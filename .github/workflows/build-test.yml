@@ -1,0 +1,48 @@
+name: Test Build
+
+on:
+    push:
+        branches: [ 'master' ]
+    workflow_dispatch:
+
+env:
+    BUILD_TYPE: Debug
+
+jobs:
+    build:
+        env:
+            buildDir: '${{ github.workspace }}/build/'
+        strategy:
+            matrix:
+                os: [ macos-10.15, windows-2019, ubuntu-18.04 ]
+            fail-fast: false
+        runs-on: ${{ matrix.os }}
+
+        steps:
+            -   uses: actions/checkout@v2
+                with:
+                    submodules: true
+
+            -   uses: maxim-lobanov/setup-xcode@v1
+                with:
+                    xcode-version: '11.2.1'
+                if: runner.os == 'macOS'
+
+            -   name: Install tools on Ubuntu
+                run: sudo apt-get install -y ninja-build build-essential
+                if: runner.os == 'Linux'
+
+            # Install latest CMake.
+            -   uses: lukka/get-cmake@latest
+
+            -   name: Build the project (Windows)
+                if: runner.os == 'Windows'
+                run: |
+                    cmake -B build -A Win32
+                    cmake --build build --target RunFrameworkTests
+
+            -   name: Build the project
+                if: runner.os != 'Windows'
+                run: |
+                    cmake -B build
+                    cmake --build build --target RunFrameworkTests

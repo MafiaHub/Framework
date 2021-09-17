@@ -1,0 +1,40 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2021, MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
+#pragma once
+
+#include "errors.h"
+
+#include <discord.h>
+#include <string>
+
+namespace Framework::External::Discord {
+    class Wrapper final {
+      private:
+        discord::User _user;
+        discord::Core *_instance;
+
+      public:
+        Wrapper() = default;
+        DiscordError Init(int64_t id);
+        DiscordError Shutdown();
+
+        DiscordError Update();
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,
+            const std::string &smallImage, const std::string &smallText);
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
+
+        discord::ActivityManager &GetActivityManager();
+        discord::UserManager &GetUserManager();
+        discord::ImageManager &GetImageManager();
+        discord::OverlayManager &GetOverlayManager();
+        discord::ApplicationManager &GetApplicationManager();
+        discord::VoiceManager &GetVoiceManager();
+        discord::RelationshipManager &GetRelationshipManager();
+    };
+} // namespace Framework::External::Discord

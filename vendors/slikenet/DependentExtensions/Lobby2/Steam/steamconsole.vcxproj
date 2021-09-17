@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{D54E74A9-6874-425F-9FCE-6EF8C5563343}</ProjectGuid>
+    <RootNamespace>steamconsole</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>NotSet</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.40219.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Configuration)\</IntDir>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</LinkIncremental>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Configuration)\</IntDir>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkIncremental>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+    <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+    <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>.\;..\;..\..\..\Source;C:\Steam\public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;_DEBUG;_CONSOLE;USE_STEAM_SOCKET_FUNCTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>steam_api.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Steam\redistributable_bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+    <PostBuildEvent>
+      <Command>copy C:\Steam\redistributable_bin\*.dll .\
+copy C:\Steam\SteamworksExample\steam_appid.txt .\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>.\;..\;..\..\..\Source;C:\Steam\public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;WIN32;NDEBUG;_CONSOLE;USE_STEAM_SOCKET_FUNCTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>steam_api.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Steam\redistributable_bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+    <PostBuildEvent>
+      <Command>copy C:\Steam\redistributable_bin\*.dll .\
+copy C:\Steam\SteamworksExample\steam_appid.txt .\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\Source\src\_FindFirst.cpp" />
+    <ClCompile Include="..\..\..\Source\src\AsynchronousFileIO.cpp" />
+    <ClCompile Include="..\..\..\Source\src\AutoRPC.cpp" />
+    <ClCompile Include="..\..\..\Source\src\BigInt.cpp" />
+    <ClCompile Include="..\..\..\Source\src\BitStream.cpp" />
+    <ClCompile Include="..\..\..\Source\src\BitStream_NoTemplate.cpp" />
+    <ClCompile Include="..\..\..\Source\src\CheckSum.cpp" />
+    <ClCompile Include="..\..\..\Source\src\CommandParserInterface.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ConnectionGraph.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ConnectionGraph2.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ConsoleServer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DataBlockEncryptor.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DataCompressor.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DirectoryDeltaTransfer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DS_BytePool.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DS_ByteQueue.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DS_HuffmanEncodingTree.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DS_Table.cpp" />
+    <ClCompile Include="..\..\..\Source\src\EmailSender.cpp" />
+    <ClCompile Include="..\..\..\Source\src\EncodeClassName.cpp" />
+    <ClCompile Include="..\..\..\Source\src\EpochTimeToString.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ExtendedOverlappedPool.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FileList.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FileListTransfer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FileOperations.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FormatString.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FullyConnectedMesh.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FullyConnectedMesh2.cpp" />
+    <ClCompile Include="..\..\..\Source\src\FunctionThread.cpp" />
+    <ClCompile Include="..\..\..\Source\src\Gen_RPC8.cpp" />
+    <ClCompile Include="..\..\..\Source\src\GetTime.cpp" />
+    <ClCompile Include="..\..\..\Source\src\gettimeofday.cpp" />
+    <ClCompile Include="..\..\..\Source\src\GridSectorizer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\HTTPConnection.cpp" />
+    <ClCompile Include="..\..\..\Source\src\IncrementalReadInterface.cpp" />
+    <ClCompile Include="..\..\..\Source\src\InlineFunctor.cpp" />
+    <ClCompile Include="..\..\..\Source\src\Itoa.cpp" />
+    <ClCompile Include="..\..\..\Source\src\LightweightDatabaseClient.cpp" />
+    <ClCompile Include="..\..\..\Source\src\LightweightDatabaseCommon.cpp" />
+    <ClCompile Include="..\..\..\Source\src\LightweightDatabaseServer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\LinuxStrings.cpp" />
+    <ClCompile Include="..\..\..\Source\src\LogCommandParser.cpp" />
+    <ClCompile Include="..\..\..\Source\src\MessageFilter.cpp" />
+    <ClCompile Include="..\..\..\Source\src\NatPunchthroughClient.cpp" />
+    <ClCompile Include="..\..\..\Source\src\NatPunchthroughServer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\NetworkIDManager.cpp" />
+    <ClCompile Include="..\..\..\Source\src\NetworkIDObject.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PacketConsoleLogger.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PacketFileLogger.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PacketizedTCP.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PacketLogger.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PacketOutputWindowLogger.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PluginInterface.cpp" />
+    <ClCompile Include="..\..\..\Source\src\PluginInterface2.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakMemoryOverride.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetCommandParser.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetSocket.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetStatistics.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetTransport.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetTransport2.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetTypes.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakNetworkFactory.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakPeer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakSleep.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakString.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RakThread.cpp" />
+    <ClCompile Include="..\..\..\Source\src\Rand.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ReadyEvent.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ReliabilityLayer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ReplicaManager.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ReplicaManager2.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ReplicaManager3.cpp" />
+    <ClCompile Include="..\..\..\Source\src\rijndael.cpp" />
+    <ClCompile Include="..\..\..\Source\src\Router.cpp" />
+    <ClCompile Include="..\..\..\Source\src\Router2.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RPCMap.cpp" />
+    <ClCompile Include="..\..\..\Source\src\RSACrypt.cpp" />
+    <ClCompile Include="..\..\..\Source\src\DR_SHA1.cpp" />
+    <ClCompile Include="..\..\..\Source\src\SimpleMutex.cpp" />
+    <ClCompile Include="..\..\..\Source\src\SocketLayer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\StringCompressor.cpp" />
+    <ClCompile Include="..\..\..\Source\src\StringTable.cpp" />
+    <ClCompile Include="..\..\..\Source\src\SuperFastHash.cpp" />
+    <ClCompile Include="..\..\..\Source\src\SystemAddressList.cpp" />
+    <ClCompile Include="..\..\..\Source\src\TableSerializer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\TCPInterface.cpp" />
+    <ClCompile Include="..\..\..\Source\src\TelnetTransport.cpp" />
+    <ClCompile Include="..\..\..\Source\src\ThreadsafePacketLogger.cpp" />
+    <ClCompile Include="..\..\..\Source\src\UDPForwarder.cpp" />
+    <ClCompile Include="..\..\..\Source\src\UDPProxyClient.cpp" />
+    <ClCompile Include="..\..\..\Source\src\UDPProxyCoordinator.cpp" />
+    <ClCompile Include="..\..\..\Source\src\UDPProxyServer.cpp" />
+    <ClCompile Include="..\..\..\Source\src\WSAStartupSingleton.cpp" />
+    <ClCompile Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2Client.cpp" />
+    <ClCompile Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Steam\Lobby2Client_Steam.cpp" />
+    <ClCompile Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2Message.cpp" />
+    <ClCompile Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Steam\Lobby2Message_Steam.cpp" />
+    <ClCompile Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2Plugin.cpp" />
+    <ClCompile Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2ResultCode.cpp" />
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\Source\include\slikenet\_FindFirst.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\AsynchronousFileIO.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\AutopatcherPatchContext.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\AutopatcherRepositoryInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\AutoRPC.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\BigInt.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\BitStream.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\BitStream_NoTemplate.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\CheckSum.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ClientContextStruct.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\CommandParserInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ConnectionGraph.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ConnectionGraph2.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ConsoleServer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DataBlockEncryptor.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DataCompressor.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DirectoryDeltaTransfer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_BinarySearchTree.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_BPlusTree.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_BytePool.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_ByteQueue.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_Heap.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_HuffmanEncodingTree.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_HuffmanEncodingTreeFactory.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_HuffmanEncodingTreeNode.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_LinkedList.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_List.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_Map.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_MemoryPool.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_Multilist.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_OrderedChannelHeap.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_OrderedList.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_Queue.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_QueueLinkedList.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_RangeList.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_Table.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_Tree.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DS_WeightedGraph.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\EmailSender.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\EpochTimeToString.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Export.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ExtendedOverlappedPool.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FileList.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FileListNodeContext.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FileListTransfer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FileListTransferCBInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FileOperations.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FormatString.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FullyConnectedMesh.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FullyConnectedMesh2.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\FunctionThread.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Gen_RPC8.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\GetTime.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\gettimeofday.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\GridSectorizer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\HTTPConnection.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\IncrementalReadInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\InlineFunctor.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\InternalPacket.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Itoa.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Kbhit.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\LightweightDatabaseClient.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\LightweightDatabaseCommon.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\LightweightDatabaseServer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\LinuxStrings.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\LogCommandParser.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\MessageFilter.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\MessageIdentifiers.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\MTUSize.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\NativeTypes.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\NatPunchthroughClient.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\NatPunchthroughServer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\NetworkIDManager.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\NetworkIDObject.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketConsoleLogger.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketFileLogger.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketizedTCP.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketLogger.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketOutputWindowLogger.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketPool.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PacketPriority.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Platform.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PluginInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\PluginInterface2.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\alloca.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\assert.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\memoryoverride.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\commandparser.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\defines.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\smartptr.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\socket.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\statistics.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\time.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\transport.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\transport2.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\types.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\version.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\peer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\peerinterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\sleep.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\string.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\thread.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Rand.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ReadyEvent.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\RefCountedObj.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ReliabilityLayer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Replica.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ReplicaEnums.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ReplicaManager.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ReplicaManager2.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ReplicaManager3.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Rijndael-Boxes.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Rijndael.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Router.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\Router2.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\RouterInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\RPCMap.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\RPCNode.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\RSACrypt.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\DR_SHA1.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SimpleMutex.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SimpleTCPServer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SingleProducerConsumer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SocketIncludes.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SocketLayer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\StringCompressor.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\StringTable.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SuperFastHash.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\SystemAddressList.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\TableSerializer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\TCPInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\TelnetTransport.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ThreadPool.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\ThreadsafePacketLogger.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\TransportInterface.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\UDPForwarder.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\UDPProxyClient.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\UDPProxyCommon.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\UDPProxyCoordinator.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\UDPProxyServer.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\WindowsIncludes.h" />
+    <ClInclude Include="..\..\..\Source\include\slikenet\WSAStartupSingleton.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamapps.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamclient.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamfriends.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamgameserver.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteammasterserverupdater.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteammatchmaking.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamnetworking.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamremotestorage.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamuser.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamuserstats.h" />
+    <ClInclude Include="C:\Steam\public\steam\isteamutils.h" />
+    <ClInclude Include="C:\Steam\public\steam\matchmakingtypes.h" />
+    <ClInclude Include="C:\Steam\public\steam\steam_api.h" />
+    <ClInclude Include="C:\Steam\public\steam\steam_gameserver.h" />
+    <ClInclude Include="C:\Steam\public\steam\steamclientpublic.h" />
+    <ClInclude Include="C:\Steam\public\steam\steamtypes.h" />
+    <ClInclude Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2Client.h" />
+    <ClInclude Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Steam\Lobby2Client_Steam.h" />
+    <ClInclude Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2Message.h" />
+    <ClInclude Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Steam\Lobby2Message_Steam.h" />
+    <ClInclude Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2Plugin.h" />
+    <ClInclude Include="X:\p4\ob1\Data\DHEngine\Code\sdks\RakNet\DependentExtensions\Lobby2\Lobby2ResultCode.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="readme.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,0 +1,14 @@
+{
+    "id":"flecs",
+    "type":"package",
+    "value": {
+        "author": "Sander Mertens",
+        "description": "Multithreaded Entity Component System written in C99",
+        "amalgamate": true
+    },
+    "lang.c": {
+        "${os linux}": {
+            "lib": ["rt"]
+        }
+    }
+}

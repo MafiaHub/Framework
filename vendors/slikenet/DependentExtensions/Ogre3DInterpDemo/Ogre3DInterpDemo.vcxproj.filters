@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="App3D">
+      <UniqueIdentifier>{c2068a7a-7dfb-4c19-9ab5-c8e9bb2fd374}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="SLikeNet">
+      <UniqueIdentifier>{2e913c0b-b295-44aa-bbba-10a26bd2279c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="TransformationHistory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WinMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="App3D.cpp">
+      <Filter>App3D</Filter>
+    </ClCompile>
+    <ClCompile Include="AppInterface.cpp">
+      <Filter>App3D</Filter>
+    </ClCompile>
+    <ClCompile Include="FSM.cpp">
+      <Filter>App3D</Filter>
+    </ClCompile>
+    <ClCompile Include="OverlayHelper.cpp">
+      <Filter>App3D</Filter>
+    </ClCompile>
+    <ClCompile Include="RunnableState.cpp">
+      <Filter>App3D</Filter>
+    </ClCompile>
+    <ClCompile Include="State.cpp">
+      <Filter>App3D</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\src\FormatString.cpp">
+      <Filter>SLikeNet</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\src\RakSleep.cpp">
+      <Filter>SLikeNet</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\src\Rand.cpp">
+      <Filter>SLikeNet</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="TransformationHistory.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="App3D.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="AppInterface.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="AppTypes.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="FSM.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="OverlayHelper.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="RunnableState.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="State.h">
+      <Filter>App3D</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\include\slikesoft\FormatString.h">
+      <Filter>SLikeNet</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\include\slikesoft\sleep.h">
+      <Filter>SLikeNet</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\include\slikesoft\Rand.h">
+      <Filter>SLikeNet</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

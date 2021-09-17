@@ -1,0 +1,51 @@
+MafiaHub OSS license
+Copyright (c) 2021 MafiaHub. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+disclaimer in the documentation and/or other materials provided with the distribution.
+3. All advertising materials mentioning features or use of this software must display the following acknowledgement:
+This product includes software developed by the organization.
+4. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products
+derived from this software without specific prior written permission.
+5. The use of derivative work is permitted only with the intent to contribute to the original work. It is forbidden to
+use the original work for personal and/or commercial use without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY COPYRIGHT HOLDER "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+COPYRIGHT HOLDER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
+
+This codebase also depends on the following third-party libraries:
+    jitasm          - https://github.com/hlide/jitasm/blob/master/LICENSE
+    minhook         - https://github.com/TsudaKageyu/minhook/blob/master/LICENSE.txt
+    minhook helpers - https://github.com/citizenfx/fivem/blob/master/code/LICENSE
+    zpl.test        - https://github.com/zpl-c/zpl.test/blob/master/LICENSE
+    cppfs           - https://github.com/cginternals/cppfs/blob/master/LICENSE
+    cef             - https://github.com/chromiumembedded/cef/blob/master/LICENSE.txt
+    firebase        - https://github.com/firebase/firebase-cpp-sdk/blob/main/LICENSE
+    glm             - https://github.com/firebase/firebase-cpp-sdk/blob/main/LICENSE
+    discord         - https://discord.com/developers/docs/legal
+    httplib         - https://github.com/yhirose/cpp-httplib/blob/master/LICENSE
+    nlohmann-json   - https://github.com/nlohmann/json/blob/develop/LICENSE.MIT
+    mongoose        - https://github.com/cesanta/mongoose/blob/master/LICENSE
+    nodejs          - https://github.com/nodejs/node/blob/master/LICENSE
+    openssl         - https://www.openssl.org/source/license.html
+    slikenet        - https://github.com/SLikeSoft/SLikeNet/blob/master/license.txt
+    optick          - https://github.com/bombomby/optick/blob/master/LICENSE
+    spdlog          - https://github.com/gabime/spdlog/blob/v1.x/LICENSE
+    steamworks      - https://partner.steamgames.com/documentation/sdk_access_agreement
+    sentry          - https://sentry.io/terms/
+    protobuf        - https://github.com/protocolbuffers/protobuf/blob/master/LICENSE
+    curl            - https://curl.se/docs/copyright.html
+    udis86          - https://github.com/vmt/udis86
+    ultralight      - https://ultralig.ht/
+    flecs           - https://github.com/SanderMertens/flecs/
+    fmt             - https://fmt.dev/latest/index.html

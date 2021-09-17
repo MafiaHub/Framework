@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx</Extensions>
+    </Filter>
+    <Filter Include="BZIP">
+      <UniqueIdentifier>{8b5ec9c1-78e6-4211-aa52-dfe21e688140}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\ApplyPatch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\CreatePatch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\MemoryCompressor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\blocksort.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\bzip2.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\bzlib.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\compress.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\crctable.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\decompress.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\huffman.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\bzip2-1.0.6\randtable.c">
+      <Filter>BZIP</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\ApplyPatch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\CreatePatch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\MemoryCompressor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\bzip2-1.0.6\bzlib.h">
+      <Filter>BZIP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\bzip2-1.0.6\bzlib_private.h">
+      <Filter>BZIP</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
