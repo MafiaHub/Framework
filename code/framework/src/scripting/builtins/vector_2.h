@@ -37,24 +37,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 2) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 2 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
+        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y;
@@ -72,24 +66,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 2) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 2 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
+        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y;
@@ -107,24 +95,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 2) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 2 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
+        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y;
@@ -142,24 +124,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 2) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 2 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
-        double newX, newY, newZ;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
+        V8Helpers::ArgumentStack stack(info);
+
+        double newX, newY;
+        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y;
@@ -192,13 +168,17 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
+        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+            return;
+        }
 
         // Acquire factor
         double f;
-        V8Helpers::SafeToNumber(info[2], ctx, f);
+        V8Helpers::SafeToNumber(stack.Pop(), ctx, f);
 
         // Acquire old values
         double x, y;

@@ -38,25 +38,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 3) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 3 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY, newZ;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
-        V8Helpers::SafeToNumber(info[2], ctx, newZ);
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y, z;
@@ -75,25 +68,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 3) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 3 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY, newZ;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
-        V8Helpers::SafeToNumber(info[2], ctx, newZ);
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y, z;
@@ -112,25 +98,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 3) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 3 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY, newZ;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
-        V8Helpers::SafeToNumber(info[2], ctx, newZ);
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y, z;
@@ -149,25 +128,18 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 3) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 3 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY, newZ;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
-        V8Helpers::SafeToNumber(info[2], ctx, newZ);
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
 
         // Acquire old values
         double x, y, z;
@@ -186,29 +158,22 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 4) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 4 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
         // Acquire new values
+        V8Helpers::ArgumentStack stack(info);
+
         double newX, newY, newZ;
-        V8Helpers::SafeToNumber(info[0], ctx, newX);
-        V8Helpers::SafeToNumber(info[1], ctx, newY);
-        V8Helpers::SafeToNumber(info[2], ctx, newZ);
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
 
         // Acquire factor
         double f;
-        V8Helpers::SafeToNumber(info[3], ctx, f);
+        V8Helpers::SafeToNumber(stack.Pop(), ctx, f);
 
         // Acquire old values
         double x, y, z;

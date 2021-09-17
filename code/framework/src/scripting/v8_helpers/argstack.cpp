@@ -17,7 +17,6 @@ namespace Framework::Scripting::V8Helpers {
     v8::Local<v8::Value> ArgumentStack::Peek() {
         if (IsEmpty())
             return v8::Null(_isolate);
-        auto local = _args.front();
-        return local;
+        return _args.front();
     }
 } // namespace Framework::Scripting::V8Helpers
