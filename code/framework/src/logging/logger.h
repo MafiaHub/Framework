@@ -1,0 +1,70 @@
+#pragma once
+
+#include <chrono>
+#include <map>
+#include <spdlog/async.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
+#include <unordered_map>
+
+#define FRAMEWORK_INNER_NETWORKING   "Networking"
+#define FRAMEWORK_INNER_SCRIPTING    "Scripting"
+#define FRAMEWORK_INNER_HTTP         "HTTP"
+#define FRAMEWORK_INNER_SERVICES     "Services"
+#define FRAMEWORK_INNER_INTEGRATIONS "Integrations"
+#define FRAMEWORK_INNER_JOBS         "Jobs"
+
+namespace Framework::Logging {
+    class Logger final {
+      private:
+        std::chrono::time_point<std::chrono::system_clock> _sessionStart;
+        std::unordered_map<const char *, std::shared_ptr<spdlog::logger>> _loggers;
+        std::string _logName = "framework";
+        size_t _maxFileSize  = 1024 * 1024 * 10;
+        size_t _maxFileCount = 10;
+        bool _loggingPaused  = false;
+
+      public:
+        Logger();
+        ~Logger() = default;
+
+        std::shared_ptr<spdlog::logger> Get(const char *moduleName);
+
+        void SetLogName(const std::string &name) {
+            _logName = name;
+        }
+
+        const std::string &GetLogName() const {
+            return _logName;
+        }
+
+        void SetMaxFileSize(size_t size) {
+            _maxFileSize = size;
+        }
+
+        size_t GetMaxFileSize() const {
+            return _maxFileSize;
+        }
+
+        bool IsLoggingPaused() const {
+            return _loggingPaused;
+        }
+
+        void PauseLogging(bool state) {
+            _loggingPaused = state;
+        }
+
+        void SetMaxFileCount(size_t count) {
+            _maxFileCount = count;
+        }
+
+        size_t GetMaxFileCount() const {
+            return _maxFileCount;
+        }
+    };
+
+    extern Logger *GetInstance();
+
+    extern std::shared_ptr<spdlog::logger> GetLogger(const char *name);
+} // namespace Framework::Logging

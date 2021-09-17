@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libspeex", "..\libspeex\libspeex.vcxproj", "{6FBDB071-E767-E1EB-9B2E-891F68695A27}"
+EndProject
+Project("{059D6162-CD51-11D0-AE1F-00A0C90FFFC3}") = "ogg_static", "..\..\..\MYOV-1.0\ogg\win32\ogg_static.dsp", "{C5B21BA4-F868-49E8-B5E5-E967A871BF4C}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "speexdec", "speexdec.vcxproj", "{A3F40A7E-FAF8-7E31-0360-EE366C043862}"
+	ProjectSection(ProjectDependencies) = postProject
+		{6FBDB071-E767-E1EB-9B2E-891F68695A27} = {6FBDB071-E767-E1EB-9B2E-891F68695A27}
+		{C5B21BA4-F868-49E8-B5E5-E967A871BF4C} = {C5B21BA4-F868-49E8-B5E5-E967A871BF4C}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6FBDB071-E767-E1EB-9B2E-891F68695A27}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6FBDB071-E767-E1EB-9B2E-891F68695A27}.Debug|Win32.Build.0 = Debug|Win32
+		{6FBDB071-E767-E1EB-9B2E-891F68695A27}.Release|Win32.ActiveCfg = Release|Win32
+		{6FBDB071-E767-E1EB-9B2E-891F68695A27}.Release|Win32.Build.0 = Release|Win32
+		{A3F40A7E-FAF8-7E31-0360-EE366C043862}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A3F40A7E-FAF8-7E31-0360-EE366C043862}.Debug|Win32.Build.0 = Debug|Win32
+		{A3F40A7E-FAF8-7E31-0360-EE366C043862}.Release|Win32.ActiveCfg = Release|Win32
+		{A3F40A7E-FAF8-7E31-0360-EE366C043862}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
