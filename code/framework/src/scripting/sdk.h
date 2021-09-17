@@ -1,15 +1,14 @@
 #pragma once
 
+#include "init.h"
 #include "v8_helpers/v8_class.h"
 #include "v8_helpers/v8_module.h"
 
 #include <glm/glm.hpp>
 #include <string>
 #include <unordered_set>
-#include <vector>
 #include <v8.h>
-
-#include "init.h"
+#include <vector>
 
 namespace Framework::Scripting {
     class SDK {
@@ -22,8 +21,13 @@ namespace Framework::Scripting {
         ~SDK() = default;
 
         bool RegisterModules(v8::Local<v8::Context>);
+
         Helpers::V8Module *GetRootModule() const {
             return _rootModule;
+        }
+
+        std::unordered_set<Helpers::V8Module *> &GetModules() {
+            return _modules;
         }
 
         v8::Local<v8::Value> CreateVector2(v8::Local<v8::Context>, glm::vec2);
