@@ -143,24 +143,17 @@ namespace Framework::Scripting::Builtins {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
 
-        if (info.Length() != 3) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 3 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
         auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
 
         v8::Local<v8::Object> _this = info.This();
 
+        V8Helpers::ArgumentStack stack(info);
+
         double pX, pY, pZ;
-        V8Helpers::SafeToNumber(info[0], ctx, pX);
-        V8Helpers::SafeToNumber(info[1], ctx, pY);
-        V8Helpers::SafeToNumber(info[2], ctx, pZ);
+        if (!V8Helpers::GetVec3(ctx, stack, pX, pY, pZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
 
         double w, x, y, z;
         V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
