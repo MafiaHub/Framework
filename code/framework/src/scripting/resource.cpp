@@ -51,19 +51,49 @@ namespace Framework::Scripting {
         return true;
     }
 
-    bool Resource::WatchChanges(){
+    bool Resource::WatchChanges() {
         cppfs::FileHandle dir = cppfs::fs::open(_path);
-        if(!dir.isDirectory()){
+        if (!dir.isDirectory()) {
             return false;
         }
 
-
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Watching {} changes", dir.path().c_str());
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
-        _watcher.addHandler([] (cppfs::FileHandle &fh, cppfs::FileEvent ev){
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->critical("File changed");
+        _watcher.addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource {} is reloaded due to the file changes", _name);
+            ReloadChanges();
         });
         return true;
+    }
+
+    void Resource::ReloadChanges() {
+        cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
+        if (!entryPointFile.exists() || !entryPointFile.isFile()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint is not a file");
+            return;
+        }
+
+        // Read the file content
+        std::string content = entryPointFile.readFile();
+        if (content.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file is empty");
+            return;
+        }
+
+        const auto isolate = _engine->GetIsolate();
+        if (!isolate) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Cannot acquire isolate instance");
+            return;
+        }
+
+        v8::Locker isolateLock(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+
+        Compile(content, entryPointFile.path());
+        Run();
+
+        std::vector<v8::Local<v8::Value>> args = {v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked()};
+        InvokeEvent(Events[EventIDs::RESOURCE_RELOADED], args);
     }
 
     bool Resource::Init(SDKRegisterCallback cb) {

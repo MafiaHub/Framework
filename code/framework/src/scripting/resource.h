@@ -76,5 +76,6 @@ namespace Framework::Scripting {
         bool WatchChanges();
         bool Compile(const std::string &, const std::string &);
         bool Run();
+        void ReloadChanges();
     };
 } // namespace Framework::Scripting

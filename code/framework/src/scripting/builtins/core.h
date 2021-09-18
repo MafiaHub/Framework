@@ -31,8 +31,6 @@ namespace Framework::Scripting::Builtins {
             resource->SubscribeEvent(Helpers::ToCString(eventName), eventCallback,
                                      Helpers::SourceLocation::GetCurrent(isolate));
             return;
-        } else {
-            return;
         }
     }
 } // namespace Framework::Scripting::Builtins
