@@ -62,6 +62,9 @@ cmake -B build -A Win32
 # On other platforms
 cmake -B build
 
+# Build framework
+cmake --build build
+
 # Run framework tests
 cmake --build --target RunFrameworkTests
 ```
