@@ -9,7 +9,11 @@ namespace Framework::GUI {
 
         // Prepare the launch arguments
         // TODO: make it UNIX compatible
-        CefMainArgs args(0, nullptr);
+        #ifdef __APPLE__
+            CefMainArgs args(0, nullptr);
+        #else
+            CefMainArgs args(0);
+        #endif
 
         // Prepare the settings
         CefSettings settings;
