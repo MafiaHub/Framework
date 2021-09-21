@@ -41,6 +41,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/integrations/cef/application.cpp
         src/integrations/cef/client.cpp
         src/integrations/cef/render_handler.cpp
+        src/integrations/cef/worker.hpp
 
         src/gui/web.cpp
 
