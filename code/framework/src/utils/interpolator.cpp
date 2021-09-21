@@ -59,15 +59,15 @@ glm::vec3 Framework::Utils::Interpolator::Position::UpdateTargetValue(const glm:
 
     glm::vec3 compensation = glm::mix(glm::vec3(), _error, currentAlpha);
 
-    if (alpha == 1.5f)
+    if (alpha == _compensationFactor)
         _finishTime = TimePoint::max();
 
     auto newPos = current + compensation;
 
     // NOTE: snap value to target pos if below threshold (useful when entity stands, no need to run calculations during that time)
     if (glm::distance(newPos, _end) <= _snapThreshold) {
-        //_finishTime = TimePoint::max();
-        // newPos      = _end;
+        _finishTime = TimePoint::max();
+        newPos      = _end;
     }
 
     return newPos;
@@ -76,12 +76,12 @@ void Framework::Utils::Interpolator::Rotation::SetTargetValue(const glm::quat &c
                                                               float delay) {
     UpdateTargetValue(current);
 
-    _end   = target;
-    _start = current;
+    _end   = glm::normalize(target);
+    _start = glm::normalize(current);
     _error =
-        glm::slerp(glm::quat(), glm::normalize(glm::inverse(_start)), math::UnlerpClamped(_delayMin, _delayMax, delay));
+        glm::slerp(glm::identity<glm::quat>(), glm::normalize(glm::inverse(_start)) * _end, glm::mix(0.40f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay)));
 
-    _startTime  = std::chrono::high_resolution_clock::now();
+    _startTime  = GetCurrentTime();
     _finishTime = _startTime + std::chrono::milliseconds(static_cast<int>(delay));
 
     _lastAlpha = 0.0f;
@@ -99,9 +99,9 @@ glm::quat Framework::Utils::Interpolator::Rotation::UpdateTargetValue(const glm:
     auto currentAlpha = alpha - _lastAlpha;
     _lastAlpha        = alpha;
 
-    auto compensation = glm::slerp(glm::quat(), _error, currentAlpha);
+    auto compensation = glm::slerp(glm::identity<glm::quat>(), _error, currentAlpha);
 
-    if (alpha == 1.0f)
+    if (alpha == _compensationFactor)
         _finishTime = TimePoint::max();
 
     return glm::normalize(glm::normalize(current) * compensation);
@@ -135,7 +135,7 @@ float Framework::Utils::Interpolator::Scalar::UpdateTargetValue(const float &cur
 
     float compensation = glm::mix(0.0f, _error, currentAlpha);
 
-    if (alpha == 1.0f)
+    if (alpha == _compensationFactor)
         _finishTime = TimePoint::max();
 
     return current + compensation;
