@@ -79,8 +79,7 @@ namespace Framework::Scripting {
         for (auto res : _resources) { res.second->InvokeEvent(eventName, args); }
     }
 
-    void ResourceManager::InvokeErrorEvent(const std::string &error, const std::string &stackTrace,
-                                           const std::string &file, int32_t line) {
+    void ResourceManager::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
         for (auto res : _resources) { res.second->InvokeErrorEvent(error, stackTrace, file, line); }
     }
 } // namespace Framework::Scripting

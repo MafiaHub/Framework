@@ -1,6 +1,7 @@
 #pragma once
 
 #include "errors.h"
+#include "init.h"
 #include "resource_manager.h"
 
 #include <node.h>
@@ -9,13 +10,11 @@
 #include <v8.h>
 #include <vector>
 
-#include "init.h"
-
 namespace Framework::Scripting {
     class Engine {
       private:
-        v8::Isolate *_isolate = nullptr;
-        node::IsolateData* _isolateData = nullptr;
+        v8::Isolate *_isolate           = nullptr;
+        node::IsolateData *_isolateData = nullptr;
         uv_loop_t _uvLoop;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
@@ -38,7 +37,7 @@ namespace Framework::Scripting {
             return _isolate;
         }
 
-        node::IsolateData* GetIsolateData() const {
+        node::IsolateData *GetIsolateData() const {
             return _isolateData;
         }
 

@@ -12,8 +12,7 @@ namespace math {
         return static_cast<float>((pos - from) / (to - from));
     }
 
-    inline const float Unlerp(const std::chrono::high_resolution_clock::time_point &from,
-                              const std::chrono::high_resolution_clock::time_point &to,
+    inline const float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to,
                               const std::chrono::high_resolution_clock::time_point &pos) {
         float r = std::chrono::duration<float, std::milli>(to - from).count();
 
@@ -29,8 +28,7 @@ namespace math {
     }
 } // namespace math
 
-void Framework::Utils::Interpolator::Position::SetTargetValue(const glm::vec3 &current, const glm::vec3 &target,
-                                                              float delay) {
+void Framework::Utils::Interpolator::Position::SetTargetValue(const glm::vec3 &current, const glm::vec3 &target, float delay) {
     UpdateTargetValue(current);
 
     _end   = target;
@@ -72,14 +70,12 @@ glm::vec3 Framework::Utils::Interpolator::Position::UpdateTargetValue(const glm:
 
     return newPos;
 }
-void Framework::Utils::Interpolator::Rotation::SetTargetValue(const glm::quat &current, const glm::quat &target,
-                                                              float delay) {
+void Framework::Utils::Interpolator::Rotation::SetTargetValue(const glm::quat &current, const glm::quat &target, float delay) {
     UpdateTargetValue(current);
 
     _end   = glm::normalize(target);
     _start = glm::normalize(current);
-    _error =
-        glm::slerp(glm::identity<glm::quat>(), glm::normalize(glm::inverse(_start)) * _end, glm::mix(0.40f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay)));
+    _error = glm::slerp(glm::identity<glm::quat>(), glm::normalize(glm::inverse(_start)) * _end, glm::mix(0.40f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay)));
 
     _startTime  = GetCurrentTime();
     _finishTime = _startTime + std::chrono::milliseconds(static_cast<int>(delay));

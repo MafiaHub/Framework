@@ -31,8 +31,7 @@ namespace Framework::Utils {
                         const std::lock_guard<std::recursive_mutex> lock(_mutex);
                         bool last_empty = false;
 
-                        for (auto [queue, end, i] = std::tuple {_jobs.begin(), _jobs.end(), 0}; queue != end;
-                             ++queue, ++i) {
+                        for (auto [queue, end, i] = std::tuple {_jobs.begin(), _jobs.end(), 0}; queue != end; ++queue, ++i) {
                             if (queue->empty()) {
                                 last_empty = ((queue + 1) == end);
                                 continue;
@@ -43,8 +42,7 @@ namespace Framework::Utils {
                             last_empty = false;
                             jobInfo    = queue->front();
                             queue->pop();
-                            Logging::GetLogger(FRAMEWORK_INNER_JOBS)
-                                ->trace("Job with priority {} is now being processed", i);
+                            Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} is now being processed", i);
 
                             break;
                         }

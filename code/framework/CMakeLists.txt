@@ -12,7 +12,7 @@ set(FRAMEWORK_SRC
         src/utils/job_system.cpp
 
         src/integrations/discord/wrapper.cpp
-        src/integrations/sentry/crash_reporter.cpp
+        src/integrations/sentry/wrapper.cpp
         src/integrations/firebase/wrapper.cpp
         src/integrations/optick/wrapper.cpp
         )

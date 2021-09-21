@@ -42,10 +42,8 @@ namespace Framework::Integrations::CEF {
         virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser>,
-                                                                               CefRefPtr<CefFrame>,
-                                                                               CefRefPtr<CefRequest>, bool, bool,
-                                                                               const CefString &, bool &) override {
+        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool, const CefString &,
+                                                                               bool &) override {
             return this;
         }
 
@@ -53,8 +51,7 @@ namespace Framework::Integrations::CEF {
         virtual void OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int) override;
         virtual void OnAfterCreated(CefRefPtr<CefBrowser>) override;
         virtual void OnBeforeClose(CefRefPtr<CefBrowser>) override;
-        virtual cef_return_value_t OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
-                                                        CefRefPtr<CefRequest>, CefRefPtr<CefRequestCallback>) override;
+        virtual cef_return_value_t OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefRequestCallback>) override;
         virtual void OnRenderProcessTerminated(CefRefPtr<CefBrowser>, TerminationStatus) override;
 
         IMPLEMENT_REFCOUNTING(Client);

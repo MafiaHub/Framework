@@ -1,11 +1,11 @@
 #pragma once
 
 namespace Framework::Integrations::Steam {
-    enum WrapperError {
-        WRAPPER_ERROR_NONE,
-        WRAPPER_ERROR_STEAM_NOT_RUNNING,
-        WRAPPER_ERROR_INIT_STEAM,
-        WRAPPER_ERROR_CONTEXT_CREATE,
-        WRAPPER_ERROR_CONTEXT_INIT
+    enum SteamError {
+        STEAM_NONE,
+        STEAM_CLIENT_NOT_RUNNING,
+        STEAM_INIT_FAILED,
+        STEAM_CONTEXT_CREATION_FAILED,
+        STEAM_CONTEXT_INIT_FAILED
     };
 }

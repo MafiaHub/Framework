@@ -14,8 +14,8 @@ namespace Framework::Networking {
         std::unordered_map<uint32_t, Messages::MessageCallback> _registeredMessageCallbacks;
 
       public:
-        bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID,
-                  PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
+                  PacketReliability reliability = RELIABLE_ORDERED) {
             if (!_peer) {
                 return false;
             }

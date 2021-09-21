@@ -72,7 +72,7 @@ namespace Framework::Scripting::V8Helpers {
 
     bool GetVec3(v8::Local<v8::Context> ctx, ArgumentStack &stack, double &x, double &y, double &z) {
         v8::Local<v8::Value> front = stack.Peek();
-        auto lol = Helpers::ToString(front.As<v8::String>());
+        auto lol                   = Helpers::ToString(front.As<v8::String>());
         if (front->IsObject() && Helpers::ToString(front.As<v8::Object>()->GetConstructorName()) == GetKeyName(Keys::KEY_VECTOR_3)) {
             auto arg = stack.Pop();
             if (!arg->IsObject()) {

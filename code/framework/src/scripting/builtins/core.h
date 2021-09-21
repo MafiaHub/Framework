@@ -20,16 +20,14 @@ namespace Framework::Scripting::Builtins {
             if (context.IsEmpty()) {
                 return;
             }
-            auto resource =
-                static_cast<Framework::Scripting::Resource *>(context->GetAlignedPointerFromEmbedderData(0));
+            auto resource = static_cast<Framework::Scripting::Resource *>(context->GetAlignedPointerFromEmbedderData(0));
             if (!resource) {
                 return;
             }
 
             v8::Local<v8::String> eventName       = info[0]->ToString(context).ToLocalChecked();
             v8::Local<v8::Function> eventCallback = info[1].As<v8::Function>();
-            resource->SubscribeEvent(Helpers::ToCString(eventName), eventCallback,
-                                     Helpers::SourceLocation::GetCurrent(isolate));
+            resource->SubscribeEvent(Helpers::ToCString(eventName), eventCallback, Helpers::SourceLocation::GetCurrent(isolate));
             return;
         }
     }

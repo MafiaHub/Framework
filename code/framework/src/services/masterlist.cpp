@@ -34,13 +34,11 @@ namespace Framework::Services {
                 req["maxPlayers"] = GetMaxPlayers();
                 const auto json   = req.dump(0);
 
-                Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)
-                    ->trace("[Masterlist] Pushing server info to backend");
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->trace("[Masterlist] Pushing server info to backend");
                 const auto res = cli.Post("/pushServer", json.c_str(), "application/json");
 
                 if (res && res->status != 200) {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)
-                        ->warn("[Masterlist] Push failed with error {} and message {}", res->status, res->body);
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->warn("[Masterlist] Push failed with error {} and message {}", res->status, res->body);
 
                     return false;
                 } else if (!res) {

@@ -2,8 +2,8 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Integrations {
-    bool Firebase::Init(const std::string &projectId, const std::string &appId, const std::string &apiKey) {
+namespace Framework::Integrations::Firebase {
+    FirebaseError Wrapper::Init(const std::string &projectId, const std::string &appId, const std::string &apiKey) {
         // Init the firebase options
         firebase::AppOptions opts;
         opts.set_api_key(apiKey.c_str());
@@ -29,10 +29,8 @@ namespace Framework::Integrations {
 
         // Was everything correctly initialized?
         if (initializer.InitializeLastResult().error() != 0) {
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_INTEGRATIONS)
-                ->debug("[Firebase] FAILED TO INITIALIZE: {}", initializer.InitializeLastResult().error_message());
-            return false;
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Firebase] FAILED TO INITIALIZE: {}", initializer.InitializeLastResult().error_message());
+            return FirebaseError::FIREBASE_INITIALIZE_FAILED;
         }
 
         // Mark the current class as an auth state listener
@@ -44,48 +42,46 @@ namespace Framework::Integrations {
         firebase::analytics::SetSessionTimeoutDuration(1000 * 60 * 30);
 
         Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Firebase] Initialize complete");
-        return true;
+        return FirebaseError::FIREBASE_NONE;
     }
 
-    bool Firebase::SignInWithEmailPassword(const std::string &email, const std::string &password) {
-        auto auth = GetAuth();
-        firebase::Future<firebase::auth::User *> result =
-            auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());
+    FirebaseError Wrapper::SignInWithEmailPassword(const std::string &email, const std::string &password) {
+        auto auth                                       = GetAuth();
+        firebase::Future<firebase::auth::User *> result = auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());
         while (result.status() != firebase::kFutureStatusComplete) {};
         if (result.error() == firebase::auth::kAuthErrorNone) {
-            return true;
+            return FirebaseError::FIREBASE_NONE;
         } else {
-            return false;
+            return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
 
-    bool Firebase::SignUpWithEmailPassword(const std::string &email, const std::string &password) {
-        auto auth = GetAuth();
-        firebase::Future<firebase::auth::User *> result =
-            auth->CreateUserWithEmailAndPassword(email.c_str(), password.c_str());
+    FirebaseError Wrapper::SignUpWithEmailPassword(const std::string &email, const std::string &password) {
+        auto auth                                       = GetAuth();
+        firebase::Future<firebase::auth::User *> result = auth->CreateUserWithEmailAndPassword(email.c_str(), password.c_str());
         while (result.status() != firebase::kFutureStatusComplete) {};
         if (result.error() == firebase::auth::kAuthErrorNone) {
-            return true;
+            return FirebaseError::FIREBASE_NONE;
         } else {
-            return false;
+            return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
 
-    bool Firebase::SignInAnonymously() {
+    FirebaseError Wrapper::SignInAnonymously() {
         auto auth                                       = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInAnonymously();
         while (result.status() != firebase::kFutureStatusComplete) {};
         if (result.error() == firebase::auth::kAuthErrorNone) {
-            return true;
+            return FirebaseError::FIREBASE_NONE;
         } else {
-            return false;
+            return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
 
-    bool Firebase::SignOut() {
+    FirebaseError Wrapper::SignOut() {
         auto auth = GetAuth();
         auth->SignOut();
-        return true;
+        return FirebaseError::FIREBASE_NONE;
     }
 
     void LogEvent(const std::string &name, const std::string &paramName, const std::string &paramValue) {
@@ -100,7 +96,7 @@ namespace Framework::Integrations {
         firebase::analytics::LogEvent(name.c_str());
     }
 
-    void Firebase::OnAuthStateChanged(firebase::auth::Auth *auth) {
+    void Wrapper::OnAuthStateChanged(firebase::auth::Auth *auth) {
         _user = auth->current_user();
         if (!_user) {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Firebase] AuthStateChanged: user null");
@@ -109,8 +105,6 @@ namespace Framework::Integrations {
 
         firebase::analytics::SetUserId(_user->uid().c_str());
 
-        Logging::GetInstance()
-            ->Get(FRAMEWORK_INNER_INTEGRATIONS)
-            ->debug("[Firebase] AuthStateChanged: user active {}", _user->uid().c_str());
+        Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Firebase] AuthStateChanged: user active {}", _user->uid().c_str());
     }
 } // namespace Framework::Integrations

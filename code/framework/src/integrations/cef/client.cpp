@@ -21,8 +21,7 @@ namespace Framework::Integrations::CEF {
 
     void Client::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status) {}
 
-    cef_return_value_t Client::OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-                                                    CefRefPtr<CefRequest> request,
+    cef_return_value_t Client::OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request,
                                                     CefRefPtr<CefRequestCallback> callback) {
         // TODO: check for forbidden url and block them if required
         return {};

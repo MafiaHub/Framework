@@ -3,17 +3,9 @@
 #include "v8_try_catch.h"
 
 namespace Framework::Scripting::Helpers {
-    V8Class::V8Class(const std::string &name, ClassInitCallback &&cb)
-        : _name(name)
-        , _constructor(nullptr)
-        , _loaded(false)
-        , _initCb(cb) {}
+    V8Class::V8Class(const std::string &name, ClassInitCallback &&cb): _name(name), _constructor(nullptr), _loaded(false), _initCb(cb) {}
 
-    V8Class::V8Class(const std::string &name, v8::FunctionCallback constructor, ClassInitCallback &&cb)
-        : _name(name)
-        , _constructor(constructor)
-        , _loaded(false)
-        , _initCb(cb) {}
+    V8Class::V8Class(const std::string &name, v8::FunctionCallback constructor, ClassInitCallback &&cb): _name(name), _constructor(constructor), _loaded(false), _initCb(cb) {}
 
     V8HelperError V8Class::Load() {
         auto isolate                        = v8::Isolate::GetCurrent();
@@ -41,9 +33,8 @@ namespace Framework::Scripting::Helpers {
             return HELPER_CONTEXT_EMPTY;
         }
 
-        v8::Maybe<bool> res = obj->Set(
-            context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
-            _fnTpl.Get(isolate)->GetFunction(context).ToLocalChecked());
+        v8::Maybe<bool> res = obj->Set(context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+                                       _fnTpl.Get(isolate)->GetFunction(context).ToLocalChecked());
 
         // If something went weird, just cancel and evacuate
         if (!res.ToChecked()) {
@@ -59,8 +50,7 @@ namespace Framework::Scripting::Helpers {
         return obj;
     }
 
-    v8::Local<v8::Value> V8Class::CreateInstance(v8::Isolate *isolate, v8::Local<v8::Context> context,
-                                                 std::vector<v8::Local<v8::Value>> args) {
+    v8::Local<v8::Value> V8Class::CreateInstance(v8::Isolate *isolate, v8::Local<v8::Context> context, std::vector<v8::Local<v8::Value>> args) {
         v8::Local<v8::Function> constructor = _fnTpl.Get(isolate)->GetFunction(context).ToLocalChecked();
         v8::Local<v8::Value> obj;
 

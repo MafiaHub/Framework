@@ -6,8 +6,8 @@
 #include "../errors.h"
 #include "v8_class.h"
 
-#include <string>
 #include <map>
+#include <string>
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
@@ -26,7 +26,7 @@ namespace Framework::Scripting::Helpers {
 
         V8HelperError AddClass(V8Class *);
 
-        V8Class* GetClass(const std::string &);
+        V8Class *GetClass(const std::string &);
 
         V8HelperError Register(v8::Local<v8::Context>);
     };

@@ -17,7 +17,5 @@ namespace Framework::Scripting::Helpers {
         return SourceLocation {"[unknown]", 0};
     }
 
-    SourceLocation::SourceLocation(std::string &&fileName, int lineNumber)
-        : _fileName(fileName)
-        , _lineNumber(lineNumber) {}
+    SourceLocation::SourceLocation(std::string &&fileName, int lineNumber): _fileName(fileName), _lineNumber(lineNumber) {}
 } // namespace Framework::Scripting::Helpers

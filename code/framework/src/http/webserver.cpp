@@ -24,8 +24,7 @@ namespace Framework::HTTP {
                 const auto serveDir = webServer->GetServeDirectory();
                 const auto uri      = std::string(hm->uri.ptr, hm->uri.len);
                 if (serveDir.empty()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_HTTP)
-                        ->trace("[Webserver] Path not registered, sending 404: {}", uri);
+                    Logging::GetLogger(FRAMEWORK_INNER_HTTP)->trace("[Webserver] Path not registered, sending 404: {}", uri);
                     mg_http_reply(c, 404, "", "");
                 } else {
                     struct mg_http_serve_opts opts = {};
@@ -65,8 +64,7 @@ namespace Framework::HTTP {
     void Webserver::RegisterRequest(const char *path, RequestCallback callback) {
         if (strlen(path) > 0 && callback) {
             _registeredRequestCallback.insert({path, callback});
-            Logging::GetLogger(FRAMEWORK_INNER_HTTP)
-                ->debug("[Webserver] Registered request callback for path: {}", path);
+            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Registered request callback for path: {}", path);
         }
     }
     void Webserver::Respond(mg_connection *c, int32_t code, const std::string &message) {

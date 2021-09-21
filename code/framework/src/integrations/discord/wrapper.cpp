@@ -2,44 +2,44 @@
 
 #include <logging/logger.h>
 
-namespace Framework::Integrations {
-    bool Discord::Init(int64_t id) {
+namespace Framework::Integrations::Discord {
+    DiscordError Wrapper::Init(int64_t id) {
         auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
         if (result != discord::Result::Ok) {
-            return false;
+            return DiscordError::DISCORD_CORE_CREATE_FAILED;
         }
 
         _instance->UserManager().OnCurrentUserUpdate.Connect([this]() {
             _instance->UserManager().GetCurrentUser(&_user);
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_INTEGRATIONS)
-                ->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
         });
 
-        return true;
+        return DiscordError::DISCORD_NONE;
     }
 
-    bool Discord::Shutdown() {
+    DiscordError Wrapper::Shutdown() {
         if (!_instance) {
-            return false;
+            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
         _instance->UserManager().OnCurrentUserUpdate.DisconnectAll();
 
-        return true;
+        return DiscordError::DISCORD_NONE;
     }
 
-    void Discord::Update() {
-        if (_instance) {
-            _instance->RunCallbacks();
+    DiscordError Wrapper::Update() {
+        if(!_instance){
+            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
+        
+        _instance->RunCallbacks();
+        return DiscordError::DISCORD_NONE;
     }
 
-    void Discord::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity,
-                              const std::string &largeImage, const std::string &largeText,
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,
                               const std::string &smallImage, const std::string &smallText) {
         if (!_instance) {
-            return;
+            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
         discord::Activity act {};
@@ -57,36 +57,38 @@ namespace Framework::Integrations {
                 Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to update activity");
             }
         });
+
+        return DiscordError::DISCORD_NONE;
     }
-    void Discord::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) {
-        SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) {
+        return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
-    discord::UserManager &Discord::GetUserManager() {
+    discord::UserManager &Wrapper::GetUserManager() {
         return _instance->UserManager();
     }
 
-    discord::ActivityManager &Discord::GetActivityManager() {
+    discord::ActivityManager &Wrapper::GetActivityManager() {
         return _instance->ActivityManager();
     }
 
-    discord::ImageManager &Discord::GetImageManager() {
+    discord::ImageManager &Wrapper::GetImageManager() {
         return _instance->ImageManager();
     }
 
-    discord::OverlayManager &Discord::GetOverlayManager() {
+    discord::OverlayManager &Wrapper::GetOverlayManager() {
         return _instance->OverlayManager();
     }
 
-    discord::ApplicationManager &Discord::GetApplicationManager() {
+    discord::ApplicationManager &Wrapper::GetApplicationManager() {
         return _instance->ApplicationManager();
     }
 
-    discord::VoiceManager &Discord::GetVoiceManager() {
+    discord::VoiceManager &Wrapper::GetVoiceManager() {
         return _instance->VoiceManager();
     }
 
-    discord::RelationshipManager &Discord::GetRelationshipManager() {
+    discord::RelationshipManager &Wrapper::GetRelationshipManager() {
         return _instance->RelationshipManager();
     }
 } // namespace Framework::Integrations

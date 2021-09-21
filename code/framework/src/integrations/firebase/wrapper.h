@@ -1,5 +1,7 @@
 #pragma once
 
+#include "errors.h"
+
 #include <firebase/analytics.h>
 #include <firebase/analytics/event_names.h>
 #include <firebase/analytics/parameter_names.h>
@@ -9,9 +11,8 @@
 #include <firebase/util.h>
 #include <string>
 
-
-namespace Framework::Integrations {
-    class Firebase final: public firebase::auth::AuthStateListener {
+namespace Framework::Integrations::Firebase {
+    class Wrapper final: public firebase::auth::AuthStateListener {
       private:
         firebase::App *_app;
         firebase::auth::User *_user;
@@ -22,12 +23,12 @@ namespace Framework::Integrations {
         void OnAuthStateChanged(firebase::auth::Auth *) override;
 
       public:
-        bool Init(const std::string &, const std::string &, const std::string &);
+        FirebaseError Init(const std::string &, const std::string &, const std::string &);
 
-        bool SignInWithEmailPassword(const std::string &, const std::string &);
-        bool SignUpWithEmailPassword(const std::string &, const std::string &);
-        bool SignInAnonymously();
-        bool SignOut();
+        FirebaseError SignInWithEmailPassword(const std::string &, const std::string &);
+        FirebaseError SignUpWithEmailPassword(const std::string &, const std::string &);
+        FirebaseError SignInAnonymously();
+        FirebaseError SignOut();
 
         void LogEvent(const std::string &, const std::string &, const std::string &);
         void LogEvent(const std::string &, const std::string &, const double);

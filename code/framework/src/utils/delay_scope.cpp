@@ -11,7 +11,8 @@ namespace Framework::Utils {
         const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - _created);
 
         if (milliseconds.count() >= _delay) {
-            if (_callback != nullptr) _callback();
+            if (_callback != nullptr)
+                _callback();
 
             return true;
         }

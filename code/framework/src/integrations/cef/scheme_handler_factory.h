@@ -10,8 +10,7 @@ namespace Framework::Integrations::CEF {
         std::vector<std::regex> _requestsBlacklist;
 
       public:
-        virtual CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, const CefString &,
-                                                     CefRefPtr<CefRequest>);
+        virtual CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, const CefString &, CefRefPtr<CefRequest>);
 
         void SetRequestBlacklist(const std::vector<std::regex> &);
 

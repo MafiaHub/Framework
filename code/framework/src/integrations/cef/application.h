@@ -37,11 +37,9 @@ namespace Framework::Integrations::CEF {
         virtual void OnContextInitialized() override;
         virtual void OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefCommandLine>) override;
 
-        virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefProcessId,
-                                              CefRefPtr<CefProcessMessage>) override;
+        virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefProcessId, CefRefPtr<CefProcessMessage>) override;
 
-        virtual bool Execute(const CefString &, CefRefPtr<CefV8Value>, const CefV8ValueList &, CefRefPtr<CefV8Value> &,
-                             CefString &) override;
+        virtual bool Execute(const CefString &, CefRefPtr<CefV8Value>, const CefV8ValueList &, CefRefPtr<CefV8Value> &, CefString &) override;
 
         IMPLEMENT_REFCOUNTING(Application);
     };

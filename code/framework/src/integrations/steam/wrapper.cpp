@@ -3,15 +3,15 @@
 #include <logging/logger.h>
 
 namespace Framework::Integrations::Steam {
-    WrapperError Wrapper::Init() {
+    SteamError Wrapper::Init() {
         if (!SteamAPI_IsSteamRunning()) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Steam API is not running");
-            return WRAPPER_ERROR_STEAM_NOT_RUNNING;
+            return SteamError::STEAM_CLIENT_NOT_RUNNING;
         }
 
         if (!SteamAPI_InitSafe()) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam API");
-            return WRAPPER_ERROR_INIT_STEAM;
+            return SteamError::STEAM_INIT_FAILED;
         }
 
         CSteamAPIContext *ctx = new CSteamAPIContext();
@@ -19,15 +19,15 @@ namespace Framework::Integrations::Steam {
 
         if (!_ctx) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to create steam api context");
-            return WRAPPER_ERROR_CONTEXT_CREATE;
+            return SteamError::STEAM_CONTEXT_CREATION_FAILED;
         }
 
         if (!_ctx->Init()) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam context");
-            return WRAPPER_ERROR_CONTEXT_INIT;
+            return SteamError::STEAM_CONTEXT_INIT_FAILED;
         }
 
-        return WRAPPER_ERROR_NONE;
+        return SteamError::STEAM_NONE;
     }
 
     CSteamID Wrapper::GetSteamID() const {

@@ -1,25 +1,25 @@
 #pragma once
 
+#include "errors.h"
+
 #include <discord.h>
 #include <string>
 
-namespace Framework::Integrations {
-    class Discord final {
+namespace Framework::Integrations::Discord {
+    class Wrapper final {
       private:
         discord::User _user;
         discord::Core *_instance;
 
       public:
-        Discord() = default;
-        bool Init(int64_t id);
-        bool Shutdown();
+        Wrapper() = default;
+        DiscordError Init(int64_t id);
+        DiscordError Shutdown();
 
-        void Update();
-
-        void SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity,
-                         const std::string &largeImage, const std::string &largeText, const std::string &smallImage,
-                         const std::string &smallText);
-        void SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
+        DiscordError Update();
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,
+                                 const std::string &smallImage, const std::string &smallText);
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
 
         discord::ActivityManager &GetActivityManager();
         discord::UserManager &GetUserManager();

@@ -26,9 +26,7 @@ namespace Framework::Scripting {
         // Create the multi isolate platform on a single thread
         _platform = node::MultiIsolatePlatform::Create(1, nullptr);
         if (!_platform) {
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_SCRIPTING)
-                ->debug("Failed to initialize the node multi isolate platform");
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the node multi isolate platform");
             return ENGINE_PLATFORM_INIT_FAILED;
         }
 
@@ -82,9 +80,8 @@ namespace Framework::Scripting {
             v8::String::Utf8Value res(isolate, message->GetScriptResourceName());
             v8::String::Utf8Value msg(isolate, message->Get());
 
-            v8::Local<v8::Object> err_obj = error->ToObject(context).ToLocalChecked();
-            v8::Local<v8::Value> trace_value =
-                err_obj->Get(context, v8::String::NewFromUtf8(isolate, "stack").ToLocalChecked()).ToLocalChecked();
+            v8::Local<v8::Object> err_obj    = error->ToObject(context).ToLocalChecked();
+            v8::Local<v8::Value> trace_value = err_obj->Get(context, v8::String::NewFromUtf8(isolate, "stack").ToLocalChecked()).ToLocalChecked();
             v8::String::Utf8Value trace(isolate, trace_value->ToString(context).ToLocalChecked());
 
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("{}: {}", *res, *msg);

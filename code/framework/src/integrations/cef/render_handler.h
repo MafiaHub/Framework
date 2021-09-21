@@ -21,8 +21,7 @@ namespace Framework::Integrations::CEF {
 
       protected:
         virtual void GetViewRect(CefRefPtr<CefBrowser>, CefRect &) override;
-        virtual void OnPaint(CefRefPtr<CefBrowser>, PaintElementType, const RectList &, const void *, int,
-                             int) override;
+        virtual void OnPaint(CefRefPtr<CefBrowser>, PaintElementType, const RectList &, const void *, int, int) override;
         virtual void OnPopupShow(CefRefPtr<CefBrowser>, bool) override;
         virtual void OnPopupSize(CefRefPtr<CefBrowser>, const CefRect &) override;
         virtual void OnImeCompositionRangeChanged(CefRefPtr<CefBrowser>, const CefRange &, const RectList &) override;

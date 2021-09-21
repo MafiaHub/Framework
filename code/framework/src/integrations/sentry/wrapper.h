@@ -1,10 +1,11 @@
 #pragma once
 
+#include "errors.h"
+
 #include <sentry.h>
 #include <string>
 
-
-namespace Framework::Integrations {
+namespace Framework::Integrations::Sentry {
     struct SystemInformation {
         std::string _cpuBrand;
         uint8_t _cpuProcessorsCount = 0;
@@ -32,21 +33,21 @@ namespace Framework::Integrations {
         std::string _version;
     };
 
-    class CrashReporter final {
+    class Wrapper final {
       private:
         bool _valid = false;
 
       public:
-        bool Init(const std::string &, const std::string &);
-        bool Shutdown();
+        SentryError Init(const std::string &, const std::string &);
+        SentryError Shutdown();
 
-        void CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload);
-        void CaptureEventException(const std::string &type, const std::string &message);
+        SentryError CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload);
+        SentryError CaptureEventException(const std::string &type, const std::string &message);
 
-        void SetSystemInformation(const SystemInformation &);
-        void SetScreenInformation(const ScreenInformation &);
-        void SetUserInformation(const UserInformation &);
-        void SetGameInformation(const GameInformation &);
+        SentryError SetSystemInformation(const SystemInformation &);
+        SentryError SetScreenInformation(const ScreenInformation &);
+        SentryError SetUserInformation(const UserInformation &);
+        SentryError SetGameInformation(const GameInformation &);
 
         bool IsValid() const {
             return _valid;

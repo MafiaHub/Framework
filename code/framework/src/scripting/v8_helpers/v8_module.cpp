@@ -16,16 +16,16 @@ namespace Framework::Scripting::Helpers {
     }
 
     V8HelperError V8Module::AddClass(V8Class *cls) {
-        if(_classes.count(cls->GetName()) > 0){
+        if (_classes.count(cls->GetName()) > 0) {
             return HELPER_ALREADY_LOADED;
         }
-        
+
         cls->Load();
         _classes[cls->GetName()] = cls;
         return HELPER_NONE;
     }
 
-    V8Class* V8Module::GetClass(const std::string &name){
+    V8Class *V8Module::GetClass(const std::string &name) {
         return _classes[name];
     }
 
@@ -40,27 +40,21 @@ namespace Framework::Scripting::Helpers {
         }
 
         // Load all classes
-        for (auto &cls : _classes) { 
-            cls.second->Load();
-        }
+        for (auto &cls : _classes) { cls.second->Load(); }
 
         // Create the object template
         v8::Local<v8::Object> objTpl = _objTemplate->NewInstance(context).ToLocalChecked();
 
         // Create the inner content of the module
-        if(_initCb){
+        if (_initCb) {
             _initCb(context, objTpl);
         }
 
         // Bind the classes to the object template
-        for (auto &cls : _classes) { 
-            cls.second->Register(context, objTpl); 
-        };
+        for (auto &cls : _classes) { cls.second->Register(context, objTpl); };
 
         // Register the obj template to the global obj template
-        v8::Maybe<bool> res = context->Global()->Set(
-            context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
-            objTpl);
+        v8::Maybe<bool> res = context->Global()->Set(context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), objTpl);
 
         // If something went weird, just cancel and evacuate
         if (!res.ToChecked()) {

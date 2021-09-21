@@ -9,7 +9,7 @@ namespace Framework::GUI {
 
         // Prepare the launch arguments
         // TODO: make it UNIX compatible
-        CefMainArgs args(0);
+        CefMainArgs args(0, nullptr);
 
         // Prepare the settings
         CefSettings settings;

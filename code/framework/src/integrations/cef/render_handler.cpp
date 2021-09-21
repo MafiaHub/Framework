@@ -5,12 +5,12 @@ namespace Framework::Integrations::CEF {
 
     RenderHandler::~RenderHandler() {}
 
-    void RenderHandler::UpdatePopup(){
-        if(_isPaintingPopup){
+    void RenderHandler::UpdatePopup() {
+        if (_isPaintingPopup) {
             return;
         }
 
-        if(_popupRect.IsEmpty()){
+        if (_popupRect.IsEmpty()) {
             return;
         }
 
@@ -21,11 +21,9 @@ namespace Framework::Integrations::CEF {
 
     void RenderHandler::GetViewRect(CefRefPtr<CefBrowser> browser, CefRect &rect) {}
 
-    void RenderHandler::OnPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects,
-                                const void *buffer, int width, int height) {}
+    void RenderHandler::OnPaint(CefRefPtr<CefBrowser> browser, PaintElementType type, const RectList &dirtyRects, const void *buffer, int width, int height) {}
 
-    void RenderHandler::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser, const CefRange &selectedRange,
-                                                     const RectList &characterBounds) {}
+    void RenderHandler::OnImeCompositionRangeChanged(CefRefPtr<CefBrowser> browser, const CefRange &selectedRange, const RectList &characterBounds) {}
 
     void RenderHandler::OnPopupShow(CefRefPtr<CefBrowser> browser, bool show) {}
 

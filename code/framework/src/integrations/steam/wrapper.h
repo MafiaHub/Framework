@@ -37,7 +37,7 @@ namespace Framework::Integrations::Steam {
 
         ~Wrapper() = default;
 
-        WrapperError Init();
+        SteamError Init();
 
         CSteamID GetSteamID() const;
         EPersonaState GetSteamUserState() const;

@@ -18,7 +18,7 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DFW_DEBUG")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 else ()
-    add_definitions("-Wno-unused-result" "-Wno-deprecated-declarations")
+    add_definitions("-Wno-unused-result" "-Wno-deprecated-declarations" "-Winvalid-offsetof")
 endif ()
 
 add_subdirectory(vendors)

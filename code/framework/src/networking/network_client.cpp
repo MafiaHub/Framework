@@ -34,9 +34,7 @@ namespace Framework::Networking {
 
     ClientError NetworkClient::Connect(std::string &host, int32_t port, std::string &password) {
         if (_state != DISCONNECTED) {
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_NETWORKING)
-                ->debug("Cannot connect an already connected instance");
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
             return CLIENT_ALREADY_CONNECTED;
         }
 
@@ -140,14 +138,12 @@ namespace Framework::Networking {
                 if (_registeredMessageCallbacks.find(innerSyncMessage) != _registeredMessageCallbacks.end()) {
                     _registeredMessageCallbacks[innerSyncMessage](&bsIn);
                 } else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                        ->warn("Received unknown game sync message {}", innerSyncMessage);
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", innerSyncMessage);
                 }
             } break;
 
             default: {
-                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                    ->debug("Received unknown packet {}", _packet->data[offset]);
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Received unknown packet {}", _packet->data[offset]);
             } break;
             }
         }

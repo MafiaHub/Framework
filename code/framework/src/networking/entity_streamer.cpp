@@ -22,7 +22,8 @@ namespace Framework::Networking {
                     continue;
                 }
 
-                if (!entity->IsSpawned()) continue;
+                if (!entity->IsSpawned())
+                    continue;
 
                 // Determine if the entity is visible for our networked client and trigger respective event.
                 bool canSend = CanSend(player, entity);
@@ -44,15 +45,15 @@ namespace Framework::Networking {
 
     bool EntityStreamer::CanSend(Entities::Entity *receiver, Entities::Entity *entity) {
         const float distanceBetweenEntities = glm::length(receiver->GetPosition() - entity->GetPosition());
-        return entity->GetVirtualWorld() == receiver->GetVirtualWorld() && entity->IsSpawned()
-               && !entity->IsPendingRemoval() && distanceBetweenEntities < GetStreamingRange();
+        return entity->GetVirtualWorld() == receiver->GetVirtualWorld() && entity->IsSpawned() && !entity->IsPendingRemoval() && distanceBetweenEntities < GetStreamingRange();
     }
 
     void EntityStreamer::ClearEntity(Entities::Entity *entity) {
         const auto entityNetId = entity->GetNetworkID();
         auto players           = GetStreamerEntities();
         for (auto player : players) {
-            if (player == entity) continue;
+            if (player == entity)
+                continue;
 
             auto &snapshot = _streamedEntities[player->GetOwner().g];
             if (std::find(snapshot.begin(), snapshot.end(), entityNetId) != snapshot.end()) {

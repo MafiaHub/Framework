@@ -18,7 +18,6 @@ namespace Framework::Scripting::Builtins {
 
     static void PlayerGetName(v8::Local<v8::String> name, const v8::PropertyCallbackInfo<v8::Value> &info) {
         auto isolate = v8::Isolate::GetCurrent();
-        info.GetReturnValue().Set(
-            v8::String::NewFromUtf8(isolate, "john_doe", v8::NewStringType::kNormal).ToLocalChecked());
+        info.GetReturnValue().Set(v8::String::NewFromUtf8(isolate, "john_doe", v8::NewStringType::kNormal).ToLocalChecked());
     }
 } // namespace Framework::Scripting::Builtins

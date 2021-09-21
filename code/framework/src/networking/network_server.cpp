@@ -16,9 +16,7 @@ namespace Framework::Networking {
 
         if (password.length() > 0) {
             _peer->SetIncomingPassword(password.c_str(), password.length());
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_NETWORKING)
-                ->debug("Applying incoming password to networking peer");
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Applying incoming password to networking peer");
         }
 
         _peer->SetMaximumIncomingConnections(maxPlayers);
@@ -68,14 +66,11 @@ namespace Framework::Networking {
                 if (_registeredMessageCallbacks.find(innerSyncMessage) != _registeredMessageCallbacks.end()) {
                     _registeredMessageCallbacks[innerSyncMessage](&bsIn);
                 } else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                        ->warn("Received unknown game sync message {}", innerSyncMessage);
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", innerSyncMessage);
                 }
             } break;
 
-            default:
-                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                    ->debug("Received unknown packet {}", _packet->data[offset]);
+            default: Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Received unknown packet {}", _packet->data[offset]);
             }
         }
     }

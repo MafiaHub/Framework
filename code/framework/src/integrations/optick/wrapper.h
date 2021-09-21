@@ -2,8 +2,8 @@
 
 #include <optick.h>
 
-namespace Framework::Integrations {
-    class Optick final {
+namespace Framework::Integrations::Optick {
+    class Wrapper final {
       public:
         /**
          * Automated profiling
