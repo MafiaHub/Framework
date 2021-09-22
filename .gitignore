@@ -1,5 +1,8 @@
 .idea/
 .vscode
+.vs
+
+CMakeSettings.json
 
 *.a
 *.dylib
@@ -26,3 +29,4 @@ code/projects
 vendors/cef/lib/osx
 
 _external
+**/obj
