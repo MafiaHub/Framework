@@ -17,6 +17,13 @@
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
+    inline void QuatExtract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &w, double &x, double &y, double &z) {
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "w"), ctx, w);
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "x"), ctx, x);
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "y"), ctx, y);
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "z"), ctx, z);
+    }
+
     static void QuaternionConstructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
@@ -50,10 +57,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
@@ -79,10 +83,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
@@ -109,10 +110,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
@@ -129,10 +127,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
@@ -156,10 +151,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
@@ -200,10 +192,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
@@ -218,10 +207,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         glm::quat nativeQuat(w, x, y, z);
         info.GetReturnValue().Set(static_cast<double>(glm::length(nativeQuat)));
@@ -234,10 +220,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         v8::Local<v8::Array> arr = v8::Array::New(isolate, 4);
         arr->Set(ctx, 0, v8::Number::New(isolate, w));
@@ -254,10 +237,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         double w, x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "w"), ctx, w);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        QuatExtract(ctx, _this, w, x, y, z);
 
         std::ostringstream ss;
         ss << std::fixed << std::setprecision(4) << "Quaternion{ w: " << w << ", x: " << x << ", y: " << y << ", z: " << z << " }";
