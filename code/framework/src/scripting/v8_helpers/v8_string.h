@@ -7,13 +7,21 @@
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
-    const char *ToCString(v8::Local<v8::String> str) {
+    inline const char *ToCString(v8::Local<v8::String> str) {
         v8::String::Utf8Value value(v8::Isolate::GetCurrent(), str);
         return *value ? *value : "<string conversion failed>";
     }
 
-    const std::string ToString(v8::Local<v8::String> str) {
+    inline const std::string ToString(v8::Local<v8::String> str) {
         v8::String::Utf8Value value(v8::Isolate::GetCurrent(), str);
         return *value ? *value : "<string conversion failed>";
+    }
+
+    inline v8::MaybeLocal<v8::String> MakeString(v8::Isolate *isolate, const char *str) {
+        return v8::String::NewFromUtf8(isolate, str, v8::NewStringType::kNormal);
+    }
+
+    inline v8::MaybeLocal<v8::String> MakeString(v8::Isolate *isolate, const std::string &str) {
+        return MakeString(isolate, str.c_str());
     }
 } // namespace Framework::Scripting::Helpers

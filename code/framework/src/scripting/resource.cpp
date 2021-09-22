@@ -2,6 +2,7 @@
 
 #include "engine.h"
 #include "events.h"
+#include "v8_helpers/v8_string.h"
 #include "v8_helpers/v8_try_catch.h"
 
 #include <logging/logger.h>
@@ -152,12 +153,15 @@ namespace Framework::Scripting {
                            + "/');"
                              "globalThis.require = publicRequire;"
                              "require('vm').runInThisContext(process.argv[1]);";
-        node::LoadEnvironment(_environment, init.c_str());
+
+        if (node::LoadEnvironment(_environment, init.c_str()).IsEmpty())
+            return false;
+
         Compile(content, entryPointFile.path());
         Run();
 
         // Notify the resource load
-        std::vector<v8::Local<v8::Value>> args = {v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked()};
+        std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
         InvokeEvent(Events[EventIDs::RESOURCE_LOADED], args);
 
         // Install the watch handler
@@ -217,12 +221,12 @@ namespace Framework::Scripting {
             const auto context = _context.Get(isolate);
             v8::Context::Scope contextScope(context);
 
-            const auto source = v8::String::NewFromUtf8(isolate, str.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+            const auto source = Helpers::MakeString(isolate, str).ToLocalChecked();
             v8::MaybeLocal<v8::Script> script;
             if (path.empty()) {
                 script = v8::Script::Compile(context, source);
             } else {
-                auto originValue = v8::String::NewFromUtf8(isolate, path.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+                auto originValue = Helpers::MakeString(isolate, path).ToLocalChecked();
                 v8::ScriptOrigin scriptOrigin(originValue);
 
                 script = v8::Script::Compile(context, source, &scriptOrigin);
@@ -259,9 +263,9 @@ namespace Framework::Scripting {
     }
 
     void Resource::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
-        std::vector<v8::Local<v8::Value>> args = {v8::String::NewFromUtf8(_engine->GetIsolate(), error.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
-                                                  v8::String::NewFromUtf8(_engine->GetIsolate(), stackTrace.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
-                                                  v8::String::NewFromUtf8(_engine->GetIsolate(), file.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+        std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(_engine->GetIsolate(), error).ToLocalChecked(),
+                                                  Helpers::MakeString(_engine->GetIsolate(), stackTrace).ToLocalChecked(),
+                                                  Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(),
                                                   v8::Integer::New(_engine->GetIsolate(), line)};
         InvokeEvent("resourceError", args);
     }
