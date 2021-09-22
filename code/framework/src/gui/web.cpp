@@ -5,7 +5,7 @@
 namespace Framework::GUI {
     bool Web::Init(const std::string &rootPath, bool windowLess) {
         // Create the application instance
-        _application = new Integrations::CEF::Application();
+        _application = new External::CEF::Application();
 
         // Prepare the launch arguments
         // TODO: make it UNIX compatible

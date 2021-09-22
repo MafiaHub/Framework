@@ -15,6 +15,9 @@
 #define FRAMEWORK_INNER_INTEGRATIONS "Integrations"
 #define FRAMEWORK_INNER_JOBS         "Jobs"
 
+#define FRAMEWORK_INNER_SERVER "Server"
+#define FRAMEWORK_INNER_CLIENT "Client"
+
 namespace Framework::Logging {
     class Logger final {
       private:

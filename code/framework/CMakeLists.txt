@@ -11,10 +11,10 @@ set(FRAMEWORK_SRC
         src/utils/time.cpp
         src/utils/job_system.cpp
 
-        src/integrations/discord/wrapper.cpp
-        src/integrations/sentry/wrapper.cpp
-        src/integrations/firebase/wrapper.cpp
-        src/integrations/optick/wrapper.cpp
+        src/external/discord/wrapper.cpp
+        src/external/sentry/wrapper.cpp
+        src/external/firebase/wrapper.cpp
+        src/external/optick/wrapper.cpp
         )
 
 set(FRAMEWORK_SERVER_SRC
@@ -35,20 +35,23 @@ set(FRAMEWORK_SERVER_SRC
 
         src/networking/network_server.cpp
         src/networking/entity_streamer.cpp
+
+        src/integrations/server/instance.cpp
         )
 
 set(FRAMEWORK_CLIENT_SRC
-        src/integrations/cef/application.cpp
-        src/integrations/cef/client.cpp
-        src/integrations/cef/render_handler.cpp
-        src/integrations/cef/worker.hpp
+        src/external/cef/application.cpp
+        src/external/cef/client.cpp
+        src/external/cef/render_handler.cpp
+        src/external/cef/worker.hpp
 
         src/gui/web.cpp
 
         src/networking/network_client.cpp
 
-        src/integrations/steam/wrapper.cpp
+        src/external/steam/wrapper.cpp
 
+        src/integrations/client/instance.cpp
         )
 
 # Append the files to the target static library
