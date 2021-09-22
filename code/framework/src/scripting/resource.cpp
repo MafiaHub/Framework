@@ -154,7 +154,7 @@ namespace Framework::Scripting {
                              "globalThis.require = publicRequire;"
                              "require('vm').runInThisContext(process.argv[1]);";
 
-        if (node::LoadEnvironment(_environment, init.c_str()).IsEmpty())
+        if (!node::LoadEnvironment(_environment, init.c_str()).IsEmpty())
             return false;
 
         Compile(content, entryPointFile.path());
