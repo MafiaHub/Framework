@@ -95,6 +95,8 @@ namespace Framework::Scripting {
         // Load the resources
         _resourceManager = new ResourceManager(this);
         _resourceManager->LoadAll(cb);
+        _resourceManager->UnloadAll();
+        _resourceManager->LoadAll(cb);
         return ENGINE_NONE;
     }
 

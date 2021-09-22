@@ -38,7 +38,7 @@ namespace Framework::Scripting {
 
     ResourceManagerError ResourceManager::Unload(std::string name) {
         // Is the package event present?
-        if (_resources.find(name) != _resources.end()) {
+        if (_resources.find(name) == _resources.end()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Package {} not loaded", name);
             return RESOURCE_NOT_LOADED;
         }

@@ -38,6 +38,8 @@ namespace Framework::Scripting {
 
         SDK *_sdk;
 
+        SDKRegisterCallback _regCb;
+
       public:
         Resource(Engine *, std::string &, SDKRegisterCallback);
 
@@ -73,6 +75,5 @@ namespace Framework::Scripting {
         bool WatchChanges();
         bool Compile(const std::string &, const std::string &);
         bool Run();
-        void ReloadChanges();
     };
 } // namespace Framework::Scripting

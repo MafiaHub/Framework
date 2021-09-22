@@ -9,7 +9,7 @@
 #include <nlohmann/json.hpp>
 
 namespace Framework::Scripting {
-    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _path(path), _engine(engine) {
+    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _path(path), _engine(engine), _regCb(cb) {
         if (LoadPackageFile()) {
             if (Init(cb)) {
                 _loaded = true;
@@ -62,39 +62,15 @@ namespace Framework::Scripting {
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
         _watcher.addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource {} is reloaded due to the file changes", _name);
-            ReloadChanges();
+
+            // Close the resource first, we'll start with a clean slate
+            Shutdown();
+
+            if (LoadPackageFile()) {
+                Init(_regCb);
+            }
         });
         return true;
-    }
-
-    void Resource::ReloadChanges() {
-        cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
-        if (!entryPointFile.exists() || !entryPointFile.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint is not a file");
-            return;
-        }
-
-        // Read the file content
-        std::string content = entryPointFile.readFile();
-        if (content.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file is empty");
-            return;
-        }
-
-        const auto isolate = _engine->GetIsolate();
-        if (!isolate) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Cannot acquire isolate instance");
-            return;
-        }
-
-        v8::Locker isolateLock(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-
-        Compile(content, entryPointFile.path());
-        Run();
-
-        std::vector<v8::Local<v8::Value>> args = {v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked()};
-        InvokeEvent(Events[EventIDs::RESOURCE_RELOADED], args);
     }
 
     bool Resource::Init(SDKRegisterCallback cb) {
@@ -166,6 +142,8 @@ namespace Framework::Scripting {
 
         // Install the watch handler
         WatchChanges();
+
+        _loaded = true;
         return true;
     }
 
@@ -182,10 +160,12 @@ namespace Framework::Scripting {
         }
 
         // Process the scripting layer
-        v8::HandleScope scope(isolate);
-        v8::Local<v8::Context> context = _context.Get(isolate);
-        context->Enter();
-        context->Exit();
+        {
+            v8::HandleScope scope(isolate);
+            v8::Local<v8::Context> context = _context.Get(isolate);
+            context->Enter();
+            context->Exit();
+        }
 
         // Process the file changes watcher
         _watcher.watch();
@@ -208,6 +188,8 @@ namespace Framework::Scripting {
 
         _script.Reset();
         _context.Reset();
+
+        _loaded = false;
         return true;
     }
 
