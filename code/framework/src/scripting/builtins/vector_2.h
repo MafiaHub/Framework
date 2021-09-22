@@ -11,6 +11,11 @@
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
+    inline void Vector2Extract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &x, double &y) {
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "x"), ctx, x);
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "y"), ctx, y);
+    }
+
     static void Vector2Constructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
@@ -52,8 +57,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        Vector2Extract(ctx, _this, x, y);
 
         // Construct our objects
         glm::vec2 oldVec(x, y);
@@ -81,8 +85,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        Vector2Extract(ctx, _this, x, y);
 
         // Construct our objects
         glm::vec2 oldVec(x, y);
@@ -110,8 +113,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        Vector2Extract(ctx, _this, x, y);
 
         // Construct our objects
         glm::vec2 oldVec(x, y);
@@ -139,8 +141,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        Vector2Extract(ctx, _this, x, y);
 
         // Construct our objects
         glm::vec2 oldVec(x, y);
@@ -182,8 +183,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        Vector2Extract(ctx, _this, x, y);
 
         // Construct our objects
         glm::vec2 oldVec(x, y);
@@ -198,8 +198,7 @@ namespace Framework::Scripting::Builtins {
         v8::Local<v8::Object> _this = info.This();
 
         double x, y;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        Vector2Extract(ctx, _this, x, y);
 
         glm::vec2 nativeVec(x, y);
         info.GetReturnValue().Set(static_cast<double>(glm::length(nativeVec)));

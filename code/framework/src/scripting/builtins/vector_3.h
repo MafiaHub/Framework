@@ -11,6 +11,12 @@
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
+    inline void Vector3Extract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &x, double &y, double &z) {
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "x"), ctx, x);
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "y"), ctx, y);
+        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "z"), ctx, z);
+    }
+
     static void Vector3Constructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
         v8::Isolate *isolate       = info.GetIsolate();
         v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
@@ -53,9 +59,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        Vector3Extract(ctx, _this, x, y, z);
 
         // Construct our objects
         glm::vec3 oldVec(x, y, z);
@@ -83,9 +87,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        Vector3Extract(ctx, _this, x, y, z);
 
         // Construct our objects
         glm::vec3 oldVec(x, y, z);
@@ -113,9 +115,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        Vector3Extract(ctx, _this, x, y, z);
 
         // Construct our objects
         glm::vec3 oldVec(x, y, z);
@@ -143,9 +143,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        Vector3Extract(ctx, _this, x, y, z);
 
         // Construct our objects
         glm::vec3 oldVec(x, y, z);
@@ -177,9 +175,7 @@ namespace Framework::Scripting::Builtins {
 
         // Acquire old values
         double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "z"), ctx, z);
+        Vector3Extract(ctx, _this, x, y, z);
 
         // Construct our objects
         glm::vec3 oldVec(x, y, z);
