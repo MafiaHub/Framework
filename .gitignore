@@ -10,6 +10,7 @@ CMakeSettings.json
 
 Bin/
 Build/
+Build*/
 
 CMakeLists.txt.user
 CMakeCache.txt
