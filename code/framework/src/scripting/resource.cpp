@@ -161,9 +161,9 @@ namespace Framework::Scripting {
         return true;
     }
 
-    void Resource::Update() {
+    void Resource::Update(bool force) {
         // We don't want to update a shutdown-in-progress resource
-        if (_isShuttingDown) {
+        if (_isShuttingDown && !force) {
             return;
         }
 
@@ -200,21 +200,33 @@ namespace Framework::Scripting {
 
     bool Resource::Shutdown() {
         if (!_loaded) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already unloaded");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource is already unloaded");
             return false;
         }
 
         if (!_environment) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid environment instance");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Invalid environment instance");
             return false;
         }
 
         if (_isShuttingDown) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already shutting down");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource is already shutting down");
             return false;
         }
 
+        // Flag the resource
         _isShuttingDown       = true;
+
+        // Call the resource unloading event
+        //TODO: implement
+
+        // Tick one last time
+        Update(true);
+
+        // Clear the event handlers
+        _remoteHandlers.clear();
+
+        // Clear the node instance
         const auto isolate = _engine->GetIsolate();
 
         v8::Locker locker(isolate);
@@ -228,6 +240,7 @@ namespace Framework::Scripting {
         node::FreeEnvironment(_environment);
         node::FreeIsolateData(_isolateData);
 
+        // Reset our members
         _script.Reset();
         _context.Reset();
         _environment = nullptr;

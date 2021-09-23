@@ -48,7 +48,7 @@ namespace Framework::Scripting {
 
         ~Resource();
 
-        void Update();
+        void Update(bool force = false);
 
         bool Init(SDKRegisterCallback = nullptr);
         bool Shutdown();
