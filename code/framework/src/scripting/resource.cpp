@@ -9,7 +9,7 @@
 #include <nlohmann/json.hpp>
 
 namespace Framework::Scripting {
-    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _path(path), _engine(engine), _regCb(cb) {
+    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _shutdowning(false), _path(path), _engine(engine), _regCb(cb) {
         if (LoadPackageFile()) {
             if (Init(cb)) {
                 _loaded = true;
