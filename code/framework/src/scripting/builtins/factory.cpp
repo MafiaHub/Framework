@@ -27,4 +27,4 @@ namespace Framework::Scripting::Builtins {
         Helpers::V8Class *cls = module->GetClass(GetKeyName(Keys::KEY_QUATERNION));
         return cls->CreateInstance(isolate, ctx, args);
     }
-}
+} // namespace Framework::Scripting::Builtins

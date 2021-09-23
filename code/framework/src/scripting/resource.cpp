@@ -190,7 +190,6 @@ namespace Framework::Scripting {
             uv_run(_uvLoop, UV_RUN_NOWAIT);
         }
 
-
         if (!_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
             // Process the file changes watcher
             _watcher.watch(0);
@@ -215,7 +214,7 @@ namespace Framework::Scripting {
         }
 
         // Flag the resource
-        _isShuttingDown       = true;
+        _isShuttingDown = true;
 
         const auto isolate = _engine->GetIsolate();
 
@@ -228,7 +227,6 @@ namespace Framework::Scripting {
             std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
             InvokeEvent(Events[EventIDs::RESOURCE_UNLOADING], args);
         }
-        
 
         // Tick one last time
         Update(true);
@@ -253,7 +251,7 @@ namespace Framework::Scripting {
         _context.Reset();
         _environment = nullptr;
 
-        _loaded      = false;
+        _loaded         = false;
         _isShuttingDown = false;
 
         return true;
@@ -333,21 +331,23 @@ namespace Framework::Scripting {
 
         const auto isolate = _engine->GetIsolate();
 
-        Helpers::TryCatch([&] {
-            v8::MaybeLocal<v8::Value> retn = callback->_fn.Get(isolate)->Call(_context.Get(isolate), v8::Undefined(isolate), args.size(), args.data());
-            if (retn.IsEmpty()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to invoke event '{}' for '{}'", eventName, _name);
-                return false;
-            }
+        Helpers::TryCatch(
+            [&] {
+                v8::MaybeLocal<v8::Value> retn = callback->_fn.Get(isolate)->Call(_context.Get(isolate), v8::Undefined(isolate), args.size(), args.data());
+                if (retn.IsEmpty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to invoke event '{}' for '{}'", eventName, _name);
+                    return false;
+                }
 
-            if (!suppressLog)
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event '{}' for '{}'", eventName, _name);
-            return true;
-        }, isolate, _context.Get(isolate));
+                if (!suppressLog)
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event '{}' for '{}'", eventName, _name);
+                return true;
+            },
+            isolate, _context.Get(isolate));
 
         if (callback->_once) {
             callback->_removed = true;
-        } 
+        }
     };
 
     v8::Local<v8::Context> Resource::GetContext() {

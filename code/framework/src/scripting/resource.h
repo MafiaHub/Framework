@@ -3,9 +3,9 @@
 #include "errors.h"
 #include "init.h"
 #include "sdk.h"
+#include "utils/time.h"
 #include "v8_helpers/v8_event_callback.h"
 #include "v8_helpers/v8_source_location.h"
-#include "utils/time.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileWatcher.h>
@@ -30,8 +30,8 @@ namespace Framework::Scripting {
 
         cppfs::FileWatcher _watcher;
 
-        node::IsolateData* _isolateData = nullptr;
-        uv_loop_t* _uvLoop = nullptr;
+        node::IsolateData *_isolateData = nullptr;
+        uv_loop_t *_uvLoop              = nullptr;
         v8::Persistent<v8::Context> _context;
         v8::Persistent<v8::Script> _script;
         node::Environment *_environment = nullptr;

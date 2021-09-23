@@ -1,13 +1,12 @@
 #pragma once
 
+#include "errors.h"
+#include "init.h"
 #include "resource.h"
 
 #include <map>
 #include <string>
 #include <v8.h>
-
-#include "errors.h"
-#include "init.h"
 
 namespace Framework::Scripting {
     class Engine;

@@ -13,7 +13,7 @@
 namespace Framework::Scripting {
     class Engine {
       private:
-        v8::Isolate *_isolate           = nullptr;
+        v8::Isolate *_isolate = nullptr;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
 
