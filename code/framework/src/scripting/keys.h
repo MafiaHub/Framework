@@ -3,13 +3,13 @@
 #include <string>
 
 namespace Framework::Scripting {
-    enum Keys {
+    enum class Keys {
         KEY_VECTOR_2,
         KEY_VECTOR_3,
         KEY_QUATERNION,
     };
 
-    const std::string GetKeyName(Keys k) {
+    const inline std::string GetKeyName(Keys k) {
         switch (k) {
         case Keys::KEY_VECTOR_2: return std::string("Vector2");
 

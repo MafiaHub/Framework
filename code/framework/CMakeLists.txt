@@ -23,6 +23,8 @@ set(FRAMEWORK_SERVER_SRC
         src/scripting/resource.cpp
         src/scripting/resource_manager.cpp
 
+        src/scripting/builtins/factory.cpp
+
         src/scripting/v8_helpers/argstack.cpp
         src/scripting/v8_helpers/v8_class.cpp
         src/scripting/v8_helpers/v8_module.cpp

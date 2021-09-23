@@ -5,6 +5,7 @@
 #include "../v8_helpers/helpers.h"
 #include "../v8_helpers/v8_class.h"
 #include "../v8_helpers/v8_module.h"
+#include "factory.h"
 
 #include <glm/ext.hpp>
 #include <glm/ext/matrix_relational.hpp>
@@ -61,7 +62,7 @@ namespace Framework::Scripting::Builtins {
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
-        info.GetReturnValue().Set(resource->GetSDK()->CreateQuaternion(ctx, glm::conjugate(oldQuat)));
+        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::conjugate(oldQuat)));
     }
 
     static void QuaternionCross(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -88,7 +89,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        info.GetReturnValue().Set(resource->GetSDK()->CreateQuaternion(ctx, glm::cross(oldQuat, newQuat)));
+        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::cross(oldQuat, newQuat)));
     }
 
     static void QuaternionDot(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -131,7 +132,7 @@ namespace Framework::Scripting::Builtins {
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
-        info.GetReturnValue().Set(resource->GetSDK()->CreateQuaternion(ctx, glm::inverse(oldQuat)));
+        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::inverse(oldQuat)));
     }
 
     static void QuaternionRotateVector3(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -156,7 +157,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::vec3 point(pX, pY, pZ);
-        info.GetReturnValue().Set(resource->GetSDK()->CreateVector3(ctx, oldQuat * point));
+        info.GetReturnValue().Set(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, oldQuat * point));
     }
 
     static void QuaternionSlerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -197,7 +198,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        info.GetReturnValue().Set(resource->GetSDK()->CreateQuaternion(ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
+        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
     }
 
     static void QuaternionLength(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
@@ -259,7 +260,7 @@ namespace Framework::Scripting::Builtins {
         }
         glm::quat newQuat(glm::vec3(x, y, z));
 
-        info.GetReturnValue().Set(resource->GetSDK()->CreateQuaternion(ctx, newQuat));
+        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
     }
 
     static void QuaternionFromAxisAngle(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -278,7 +279,7 @@ namespace Framework::Scripting::Builtins {
 
         glm::quat newQuat(glm::angleAxis(static_cast<float>(angle), glm::vec3(axisX, axisY, axisZ)));
 
-        info.GetReturnValue().Set(resource->GetSDK()->CreateQuaternion(ctx, newQuat));
+        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
     }
 
     static void QuaternionRegister(Scripting::Helpers::V8Module *rootModule) {

@@ -29,9 +29,5 @@ namespace Framework::Scripting {
         std::unordered_set<Helpers::V8Module *> &GetModules() {
             return _modules;
         }
-
-        v8::Local<v8::Value> CreateVector2(v8::Local<v8::Context>, glm::vec2);
-        v8::Local<v8::Value> CreateVector3(v8::Local<v8::Context>, glm::vec3);
-        v8::Local<v8::Value> CreateQuaternion(v8::Local<v8::Context>, glm::quat);
     };
 } // namespace Framework::Scripting

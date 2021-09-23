@@ -5,6 +5,7 @@
 #include "../v8_helpers/helpers.h"
 #include "../v8_helpers/v8_class.h"
 #include "../v8_helpers/v8_module.h"
+#include "factory.h"
 
 #include <glm/glm.hpp>
 #include <iomanip>
@@ -63,7 +64,7 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec += newVec;
-        info.GetReturnValue().Set(resource->GetSDK()->CreateVector2(ctx, oldVec));
+        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Sub(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -91,7 +92,7 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec -= newVec;
-        info.GetReturnValue().Set(resource->GetSDK()->CreateVector2(ctx, oldVec));
+        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Mul(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -119,7 +120,7 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec *= newVec;
-        info.GetReturnValue().Set(resource->GetSDK()->CreateVector2(ctx, oldVec));
+        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Div(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -147,7 +148,7 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec /= newVec;
-        info.GetReturnValue().Set(resource->GetSDK()->CreateVector2(ctx, oldVec));
+        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Lerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -188,7 +189,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
-        info.GetReturnValue().Set(resource->GetSDK()->CreateVector2(ctx, glm::mix(oldVec, newVec, static_cast<float>(f))));
+        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldVec, newVec, static_cast<float>(f))));
     }
 
     static void Vector2Length(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
