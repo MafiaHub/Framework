@@ -5,6 +5,8 @@
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
 
+#include "logging/logger.h"
+
 namespace Framework::Scripting {
     SDK::SDK(SDKRegisterCallback cb): _rootModule(nullptr) {
         _rootModule = new Helpers::V8Module("sdk", [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj) {
@@ -12,6 +14,7 @@ namespace Framework::Scripting {
         });
 
         if (!_rootModule) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Could not initialise the scripting sdk");
             return;
         }
 
