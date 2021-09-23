@@ -9,7 +9,19 @@
             "cmakeCommandArgs": "",
             "buildCommandArgs": "",
             "ctestCommandArgs": "",
-            "inheritEnvironments": [ "msvc_x86" ]
+            "inheritEnvironments": [ "msvc_x86" ],
+            "variables": [
+                {
+                    "name": "BUILD_SHARED_LIBS",
+                    "value": "",
+                    "type": "BOOL"
+                },
+                {
+                    "name": "BUILD_EXAMPLES",
+                    "value": "false",
+                    "type": "BOOL"
+                }
+            ]
         },
         {
             "name": "x86-Release",
@@ -20,7 +32,19 @@
             "cmakeCommandArgs": "",
             "buildCommandArgs": "",
             "ctestCommandArgs": "",
-            "inheritEnvironments": [ "msvc_x86" ]
+            "inheritEnvironments": [ "msvc_x86" ],
+            "variables": [
+                {
+                    "name": "BUILD_SHARED_LIBS",
+                    "value": "",
+                    "type": "BOOL"
+                },
+                {
+                    "name": "BUILD_EXAMPLES",
+                    "value": "false",
+                    "type": "BOOL"
+                }
+            ]
         },
         {
             "name": "x86-Prod",
@@ -31,7 +55,19 @@
             "cmakeCommandArgs": "",
             "buildCommandArgs": "",
             "ctestCommandArgs": "",
-            "inheritEnvironments": [ "msvc_x86" ]
+            "inheritEnvironments": [ "msvc_x86" ],
+            "variables": [
+                {
+                    "name": "BUILD_SHARED_LIBS",
+                    "value": "",
+                    "type": "BOOL"
+                },
+                {
+                    "name": "BUILD_EXAMPLES",
+                    "value": "false",
+                    "type": "BOOL"
+                }
+            ]
         }
     ]
 }

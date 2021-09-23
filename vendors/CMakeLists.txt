@@ -1,4 +1,4 @@
-set(BUILD_SHARED_LIBS OFF)
+set(BUILD_SHARED_LIBS CACHE BOOL OFF)
 
 # Add OpenSSL
 if (WIN32)
@@ -42,7 +42,7 @@ add_subdirectory(json)
 add_subdirectory(glm)
 
 # Build CPPFS
-set(OPTION_BUILD_TESTS OFF)
+set(OPTION_BUILD_TESTS CACHE BOOL OFF)
 add_subdirectory(cppfs)
 
 # Build HTTPLib
