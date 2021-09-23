@@ -3,7 +3,7 @@
 #include "../errors.h"
 #include "../resource.h"
 #include "../v8_helpers/v8_string.h"
-#include "macros.h"
+#include "../v8_helpers/helpers.h"
 
 #include <v8.h>
 

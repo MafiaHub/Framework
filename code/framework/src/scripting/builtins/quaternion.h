@@ -6,7 +6,6 @@
 #include "../v8_helpers/v8_class.h"
 #include "../v8_helpers/v8_module.h"
 #include "factory.h"
-#include "macros.h"
 
 #include <glm/ext.hpp>
 #include <glm/ext/matrix_relational.hpp>
