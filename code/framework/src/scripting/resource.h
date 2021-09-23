@@ -25,9 +25,12 @@ namespace Framework::Scripting {
         std::string _entryPoint;
 
         bool _loaded;
+        bool _shutdowning;
 
         cppfs::FileWatcher _watcher;
 
+        node::IsolateData* _isolateData = nullptr;
+        uv_loop_t* _uvLoop = nullptr;
         v8::Persistent<v8::Context> _context;
         v8::Persistent<v8::Script> _script;
         node::Environment *_environment = nullptr;

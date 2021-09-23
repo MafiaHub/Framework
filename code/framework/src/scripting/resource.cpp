@@ -114,14 +114,24 @@ namespace Framework::Scripting {
         context->SetAlignedPointerInEmbedderData(0, this);
         _context.Reset(isolate, context);
 
+        // Create the event loop
+        _uvLoop      = uv_loop_new();
+        _isolateData = node::CreateIsolateData(isolate, _uvLoop, _engine->GetPlatform());
+
         // Start initializing the environment
         v8::Context::Scope contextScope(context);
         v8::TryCatch tryCatch(isolate);
-        _environment = node::CreateEnvironment(_engine->GetIsolateData(), context, {_entryPoint, entryPointFile.path()}, {}, node::EnvironmentFlags::kNoFlags);
+
+        node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
+        _environment                        = node::CreateEnvironment(_isolateData, context, {_entryPoint, entryPointFile.path()}, {}, flags);
         if (!_environment) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Environment init failed");
             return false;
         }
+
+        // Apply the isolate settings to the local resource
+        node::IsolateSettings is;
+        node::SetIsolateUpForNode(isolate, is);
 
         std::string init = "const publicRequire ="
                            "require('module').createRequire(process.cwd() + '/resources/"
@@ -148,6 +158,11 @@ namespace Framework::Scripting {
     }
 
     void Resource::Update() {
+        // We don't want to update a shutdown-in-progress resource
+        if (_shutdowning) {
+            return;
+        }
+
         const auto isolate = _engine->GetIsolate();
 
         // Process the event handlers
@@ -161,10 +176,12 @@ namespace Framework::Scripting {
 
         // Process the scripting layer
         {
-            v8::HandleScope scope(isolate);
-            v8::Local<v8::Context> context = _context.Get(isolate);
-            context->Enter();
-            context->Exit();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+
+            v8::Context::Scope scope(GetContext());
+            uv_run(_uvLoop, UV_RUN_NOWAIT);
         }
 
         // Process the file changes watcher
@@ -177,19 +194,31 @@ namespace Framework::Scripting {
             return false;
         }
 
+        if (_shutdowning) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already shutdowning");
+            return false;
+        }
+
+        _shutdowning       = true;
         const auto isolate = _engine->GetIsolate();
 
-        v8::Locker lock(isolate);
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
 
         node::EmitBeforeExit(_environment);
         node::EmitExit(_environment);
-        node::Stop(_environment);
+        node::RunAtExit(_environment);
+
+        node::FreeEnvironment(_environment);
+        node::FreeIsolateData(_isolateData);
 
         _script.Reset();
         _context.Reset();
 
-        _loaded = false;
+        _loaded      = false;
+        _shutdowning = false;
+
         return true;
     }
 
@@ -247,8 +276,7 @@ namespace Framework::Scripting {
     void Resource::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
         std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(_engine->GetIsolate(), error).ToLocalChecked(),
                                                   Helpers::MakeString(_engine->GetIsolate(), stackTrace).ToLocalChecked(),
-                                                  Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(),
-                                                  v8::Integer::New(_engine->GetIsolate(), line)};
+                                                  Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(), v8::Integer::New(_engine->GetIsolate(), line)};
         InvokeEvent("resourceError", args);
     }
 
