@@ -2,8 +2,6 @@
 .vscode
 .vs
 
-CMakeSettings.json
-
 *.a
 *.dylib
 *.DS_STORE
