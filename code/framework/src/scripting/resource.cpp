@@ -9,10 +9,13 @@
 #include <nlohmann/json.hpp>
 
 namespace Framework::Scripting {
-    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _shutdowning(false), _path(path), _engine(engine), _regCb(cb) {
+    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _isShuttingDown(false), _path(path), _engine(engine), _regCb(cb) {
         if (LoadPackageFile()) {
             if (Init(cb)) {
                 _loaded = true;
+
+                // Install the watch handler
+                WatchChanges();
             }
         }
     }
@@ -62,7 +65,6 @@ namespace Framework::Scripting {
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
         _watcher.addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource {} is reloaded due to the file changes", _name);
-
             // Close the resource first, we'll start with a clean slate
             Shutdown();
 
@@ -74,6 +76,8 @@ namespace Framework::Scripting {
     }
 
     bool Resource::Init(SDKRegisterCallback cb) {
+        _isShuttingDown = false;
+
         // Is the file valid?
         cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
         if (!entryPointFile.exists() || !entryPointFile.isFile()) {
@@ -150,16 +154,13 @@ namespace Framework::Scripting {
         std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
         InvokeEvent(Events[EventIDs::RESOURCE_LOADED], args);
 
-        // Install the watch handler
-        WatchChanges();
-
         _loaded = true;
         return true;
     }
 
     void Resource::Update() {
         // We don't want to update a shutdown-in-progress resource
-        if (_shutdowning) {
+        if (_isShuttingDown) {
             return;
         }
 
@@ -185,7 +186,13 @@ namespace Framework::Scripting {
         }
 
         // Process the file changes watcher
-        _watcher.watch();
+        //_watcher.watch();
+
+        Shutdown();
+
+        if (LoadPackageFile()) {
+            Init(_regCb);
+        }
     }
 
     bool Resource::Shutdown() {
@@ -194,12 +201,12 @@ namespace Framework::Scripting {
             return false;
         }
 
-        if (_shutdowning) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already shutdowning");
+        if (_isShuttingDown) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already shutting down");
             return false;
         }
 
-        _shutdowning       = true;
+        _isShuttingDown       = true;
         const auto isolate = _engine->GetIsolate();
 
         v8::Locker locker(isolate);
@@ -217,7 +224,7 @@ namespace Framework::Scripting {
         _context.Reset();
 
         _loaded      = false;
-        _shutdowning = false;
+        _isShuttingDown = false;
 
         return true;
     }
@@ -308,7 +315,7 @@ namespace Framework::Scripting {
 
         if (callback->_once) {
             callback->_removed = true;
-        }
+        } 
     };
 
     v8::Local<v8::Context> Resource::GetContext() {

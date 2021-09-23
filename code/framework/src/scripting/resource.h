@@ -25,7 +25,7 @@ namespace Framework::Scripting {
         std::string _entryPoint;
 
         bool _loaded;
-        bool _shutdowning;
+        bool _isShuttingDown;
 
         cppfs::FileWatcher _watcher;
 

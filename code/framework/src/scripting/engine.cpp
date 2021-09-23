@@ -82,8 +82,6 @@ namespace Framework::Scripting {
             v8::Isolate::Scope isolateScope(_isolate);
             v8::HandleScope handlerScope(_isolate);
             _resourceManager->LoadAll(cb);
-            _resourceManager->UnloadAll();
-            _resourceManager->LoadAll(cb);
         }
         return ENGINE_NONE;
     }
