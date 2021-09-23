@@ -187,10 +187,6 @@ namespace Framework::Scripting {
             v8::HandleScope handleScope(isolate);
             v8::Context::Scope scope(GetContext());
 
-            // Notify the resource update
-            std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
-            InvokeEvent(Events[EventIDs::RESOURCE_UPDATE], args, true);
-
             uv_run(_uvLoop, UV_RUN_NOWAIT);
         }
 
