@@ -8,5 +8,5 @@
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
-    bool TryCatch(const std::function<bool()> &);
+    bool TryCatch(const std::function<bool()> &, v8::Isolate *isolate = nullptr, v8::Local<v8::Context> context = {});
 }

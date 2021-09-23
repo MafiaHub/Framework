@@ -185,8 +185,12 @@ namespace Framework::Scripting {
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
-
             v8::Context::Scope scope(GetContext());
+
+            // Notify the resource update
+            std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
+            InvokeEvent(Events[EventIDs::RESOURCE_UPDATE], args, true);
+
             uv_run(_uvLoop, UV_RUN_NOWAIT);
         }
 
@@ -217,8 +221,18 @@ namespace Framework::Scripting {
         // Flag the resource
         _isShuttingDown       = true;
 
-        // Call the resource unloading event
-        //TODO: implement
+        const auto isolate = _engine->GetIsolate();
+
+        // Notify the resource unload
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+
+            std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
+            InvokeEvent(Events[EventIDs::RESOURCE_UNLOADING], args);
+        }
+        
 
         // Tick one last time
         Update(true);
@@ -227,8 +241,6 @@ namespace Framework::Scripting {
         _remoteHandlers.clear();
 
         // Clear the node instance
-        const auto isolate = _engine->GetIsolate();
-
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
@@ -309,10 +321,11 @@ namespace Framework::Scripting {
         InvokeEvent("resourceError", args);
     }
 
-    void Resource::InvokeEvent(const std::string &eventName, std::vector<v8::Local<v8::Value>> &args) {
+    void Resource::InvokeEvent(const std::string &eventName, std::vector<v8::Local<v8::Value>> &args, bool suppressLog) {
         auto entry = _remoteHandlers.find(eventName);
         if (entry == _remoteHandlers.end()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find such event");
+            if (!suppressLog)
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find such event {}", eventName);
             return;
         }
 
@@ -331,9 +344,10 @@ namespace Framework::Scripting {
                 return false;
             }
 
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event {}", eventName);
+            if (!suppressLog)
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event {}", eventName);
             return true;
-        });
+        }, isolate, _context.Get(isolate));
 
         if (callback->_once) {
             callback->_removed = true;

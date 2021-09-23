@@ -4,14 +4,20 @@
 #include <scripting/resource.h>
 
 namespace Framework::Scripting::Helpers {
-    bool TryCatch(const std::function<bool()> &fn) {
-        v8::Isolate *isolate = v8::Isolate::GetCurrent();
+    bool TryCatch(const std::function<bool()> &fn, v8::Isolate *isolate, v8::Local<v8::Context> context) {
+        if (!isolate) {
+            isolate = v8::Isolate::GetCurrent();
+        }
+
         if (!isolate) {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] Failed to acquire isolate instance");
             return false;
         }
 
-        v8::Local<v8::Context> context = isolate->GetEnteredOrMicrotaskContext();
+        if (context.IsEmpty()) {
+            context = isolate->GetEnteredOrMicrotaskContext();
+        }
+
         if (context.IsEmpty()) {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] Failed to acquire context instance");
             return false;
