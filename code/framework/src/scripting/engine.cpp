@@ -24,43 +24,25 @@ namespace Framework::Scripting {
         }
 
         // Create the multi isolate platform on a single thread
-        _platform = node::MultiIsolatePlatform::Create(1, nullptr);
-        if (!_platform) {
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the node multi isolate platform");
-            return ENGINE_PLATFORM_INIT_FAILED;
-        }
-
-        // Create the unique V8 platform
+        _platform.reset(node::CreatePlatform(4, node::GetTracingController()));
         v8::V8::InitializePlatform(_platform.get());
+
         if (!v8::V8::Initialize()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the V8 engine");
             return ENGINE_V8_INIT_FAILED;
         }
 
-        // Initialize the event loop
-        if (uv_loop_init(&_uvLoop) != 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the event loop");
-            return ENGINE_UV_LOOP_INIT_FAILED;
-        }
-
-        _allocator = node::ArrayBufferAllocator::Create();
-
         // Create the isolate instance
-        _isolate = node::NewIsolate(_allocator, &_uvLoop, _platform.get());
+        _isolate = v8::Isolate::Allocate();
         if (!_isolate) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the node isolate");
             return ENGINE_ISOLATE_ALLOCATION_FAILED;
         }
+        _platform->RegisterIsolate(_isolate, uv_default_loop());
 
-        v8::Locker isolateLocker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-
-        // Create the isolate data instance
-        _isolateData = node::CreateIsolateData(_isolate, &_uvLoop, _platform.get(), _allocator.get());
-        if (!_isolateData) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to create the isolate data");
-            return ENGINE_ISOLATE_DATA_ALLOCATION_FAILED;
-        }
+        v8::Isolate::CreateParams params;
+        params.array_buffer_allocator = node::CreateArrayBufferAllocator();
+        v8::Isolate::Initialize(_isolate, params);
 
         // Initialize the error reporting and console delegate
         _isolate->SetFatalErrorHandler([](const char *location, const char *message) {
@@ -94,7 +76,13 @@ namespace Framework::Scripting {
 
         // Load the resources
         _resourceManager = new ResourceManager(this);
-        _resourceManager->LoadAll(cb);
+
+        {
+            v8::Locker locker(_isolate);
+            v8::Isolate::Scope isolateScope(_isolate);
+            v8::HandleScope handlerScope(_isolate);
+            _resourceManager->LoadAll(cb);
+        }
         return ENGINE_NONE;
     }
 
@@ -113,16 +101,18 @@ namespace Framework::Scripting {
             _resourceManager->UnloadAll();
         }
 
-        node::FreeIsolateData(_isolateData);
-        _isolateData = nullptr;
-
-        _platform->UnregisterIsolate(_isolate);
-        _isolate->Dispose();
-        _isolate = nullptr;
-
+#ifdef WIN32
         v8::V8::Dispose();
         v8::V8::ShutdownPlatform();
-        node::FreePlatform(_platform.release());
+#else
+        _platform->DrainTasks(_isolate);
+        _platform->CancelPendingDelayedTasks(_isolate);
+        _platform->UnregisterIsolate(_isolate);
+
+        _isolate->Dispose();
+        v8::V8::Dispose();
+        _platform.release();
+#endif
 
         return ENGINE_NONE;
     }
@@ -139,8 +129,7 @@ namespace Framework::Scripting {
         v8::SealHandleScope seal(_isolate);
 
         // Tick the platform
-        uv_run(&_uvLoop, UV_RUN_NOWAIT);
-        while (_platform->FlushForegroundTasks(_isolate)) {}
+        _platform->DrainTasks(_isolate);
 
         // Tick all resources
         for (auto resource : _resourceManager->GetAllResources()) { resource.second->Update(); }

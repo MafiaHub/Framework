@@ -1,5 +1,8 @@
 .idea/
 .vscode
+.vs
+
+CMakeSettings.json
 
 *.a
 *.dylib
@@ -7,6 +10,7 @@
 
 Bin/
 Build/
+Build*/
 
 CMakeLists.txt.user
 CMakeCache.txt
@@ -26,3 +30,4 @@ code/projects
 vendors/cef/lib/osx
 
 _external
+**/obj

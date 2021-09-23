@@ -5,6 +5,7 @@
 #include "sdk.h"
 #include "v8_helpers/v8_event_callback.h"
 #include "v8_helpers/v8_source_location.h"
+#include "utils/time.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileWatcher.h>
@@ -25,9 +26,12 @@ namespace Framework::Scripting {
         std::string _entryPoint;
 
         bool _loaded;
+        bool _isShuttingDown;
 
         cppfs::FileWatcher _watcher;
 
+        node::IsolateData* _isolateData = nullptr;
+        uv_loop_t* _uvLoop = nullptr;
         v8::Persistent<v8::Context> _context;
         v8::Persistent<v8::Script> _script;
         node::Environment *_environment = nullptr;
@@ -38,12 +42,17 @@ namespace Framework::Scripting {
 
         SDK *_sdk;
 
+        SDKRegisterCallback _regCb;
+
+        Utils::Time::TimePoint _nextFileWatchUpdate;
+        int32_t _fileWatchUpdatePeriod = 1000;
+
       public:
         Resource(Engine *, std::string &, SDKRegisterCallback);
 
         ~Resource();
 
-        void Update();
+        void Update(bool force = false);
 
         bool Init(SDKRegisterCallback = nullptr);
         bool Shutdown();
@@ -73,6 +82,5 @@ namespace Framework::Scripting {
         bool WatchChanges();
         bool Compile(const std::string &, const std::string &);
         bool Run();
-        void ReloadChanges();
     };
 } // namespace Framework::Scripting

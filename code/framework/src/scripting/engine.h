@@ -14,11 +14,8 @@ namespace Framework::Scripting {
     class Engine {
       private:
         v8::Isolate *_isolate           = nullptr;
-        node::IsolateData *_isolateData = nullptr;
-        uv_loop_t _uvLoop;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
-        std::shared_ptr<node::ArrayBufferAllocator> _allocator;
 
         ResourceManager *_resourceManager = nullptr;
 
@@ -35,10 +32,6 @@ namespace Framework::Scripting {
 
         v8::Isolate *GetIsolate() const {
             return _isolate;
-        }
-
-        node::IsolateData *GetIsolateData() const {
-            return _isolateData;
         }
 
         node::MultiIsolatePlatform *GetPlatform() const {

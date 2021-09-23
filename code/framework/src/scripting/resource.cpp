@@ -9,10 +9,13 @@
 #include <nlohmann/json.hpp>
 
 namespace Framework::Scripting {
-    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _path(path), _engine(engine) {
+    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _isShuttingDown(false), _path(path), _engine(engine), _regCb(cb) {
         if (LoadPackageFile()) {
             if (Init(cb)) {
                 _loaded = true;
+
+                // Install the watch handler
+                WatchChanges();
             }
         }
     }
@@ -62,42 +65,24 @@ namespace Framework::Scripting {
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
         _watcher.addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource {} is reloaded due to the file changes", _name);
-            ReloadChanges();
+            // Close the resource first, we'll start with a clean slate
+            Shutdown();
+
+            if (LoadPackageFile()) {
+                Init(_regCb);
+            }
         });
+
+        _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
         return true;
     }
 
-    void Resource::ReloadChanges() {
-        cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
-        if (!entryPointFile.exists() || !entryPointFile.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint is not a file");
-            return;
-        }
-
-        // Read the file content
-        std::string content = entryPointFile.readFile();
-        if (content.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file is empty");
-            return;
-        }
-
-        const auto isolate = _engine->GetIsolate();
-        if (!isolate) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Cannot acquire isolate instance");
-            return;
-        }
-
-        v8::Locker isolateLock(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-
-        Compile(content, entryPointFile.path());
-        Run();
-
-        std::vector<v8::Local<v8::Value>> args = {v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked()};
-        InvokeEvent(Events[EventIDs::RESOURCE_RELOADED], args);
-    }
-
     bool Resource::Init(SDKRegisterCallback cb) {
+        if (_loaded) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already loaded");
+            return false;
+        }
+
         // Is the file valid?
         cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
         if (!entryPointFile.exists() || !entryPointFile.isFile()) {
@@ -138,14 +123,24 @@ namespace Framework::Scripting {
         context->SetAlignedPointerInEmbedderData(0, this);
         _context.Reset(isolate, context);
 
+        // Create the event loop
+        _uvLoop      = uv_loop_new();
+        _isolateData = node::CreateIsolateData(isolate, _uvLoop, _engine->GetPlatform());
+
         // Start initializing the environment
         v8::Context::Scope contextScope(context);
         v8::TryCatch tryCatch(isolate);
-        _environment = node::CreateEnvironment(_engine->GetIsolateData(), context, {_entryPoint, entryPointFile.path()}, {}, node::EnvironmentFlags::kNoFlags);
+
+        node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
+        _environment                        = node::CreateEnvironment(_isolateData, context, {_entryPoint, entryPointFile.path()}, {}, flags);
         if (!_environment) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Environment init failed");
             return false;
         }
+
+        // Apply the isolate settings to the local resource
+        node::IsolateSettings is;
+        node::SetIsolateUpForNode(isolate, is);
 
         std::string init = "const publicRequire ="
                            "require('module').createRequire(process.cwd() + '/resources/"
@@ -164,12 +159,16 @@ namespace Framework::Scripting {
         std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
         InvokeEvent(Events[EventIDs::RESOURCE_LOADED], args);
 
-        // Install the watch handler
-        WatchChanges();
+        _loaded = true;
         return true;
     }
 
-    void Resource::Update() {
+    void Resource::Update(bool force) {
+        // We don't want to update a shutdown-in-progress resource
+        if (_isShuttingDown && !force) {
+            return;
+        }
+
         const auto isolate = _engine->GetIsolate();
 
         // Process the event handlers
@@ -182,32 +181,73 @@ namespace Framework::Scripting {
         }
 
         // Process the scripting layer
-        v8::HandleScope scope(isolate);
-        v8::Local<v8::Context> context = _context.Get(isolate);
-        context->Enter();
-        context->Exit();
+        {
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
 
-        // Process the file changes watcher
-        _watcher.watch();
+            v8::Context::Scope scope(GetContext());
+            uv_run(_uvLoop, UV_RUN_NOWAIT);
+        }
+
+
+        if (!_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
+            // Process the file changes watcher
+            _watcher.watch(0);
+            _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
+        }
     }
 
     bool Resource::Shutdown() {
-        if (!_environment) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid environment instance");
+        if (!_loaded) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource is already unloaded");
             return false;
         }
 
+        if (!_environment) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Invalid environment instance");
+            return false;
+        }
+
+        if (_isShuttingDown) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource is already shutting down");
+            return false;
+        }
+
+        // Flag the resource
+        _isShuttingDown       = true;
+
+        // Call the resource unloading event
+        //TODO: implement
+
+        // Tick one last time
+        Update(true);
+
+        // Clear the event handlers
+        _remoteHandlers.clear();
+
+        // Clear the node instance
         const auto isolate = _engine->GetIsolate();
 
-        v8::Locker lock(isolate);
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
 
         node::EmitBeforeExit(_environment);
         node::EmitExit(_environment);
-        node::Stop(_environment);
+        node::RunAtExit(_environment);
 
+        node::FreeEnvironment(_environment);
+        node::FreeIsolateData(_isolateData);
+
+        // Reset our members
         _script.Reset();
         _context.Reset();
+        _environment = nullptr;
+
+        _loaded      = false;
+        _isShuttingDown = false;
+
         return true;
     }
 
@@ -265,8 +305,7 @@ namespace Framework::Scripting {
     void Resource::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
         std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(_engine->GetIsolate(), error).ToLocalChecked(),
                                                   Helpers::MakeString(_engine->GetIsolate(), stackTrace).ToLocalChecked(),
-                                                  Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(),
-                                                  v8::Integer::New(_engine->GetIsolate(), line)};
+                                                  Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(), v8::Integer::New(_engine->GetIsolate(), line)};
         InvokeEvent("resourceError", args);
     }
 
@@ -298,7 +337,7 @@ namespace Framework::Scripting {
 
         if (callback->_once) {
             callback->_removed = true;
-        }
+        } 
     };
 
     v8::Local<v8::Context> Resource::GetContext() {

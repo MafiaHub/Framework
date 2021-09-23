@@ -3,7 +3,7 @@ if(WIN32)
     target_link_directories(Sentry PUBLIC "lib/win_32")
     file(GLOB SENTRY_LIBS "lib/win_32/*.lib")
     add_custom_command(TARGET Sentry POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/win_32/crashpad_handler.exe" "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/win_32/crashpad_handler.exe" "${CMAKE_BINARY_DIR}/bin"
             )
 elseif(APPLE)
     target_link_directories(Sentry PUBLIC "lib/osx")
