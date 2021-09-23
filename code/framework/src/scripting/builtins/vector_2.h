@@ -6,6 +6,7 @@
 #include "../v8_helpers/v8_class.h"
 #include "../v8_helpers/v8_module.h"
 #include "factory.h"
+#include "macros.h"
 
 #include <glm/glm.hpp>
 #include <iomanip>
@@ -18,13 +19,9 @@ namespace Framework::Scripting::Builtins {
     }
 
     static void Vector2Constructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
-        if (!info.IsConstructCall()) {
-            V8Helpers::Throw(isolate, "Function cannot be called without new keyword");
-            return;
-        }
+        V8_VALIDATE_CTOR_CALL();
 
         v8::Local<v8::Object> _this = info.This();
         V8Helpers::ArgumentStack stack(info);
@@ -40,10 +37,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     static void Vector2Add(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -64,14 +58,11 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec += newVec;
-        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
+        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Sub(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -92,14 +83,11 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec -= newVec;
-        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
+        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Mul(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -120,14 +108,11 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec *= newVec;
-        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
+        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Div(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -148,24 +133,11 @@ namespace Framework::Scripting::Builtins {
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
         oldVec /= newVec;
-        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
+        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
     }
 
     static void Vector2Lerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        if (info.Length() != 4) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 4 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -189,7 +161,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::vec2 oldVec(x, y);
         glm::vec2 newVec(newX, newY);
-        info.GetReturnValue().Set(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldVec, newVec, static_cast<float>(f))));
+        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldVec, newVec, static_cast<float>(f))));
     }
 
     static void Vector2Length(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
@@ -202,38 +174,34 @@ namespace Framework::Scripting::Builtins {
         Vector2Extract(ctx, _this, x, y);
 
         glm::vec2 nativeVec(x, y);
-        info.GetReturnValue().Set(static_cast<double>(glm::length(nativeVec)));
+        V8_RETURN(static_cast<double>(glm::length(nativeVec)));
     }
 
     static void Vector2ToArray(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
         v8::Local<v8::Object> _this = info.This();
 
-        double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        double x, y;
+        Vector2Extract(ctx, _this, x, y);
 
         v8::Local<v8::Array> arr = v8::Array::New(isolate, 2);
         arr->Set(ctx, 0, v8::Number::New(isolate, x));
         arr->Set(ctx, 1, v8::Number::New(isolate, y));
-        info.GetReturnValue().Set(arr);
+        V8_RETURN(arr);
     }
 
     static void Vector2ToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
         v8::Local<v8::Object> _this = info.This();
 
-        double x, y, z;
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, _this, "y"), ctx, y);
+        double x, y;
+        Vector2Extract(ctx, _this, x, y);
 
         std::ostringstream ss;
         ss << std::fixed << std::setprecision(4) << "Vector2{ x: " << x << ", y: " << y << " }";
-        info.GetReturnValue().Set(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
+        V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
     static void Vector2Register(Scripting::Helpers::V8Module *rootModule) {

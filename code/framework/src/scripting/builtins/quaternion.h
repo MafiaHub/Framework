@@ -6,6 +6,7 @@
 #include "../v8_helpers/v8_class.h"
 #include "../v8_helpers/v8_module.h"
 #include "factory.h"
+#include "macros.h"
 
 #include <glm/ext.hpp>
 #include <glm/ext/matrix_relational.hpp>
@@ -26,13 +27,9 @@ namespace Framework::Scripting::Builtins {
     }
 
     static void QuaternionConstructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
-        if (!info.IsConstructCall()) {
-            V8Helpers::Throw(isolate, "Function cannot be called without new keyword");
-            return;
-        }
+        V8_VALIDATE_CTOR_CALL();
 
         v8::Local<v8::Object> _this = info.This();
         V8Helpers::ArgumentStack stack(info);
@@ -50,10 +47,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     static void QuaternionConj(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -62,14 +56,11 @@ namespace Framework::Scripting::Builtins {
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
-        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::conjugate(oldQuat)));
+        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::conjugate(oldQuat)));
     }
 
     static void QuaternionCross(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -89,14 +80,11 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::cross(oldQuat, newQuat)));
+        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::cross(oldQuat, newQuat)));
     }
 
     static void QuaternionDot(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -116,14 +104,11 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        info.GetReturnValue().Set(static_cast<float>(glm::dot(oldQuat, newQuat)));
+        V8_RETURN(static_cast<float>(glm::dot(oldQuat, newQuat)));
     }
 
     static void QuaternionInverse(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -132,14 +117,11 @@ namespace Framework::Scripting::Builtins {
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
-        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::inverse(oldQuat)));
+        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::inverse(oldQuat)));
     }
 
     static void QuaternionRotateVector3(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -157,24 +139,11 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::vec3 point(pX, pY, pZ);
-        info.GetReturnValue().Set(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, oldQuat * point));
+        V8_RETURN(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, oldQuat * point));
     }
 
     static void QuaternionSlerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        if (info.Length() != 5) {
-            V8Helpers::Throw(isolate, "Argument must be an array of 5 floating number");
-            return;
-        }
-
-        if (!info[0]->IsNumber() || !info[1]->IsNumber() || !info[2]->IsNumber() || !info[3]->IsNumber() || !info[4]->IsNumber()) {
-            V8Helpers::Throw(isolate, "Every arguments have to be number");
-            return;
-        }
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -198,12 +167,11 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
+        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
     }
 
     static void QuaternionLength(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -211,12 +179,11 @@ namespace Framework::Scripting::Builtins {
         QuatExtract(ctx, _this, w, x, y, z);
 
         glm::quat nativeQuat(w, x, y, z);
-        info.GetReturnValue().Set(static_cast<double>(glm::length(nativeQuat)));
+        V8_RETURN(static_cast<double>(glm::length(nativeQuat)));
     }
 
     static void QuaternionToArray(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -228,12 +195,11 @@ namespace Framework::Scripting::Builtins {
         arr->Set(ctx, 1, v8::Number::New(isolate, x));
         arr->Set(ctx, 2, v8::Number::New(isolate, y));
         arr->Set(ctx, 3, v8::Number::New(isolate, z));
-        info.GetReturnValue().Set(arr);
+        V8_RETURN(arr);
     }
 
     static void QuaternionToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        V8_GET_ISOLATE_CONTEXT();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -242,14 +208,11 @@ namespace Framework::Scripting::Builtins {
 
         std::ostringstream ss;
         ss << std::fixed << std::setprecision(4) << "Quaternion{ w: " << w << ", x: " << x << ", y: " << y << ", z: " << z << " }";
-        info.GetReturnValue().Set(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
+        V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
     static void QuaternionFromEuler(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         V8Helpers::ArgumentStack stack(info);
 
@@ -260,14 +223,11 @@ namespace Framework::Scripting::Builtins {
         }
         glm::quat newQuat(glm::vec3(x, y, z));
 
-        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
+        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
     }
 
     static void QuaternionFromAxisAngle(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
-
-        auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        V8_GET_SUITE();
 
         v8::Local<v8::Object> _this = info.This();
 
@@ -279,7 +239,7 @@ namespace Framework::Scripting::Builtins {
 
         glm::quat newQuat(glm::angleAxis(static_cast<float>(angle), glm::vec3(axisX, axisY, axisZ)));
 
-        info.GetReturnValue().Set(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
+        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
     }
 
     static void QuaternionRegister(Scripting::Helpers::V8Module *rootModule) {
