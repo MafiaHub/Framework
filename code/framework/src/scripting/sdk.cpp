@@ -4,8 +4,6 @@
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
-#include "keys.h"
-#include "v8_helpers/helpers.h"
 
 namespace Framework::Scripting {
     SDK::SDK(SDKRegisterCallback cb): _rootModule(nullptr) {

@@ -1,14 +1,10 @@
 #pragma once
 
 #include "init.h"
-#include "v8_helpers/v8_class.h"
 #include "v8_helpers/v8_module.h"
 
-#include <glm/glm.hpp>
-#include <string>
 #include <unordered_set>
 #include <v8.h>
-#include <vector>
 
 namespace Framework::Scripting {
     class SDK {

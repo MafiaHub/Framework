@@ -1,6 +1,5 @@
 #include "factory.h"
 
-#include "../init.h"
 #include "../keys.h"
 #include "../v8_helpers/v8_class.h"
 
