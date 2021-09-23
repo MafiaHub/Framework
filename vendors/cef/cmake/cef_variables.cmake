@@ -392,7 +392,7 @@ if(OS_WINDOWS)
   # Consumers using different runtime types may want to pass different flags
   set(CEF_RUNTIME_LIBRARY_FLAG "/MT" CACHE STRING "Optional flag specifying which runtime to use")
   if (CEF_RUNTIME_LIBRARY_FLAG)
-    list(APPEND CEF_COMPILER_FLAGS_DEBUG ${CEF_RUNTIME_LIBRARY_FLAG}d)
+    list(APPEND CEF_COMPILER_FLAGS_DEBUG ${CEF_RUNTIME_LIBRARY_FLAG}) # CHANGE: Removed 'MTd' 
     list(APPEND CEF_COMPILER_FLAGS_RELEASE ${CEF_RUNTIME_LIBRARY_FLAG})
   endif()
 
