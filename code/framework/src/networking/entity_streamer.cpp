@@ -5,9 +5,12 @@
 
 #include <algorithm>
 #include <glm/glm.hpp>
+#include <optick.h>
 
 namespace Framework::Networking {
     void EntityStreamer::Update() {
+        OPTICK_EVENT();
+
         auto players        = GetStreamerEntities();
         const auto entities = GetEntities();
 

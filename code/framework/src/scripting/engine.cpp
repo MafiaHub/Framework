@@ -1,6 +1,7 @@
 #include "engine.h"
 
 #include <logging/logger.h>
+#include <optick.h>
 
 namespace Framework::Scripting {
     Engine::~Engine() {
@@ -122,6 +123,8 @@ namespace Framework::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to acquire platform or isolate");
             return;
         }
+
+        OPTICK_EVENT();
 
         // Lock and isolate
         v8::Locker locker(_isolate);

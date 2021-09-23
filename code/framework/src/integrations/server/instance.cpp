@@ -1,4 +1,5 @@
 #include "instance.h"
+#include <optick.h>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
@@ -44,5 +45,11 @@ namespace Framework::Integrations::Server {
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    void Instance::Run() {
+        while (_alive) {
+            OPTICK_FRAME("MainThread");
+            Update();
+        }
     }
 } // namespace Framework::Integrations::Server

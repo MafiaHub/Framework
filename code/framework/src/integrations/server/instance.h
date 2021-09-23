@@ -35,6 +35,8 @@ namespace Framework::Integrations::Server {
 
         void Update();
 
+        void Run();
+
         bool IsAlive() const {
             return _alive;
         }

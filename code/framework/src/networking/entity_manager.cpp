@@ -2,6 +2,8 @@
 
 #include "logging/logger.h"
 
+#include <optick.h>
+
 namespace Framework::Networking {
     EntityManager::~EntityManager() {
         for (auto entity : _entities) { delete entity.second; }
@@ -46,6 +48,8 @@ namespace Framework::Networking {
         return entities;
     }
     void EntityManager::Update() {
+        OPTICK_EVENT();
+
         RemovePendingEntities();
 
         for (auto &entity : _entities) { entity.second->Update(); }

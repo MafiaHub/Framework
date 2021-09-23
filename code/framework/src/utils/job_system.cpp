@@ -1,6 +1,7 @@
 #include "job_system.h"
 
 #include "logging/logger.h"
+#include <optick.h>
 
 namespace Framework::Utils {
     JobSystem *JobSystem::GetInstance() {
@@ -23,7 +24,9 @@ namespace Framework::Utils {
 
         for (size_t i = 0; i < numThreads; i++) {
             std::thread worker = std::thread([=]() {
+                OPTICK_THREAD("JobSystemWorker");
                 while (!_pendingShutdown) {
+                    OPTICK_EVENT();
                     Job jobInfo {};
 
                     // Wait for a job to be available

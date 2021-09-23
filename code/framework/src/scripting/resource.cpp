@@ -7,6 +7,7 @@
 
 #include <logging/logger.h>
 #include <nlohmann/json.hpp>
+#include <optick.h>
 
 namespace Framework::Scripting {
     Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _isShuttingDown(false), _path(path), _engine(engine), _regCb(cb) {
@@ -169,6 +170,8 @@ namespace Framework::Scripting {
             return;
         }
 
+        OPTICK_EVENT();
+
         const auto isolate = _engine->GetIsolate();
 
         // Process the event handlers
@@ -260,6 +263,8 @@ namespace Framework::Scripting {
     bool Resource::Compile(const std::string &str, const std::string &path) {
         const auto isolate = _engine->GetIsolate();
 
+        OPTICK_EVENT();
+
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
 
@@ -289,6 +294,8 @@ namespace Framework::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid resource script instance");
             return false;
         }
+
+        OPTICK_EVENT();
 
         const auto isolate = _engine->GetIsolate();
 

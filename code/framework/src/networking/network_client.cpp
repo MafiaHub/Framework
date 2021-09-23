@@ -1,6 +1,7 @@
 #include "network_client.h"
 
 #include <logging/logger.h>
+#include <optick.h>
 
 namespace Framework::Networking {
     NetworkClient::NetworkClient(): _state(PeerState::DISCONNECTED) {
@@ -43,6 +44,7 @@ namespace Framework::Networking {
         }
 
         _state                                = CONNECTING;
+        
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Failed to connect to the remote host");
@@ -61,6 +63,8 @@ namespace Framework::Networking {
     }
 
     void NetworkClient::Update() {
+        OPTICK_EVENT();
+
         if (!_peer) {
             return;
         }

@@ -2,8 +2,12 @@
 
 #include <logging/logger.h>
 
+#include <optick.h>
+
 namespace Framework::HTTP {
     void HandleWebRequest(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
+        OPTICK_EVENT();
+
         if (ev == MG_EV_HTTP_MSG) {
             auto hm = reinterpret_cast<struct mg_http_message *>(ev_data);
 
@@ -45,7 +49,11 @@ namespace Framework::HTTP {
         mg_http_listen(&_manager, address.c_str(), &HandleWebRequest, this);
 
         _webThread = std::thread([this]() {
-            while (this->_running) { mg_mgr_poll(&_manager, 1000); }
+            OPTICK_THREAD("WebWorker");
+            while (this->_running) { 
+                OPTICK_EVENT();
+                mg_mgr_poll(&_manager, 1000); 
+            }
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Listening on {}", address.c_str());
