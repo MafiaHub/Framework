@@ -24,8 +24,8 @@ namespace Framework::Scripting::Builtins {
 
         V8_VALIDATE_CTOR_CALL();
 
-        v8::Local<v8::Object> _this = info.This();
-        V8Helpers::ArgumentStack stack(info);
+        V8_GET_SELF();
+        V8_DEFINE_STACK();
 
         double x, y, z;
         if (!V8Helpers::GetVec3(ctx, stack, x, y, z)) {
@@ -41,10 +41,10 @@ namespace Framework::Scripting::Builtins {
     static void Vector3Add(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newX, newY, newZ;
         if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
@@ -66,10 +66,10 @@ namespace Framework::Scripting::Builtins {
     static void Vector3Sub(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newX, newY, newZ;
         if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
@@ -91,10 +91,10 @@ namespace Framework::Scripting::Builtins {
     static void Vector3Mul(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newX, newY, newZ;
         if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
@@ -116,10 +116,10 @@ namespace Framework::Scripting::Builtins {
     static void Vector3Div(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newX, newY, newZ;
         if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
@@ -141,10 +141,10 @@ namespace Framework::Scripting::Builtins {
     static void Vector3Lerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newX, newY, newZ;
         if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
@@ -169,7 +169,7 @@ namespace Framework::Scripting::Builtins {
     static void Vector3Length(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double x, y, z;
         Vector3Extract(ctx, _this, x, y, z);
@@ -181,7 +181,7 @@ namespace Framework::Scripting::Builtins {
     static void Vector3ToArray(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double x, y, z;
         Vector3Extract(ctx, _this, x, y, z);
@@ -196,7 +196,7 @@ namespace Framework::Scripting::Builtins {
     static void Vector3ToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double x, y, z;
         Vector3Extract(ctx, _this, x, y, z);

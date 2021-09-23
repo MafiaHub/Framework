@@ -31,8 +31,8 @@ namespace Framework::Scripting::Builtins {
 
         V8_VALIDATE_CTOR_CALL();
 
-        v8::Local<v8::Object> _this = info.This();
-        V8Helpers::ArgumentStack stack(info);
+        V8_GET_SELF();
+        V8_DEFINE_STACK();
 
         double w, x, y, z;
         if (!V8Helpers::GetQuat(ctx, stack, w, x, y, z)) {
@@ -49,7 +49,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionConj(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double w, x, y, z;
         QuatExtract(ctx, _this, w, x, y, z);
@@ -62,10 +62,10 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionCross(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newW, newX, newY, newZ;
         if (!V8Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
@@ -86,10 +86,10 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionDot(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newW, newX, newY, newZ;
         if (!V8Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
@@ -110,7 +110,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionInverse(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double w, x, y, z;
         QuatExtract(ctx, _this, w, x, y, z);
@@ -123,9 +123,9 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionRotateVector3(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double pX, pY, pZ;
         if (!V8Helpers::GetVec3(ctx, stack, pX, pY, pZ)) {
@@ -145,10 +145,10 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionSlerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         // Acquire new values
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double newW, newX, newY, newZ;
         if (!V8Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
@@ -173,7 +173,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionLength(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double w, x, y, z;
         QuatExtract(ctx, _this, w, x, y, z);
@@ -185,7 +185,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionToArray(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double w, x, y, z;
         QuatExtract(ctx, _this, w, x, y, z);
@@ -201,7 +201,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double w, x, y, z;
         QuatExtract(ctx, _this, w, x, y, z);
@@ -214,7 +214,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionFromEuler(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        V8Helpers::ArgumentStack stack(info);
+        V8_DEFINE_STACK();
 
         double x, y, z;
         if (!V8Helpers::GetVec3(ctx, stack, x, y, z)) {
@@ -229,7 +229,7 @@ namespace Framework::Scripting::Builtins {
     static void QuaternionFromAxisAngle(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
-        v8::Local<v8::Object> _this = info.This();
+        V8_GET_SELF();
 
         double angle, axisX, axisY, axisZ;
         V8Helpers::SafeToNumber(info[0], ctx, angle);
