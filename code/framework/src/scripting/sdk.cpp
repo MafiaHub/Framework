@@ -19,9 +19,7 @@ namespace Framework::Scripting {
         }
 
         // Before inserting the reference, we create the required builtins
-        Builtins::Vector2Register(_rootModule);
-        Builtins::Vector3Register(_rootModule);
-        Builtins::QuaternionRegister(_rootModule);
+        RegisterBuiltins();
 
         // Call the SDK register callback for mod-provided implementations
         if (cb) {
@@ -29,6 +27,12 @@ namespace Framework::Scripting {
         }
 
         _modules.insert(_rootModule);
+    }
+
+    void SDK::RegisterBuiltins() {
+        Builtins::Vector2Register(_rootModule);
+        Builtins::Vector3Register(_rootModule);
+        Builtins::QuaternionRegister(_rootModule);
     }
 
     bool SDK::RegisterModules(v8::Local<v8::Context> context) {

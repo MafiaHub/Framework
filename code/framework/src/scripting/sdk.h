@@ -12,6 +12,8 @@ namespace Framework::Scripting {
         std::unordered_set<Helpers::V8Module *> _modules;
         Helpers::V8Module *_rootModule;
 
+        void RegisterBuiltins();
+
       public:
         SDK(SDKRegisterCallback = nullptr);
         ~SDK() = default;
