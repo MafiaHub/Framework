@@ -17,12 +17,12 @@ namespace Framework::Scripting::Helpers {
 
     V8HelperError V8Module::AddClass(V8Class *cls) {
         if (_classes.count(cls->GetName()) > 0) {
-            return HELPER_ALREADY_LOADED;
+            return Framework::Scripting::V8HelperError::HELPER_ALREADY_LOADED;
         }
 
         cls->Load();
         _classes[cls->GetName()] = cls;
-        return HELPER_NONE;
+        return Framework::Scripting::V8HelperError::HELPER_NONE;
     }
 
     V8Class *V8Module::GetClass(const std::string &name) {
@@ -32,11 +32,11 @@ namespace Framework::Scripting::Helpers {
     V8HelperError V8Module::Register(v8::Local<v8::Context> context) {
         auto isolate = v8::Isolate::GetCurrent();
         if (!isolate) {
-            return HELPER_ISOLATE_NULL;
+            return Framework::Scripting::V8HelperError::HELPER_ISOLATE_NULL;
         }
 
         if (context.IsEmpty()) {
-            return HELPER_CONTEXT_EMPTY;
+            return Framework::Scripting::V8HelperError::HELPER_CONTEXT_EMPTY;
         }
 
         // Load all classes
@@ -58,8 +58,8 @@ namespace Framework::Scripting::Helpers {
 
         // If something went weird, just cancel and evacuate
         if (!res.ToChecked()) {
-            return HELPER_REGISTER_FAILED;
+            return Framework::Scripting::V8HelperError::HELPER_REGISTER_FAILED;
         }
-        return HELPER_NONE;
+        return Framework::Scripting::V8HelperError::HELPER_NONE;
     }
 } // namespace Framework::Scripting::Helpers

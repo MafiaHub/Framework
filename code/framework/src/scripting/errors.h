@@ -1,7 +1,7 @@
 #pragma once
 
 namespace Framework::Scripting {
-    enum EngineError {
+    enum class EngineError {
         ENGINE_NONE,
         ENGINE_NODE_INIT_FAILED,
         ENGINE_PLATFORM_INIT_FAILED,
@@ -13,14 +13,14 @@ namespace Framework::Scripting {
         ENGINE_ISOLATE_NULL
     };
 
-    enum ResourceManagerError {
+    enum class ResourceManagerError {
         RESOURCE_MANAGER_NONE,
         RESOURCE_ALREADY_LOADED,
         RESOURCE_NOT_LOADED,
         RESOURCE_LOADING_FAILED
     };
 
-    enum BuiltinError {
+    enum class BuiltinError {
         BUILTIN_NONE,
         BUILTIN_INVALID_PARAMETERS_COUNT,
         BUILTIN_INVALID_PARAMETER,
@@ -29,7 +29,7 @@ namespace Framework::Scripting {
         BUILTIN_RESOURCE_NULL
     };
 
-    enum V8HelperError {
+    enum class V8HelperError {
         HELPER_NONE,
         HELPER_ISOLATE_NULL,
         HELPER_CONTEXT_EMPTY,

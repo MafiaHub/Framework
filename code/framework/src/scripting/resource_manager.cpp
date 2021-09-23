@@ -20,7 +20,7 @@ namespace Framework::Scripting {
         // Is the package already present?
         if (_resources.find(name) != _resources.end()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Package {} already loaded", name);
-            return RESOURCE_ALREADY_LOADED;
+            return Framework::Scripting::ResourceManagerError::RESOURCE_ALREADY_LOADED;
         }
 
         std::string fullPath("resources/" + name);
@@ -29,18 +29,18 @@ namespace Framework::Scripting {
         // If loading failed, just free everything and return
         if (!res->IsLoaded()) {
             delete res;
-            return RESOURCE_LOADING_FAILED;
+            return Framework::Scripting::ResourceManagerError::RESOURCE_LOADING_FAILED;
         }
 
         _resources[name] = res;
-        return RESOURCE_MANAGER_NONE;
+        return Framework::Scripting::ResourceManagerError::RESOURCE_MANAGER_NONE;
     }
 
     ResourceManagerError ResourceManager::Unload(std::string name) {
         // Is the package event present?
         if (_resources.find(name) == _resources.end()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Package {} not loaded", name);
-            return RESOURCE_NOT_LOADED;
+            return Framework::Scripting::ResourceManagerError::RESOURCE_NOT_LOADED;
         }
 
         // Acquire the instance and call the unloader
@@ -52,7 +52,7 @@ namespace Framework::Scripting {
         // Free em
         delete res;
         _resources.erase(name);
-        return RESOURCE_MANAGER_NONE;
+        return Framework::Scripting::ResourceManagerError::RESOURCE_MANAGER_NONE;
     }
 
     void ResourceManager::LoadAll(SDKRegisterCallback cb) {

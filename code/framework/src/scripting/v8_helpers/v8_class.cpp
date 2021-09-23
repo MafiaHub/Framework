@@ -20,17 +20,17 @@ namespace Framework::Scripting::Helpers {
 
         _fnTpl.Reset(isolate, tpl);
         _loaded = true;
-        return HELPER_NONE;
+        return Framework::Scripting::V8HelperError::HELPER_NONE;
     }
 
     V8HelperError V8Class::Register(v8::Local<v8::Context> context, v8::Local<v8::Object> obj) {
         auto isolate = v8::Isolate::GetCurrent();
         if (!isolate) {
-            return HELPER_ISOLATE_NULL;
+            return Framework::Scripting::V8HelperError::HELPER_ISOLATE_NULL;
         }
 
         if (context.IsEmpty()) {
-            return HELPER_CONTEXT_EMPTY;
+            return Framework::Scripting::V8HelperError::HELPER_CONTEXT_EMPTY;
         }
 
         v8::Maybe<bool> res = obj->Set(context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
@@ -38,10 +38,10 @@ namespace Framework::Scripting::Helpers {
 
         // If something went weird, just cancel and evacuate
         if (!res.ToChecked()) {
-            return HELPER_REGISTER_FAILED;
+            return Framework::Scripting::V8HelperError::HELPER_REGISTER_FAILED;
         }
 
-        return HELPER_NONE;
+        return Framework::Scripting::V8HelperError::HELPER_NONE;
     }
 
     v8::Local<v8::Object> V8Class::CreateInstance(v8::Local<v8::Context> context) {

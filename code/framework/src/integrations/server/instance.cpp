@@ -12,7 +12,7 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(opts.modSlug);
 
         // Initialize the scripting engine
-        if (_scriptingEngine->Init() != Scripting::ENGINE_NONE) {
+        if (_scriptingEngine->Init() != Scripting::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }

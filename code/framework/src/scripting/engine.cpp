@@ -20,7 +20,7 @@ namespace Framework::Scripting {
         int exitCode = node::InitializeNodeWithArgs(&argv, &eav, &errors);
         if (exitCode != 0) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node {}", exitCode);
-            return ENGINE_NODE_INIT_FAILED;
+            return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;
         }
 
         // Create the multi isolate platform on a single thread
@@ -29,14 +29,14 @@ namespace Framework::Scripting {
 
         if (!v8::V8::Initialize()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the V8 engine");
-            return ENGINE_V8_INIT_FAILED;
+            return Framework::Scripting::EngineError::ENGINE_V8_INIT_FAILED;
         }
 
         // Create the isolate instance
         _isolate = v8::Isolate::Allocate();
         if (!_isolate) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize the node isolate");
-            return ENGINE_ISOLATE_ALLOCATION_FAILED;
+            return Framework::Scripting::EngineError::ENGINE_ISOLATE_ALLOCATION_FAILED;
         }
         _platform->RegisterIsolate(_isolate, uv_default_loop());
 
@@ -83,13 +83,13 @@ namespace Framework::Scripting {
             v8::HandleScope handlerScope(_isolate);
             _resourceManager->LoadAll(cb);
         }
-        return ENGINE_NONE;
+        return Framework::Scripting::EngineError::ENGINE_NONE;
     }
 
     EngineError Engine::Shutdown() {
         if (!_platform || !_isolate) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to acquire platform or isolate");
-            return ENGINE_ISOLATE_NULL;
+            return Framework::Scripting::EngineError::ENGINE_ISOLATE_NULL;
         }
 
         // Acquire resources
@@ -114,7 +114,7 @@ namespace Framework::Scripting {
         _platform.release();
 #endif
 
-        return ENGINE_NONE;
+        return Framework::Scripting::EngineError::ENGINE_NONE;
     }
 
     void Engine::Update() {
