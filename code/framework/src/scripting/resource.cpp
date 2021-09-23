@@ -72,6 +72,8 @@ namespace Framework::Scripting {
                 Init(_regCb);
             }
         });
+
+        _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
         return true;
     }
 
@@ -188,13 +190,11 @@ namespace Framework::Scripting {
             uv_run(_uvLoop, UV_RUN_NOWAIT);
         }
 
-        // Process the file changes watcher
-        //_watcher.watch();
 
-        Shutdown();
-
-        if (LoadPackageFile()) {
-            Init(_regCb);
+        if (!_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
+            // Process the file changes watcher
+            _watcher.watch(0);
+            _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
         }
     }
 

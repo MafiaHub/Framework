@@ -5,6 +5,7 @@
 #include "sdk.h"
 #include "v8_helpers/v8_event_callback.h"
 #include "v8_helpers/v8_source_location.h"
+#include "utils/time.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileWatcher.h>
@@ -42,6 +43,9 @@ namespace Framework::Scripting {
         SDK *_sdk;
 
         SDKRegisterCallback _regCb;
+
+        Utils::Time::TimePoint _nextFileWatchUpdate;
+        int32_t _fileWatchUpdatePeriod = 1000;
 
       public:
         Resource(Engine *, std::string &, SDKRegisterCallback);
