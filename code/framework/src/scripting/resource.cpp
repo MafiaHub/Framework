@@ -76,7 +76,10 @@ namespace Framework::Scripting {
     }
 
     bool Resource::Init(SDKRegisterCallback cb) {
-        _isShuttingDown = false;
+        if (_loaded) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already loaded");
+            return false;
+        }
 
         // Is the file valid?
         cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
@@ -196,6 +199,11 @@ namespace Framework::Scripting {
     }
 
     bool Resource::Shutdown() {
+        if (!_loaded) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already unloaded");
+            return false;
+        }
+
         if (!_environment) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid environment instance");
             return false;
@@ -222,6 +230,7 @@ namespace Framework::Scripting {
 
         _script.Reset();
         _context.Reset();
+        _environment = nullptr;
 
         _loaded      = false;
         _isShuttingDown = false;
