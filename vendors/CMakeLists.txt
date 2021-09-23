@@ -99,5 +99,6 @@ add_subdirectory(optick)
 # Build OS specific libraries
 if (WIN32)
     add_subdirectory(minhook)
+    add_subdirectory(steamworks)
 endif ()
 
