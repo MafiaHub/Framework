@@ -61,10 +61,10 @@ namespace Framework::Scripting {
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Watching {} changes", dir.path().c_str());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Watching '{}' changes", dir.path().c_str());
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
         _watcher.addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource {} is reloaded due to the file changes", _name);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' is reloaded due to the file changes", _name);
             // Close the resource first, we'll start with a clean slate
             Shutdown();
 
@@ -79,21 +79,21 @@ namespace Framework::Scripting {
 
     bool Resource::Init(SDKRegisterCallback cb) {
         if (_loaded) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource is already loaded");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' is already loaded", _name);
             return false;
         }
 
         // Is the file valid?
         cppfs::FileHandle entryPointFile = cppfs::fs::open(_path + "/" + _entryPoint);
         if (!entryPointFile.exists() || !entryPointFile.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint is not a file");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint '{}' from '{}' is not a file", _entryPoint, _name);
             return false;
         }
 
         // Read the file content
         std::string content = entryPointFile.readFile();
         if (content.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file is empty");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file '{}' from '{}' is empty", _entryPoint, _name);
             return false;
         }
 
@@ -210,7 +210,7 @@ namespace Framework::Scripting {
         }
 
         if (_isShuttingDown) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource is already shutting down");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource '{}' is already shutting down", _name);
             return false;
         }
 
@@ -321,13 +321,13 @@ namespace Framework::Scripting {
         auto entry = _remoteHandlers.find(eventName);
         if (entry == _remoteHandlers.end()) {
             if (!suppressLog)
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find such event {}", eventName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find such event '{}' for resource '{}'", eventName, _name);
             return;
         }
 
         auto callback = &entry->second;
         if (callback->_removed) {
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("Event was already fired, not supposed to be here");
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("Event '{}' in '{}' was already fired, not supposed to be here", eventName, _name);
             return;
         }
 
@@ -336,12 +336,12 @@ namespace Framework::Scripting {
         Helpers::TryCatch([&] {
             v8::MaybeLocal<v8::Value> retn = callback->_fn.Get(isolate)->Call(_context.Get(isolate), v8::Undefined(isolate), args.size(), args.data());
             if (retn.IsEmpty()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to invoke event {}", eventName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to invoke event '{}' for '{}'", eventName, _name);
                 return false;
             }
 
             if (!suppressLog)
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event {}", eventName);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event '{}' for '{}'", eventName, _name);
             return true;
         }, isolate, _context.Get(isolate));
 

@@ -1,4 +1,7 @@
 #include "logger.h"
+#include <spdlog/sinks/null_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace Framework::Logging {
     Logger::Logger() {
@@ -19,13 +22,11 @@ namespace Framework::Logging {
                 return logger;
             }
 
-            auto dummyLogger = spdlog::stdout_color_mt(suppressedLogger);
-            dummyLogger->set_level(spdlog::level::off);
+            auto dummyLogger = spdlog::create<spdlog::sinks::null_sink_mt>(suppressedLogger);
             _loggers.emplace(suppressedLogger, dummyLogger);
             return dummyLogger;
         }
 
-        // TODO multithreaded needed? Race conditions from separate threads?
         if (auto logger = spdlog::get(logName)) {
             return logger;
         }
@@ -39,7 +40,7 @@ namespace Framework::Logging {
         fileLogger->set_level(spdlog::level::trace);
 
         std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger};
-        auto spdLogger = std::make_shared<spdlog::logger>(logName, sinks.begin(), sinks.end());
+        auto spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
         spdLogger->set_level(spdlog::level::trace);
         spdlog::register_logger(spdLogger);
 
