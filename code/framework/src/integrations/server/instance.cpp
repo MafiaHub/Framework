@@ -1,9 +1,11 @@
 #include "instance.h"
+
 #include <optick.h>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
         _scriptingEngine = new Scripting::Engine;
+        _webServer = new HTTP::Webserver;
     }
 
     Instance::~Instance() {}
@@ -11,6 +13,12 @@ namespace Framework::Integrations::Server {
     ServerError Instance::Init(InstanceOptions &opts) {
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(opts.modSlug);
+
+        // Initialize the web server
+        if (!_webServer->Init(opts.bindHost, opts.bindPort)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
+            return ServerError::SERVER_WEBSERVER_INIT_FAILED;
+        }
 
         // Initialize the scripting engine
         if (_scriptingEngine->Init() != Scripting::EngineError::ENGINE_NONE) {
@@ -27,16 +35,20 @@ namespace Framework::Integrations::Server {
         return ServerError::SERVER_NONE;
     }
 
-    ServerError Instance::Shutdown(){
-        if(_scriptingEngine){
+    ServerError Instance::Shutdown() {
+        if (_scriptingEngine) {
             _scriptingEngine->Shutdown();
+        }
+
+        if (_webServer) {
+            _webServer->Shutdown();
         }
 
         _alive = false;
         return ServerError::SERVER_NONE;
     }
 
-    void Instance::Update(){
+    void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
             if (_scriptingEngine) {

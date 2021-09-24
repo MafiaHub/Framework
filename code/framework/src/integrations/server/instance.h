@@ -3,6 +3,7 @@
 #include "errors.h"
 
 #include <chrono>
+#include <http/webserver.h>
 #include <logging/logger.h>
 #include <scripting/engine.h>
 #include <string>
@@ -25,6 +26,7 @@ namespace Framework::Integrations::Server {
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 
         Scripting::Engine *_scriptingEngine;
+        HTTP::Webserver *_webServer;
 
       public:
         Instance();
@@ -32,6 +34,8 @@ namespace Framework::Integrations::Server {
 
         ServerError Init(InstanceOptions &);
         ServerError Shutdown();
+
+        void InitEndpoints();
 
         void Update();
 
@@ -43,6 +47,10 @@ namespace Framework::Integrations::Server {
 
         Scripting::Engine *GetScriptingEngine() const {
             return _scriptingEngine;
+        }
+
+        HTTP::Webserver *GetWebserver() const {
+            return _webServer;
         }
     };
 } // namespace Framework::Integrations::Server
