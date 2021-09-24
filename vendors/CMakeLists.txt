@@ -60,6 +60,9 @@ add_subdirectory(cef)
 # Build slikenet
 add_subdirectory(slikenet)
 
+# Build Ultralight
+add_subdirectory(ultralight)
+
 # Build firebase
 
 add_library(Firebase INTERFACE)

@@ -122,9 +122,11 @@ if (WIN32)
     target_link_libraries(FrameworkClient minhook SteamSDK)
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
+    else ()
+        target_link_libraries(FrameworkClient Ultralight)
     endif ()
-elseif (APPLE)
-elseif (UNIX)
+else ()
+    target_link_libraries(FrameworkClient Ultralight)
 endif ()
 
 # Custom defines
