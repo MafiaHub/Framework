@@ -29,6 +29,7 @@ namespace Framework::Scripting {
     }
 
     bool Resource::LoadPackageFile() {
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Loading '{}'", _path);
         cppfs::FileHandle packageFile = cppfs::fs::open(_path + "/package.json");
         // Is the file valid ?
         if (!packageFile.exists()) {
@@ -49,10 +50,15 @@ namespace Framework::Scripting {
         }
 
         // Apply settings
-        auto root   = nlohmann::json::parse(content);
-        _name       = root["name"].get<std::string>();
-        _version    = root["version"].get<std::string>();
-        _entryPoint = root["entry_point"].get<std::string>();
+        auto root = nlohmann::json::parse(content);
+        try {
+            _name       = root["name"].get<std::string>();
+            _version    = root["version"].get<std::string>();
+            _entryPoint = root["entry_point"].get<std::string>();
+        } catch (nlohmann::detail::type_error &err) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The package.json is not valid:\n\t{}", err.what());
+            return false;
+        }
         return true;
     }
 
