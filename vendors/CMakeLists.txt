@@ -56,6 +56,7 @@ add_subdirectory(discord)
 
 # Build LibCEF
 add_subdirectory(cef)
+add_subdirectory(cef_target)
 
 # Build slikenet
 add_subdirectory(slikenet)
@@ -64,40 +65,22 @@ add_subdirectory(slikenet)
 add_subdirectory(ultralight)
 
 # Build firebase
-
-add_library(Firebase INTERFACE)
-set(FIREBASE_LIBS firebase_analytics firebase_auth firebase_app)
-if (NOT CMAKE_CL_64 AND WIN32)
-    target_link_directories(Firebase INTERFACE "firebase/lib/win_32/Release")
-elseif (WIN32)
-    target_link_directories(Firebase INTERFACE "firebase/lib/win_64/Release")
-elseif (APPLE)
-    target_link_directories(Firebase INTERFACE "firebase/lib/osx")
-else ()
-    target_link_directories(Firebase INTERFACE "firebase/lib/linux_64")
-endif ()
-
-target_link_libraries(Firebase INTERFACE ${FIREBASE_LIBS})
-target_include_directories(Firebase INTERFACE "firebase/include")
+add_subdirectory(firebase)
 
 # Build sentry
 set(CURL_STATICLIB ON)
 add_subdirectory(sentry)
 
 # Build curl
-add_library(Curl INTERFACE)
-
-if (WIN32)
-    target_link_directories(Curl INTERFACE "curl/lib")
-    target_link_libraries(Curl INTERFACE libcurl)
-else ()
-    target_link_libraries(Curl INTERFACE curl)
-endif ()
+add_subdirectory(curl)
 
 # Build Optick
 set(OPTICK_BUILD_SHARED CACHE BOOL "" OFF)
 set(OPTICK_INSTALL_TARGETS CACHE BOOL "" OFF)
 add_subdirectory(optick)
+
+# Build NodeJS
+add_subdirectory(nodejs)
 
 # Build OS specific libraries
 if (WIN32)
