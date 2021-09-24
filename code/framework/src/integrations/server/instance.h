@@ -18,6 +18,7 @@ namespace Framework::Integrations::Server {
         int32_t bindPort;
         std::string bindPassword;
         int32_t maxPlayers;
+        std::string httpServeDir;
     };
 
     class Instance {

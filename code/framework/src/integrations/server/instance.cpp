@@ -15,7 +15,7 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(opts.modSlug);
 
         // Initialize the web server
-        if (!_webServer->Init(opts.bindHost, opts.bindPort)) {
+        if (!_webServer->Init(opts.bindHost, opts.bindPort, opts.httpServeDir)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
