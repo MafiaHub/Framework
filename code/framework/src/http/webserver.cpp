@@ -30,6 +30,9 @@ namespace Framework::HTTP {
                 if (serveDir.empty()) {
                     Logging::GetLogger(FRAMEWORK_INNER_HTTP)->trace("[Webserver] Path not registered, sending 404: {}", uri);
                     mg_http_reply(c, 404, "", "");
+                    if(webServer->GetNotFoundCallback()){
+                        webServer->GetNotFoundCallback()(uri);
+                    }
                 } else {
                     struct mg_http_serve_opts opts = {};
 
@@ -41,9 +44,10 @@ namespace Framework::HTTP {
         }
     }
 
-    bool Webserver::Init(const std::string &host, int32_t port) {
+    bool Webserver::Init(const std::string &host, int32_t port, const std::string &serveDir) {
         mg_mgr_init(&_manager);
         _running = true;
+        _serveDir = serveDir;
 
         auto address = "http://" + (host.empty() ? "0.0.0.0" : host) + ":" + std::to_string(port);
         mg_http_listen(&_manager, address.c_str(), &HandleWebRequest, this);
