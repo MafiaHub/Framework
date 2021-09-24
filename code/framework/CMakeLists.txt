@@ -83,7 +83,10 @@ target_link_libraries(FrameworkServer mongoose)
 target_link_libraries(FrameworkClient DiscordSDK)
 
 # NodeJS libraries
-if (WIN32)
+if (CMAKE_CL_64)
+    target_link_directories(FrameworkServer PRIVATE "../../vendors/nodejs/lib/win64")
+    file(GLOB NODEJS_LIBS "../../vendors/nodejs/lib/win64/*.lib")
+elseif (WIN32)
     target_link_directories(FrameworkServer PRIVATE "../../vendors/nodejs/lib/win32")
     file(GLOB NODEJS_LIBS "../../vendors/nodejs/lib/win32/*.lib")
 elseif (APPLE)
