@@ -43,5 +43,9 @@ namespace Framework::Networking {
         SLNet::Packet *GetPacket() const {
             return _packet;
         }
+
+        SLNet::RakPeerInterface *GetPeer() const {
+            return _peer;
+        }
     };
 } // namespace Framework::Networking

@@ -9,20 +9,21 @@
 #include <unordered_map>
 
 namespace Framework::HTTP {
-    using RequestCallback = std::function<void(struct mg_connection *c, void *ev_data)>;
+    using ResponseCallback = std::function<void(int32_t code, const std::string &message)>;
+    using RequestCallback  = std::function<void(struct mg_connection *c, void *ev_data, ResponseCallback)>;
     using NotFoundCallback = std::function<void(std::string)>;
-    using CallbacksMap    = std::unordered_map<const char *, RequestCallback>;
+    using CallbacksMap     = std::unordered_map<const char *, RequestCallback>;
 
     class Webserver {
       public:
-        virtual bool Init(const std::string &host, int32_t port, const std::string &);
+        bool Init(const std::string &host, int32_t port, const std::string &);
 
         bool Shutdown();
 
         void RegisterRequest(const char *, RequestCallback);
 
-        void SetNotFoundCallback(NotFoundCallback cb){
-          _notFoundCallback = cb;
+        void SetNotFoundCallback(NotFoundCallback cb) {
+            _notFoundCallback = cb;
         }
 
         CallbacksMap GetRegisteredRequestCallbacks() const {
@@ -30,7 +31,7 @@ namespace Framework::HTTP {
         }
 
         NotFoundCallback GetNotFoundCallback() const {
-          return _notFoundCallback;
+            return _notFoundCallback;
         }
 
         const std::string &GetServeDirectory() {
@@ -38,8 +39,6 @@ namespace Framework::HTTP {
         }
 
       protected:
-        static void Respond(mg_connection *c, int32_t code, const std::string &message);
-
         void ServeDirectory(const std::string &dir);
 
       private:

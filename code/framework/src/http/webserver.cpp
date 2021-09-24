@@ -1,7 +1,6 @@
 #include "webserver.h"
 
 #include <logging/logger.h>
-
 #include <optick.h>
 
 namespace Framework::HTTP {
@@ -19,7 +18,9 @@ namespace Framework::HTTP {
             auto found = false;
             for (auto &it : webServer->GetRegisteredRequestCallbacks()) {
                 if (mg_http_match_uri(hm, it.first)) {
-                    it.second(c, ev_data);
+                    it.second(c, ev_data, [&](int32_t code, const std::string &message) {
+                        mg_http_reply(c, code, "", "%s\n", message.c_str());
+                    });
                     found = true;
                 }
             }
@@ -30,7 +31,7 @@ namespace Framework::HTTP {
                 if (serveDir.empty()) {
                     Logging::GetLogger(FRAMEWORK_INNER_HTTP)->trace("[Webserver] Path not registered, sending 404: {}", uri);
                     mg_http_reply(c, 404, "", "");
-                    if(webServer->GetNotFoundCallback()){
+                    if (webServer->GetNotFoundCallback()) {
                         webServer->GetNotFoundCallback()(uri);
                     }
                 } else {
@@ -46,7 +47,7 @@ namespace Framework::HTTP {
 
     bool Webserver::Init(const std::string &host, int32_t port, const std::string &serveDir) {
         mg_mgr_init(&_manager);
-        _running = true;
+        _running  = true;
         _serveDir = serveDir;
 
         auto address = "http://" + (host.empty() ? "0.0.0.0" : host) + ":" + std::to_string(port);
@@ -54,9 +55,9 @@ namespace Framework::HTTP {
 
         _webThread = std::thread([this]() {
             OPTICK_THREAD("WebWorker");
-            while (this->_running) { 
+            while (this->_running) {
                 OPTICK_EVENT();
-                mg_mgr_poll(&_manager, 1000); 
+                mg_mgr_poll(&_manager, 1000);
             }
         });
 
@@ -79,9 +80,7 @@ namespace Framework::HTTP {
             Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Registered request callback for path: {}", path);
         }
     }
-    void Webserver::Respond(mg_connection *c, int32_t code, const std::string &message) {
-        mg_http_reply(c, code, "", "%s\n", message.c_str());
-    }
+
     void Webserver::ServeDirectory(const std::string &dir) {
         _serveDir = dir;
     }

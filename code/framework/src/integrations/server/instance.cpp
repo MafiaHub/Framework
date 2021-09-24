@@ -1,6 +1,7 @@
 #include "instance.h"
 
 #include <optick.h>
+#include <nlohmann/json.hpp>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
@@ -12,6 +13,8 @@ namespace Framework::Integrations::Server {
     Instance::~Instance() {}
 
     ServerError Instance::Init(InstanceOptions &opts) {
+        _opts = opts;
+
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(opts.modSlug);
 
@@ -27,10 +30,14 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
+        // Initialize our networking engine
         if(!_networkingEngine->Init(opts.bindPort, opts.bindHost, opts.maxPlayers, opts.bindPassword)){
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }
+
+        // Register the default endpoints
+        InitEndpoints();
 
         _alive = true;
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", opts.modName);
@@ -39,6 +46,20 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", opts.maxPlayers);
         return ServerError::SERVER_NONE;
+    }
+
+    void Instance::InitEndpoints(){
+        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, Framework::HTTP::ResponseCallback cb) {
+            nlohmann::json root;
+            root["mod_name"] = _opts.modName;
+            root["mod_slug"] = _opts.modSlug;
+            root["mod_version"] = _opts.modVersion;
+            root["host"] = _opts.bindHost;
+            root["port"] = _opts.bindPort;
+            root["password_required"] = !_opts.bindPassword.empty();
+            root["max_players"] = _opts.maxPlayers;
+            cb(200, root.dump(4));
+        });
     }
 
     ServerError Instance::Shutdown() {

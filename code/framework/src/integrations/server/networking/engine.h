@@ -4,19 +4,19 @@
 
 namespace Framework::Integrations::Server::Networking {
     class Engine {
-        private:
-            Framework::Networking::NetworkServer *_peer = nullptr;
+      private:
+        Framework::Networking::NetworkServer *_networkServer = nullptr;
 
-        public:
-            Engine();
+      public:
+        Engine();
 
-            bool Init(int32_t, std::string &, int32_t, std::string &);
-            bool Shutdown();
+        bool Init(int32_t, std::string &, int32_t, std::string &);
+        bool Shutdown();
 
-            void Update();
+        void Update();
 
-            Framework::Networking::NetworkServer *GetPeer() const {
-            return _peer;
+        Framework::Networking::NetworkServer *GetNetworkServer() const {
+            return _networkServer;
         }
     };
-}
+} // namespace Framework::Integrations::Server::Networking

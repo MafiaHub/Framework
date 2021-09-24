@@ -27,6 +27,7 @@ namespace Framework::Integrations::Server {
       private:
         bool _alive;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
+        InstanceOptions _opts;
 
         Scripting::Engine *_scriptingEngine;
         Networking::Engine *_networkingEngine;
