@@ -15,6 +15,8 @@ namespace Framework::Utils {
         /// Call this in a loop to process all delayed scopes.
         static void Update();
 
+        static void Push(uint32_t delay, std::function<void()> callback);
+
       private:
         bool FireWhenReady();
 

@@ -3,7 +3,6 @@
 namespace Framework::Utils {
     DelayScope::DelayScope(uint32_t delay, std::function<void()> callback): _delay(delay), _callback(callback) {
         _created = std::chrono::high_resolution_clock::now();
-        activeHandlers.push_back(this);
     }
 
     bool DelayScope::FireWhenReady() {
@@ -32,6 +31,10 @@ namespace Framework::Utils {
         }
 
         activeHandlers = pendingDelays;
+    }
+
+    void DelayScope::Push(uint32_t delay, std::function<void()> callback) {
+        activeHandlers.push_back(new DelayScope(delay, callback));
     }
 
     std::vector<DelayScope *> DelayScope::activeHandlers;
