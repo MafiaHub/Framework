@@ -5,6 +5,7 @@
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
         _scriptingEngine = new Scripting::Engine;
+        _networkingEngine = new Networking::Engine;
         _webServer = new HTTP::Webserver;
     }
 
@@ -26,6 +27,11 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
+        if(!_networkingEngine->Init(opts.bindPort, opts.bindHost, opts.maxPlayers, opts.bindPassword)){
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
+            return ServerError::SERVER_NETWORKING_INIT_FAILED;
+        }
+
         _alive = true;
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", opts.bindName);
@@ -36,6 +42,10 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Shutdown() {
+        if (_networkingEngine){
+            _networkingEngine->Shutdown();
+        }
+        
         if (_scriptingEngine) {
             _scriptingEngine->Shutdown();
         }
@@ -51,6 +61,10 @@ namespace Framework::Integrations::Server {
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
+            if (_networkingEngine){
+                _networkingEngine->Update();
+            }
+            
             if (_scriptingEngine) {
                 _scriptingEngine->Update();
             }

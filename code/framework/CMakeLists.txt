@@ -39,6 +39,7 @@ set(FRAMEWORK_SERVER_SRC
         src/networking/entity_streamer.cpp
 
         src/integrations/server/instance.cpp
+        src/integrations/server/networking/engine.cpp
         )
 
 set(FRAMEWORK_CLIENT_SRC

@@ -8,6 +8,8 @@
 #include <scripting/engine.h>
 #include <string>
 
+#include "networking/engine.h"
+
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
         std::string modSlug;
@@ -27,6 +29,7 @@ namespace Framework::Integrations::Server {
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 
         Scripting::Engine *_scriptingEngine;
+        Networking::Engine *_networkingEngine;
         HTTP::Webserver *_webServer;
 
       public:
@@ -48,6 +51,10 @@ namespace Framework::Integrations::Server {
 
         Scripting::Engine *GetScriptingEngine() const {
             return _scriptingEngine;
+        }
+
+        Networking::Engine *GetNetworkingEngine() const {
+            return _networkingEngine;
         }
 
         HTTP::Webserver *GetWebserver() const {
