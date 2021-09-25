@@ -1,5 +1,6 @@
-﻿---
+---
 BasedOnStyle: LLVM
+IndentWidth: 4
 AlignAfterOpenBracket: Align
 AlignConsecutiveMacros: 'true'
 AlignConsecutiveAssignments: 'true'
@@ -21,7 +22,19 @@ BinPackArguments: 'true'
 BinPackParameters: 'true'
 BreakAfterJavaFieldAnnotations: 'true'
 BreakBeforeBinaryOperators: NonAssignment
-BreakBeforeBraces: Attach
+BreakBeforeBraces: Custom
+BraceWrapping:                         
+    AfterClass:      false   
+    AfterControlStatement: false
+    AfterEnum:       false
+    AfterFunction:   false          
+    AfterNamespace:  false               
+    AfterStruct:     false
+    AfterUnion:      false
+    BeforeCatch:     true
+    BeforeElse:      true  
+    BeforeLambdaBody: 'false'
+    IndentBraces:    false
 BreakConstructorInitializers: BeforeComma
 BreakInheritanceList: BeforeComma
 ColumnLimit: '180'
@@ -31,7 +44,6 @@ ConstructorInitializerAllOnOneLineOrOnePerLine: 'true'
 ContinuationIndentWidth: '4'
 FixNamespaceComments: 'true'
 IncludeBlocks: Regroup
-IndentWidth: '4'
 KeepEmptyLinesAtTheStartOfBlocks: 'false'
 Language: Cpp
 MaxEmptyLinesToKeep: '1'
@@ -54,7 +66,6 @@ SpacesInCStyleCastParentheses: 'false'
 SpacesInContainerLiterals: 'false'
 SpacesInParentheses: 'false'
 SpacesInSquareBrackets: 'false'
-Standard: Cpp11
+Standard: Auto
 UseTab: Never
-
 ...
