@@ -6,9 +6,12 @@
 
 #include <map>
 #include <string>
+#include <functional>
 #include <v8.h>
 
 namespace Framework::Scripting {
+    using InvokeEventCallback = std::function<std::vector<v8::Local<v8::Value>>(v8::Isolate *, v8::Local<v8::Context>)>;
+
     class Engine;
     class ResourceManager {
       private:
@@ -38,6 +41,6 @@ namespace Framework::Scripting {
 
         void InvokeErrorEvent(const std::string &, const std::string &, const std::string &, int32_t);
 
-        void InvokeEvent(const std::string &, std::vector<v8::Local<v8::Value>> &);
+        void InvokeEvent(const std::string &, InvokeEventCallback cb);
     };
 } // namespace Framework::Scripting

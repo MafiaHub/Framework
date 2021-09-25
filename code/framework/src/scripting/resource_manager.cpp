@@ -1,4 +1,5 @@
 #include "resource_manager.h"
+#include "engine.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileIterator.h>
@@ -75,8 +76,19 @@ namespace Framework::Scripting {
         for (auto it = dir.begin(); it != dir.end(); ++it) { Unload(*it); }
     }
 
-    void ResourceManager::InvokeEvent(const std::string &eventName, std::vector<v8::Local<v8::Value>> &args) {
-        for (auto res : _resources) { res.second->InvokeEvent(eventName, args); }
+    void ResourceManager::InvokeEvent(const std::string &eventName, InvokeEventCallback cb) {
+        for (auto resPair : _resources) { 
+            const auto res = resPair.second;
+
+            auto isolate = _engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+
+            auto ctx = res->GetContext();
+            v8::Context::Scope contextScope(ctx);
+            res->InvokeEvent(eventName, cb(isolate, ctx));
+        }
     }
 
     void ResourceManager::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {

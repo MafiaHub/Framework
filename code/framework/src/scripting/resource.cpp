@@ -364,6 +364,7 @@ namespace Framework::Scripting {
     };
 
     v8::Local<v8::Context> Resource::GetContext() {
-        return _context.Get(_engine->GetIsolate());
+        auto isolate = _engine->GetIsolate();
+        return _context.Get(isolate);
     }
 } // namespace Framework::Scripting

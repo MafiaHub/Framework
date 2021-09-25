@@ -79,6 +79,22 @@ namespace Framework::Scripting::V8Helpers {
         return true;
     }
 
+    inline bool SafeToInteger(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, int32_t &out) {
+        v8::MaybeLocal maybeVal = val->ToInteger(ctx);
+        if (maybeVal.IsEmpty())
+            return false;
+        out = maybeVal.ToLocalChecked()->Value();
+        return true;
+    }
+
+    inline bool SafeToInteger(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, int64_t &out) {
+        v8::MaybeLocal maybeVal = val->ToBigInt(ctx);
+        if (maybeVal.IsEmpty())
+            return false;
+        out = maybeVal.ToLocalChecked()->Int64Value();
+        return true;
+    }
+
     inline bool GetVec3(v8::Local<v8::Context> ctx, ArgumentStack &stack, double &x, double &y, double &z) {
         v8::Local<v8::Value> front = stack.Peek();
         if (front->IsObject() && Helpers::ToString(front.As<v8::Object>()->GetConstructorName()) == GetKeyName(Keys::KEY_VECTOR_3)) {
@@ -176,3 +192,6 @@ namespace Framework::Scripting::V8Helpers {
 #define V8_MODULE_CB [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj)
 #define V8_CLASS_CB  [](v8::Local<v8::FunctionTemplate> tpl)
 #define V8_METHOD_CB [](const v8::FunctionCallbackInfo<v8::Value> &info)
+
+#define V8_EVENT_ARGS std::vector<v8::Local<v8::Value>>
+#define V8_EVENT_CB  [=](v8::Isolate *isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
