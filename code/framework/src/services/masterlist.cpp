@@ -39,9 +39,6 @@ namespace Framework::Services {
 
                 if (res && res->status != 200) {
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->warn("[Masterlist] Push failed with error {} and message {}", res->status, res->body);
-
-                    return false;
-                } else if (!res) {
                     return false;
                 }
 
