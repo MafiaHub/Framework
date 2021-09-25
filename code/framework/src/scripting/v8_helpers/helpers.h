@@ -172,3 +172,7 @@ namespace Framework::Scripting::V8Helpers {
         V8Helpers::Throw(isolate, "Function cannot be called without new keyword");                                                                                                \
         return;                                                                                                                                                                    \
     }
+
+#define V8_MODULE_CB [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj)
+#define V8_CLASS_CB  [](v8::Local<v8::FunctionTemplate> tpl)
+#define V8_METHOD_CB [](const v8::FunctionCallbackInfo<v8::Value> &info)

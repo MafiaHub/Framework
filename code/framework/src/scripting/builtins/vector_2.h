@@ -208,7 +208,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        auto vec3Class = new Helpers::V8Class(GetKeyName(Keys::KEY_VECTOR_2), Vector2Constructor, [](v8::Local<v8::FunctionTemplate> tpl) {
+        auto vec3Class = new Helpers::V8Class(GetKeyName(Keys::KEY_VECTOR_2), Vector2Constructor, V8_CLASS_CB {
             v8::Isolate *isolate = v8::Isolate::GetCurrent();
             V8Helpers::SetAccessor(isolate, tpl, "length", Vector2Length);
 
