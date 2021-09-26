@@ -18,10 +18,13 @@ namespace Framework::Scripting::Helpers {
         ClassInitCallback _initCb;
         v8::FunctionCallback _constructor;
         v8::Persistent<v8::FunctionTemplate> _fnTpl;
+        V8Class *_parent;
 
       public:
-        V8Class(const std::string &, ClassInitCallback &&init = {});
-        V8Class(const std::string &, v8::FunctionCallback, ClassInitCallback &&cb = {});
+        V8Class(const std::string &, ClassInitCallback && = {});
+        V8Class(const std::string &, v8::FunctionCallback, ClassInitCallback && = {});
+        V8Class(const std::string &, V8Class &, ClassInitCallback && = {});
+        V8Class(const std::string &, V8Class &, v8::FunctionCallback, ClassInitCallback && = {});
 
         V8HelperError Load();
         V8HelperError Register(v8::Local<v8::Context>, v8::Local<v8::Object>);
