@@ -3,9 +3,23 @@
 #include "v8_try_catch.h"
 
 namespace Framework::Scripting::Helpers {
-    V8Class::V8Class(const std::string &name, ClassInitCallback &&cb): _name(name), _constructor(nullptr), _loaded(false), _initCb(cb) {}
+    V8Class::V8Class(const std::string &name, ClassInitCallback &&cb): _name(name), _parent(nullptr), _constructor(nullptr), _loaded(false), _initCb(cb) {}
 
-    V8Class::V8Class(const std::string &name, v8::FunctionCallback constructor, ClassInitCallback &&cb): _name(name), _constructor(constructor), _loaded(false), _initCb(cb) {}
+    V8Class::V8Class(const std::string &name, v8::FunctionCallback constructor, ClassInitCallback &&cb)
+        : _name(name)
+        , _parent(nullptr)
+        , _constructor(constructor)
+        , _loaded(false)
+        , _initCb(cb) {}
+
+    V8Class::V8Class(const std::string &name, V8Class &parent, ClassInitCallback &&cb): _name(name), _parent(&parent), _constructor(nullptr), _loaded(false), _initCb(cb) {}
+
+    V8Class::V8Class(const std::string &name, V8Class &parent, v8::FunctionCallback constructor, ClassInitCallback &&cb)
+        : _name(name)
+        , _parent(&parent)
+        , _constructor(constructor)
+        , _loaded(false)
+        , _initCb(cb) {}
 
     V8HelperError V8Class::Load() {
         auto isolate                        = v8::Isolate::GetCurrent();
@@ -16,7 +30,17 @@ namespace Framework::Scripting::Helpers {
             _initCb(tpl);
         }
 
-        // TODO: check for parent (inheritance)
+        if (_parent) {
+            if (!_parent->_loaded)
+                _parent->Load();
+            auto parentTpl = _parent->_fnTpl.Get(isolate);
+            tpl->Inherit(parentTpl);
+
+            // Make sure the template has the the needed amount of internal fields for the parent
+            auto parentInternalFieldCount = parentTpl->InstanceTemplate()->InternalFieldCount();
+            if (parentInternalFieldCount > tpl->InstanceTemplate()->InternalFieldCount())
+                tpl->InstanceTemplate()->SetInternalFieldCount(parentInternalFieldCount);
+        }
 
         _fnTpl.Reset(isolate, tpl);
         _loaded = true;
