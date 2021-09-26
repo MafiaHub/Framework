@@ -66,7 +66,7 @@ cmake -B build
 cmake --build build
 
 # Run framework tests
-cmake --build --target RunFrameworkTests
+cmake --build build --target RunFrameworkTests
 ```
 
 ## Add a multi-player project to the framework
