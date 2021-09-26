@@ -65,7 +65,7 @@ namespace Framework::Scripting {
             return _name;
         }
 
-        inline v8::Local<v8::Context> GetContext();
+        v8::Local<v8::Context> GetContext();
 
         SDK *GetSDK() const {
             return _sdk;
