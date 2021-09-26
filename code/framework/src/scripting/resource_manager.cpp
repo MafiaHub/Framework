@@ -1,4 +1,5 @@
 #include "resource_manager.h"
+
 #include "engine.h"
 
 #include <cppfs/FileHandle.h>
@@ -77,13 +78,13 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::InvokeEvent(const std::string &eventName, InvokeEventCallback cb) {
-        for (auto resPair : _resources) { 
-            const auto res = resPair.second;
+        auto isolate = _engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
 
-            auto isolate = _engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
+        for (auto resPair : _resources) {
+            const auto res = resPair.second;
 
             auto ctx = res->GetContext();
             v8::Context::Scope contextScope(ctx);
