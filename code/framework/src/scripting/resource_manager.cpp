@@ -88,7 +88,9 @@ namespace Framework::Scripting {
 
             auto ctx = res->GetContext();
             v8::Context::Scope contextScope(ctx);
-            res->InvokeEvent(eventName, cb(isolate, ctx));
+
+            auto args = cb(isolate, ctx);
+            res->InvokeEvent(eventName, args);
         }
     }
 
