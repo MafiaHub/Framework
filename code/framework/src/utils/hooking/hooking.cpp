@@ -15,8 +15,8 @@ namespace hook
 		inject_hook_frontend fe(this);
 		m_assembly = std::make_shared<FunctionAssembly>(fe);
 
-		writeVP<uint8_t>(m_address, 0xE9);
-        writeVP<int>(m_address + 1, (uintptr_t)m_assembly->GetCode() - (uintptr_t)get_adjusted(m_address) - 5);
+		put<uint8_t>(m_address, 0xE9);
+        put<int>(m_address + 1, (uintptr_t)m_assembly->GetCode() - (uintptr_t)get_adjusted(m_address) - 5);
 	}
 
 	void inject_hook::injectCall()
@@ -24,8 +24,8 @@ namespace hook
 		inject_hook_frontend fe(this);
 		m_assembly = std::make_shared<FunctionAssembly>(fe);
 
-        writeVP<uint8_t>(m_address, 0xE8);
-        writeVP<int>(m_address + 1, (uintptr_t)m_assembly->GetCode() - (uintptr_t)get_adjusted(m_address) - 5);
+        put<uint8_t>(m_address, 0xE8);
+        put<int>(m_address + 1, (uintptr_t)m_assembly->GetCode() - (uintptr_t)get_adjusted(m_address) - 5);
 	}
 #else
 	void* AllocateFunctionStub(void* ptr, int type)

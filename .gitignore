@@ -6,6 +6,11 @@
 *.dylib
 *.DS_STORE
 
+*.vcxproj
+*.vcxproj.filters
+*.cmake
+*.sln
+
 Bin/
 Build/
 Build*/
