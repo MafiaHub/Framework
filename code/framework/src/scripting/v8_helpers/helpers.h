@@ -2,9 +2,9 @@
 // Some parts were taken from https://github.com/altmp/v8-helpers
 
 #pragma once
+#include "../keys.h"
 #include "argstack.h"
 #include "v8_string.h"
-#include "../keys.h"
 
 #include <v8.h>
 
@@ -17,13 +17,14 @@ namespace Framework::Scripting::V8Helpers {
         tpl->Set(isolate, name, v8::FunctionTemplate::New(isolate, callback));
     }
 
-    inline void SetAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
+    inline void SetAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter,
+                            v8::AccessorSetterCallback setter = nullptr) {
         tpl->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::Local<v8::Value>(),
                                               v8::AccessControl::DEFAULT, setter != nullptr ? v8::PropertyAttribute::None : v8::PropertyAttribute::ReadOnly);
     }
 
     inline void SetStaticAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter,
-                           v8::AccessorSetterCallback setter = nullptr) {
+                                  v8::AccessorSetterCallback setter = nullptr) {
         tpl->SetNativeDataProperty(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter);
     }
 
@@ -42,12 +43,12 @@ namespace Framework::Scripting::V8Helpers {
     }
 
     inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, const char *name, v8::Local<v8::Value> value,
-                           v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
+                                  v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
         val->DefineOwnProperty(ctx, v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), value, attributes);
     }
 
     inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, v8::Local<v8::String> name, v8::Local<v8::Value> value,
-                           v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
+                                  v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
         val->DefineOwnProperty(ctx, name, value, attributes);
     }
 
@@ -108,7 +109,8 @@ namespace Framework::Scripting::V8Helpers {
             bool r2                    = SafeToNumber(Get(ctx, vec3, "y"), ctx, y);
             bool r3                    = SafeToNumber(Get(ctx, vec3, "z"), ctx, z);
             return r1 && r2 && r3;
-        } else {
+        }
+        else {
             bool r1 = SafeToNumber(stack.Pop(), ctx, x);
             bool r2 = SafeToNumber(stack.Pop(), ctx, y);
             bool r3 = SafeToNumber(stack.Pop(), ctx, z);
@@ -129,7 +131,8 @@ namespace Framework::Scripting::V8Helpers {
             bool r1                    = SafeToNumber(Get(ctx, vec2, "x"), ctx, x);
             bool r2                    = SafeToNumber(Get(ctx, vec2, "y"), ctx, y);
             return r1 && r2;
-        } else {
+        }
+        else {
             bool r1 = SafeToNumber(stack.Pop(), ctx, x);
             bool r2 = SafeToNumber(stack.Pop(), ctx, y);
             return r1 && r2;
@@ -151,7 +154,8 @@ namespace Framework::Scripting::V8Helpers {
             bool r3                    = SafeToNumber(Get(ctx, quat, "y"), ctx, y);
             bool r4                    = SafeToNumber(Get(ctx, quat, "z"), ctx, z);
             return r1 && r2 && r3 && r4;
-        } else {
+        }
+        else {
             bool r1 = SafeToNumber(stack.Pop(), ctx, w);
             bool r2 = SafeToNumber(stack.Pop(), ctx, x);
             bool r3 = SafeToNumber(stack.Pop(), ctx, y);
@@ -159,6 +163,47 @@ namespace Framework::Scripting::V8Helpers {
             return r1 && r2 && r3 && r4;
         }
         return false;
+    }
+
+    inline v8::Local<v8::String> JSValue(const char *val) {
+        return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), val).ToLocalChecked();
+    }
+    inline v8::Local<v8::String> JSValue(const std::string &val) {
+        return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), val.c_str(), v8::NewStringType::kNormal, (int)val.size()).ToLocalChecked();
+    }
+    inline v8::Local<v8::String> JSValue(const uint16_t *val) {
+        return v8::String::NewFromTwoByte(v8::Isolate::GetCurrent(), val).ToLocalChecked();
+    }
+    inline v8::Local<v8::String> JSValue(const std::wstring &val) {
+        return v8::String::NewFromTwoByte(v8::Isolate::GetCurrent(), (uint16_t *)val.data()).ToLocalChecked();
+    }
+    inline v8::Local<v8::Boolean> JSValue(bool val) {
+        return v8::Boolean::New(v8::Isolate::GetCurrent(), val);
+    }
+    inline v8::Local<v8::Number> JSValue(double val) {
+        return v8::Number::New(v8::Isolate::GetCurrent(), val);
+    }
+    inline v8::Local<v8::Integer> JSValue(int32_t val) {
+        return v8::Integer::New(v8::Isolate::GetCurrent(), val);
+    }
+    inline v8::Local<v8::Integer> JSValue(uint32_t val) {
+        return v8::Integer::NewFromUnsigned(v8::Isolate::GetCurrent(), val);
+    }
+    inline v8::Local<v8::BigInt> JSValue(int64_t val) {
+        return v8::BigInt::New(v8::Isolate::GetCurrent(), val);
+    }
+    inline v8::Local<v8::BigInt> JSValue(uint64_t val) {
+        return v8::BigInt::NewFromUnsigned(v8::Isolate::GetCurrent(), val);
+    }
+    template <class T>
+    inline v8::Local<v8::Array> JSValue(std::vector<T> &arr) {
+        auto jsArr = v8::Array::New(v8::Isolate::GetCurrent(), arr.size());
+        for (int i = 0; i < arr.size(); i++) { jsArr->Set(v8::Isolate::GetCurrent()->GetEnteredOrMicrotaskContext(), i, JSValue(arr[i])); }
+        return jsArr;
+    }
+    // Returns null
+    inline v8::Local<v8::Primitive> JSValue(std::nullptr_t val) {
+        return v8::Null(v8::Isolate::GetCurrent());
     }
 } // namespace Framework::Scripting::V8Helpers
 
@@ -194,4 +239,4 @@ namespace Framework::Scripting::V8Helpers {
 #define V8_METHOD_CB [](const v8::FunctionCallbackInfo<v8::Value> &info)
 
 #define V8_EVENT_ARGS std::vector<v8::Local<v8::Value>>
-#define V8_EVENT_CB  [=](v8::Isolate *isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
+#define V8_EVENT_CB   [=](v8::Isolate * isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
