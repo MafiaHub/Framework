@@ -57,6 +57,16 @@ set(FRAMEWORK_CLIENT_SRC
         src/integrations/client/instance.cpp
         )
 
+# Append the platform-dependent files to the related lists
+if(WIN32)
+    list(
+        APPEND
+        FRAMEWORK_CLIENT_SRC
+        src/launcher/entrypointcpp
+        src/launcher/project.cpp
+    )
+endif()
+
 # Append the files to the target static library
 add_library(Framework STATIC ${FRAMEWORK_SRC})
 add_library(FrameworkClient STATIC ${FRAMEWORK_CLIENT_SRC})
