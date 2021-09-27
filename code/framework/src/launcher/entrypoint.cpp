@@ -1,3 +1,4 @@
+#include "entrypoint.h"
 #include "project.h"
 
 namespace Framework::Launcher::Entrypoint {

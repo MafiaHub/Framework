@@ -62,7 +62,7 @@ if(WIN32)
     list(
         APPEND
         FRAMEWORK_CLIENT_SRC
-        src/launcher/entrypointcpp
+        src/launcher/entrypoint.cpp
         src/launcher/project.cpp
     )
 endif()
