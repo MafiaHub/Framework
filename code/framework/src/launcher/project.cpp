@@ -3,6 +3,10 @@
 #include <Windows.h>
 
 namespace Framework::Launcher {
+    using PreInitFunction  = void (*)(LPVOID);
+    using InitFunction     = void (*)(LPVOID);
+    using PostInitFunction = void (*)(LPVOID);
+
     bool Project::Init() {
         _appHandle = LoadLibraryA(_handleName.c_str());
         if (_appHandle) {
@@ -19,7 +23,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        auto *preInitFn = (void (*)(LPVOID)(GetProcAddress(HMODULE) _appHandle), "PreInit");
+        auto preInitFn = (PreInitFunction)(GetProcAddress((HMODULE)_appHandle, "PreInit"));
         if (!preInitFn) {
             return false;
         }
@@ -34,8 +38,8 @@ namespace Framework::Launcher {
             return false;
         }
 
-        auto *preInitFn = (void (*)(LPVOID)(GetProcAddress(HMODULE) _appHandle), "Init");
-        if (!preInitFn) {
+        auto initFn = (InitFunction)(GetProcAddress((HMODULE)_appHandle, "Init"));
+        if (!initFn) {
             return false;
         }
 
@@ -49,8 +53,8 @@ namespace Framework::Launcher {
             return false;
         }
 
-        auto *preInitFn = (void (*)(LPVOID)(GetProcAddress(HMODULE) _appHandle), "PostInit");
-        if (!preInitFn) {
+        auto postInitFn = (PostInitFunction)(GetProcAddress((HMODULE)_appHandle, "PostInit"));
+        if (!postInitFn) {
             return false;
         }
 
