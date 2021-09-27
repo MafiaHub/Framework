@@ -13,13 +13,13 @@ namespace Framework::Launcher {
             return true;
         }
 
-        MessageBox(nullptr, L"Failed to acquire the destination DLL pointer", L"Error", MB_ICONERROR);
+        MessageBoxW(nullptr, L"Failed to acquire the destination DLL pointer", L"Error", MB_ICONERROR);
         return false;
     }
 
     bool Project::DoInnerPreInit() {
         if (!_appHandle) {
-            MessageBox(nullptr, L"Failed to do inner pre init due to invalid app handle", L"Error", MB_ICONERROR);
+            MessageBoxW(nullptr, L"Failed to do inner pre init due to invalid app handle", L"Error", MB_ICONERROR);
             return false;
         }
 
@@ -34,7 +34,7 @@ namespace Framework::Launcher {
 
     bool Project::DoInnerInit() {
         if (!_appHandle) {
-            MessageBox(nullptr, L"Failed to do inner init due to invalid app handle", L"Error", MB_ICONERROR);
+            MessageBoxW(nullptr, L"Failed to do inner init due to invalid app handle", L"Error", MB_ICONERROR);
             return false;
         }
 
@@ -49,7 +49,7 @@ namespace Framework::Launcher {
 
     bool Project::DoInnerPostInit() {
         if (!_appHandle) {
-            MessageBox(nullptr, L"Failed to do inner init due to invalid app handle", L"Error", MB_ICONERROR);
+            MessageBoxW(nullptr, L"Failed to do inner init due to invalid app handle", L"Error", MB_ICONERROR);
             return false;
         }
 
