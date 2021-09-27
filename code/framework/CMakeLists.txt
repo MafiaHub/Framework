@@ -55,7 +55,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/external/steam/wrapper.cpp
 
         src/integrations/client/instance.cpp
-        )
+    )
 
 # Append the platform-dependent files to the related lists
 if(WIN32)
@@ -64,6 +64,10 @@ if(WIN32)
         FRAMEWORK_CLIENT_SRC
         src/launcher/entrypoint.cpp
         src/launcher/project.cpp
+        src/utils/hooking/hook_function.cpp
+        src/utils/hooking/hooking_patterns.cpp
+        src/utils/hooking/hooking.cpp
+        src/utils/memory.cpp
     )
 endif()
 
@@ -109,3 +113,7 @@ endif ()
 
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
+IF(WIN32)
+    add_definitions(-D_USE_MATH_DEFINES)
+    add_definitions(-DNOMINMAX)
+ENDIF()
