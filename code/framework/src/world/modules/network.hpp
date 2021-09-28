@@ -7,6 +7,8 @@
 #include <glm/ext.hpp>
 #include <slikenet/types.h>
 #include <unordered_map>
+#include <functional>
+#include <flecs/addons/timer.h>
 
 namespace Framework::World::Modules {
     struct Network {
@@ -15,6 +17,14 @@ namespace Framework::World::Modules {
             bool isVisible;
             int64_t updateFrequency = 1667;
             flecs::entity_t owner   = 0;
+
+            struct Events {
+                using Proc = std::function<bool(SLNet::RakNetGUID, flecs::entity &)>;
+                Proc spawnProc;
+                Proc despawnProc;
+                Proc selfUpdateProc;
+                Proc updateProc;
+            } events;
         };
 
         struct Streamer {
@@ -26,6 +36,10 @@ namespace Framework::World::Modules {
 
             SLNet::RakNetGUID peer = SLNet::UNASSIGNED_RAKNET_GUID;
         };
+
+        flecs::entity GetStreamer() {
+            return _streamEntities;
+        }
 
         Network(flecs::world &world) {
             world.module<Network>();
@@ -45,8 +59,11 @@ namespace Framework::World::Modules {
                 return dist < streamer.range;
             };
 
-            world.system<Base::Transform, Streamer, Streamable>("StreamEntities")
+            float tickDelay = 7.813f;
+
+            _streamEntities = world.system<Base::Transform, Streamer, Streamable>("StreamEntities")
                 .kind(flecs::PostUpdate)
+                .interval(tickDelay)
                 .iter([allStreamableEntities, isVisible](flecs::iter it, Base::Transform *tr, Streamer *s, Streamable *rs) {
                     for (size_t i = 0; i < it.count(); i++) {
                         allStreamableEntities.each([=](flecs::entity e, Base::Transform &otherTr, Streamable &otherS) {
@@ -54,25 +71,41 @@ namespace Framework::World::Modules {
                             const auto id      = e.id();
                             const auto map_it  = s[i].entities.find(id);
                             if (map_it != s[i].entities.end()) {
+
+                                // If we can't stream an entity anymore, despawn it
                                 if (!canSend) {
                                     s[i].entities.erase(map_it);
-                                    // TODO: send despawn
+                                    if (otherS.events.despawnProc)
+                                        otherS.events.despawnProc(s[i].peer, e);
                                 }
+
+                                // otherwise we do regular updates
                                 else if (rs[i].owner != otherS.owner) {
-                                    // TODO: regulate throughput and send update
+                                    auto &data = map_it->second;
+                                    if (Utils::Time::GetTime() - data.lastUpdate > otherS.updateFrequency) {
+                                        if (otherS.events.updateProc)
+                                            otherS.events.updateProc(s[i].peer, e);
+                                        data.lastUpdate = Utils::Time::GetTime();
+                                    }
                                 }
                             }
-                            else if (canSend) {
-                                Streamer::StreamData data;
-                                data.lastUpdate   = Utils::Time::GetTime();
-                                s[i].entities[id] = data;
-                                // TODO: send spawn
+
+                            // this is a new entity, spawn it unless user says otherwise
+                            else if (canSend && otherS.events.spawnProc) {
+                                if (otherS.events.spawnProc(s[i].peer, e)) {
+                                    Streamer::StreamData data;
+                                    data.lastUpdate   = Utils::Time::GetTime();
+                                    s[i].entities[id] = data;
+                                }
                             }
                         });
 
-                        // TODO: send self-update to streamer
+                        if (rs[i].events.selfUpdateProc)
+                            rs[i].events.selfUpdateProc(s[i].peer, it.entity(i));
                     }
                 });
         }
+
+        flecs::entity _streamEntities;
     };
 } // namespace Framework::World::Modules

@@ -9,22 +9,20 @@ namespace Framework::World::Archetypes {
     class PlayerFactory {
       private:
         flecs::world *_world = nullptr;
-
-        inline void AssignPlayerComponents(flecs::entity &e) {
-            e.add<Modules::Base::Transform>();
-            e.add<Modules::Base::Frame>();
-            e.add<Modules::Network::Streamable>();
-            e.add<Modules::Network::Streamer>();
-        }
+        Modules::Network::Streamable::Events _events;
 
       public:
-        PlayerFactory(flecs::world *world): _world(world) {}
+        PlayerFactory(flecs::world *world, Modules::Network::Streamable::Events &&events): _world(world), _events(events) {}
 
         template <typename... Args>
         inline flecs::entity Create(Args &&...args) {
             auto e = _world->entity<Args...>(std::forward<Args>(args)...);
 
-            AssignPlayerComponents(e);
+            e.add<Modules::Base::Transform>();
+            e.add<Modules::Base::Frame>();
+            e.add<Modules::Network::Streamer>();
+            auto streamable = e.add<Modules::Network::Streamable>();
+            streamable->events = _events;
             return e;
         }
     };
