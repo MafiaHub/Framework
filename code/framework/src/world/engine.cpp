@@ -1,11 +1,12 @@
 #include "engine.h"
 
 #include "modules/base.hpp"
+#include "types/player.hpp"
 
 namespace Framework::World {
     EngineError Engine::Init() {
         _world = new flecs::world();
-        
+
         // Register a base module
         _world->import<Modules::Base>();
 

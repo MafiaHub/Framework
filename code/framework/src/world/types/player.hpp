@@ -20,24 +20,12 @@ namespace Framework::World::Archetypes {
       public:
         PlayerFactory(flecs::world *world): _world(world) {}
 
-        inline flecs::entity Create(char *name, SLNet::RakNetGUID guid) {
-            auto e = _world->entity(name);
-
-            AssignPlayerComponents(e);
-
-            auto s = e.get_mut<Modules::Network::Streamer>();
-            s->peer = guid;
-            return e;
-        }
-
-        /* entity wrappers */
-        /* useful in client code */
-
-        inline flecs::entity Wrap(flecs::entity_t id) {
-            auto e = _world->entity(id);
+        template <typename... Args>
+        inline flecs::entity Create(Args &&...args) {
+            auto e = _world->entity<Args...>(std::forward<Args>(args)...);
 
             AssignPlayerComponents(e);
             return e;
         }
     };
-} // namespace Framework::World::Archetype
+} // namespace Framework::World::Archetypes
