@@ -15,6 +15,8 @@ set(FRAMEWORK_SRC
         src/external/sentry/wrapper.cpp
         src/external/firebase/wrapper.cpp
         src/external/optick/wrapper.cpp
+
+        src/world/engine.cpp
         )
 
 set(FRAMEWORK_SERVER_SRC
@@ -83,7 +85,7 @@ macro(link_shared_deps target_name)
         target_link_libraries(${target_name} "-framework CoreFoundation" "-framework Foundation" "-framework GSS" "-framework Security" "-framework CoreText" "-framework CoreGraphics" bsm)
     endif()
 
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Firebase Curl OptickCore)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Firebase Curl OptickCore flecs_static)
 endmacro()
 
 link_shared_deps(Framework)
