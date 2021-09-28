@@ -30,6 +30,10 @@ class HookFunctionBase
             void Register();
         };
 
+class InitFunction : public HookFunctionBase {
+
+};
+
 class HookFunction : public HookFunctionBase
         {
         private:

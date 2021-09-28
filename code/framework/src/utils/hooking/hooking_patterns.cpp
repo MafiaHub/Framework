@@ -5,7 +5,6 @@
  * regarding licensing.
  */
 
-#ifndef IS_FXSERVER
 #include "hooking_patterns.h"
 
 #include <windows.h>
@@ -17,7 +16,7 @@
 
 static void Citizen_PatternSaveHint(uint64_t hash, uintptr_t hint)
 {
-    fwPlatformString hintsFile = MakeRelativeCitPath(L"citizen\\hints.dat");
+    fwPlatformString hintsFile = MakeRelativeCitPath(L"hints.dat");
     FILE* hints = _pfopen(hintsFile.c_str(), _P("ab"));
 
     if (hints)
@@ -65,7 +64,7 @@ namespace hook
                 {
             RefSource()
             {
-                auto func = (decltype(hints)(*)())GetProcAddress(GetModuleHandle(L"CoreRT.dll"), "CoreGetPatternHints");
+                auto func = (decltype(hints)(*)())GetProcAddress(GetModuleHandle("CoreRT.dll"), "CoreGetPatternHints");
 
                 this->hints = func();
             }
@@ -289,4 +288,3 @@ void pattern::hint(uint64_t hash, uintptr_t address)
 }
 #endif
 }
-#endif
