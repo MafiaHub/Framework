@@ -33,7 +33,7 @@ namespace Framework::World::Archetypes {
         /* entity wrappers */
         /* useful in client code */
 
-        inline flecs::entity Create(flecs::entity_t id) {
+        inline flecs::entity Wrap(flecs::entity_t id) {
             auto e = _world->entity(id);
 
             AssignPlayerComponents(e);
