@@ -17,7 +17,7 @@
     Brought to you by <a href="https://github.com/Segfaultd">@Segfault</a>,
     <a href="https://github.com/zaklaus">@zaklaus</a>,
     <a href="https://github.com/DavoSK">@DavoSK</a>,
-    and other contributors!
+    and other <a href="https://github.com/MafiaHub/Framework/graphs/contributors">contributors</a>!
   </sub>
 </div>
 <hr/>
