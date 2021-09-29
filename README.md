@@ -26,6 +26,7 @@
 
 This codebase provides a suite of tools and libraries to simplify the development of multi-player modifications and ensure consistency across all of them. The primary goal is to provide a common foundation and interface, in regards to shared functionality and data. It covers many fields we found important during the development of multi-player mods, such as:
 * **Networking**: The core of the framework, it provides all the necessary tools to synchronize data between players.
+* **ECS**: Backed by a strong ECS framework that simplifies entity management and world streaming, it is also easily extensible.
 * **Scripting**: The **Node.js** scripting layer provides an easy way to create and manage resources used on game servers. It also provides a common interface accross all multi-player mods, making it easy to create and manage shared resources between games.
 * **Logging**: It is always important to log actions and errors, so the framework provides a simple way to do so.
 * **GUI**: It also provides a simple way to create and manage GUI elements using the **Chromium Embedded Framework** library.
