@@ -47,6 +47,7 @@ If you're interested in development, please read our [Contribution Guidelines](.
 We use **CMake** to build our projects, so you can use any of the supported build systems. We support **Windows**, **Linux**, and **MacOS** operating systems at the moment. You can follow this guide to get started:
 
 ### Build framework
+First make sure your Git client supports LFS objects, visit [Git LFS page](https://git-lfs.github.com/) for more info.
 
 ```sh
 # Clone the repo
@@ -69,7 +70,7 @@ cmake --build build
 cmake --build build --target RunFrameworkTests
 ```
 
-**Note:** If you have issues cloning the repository (Git LFS related errors), first ensure you have Git LFS support enabled. If that's the case, please contact [@ZaKlaus](https://github.com/zaklaus) to investigate this issue.
+**Note:** If you have issues cloning the repository (Git LFS related errors), first ensure you have Git LFS support enabled. If you do and this looks to be a server issue, please contact [@ZaKlaus](https://github.com/zaklaus) to investigate it.
 
 ## Add a multi-player project to the framework
 
