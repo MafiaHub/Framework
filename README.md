@@ -32,7 +32,8 @@ This codebase provides a suite of tools and libraries to simplify the developmen
 * **GUI**: It also provides a simple way to create and manage GUI elements using the **Chromium Embedded Framework** library.
 * **Sentry**: The framework provides a simple way to report errors and exceptions to the **Sentry** service.
 * **Firebase**: It is used to easily store and retrieve data from the **Firebase** service. Including stats, player data, and more.
-* **Integrations**: This layer is used to integrate with other services, such as **Discord** and **Steam**.
+* **Externals**: Contains wrappers for various libraries and services used within the framework.
+* **Integrations**: Provides a simple server and client moddable setup that combines various framework components together allowing you to focus on game-specific features themselves.
 * **Utils**: It provides a collection of useful functions and classes that are used throughout the framework.
 
 **MafiaHub Services** are NOT part of this project, but our framework provides a simple way to integrate them. Feel free to ask us for more information about this service, so we could provide the resources and a license to use it.
