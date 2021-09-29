@@ -69,6 +69,8 @@ cmake --build build
 cmake --build build --target RunFrameworkTests
 ```
 
+**Note:** If you have issues cloning the repository (Git LFS related errors), first ensure you have Git LFS support enabled. If that's the case, please contact [@ZaKlaus](https://github.com/zaklaus) to investigate this issue.
+
 ## Add a multi-player project to the framework
 
 Multi-player modifications are cloned into the `code/projects` directory and automatically picked up by the framework. We use this approach so that we can easily manage the projects and their dependencies, perform mass changes and general maintenance during the development.
