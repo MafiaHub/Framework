@@ -14,7 +14,7 @@ namespace Framework::World {
 
         EngineError Shutdown();
 
-        void Update(float dt);
+        void Update(float dt = 0.0f);
 
         flecs::world *GetWorld() {
             return _world;
