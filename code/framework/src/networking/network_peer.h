@@ -1,6 +1,7 @@
 #pragma once
 
 #include "messages/message.h"
+#include "messages/messages.h"
 
 #include <PacketPriority.h>
 #include <RakPeerInterface.h>

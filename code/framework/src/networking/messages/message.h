@@ -1,6 +1,7 @@
 #pragma once
 
 #include <RakNetTypes.h>
+#include <BitStream.h>
 
 namespace Framework::Networking::Messages {
     class IMessage {
