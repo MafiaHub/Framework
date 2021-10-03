@@ -65,6 +65,8 @@ if(WIN32)
         APPEND
         FRAMEWORK_CLIENT_SRC
         src/launcher/project.cpp
+        src/launcher/loaders/exe_ldr.cpp
+        src/launcher/loaders/tls.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp

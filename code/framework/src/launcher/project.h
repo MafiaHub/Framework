@@ -8,9 +8,11 @@ namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
 
     struct ProjectConfiguration {
-        AppId_t steamAppId;
+        std::wstring executableName;
+        std::wstring destinationDllName;
         std::string name;
         ProjectPlatform platform;
+        AppId_t steamAppId;
     };
 
     class Project {
@@ -23,7 +25,7 @@ namespace Framework::Launcher {
         Project(ProjectConfiguration &);
         ~Project();
 
-        bool Run();
+        bool Launch();
 
       private:
         bool EnsureFilesExists(const std::vector<std::string> &);
@@ -31,10 +33,8 @@ namespace Framework::Launcher {
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();
 
-        bool RunInnerPreInit();
-        bool RunInnerInit();
-        bool RunInnerPostInit();
+        void InvokeEntryPoint(void (*entryPoint)());
 
-        bool Launch();
+        bool Run();
     };
 } // namespace Framework::Launcher
