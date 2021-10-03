@@ -33,4 +33,6 @@ namespace hook
 		return ptr;
 	}
 #endif
+
+    ptrdiff_t baseAddressDifference;
 };

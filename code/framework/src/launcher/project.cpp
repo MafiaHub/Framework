@@ -16,10 +16,6 @@ extern "C" {
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
-// Prepare space required for loading the game
-#pragma bss_seg(".maf")
-char maf_seg[0x10000000];
-
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
 
