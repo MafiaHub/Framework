@@ -1,21 +1,40 @@
 #pragma once
 
+#include <external/steam/wrapper.h>
 #include <string>
+#include <vector>
 
 namespace Framework::Launcher {
+    enum class ProjectPlatform { CLASSIC, STEAM };
+
+    struct ProjectConfiguration {
+        AppId_t steamAppId;
+        std::string name;
+        ProjectPlatform platform;
+    };
+
     class Project {
       private:
-        void *_appHandle = nullptr;
-        std::string _handleName;
+        ProjectConfiguration _config;
+        std::wstring _gamePath;
+        External::Steam::Wrapper *_steamWrapper;
 
       public:
-        Project(std::string &name): _handleName(name) {};
-        ~Project() = default;
+        Project(ProjectConfiguration &);
+        ~Project();
 
-        bool Init();
+        bool Run();
 
-        bool DoInnerPreInit();
-        bool DoInnerInit();
-        bool DoInnerPostInit();
+      private:
+        bool EnsureFilesExists(const std::vector<std::string> &);
+
+        bool RunInnerSteamChecks();
+        bool RunInnerClassicChecks();
+
+        bool RunInnerPreInit();
+        bool RunInnerInit();
+        bool RunInnerPostInit();
+
+        bool Launch();
     };
-}; // namespace Framework::Launcher
+} // namespace Framework::Launcher

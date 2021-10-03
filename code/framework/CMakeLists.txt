@@ -64,7 +64,6 @@ if(WIN32)
     list(
         APPEND
         FRAMEWORK_CLIENT_SRC
-        src/launcher/entrypoint.cpp
         src/launcher/project.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
