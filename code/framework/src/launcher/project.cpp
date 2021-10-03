@@ -168,7 +168,7 @@ namespace Framework::Launcher {
         }
 
         // Initialize the steam wrapper
-        if (!_steamWrapper->Init()) {
+        if (_steamWrapper->Init() != External::Steam::SteamError::STEAM_NONE) {
             MessageBox(nullptr, "Failed to init the bridge with steam, are you sure the Steam Client is running?", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
