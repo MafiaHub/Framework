@@ -23,7 +23,7 @@ namespace Framework::Launcher {
 
       public:
         Project(ProjectConfiguration &);
-        ~Project();
+        ~Project() = default;
 
         bool Launch();
 

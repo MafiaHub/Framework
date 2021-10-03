@@ -2,6 +2,7 @@
 
 #include "loaders/exe_ldr.h"
 
+#include <ShellScalingApi.h>
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -116,6 +117,16 @@ namespace Framework::Launcher {
             if (!LoadLibraryW(L"steam_api64.dll")) {
                 MessageBox(nullptr, "Failed to inject the steam runtime DLL in the running process", _config.name.c_str(), MB_ICONERROR);
                 return false;
+            }
+        }
+
+        // Use real scaling
+        auto shcore = LoadLibraryW(L"shcore.dll");
+        if (shcore) {
+            auto SetProcessDpiAwareness = (decltype(&::SetProcessDpiAwareness))GetProcAddress(shcore, "SetProcessDpiAwareness");
+
+            if (SetProcessDpiAwareness) {
+                SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
             }
         }
 
