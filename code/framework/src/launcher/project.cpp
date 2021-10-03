@@ -93,6 +93,12 @@ namespace Framework::Launcher {
             }
         }
 
+        // Load the destination DLL
+        if (!LoadLibraryW(_config.destinationDllName.c_str())) {
+            MessageBox(nullptr, "Failed to load core runtime", _config.name.c_str(), MB_ICONERROR);
+            return 0;
+        }
+
         // Add the required DLL directories to the current process
         auto addDllDirectory          = (decltype(&AddDllDirectory))GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "AddDllDirectory");
         auto setDefaultDllDirectories = (decltype(&SetDefaultDllDirectories))GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetDefaultDllDirectories");
@@ -127,6 +133,27 @@ namespace Framework::Launcher {
     }
 
     bool Project::RunInnerSteamChecks() {
+        // are we a steam child ?
+        const wchar_t *child_part = L"-steamchild:";
+        wchar_t *cmd_match        = wcsstr(GetCommandLineW(), child_part);
+
+        if (cmd_match) {
+            int master_pid = _wtoi(&cmd_match[wcslen(child_part)]);
+
+            // open a handle to the parent process with SYNCHRONIZE rights
+            auto handle = OpenProcess(SYNCHRONIZE, FALSE, master_pid);
+
+            // if we opened the process...
+            if (handle != INVALID_HANDLE_VALUE) {
+                // ... wait for it to exit and close the handle afterwards
+                WaitForSingleObject(handle, INFINITE);
+
+                CloseHandle(handle);
+            }
+
+            return 0;
+        }
+
         const std::vector<std::string> requiredFiles = {"steam_api64.dll"};
         // Make sure we have our required files
         if (!EnsureFilesExists(requiredFiles)) {
@@ -156,6 +183,25 @@ namespace Framework::Launcher {
     }
 
     bool Project::RunInnerClassicChecks() {
+        LPWSTR *szArglist;
+        int nArgs;
+
+        szArglist = CommandLineToArgvW(GetCommandLineW(), &nArgs);
+        if (NULL == szArglist) {
+            wprintf(L"CommandLineToArgvW failed\n");
+            return 0;
+        }
+
+        if (nArgs < 2) {
+            MessageBoxW(nullptr, L"Please specify game path", L"MafiaMP", MB_ICONERROR);
+            return 0;
+        }
+        else {
+            _gamePath = std::wstring(szArglist[1]);
+        }
+
+        // Free memory allocated for CommandLineToArgvW arguments.
+        LocalFree(szArglist);
         return true;
     }
 
