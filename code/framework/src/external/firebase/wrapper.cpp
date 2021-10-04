@@ -45,6 +45,18 @@ namespace Framework::External::Firebase {
         return FirebaseError::FIREBASE_NONE;
     }
 
+    FirebaseError Wrapper::SignInWithCustomToken(const std::string &token) {
+        auto auth                                       = GetAuth();
+        firebase::Future<firebase::auth::User *> result = auth->SignInWithCustomToken(token.c_str());
+        while (result.status() != firebase::kFutureStatusComplete) {};
+        if (result.error() == firebase::auth::kAuthErrorNone) {
+            return FirebaseError::FIREBASE_NONE;
+        }
+        else {
+            return FirebaseError::FIREBASE_AUTH_FAILED;
+        }
+    }
+
     FirebaseError Wrapper::SignInWithEmailPassword(const std::string &email, const std::string &password) {
         auto auth                                       = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());

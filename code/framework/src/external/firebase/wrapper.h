@@ -25,6 +25,7 @@ namespace Framework::External::Firebase {
       public:
         FirebaseError Init(const std::string &, const std::string &, const std::string &);
 
+        FirebaseError SignInWithCustomToken(const std::string &);
         FirebaseError SignInWithEmailPassword(const std::string &, const std::string &);
         FirebaseError SignUpWithEmailPassword(const std::string &, const std::string &);
         FirebaseError SignInAnonymously();
