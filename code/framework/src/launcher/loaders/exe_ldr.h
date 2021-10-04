@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <vector>
 #include <windows.h>
 #include <winnt.h>
 
@@ -19,8 +20,12 @@ namespace Framework::Launcher::Loaders {
 
         std::function<bool(const IMAGE_TLS_DIRECTORY *)> m_tlsInitializer;
 
+        std::vector<std::tuple<void *, DWORD, DWORD>> m_targetProtections;
+
         void LoadSection(IMAGE_SECTION_HEADER *section);
         void LoadSections(IMAGE_NT_HEADERS *ntHeader);
+
+        bool ApplyRelocations();
 
 #ifdef _M_AMD64
         void LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader);
@@ -63,6 +68,7 @@ namespace Framework::Launcher::Loaders {
             return m_entryPoint;
         }
 
+        void Protect();
         void LoadIntoModule(HMODULE module);
     };
 } // namespace Framework::Launcher::Loaders

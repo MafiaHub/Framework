@@ -4,6 +4,7 @@
 
 namespace Framework::Launcher::Loaders {
     ExecutableLoader::ExecutableLoader(const uint8_t *origBinary) {
+        hook::set_base();
         m_origBinary = origBinary;
         m_loadLimit  = UINT_MAX;
 
@@ -81,16 +82,70 @@ namespace Framework::Launcher::Loaders {
         void *targetAddress       = GetTargetRVA<uint8_t>(section->VirtualAddress);
         const void *sourceAddress = m_origBinary + section->PointerToRawData;
 
-        if ((uintptr_t)targetAddress >= m_loadLimit) {
+        if ((uintptr_t)targetAddress >= (m_loadLimit + hook::baseAddressDifference)) {
             return;
         }
 
         if (section->SizeOfRawData > 0) {
             uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
 
-            DWORD oldProtect;
-            VirtualProtect(targetAddress, sizeOfData, PAGE_EXECUTE_READWRITE, &oldProtect);
             memcpy(targetAddress, sourceAddress, sizeOfData);
+        }
+
+        DWORD oldProtect;
+        VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+        DWORD protection = 0;
+        if (section->Characteristics & IMAGE_SCN_MEM_NOT_CACHED) {
+            protection |= PAGE_NOCACHE;
+        }
+
+        if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE) {
+            if (section->Characteristics & IMAGE_SCN_MEM_READ) {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_EXECUTE_READWRITE;
+                }
+                else {
+                    protection |= PAGE_EXECUTE_READ;
+                }
+            }
+            else {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_EXECUTE_WRITECOPY;
+                }
+                else {
+                    protection |= PAGE_EXECUTE;
+                }
+            }
+        }
+        else {
+            if (section->Characteristics & IMAGE_SCN_MEM_READ) {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_READWRITE;
+                }
+                else {
+                    protection |= PAGE_READONLY;
+                }
+            }
+            else {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_WRITECOPY;
+                }
+                else {
+                    protection |= PAGE_NOACCESS;
+                }
+            }
+        }
+
+        if (protection) {
+            m_targetProtections.push_back({targetAddress, section->Misc.VirtualSize, protection});
+        }
+    }
+
+    void ExecutableLoader::Protect() {
+        for (const auto &protection : m_targetProtections) {
+            DWORD op;
+            VirtualProtect(std::get<0>(protection), std::get<1>(protection), std::get<2>(protection), &op);
         }
     }
 
@@ -105,6 +160,24 @@ namespace Framework::Launcher::Loaders {
     }
 
 #if defined(_M_AMD64)
+    typedef enum _FUNCTION_TABLE_TYPE { RF_SORTED, RF_UNSORTED, RF_CALLBACK } FUNCTION_TABLE_TYPE;
+
+    typedef struct _DYNAMIC_FUNCTION_TABLE {
+        LIST_ENTRY Links;
+        PRUNTIME_FUNCTION FunctionTable;
+        LARGE_INTEGER TimeStamp;
+
+        ULONG_PTR MinimumAddress;
+        ULONG_PTR MaximumAddress;
+        ULONG_PTR BaseAddress;
+
+        PGET_RUNTIME_FUNCTION_CALLBACK Callback;
+        PVOID Context;
+        PWSTR OutOfProcessCallbackDll;
+        FUNCTION_TABLE_TYPE Type;
+        ULONG EntryCount;
+    } DYNAMIC_FUNCTION_TABLE, *PDYNAMIC_FUNCTION_TABLE;
+
     void ExecutableLoader::LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader) {
         IMAGE_DATA_DIRECTORY *exceptionDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
 
@@ -116,8 +189,40 @@ namespace Framework::Launcher::Loaders {
             printf("Setting exception handlers failed.");
         }
 
-        // use CoreRT API instead
-        HMODULE coreRT = GetModuleHandleA("client.dll");
+        // replace the function table stored for debugger purposes (though we just added it above)
+        {
+            PLIST_ENTRY(NTAPI * rtlGetFunctionTableListHead)(VOID);
+            rtlGetFunctionTableListHead = (decltype(rtlGetFunctionTableListHead))GetProcAddress(GetModuleHandle("ntdll.dll"), "RtlGetFunctionTableListHead");
+
+            if (rtlGetFunctionTableListHead) {
+                auto tableListHead  = rtlGetFunctionTableListHead();
+                auto tableListEntry = tableListHead->Flink;
+
+                while (tableListEntry != tableListHead) {
+                    auto functionTable = CONTAINING_RECORD(tableListEntry, DYNAMIC_FUNCTION_TABLE, Links);
+
+                    if (functionTable->BaseAddress == (ULONG_PTR)m_module) {
+                        printf("Replacing function table list entry %p with %p\n", (void *)functionTable->FunctionTable, (void *)functionList);
+
+                        if (functionTable->FunctionTable != functionList) {
+                            DWORD oldProtect;
+                            VirtualProtect(functionTable, sizeof(DYNAMIC_FUNCTION_TABLE), PAGE_READWRITE, &oldProtect);
+
+                            functionTable->EntryCount    = entryCount;
+                            functionTable->FunctionTable = functionList;
+
+                            VirtualProtect(functionTable, sizeof(DYNAMIC_FUNCTION_TABLE), oldProtect, &oldProtect);
+                        }
+                    }
+
+                    tableListEntry = functionTable->Links.Flink;
+                }
+            }
+        }
+
+        // use CoreRT API instead - This should get its value from ProjectConfiguration structure
+        // TODO: fix
+        HMODULE coreRT = GetModuleHandleA("MafiaMPClient.dll");
         if (coreRT) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(m_module, ((char *)m_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
@@ -137,15 +242,22 @@ namespace Framework::Launcher::Loaders {
         IMAGE_DOS_HEADER *sourceHeader   = (IMAGE_DOS_HEADER *)module;
         IMAGE_NT_HEADERS *sourceNtHeader = GetTargetRVA<IMAGE_NT_HEADERS>(sourceHeader->e_lfanew);
 
-#if defined(PAYNE)
-        IMAGE_TLS_DIRECTORY origTls = *GetTargetRVA<IMAGE_TLS_DIRECTORY>(sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-#endif
-
         IMAGE_NT_HEADERS *ntHeader = (IMAGE_NT_HEADERS *)(m_origBinary + header->e_lfanew);
+
+        auto origCheckSum  = sourceNtHeader->OptionalHeader.CheckSum;
+        auto origTimeStamp = sourceNtHeader->FileHeader.TimeDateStamp;
+        auto origDebugDir  = sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
 
         m_entryPoint = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
 
         LoadSections(ntHeader);
+
+        DWORD oldProtect;
+        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+        sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+        ApplyRelocations();
+
         LoadImports(ntHeader);
 
 #if defined(_M_AMD64)
@@ -183,12 +295,82 @@ namespace Framework::Launcher::Loaders {
         }
 
         // copy over the offset to the new imports directory
-        DWORD oldProtect;
-        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect);
-
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
         memcpy(sourceNtHeader, ntHeader, sizeof(IMAGE_NT_HEADERS) + (ntHeader->FileHeader.NumberOfSections * (sizeof(IMAGE_SECTION_HEADER))));
+
+        sourceNtHeader->OptionalHeader.CheckSum  = origCheckSum;
+        sourceNtHeader->FileHeader.TimeDateStamp = origTimeStamp;
+
+        sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG] = origDebugDir;
+    }
+
+    bool ExecutableLoader::ApplyRelocations() {
+        IMAGE_DOS_HEADER *dosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(m_module);
+
+        IMAGE_NT_HEADERS *ntHeader = GetTargetRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
+
+        IMAGE_DATA_DIRECTORY *relocationDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+
+        IMAGE_BASE_RELOCATION *relocation    = GetTargetRVA<IMAGE_BASE_RELOCATION>(relocationDirectory->VirtualAddress);
+        IMAGE_BASE_RELOCATION *endRelocation = reinterpret_cast<IMAGE_BASE_RELOCATION *>((char *)relocation + relocationDirectory->Size);
+
+        constexpr uintptr_t base =
+#ifdef _M_AMD64
+            0x140000000
+#else
+            0x400000
+#endif
+            ;
+
+        intptr_t relocOffset = reinterpret_cast<intptr_t>(m_module) - static_cast<intptr_t>(base);
+
+        if (relocOffset == 0) {
+            return true;
+        }
+
+        // loop
+        while (true) {
+            // are we past the size?
+            if (relocation >= endRelocation) {
+                break;
+            }
+
+            // is this an empty block?
+            if (relocation->SizeOfBlock == 0) {
+                break;
+            }
+
+            // go through each and every relocation
+            size_t numRelocations = (relocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
+            uint16_t *relocStart  = reinterpret_cast<uint16_t *>(relocation + 1);
+
+            for (size_t i = 0; i < numRelocations; i++) {
+                uint16_t type = relocStart[i] >> 12;
+                uint32_t rva  = (relocStart[i] & 0xFFF) + relocation->VirtualAddress;
+
+                void *addr = GetTargetRVA<void>(rva);
+                DWORD oldProtect;
+                VirtualProtect(addr, 4, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+                if (type == IMAGE_REL_BASED_HIGHLOW) {
+                    *reinterpret_cast<int32_t *>(addr) += relocOffset;
+                }
+                else if (type == IMAGE_REL_BASED_DIR64) {
+                    *reinterpret_cast<int64_t *>(addr) += relocOffset;
+                }
+                else if (type != IMAGE_REL_BASED_ABSOLUTE) {
+                    return false;
+                }
+
+                VirtualProtect(addr, 4, oldProtect, &oldProtect);
+            }
+
+            // on to the next one!
+            relocation = reinterpret_cast<IMAGE_BASE_RELOCATION *>((char *)relocation + relocation->SizeOfBlock);
+        }
+
+        return true;
     }
 
     HMODULE ExecutableLoader::ResolveLibrary(const char *name) {
