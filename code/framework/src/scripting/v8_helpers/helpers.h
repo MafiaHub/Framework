@@ -41,6 +41,14 @@ namespace Framework::Scripting::V8Helpers {
             return;
         }
     }
+    inline void RegisterProperty(v8::Local<v8::Object> exports, const std::string &_name, v8::AccessorNameGetterCallback getter, v8::AccessorNameSetterCallback setter = nullptr,
+                                 void *data = nullptr) {
+        v8::Isolate *isolate       = v8::Isolate::GetCurrent();
+        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+
+        exports->SetNativeDataProperty(ctx, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter,
+                                       v8::External::New(isolate, data));
+    }
 
     inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, const char *name, v8::Local<v8::Value> value,
                                   v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
