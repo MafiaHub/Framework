@@ -33,7 +33,7 @@ void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
         auto mod = LoadLibraryW(gDllName);
 
         if (mod) {
-            auto init = reinterpret_cast<void *(*)()>(GetProcAddress(mod, "Init"));
+            auto init = reinterpret_cast<void *(*)()>(GetProcAddress(mod, "InitClient"));
             if (init) {
                 init();
             }
