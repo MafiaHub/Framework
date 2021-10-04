@@ -227,12 +227,13 @@ namespace Framework::Launcher {
     bool Project::Run() {
         // Method cannot be called directly
         if (_gamePath.empty()) {
+            MessageBox(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile == INVALID_HANDLE_VALUE) {
-            MessageBoxA(NULL, "Failed to find executable image", "MafiaMP", MB_ICONERROR);
+            MessageBox(nullptr, "Failed to find executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -242,14 +243,14 @@ namespace Framework::Launcher {
         DWORD dwFileLength = SetFilePointer(hFile, 0, NULL, FILE_END);
         if (dwFileLength == INVALID_SET_FILE_POINTER) {
             CloseHandle(hFile);
-            MessageBoxA(NULL, "Could not inquire executable image size", "MafiaMP", MB_ICONERROR);
+            MessageBox(nullptr, "Could not inquire executable image size", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         HANDLE hMapping = CreateFileMappingW(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
         if (hMapping == INVALID_HANDLE_VALUE) {
             CloseHandle(hFile);
-            MessageBoxA(NULL, "Could not map executable image", "MafiaMP", MB_ICONERROR);
+            MessageBox(nullptr, "Could not map executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -257,7 +258,7 @@ namespace Framework::Launcher {
         if (!data) {
             CloseHandle(hMapping);
             CloseHandle(hFile);
-            MessageBoxA(NULL, "Could not map view of executable image", "MafiaMP", MB_ICONERROR);
+            MessageBox(nullptr, "Could not map view of executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
