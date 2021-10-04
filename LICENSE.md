@@ -33,3 +33,7 @@ This codebase also depends on the following third-party libraries:
 - [sentry](https://sentry.io/terms/)
 - [protobuf](https://github.com/protocolbuffers/protobuf/blob/master/LICENSE)
 - [curl](https://curl.se/docs/copyright.html)
+- [udis86](https://github.com/vmt/udis86)
+- [ultralight](https://ultralig.ht/)
+- [flecs](https://github.com/SanderMertens/flecs/)
+- [fmt](https://fmt.dev/latest/index.html)

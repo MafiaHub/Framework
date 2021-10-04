@@ -11,6 +11,7 @@ include_directories(PUBLIC
         "../vendors/spdlog/include"
         "../vendors/optick/src"
         "../vendors/steamworks/include"
+        "../vendors/udis86"
         "../vendors/httplib"
         "../vendors/cef"
         "../vendors/discord/src"

@@ -66,6 +66,7 @@ if(WIN32)
         FRAMEWORK_CLIENT_SRC
         src/launcher/project.cpp
         src/launcher/loaders/exe_ldr.cpp
+        src/launcher/loaders/seh_ldr.cpp
         src/launcher/loaders/tls.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
@@ -104,7 +105,7 @@ target_link_libraries(FrameworkClient DiscordSDK CefTarget)
 if (WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
-    target_link_libraries(FrameworkClient minhook SteamSDK)
+    target_link_libraries(FrameworkClient minhook SteamSDK udis86)
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else ()

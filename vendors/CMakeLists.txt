@@ -93,5 +93,6 @@ add_subdirectory(fmt)
 if (WIN32)
     add_subdirectory(minhook)
     add_subdirectory(steamworks)
+    add_subdirectory(udis86)
 endif ()
 
