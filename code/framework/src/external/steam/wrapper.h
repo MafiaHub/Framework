@@ -38,6 +38,7 @@ namespace Framework::External::Steam {
         ~Wrapper() = default;
 
         SteamError Init();
+        SteamError Shutdown();
 
         CSteamID GetSteamID() const;
         EPersonaState GetSteamUserState() const;

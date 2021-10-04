@@ -4,6 +4,7 @@
 
 #include <ShellScalingApi.h>
 #include <Windows.h>
+#include <ostream>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <utils/hooking/hooking.h>
@@ -166,8 +167,15 @@ namespace Framework::Launcher {
         const std::vector<std::string> requiredFiles = {"steam_api64.dll"};
         // Make sure we have our required files
         if (!EnsureFilesExists(requiredFiles)) {
-            return false;
+            return false;	
         }
+
+		// If we don't have the app id file, create it
+        cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
+		if (!appIdFile.exists()) {
+            auto outStream = appIdFile.createOutputStream();
+			(*outStream) << std::to_string(_config.steamAppId) << std::endl;
+		}
 
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();

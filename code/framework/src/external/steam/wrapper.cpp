@@ -9,9 +9,14 @@ namespace Framework::External::Steam {
             return SteamError::STEAM_CLIENT_NOT_RUNNING;
         }
 
-        if (!SteamAPI_InitSafe()) {
+        if (!SteamAPI_Init()) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam API");
             return SteamError::STEAM_INIT_FAILED;
+        }
+
+        if (!SteamUser()->BLoggedOn()) {
+            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("User is not logged on");
+            return SteamError::STEAM_USER_NOT_LOGGED_ON;
         }
 
         CSteamAPIContext *ctx = new CSteamAPIContext();
@@ -27,6 +32,11 @@ namespace Framework::External::Steam {
             return SteamError::STEAM_CONTEXT_INIT_FAILED;
         }
 
+        return SteamError::STEAM_NONE;
+    }
+
+    SteamError Wrapper::Shutdown() {
+        SteamAPI_Shutdown();
         return SteamError::STEAM_NONE;
     }
 
