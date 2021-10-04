@@ -14,8 +14,8 @@
 namespace Framework::External::Firebase {
     class Wrapper final: public firebase::auth::AuthStateListener {
       private:
-        firebase::App *_app;
-        firebase::auth::User *_user;
+        firebase::App *_app         = nullptr;
+        firebase::auth::User *_user = nullptr;
 
         bool _valid = false;
 
@@ -34,6 +34,7 @@ namespace Framework::External::Firebase {
         void LogEvent(const std::string &, const std::string &, const std::string &);
         void LogEvent(const std::string &, const std::string &, const double);
         void LogEvent(const std::string &);
+        void SetUserProperty(const std::string &, const std::string &);
 
         bool IsValid() const {
             return _valid;

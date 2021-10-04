@@ -96,6 +96,10 @@ namespace Framework::External::Firebase {
         return FirebaseError::FIREBASE_NONE;
     }
 
+    void Wrapper::SetUserProperty(const std::string &name, const std::string &property) {
+        firebase::analytics::SetUserProperty(name.c_str(), property.c_str());
+    }
+
     void LogEvent(const std::string &name, const std::string &paramName, const std::string &paramValue) {
         firebase::analytics::LogEvent(name.c_str(), paramName.c_str(), paramValue.c_str());
     }
@@ -111,6 +115,7 @@ namespace Framework::External::Firebase {
     void Wrapper::OnAuthStateChanged(firebase::auth::Auth *auth) {
         _user = auth->current_user();
         if (!_user) {
+            firebase::analytics::SetUserId(nullptr);
             Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Firebase] AuthStateChanged: user null");
             return;
         }
