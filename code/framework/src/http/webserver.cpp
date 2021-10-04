@@ -69,7 +69,8 @@ namespace Framework::HTTP {
 
     bool Webserver::Shutdown() {
         _running = false;
-        _webThread.join();
+        if (_webThread.joinable())
+            _webThread.join();
         mg_mgr_free(&_manager);
         return true;
     }
