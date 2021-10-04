@@ -86,6 +86,9 @@ add_subdirectory(nodejs)
 set(FLECS_SHARED_LIBBS CACHE BOOL "" OFF)
 add_subdirectory(flecs)
 
+# Build FMT
+add_subdirectory(fmt)
+
 # Build OS specific libraries
 if (WIN32)
     add_subdirectory(minhook)

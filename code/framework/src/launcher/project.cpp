@@ -8,6 +8,8 @@
 #include <cppfs/fs.h>
 #include <utils/hooking/hooking.h>
 
+#include <fmt/core.h>
+
 // Fix for gpu-enabled games
 extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
@@ -168,8 +170,10 @@ namespace Framework::Launcher {
         }
 
         // Initialize the steam wrapper
-        if (_steamWrapper->Init() != External::Steam::SteamError::STEAM_NONE) {
-            MessageBox(nullptr, "Failed to init the bridge with steam, are you sure the Steam Client is running?", _config.name.c_str(), MB_ICONERROR);
+        const auto initResult = _steamWrapper->Init();
+        if (initResult != External::Steam::SteamError::STEAM_NONE) {
+            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? Error Code #{}", initResult).c_str(),
+                       _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 

@@ -16,6 +16,7 @@ include_directories(PUBLIC
         "../vendors/discord/src"
         "../vendors/sentry/include"
         "../vendors/curl/include"
+        "../vendors/fmt/include"
         "../vendors"
         )
 
