@@ -45,5 +45,9 @@ namespace Framework::External::Firebase {
         firebase::auth::User *GetCurrentUser() const {
             return _user;
         }
+
+        firebase::App* GetApp() {
+            return _app;
+        }
     };
 } // namespace Framework::Integrations

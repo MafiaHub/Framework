@@ -1,11 +1,15 @@
 #pragma once
 
 #include <string>
+#include "external/firebase/wrapper.h"
 
 namespace Framework::Services {
     class Masterlist {
+      private:
+        int32_t _interval   = 60000;
+        int64_t _nextUpdate = 0;
       public:
-        void Update();
+        void Update(External::Firebase::Wrapper *);
 
         void SetInterval(int32_t interval) {
             _interval = interval;
@@ -51,9 +55,5 @@ namespace Framework::Services {
         virtual int32_t GetPlayers() {
             return 0;
         }
-
-      private:
-        int32_t _interval   = 60000;
-        int64_t _nextUpdate = 0;
     };
 } // namespace Framework::Services

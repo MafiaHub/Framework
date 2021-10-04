@@ -4,44 +4,42 @@
 #include "utils/job_system.h"
 #include "utils/time.h"
 
-#include <httplib.h>
-#include <nlohmann/json.hpp>
-
-#define SERVICES_MASTERLIST_URI "https://us-central1-mafiahub-3ebed.cloudfunctions.net"
+#include <firebase/functions.h>
 
 namespace Framework::Services {
-    void Masterlist::Update() {
+    void Masterlist::Update(External::Firebase::Wrapper *firebaseWrapper) {
         const auto now = Framework::Utils::Time::GetTime();
 
         if (now > _nextUpdate) {
-            Framework::Utils::JobSystem::GetInstance()->EnqueueJob([this]() {
-                httplib::Client cli(SERVICES_MASTERLIST_URI);
+            Framework::Utils::JobSystem::GetInstance()->EnqueueJob([this, firebaseWrapper]() {
+                auto functions = firebase::functions::Functions::GetInstance(firebaseWrapper->GetApp());
 
-                nlohmann::json req;
+                firebase::Variant req = firebase::Variant::EmptyMap();
 
                 if (!GetHost().empty()) {
-                    req["host"] = GetHost();
+                    req.map()["host"] = GetHost();
                 }
 
-                req["secret"]     = GetSecretKey();
-                req["port"]       = GetPort();
-                req["name"]       = GetServerName();
-                req["game"]       = GetGame();
-                req["version"]    = GetVersion();
-                req["mapname"]    = GetMap();
-                req["pass"]       = IsPassworded();
-                req["players"]    = GetPlayers();
-                req["maxPlayers"] = GetMaxPlayers();
-                const auto json   = req.dump(0);
+                req.map()["secret"]     = GetSecretKey();
+                req.map()["port"]       = GetPort();
+                req.map()["name"]       = GetServerName();
+                req.map()["game"]       = GetGame();
+                req.map()["version"]    = GetVersion();
+                req.map()["mapname"]    = GetMap();
+                req.map()["pass"]       = IsPassworded();
+                req.map()["players"]    = GetPlayers();
+                req.map()["maxPlayers"] = GetMaxPlayers();
 
                 Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->trace("[Masterlist] Pushing server info to backend");
-                const auto res = cli.Post("/pushServer", json.c_str(), "application/json");
 
-                if (res && res->status != 200) {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->warn("[Masterlist] Push failed with error {} and message {}", res->status, res->body);
+                auto pushServer = functions->GetHttpsCallable("pushServer");
+                auto result = pushServer.Call(req);
+                while (result.status() != firebase::kFutureStatusComplete) {};
+                if (result.error() != firebase::functions::kErrorNone) {
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->warn("[Masterlist] Push failed with error '{}' and message: '{}'", result.error(), result.error_message());
                     return false;
                 }
-
+                
                 return true;
             });
 

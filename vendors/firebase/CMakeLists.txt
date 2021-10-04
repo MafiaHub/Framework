@@ -1,5 +1,5 @@
 add_library(Firebase INTERFACE)
-set(FIREBASE_LIBS firebase_analytics firebase_auth firebase_app)
+set(FIREBASE_LIBS firebase_analytics firebase_auth firebase_app firebase_functions)
 if (CMAKE_CL_64)
     target_link_directories(Firebase INTERFACE "lib/win_64/Release")
 elseif (WIN32)
