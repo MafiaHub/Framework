@@ -58,7 +58,12 @@ set(FRAMEWORK_CLIENT_SRC
 
         src/integrations/client/instance.cpp
 
-        src/launcher/client_stub/seh_win32.cpp
+        src/launcher/client_xref/seh_win32.cpp
+
+        src/utils/hooking/hook_function.cpp
+        src/utils/hooking/hooking_patterns.cpp
+        src/utils/hooking/hooking.cpp
+        src/utils/memory.cpp
     )
 
 # Append the platform-dependent files to the related lists
@@ -67,7 +72,7 @@ if(WIN32)
         STATIC
         src/launcher/project.cpp
         src/launcher/loaders/exe_ldr.cpp
-        src/launcher/loaders/tls.cpp
+        src/external/steam/wrapper.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
@@ -79,8 +84,6 @@ endif()
 add_library(Framework STATIC ${FRAMEWORK_SRC})
 add_library(FrameworkClient STATIC ${FRAMEWORK_CLIENT_SRC})
 add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
-
-target_link_options(FrameworkClient PUBLIC /EXPORT:CoreRT_SetupSEHHandler)
 
 find_package(OpenSSL REQUIRED)
 
@@ -99,7 +102,6 @@ endmacro()
 link_shared_deps(Framework)
 link_shared_deps(FrameworkServer)
 link_shared_deps(FrameworkClient)
-link_shared_deps(FrameworkLoader)
 
 target_link_libraries(FrameworkServer mongoose NodeJS)
 target_link_libraries(FrameworkClient DiscordSDK CefTarget)
@@ -111,13 +113,15 @@ if (WIN32)
 
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
+
+    link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS})
     
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else ()
         target_link_libraries(FrameworkClient Ultralight)
-        target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
+        target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO" /EXPORT:CoreRT_SetupSEHHandler)
     endif ()
 else ()
     target_link_libraries(FrameworkClient Ultralight)

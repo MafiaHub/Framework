@@ -117,7 +117,7 @@ namespace Framework::Launcher::Loaders {
         }
 
         // use CoreRT API instead
-        HMODULE coreRT = GetModuleHandleA("Client.dll");
+        HMODULE coreRT = GetModuleHandleW(L"MafiaMPClient.dll");
         if (coreRT) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(m_module, ((char *)m_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
@@ -199,4 +199,5 @@ namespace Framework::Launcher::Loaders {
     HMODULE ExecutableLoader::ResolveLibrary(const char *name) {
         return m_libraryLoader(name);
     }
+
 } // namespace Framework::Launcher::Loaders

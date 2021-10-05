@@ -1,4 +1,4 @@
-﻿/*
+/*
  *  MinHook - The Minimalistic API Hooking Library for x64/x86
  *  Copyright (C) 2009-2017 Tsuda Kageyu.
  *  All rights reserved.
@@ -27,21 +27,16 @@
  */
 
 #include <windows.h>
-
-#ifdef _MSC_VER
-    #include <intrin.h>
-#endif
-
 #ifndef ARRAYSIZE
     #define ARRAYSIZE(A) (sizeof(A)/sizeof((A)[0]))
 #endif
 
 #if defined(_M_X64) || defined(__x86_64__)
-    #include "./hde/hde64.h"
+#include "hde64.h"
     typedef hde64s HDE;
     #define HDE_DISASM(code, hs) hde64_disasm(code, hs)
 #else
-    #include "./hde/hde32.h"
+    #include "hde32.h"
     typedef hde32s HDE;
     #define HDE_DISASM(code, hs) hde32_disasm(code, hs)
 #endif
@@ -208,7 +203,7 @@ BOOL CreateTrampolineFunction(PTRAMPOLINE ct)
                 pCopySrc = &jmp;
                 copySize = sizeof(jmp);
 
-                // Exit the function if it is not in the branch.
+                // Exit the function If it is not in the branch
                 finished = (pOldInst >= jmpDest);
             }
         }
@@ -280,7 +275,7 @@ BOOL CreateTrampolineFunction(PTRAMPOLINE ct)
 #ifndef _MSC_VER
         memcpy((LPBYTE)ct->pTrampoline + newPos, pCopySrc, copySize);
 #else
-        __movsb((LPBYTE)ct->pTrampoline + newPos, (LPBYTE)pCopySrc, copySize);
+        __movsb((LPBYTE)ct->pTrampoline + newPos, pCopySrc, copySize);
 #endif
         newPos += copySize;
         oldPos += hs.len;

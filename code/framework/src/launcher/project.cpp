@@ -129,6 +129,16 @@ namespace Framework::Launcher {
             }
         }
 
+        // handle path variable
+        {
+            static wchar_t pathBuf[32768];
+            GetEnvironmentVariableW(L"PATH", pathBuf, sizeof(pathBuf));
+
+            // append bin & game directories
+            std::wstring newPath = _gamePath + L";" + std::wstring(pathBuf);
+            SetEnvironmentVariableW(L"PATH", newPath.c_str());
+        }
+
         // Update the game path to include the executable name;
         _gamePath += std::wstring(L"//") + _config.executableName;
 
@@ -297,7 +307,12 @@ namespace Framework::Launcher {
         auto entry_point = static_cast<void (*)()>(loader.GetEP());
 
         hook::set_base(reinterpret_cast<uintptr_t>(base));
+
+#ifndef _M_AMD64
         InvokeEntryPoint(entry_point);
+#else
+        entry_point();
+#endif
 
         return true;
     }
