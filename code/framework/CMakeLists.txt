@@ -55,18 +55,17 @@ set(FRAMEWORK_CLIENT_SRC
         src/networking/network_client.cpp
 
         src/external/steam/wrapper.cpp
+        src/launcher/loaders/seh_ldr.cpp
 
         src/integrations/client/instance.cpp
     )
 
 # Append the platform-dependent files to the related lists
 if(WIN32)
-    list(
-        APPEND
-        FRAMEWORK_CLIENT_SRC
+    add_library(FrameworkLoader
+        STATIC
         src/launcher/project.cpp
         src/launcher/loaders/exe_ldr.cpp
-        src/launcher/loaders/seh_ldr.cpp
         src/launcher/loaders/tls.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
@@ -97,6 +96,7 @@ endmacro()
 link_shared_deps(Framework)
 link_shared_deps(FrameworkServer)
 link_shared_deps(FrameworkClient)
+link_shared_deps(FrameworkLoader)
 
 target_link_libraries(FrameworkServer mongoose NodeJS)
 target_link_libraries(FrameworkClient DiscordSDK CefTarget)
@@ -105,7 +105,11 @@ target_link_libraries(FrameworkClient DiscordSDK CefTarget)
 if (WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
-    target_link_libraries(FrameworkClient minhook SteamSDK udis86)
+
+    set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
+    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS})
+    
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else ()
