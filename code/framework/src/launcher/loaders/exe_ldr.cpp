@@ -222,11 +222,11 @@ namespace Framework::Launcher::Loaders {
 
         // use CoreRT API instead - This should get its value from ProjectConfiguration structure
         // TODO: fix
-        /*HMODULE coreRT = GetModuleHandleA("MafiaMPClient.dll");
+        HMODULE coreRT = GetModuleHandleA("MafiaMPClient.dll");
         if (coreRT) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(m_module, ((char *)m_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
-        }*/
+        }
     }
 #endif
 

@@ -55,9 +55,10 @@ set(FRAMEWORK_CLIENT_SRC
         src/networking/network_client.cpp
 
         src/external/steam/wrapper.cpp
-        src/launcher/loaders/seh_ldr.cpp
 
         src/integrations/client/instance.cpp
+
+        src/launcher/client_stub/seh_win32.cpp
     )
 
 # Append the platform-dependent files to the related lists
@@ -78,6 +79,8 @@ endif()
 add_library(Framework STATIC ${FRAMEWORK_SRC})
 add_library(FrameworkClient STATIC ${FRAMEWORK_CLIENT_SRC})
 add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
+
+target_link_options(FrameworkClient PUBLIC /EXPORT:CoreRT_SetupSEHHandler)
 
 find_package(OpenSSL REQUIRED)
 
@@ -114,6 +117,7 @@ if (WIN32)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else ()
         target_link_libraries(FrameworkClient Ultralight)
+        target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
     endif ()
 else ()
     target_link_libraries(FrameworkClient Ultralight)
