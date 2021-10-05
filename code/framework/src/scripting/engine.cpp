@@ -49,7 +49,8 @@ namespace Framework::Scripting {
         _isolate->SetFatalErrorHandler([](const char *location, const char *message) {
             if (location) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("{} {}", location, message);
-            } else {
+            }
+            else {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("{}", message);
             }
         });
@@ -70,6 +71,8 @@ namespace Framework::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("{}: {}", *res, *msg);
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("{}", *trace);
         });
+
+        _isolate->SetCaptureStackTraceForUncaughtExceptions(true);
 
         v8::HandleScope isolateHandleScope(_isolate);
         v8::Local<v8::ObjectTemplate> globalObjTemplate = v8::ObjectTemplate::New(_isolate);
