@@ -3,9 +3,10 @@
 #include <utils/hooking/hooking.h>
 
 namespace Framework::Launcher::Loaders {
-    ExecutableLoader::ExecutableLoader(const uint8_t *origBinary) {
+    ExecutableLoader::ExecutableLoader(const uint8_t *origBinary, HMODULE tlsDll) {
         m_origBinary = origBinary;
         m_loadLimit  = UINT_MAX;
+        _tlsDll      = tlsDll;
 
         SetLibraryLoader([](const char *name) {
             return LoadLibraryA(name);
@@ -137,10 +138,6 @@ namespace Framework::Launcher::Loaders {
         IMAGE_DOS_HEADER *sourceHeader   = (IMAGE_DOS_HEADER *)module;
         IMAGE_NT_HEADERS *sourceNtHeader = GetTargetRVA<IMAGE_NT_HEADERS>(sourceHeader->e_lfanew);
 
-#if defined(PAYNE)
-        IMAGE_TLS_DIRECTORY origTls = *GetTargetRVA<IMAGE_TLS_DIRECTORY>(sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-#endif
-
         IMAGE_NT_HEADERS *ntHeader = (IMAGE_NT_HEADERS *)(m_origBinary + header->e_lfanew);
 
         m_entryPoint = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
@@ -148,40 +145,44 @@ namespace Framework::Launcher::Loaders {
         LoadSections(ntHeader);
         LoadImports(ntHeader);
 
+
+
 #if defined(_M_AMD64)
         LoadExceptionTable(ntHeader);
 #endif
 
         // copy over TLS index (source in this case indicates the TLS data to copy from, which is the launcher app itself)
         if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size) {
-#if defined(GTA_NY)
-            const IMAGE_TLS_DIRECTORY *targetTls = GetRVA<IMAGE_TLS_DIRECTORY>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-            const IMAGE_TLS_DIRECTORY *sourceTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-
-            *(DWORD *)(targetTls->AddressOfIndex) = *(DWORD *)(sourceTls->AddressOfIndex);
-#else
             const IMAGE_TLS_DIRECTORY *targetTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
             const IMAGE_TLS_DIRECTORY *sourceTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 
-            *(DWORD *)(sourceTls->AddressOfIndex) = 0;
-
-            // note: 32-bit!
 #if defined(_M_IX86)
-            LPVOID tlsBase = *(LPVOID *)__readfsdword(0x2C);
+            LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
 #elif defined(_M_AMD64)
-            LPVOID tlsBase = *(LPVOID *)__readgsqword(0x58);
+            LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
 #endif
 
-            DWORD oldProtect;
-            VirtualProtect(reinterpret_cast<LPVOID>(targetTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE,
-                           &oldProtect);
+#ifndef GTA_NY
+            uint32_t tlsIndex = 0;
+            void *tlsInit     = nullptr;
 
-            memcpy(tlsBase, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
-            memcpy((void *)targetTls->StartAddressOfRawData, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData),
-                   sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
-            /*#else
-            const IMAGE_TLS_DIRECTORY* targetTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-            m_tlsInitializer(targetTls);*/
+            auto tlsExport = (void (*)(void **, uint32_t *))GetProcAddress(_tlsDll, "GetThreadLocalStorage");
+            tlsExport(&tlsInit, &tlsIndex);
+
+            assert(tlsIndex < 64);
+
+            if (sourceTls->StartAddressOfRawData) {
+                DWORD oldProtect;
+                VirtualProtect(tlsInit, sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE, &oldProtect);
+
+                memcpy(tlsBase[tlsIndex], reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
+                memcpy(tlsInit, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
+            }
+
+            if (sourceTls->AddressOfIndex) {
+                hook::put(sourceTls->AddressOfIndex, tlsIndex);
+            }
+#else
 #endif
         }
 

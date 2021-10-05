@@ -1,0 +1,9 @@
+.maf
+.text
+.idata
+.rdata
+.data
+.pdata
+.tls
+.rsrc
+_RDATA

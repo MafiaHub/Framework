@@ -21,6 +21,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
+static HMODULE tlsDll;
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
@@ -110,6 +111,14 @@ namespace Framework::Launcher {
             AddDllDirectory(L"bin");
             SetCurrentDirectoryW(_gamePath.c_str());
         }
+
+        // Load TLS dummy so the game can have some
+#ifdef _M_AMD64
+        if (!(tlsDll = LoadLibraryW(L"FrameworkTLSDummy.dll"))) {
+            MessageBox(nullptr, "Failed to load a vital framework component", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+#endif
 
         // Load the steam runtime only if required
         if (_config.platform == ProjectPlatform::STEAM) {
@@ -277,7 +286,7 @@ namespace Framework::Launcher {
         auto base = GetModuleHandle(nullptr);
 
         // Create the loader instance
-        Loaders::ExecutableLoader loader(data);
+        Loaders::ExecutableLoader loader(data, tlsDll);
         loader.SetLoadLimit(0x140000000 + 0x130000000);
         loader.SetLibraryLoader([](const char *library) -> HMODULE {
             auto hMod = LoadLibraryA(library);

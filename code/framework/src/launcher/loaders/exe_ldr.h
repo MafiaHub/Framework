@@ -10,6 +10,7 @@ namespace Framework::Launcher::Loaders {
     class ExecutableLoader {
         const uint8_t *m_origBinary;
         HMODULE m_module {};
+        HMODULE _tlsDll {};
         uintptr_t m_loadLimit;
 
         void *m_entryPoint {};
@@ -24,8 +25,6 @@ namespace Framework::Launcher::Loaders {
 
         void LoadSection(IMAGE_SECTION_HEADER *section);
         void LoadSections(IMAGE_NT_HEADERS *ntHeader);
-
-        bool ApplyRelocations();
 
 #ifdef _M_AMD64
         void LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader);
@@ -46,7 +45,7 @@ namespace Framework::Launcher::Loaders {
         }
 
       public:
-        ExecutableLoader(const uint8_t *origBinary);
+        ExecutableLoader(const uint8_t *origBinary, HMODULE tlsDll);
 
         void SetLoadLimit(uintptr_t loadLimit) {
             m_loadLimit = loadLimit;
