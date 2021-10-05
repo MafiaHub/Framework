@@ -19,6 +19,10 @@ extern "C" {
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
+// allocate space for game
+#pragma bss_seg(".fwgame")
+char fwgame_seg[0x130000000];
+
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
 static HMODULE tlsDll;

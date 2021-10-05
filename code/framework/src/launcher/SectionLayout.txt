@@ -1,4 +1,4 @@
-.maf
+.fwgame
 .text
 .idata
 .rdata
