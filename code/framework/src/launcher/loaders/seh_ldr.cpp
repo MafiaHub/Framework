@@ -319,7 +319,7 @@ extern "C" void __declspec(dllexport) CoreSetExceptionOverride(LONG(*handler)(EX
 	}
 }
 #else
-void DLL_EXPORT CoreRT_SetupSEHHandler(...)
+void __declspec(dllexport) CoreRT_SetupSEHHandler(...)
 {
 	// no-op for non-AMD64
 }
