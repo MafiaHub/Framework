@@ -4,7 +4,6 @@
 
 namespace Framework::Launcher::Loaders {
     ExecutableLoader::ExecutableLoader(const uint8_t *origBinary) {
-        hook::set_base();
         m_origBinary = origBinary;
         m_loadLimit  = UINT_MAX;
 
@@ -28,7 +27,7 @@ namespace Framework::Launcher::Loaders {
             HMODULE module = ResolveLibrary(name);
 
             if (!module) {
-                printf("Could not load dependent module %s. Error code was %i.\n", name, GetLastError());
+                //  FatalError("Could not load dependent module %s. Error code was %i.\n", name, GetLastError());
             }
 
             // "don't load"
@@ -65,7 +64,7 @@ namespace Framework::Launcher::Loaders {
                     char pathName[MAX_PATH];
                     GetModuleFileNameA(module, pathName, sizeof(pathName));
 
-                    printf("Could not load function %s in dependent module %s (%s).\n", functionName, name, pathName);
+                    // FatalError("Could not load function %s in dependent module %s (%s).\n", functionName, name, pathName);
                 }
 
                 *addressTableEntry = (uintptr_t)function;
@@ -118,7 +117,7 @@ namespace Framework::Launcher::Loaders {
         }
 
         // use CoreRT API instead
-        HMODULE coreRT = GetModuleHandleA("MafiaMPClient.dll");
+        HMODULE coreRT = GetModuleHandleA("Client.dll");
         if (coreRT) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(m_module, ((char *)m_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
