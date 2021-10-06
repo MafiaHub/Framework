@@ -1,3 +1,10 @@
+/*
+ * This file is part of the CitizenFX project - http://citizen.re/
+ *
+ * See LICENSE and MENTIONS in the root of the source tree for information
+s * regarding licensing.
+ */
+
 #include <cstdint>
 
 #define DECLARE_TLS_VARS(i) __declspec(thread) uint8_t tls1[sizeof(int) * i];
