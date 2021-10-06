@@ -13,7 +13,7 @@ cd "$script_path/.." || exit 1
 #  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
 #  * See LICENSE file in the source repository for information regarding licensing.
 #  */
-GOOD_LICENSE_HEADER_PATTERN=$'^/\*\n \* MafiaHub OSS license\n( \* Copyright \(c\) [0-9]{4}(-[0-9]{4})? .*\n)+ \*\n \* This file comes from MafiaHub, hosted at https://github\.com/MafiaHub/Framework\.\n \* See LICENSE file in the source repository for information regarding licensing\.\n \*/(\n\n|$)'
+GOOD_LICENSE_HEADER_PATTERN=$'^/\*\n \* MafiaHub OSS license\n( \* Copyright \(c\) [0-9]{4}(-[0-9]{4})?\, .*\n)+ \*\n \* This file comes from MafiaHub, hosted at https://github\.com/MafiaHub/Framework\.\n \* See LICENSE file in the source repository for information regarding licensing\.\n \*/(\n\n|$)'
 BAD_LICENSE_HEADER_ERRORS=()
 LICENSE_HEADER_CHECK_EXCLUDES=(code/framework/src/utils/hooks/*)
 
