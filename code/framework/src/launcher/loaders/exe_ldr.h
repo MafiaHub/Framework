@@ -1,4 +1,7 @@
 #pragma once
+/*
+* This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.h
+*/
 
 #include <cstdint>
 #include <functional>
