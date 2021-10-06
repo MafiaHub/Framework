@@ -126,12 +126,10 @@ namespace Framework::Launcher {
         }
 
         // Load TLS dummy so the game can have some
-#ifdef _M_AMD64
         if (!(tlsDll = LoadLibraryW(L"FrameworkTLSDummy.dll"))) {
             MessageBox(nullptr, "Failed to load a vital framework component", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
-#endif
 
         // Load the steam runtime only if required
         if (_config.platform == ProjectPlatform::STEAM) {
@@ -325,12 +323,10 @@ namespace Framework::Launcher {
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
 
-#ifdef _M_AMD64
         loader.SetTLSInitializer([&](void **base, uint32_t *index) {
             auto tlsExport = (void (*)(void **, uint32_t *))GetProcAddress(tlsDll, "GetThreadLocalStorage");
             tlsExport(base, index);
         });
-#endif
 
         loader.LoadIntoModule(base);
 
