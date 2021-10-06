@@ -240,8 +240,8 @@ namespace Framework::Launcher {
     }
 
     bool Project::RunInnerClassicChecks() {
-        cppfs::FilePath path(Utils::StringUtils::WideToNormal(_config.classicGamePath));
-        if (!path.pointsToContent()) {
+        cppfs::FileHandle handle = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath));
+        if (!handle.isDirectory()) {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
             return 0;
         }
