@@ -8,6 +8,10 @@
 
 namespace Framework::Launcher::Loaders {
     class ExecutableLoader {
+      public:
+        using FunctionResolverProc = std::function<LPVOID(HMODULE, const char *)>;
+        using LibraryLoaderProc    = std::function<HMODULE(const char *)>;
+
       private:
         const uint8_t *_origBinary;
         HMODULE _module;
@@ -15,9 +19,8 @@ namespace Framework::Launcher::Loaders {
 
         void *_entryPoint;
 
-        HMODULE (*_libraryLoader)(const char *);
-
-        LPVOID (*_functionResolver)(HMODULE, const char *);
+        LibraryLoaderProc _libraryLoader;
+        FunctionResolverProc _functionResolver;
 
         std::function<void(void **base, uint32_t *index)> _tlsInitializer;
 
@@ -52,11 +55,11 @@ namespace Framework::Launcher::Loaders {
             _loadLimit = loadLimit;
         }
 
-        inline void SetLibraryLoader(HMODULE (*loader)(const char *)) {
+        inline void SetLibraryLoader(LibraryLoaderProc loader) {
             _libraryLoader = loader;
         }
 
-        inline void SetFunctionResolver(LPVOID (*functionResolver)(HMODULE, const char *)) {
+        inline void SetFunctionResolver(FunctionResolverProc functionResolver) {
             _functionResolver = functionResolver;
         }
 

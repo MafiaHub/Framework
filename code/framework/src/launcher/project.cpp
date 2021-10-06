@@ -4,12 +4,12 @@
 
 #include <ShellScalingApi.h>
 #include <Windows.h>
-#include <ostream>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
-#include <utils/hooking/hooking.h>
-
 #include <fmt/core.h>
+#include <functional>
+#include <ostream>
+#include <utils/hooking/hooking.h>
 
 // Fix for gpu-enabled games
 extern "C" {
@@ -200,12 +200,12 @@ namespace Framework::Launcher {
             return false;
         }
 
-		// If we don't have the app id file, create it
+        // If we don't have the app id file, create it
         cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
-		if (!appIdFile.exists()) {
+        if (!appIdFile.exists()) {
             auto outStream = appIdFile.createOutputStream();
-			(*outStream) << std::to_string(_config.steamAppId) << std::endl;
-		}
+            (*outStream) << std::to_string(_config.steamAppId) << std::endl;
+        }
 
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
@@ -299,14 +299,26 @@ namespace Framework::Launcher {
         // Create the loader instance
         Loaders::ExecutableLoader loader(data);
         loader.SetLoadLimit(0x140000000 + 0x130000000);
-        loader.SetLibraryLoader([](const char *library) -> HMODULE {
-            auto hMod = LoadLibraryA(library);
-            if (hMod == nullptr) {
-                hMod = (HMODULE)INVALID_HANDLE_VALUE;
+        loader.SetLibraryLoader([this](const char *library) -> HMODULE {
+            if (_libraryLoader) {
+                auto mod = _libraryLoader(library);
+                if (mod) {
+                    return mod;
+                }
             }
-            return hMod;
+            auto mod = LoadLibraryA(library);
+            if (mod == nullptr) {
+                mod = (HMODULE)INVALID_HANDLE_VALUE;
+            }
+            return mod;
         });
-        loader.SetFunctionResolver([](HMODULE hmod, const char *exportFn) -> LPVOID {
+        loader.SetFunctionResolver([this](HMODULE hmod, const char *exportFn) -> LPVOID {
+            if (_functionResolver) {
+                auto ret = _functionResolver(hmod, exportFn);
+                if (ret) {
+                    return ret;
+                }
+            }
             if (!_strcmpi(exportFn, "GetStartupInfoW")) {
                 return static_cast<LPVOID>(GetStartupInfoW_Stub);
             }

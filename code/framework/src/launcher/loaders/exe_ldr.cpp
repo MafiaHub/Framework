@@ -34,7 +34,7 @@ namespace Framework::Launcher::Loaders {
             }
 
             // "don't load"
-            if (reinterpret_cast<uint32_t>(module) == 0xFFFFFFFF) {
+            if (reinterpret_cast<uintptr_t>(module) == 0xFFFFFFFF) {
                 descriptor++;
                 continue;
             }
