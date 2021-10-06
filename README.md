@@ -102,6 +102,6 @@ The guide on how to set up the project files for CLion is available [here](.gith
 
 ## License
 
-The code is licensed under a modified [MafiaHub OSS](LICENSE.md) license.
+The code is licensed under the [MafiaHub OSS](LICENSE.md) license.
 
 The 5th clause exists to ensure that the work can focus primarily on this repository, as we provide an access to the framework and its services. This is important to ensure that the framework is not used for other purposes, such as the creation of other projects, that would diverge from the framework. This approach guarantees that the changes are directly made to the framework itself, having a healthy ecosystem in mind.
