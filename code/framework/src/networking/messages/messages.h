@@ -19,11 +19,7 @@ namespace Framework::Networking::Messages {
 
     enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, BANNED, UNKNOWN };
 
-    enum GameMessages : uint32_t {
-        GAME_CONNECTION_HANDSHAKE = ID_USER_PACKET_ENUM + 1,
-        GAME_CONNECTION_FINALIZED,
-        GAME_SYNC
-    };
+    enum GameMessages : uint32_t { GAME_CONNECTION_HANDSHAKE = ID_USER_PACKET_ENUM + 1, GAME_CONNECTION_FINALIZED, GAME_SYNC };
 
     enum GameSyncMessages : uint32_t {
         GAME_SYNC_PLAYER_SPAWN,

@@ -63,7 +63,8 @@ namespace Framework::Scripting {
             _name       = root["name"].get<std::string>();
             _version    = root["version"].get<std::string>();
             _entryPoint = root["entry_point"].get<std::string>();
-        } catch (nlohmann::detail::type_error &err) {
+        }
+        catch (nlohmann::detail::type_error &err) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The package.json is not valid:\n\t{}", err.what());
             return false;
         }
@@ -192,7 +193,8 @@ namespace Framework::Scripting {
         for (auto it = _remoteHandlers.begin(); it != _remoteHandlers.end();) {
             if (it->second._removed) {
                 it = _remoteHandlers.erase(it);
-            } else {
+            }
+            else {
                 ++it;
             }
         }
@@ -290,7 +292,8 @@ namespace Framework::Scripting {
             v8::MaybeLocal<v8::Script> script;
             if (path.empty()) {
                 script = v8::Script::Compile(context, source);
-            } else {
+            }
+            else {
                 auto originValue = Helpers::MakeString(isolate, path).ToLocalChecked();
                 v8::ScriptOrigin scriptOrigin(originValue);
 
@@ -331,8 +334,8 @@ namespace Framework::Scripting {
 
     void Resource::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
         std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(_engine->GetIsolate(), error).ToLocalChecked(),
-                                                  Helpers::MakeString(_engine->GetIsolate(), stackTrace).ToLocalChecked(),
-                                                  Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(), v8::Integer::New(_engine->GetIsolate(), line)};
+            Helpers::MakeString(_engine->GetIsolate(), stackTrace).ToLocalChecked(), Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(),
+            v8::Integer::New(_engine->GetIsolate(), line)};
         InvokeEvent("resourceError", args);
     }
 

@@ -51,8 +51,8 @@ namespace Framework::Networking {
             return CLIENT_PEER_NULL;
         }
 
-        _state                                = CONNECTING;
-        
+        _state = CONNECTING;
+
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Failed to connect to the remote host");
@@ -149,7 +149,8 @@ namespace Framework::Networking {
 
                 if (_registeredMessageCallbacks.find(innerSyncMessage) != _registeredMessageCallbacks.end()) {
                     _registeredMessageCallbacks[innerSyncMessage](&bsIn);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", innerSyncMessage);
                 }
             } break;

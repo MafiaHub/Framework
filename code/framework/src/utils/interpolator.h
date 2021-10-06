@@ -150,7 +150,8 @@ namespace Framework::Utils {
     Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() {
         if (_debugEnabled) {
             return _startTime + _debugTime;
-        } else {
+        }
+        else {
             return std::chrono::high_resolution_clock::now();
         }
     }

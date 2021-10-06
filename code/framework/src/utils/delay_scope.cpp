@@ -33,7 +33,8 @@ namespace Framework::Utils {
         for (auto handler : activeHandlers) {
             if (handler != nullptr && !handler->FireWhenReady()) {
                 pendingDelays.push_back(handler);
-            } else {
+            }
+            else {
                 delete handler;
             }
         }

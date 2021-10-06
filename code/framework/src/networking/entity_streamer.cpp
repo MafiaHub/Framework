@@ -42,11 +42,13 @@ namespace Framework::Networking {
                     if (!canSend) {
                         snapshot.erase(std::remove(snapshot.begin(), snapshot.end(), entity->GetNetworkID()));
                         EntityDespawn(entity, player->GetOwner());
-                    } else if (player->GetOwner() != entity->GetOwner()) {
+                    }
+                    else if (player->GetOwner() != entity->GetOwner()) {
                         // Entity was already present in our last snapshot and is still visible, send update.
                         EntityUpdate(entity, player->GetOwner());
                     }
-                } else if (canSend) {
+                }
+                else if (canSend) {
                     snapshot.push_back(entity->GetNetworkID());
                     EntitySpawn(entity, player->GetOwner());
                 }

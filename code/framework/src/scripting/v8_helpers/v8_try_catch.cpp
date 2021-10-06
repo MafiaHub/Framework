@@ -58,17 +58,18 @@ namespace Framework::Scripting::Helpers {
 
                         if (sourceLine->Length() <= 80) {
                             Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] {}", *v8::String::Utf8Value(isolate, sourceLine));
-                        } else {
+                        }
+                        else {
                             Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] {}", std::string {*v8::String::Utf8Value(isolate, sourceLine), 80});
                         }
                     }
 
                     auto stackTrace = tryCatch.StackTrace(context);
                     resource->InvokeErrorEvent(exception.IsEmpty() ? "unknown" : *v8::String::Utf8Value(isolate, exception),
-                                               (!stackTrace.IsEmpty() && stackTrace.ToLocalChecked()->IsString()) ? *v8::String::Utf8Value(isolate, stackTrace.ToLocalChecked())
-                                                                                                                  : "",
-                                               *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
-                } else {
+                        (!stackTrace.IsEmpty() && stackTrace.ToLocalChecked()->IsString()) ? *v8::String::Utf8Value(isolate, stackTrace.ToLocalChecked()) : "",
+                        *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
+                }
+                else {
                     Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] Exception at {}", resource->GetName());
                 }
 
@@ -77,9 +78,11 @@ namespace Framework::Scripting::Helpers {
                     v8::String::Utf8Value stackTraceStr(isolate, stackTrace.ToLocalChecked().As<v8::String>());
                     Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] {}", *stackTraceStr);
                 }
-            } else if (!exception.IsEmpty()) {
+            }
+            else if (!exception.IsEmpty()) {
                 Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] Exception: {}", *v8::String::Utf8Value(isolate, exception));
-            } else {
+            }
+            else {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[V8Helpers] Exception occured");
             }
 

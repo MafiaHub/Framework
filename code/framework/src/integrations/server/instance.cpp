@@ -8,14 +8,14 @@
 
 #include "instance.h"
 
-#include <optick.h>
 #include <nlohmann/json.hpp>
+#include <optick.h>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
-        _scriptingEngine = new Scripting::Engine;
+        _scriptingEngine  = new Scripting::Engine;
         _networkingEngine = new Networking::Engine;
-        _webServer = new HTTP::Webserver;
+        _webServer        = new HTTP::Webserver;
     }
 
     Instance::~Instance() {}
@@ -39,7 +39,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize our networking engine
-        if(!_networkingEngine->Init(opts.bindPort, opts.bindHost, opts.maxPlayers, opts.bindPassword)){
+        if (!_networkingEngine->Init(opts.bindPort, opts.bindHost, opts.maxPlayers, opts.bindPassword)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }
@@ -56,25 +56,25 @@ namespace Framework::Integrations::Server {
         return ServerError::SERVER_NONE;
     }
 
-    void Instance::InitEndpoints(){
+    void Instance::InitEndpoints() {
         _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, Framework::HTTP::ResponseCallback cb) {
             nlohmann::json root;
-            root["mod_name"] = _opts.modName;
-            root["mod_slug"] = _opts.modSlug;
-            root["mod_version"] = _opts.modVersion;
-            root["host"] = _opts.bindHost;
-            root["port"] = _opts.bindPort;
+            root["mod_name"]          = _opts.modName;
+            root["mod_slug"]          = _opts.modSlug;
+            root["mod_version"]       = _opts.modVersion;
+            root["host"]              = _opts.bindHost;
+            root["port"]              = _opts.bindPort;
             root["password_required"] = !_opts.bindPassword.empty();
-            root["max_players"] = _opts.maxPlayers;
+            root["max_players"]       = _opts.maxPlayers;
             cb(200, root.dump(4));
         });
     }
 
     ServerError Instance::Shutdown() {
-        if (_networkingEngine){
+        if (_networkingEngine) {
             _networkingEngine->Shutdown();
         }
-        
+
         if (_scriptingEngine) {
             _scriptingEngine->Shutdown();
         }
@@ -90,10 +90,10 @@ namespace Framework::Integrations::Server {
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
-            if (_networkingEngine){
+            if (_networkingEngine) {
                 _networkingEngine->Update();
             }
-            
+
             if (_scriptingEngine) {
                 _scriptingEngine->Update();
             }

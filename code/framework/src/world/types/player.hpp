@@ -29,7 +29,7 @@ namespace Framework::World::Archetypes {
             e.add<Modules::Base::Transform>();
             e.add<Modules::Base::Frame>();
             e.add<Modules::Network::Streamer>();
-            auto streamable = e.get_mut<Modules::Network::Streamable>();
+            auto streamable    = e.get_mut<Modules::Network::Streamable>();
             streamable->events = _events;
             return e;
         }

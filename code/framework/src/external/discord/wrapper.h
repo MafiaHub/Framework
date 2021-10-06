@@ -26,7 +26,7 @@ namespace Framework::External::Discord {
 
         DiscordError Update();
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,
-                                 const std::string &smallImage, const std::string &smallText);
+            const std::string &smallImage, const std::string &smallText);
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
 
         discord::ActivityManager &GetActivityManager();

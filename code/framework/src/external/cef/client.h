@@ -50,8 +50,8 @@ namespace Framework::External::CEF {
         virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool, const CefString &,
-                                                                               bool &) override {
+        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+            CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool, const CefString &, bool &) override {
             return this;
         }
 

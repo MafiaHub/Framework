@@ -38,7 +38,8 @@ namespace Framework::Scripting::Builtins {
             v8::Local<v8::Function> eventCallback = info[1].As<v8::Function>();
             resource->SubscribeEvent(Helpers::ToCString(eventName), eventCallback, Helpers::SourceLocation::GetCurrent(isolate));
             return;
-        } else {
+        }
+        else {
             return;
         }
     }

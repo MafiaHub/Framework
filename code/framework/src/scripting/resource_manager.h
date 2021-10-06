@@ -12,9 +12,9 @@
 #include "init.h"
 #include "resource.h"
 
+#include <functional>
 #include <map>
 #include <string>
-#include <functional>
 #include <v8.h>
 
 namespace Framework::Scripting {

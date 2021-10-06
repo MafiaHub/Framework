@@ -12,5 +12,5 @@
 
 namespace Framework::Scripting {
     class SDK;
-    using SDKRegisterCallback = std::function<void(SDK*)>;
-}
+    using SDKRegisterCallback = std::function<void(SDK *)>;
+} // namespace Framework::Scripting

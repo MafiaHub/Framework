@@ -12,7 +12,6 @@
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
-
 #include "logging/logger.h"
 
 namespace Framework::Scripting {

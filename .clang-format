@@ -1,7 +1,7 @@
 ---
 BasedOnStyle: LLVM
 IndentWidth: 4
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: false
 AlignConsecutiveMacros: 'true'
 AlignConsecutiveAssignments: 'true'
 AlignConsecutiveDeclarations: 'false'
@@ -33,7 +33,7 @@ BraceWrapping:
     AfterUnion:      false
     BeforeCatch:     true
     BeforeElse:      true  
-    BeforeLambdaBody: 'false'
+    BeforeLambdaBody: false
     IndentBraces:    false
 BreakConstructorInitializers: BeforeComma
 BreakInheritanceList: BeforeComma

@@ -8,14 +8,16 @@
 
 #pragma once
 
-#include <string>
 #include "external/firebase/wrapper.h"
+
+#include <string>
 
 namespace Framework::Services {
     class Masterlist {
       private:
         int32_t _interval   = 60000;
         int64_t _nextUpdate = 0;
+
       public:
         void Update(External::Firebase::Wrapper *);
 

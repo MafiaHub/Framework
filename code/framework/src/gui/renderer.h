@@ -31,7 +31,7 @@ namespace Framework::GUI {
         void HandleDeviceReset();
 
         RendererAPI GetRendererAPI() const {
-          return _api;
+            return _api;
         }
 
         RendererBackend GetBackend() const {

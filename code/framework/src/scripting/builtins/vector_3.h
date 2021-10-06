@@ -220,17 +220,17 @@ namespace Framework::Scripting::Builtins {
 
         auto vec3Class = new Helpers::V8Class(
             GetKeyName(Keys::KEY_VECTOR_3), Vector3Constructor, V8_CLASS_CB {
-            v8::Isolate *isolate = v8::Isolate::GetCurrent();
-            V8Helpers::SetAccessor(isolate, tpl, "length", Vector3Length);
+                v8::Isolate *isolate = v8::Isolate::GetCurrent();
+                V8Helpers::SetAccessor(isolate, tpl, "length", Vector3Length);
 
-            V8Helpers::SetMethod(isolate, tpl, "add", Vector3Add);
-            V8Helpers::SetMethod(isolate, tpl, "sub", Vector3Sub);
-            V8Helpers::SetMethod(isolate, tpl, "mul", Vector3Mul);
-            V8Helpers::SetMethod(isolate, tpl, "div", Vector3Div);
-            V8Helpers::SetMethod(isolate, tpl, "lerp", Vector3Lerp);
-            V8Helpers::SetMethod(isolate, tpl, "toArray", Vector3ToArray);
-            V8Helpers::SetMethod(isolate, tpl, "toString", Vector3ToString);
-        });
+                V8Helpers::SetMethod(isolate, tpl, "add", Vector3Add);
+                V8Helpers::SetMethod(isolate, tpl, "sub", Vector3Sub);
+                V8Helpers::SetMethod(isolate, tpl, "mul", Vector3Mul);
+                V8Helpers::SetMethod(isolate, tpl, "div", Vector3Div);
+                V8Helpers::SetMethod(isolate, tpl, "lerp", Vector3Lerp);
+                V8Helpers::SetMethod(isolate, tpl, "toArray", Vector3ToArray);
+                V8Helpers::SetMethod(isolate, tpl, "toString", Vector3ToString);
+            });
 
         rootModule->AddClass(vec3Class);
     }

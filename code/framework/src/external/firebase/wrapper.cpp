@@ -71,7 +71,8 @@ namespace Framework::External::Firebase {
         while (result.status() != firebase::kFutureStatusComplete) {};
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        } else {
+        }
+        else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
@@ -82,7 +83,8 @@ namespace Framework::External::Firebase {
         while (result.status() != firebase::kFutureStatusComplete) {};
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        } else {
+        }
+        else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
@@ -93,7 +95,8 @@ namespace Framework::External::Firebase {
         while (result.status() != firebase::kFutureStatusComplete) {};
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        } else {
+        }
+        else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }

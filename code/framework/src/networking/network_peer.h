@@ -24,7 +24,7 @@ namespace Framework::Networking {
 
       public:
         bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-                  PacketReliability reliability = RELIABLE_ORDERED) {
+            PacketReliability reliability = RELIABLE_ORDERED) {
             if (!_peer) {
                 return false;
             }

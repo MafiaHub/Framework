@@ -7,9 +7,9 @@
  */
 
 /*
-* This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.cpp
-* See: https://github.com/citizenfx/fivem/blob/master/code/LICENSE
-*/
+ * This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.cpp
+ * See: https://github.com/citizenfx/fivem/blob/master/code/LICENSE
+ */
 
 #include "exe_ldr.h"
 
@@ -68,7 +68,7 @@ namespace Framework::Launcher::Loaders {
                 // is this an ordinal-only import?
                 if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                     uint64_t ordinalId = IMAGE_ORDINAL(*nameTableEntry);
-                    function = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
+                    function           = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
                     static char _backingFunctionNameBuf[4096];
                     ::snprintf(_backingFunctionNameBuf, 4096, "#%lld", ordinalId);
                     functionName = _backingFunctionNameBuf;
@@ -107,7 +107,7 @@ namespace Framework::Launcher::Loaders {
 
         if (section->SizeOfRawData > 0) {
             uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
-            
+
             DWORD oldProtect;
             VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect);
             memcpy(targetAddress, sourceAddress, sizeOfData);

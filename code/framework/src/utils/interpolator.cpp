@@ -21,7 +21,7 @@ namespace math {
     }
 
     inline const float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to,
-                              const std::chrono::high_resolution_clock::time_point &pos) {
+        const std::chrono::high_resolution_clock::time_point &pos) {
         float r = std::chrono::duration<float, std::milli>(to - from).count();
 
         // Avoid dividing by 0 (results in INF values)

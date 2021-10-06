@@ -22,7 +22,8 @@ namespace Framework::Utils {
         try {
             const auto doc = nlohmann::json::parse(content, nullptr, true, true);
             *_document     = doc;
-        } catch (nlohmann::json::exception &e) {
+        }
+        catch (nlohmann::json::exception &e) {
             _lastError = e.what();
             return false;
         }

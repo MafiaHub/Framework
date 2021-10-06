@@ -75,7 +75,8 @@ namespace Framework::Networking {
 
                 if (_registeredMessageCallbacks.find(innerSyncMessage) != _registeredMessageCallbacks.end()) {
                     _registeredMessageCallbacks[innerSyncMessage](&bsIn);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", innerSyncMessage);
                 }
             } break;

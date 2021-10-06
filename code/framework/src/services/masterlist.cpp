@@ -41,13 +41,14 @@ namespace Framework::Services {
                 Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->trace("[Masterlist] Pushing server info to backend");
 
                 auto pushServer = functions->GetHttpsCallable("pushServer");
-                auto result = pushServer.Call(req);
+                auto result     = pushServer.Call(req);
                 while (result.status() != firebase::kFutureStatusComplete) {};
                 if (result.error() != firebase::functions::kErrorNone) {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->warn("[Masterlist] Push failed with error '{}' and message: '{}'", result.error(), result.error_message());
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)
+                        ->warn("[Masterlist] Push failed with error '{}' and message: '{}'", result.error(), result.error_message());
                     return false;
                 }
-                
+
                 return true;
             });
 

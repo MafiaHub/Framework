@@ -88,7 +88,7 @@ namespace hook {
 #if defined(_M_IX86)
         LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
 #elif defined(_M_AMD64)
-        LPVOID *tlsBase       = (LPVOID *)__readgsqword(0x58);
+        LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
 #endif
 
         return (T)tlsBase[*tlsIndex];

@@ -9,14 +9,13 @@
 #pragma once
 
 #include "errors.h"
+#include "networking/engine.h"
 
 #include <chrono>
 #include <http/webserver.h>
 #include <logging/logger.h>
 #include <scripting/engine.h>
 #include <string>
-
-#include "networking/engine.h"
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {

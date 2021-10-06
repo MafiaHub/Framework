@@ -19,9 +19,9 @@
 #include <cppfs/fs.h>
 #include <fmt/core.h>
 #include <fstream>
-#include <psapi.h>
 #include <functional>
 #include <ostream>
+#include <psapi.h>
 #include <utils/hooking/hooking.h>
 
 // Fix for gpu-enabled games
@@ -255,7 +255,7 @@ namespace Framework::Launcher {
         const auto initResult = _steamWrapper->Init();
         if (initResult != External::Steam::SteamError::STEAM_NONE) {
             MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? Error Code #{}", initResult).c_str(),
-                       _config.name.c_str(), MB_ICONERROR);
+                _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 

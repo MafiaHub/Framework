@@ -9,7 +9,6 @@
 #pragma once
 
 #include <logging/logger.h>
-
 #include <v8.h>
 /*
 

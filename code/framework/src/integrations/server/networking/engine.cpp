@@ -32,8 +32,8 @@ namespace Framework::Integrations::Server::Networking {
     }
 
     void Engine::Update() {
-         if (_networkServer) {
+        if (_networkServer) {
             _networkServer->Update();
-         }
+        }
     }
 } // namespace Framework::Integrations::Server::Networking

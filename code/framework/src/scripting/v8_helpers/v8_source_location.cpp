@@ -18,7 +18,8 @@ namespace Framework::Scripting::Helpers {
                 std::string fileName = *v8::String::Utf8Value(isolate, frame->GetScriptName());
                 int line             = frame->GetLineNumber();
                 return SourceLocation {std::move(fileName), line};
-            } else if (frame->IsEval()) {
+            }
+            else if (frame->IsEval()) {
                 return SourceLocation {"[eval]", 0};
             }
         }

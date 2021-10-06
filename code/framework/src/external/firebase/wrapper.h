@@ -56,8 +56,8 @@ namespace Framework::External::Firebase {
             return _user;
         }
 
-        firebase::App* GetApp() {
+        firebase::App *GetApp() {
             return _app;
         }
     };
-} // namespace Framework::Integrations
+} // namespace Framework::External::Firebase

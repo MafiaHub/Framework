@@ -9,6 +9,7 @@
 #include "job_system.h"
 
 #include "logging/logger.h"
+
 #include <optick.h>
 
 namespace Framework::Utils {
@@ -46,7 +47,8 @@ namespace Framework::Utils {
                             if (queue->empty()) {
                                 last_empty = ((queue + 1) == end);
                                 continue;
-                            } else if (!last_empty && ((_counter++ % GetJobPriorityFromIndex(i)) != 0)) {
+                            }
+                            else if (!last_empty && ((_counter++ % GetJobPriorityFromIndex(i)) != 0)) {
                                 continue;
                             }
 
@@ -62,7 +64,8 @@ namespace Framework::Utils {
                     if (jobInfo.status == JobStatus::Invalid) {
                         std::this_thread::yield();
                         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                    } else {
+                    }
+                    else {
                         jobInfo.status = JobStatus::Running;
                         if (!jobInfo.proc()) {
                             // TODO: Improve reports
@@ -73,7 +76,8 @@ namespace Framework::Utils {
                                 jobInfo.status = JobStatus::Pending;
                                 _jobs[jobInfo.priority].push(jobInfo);
                             }
-                        } else {
+                        }
+                        else {
                             Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job is done");
                         }
                     }

@@ -15,13 +15,13 @@ namespace Framework::GUI {
         // Create the application instance
         _application = new External::CEF::Application();
 
-        // Prepare the launch arguments
-        // TODO: make it UNIX compatible
-        #ifdef __APPLE__
-            CefMainArgs args(0, nullptr);
-        #else
-            CefMainArgs args(0);
-        #endif
+// Prepare the launch arguments
+// TODO: make it UNIX compatible
+#ifdef __APPLE__
+        CefMainArgs args(0, nullptr);
+#else
+        CefMainArgs args(0);
+#endif
 
         // Prepare the settings
         CefSettings settings;
@@ -31,26 +31,26 @@ namespace Framework::GUI {
         CefString(&settings.cache_path)              = rootPath + "\\cef\\cache";
         CefString(&settings.user_data_path)          = rootPath + "\\cef\\userdata";
         CefString(&settings.browser_subprocess_path) = rootPath + "\\CefWorker.exe"; // TODO: make it UNIX compatible
-        settings.multi_threaded_message_loop    = false;
-        settings.log_severity                   = LOGSEVERITY_WARNING;
-        settings.remote_debugging_port          = 7777;
-        settings.windowless_rendering_enabled   = windowLess;
-        settings.background_color               = 0x00000000;
+        settings.multi_threaded_message_loop         = false;
+        settings.log_severity                        = LOGSEVERITY_WARNING;
+        settings.remote_debugging_port               = 7777;
+        settings.windowless_rendering_enabled        = windowLess;
+        settings.background_color                    = 0x00000000;
 
         // Initialize the app
-        if(!CefInitialize(args, settings, _application, nullptr)){
-            //TODO: log it out
+        if (!CefInitialize(args, settings, _application, nullptr)) {
+            // TODO: log it out
             return false;
         }
 
         // Register the custom URI schemes
-        //TODO: implement
+        // TODO: implement
 
         return true;
     }
 
-    bool Web::Shutdown(){
-        if(!_application){
+    bool Web::Shutdown() {
+        if (!_application) {
             return false;
         }
 
@@ -58,8 +58,8 @@ namespace Framework::GUI {
         return true;
     }
 
-    void Web::Update(){
-        if(!_application){
+    void Web::Update() {
+        if (!_application) {
             return;
         }
 

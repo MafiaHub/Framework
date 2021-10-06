@@ -65,8 +65,8 @@ namespace Framework::Scripting::Helpers {
             return Framework::Scripting::V8HelperError::HELPER_CONTEXT_EMPTY;
         }
 
-        v8::Maybe<bool> res = obj->Set(context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
-                                       _fnTpl.Get(isolate)->GetFunction(context).ToLocalChecked());
+        v8::Maybe<bool> res = obj->Set(
+            context, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), _fnTpl.Get(isolate)->GetFunction(context).ToLocalChecked());
 
         // If something went weird, just cancel and evacuate
         if (!res.ToChecked()) {

@@ -256,21 +256,21 @@ namespace Framework::Scripting::Builtins {
 
         auto vec3Class = new Helpers::V8Class(
             GetKeyName(Keys::KEY_QUATERNION), QuaternionConstructor, V8_CLASS_CB {
-            v8::Isolate *isolate = v8::Isolate::GetCurrent();
-            V8Helpers::SetAccessor(isolate, tpl, "length", QuaternionLength);
+                v8::Isolate *isolate = v8::Isolate::GetCurrent();
+                V8Helpers::SetAccessor(isolate, tpl, "length", QuaternionLength);
 
-            V8Helpers::SetStaticMethod(isolate, tpl, "fromEuler", QuaternionFromEuler);
-            V8Helpers::SetStaticMethod(isolate, tpl, "fromAxisAngle", QuaternionFromAxisAngle);
+                V8Helpers::SetStaticMethod(isolate, tpl, "fromEuler", QuaternionFromEuler);
+                V8Helpers::SetStaticMethod(isolate, tpl, "fromAxisAngle", QuaternionFromAxisAngle);
 
-            V8Helpers::SetMethod(isolate, tpl, "conj", QuaternionConj);
-            V8Helpers::SetMethod(isolate, tpl, "dot", QuaternionDot);
-            V8Helpers::SetMethod(isolate, tpl, "cross", QuaternionCross);
-            V8Helpers::SetMethod(isolate, tpl, "inverse", QuaternionInverse);
-            V8Helpers::SetMethod(isolate, tpl, "toArray", QuaternionToArray);
-            V8Helpers::SetMethod(isolate, tpl, "toString", QuaternionToString);
-            V8Helpers::SetMethod(isolate, tpl, "rotateVec3", QuaternionRotateVector3);
-            V8Helpers::SetMethod(isolate, tpl, "slerp", QuaternionSlerp);
-        });
+                V8Helpers::SetMethod(isolate, tpl, "conj", QuaternionConj);
+                V8Helpers::SetMethod(isolate, tpl, "dot", QuaternionDot);
+                V8Helpers::SetMethod(isolate, tpl, "cross", QuaternionCross);
+                V8Helpers::SetMethod(isolate, tpl, "inverse", QuaternionInverse);
+                V8Helpers::SetMethod(isolate, tpl, "toArray", QuaternionToArray);
+                V8Helpers::SetMethod(isolate, tpl, "toString", QuaternionToString);
+                V8Helpers::SetMethod(isolate, tpl, "rotateVec3", QuaternionRotateVector3);
+                V8Helpers::SetMethod(isolate, tpl, "slerp", QuaternionSlerp);
+            });
 
         rootModule->AddClass(vec3Class);
     }

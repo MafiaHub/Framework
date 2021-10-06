@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <glm/ext.hpp>
 #include <flecs/flecs.h>
+#include <glm/ext.hpp>
 #include <string>
 
 namespace Framework::World::Modules {
@@ -25,11 +25,11 @@ namespace Framework::World::Modules {
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
         };
 
-        Base(flecs::world& world) {
+        Base(flecs::world &world) {
             world.module<Base>();
 
             world.component<Transform>();
             world.component<Frame>();
         }
     };
-}
+} // namespace Framework::World::Modules

@@ -26,8 +26,8 @@ namespace Framework::Launcher {
         std::string name;
         ProjectPlatform platform;
         ProjectArchitecture arch;
-        AppId_t steamAppId      = 430;
-        uintptr_t loadLimit     = 0x140000000 + 0x130000000;
+        AppId_t steamAppId  = 430;
+        uintptr_t loadLimit = 0x140000000 + 0x130000000;
 
         // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
         bool loadClientManually = false;

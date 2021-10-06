@@ -11,12 +11,12 @@
 #include "base.hpp"
 #include "utils/time.h"
 
+#include <flecs/addons/timer.h>
 #include <flecs/flecs.h>
+#include <functional>
 #include <glm/ext.hpp>
 #include <slikenet/types.h>
 #include <unordered_map>
-#include <functional>
-#include <flecs/addons/timer.h>
 
 namespace Framework::World::Modules {
     struct Network {
@@ -70,48 +70,47 @@ namespace Framework::World::Modules {
             float tickDelay = 7.813f;
 
             _streamEntities = world.system<Base::Transform, Streamer, Streamable>("StreamEntities")
-                .kind(flecs::PostUpdate)
-                .interval(tickDelay)
-                .iter([allStreamableEntities, isVisible](flecs::iter it, Base::Transform *tr, Streamer *s, Streamable *rs) {
-                    for (size_t i = 0; i < it.count(); i++) {
-                        allStreamableEntities.each([=](flecs::entity e, Base::Transform &otherTr, Streamable &otherS) {
-                            const auto canSend = isVisible(tr[i], s[i], rs[i], otherTr, otherS);
-                            const auto id      = e.id();
-                            const auto map_it  = s[i].entities.find(id);
-                            if (map_it != s[i].entities.end()) {
+                                  .kind(flecs::PostUpdate)
+                                  .interval(tickDelay)
+                                  .iter([allStreamableEntities, isVisible](flecs::iter it, Base::Transform *tr, Streamer *s, Streamable *rs) {
+                                      for (size_t i = 0; i < it.count(); i++) {
+                                          allStreamableEntities.each([=](flecs::entity e, Base::Transform &otherTr, Streamable &otherS) {
+                                              const auto canSend = isVisible(tr[i], s[i], rs[i], otherTr, otherS);
+                                              const auto id      = e.id();
+                                              const auto map_it  = s[i].entities.find(id);
+                                              if (map_it != s[i].entities.end()) {
+                                                  // If we can't stream an entity anymore, despawn it
+                                                  if (!canSend) {
+                                                      s[i].entities.erase(map_it);
+                                                      if (otherS.events.despawnProc)
+                                                          otherS.events.despawnProc(s[i].peer, e);
+                                                  }
 
-                                // If we can't stream an entity anymore, despawn it
-                                if (!canSend) {
-                                    s[i].entities.erase(map_it);
-                                    if (otherS.events.despawnProc)
-                                        otherS.events.despawnProc(s[i].peer, e);
-                                }
+                                                  // otherwise we do regular updates
+                                                  else if (rs[i].owner != otherS.owner) {
+                                                      auto &data = map_it->second;
+                                                      if (Utils::Time::GetTime() - data.lastUpdate > otherS.updateFrequency) {
+                                                          if (otherS.events.updateProc)
+                                                              otherS.events.updateProc(s[i].peer, e);
+                                                          data.lastUpdate = Utils::Time::GetTime();
+                                                      }
+                                                  }
+                                              }
 
-                                // otherwise we do regular updates
-                                else if (rs[i].owner != otherS.owner) {
-                                    auto &data = map_it->second;
-                                    if (Utils::Time::GetTime() - data.lastUpdate > otherS.updateFrequency) {
-                                        if (otherS.events.updateProc)
-                                            otherS.events.updateProc(s[i].peer, e);
-                                        data.lastUpdate = Utils::Time::GetTime();
-                                    }
-                                }
-                            }
+                                              // this is a new entity, spawn it unless user says otherwise
+                                              else if (canSend && otherS.events.spawnProc) {
+                                                  if (otherS.events.spawnProc(s[i].peer, e)) {
+                                                      Streamer::StreamData data;
+                                                      data.lastUpdate   = Utils::Time::GetTime();
+                                                      s[i].entities[id] = data;
+                                                  }
+                                              }
+                                          });
 
-                            // this is a new entity, spawn it unless user says otherwise
-                            else if (canSend && otherS.events.spawnProc) {
-                                if (otherS.events.spawnProc(s[i].peer, e)) {
-                                    Streamer::StreamData data;
-                                    data.lastUpdate   = Utils::Time::GetTime();
-                                    s[i].entities[id] = data;
-                                }
-                            }
-                        });
-
-                        if (rs[i].events.selfUpdateProc)
-                            rs[i].events.selfUpdateProc(s[i].peer, it.entity(i));
-                    }
-                });
+                                          if (rs[i].events.selfUpdateProc)
+                                              rs[i].events.selfUpdateProc(s[i].peer, it.entity(i));
+                                      }
+                                  });
         }
 
         flecs::entity _streamEntities;

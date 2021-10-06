@@ -8,6 +8,4 @@
 
 #include "renderer.h"
 
-namespace Framework::GUI {
-    
-}
+namespace Framework::GUI {}

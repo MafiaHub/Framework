@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <RakNetTypes.h>
 #include <BitStream.h>
+#include <RakNetTypes.h>
 
 namespace Framework::Networking::Messages {
     class IMessage {

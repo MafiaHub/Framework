@@ -42,7 +42,8 @@ namespace Framework::HTTP {
                     if (webServer->GetNotFoundCallback()) {
                         webServer->GetNotFoundCallback()(uri);
                     }
-                } else {
+                }
+                else {
                     struct mg_http_serve_opts opts = {};
 
                     opts.root_dir = serveDir.c_str();
