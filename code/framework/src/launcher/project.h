@@ -20,7 +20,13 @@ namespace Framework::Launcher {
         ProjectArchitecture arch;
         AppId_t steamAppId      = 430;
         uintptr_t loadLimit     = 0x140000000 + 0x130000000;
+
+        // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
         bool loadClientManually = false;
+
+        // game exe integrity checks
+        bool verifyGameIntegrity = false;
+        std::vector<uint32_t> supportedGameVersions;
     };
 
     class Project {
@@ -59,6 +65,7 @@ namespace Framework::Launcher {
       private:
         bool EnsureFilesExist(const std::vector<std::string> &);
         bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
+        bool EnsureGameExecutableIsCompatible();
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();

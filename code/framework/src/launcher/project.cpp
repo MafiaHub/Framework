@@ -1,6 +1,7 @@
 #include "project.h"
 
 #include "loaders/exe_ldr.h"
+#include "utils/hashing.h"
 #include "utils/string_utils.h"
 
 #include <ShellScalingApi.h>
@@ -9,6 +10,7 @@
 #include <cppfs/FilePath.h>
 #include <cppfs/fs.h>
 #include <fmt/core.h>
+#include <fstream>
 #include <functional>
 #include <ostream>
 #include <utils/hooking/hooking.h>
@@ -170,6 +172,14 @@ namespace Framework::Launcher {
 
         // Update the game path to include the executable name;
         _gamePath += std::wstring(L"//") + _config.executableName;
+
+        // verify game integrity if enabled
+        if (_config.verifyGameIntegrity) {
+            if (!EnsureGameExecutableIsCompatible()) {
+                MessageBox(nullptr, "Unsupported game version", _config.name.c_str(), MB_ICONERROR);
+                return false;
+            }
+        }
 
         wprintf(L"[Project] Loading game (%s)\n", _gamePath.c_str());
 
@@ -375,6 +385,32 @@ namespace Framework::Launcher {
                 return true;
             }
         }
+        return false;
+    }
+
+    bool Project::EnsureGameExecutableIsCompatible() {
+        if (_gamePath.empty()) {
+            MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        auto gameExeHandle = std::ifstream(Utils::StringUtils::WideToNormal(_gamePath), std::ios::binary | std::ios::ate);
+        if (!gameExeHandle.good()) {
+            MessageBoxA(nullptr, "Failed to find the game executable", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        auto gameExeSize = gameExeHandle.tellg();
+        gameExeHandle.seekg(0, std::ios::beg);
+        std::vector<char> data(gameExeSize);
+        gameExeHandle.read(data.data(), gameExeSize);
+        auto checksum = Utils::Hashing::CalculateCRC32(data.data(), gameExeSize);
+
+        for (auto &version : _config.supportedGameVersions) {
+            if (checksum == version)
+                return true;
+        }
+
         return false;
     }
 } // namespace Framework::Launcher
