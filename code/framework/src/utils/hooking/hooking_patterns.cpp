@@ -10,21 +10,17 @@
 #include <windows.h>
 #include <algorithm>
 #include <string_view>
+#include <fstream>
 
 #if PATTERNS_USE_HINTS
 #include <map>
 
 static void Citizen_PatternSaveHint(uint64_t hash, uintptr_t hint)
 {
-    fwPlatformString hintsFile = MakeRelativeCitPath(L"hints.dat");
-    FILE* hints = _pfopen(hintsFile.c_str(), _P("ab"));
-
-    if (hints)
-    {
-        fwrite(&hash, 1, sizeof(hash), hints);
-        fwrite(&hint, 1, sizeof(hint), hints);
-
-        fclose(hints);
+    auto hints = std::ofstream("fw_hints.dat", std::ios::app | std::ios::binary);
+    if (hints.good()) {
+        hints.write((char *)&hash, sizeof(hash));
+        hints.write((char*)&hint, sizeof(hint));
     }
 }
 #endif
@@ -60,19 +56,22 @@ namespace hook
 {
     inline std::multimap<uint64_t, uintptr_t>& GetHints()
     {
-        static struct RefSource
-                {
-            RefSource()
-            {
-                auto func = (decltype(hints)(*)())GetProcAddress(GetModuleHandle("CoreRT.dll"), "CoreGetPatternHints");
-
-                this->hints = func();
+        static std::multimap<uint64_t, uintptr_t> hints;
+        static int init = false;
+        if (!init) {
+            auto hintsFile = std::ifstream("fw_hints.dat", std::ios::binary);
+            if (hintsFile.good()) {
+                while (!hintsFile.eof()) {
+                    uint64_t hash;
+                    uintptr_t hint;
+                    hintsFile.read((char *)&hash, sizeof(hash));
+                    hintsFile.read((char *)&hint, sizeof(hint));
+                    hook::pattern::hint(hash, hint);
+                }
             }
-
-            std::multimap<uint64_t, uintptr_t>* hints;
-                } hintsRef;
-
-        return *hintsRef.hints;
+            init = true;
+        }
+        return hints;
     }
 
     static void TransformPattern(std::string_view pattern, std::string& data, std::string& mask)

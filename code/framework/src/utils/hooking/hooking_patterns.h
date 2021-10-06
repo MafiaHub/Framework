@@ -15,7 +15,7 @@
 #pragma warning(push)
 #pragma warning(disable : 4201)
 
-#define PATTERNS_USE_HINTS 0
+#define PATTERNS_USE_HINTS 1
 
 namespace hook {
     class pattern_match {
