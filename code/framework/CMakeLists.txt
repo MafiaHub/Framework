@@ -57,15 +57,16 @@ set(FRAMEWORK_CLIENT_SRC
         src/external/steam/wrapper.cpp
 
         src/integrations/client/instance.cpp
+    )
 
+# Append the platform-dependent files to the related lists
+if(WIN32)
+    list(APPEND FRAMEWORK_CLIENT_SRC 
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp
     )
-
-# Append the platform-dependent files to the related lists
-if(WIN32)
     add_library(FrameworkLoader
         STATIC
         src/launcher/project.cpp
