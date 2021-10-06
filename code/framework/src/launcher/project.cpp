@@ -314,7 +314,7 @@ namespace Framework::Launcher {
                     return ret;
                 }
             }
-            if (!_strcmpi(exportFn, "GetStartupInfoW")) {
+            if (!_config.loadClientManually && !_strcmpi(exportFn, "GetStartupInfoW")) {
                 return static_cast<LPVOID>(GetStartupInfoW_Stub);
             }
             if (!_strcmpi(exportFn, "GetModuleFileNameA")) {

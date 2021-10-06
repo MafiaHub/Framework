@@ -18,8 +18,9 @@ namespace Framework::Launcher {
         std::string name;
         ProjectPlatform platform;
         ProjectArchitecture arch;
-        AppId_t steamAppId;
-        uintptr_t loadLimit = 0x140000000 + 0x130000000;
+        AppId_t steamAppId      = 430;
+        uintptr_t loadLimit     = 0x140000000 + 0x130000000;
+        bool loadClientManually = false;
     };
 
     class Project {
