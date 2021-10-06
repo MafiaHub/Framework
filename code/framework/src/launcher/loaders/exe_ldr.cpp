@@ -85,15 +85,15 @@ namespace Framework::Launcher::Loaders {
         void *targetAddress       = GetTargetRVA<uint8_t>(section->VirtualAddress);
         const void *sourceAddress = _origBinary + section->PointerToRawData;
 
-        if ((uintptr_t)targetAddress >= _loadLimit) {
+        if ((uintptr_t)targetAddress >= (_loadLimit + hook::baseAddressDifference)) {
             return;
         }
 
         if (section->SizeOfRawData > 0) {
             uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
-
+            
             DWORD oldProtect;
-            VirtualProtect(targetAddress, sizeOfData, PAGE_EXECUTE_READWRITE, &oldProtect);
+            VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect);
             memcpy(targetAddress, sourceAddress, sizeOfData);
         }
     }
@@ -154,12 +154,10 @@ namespace Framework::Launcher::Loaders {
         LoadSections(ntHeader);
         LoadImports(ntHeader);
 
-#ifdef _M_AMD64
         uint32_t tlsIndex = 0;
         void *tlsInit     = nullptr;
 
         _tlsInitializer(&tlsInit, &tlsIndex);
-#endif
 
 #if defined(_M_AMD64)
         LoadExceptionTable(ntHeader);
@@ -169,9 +167,11 @@ namespace Framework::Launcher::Loaders {
             const IMAGE_TLS_DIRECTORY *targetTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
             const IMAGE_TLS_DIRECTORY *sourceTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 
+            if (sourceTls->AddressOfIndex) {
+                *(DWORD *)(sourceTls->AddressOfIndex) = 0;
+            }
 
 #if defined(_M_IX86)
-            *(DWORD *)(sourceTls->AddressOfIndex) = 0;
             LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
 #elif defined(_M_AMD64)
             LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
@@ -180,31 +180,20 @@ namespace Framework::Launcher::Loaders {
             if (sourceTls->StartAddressOfRawData) {
                 DWORD oldProtect;
 
-#ifdef _M_AMD64
                 VirtualProtect(tlsInit, sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE, &oldProtect);
                 memcpy(tlsBase[tlsIndex], reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
                 memcpy(tlsInit, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
-#else
-                VirtualProtect(reinterpret_cast<LPVOID>(targetTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE,
-                               &oldProtect);
-                memcpy(tlsBase, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
-                memcpy((void *)targetTls->StartAddressOfRawData, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData),
-                       sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
-#endif
             }
 
-#ifdef _M_AMD64
             if (sourceTls->AddressOfIndex) {
                 hook::put(sourceTls->AddressOfIndex, tlsIndex);
             }
-#endif
         }
 
         // copy over the offset to the new imports directory
         DWORD oldProtect;
         VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect);
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-
         memcpy(sourceNtHeader, ntHeader, sizeof(IMAGE_NT_HEADERS) + (ntHeader->FileHeader.NumberOfSections * (sizeof(IMAGE_SECTION_HEADER))));
 
         sourceNtHeader->OptionalHeader.CheckSum  = origCheckSum;

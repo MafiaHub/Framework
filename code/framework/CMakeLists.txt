@@ -81,6 +81,8 @@ if(WIN32)
 
     if (CMAKE_CL_64)
         target_link_options(FrameworkLoader PUBLIC /BASE:0x140000000)
+    else()
+        target_link_options(FrameworkLoader PUBLIC /BASE:0x400000)
     endif()
 
     add_library(FrameworkTLSDummy SHARED src/launcher/tls_dummy/tls.cpp)
