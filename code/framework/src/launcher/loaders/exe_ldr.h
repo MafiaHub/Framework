@@ -1,5 +1,14 @@
-#pragma once
 /*
+ * MafiaHub OSS license
+ * Copyright (c) 2021 MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
+#pragma once
+
+ /*
 * This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.h
 * See:https://github.com/citizenfx/fivem/blob/master/code/LICENSE
 */

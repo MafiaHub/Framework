@@ -1,3 +1,13 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2021 MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
+#pragma once
+
 // Copyright (c) 2009-2011, Hikaru Inoue, Akihiro Yamasaki,
 // All rights reserved.
 //
@@ -27,7 +37,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#pragma once
 #ifndef JITASM_H
 #define JITASM_H
 
