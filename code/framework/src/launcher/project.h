@@ -27,6 +27,9 @@ namespace Framework::Launcher {
         // game exe integrity checks
         bool verifyGameIntegrity = false;
         std::vector<uint32_t> supportedGameVersions;
+
+        // additional DLL search paths
+        std::vector<std::wstring> additionalSearchPaths;
     };
 
     class Project {

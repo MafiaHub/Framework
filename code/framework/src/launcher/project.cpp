@@ -124,6 +124,10 @@ namespace Framework::Launcher {
             AddDllDirectory(_gamePath.c_str());
             AddDllDirectory(projectDllPath);
             AddDllDirectory((std::wstring(projectDllPath) + L"\\bin").c_str());
+
+            // add any custom search paths from the mod
+            for (auto &path : _config.additionalSearchPaths) { AddDllDirectory(path.c_str()); }
+
             SetCurrentDirectoryW(_gamePath.c_str());
         }
 
