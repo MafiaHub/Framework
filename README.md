@@ -4,7 +4,7 @@
 
 <div align="center">
     <a href="https://discord.gg/eBQ4QHX"><img src="https://img.shields.io/discord/402098213114347520.svg" alt="Discord server" /></a>
-    <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-BSD%205--Clause-blue" alt="license" /></a>
+    <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MafiaHub%20OSS-blue" alt="license" /></a>
 </div>
 
 <br />
@@ -102,6 +102,6 @@ The guide on how to set up the project files for CLion is available [here](.gith
 
 ## License
 
-The code is licensed under a modified [BSD 5-Clause](LICENSE.md) license.
+The code is licensed under a modified [MafiaHub OSS](LICENSE.md) license.
 
-The 5th clause was added to ensure that the work can focus primarily on this repository, as we provide an access to the framework and its services. This is important to ensure that the framework is not used for other purposes, such as the creation of other projects, that would diverge from the framework. This approach guarantees that the changes are directly made to the framework itself, having a healthy ecosystem in mind.
+The 5th clause exists to ensure that the work can focus primarily on this repository, as we provide an access to the framework and its services. This is important to ensure that the framework is not used for other purposes, such as the creation of other projects, that would diverge from the framework. This approach guarantees that the changes are directly made to the framework itself, having a healthy ecosystem in mind.
