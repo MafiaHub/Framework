@@ -76,7 +76,5 @@ namespace Framework::Launcher::Loaders {
         }
 
         void LoadIntoModule(HMODULE module);
-
-        void LoadSnapshot(IMAGE_NT_HEADERS *ntHeader);
     };
 } // namespace Framework::Launcher::Loaders
