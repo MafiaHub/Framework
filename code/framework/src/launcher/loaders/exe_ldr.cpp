@@ -153,11 +153,12 @@ namespace Framework::Launcher::Loaders {
         LoadSections(ntHeader);
         LoadImports(ntHeader);
 
-#if defined(_M_AMD64)
         uint32_t tlsIndex = 0;
         void *tlsInit     = nullptr;
 
         _tlsInitializer(&tlsInit, &tlsIndex);
+
+#if defined(_M_AMD64)
         LoadExceptionTable(ntHeader);
 #endif
 

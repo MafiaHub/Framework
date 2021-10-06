@@ -20,8 +20,13 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
 // allocate space for game
+#ifdef _M_AMD64
 #pragma bss_seg(".fwgame")
 char fwgame_seg[0x130000000];
+#else
+#pragma bss_seg(".fwgame")
+char fwgame_seg[0x1400000];
+#endif
 
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
@@ -334,6 +339,9 @@ namespace Framework::Launcher {
         auto entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
 
         hook::set_base(reinterpret_cast<uintptr_t>(base));
+
+        if (_preLaunchFunctor)
+            _preLaunchFunctor();
 
         InvokeEntryPoint(entry_point);
         return true;

@@ -8,6 +8,7 @@ include_directories(PUBLIC
         "../vendors/cppfs/source/cppfs/include"
         "../vendors/json/include"
         "../vendors/slikenet/Source"
+        "../vendors/ntdll"
         "../vendors/spdlog/include"
         "../vendors/optick/src"
         "../vendors/steamworks/include"

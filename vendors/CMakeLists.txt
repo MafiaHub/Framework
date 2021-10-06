@@ -94,5 +94,6 @@ if (WIN32)
     add_subdirectory(minhook)
     add_subdirectory(steamworks)
     add_subdirectory(udis86)
+    add_subdirectory(ntdll)
 endif ()
 
