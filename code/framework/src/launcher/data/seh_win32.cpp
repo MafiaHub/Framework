@@ -234,7 +234,7 @@ static BOOLEAN (*g_origRtlDispatchException)(EXCEPTION_RECORD *record, CONTEXT *
 
 static BOOLEAN RtlDispatchExceptionStub(EXCEPTION_RECORD *record, CONTEXT *context) {
     // anti-anti-anti-anti-debug
-    if (IsDebuggerPresent && (record->ExceptionCode == 0xc0000008 /* || record->ExceptionCode == 0x80000003*/)) {
+    if (IsDebuggerPresent() && (record->ExceptionCode == 0xc0000008 /* || record->ExceptionCode == 0x80000003*/)) {
         return TRUE;
     }
 

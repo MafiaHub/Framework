@@ -127,8 +127,8 @@ namespace Framework::Launcher {
             SetCurrentDirectoryW(_gamePath.c_str());
         }
 
-        // Load TLS dummy so the game can have some
-        if (!(tlsDll = LoadLibraryW(L"FrameworkTLSDummy.dll"))) {
+        // Load TLS dummy so the game can use thread-local storage
+        if (!(tlsDll = LoadLibraryW(L"FrameworkLoaderData.dll"))) {
             MessageBox(nullptr, "Failed to load a vital framework component", _config.name.c_str(), MB_ICONERROR);
             return false;
         }

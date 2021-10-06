@@ -123,7 +123,7 @@ namespace Framework::Launcher::Loaders {
         }
 
         // use CoreRT API instead
-        if (HMODULE coreRT = GetModuleHandleW(L"FrameworkCoreRT.dll")) {
+        if (HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll")) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(_module, ((char *)_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
         }

@@ -86,8 +86,10 @@ if(WIN32)
         target_link_options(FrameworkLoader PUBLIC /BASE:0x400000)
     endif()
 
-    add_library(FrameworkTLSDummy SHARED src/launcher/tls_dummy/tls.cpp)
-    add_library(FrameworkCoreRT SHARED src/launcher/corert/seh_win32.cpp)
+    add_library(FrameworkLoaderData
+        SHARED 
+        src/launcher/data/tls.cpp
+        src/launcher/data/seh_win32.cpp)
 endif()
 
 # Append the files to the target static library
@@ -125,9 +127,9 @@ if (WIN32)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkTLSDummy FrameworkCoreRT ntdll)
-    target_link_libraries(FrameworkCoreRT udis86 minhook)
-    target_link_options(FrameworkCoreRT PUBLIC /EXPORT:CoreRT_SetupSEHHandler)
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll)
+    target_link_libraries(FrameworkLoaderData udis86 minhook)
+    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage)
     
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
