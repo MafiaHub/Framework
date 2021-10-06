@@ -54,8 +54,11 @@ namespace Framework::Launcher::Loaders {
 
                 // is this an ordinal-only import?
                 if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
-                    function = GetProcAddress(module, MAKEINTRESOURCEA(IMAGE_ORDINAL(*nameTableEntry)));
-                    // functionName = va("#%d", IMAGE_ORDINAL(*nameTableEntry));
+                    uint64_t ordinalId = IMAGE_ORDINAL(*nameTableEntry);
+                    function = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
+                    static char _backingFunctionNameBuf[4096];
+                    ::snprintf(_backingFunctionNameBuf, 4096, "#%lld", ordinalId);
+                    functionName = _backingFunctionNameBuf;
                 }
                 else {
                     auto import = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
