@@ -25,6 +25,7 @@ namespace Framework::Launcher {
       public:
         using FunctionResolverProc = std::function<LPVOID(HMODULE, const char *)>;
         using LibraryLoaderProc    = std::function<HMODULE(const char *)>;
+        using PreLaunchProc        = std::function<void()>;
 
       private:
         ProjectConfiguration _config;
@@ -34,6 +35,7 @@ namespace Framework::Launcher {
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;
+        PreLaunchProc _preLaunchFunctor;
 
       public:
         Project(ProjectConfiguration &);
@@ -51,6 +53,10 @@ namespace Framework::Launcher {
 
         inline void SetFunctionResolver(FunctionResolverProc functionResolver) {
             _functionResolver = functionResolver;
+        }
+
+        inline void SetPreLaunchFunctor(PreLaunchProc preLaunchFunctor) {
+            _preLaunchFunctor = preLaunchFunctor;
         }
 
       private:

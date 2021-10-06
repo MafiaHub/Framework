@@ -77,7 +77,13 @@ if(WIN32)
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp
     )
-    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /BASE:0x140000000 /LARGEADDRESSAWARE /SUBSYSTEM:windows /SECTIONLAYOUT:@${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/SectionLayout.txt)
+    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /SUBSYSTEM:windows /SECTIONLAYOUT:@${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/SectionLayout.txt)
+
+    if (CMAKE_CL_64)
+        target_link_options(FrameworkLoader PUBLIC /BASE:0x140000000)
+    else()
+        target_link_options(FrameworkLoader PUBLIC /BASE:0x400000)
+    endif()
 
     add_library(FrameworkTLSDummy SHARED src/launcher/tls_dummy/tls.cpp)
     add_library(FrameworkCoreRT SHARED src/launcher/corert/seh_win32.cpp)
