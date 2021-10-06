@@ -122,8 +122,8 @@ namespace Framework::Launcher {
             setDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
 
             AddDllDirectory(_gamePath.c_str());
-            AddDllDirectory(L"");
-            AddDllDirectory(L"bin");
+            AddDllDirectory(projectDllPath);
+            AddDllDirectory((std::wstring(projectDllPath) + L"\\bin").c_str());
             SetCurrentDirectoryW(_gamePath.c_str());
         }
 
