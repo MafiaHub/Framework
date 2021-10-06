@@ -57,30 +57,22 @@ void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
 }
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule) {
-        static char buf[MAX_PATH];
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
+        auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
+        strcpy_s(lpFilename, nSize, gamePath.c_str());
 
-        // to ansi
-        wcstombs(buf, gImagePath, MAX_PATH);
-
-        strcpy_s(lpFilename, nSize, buf);
-
-        return (DWORD)strlen(buf);
+        return (DWORD)strlen(gamePath.c_str());
     }
 
     return GetModuleFileNameA(hModule, lpFilename, nSize);
 }
 
 DWORD WINAPI GetModuleFileNameExA(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule) {
-        static char buf[MAX_PATH];
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
+        auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
+        strcpy_s(lpFilename, nSize, gamePath.c_str());
 
-        // to ansi
-        wcstombs(buf, gImagePath, MAX_PATH);
-
-        strcpy_s(lpFilename, nSize, buf);
-
-        return (DWORD)strlen(buf);
+        return (DWORD)strlen(gamePath.c_str());
     }
 
     return GetModuleFileNameExA(hProcess, hModule, lpFilename, nSize);
@@ -175,7 +167,7 @@ namespace Framework::Launcher {
         }
 
         // Update the game path to include the executable name;
-        _gamePath += std::wstring(L"//") + _config.executableName;
+        _gamePath += std::wstring(L"/") + _config.executableName;
 
         // verify game integrity if enabled
         if (_config.verifyGameIntegrity) {
