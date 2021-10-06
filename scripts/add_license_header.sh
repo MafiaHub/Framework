@@ -3,10 +3,10 @@
 script_path=$(cd -P -- "$(dirname -- "$0")" && pwd -P)
 cd "$script_path/.." || exit 1
 
-for i in *.cpp
+for i in $(find code/framework -name '*.cpp');
 do
-  if ! grep -q " * MafiaHub OSS" $i
+  if ! grep -q " * MafiaHub OSS" "$i"
   then
-    cat NOTICE.md $i >$i.new && mv $i.new $i
+    cat NOTICE.md <(echo) "$i" >"$i".new && mv "$i".new "$i"
   fi
 done
