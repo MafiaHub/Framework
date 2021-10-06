@@ -150,6 +150,16 @@ namespace hook {
         VirtualProtect((void *)address, sizeof(value), oldProtect, &oldProtect);
     }
 
+    template <typename TRet = void, typename... TArgs, typename AddressType>
+    constexpr inline TRet call(AddressType address, TArgs... args) {
+        return reinterpret_cast<TRet (*)(TArgs...)>(address)(args...);
+    }
+
+    template <typename TRet = void, typename... TArgs>
+    constexpr inline TRet this_call(uintptr_t address, TArgs... args) {
+        return reinterpret_cast<TRet(__thiscall *)(TArgs...)>(address)(args...);
+    }
+
     template <typename AddressType>
     inline void nop(AddressType address, size_t length) {
         adjust_base(address);
@@ -161,23 +171,6 @@ namespace hook {
 
         VirtualProtect((void *)address, length, oldProtect, &oldProtect);
     }
-
-#ifdef _M_IX86
-    template <typename R = void, typename... Args>
-    constexpr inline R std_call(uintptr_t address, Args... args) {
-        return reinterpret_cast<R(__stdcall *)(Args...)>(address)(args...);
-    }
-
-    template <typename R = void, typename... Args>
-    constexpr inline R this_call(uintptr_t address, Args... args) {
-        return reinterpret_cast<R(__thiscall *)(Args...)>(address)(args...);
-    }
-
-    template <typename R = void, typename... Args>
-    constexpr inline R fast_call(uintptr_t address, Args... args) {
-        return reinterpret_cast<R(__fastcall *)(Args...)>(address)(args...);
-    }
-#endif
 
     template <typename AddressType>
     inline void return_function(AddressType address, uint16_t stackSize = 0) {
