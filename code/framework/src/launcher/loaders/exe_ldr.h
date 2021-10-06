@@ -8,23 +8,24 @@
 
 namespace Framework::Launcher::Loaders {
     class ExecutableLoader {
+      private:
         const uint8_t *m_origBinary;
-        HMODULE m_module {};
-        HMODULE _tlsDll {};
+        HMODULE m_module;
         uintptr_t m_loadLimit;
 
-        void *m_entryPoint {};
+        void *m_entryPoint;
 
-        HMODULE (*m_libraryLoader)(const char *) {};
+        HMODULE (*m_libraryLoader)(const char *);
 
-        LPVOID (*m_functionResolver)(HMODULE, const char *) {};
+        LPVOID (*m_functionResolver)(HMODULE, const char *);
 
-        std::function<bool(const IMAGE_TLS_DIRECTORY *)> m_tlsInitializer;
+        std::function<void(void **base, uint32_t *index)> m_tlsInitializer;
 
-        std::vector<std::tuple<void *, DWORD, DWORD>> m_targetProtections;
-
+      private:
         void LoadSection(IMAGE_SECTION_HEADER *section);
         void LoadSections(IMAGE_NT_HEADERS *ntHeader);
+
+        bool ApplyRelocations();
 
 #ifdef _M_AMD64
         void LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader);
@@ -35,39 +36,40 @@ namespace Framework::Launcher::Loaders {
         HMODULE ResolveLibrary(const char *name);
 
         template <typename T>
-        const T *GetRVA(uint32_t rva) {
+        inline const T *GetRVA(uint32_t rva) {
             return (T *)(m_origBinary + rva);
         }
 
         template <typename T>
-        T *GetTargetRVA(uint32_t rva) {
+        inline T *GetTargetRVA(uint32_t rva) {
             return (T *)((uint8_t *)m_module + rva);
         }
 
       public:
-        ExecutableLoader(const uint8_t *origBinary, HMODULE tlsDll);
+        ExecutableLoader(const uint8_t *origBinary);
 
-        void SetLoadLimit(uintptr_t loadLimit) {
+        inline void SetLoadLimit(uintptr_t loadLimit) {
             m_loadLimit = loadLimit;
         }
 
-        void SetLibraryLoader(HMODULE (*loader)(const char *)) {
+        inline void SetLibraryLoader(HMODULE (*loader)(const char *)) {
             m_libraryLoader = loader;
         }
 
-        void SetFunctionResolver(LPVOID (*functionResolver)(HMODULE, const char *)) {
+        inline void SetFunctionResolver(LPVOID (*functionResolver)(HMODULE, const char *)) {
             m_functionResolver = functionResolver;
         }
 
-        void SetTLSInitializer(const std::function<bool(const IMAGE_TLS_DIRECTORY *)> &callback) {
+        inline void SetTLSInitializer(const std::function<void(void **base, uint32_t *index)> &callback) {
             m_tlsInitializer = callback;
         }
 
-        void *GetEP() {
+        inline void *GetEntryPoint() {
             return m_entryPoint;
         }
 
-        void Protect();
         void LoadIntoModule(HMODULE module);
+
+        void LoadSnapshot(IMAGE_NT_HEADERS *ntHeader);
     };
 } // namespace Framework::Launcher::Loaders

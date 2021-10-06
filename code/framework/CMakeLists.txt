@@ -58,8 +58,6 @@ set(FRAMEWORK_CLIENT_SRC
 
         src/integrations/client/instance.cpp
 
-        src/launcher/client_xref/seh_win32.cpp
-
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
@@ -81,6 +79,7 @@ if(WIN32)
     target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /BASE:0x140000000 /LARGEADDRESSAWARE /SUBSYSTEM:windows /SECTIONLAYOUT:@${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/SectionLayout.txt)
 
     add_library(FrameworkTLSDummy SHARED src/launcher/tls_dummy/tls.cpp)
+    add_library(FrameworkCoreRT SHARED src/launcher/corert/seh_win32.cpp)
 endif()
 
 # Append the files to the target static library
@@ -118,13 +117,15 @@ if (WIN32)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkTLSDummy)
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkTLSDummy FrameworkCoreRT)
+    target_link_libraries(FrameworkCoreRT udis86 minhook)
+    target_link_options(FrameworkCoreRT PUBLIC /EXPORT:CoreRT_SetupSEHHandler)
     
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else ()
         target_link_libraries(FrameworkClient Ultralight)
-        target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO" /EXPORT:CoreRT_SetupSEHHandler)
+        target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
     endif ()
 else ()
     target_link_libraries(FrameworkClient Ultralight)

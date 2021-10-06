@@ -25,7 +25,7 @@ char fwgame_seg[0x130000000];
 
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
-static HMODULE tlsDll;
+HMODULE tlsDll {};
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
@@ -290,7 +290,7 @@ namespace Framework::Launcher {
         auto base = GetModuleHandle(nullptr);
 
         // Create the loader instance
-        Loaders::ExecutableLoader loader(data, tlsDll);
+        Loaders::ExecutableLoader loader(data);
         loader.SetLoadLimit(0x140000000 + 0x130000000);
         loader.SetLibraryLoader([](const char *library) -> HMODULE {
             auto hMod = LoadLibraryA(library);
@@ -309,6 +309,13 @@ namespace Framework::Launcher {
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
 
+#ifdef _M_AMD64
+        loader.SetTLSInitializer([&](void **base, uint32_t *index) {
+            auto tlsExport = (void (*)(void **, uint32_t *))GetProcAddress(tlsDll, "GetThreadLocalStorage");
+            tlsExport(base, index);
+        });
+#endif
+
         loader.LoadIntoModule(base);
 
         // Once loaded, we can close handles
@@ -317,7 +324,7 @@ namespace Framework::Launcher {
         CloseHandle(hFile);
 
         // Acquire the entry point reference
-        auto entry_point = static_cast<void (*)()>(loader.GetEP());
+        auto entry_point = static_cast<void (*)()>(loader.GetEntryPoint());
 
         hook::set_base(reinterpret_cast<uintptr_t>(base));
 
