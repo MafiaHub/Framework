@@ -11,6 +11,7 @@
 #include <cppfs/fs.h>
 #include <fmt/core.h>
 #include <fstream>
+#include <psapi.h>
 #include <functional>
 #include <ostream>
 #include <utils/hooking/hooking.h>
@@ -61,21 +62,41 @@ DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nS
         auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
-        return (DWORD)strlen(gamePath.c_str());
+        return (DWORD)gamePath.size();
     }
 
     return GetModuleFileNameA(hModule, lpFilename, nSize);
 }
 
-DWORD WINAPI GetModuleFileNameExA(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
+DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
     if (!hModule || hModule == GetModuleHandle(nullptr)) {
         auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
-        return (DWORD)strlen(gamePath.c_str());
+        return (DWORD)gamePath.size();
     }
 
     return GetModuleFileNameExA(hProcess, hModule, lpFilename, nSize);
+}
+
+DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
+        wcscpy_s(lpFilename, nSize, gImagePath);
+
+        return (DWORD)wcslen(gImagePath);
+    }
+
+    return GetModuleFileNameW(hModule, lpFilename, nSize);
+}
+
+DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
+        wcscpy_s(lpFilename, nSize, gImagePath);
+
+        return (DWORD)wcslen(gImagePath);
+    }
+
+    return GetModuleFileNameExW(hProcess, hModule, lpFilename, nSize);
 }
 
 namespace Framework::Launcher {
@@ -325,6 +346,15 @@ namespace Framework::Launcher {
             }
             if (!_strcmpi(exportFn, "GetModuleFileNameA")) {
                 return static_cast<LPVOID>(GetModuleFileNameA_Hook);
+            }
+            if (!_strcmpi(exportFn, "GetModuleFileNameExA")) {
+                return static_cast<LPVOID>(GetModuleFileNameExA_Hook);
+            }
+            if (!_strcmpi(exportFn, "GetModuleFileNameW")) {
+                return static_cast<LPVOID>(GetModuleFileNameW_Hook);
+            }
+            if (!_strcmpi(exportFn, "GetModuleFileNameExW")) {
+                return static_cast<LPVOID>(GetModuleFileNameExW_Hook);
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
