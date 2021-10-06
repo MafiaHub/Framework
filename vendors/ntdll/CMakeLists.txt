@@ -1,0 +1,7 @@
+add_library(ntdll INTERFACE)
+target_link_directories(ntdll INTERFACE ".")
+if(CMAKE_CL_64)
+    target_link_libraries(ntdll INTERFACE ntdll_x64)
+else()
+    target_link_libraries(ntdll INTERFACE ntdll_x86)
+endif()

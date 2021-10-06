@@ -118,7 +118,7 @@ if (WIN32)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkTLSDummy FrameworkCoreRT)
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkTLSDummy FrameworkCoreRT ntdll)
     target_link_libraries(FrameworkCoreRT udis86 minhook)
     target_link_options(FrameworkCoreRT PUBLIC /EXPORT:CoreRT_SetupSEHHandler)
     
