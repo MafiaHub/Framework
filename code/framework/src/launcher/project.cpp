@@ -109,6 +109,10 @@ namespace Framework::Launcher {
             return 0;
         }
 
+        // Fetch the current working directory
+        static wchar_t projectDllPath[32768];
+        GetCurrentDirectoryW(32768, projectDllPath);
+
         // Add the required DLL directories to the current process
         auto addDllDirectory          = (decltype(&AddDllDirectory))GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "AddDllDirectory");
         auto setDefaultDllDirectories = (decltype(&SetDefaultDllDirectories))GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetDefaultDllDirectories");
@@ -162,7 +166,7 @@ namespace Framework::Launcher {
             GetEnvironmentVariableW(L"PATH", pathBuf, sizeof(pathBuf));
 
             // append bin & game directories
-            std::wstring newPath = _gamePath + L";" + std::wstring(pathBuf);
+            std::wstring newPath = _gamePath + L";" + std::wstring(projectDllPath) + L";" + std::wstring(pathBuf);
             SetEnvironmentVariableW(L"PATH", newPath.c_str());
         }
 
@@ -291,7 +295,7 @@ namespace Framework::Launcher {
 
         // Create the loader instance
         Loaders::ExecutableLoader loader(data);
-        loader.SetLoadLimit(0x140000000 + 0x130000000);
+        loader.SetLoadLimit(_config.loadLimit);
         loader.SetLibraryLoader([this](const char *library) -> HMODULE {
             if (_libraryLoader) {
                 auto mod = _libraryLoader(library);

@@ -19,6 +19,7 @@ namespace Framework::Launcher {
         ProjectPlatform platform;
         ProjectArchitecture arch;
         AppId_t steamAppId;
+        uintptr_t loadLimit = 0x140000000 + 0x130000000;
     };
 
     class Project {
@@ -31,7 +32,6 @@ namespace Framework::Launcher {
         ProjectConfiguration _config;
         std::wstring _gamePath;
         External::Steam::Wrapper *_steamWrapper;
-        uintptr_t _loadLimit;
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;
@@ -42,10 +42,6 @@ namespace Framework::Launcher {
         ~Project() = default;
 
         bool Launch();
-
-        inline void SetLoadLimit(uintptr_t loadLimit) {
-            _loadLimit = loadLimit;
-        }
 
         inline void SetLibraryLoader(LibraryLoaderProc loader) {
             _libraryLoader = loader;
