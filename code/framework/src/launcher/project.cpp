@@ -33,7 +33,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 // allocate space for game
 #ifdef _M_AMD64
 #pragma bss_seg(".fwgame")
-char fwgame_seg[0x130000000];
+char fwgame_seg[0x13000000];
 #else
 #pragma bss_seg(".fwgame")
 char fwgame_seg[0x1400000];
