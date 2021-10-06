@@ -7,6 +7,6 @@ for i in $(find code/framework -type f \( -iname \*.cpp -o -iname \*.h -o -iname
 do
   if ! grep -q " * MafiaHub OSS" "$i"
   then
-    cat NOTICE.md <(echo) "$i" >"$i".new && mv "$i".new "$i"
+    cat NOTICE.txt <(echo) "$i" >"$i".new && mv "$i".new "$i"
   fi
 done
