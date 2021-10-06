@@ -1,10 +1,12 @@
 #include "project.h"
 
 #include "loaders/exe_ldr.h"
+#include "utils/string_utils.h"
 
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
+#include <cppfs/FilePath.h>
 #include <cppfs/fs.h>
 #include <fmt/core.h>
 #include <functional>
@@ -226,38 +228,24 @@ namespace Framework::Launcher {
         char gamePath[_MAX_PATH] = {0};
         steamApps->GetAppInstallDir(_config.steamAppId, gamePath, _MAX_PATH);
 
-        std::string gameDirTmp = std::string(gamePath);
-        _gamePath              = std::wstring(gameDirTmp.begin(), gameDirTmp.end());
+        _gamePath = Utils::StringUtils::NormalToWide(gamePath);
         return true;
     }
 
     bool Project::RunInnerClassicChecks() {
-        LPWSTR *szArglist;
-        int nArgs;
-
-        szArglist = CommandLineToArgvW(GetCommandLineW(), &nArgs);
-        if (NULL == szArglist) {
-            wprintf(L"CommandLineToArgvW failed\n");
+        cppfs::FilePath path(Utils::StringUtils::WideToNormal(_config.classicGamePath));
+        if (!path.pointsToContent()) {
+            MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
             return 0;
         }
-
-        if (nArgs < 2) {
-            MessageBoxW(nullptr, L"Please specify game path", L"MafiaMP", MB_ICONERROR);
-            return 0;
-        }
-        else {
-            _gamePath = std::wstring(szArglist[1]);
-        }
-
-        // Free memory allocated for CommandLineToArgvW arguments.
-        LocalFree(szArglist);
+        _gamePath = _config.classicGamePath;
         return true;
     }
 
     bool Project::Run() {
         // Method cannot be called directly
         if (_gamePath.empty()) {
-            MessageBox(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 

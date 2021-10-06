@@ -14,6 +14,7 @@ namespace Framework::Launcher {
     struct ProjectConfiguration {
         std::wstring executableName;
         std::wstring destinationDllName;
+        std::wstring classicGamePath;
         std::string name;
         ProjectPlatform platform;
         ProjectArchitecture arch;
