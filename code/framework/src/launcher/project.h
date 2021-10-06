@@ -7,11 +7,14 @@
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
 
+    enum class ProjectArchitecture { CPU_X64, CPU_X86 };
+
     struct ProjectConfiguration {
         std::wstring executableName;
         std::wstring destinationDllName;
         std::string name;
         ProjectPlatform platform;
+        ProjectArchitecture arch;
         AppId_t steamAppId;
     };
 
@@ -28,7 +31,8 @@ namespace Framework::Launcher {
         bool Launch();
 
       private:
-        bool EnsureFilesExists(const std::vector<std::string> &);
+        bool EnsureFilesExist(const std::vector<std::string> &);
+        bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();

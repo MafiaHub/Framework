@@ -13,9 +13,7 @@
 
 // Fix for gpu-enabled games
 extern "C" {
-__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
-}
-extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement        = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
@@ -126,7 +124,16 @@ namespace Framework::Launcher {
 
         // Load the steam runtime only if required
         if (_config.platform == ProjectPlatform::STEAM) {
-            if (!LoadLibraryW(L"steam_api64.dll")) {
+            HMODULE steamDll {};
+
+            if (_config.arch == ProjectArchitecture::CPU_X64) {
+                steamDll = LoadLibraryW(L"steam_api64.dll");
+            }
+            else {
+                steamDll = LoadLibraryW(L"steam_api.dll");
+            }
+
+            if (!steamDll) {
                 MessageBox(nullptr, "Failed to inject the steam runtime DLL in the running process", _config.name.c_str(), MB_ICONERROR);
                 return false;
             }
@@ -187,10 +194,10 @@ namespace Framework::Launcher {
             return 0;
         }
 
-        const std::vector<std::string> requiredFiles = {"steam_api64.dll"};
         // Make sure we have our required files
-        if (!EnsureFilesExists(requiredFiles)) {
-            return false;	
+        const std::vector<std::string> requiredFiles = {"steam_api64.dll", "steam_api.dll"};
+        if (!EnsureAtLeastOneFileExists(requiredFiles)) {
+            return false;
         }
 
 		// If we don't have the app id file, create it
@@ -328,12 +335,7 @@ namespace Framework::Launcher {
 
         hook::set_base(reinterpret_cast<uintptr_t>(base));
 
-#ifndef _M_AMD64
         InvokeEntryPoint(entry_point);
-#else
-        entry_point();
-#endif
-
         return true;
     }
 
@@ -347,7 +349,7 @@ namespace Framework::Launcher {
         }
     }
 
-    bool Project::EnsureFilesExists(const std::vector<std::string> &files) {
+    bool Project::EnsureFilesExist(const std::vector<std::string> &files) {
         for (const auto &file : files) {
             cppfs::FileHandle fh = cppfs::fs::open(file);
             if (!fh.exists() || !fh.isFile()) {
@@ -356,5 +358,15 @@ namespace Framework::Launcher {
             }
         }
         return true;
+    }
+
+    bool Project::EnsureAtLeastOneFileExists(const std::vector<std::string> &files) {
+        for (const auto &file : files) {
+            cppfs::FileHandle fh = cppfs::fs::open(file);
+            if (fh.exists() && fh.isFile()) {
+                return true;
+            }
+        }
+        return false;
     }
 } // namespace Framework::Launcher

@@ -9,17 +9,17 @@
 namespace Framework::Launcher::Loaders {
     class ExecutableLoader {
       private:
-        const uint8_t *m_origBinary;
-        HMODULE m_module;
-        uintptr_t m_loadLimit;
+        const uint8_t *_origBinary;
+        HMODULE _module;
+        uintptr_t _loadLimit;
 
-        void *m_entryPoint;
+        void *_entryPoint;
 
-        HMODULE (*m_libraryLoader)(const char *);
+        HMODULE (*_libraryLoader)(const char *);
 
-        LPVOID (*m_functionResolver)(HMODULE, const char *);
+        LPVOID (*_functionResolver)(HMODULE, const char *);
 
-        std::function<void(void **base, uint32_t *index)> m_tlsInitializer;
+        std::function<void(void **base, uint32_t *index)> _tlsInitializer;
 
       private:
         void LoadSection(IMAGE_SECTION_HEADER *section);
@@ -37,35 +37,35 @@ namespace Framework::Launcher::Loaders {
 
         template <typename T>
         inline const T *GetRVA(uint32_t rva) {
-            return (T *)(m_origBinary + rva);
+            return (T *)(_origBinary + rva);
         }
 
         template <typename T>
         inline T *GetTargetRVA(uint32_t rva) {
-            return (T *)((uint8_t *)m_module + rva);
+            return (T *)((uint8_t *)_module + rva);
         }
 
       public:
         ExecutableLoader(const uint8_t *origBinary);
 
         inline void SetLoadLimit(uintptr_t loadLimit) {
-            m_loadLimit = loadLimit;
+            _loadLimit = loadLimit;
         }
 
         inline void SetLibraryLoader(HMODULE (*loader)(const char *)) {
-            m_libraryLoader = loader;
+            _libraryLoader = loader;
         }
 
         inline void SetFunctionResolver(LPVOID (*functionResolver)(HMODULE, const char *)) {
-            m_functionResolver = functionResolver;
+            _functionResolver = functionResolver;
         }
 
         inline void SetTLSInitializer(const std::function<void(void **base, uint32_t *index)> &callback) {
-            m_tlsInitializer = callback;
+            _tlsInitializer = callback;
         }
 
         inline void *GetEntryPoint() {
-            return m_entryPoint;
+            return _entryPoint;
         }
 
         void LoadIntoModule(HMODULE module);

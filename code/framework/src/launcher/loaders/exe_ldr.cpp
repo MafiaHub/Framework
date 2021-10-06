@@ -1,13 +1,14 @@
 #include "exe_ldr.h"
 
 #include <utils/hooking/hooking.h>
+#include "logging/logger.h"
 
 namespace Framework::Launcher::Loaders {
     ExecutableLoader::ExecutableLoader(const uint8_t *origBinary) {
         hook::set_base();
 
-        m_origBinary = origBinary;
-        m_loadLimit  = UINT_MAX;
+        _origBinary = origBinary;
+        _loadLimit  = UINT_MAX;
 
         SetLibraryLoader([](const char *name) {
             return LoadLibraryA(name);
@@ -29,7 +30,7 @@ namespace Framework::Launcher::Loaders {
             HMODULE module = ResolveLibrary(name);
 
             if (!module) {
-                printf("Could not load dependent module %s. Error code was %i.\n", name, GetLastError());
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load dependent module %s. Error code was %i.\n", name, GetLastError());
             }
 
             // "don't load"
@@ -52,13 +53,13 @@ namespace Framework::Launcher::Loaders {
 
                 // is this an ordinal-only import?
                 if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
-                    function     = GetProcAddress(module, MAKEINTRESOURCEA(IMAGE_ORDINAL(*nameTableEntry)));
-                    //functionName = va("#%d", IMAGE_ORDINAL(*nameTableEntry));
+                    function = GetProcAddress(module, MAKEINTRESOURCEA(IMAGE_ORDINAL(*nameTableEntry)));
+                    // functionName = va("#%d", IMAGE_ORDINAL(*nameTableEntry));
                 }
                 else {
                     auto import = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
 
-                    function     = (FARPROC)m_functionResolver(module, import->Name);
+                    function     = (FARPROC)_functionResolver(module, import->Name);
                     functionName = import->Name;
                 }
 
@@ -66,7 +67,7 @@ namespace Framework::Launcher::Loaders {
                     char pathName[MAX_PATH];
                     GetModuleFileNameA(module, pathName, sizeof(pathName));
 
-                    printf("Could not load function %s in dependent module %s (%s).\n", functionName, name, pathName);
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load function %s in dependent module %s (%s).\n", functionName, name, pathName);
                 }
 
                 *addressTableEntry = (uintptr_t)function;
@@ -81,9 +82,9 @@ namespace Framework::Launcher::Loaders {
 
     void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
         void *targetAddress       = GetTargetRVA<uint8_t>(section->VirtualAddress);
-        const void *sourceAddress = m_origBinary + section->PointerToRawData;
+        const void *sourceAddress = _origBinary + section->PointerToRawData;
 
-        if ((uintptr_t)targetAddress >= m_loadLimit) {
+        if ((uintptr_t)targetAddress >= _loadLimit) {
             return;
         }
 
@@ -101,7 +102,6 @@ namespace Framework::Launcher::Loaders {
 
         for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
             LoadSection(section);
-
             section++;
         }
     }
@@ -115,20 +115,20 @@ namespace Framework::Launcher::Loaders {
 
         // has no use - inverted function tables get used instead from Ldr; we have no influence on those
         if (!RtlAddFunctionTable(functionList, entryCount, (DWORD64)GetModuleHandle(nullptr))) {
-            printf("Setting exception handlers failed.");
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Setting exception handlers failed.");
         }
 
         // use CoreRT API instead
         if (HMODULE coreRT = GetModuleHandleW(L"FrameworkCoreRT.dll")) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
-            sehMapper(m_module, ((char *)m_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
+            sehMapper(_module, ((char *)_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
         }
     }
 #endif
     void ExecutableLoader::LoadIntoModule(HMODULE module) {
-        m_module = module;
+        _module = module;
 
-        IMAGE_DOS_HEADER *header = (IMAGE_DOS_HEADER *)m_origBinary;
+        IMAGE_DOS_HEADER *header = (IMAGE_DOS_HEADER *)_origBinary;
 
         if (header->e_magic != IMAGE_DOS_SIGNATURE) {
             return;
@@ -141,11 +141,8 @@ namespace Framework::Launcher::Loaders {
         auto origTimeStamp = sourceNtHeader->FileHeader.TimeDateStamp;
         auto origDebugDir  = sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
 
-        IMAGE_NT_HEADERS *ntHeader = (IMAGE_NT_HEADERS *)(m_origBinary + header->e_lfanew);
-        m_entryPoint               = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
-
-        LoadSections(ntHeader);
-        LoadImports(ntHeader);
+        IMAGE_NT_HEADERS *ntHeader = (IMAGE_NT_HEADERS *)(_origBinary + header->e_lfanew);
+        _entryPoint                = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
 
         DWORD oldProtect2;
         VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect2);
@@ -153,11 +150,14 @@ namespace Framework::Launcher::Loaders {
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
         ApplyRelocations();
 
+        LoadSections(ntHeader);
+        LoadImports(ntHeader);
+
 #if defined(_M_AMD64)
         uint32_t tlsIndex = 0;
         void *tlsInit     = nullptr;
 
-        m_tlsInitializer(&tlsInit, &tlsIndex);
+        _tlsInitializer(&tlsInit, &tlsIndex);
         LoadExceptionTable(ntHeader);
 #endif
 
@@ -198,7 +198,7 @@ namespace Framework::Launcher::Loaders {
     }
 
     bool ExecutableLoader::ApplyRelocations() {
-        IMAGE_DOS_HEADER *dosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(m_module);
+        IMAGE_DOS_HEADER *dosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(_module);
 
         IMAGE_NT_HEADERS *ntHeader = GetTargetRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
 
@@ -207,7 +207,7 @@ namespace Framework::Launcher::Loaders {
         IMAGE_BASE_RELOCATION *relocation    = GetTargetRVA<IMAGE_BASE_RELOCATION>(relocationDirectory->VirtualAddress);
         IMAGE_BASE_RELOCATION *endRelocation = reinterpret_cast<IMAGE_BASE_RELOCATION *>((char *)relocation + relocationDirectory->Size);
 
-        intptr_t relocOffset = reinterpret_cast<intptr_t>(m_module) - reinterpret_cast<intptr_t>(GetModuleHandle(NULL));
+        intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - reinterpret_cast<intptr_t>(GetModuleHandle(NULL));
 
         if (relocOffset == 0) {
             return true;
@@ -258,6 +258,6 @@ namespace Framework::Launcher::Loaders {
     }
 
     HMODULE ExecutableLoader::ResolveLibrary(const char *name) {
-        return m_libraryLoader(name);
+        return _libraryLoader(name);
     }
 } // namespace Framework::Launcher::Loaders
