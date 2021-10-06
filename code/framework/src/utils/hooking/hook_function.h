@@ -29,19 +29,17 @@ class HookFunctionBase {
 };
 
 class InitFunction: public HookFunctionBase {
-    {
-      private:
-        void (*m_function)();
+  private:
+    void (*m_function)();
 
-      public:
-        HookFunction(void (*function)()) {
-            m_function = function;
-        }
+  public:
+    InitFunction(void (*function)()) {
+        m_function = function;
+    }
 
-        virtual void Run() {
-            m_function();
-        }
-    };
+    virtual void Run() {
+        m_function();
+    }
 };
 
 class HookFunction: public HookFunctionBase {
