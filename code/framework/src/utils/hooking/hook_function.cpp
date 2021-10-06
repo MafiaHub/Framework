@@ -1,16 +1,10 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2021 MafiaHub. All rights reserved.
+ * Copyright (c) 2020, CitizenFX
+ * Copyright (c) 2021, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
- */
-
-/*
- * This file is part of the CitizenFX project - http://citizen.re/
- *
- * See LICENSE and MENTIONS in the root of the source tree for information
- * regarding licensing.
  */
 
 #include "hook_function.h"
