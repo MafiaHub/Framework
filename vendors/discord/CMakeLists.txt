@@ -3,9 +3,9 @@ add_library(DiscordSDK STATIC ${DISCORD_FILES})
 target_include_directories(DiscordSDK PUBLIC "src")
 
 if (CMAKE_CL_64)
-    target_link_directories(DiscordSDK PUBLIC "lib/x64_86")
+    target_link_directories(DiscordSDK PUBLIC "lib/x86_64")
     add_custom_command(TARGET DiscordSDK POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/lib/x64_86/discord_game_sdk.dll" "${CMAKE_BINARY_DIR}/bin/"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/lib/x86_64/discord_game_sdk.dll" "${CMAKE_BINARY_DIR}/bin/"
             )
     target_link_libraries(DiscordSDK PUBLIC discord_game_sdk)
 elseif (WIN32)
