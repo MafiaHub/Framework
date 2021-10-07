@@ -14,7 +14,7 @@ This will dump the entire exports table of our DLL into a new DEF file.
 
 2. Clean up the DEF file
 
-Since this is a dump, we need to strip it of any debug stats or unnecessary information that is not parsable by the lib tool. You can check out [](https://github.com/MafiaHub/Framework/tree/develop/vendors/steamworks/lib/win64/fw_steam_api64.def)
+Since this is a dump, we need to strip it of any debug stats or unnecessary information that is not parsable by the lib tool. You can check out [steam_api64.def](https://github.com/MafiaHub/Framework/tree/develop/vendors/steamworks/lib/win64/fw_steam_api64.def)
 to see how the DEF file should be constructed. Make a note of the LIBRARY entry, this is where we type in the name of our newly renamed DLL.
 
 3. Create the import library
