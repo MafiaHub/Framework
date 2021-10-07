@@ -7,7 +7,6 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#ifndef IS_FXSERVER
 #include <minhook.h>
 #include <stdint.h>
 #include <versionhelpers.h>
@@ -301,4 +300,3 @@ struct InitMHWrapper {
 };
 
 InitMHWrapper mh;
-#endif

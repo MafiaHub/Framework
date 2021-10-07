@@ -22,7 +22,7 @@ namespace Framework::Launcher::Loaders {
         hook::set_base();
 
         _origBinary = origBinary;
-        _loadLimit  = UINT_MAX;
+        _loadLimit  = SIZE_MAX;
 
         SetLibraryLoader([](const char *name) {
             return LoadLibraryA(name);
