@@ -130,12 +130,6 @@ namespace Framework::Launcher::Loaders {
         RUNTIME_FUNCTION *functionList = GetTargetRVA<RUNTIME_FUNCTION>(exceptionDirectory->VirtualAddress);
         DWORD entryCount               = exceptionDirectory->Size / sizeof(RUNTIME_FUNCTION);
 
-        // has no use - inverted function tables get used instead from Ldr; we have no influence on those
-        if (!RtlAddFunctionTable(functionList, entryCount, (DWORD64)GetModuleHandle(nullptr))) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Setting exception handlers failed.");
-        }
-
-        // use CoreRT API instead
         if (HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll")) {
             auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(_module, ((char *)_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
@@ -161,9 +155,8 @@ namespace Framework::Launcher::Loaders {
         IMAGE_NT_HEADERS *ntHeader = (IMAGE_NT_HEADERS *)(_origBinary + header->e_lfanew);
         _entryPoint                = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
 
-        DWORD oldProtect2;
-        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect2);
-
+        DWORD oldProtect1;
+        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1);
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
         ApplyRelocations();
 
@@ -194,7 +187,7 @@ namespace Framework::Launcher::Loaders {
             LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
 #endif
 
-            if (sourceTls->StartAddressOfRawData) {
+            if (sourceTls->StartAddressOfRawData && tlsInit != nullptr) {
                 DWORD oldProtect;
 
                 VirtualProtect(tlsInit, sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE, &oldProtect);
@@ -208,8 +201,8 @@ namespace Framework::Launcher::Loaders {
         }
 
         // copy over the offset to the new imports directory
-        DWORD oldProtect;
-        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect);
+        DWORD oldProtect2;
+        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect2);
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
         memcpy(sourceNtHeader, ntHeader, sizeof(IMAGE_NT_HEADERS) + (ntHeader->FileHeader.NumberOfSections * (sizeof(IMAGE_SECTION_HEADER))));
 
