@@ -142,12 +142,15 @@ namespace Framework::Launcher {
         if (addDllDirectory && setDefaultDllDirectories) {
             setDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
 
-            AddDllDirectory(_gamePath.c_str());
-            AddDllDirectory(projectDllPath);
-            AddDllDirectory((std::wstring(projectDllPath) + L"\\bin").c_str());
+            // first search in game root dir
+            addDllDirectory(_gamePath.c_str());
 
             // add any custom search paths from the mod
-            for (auto &path : _config.additionalSearchPaths) { AddDllDirectory(path.c_str()); }
+            for (auto &path : _config.additionalSearchPaths) { addDllDirectory((_gamePath + L"\\" + path).c_str()); }
+
+            // add our own paths now
+            addDllDirectory(projectDllPath);
+            addDllDirectory((std::wstring(projectDllPath) + L"\\bin").c_str());
 
             SetCurrentDirectoryW(_gamePath.c_str());
         }
@@ -163,10 +166,10 @@ namespace Framework::Launcher {
             HMODULE steamDll {};
 
             if (_config.arch == ProjectArchitecture::CPU_X64) {
-                steamDll = LoadLibraryW(L"steam_api64.dll");
+                steamDll = LoadLibraryW(L"fw_steam_api64.dll");
             }
             else {
-                steamDll = LoadLibraryW(L"steam_api.dll");
+                steamDll = LoadLibraryW(L"fw_steam_api.dll");
             }
 
             if (!steamDll) {
@@ -239,7 +242,7 @@ namespace Framework::Launcher {
         }
 
         // Make sure we have our required files
-        const std::vector<std::string> requiredFiles = {"steam_api64.dll", "steam_api.dll"};
+        const std::vector<std::string> requiredFiles = {"fw_steam_api64.dll", "fw_steam_api.dll"};
         if (!EnsureAtLeastOneFileExists(requiredFiles)) {
             return false;
         }
