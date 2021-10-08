@@ -6,12 +6,12 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include "web.h"
+#include "cef.h"
 
 #include <logging/logger.h>
 
 namespace Framework::GUI {
-    bool Web::Init(const std::string &rootPath, bool windowLess) {
+    bool CEF::Init(const std::string &rootPath, bool windowLess) {
         // Create the application instance
         _application = new External::CEF::Application();
 
@@ -49,7 +49,7 @@ namespace Framework::GUI {
         return true;
     }
 
-    bool Web::Shutdown() {
+    bool CEF::Shutdown() {
         if (!_application) {
             return false;
         }
@@ -58,7 +58,7 @@ namespace Framework::GUI {
         return true;
     }
 
-    void Web::Update() {
+    void CEF::Update() {
         if (!_application) {
             return;
         }

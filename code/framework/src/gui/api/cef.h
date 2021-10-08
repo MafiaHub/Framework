@@ -11,8 +11,10 @@
 #include <external/cef/application.h>
 #include <string>
 
+#include "api.h"
+
 namespace Framework::GUI {
-    class Web {
+    class CEF : public API {
       private:
         CefRefPtr<External::CEF::Application> _application;
 

@@ -51,7 +51,8 @@ set(FRAMEWORK_CLIENT_SRC
         src/external/cef/render_handler.cpp
         src/external/cef/worker.hpp
 
-        src/gui/web.cpp
+        src/gui/renderer.cpp
+        src/gui/api/cef.cpp
 
         src/networking/network_client.cpp
 
