@@ -10,7 +10,6 @@ set(FRAMEWORK_SRC
         src/utils/interpolator.cpp
         src/utils/time.cpp
         src/utils/job_system.cpp
-        src/utils/hashing.cpp
 
         src/external/discord/wrapper.cpp
         src/external/sentry/wrapper.cpp
@@ -63,6 +62,7 @@ set(FRAMEWORK_CLIENT_SRC
 # Append the platform-dependent files to the related lists
 if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC 
+        src/utils/hashing.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
