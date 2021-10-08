@@ -36,6 +36,7 @@ set(FRAMEWORK_SERVER_SRC
         src/http/webserver.cpp
 
         src/services/masterlist.cpp
+        src/services/user.cpp
 
         src/networking/network_server.cpp
         src/networking/entity_streamer.cpp
