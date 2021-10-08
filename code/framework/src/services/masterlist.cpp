@@ -40,7 +40,7 @@ namespace Framework::Services {
 
                 Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVICES)->trace("[Masterlist] Pushing server info to backend");
 
-                auto pushServer = functions->GetHttpsCallable("servers-pushServer");
+                auto pushServer = functions->GetHttpsCallable("servers-push");
                 auto result     = pushServer.Call(req);
                 while (result.status() != firebase::kFutureStatusComplete) {};
                 if (result.error() != firebase::functions::kErrorNone) {
