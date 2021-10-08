@@ -36,6 +36,7 @@ set(FRAMEWORK_SERVER_SRC
         src/http/webserver.cpp
 
         src/services/masterlist.cpp
+        src/services/user.cpp
 
         src/networking/network_server.cpp
         src/networking/entity_streamer.cpp
@@ -70,6 +71,7 @@ if(WIN32)
     )
     add_library(FrameworkLoader
         STATIC
+        src/utils/hashing.cpp
         src/launcher/project.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/external/steam/wrapper.cpp
