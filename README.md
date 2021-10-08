@@ -87,7 +87,7 @@ cd code/projects
 git clone git@github.com:<your-awesome-username>/<your-amazing-project>.git
 
 # e.g.
-git clone git@github.com:MafiaHub/fw-sandbox.git
+git clone git@github.com:MafiaHub/MafiaMP.git
 
 # Re-generate CMake project
 cd ../..
