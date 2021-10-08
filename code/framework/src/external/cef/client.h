@@ -8,10 +8,17 @@
 
 #pragma once
 
+#include <glm/vec2.hpp>
 #include <include/cef_client.h>
 #include <include/cef_media_router.h>
 
 namespace Framework::External::CEF {
+    struct ClientInformation {
+        uint32_t sizeX = 0;
+        uint32_t sizeY = 0;
+        glm::vec2 position {0};
+    };
+
     class Client
         : public CefClient
         , public CefLifeSpanHandler
@@ -24,11 +31,18 @@ namespace Framework::External::CEF {
         CefRefPtr<CefRenderHandler> _renderHandler;
         CefRefPtr<CefBrowser> _browser;
 
+        ClientInformation _information;
+
       public:
-        Client();
+        Client(const ClientInformation &info);
+        ~Client();
 
         CefBrowser *GetBrowser() {
             return _browser.get();
+        }
+
+        const ClientInformation &GetClientInformation() const {
+            return _information;
         }
 
       protected:
@@ -50,8 +64,8 @@ namespace Framework::External::CEF {
         virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
-            CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool, const CefString &, bool &) override {
+        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool, const CefString &,
+            bool &) override {
             return this;
         }
 
@@ -61,6 +75,9 @@ namespace Framework::External::CEF {
         virtual void OnBeforeClose(CefRefPtr<CefBrowser>) override;
         virtual cef_return_value_t OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefRequestCallback>) override;
         virtual void OnRenderProcessTerminated(CefRefPtr<CefBrowser>, TerminationStatus) override;
+
+        void OnMouseMove(const glm::ivec2 &);
+        void OnMouseClick(bool, bool, int32_t);
 
         IMPLEMENT_REFCOUNTING(Client);
     };
