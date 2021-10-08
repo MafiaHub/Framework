@@ -32,10 +32,13 @@ namespace Framework::External::CEF {
         CefRefPtr<CefBrowser> _browser;
 
         ClientInformation _information;
+        bool _visible;
 
       public:
         Client(const ClientInformation &info);
         ~Client();
+
+        bool Initialize(const std::string &);
 
         CefBrowser *GetBrowser() {
             return _browser.get();
@@ -43,6 +46,14 @@ namespace Framework::External::CEF {
 
         const ClientInformation &GetClientInformation() const {
             return _information;
+        }
+
+        bool IsVisible() const {
+            return _visible;
+        }
+
+        void SetVisible(bool visible) {
+            _visible = visible;
         }
 
       protected:
@@ -78,6 +89,9 @@ namespace Framework::External::CEF {
 
         void OnMouseMove(const glm::ivec2 &);
         void OnMouseClick(bool, bool, int32_t);
+
+        void OnEndScene();
+        void OnReset();
 
         IMPLEMENT_REFCOUNTING(Client);
     };
