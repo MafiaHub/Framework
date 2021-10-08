@@ -70,6 +70,7 @@ if(WIN32)
     )
     add_library(FrameworkLoader
         STATIC
+        src/utils/hashing.cpp
         src/launcher/project.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/external/steam/wrapper.cpp
