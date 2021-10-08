@@ -18,6 +18,8 @@ namespace Framework::Services {
 
     void UserServices::ValidateUserToken(const std::string &token, OnUserValidatedProc cb) {
         Framework::Utils::JobSystem::GetInstance()->EnqueueJob([this, &token, &cb]() {
+            // TODO: Rework once we start using this functionality
+
             auto functions = firebase::functions::Functions::GetInstance(_wrapper->GetApp());
 
             firebase::Variant req = firebase::Variant::EmptyMap();
