@@ -12,6 +12,7 @@
 
 #include <discord.h>
 #include <string>
+#include <functional>
 
 namespace Framework::External::Discord {
     class Wrapper final {
@@ -20,6 +21,7 @@ namespace Framework::External::Discord {
         discord::Core *_instance;
 
       public:
+        using DiscordLoginProc = std::function<void(const std::string &token)>;
         Wrapper() = default;
         DiscordError Init(int64_t id);
         DiscordError Shutdown();
@@ -28,6 +30,8 @@ namespace Framework::External::Discord {
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,
             const std::string &smallImage, const std::string &smallText);
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
+
+        void SignInWithDiscord(DiscordLoginProc proc);
 
         discord::ActivityManager &GetActivityManager();
         discord::UserManager &GetUserManager();

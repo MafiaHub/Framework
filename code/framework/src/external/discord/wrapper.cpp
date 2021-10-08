@@ -72,6 +72,15 @@ namespace Framework::External::Discord {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
+    void Wrapper::SignInWithDiscord(DiscordLoginProc proc) {
+        _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
+            if (result == discord::Result::Ok) {
+                proc(tokenData.GetAccessToken());
+            }
+            proc("");
+        });
+    }
+
     discord::UserManager &Wrapper::GetUserManager() {
         return _instance->UserManager();
     }
