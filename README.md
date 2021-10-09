@@ -96,6 +96,15 @@ cmake -B build
 
 Now you can access your targets and build them within the framework.
 
+### Visual Studio 2019+ support
+
+Ensure you have the cmake tools installed in your copy of Visual Studio first.
+Open your newly cloned Framework repository folder in Visual Studio and it will automagically set up everything for you!
+
+Things to note:
+- `code/projects` folder is hidden by default as it's ignored by Git, in Solution Explorer, enable **Show All Files** option to see your project files.
+- Changes in your project's cmake will not be auto-detected, cmake will only reload config on build, otherwise you can do it yourself in the Projects section in main menu.
+
 ### CLion support
 
 The guide on how to set up the project files for CLion is available [here](.github/CLION_GUIDE.md).
