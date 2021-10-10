@@ -65,6 +65,8 @@ set(FRAMEWORK_CLIENT_SRC
 # Append the platform-dependent files to the related lists
 if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC 
+        src/gui/backend/d3d9.cpp
+        src/gui/backend/d3d11.cpp
         src/utils/hashing.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp

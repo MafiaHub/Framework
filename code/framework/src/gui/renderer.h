@@ -9,21 +9,32 @@
 #pragma once
 
 #include "api/api.h"
+#include "backend/d3d9.h"
+#include "backend/d3d11.h"
 #include "errors.h"
 #include "types.h"
 
 namespace Framework::GUI {
     struct RendererConfiguration {
-        RendererAPI api;
-        RendererBackend backend;
+        RendererBackend backend; 
+        bool cef = false;
+        bool imgui = false;
+        bool ultralight = false;
     };
 
     class Renderer {
       private:
         RendererConfiguration _config;
         RendererState _state;
+        RendererBackend _backend;
 
-        API _api;
+        API _cefApi;
+        API _imguiApi;
+        API _ultralightApi;
+
+        D3D9Backend *_d3d9Backend;
+        D3D11Backend *_d3d11Backend;
+
 
         bool _initialized = false;
 
@@ -38,8 +49,12 @@ namespace Framework::GUI {
             return _state;
         }
 
-        API GetAPI() const {
-            return _api;
+        D3D9Backend* GetD3D9Backend() const {
+            return _d3d9Backend;
+        }
+
+        D3D11Backend *GetD3D11Backend() const {
+            return _d3d11Backend;
         }
 
         bool IsInitialized() const {

@@ -9,48 +9,39 @@
 #include "renderer.h"
 
 namespace Framework::GUI {
-    RendererError Renderer::Init(RendererConfiguration config){
-        if(_initialized){
+    RendererError Renderer::Init(RendererConfiguration config) {
+        if (_initialized) {
             return RendererError::RENDERER_ALREADY_INITIALIZED;
         }
 
         _config = config;
-        switch(config.api){
-            case RendererAPI::CEF: {
-                //TODO: implement
-            } break;
+        // TODO: handle APIs
 
-            case RendererAPI::ULTRALIGHT: {
-                //TODO: implement
-            } break;
-
-            default:
-                return RendererError::RENDERER_UNKNOWN_API;
+        if (config.backend == RendererBackend::BACKEND_D3D_11) {
+            _d3d11Backend = new D3D11Backend;
+        }
+        else if (config.backend == RendererBackend::BACKEND_D3D_9) {
+            _d3d9Backend = new D3D9Backend;
         }
 
         _initialized = true;
         return RendererError::RENDERER_NONE;
     }
 
-    RendererError Renderer::Shutdown(){
-        if(!_initialized){
+    RendererError Renderer::Shutdown() {
+        if (!_initialized) {
             return RendererError::RENDERER_NOT_INITIALIZED;
         }
 
-        switch(_config.api){
-            case RendererAPI::CEF: {
-                //TODO: implement
-            } break;
-
-            case RendererAPI::ULTRALIGHT: {
-                //TODO: implement
-            }
-
-            default:
-                return RendererError::RENDERER_UNKNOWN_API;
+        if (_d3d11Backend) {
+            _d3d11Backend->Shutdown();
         }
 
+        if (_d3d9Backend) {
+            _d3d9Backend->Shutdown();
+        }
+        
         _initialized = false;
         return RendererError::RENDERER_NONE;
     }
-}
+} // namespace Framework::GUI
