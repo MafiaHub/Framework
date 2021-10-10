@@ -10,6 +10,7 @@ set(FRAMEWORK_SRC
         src/utils/interpolator.cpp
         src/utils/time.cpp
         src/utils/job_system.cpp
+        src/utils/signal.cpp
 
         src/external/discord/wrapper.cpp
         src/external/sentry/wrapper.cpp

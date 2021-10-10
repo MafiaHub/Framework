@@ -16,6 +16,7 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = new Scripting::Engine;
         _networkingEngine = new Networking::Engine;
         _webServer        = new HTTP::Webserver;
+        _signalHandler    = new Utils::SignalHandler {std::bind(&Instance::OnSignal, this, std::placeholders::_1)};
     }
 
     Instance::~Instance() {}
@@ -46,6 +47,12 @@ namespace Framework::Integrations::Server {
 
         // Register the default endpoints
         InitEndpoints();
+
+        // Init the signals handlers if enabled
+        if (opts.enableSignals) {
+            _signalHandler->addSignal(SIGINT);
+            _signalHandler->addSignal(SIGTERM);
+        }
 
         _alive = true;
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", opts.modName);
@@ -106,5 +113,14 @@ namespace Framework::Integrations::Server {
             OPTICK_FRAME("MainThread");
             Update();
         }
+    }
+
+    void Instance::OnSignal(int signal) {
+        if(signal != SIGINT && signal != SIGTERM){
+            return;
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Received shutdown signal. In progress...");
+        Shutdown();
     }
 } // namespace Framework::Integrations::Server

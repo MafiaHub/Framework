@@ -16,6 +16,7 @@
 #include <logging/logger.h>
 #include <scripting/engine.h>
 #include <string>
+#include <utils/signal.h>
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
@@ -28,12 +29,16 @@ namespace Framework::Integrations::Server {
         std::string bindPassword;
         int32_t maxPlayers;
         std::string httpServeDir;
+        bool enableSignals;
     };
 
     class Instance {
       private:
         bool _alive;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
+
+        Utils::SignalHandler *_signalHandler;
+
         InstanceOptions _opts;
 
         Scripting::Engine *_scriptingEngine;
@@ -52,6 +57,8 @@ namespace Framework::Integrations::Server {
         void Update();
 
         void Run();
+
+        void OnSignal(int);
 
         bool IsAlive() const {
             return _alive;
