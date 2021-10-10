@@ -4,6 +4,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <functional>
 
 namespace Framework::Utils {
     using CommandCallback = std::function<void(const std::string &)>;

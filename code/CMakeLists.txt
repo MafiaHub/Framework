@@ -19,6 +19,7 @@ include_directories(PUBLIC
         "../vendors/sentry/include"
         "../vendors/curl/include"
         "../vendors/fmt/include"
+        "../vendors/libsig"
         "../vendors"
         )
 

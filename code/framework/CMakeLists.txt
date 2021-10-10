@@ -10,7 +10,6 @@ set(FRAMEWORK_SRC
         src/utils/interpolator.cpp
         src/utils/time.cpp
         src/utils/job_system.cpp
-        src/utils/signal.cpp
         src/utils/command_processor.cpp
 
         src/external/discord/wrapper.cpp
@@ -120,7 +119,7 @@ link_shared_deps(Framework)
 link_shared_deps(FrameworkServer)
 link_shared_deps(FrameworkClient)
 
-target_link_libraries(FrameworkServer mongoose NodeJS)
+target_link_libraries(FrameworkServer mongoose NodeJS libsig)
 target_link_libraries(FrameworkClient DiscordSDK CefTarget)
 
 # OS specific libraries

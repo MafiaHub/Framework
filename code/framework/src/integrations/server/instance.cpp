@@ -16,13 +16,10 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = new Scripting::Engine;
         _networkingEngine = new Networking::Engine;
         _webServer        = new HTTP::Webserver;
-        _signalHandler    = new Utils::SignalHandler {std::bind(&Instance::OnSignal, this, std::placeholders::_1)};
     }
 
     Instance::~Instance() {
-        if(_signalHandler){
-            delete _signalHandler;
-        }
+        sig_detach(this);
     }
 
     ServerError Instance::Init(InstanceOptions &opts) {
@@ -54,8 +51,8 @@ namespace Framework::Integrations::Server {
 
         // Init the signals handlers if enabled
         if (opts.enableSignals) {
-            _signalHandler->addSignal(SIGINT);
-            _signalHandler->addSignal(SIGTERM);
+            sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
+            sig_attach(SIGTERM, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
         }
 
         _alive = true;
@@ -94,10 +91,9 @@ namespace Framework::Integrations::Server {
             _webServer->Shutdown();
         }
 
-        if(_signalHandler){
-            _signalHandler->removeSignal(SIGINT);
-            _signalHandler->removeSignal(SIGTERM);
-        }
+        // Detach signal handlers
+        sig_detach(SIGINT, sig_slot(this, &Instance::OnSignal));
+        sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
 
         _alive = false;
         return ServerError::SERVER_NONE;
@@ -124,8 +120,8 @@ namespace Framework::Integrations::Server {
         }
     }
 
-    void Instance::OnSignal(int signal) {
-        if(signal != SIGINT && signal != SIGTERM){
+    void Instance::OnSignal(const sig_signal_t signal) {
+        if (signal.context != sig_ctx_sys()) {
             return;
         }
 

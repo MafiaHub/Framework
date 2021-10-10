@@ -89,6 +89,9 @@ add_subdirectory(flecs)
 # Build FMT
 add_subdirectory(fmt)
 
+# Build libsig
+add_subdirectory(libsig)
+
 # Build OS specific libraries
 if (WIN32)
     add_subdirectory(minhook)
