@@ -11,6 +11,7 @@ set(FRAMEWORK_SRC
         src/utils/time.cpp
         src/utils/job_system.cpp
         src/utils/signal.cpp
+        src/utils/command_processor.cpp
 
         src/external/discord/wrapper.cpp
         src/external/sentry/wrapper.cpp
