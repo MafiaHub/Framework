@@ -19,7 +19,11 @@ namespace Framework::Integrations::Server {
         _signalHandler    = new Utils::SignalHandler {std::bind(&Instance::OnSignal, this, std::placeholders::_1)};
     }
 
-    Instance::~Instance() {}
+    Instance::~Instance() {
+        if(_signalHandler){
+            delete _signalHandler;
+        }
+    }
 
     ServerError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
@@ -88,6 +92,11 @@ namespace Framework::Integrations::Server {
 
         if (_webServer) {
             _webServer->Shutdown();
+        }
+
+        if(_signalHandler){
+            _signalHandler->removeSignal(SIGINT);
+            _signalHandler->removeSignal(SIGTERM);
         }
 
         _alive = false;
