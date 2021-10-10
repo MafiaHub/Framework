@@ -42,6 +42,8 @@ namespace Framework::GUI {
         RendererError Init(RendererConfiguration);
         RendererError Shutdown();
 
+        void Update();
+
         void HandleDeviceLost();
         void HandleDeviceReset();
 

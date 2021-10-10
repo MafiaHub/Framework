@@ -11,4 +11,8 @@ namespace Framework::GUI {
     bool D3D11Backend::Shutdown() {
         return true;
     }
+
+    void D3D11Backend::Update() {
+
+    }
 }

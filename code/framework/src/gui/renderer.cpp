@@ -35,13 +35,20 @@ namespace Framework::GUI {
 
         if (_d3d11Backend) {
             _d3d11Backend->Shutdown();
-        }
-
-        if (_d3d9Backend) {
+        } else if (_d3d9Backend) {
             _d3d9Backend->Shutdown();
         }
         
         _initialized = false;
         return RendererError::RENDERER_NONE;
+    }
+
+    void Renderer::Update() {
+        if (_d3d11Backend) {
+            _d3d11Backend->Update();
+        }
+        else if (_d3d9Backend) {
+            _d3d9Backend->Update();
+        }
     }
 } // namespace Framework::GUI

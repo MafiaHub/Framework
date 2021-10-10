@@ -10,4 +10,8 @@ namespace Framework::GUI {
     bool D3D9Backend::Shutdown() {
         return true;
     }
+
+    void D3D9Backend::Update() {
+
+    }
 } // namespace Framework::GUI

@@ -9,5 +9,7 @@ namespace Framework::GUI {
       public:
         virtual bool Init(IDirect3D9 *, IDirect3D9*) override;
         virtual bool Shutdown() override;
+
+        virtual void Update() override;
     };
 } // namespace Framework::GUI

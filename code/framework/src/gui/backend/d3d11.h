@@ -9,5 +9,7 @@ namespace Framework::GUI {
       public:
         virtual bool Init(ID3D11Device *, ID3D11DeviceContext *) override;
         virtual bool Shutdown() override;
+
+        virtual void Update() override;
     };
 } // namespace Framework::GUI
