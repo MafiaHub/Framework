@@ -12,6 +12,7 @@
 
 #include <external/discord/wrapper.h>
 #include <graphics/renderer.h>
+#include <world/engine.h>
 #include <memory>
 
 namespace Framework::Integrations::Client {
@@ -31,6 +32,7 @@ namespace Framework::Integrations::Client {
 
         std::unique_ptr<External::Discord::Wrapper> _presence;
         std::unique_ptr<Graphics::Renderer> _renderer;
+        std::unique_ptr<World::Engine> _worldEngine;
 
       public:
         Instance();

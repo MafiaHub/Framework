@@ -8,6 +8,10 @@
 
 #include "instance.h"
 
+#include "networking/messages/weather_update.h"
+#include "world/modules/server.hpp"
+#include "world/types/environment.hpp"
+
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
 #include <optick.h>
@@ -68,6 +72,12 @@ namespace Framework::Integrations::Server {
         // Register the default endpoints
         InitEndpoints();
 
+        // Register built in modules
+        InitModules();
+
+        // Initialize built in managers
+        InitManagers();
+
         // Init the signals handlers if enabled
         if (opts.enableSignals) {
             sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
@@ -95,6 +105,27 @@ namespace Framework::Integrations::Server {
             root["max_players"]       = _opts.maxPlayers;
             cb(200, root.dump(4));
         });
+    }
+
+    void Instance::InitModules() {
+        if (_worldEngine) {
+            _worldEngine->GetWorld()->import<World::Modules::Server>();
+        }
+    }
+
+    void Instance::InitManagers() {
+        // weather
+        auto weatherEvents       = World::Modules::Network::Streamable::Events {};
+        weatherEvents.updateProc = [this](SLNet::RakNetGUID g, flecs::entity &e) {
+            auto weather = _weatherManager.get<World::Modules::Base::Environment>();
+            Framework::Networking::Messages::WeatherUpdate msg;
+            msg.FromParameters(weather->timeHours, false, "");
+            _networkingEngine->GetNetworkServer()->Send(msg);
+            return true;
+        };
+
+        auto envFactory = World::Archetypes::EnvFactory(_worldEngine->GetWorld(), std::move(weatherEvents));
+        _weatherManager = envFactory.Create();
     }
 
     ServerError Instance::Shutdown() {
