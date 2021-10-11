@@ -32,6 +32,10 @@ namespace Framework::Integrations::Client {
             }
         }
 
+        if (_worldEngine) {
+            _worldEngine->Init();
+        }
+
         PostInit();
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Initialize success");
