@@ -2,9 +2,6 @@
 set(FRAMEWORK_SRC
         src/logging/logger.cpp
 
-        src/networking/entities/entity.cpp
-        src/networking/entity_manager.cpp
-
         src/utils/delay_scope.cpp
         src/utils/config.cpp
         src/utils/interpolator.cpp
@@ -40,7 +37,6 @@ set(FRAMEWORK_SERVER_SRC
         src/services/user.cpp
 
         src/networking/network_server.cpp
-        src/networking/entity_streamer.cpp
 
         src/integrations/server/instance.cpp
         src/integrations/server/networking/engine.cpp

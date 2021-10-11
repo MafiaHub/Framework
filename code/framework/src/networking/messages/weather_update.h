@@ -17,7 +17,7 @@ namespace Framework::Networking::Messages {
     class WeatherUpdate final: public IMessage {
       private:
         SLNet::RakString _weatherPreset;
-        float _time = 0.0f;
+        float _time        = 0.0f;
         bool _updatePreset = false;
 
       public:
@@ -26,8 +26,8 @@ namespace Framework::Networking::Messages {
         }
 
         void FromParameters(float time, bool updatePreset = false, std::string preset = "") {
-            _time = time;
-            _updatePreset = updatePreset;
+            _time          = time;
+            _updatePreset  = updatePreset;
             _weatherPreset = SLNet::RakString(preset.c_str());
         }
 
@@ -43,7 +43,7 @@ namespace Framework::Networking::Messages {
         SLNet::BitStream *ToBitStream(SLNet::BitStream *stream) override {
             stream->Write(_time);
             stream->Write(_updatePreset);
-            
+
             if (_weatherPreset) {
                 stream->Write(_weatherPreset);
             }
