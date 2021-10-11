@@ -22,6 +22,8 @@ namespace Framework::Integrations::Server {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
         _worldEngine      = std::make_unique<World::Engine>();
+        _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
+        _masterlistSync   = std::make_unique<Masterlist>(this);
     }
 
     Instance::~Instance() {
@@ -30,7 +32,7 @@ namespace Framework::Integrations::Server {
 
     ServerError Instance::Init(InstanceOptions &opts) {
         // First level is argument parser, because we might want to overwrite stuffs
-        cxxopts::Options options(opts.modSlug, "My super multiplayer server");
+        cxxopts::Options options(opts.modSlug, opts.modHelpText);
         options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))},
                                     {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)}});
 
@@ -67,6 +69,12 @@ namespace Framework::Integrations::Server {
         if (_worldEngine->Init() != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
+        }
+
+        if (_opts.firebaseEnabled
+            && _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) != External::Firebase::FirebaseError::FIREBASE_NONE) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the firebase wrapper");
+            return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
         // Register the default endpoints
@@ -166,6 +174,10 @@ namespace Framework::Integrations::Server {
 
             if (_worldEngine) {
                 _worldEngine->Update();
+            }
+
+            if (_firebaseWrapper && _opts.firebaseEnabled) {
+                _masterlistSync->Update(_firebaseWrapper.get());
             }
 
             _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(_opts.tickInterval);

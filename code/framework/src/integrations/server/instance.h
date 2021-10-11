@@ -9,6 +9,8 @@
 #pragma once
 
 #include "errors.h"
+#include "external/firebase/wrapper.h"
+#include "masterlist.h"
 #include "networking/engine.h"
 #include "world/engine.h"
 
@@ -23,19 +25,34 @@
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
         std::string modSlug;
+        std::string modHelpText;
         std::string modName;
         std::string modVersion;
+
         std::string bindName;
         std::string bindHost;
+        std::string bindSecretKey;
+        std::string bindMapName;
         int32_t bindPort;
         std::string bindPassword;
+
         int32_t maxPlayers;
         std::string httpServeDir;
+
         bool enableSignals;
+
+        // update intervals
         uint32_t tickInterval = 3334;
 
+        // args
         int argc;
         char **argv;
+
+        // firebase
+        bool firebaseEnabled = false;
+        std::string firebaseProjectId;
+        std::string firebaseAppId;
+        std::string firebaseApiKey;
     };
 
     class Instance {
@@ -49,7 +66,9 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<World::Engine> _worldEngine;
-        
+        std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
+        std::unique_ptr<Masterlist> _masterlistSync;
+
         void InitEndpoints();
         void InitModules();
         void InitManagers();
@@ -72,6 +91,10 @@ namespace Framework::Integrations::Server {
 
         bool IsAlive() const {
             return _alive;
+        }
+
+        InstanceOptions &GetOpts() {
+            return _opts;
         }
 
         Scripting::Engine *GetScriptingEngine() const {
