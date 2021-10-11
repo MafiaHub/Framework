@@ -49,6 +49,13 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<World::Engine> _worldEngine;
+        
+        void InitEndpoints();
+        void InitModules();
+        void InitManagers();
+
+        // managers
+        flecs::entity _weatherManager;
 
       public:
         Instance();
@@ -56,8 +63,6 @@ namespace Framework::Integrations::Server {
 
         ServerError Init(InstanceOptions &);
         ServerError Shutdown();
-
-        void InitEndpoints();
 
         void Update();
 
