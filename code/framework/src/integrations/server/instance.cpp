@@ -8,6 +8,7 @@
 
 #include "instance.h"
 
+#include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
 #include <optick.h>
 
@@ -23,6 +24,19 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Init(InstanceOptions &opts) {
+        // First level is argument parser, because we might want to overwrite stuffs
+        cxxopts::Options options(opts.modSlug, "My super multiplayer server");
+        options.add_options("", {
+            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))},
+            {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)}
+        });
+
+        // Try to parse and return if anything wrong happened
+        auto result = options.parse(opts.argc, opts.argv);
+
+        // Finally apply back to the structure that is used everywhere the settings from the parser
+        opts.bindHost = result["host"].as<std::string>();
+        opts.bindPort = result["port"].as<int32_t>();
         _opts = opts;
 
         // Initialize the logging instance with the mod slug name

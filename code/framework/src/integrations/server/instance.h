@@ -30,6 +30,9 @@ namespace Framework::Integrations::Server {
         int32_t maxPlayers;
         std::string httpServeDir;
         bool enableSignals;
+
+        int argc;
+        char **argv;
     };
 
     class Instance {
