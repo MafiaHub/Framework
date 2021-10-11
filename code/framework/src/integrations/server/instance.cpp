@@ -44,6 +44,8 @@ namespace Framework::Integrations::Server {
         opts.bindPort = result["port"].as<int32_t>();
         _opts         = opts;
 
+        // TODO: Load settings from JSON file and replace InstanceOptions fields.
+
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(opts.modSlug);
 
@@ -176,7 +178,7 @@ namespace Framework::Integrations::Server {
                 _worldEngine->Update();
             }
 
-            if (_firebaseWrapper && _opts.firebaseEnabled) {
+            if (_firebaseWrapper && _opts.firebaseEnabled && _opts.bindPublicServer) {
                 _masterlistSync->Update(_firebaseWrapper.get());
             }
 

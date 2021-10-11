@@ -35,6 +35,7 @@ namespace Framework::Integrations::Server {
         std::string bindMapName;
         int32_t bindPort;
         std::string bindPassword;
+        bool bindPublicServer = false;
 
         int32_t maxPlayers;
         std::string httpServeDir;
