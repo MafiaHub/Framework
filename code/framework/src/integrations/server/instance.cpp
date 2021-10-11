@@ -14,9 +14,10 @@
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
-        _scriptingEngine  = new Scripting::Engine;
-        _networkingEngine = new Networking::Engine;
-        _webServer        = new HTTP::Webserver;
+        _scriptingEngine  = std::make_unique<Scripting::Engine>();
+        _networkingEngine = std::make_unique<Networking::Engine>();
+        _webServer        = std::make_unique<HTTP::Webserver>();
+        _worldEngine      = std::make_unique<World::Engine>();
     }
 
     Instance::~Instance() {
@@ -26,10 +27,8 @@ namespace Framework::Integrations::Server {
     ServerError Instance::Init(InstanceOptions &opts) {
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(opts.modSlug, "My super multiplayer server");
-        options.add_options("", {
-            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))},
-            {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)}
-        });
+        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))},
+                                    {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)}});
 
         // Try to parse and return if anything wrong happened
         auto result = options.parse(opts.argc, opts.argv);
@@ -37,7 +36,7 @@ namespace Framework::Integrations::Server {
         // Finally apply back to the structure that is used everywhere the settings from the parser
         opts.bindHost = result["host"].as<std::string>();
         opts.bindPort = result["port"].as<int32_t>();
-        _opts = opts;
+        _opts         = opts;
 
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(opts.modSlug);
@@ -58,6 +57,12 @@ namespace Framework::Integrations::Server {
         if (!_networkingEngine->Init(opts.bindPort, opts.bindHost, opts.maxPlayers, opts.bindPassword)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
+        }
+
+        // Initialize the world
+        if (_worldEngine->Init() != World::EngineError::ENGINE_NONE) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
+            return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
         // Register the default endpoints
@@ -105,6 +110,10 @@ namespace Framework::Integrations::Server {
             _webServer->Shutdown();
         }
 
+        if (_worldEngine) {
+            _worldEngine->Shutdown();
+        }
+
         // Detach signal handlers
         sig_detach(SIGINT, sig_slot(this, &Instance::OnSignal));
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
@@ -123,6 +132,12 @@ namespace Framework::Integrations::Server {
             if (_scriptingEngine) {
                 _scriptingEngine->Update();
             }
+
+            if (_worldEngine) {
+                _worldEngine->Update();
+            }
+
+            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(_opts.tickInterval);
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));

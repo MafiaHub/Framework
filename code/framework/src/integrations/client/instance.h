@@ -12,13 +12,14 @@
 
 #include <external/discord/wrapper.h>
 #include <graphics/renderer.h>
+#include <memory>
 
 namespace Framework::Integrations::Client {
     struct InstanceOptions {
         int64_t discordAppId = 0;
-        bool usePresence   = true;
-        bool useRenderer   = true;
-        bool useNetworking = true;
+        bool usePresence     = true;
+        bool useRenderer     = true;
+        bool useNetworking   = true;
 
         Graphics::RendererConfiguration rendererOptions = {};
     };
@@ -28,12 +29,11 @@ namespace Framework::Integrations::Client {
         bool _initialized = false;
         InstanceOptions _opts;
 
-        External::Discord::Wrapper *_presence;
-        Graphics::Renderer *_renderer;
+        std::unique_ptr<External::Discord::Wrapper> _presence;
+        std::unique_ptr<Graphics::Renderer> _renderer;
 
       public:
         Instance();
-        ~Instance();
 
         ClientError Init(InstanceOptions &);
         ClientError Shutdown();
@@ -46,11 +46,11 @@ namespace Framework::Integrations::Client {
         }
 
         External::Discord::Wrapper *GetPresence() const {
-            return _presence;
+            return _presence.get();
         }
 
         Graphics::Renderer *GetRenderer() const {
-            return _renderer;
+            return _renderer.get();
         }
     };
 } // namespace Framework::Integrations::Client

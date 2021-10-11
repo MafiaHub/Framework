@@ -12,17 +12,8 @@
 
 namespace Framework::Integrations::Client {
     Instance::Instance() {
-        _presence = new External::Discord::Wrapper;
-        _renderer = new Graphics::Renderer;
-    }
-
-    Instance::~Instance() {
-        if (_presence) {
-            delete _presence;
-        }
-        if (_renderer) {
-            delete _renderer;
-        }
+        _presence = std::make_unique<External::Discord::Wrapper>();
+        _renderer = std::make_unique<Graphics::Renderer>();
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {

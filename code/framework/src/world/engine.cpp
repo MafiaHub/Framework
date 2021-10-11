@@ -12,7 +12,7 @@
 
 namespace Framework::World {
     EngineError Engine::Init() {
-        _world = new flecs::world();
+        _world = std::make_unique<flecs::world>();
 
         // Register a base module
         _world->import<Modules::Base>();
@@ -21,12 +21,10 @@ namespace Framework::World {
     }
 
     EngineError Engine::Shutdown() {
-        delete _world;
-        _world = nullptr;
         return EngineError::ENGINE_NONE;
     }
 
-    void Engine::Update(float dt) {
-        _world->progress(dt);
+    void Engine::Update() {
+        _world->progress();
     }
 } // namespace Framework::World

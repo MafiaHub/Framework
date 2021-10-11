@@ -11,21 +11,22 @@
 #include "errors.h"
 
 #include <flecs/flecs.h>
+#include <memory>
 
 namespace Framework::World {
     class Engine {
       private:
-        flecs::world *_world = nullptr;
+        std::unique_ptr<flecs::world> _world;
 
       public:
         EngineError Init();
 
         EngineError Shutdown();
 
-        void Update(float dt = 0.0f);
+        void Update();
 
         flecs::world *GetWorld() {
-            return _world;
+            return _world.get();
         }
     };
 } // namespace Framework::World

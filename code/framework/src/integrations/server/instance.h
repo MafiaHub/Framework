@@ -10,13 +10,15 @@
 
 #include "errors.h"
 #include "networking/engine.h"
+#include "world/engine.h"
 
 #include <chrono>
 #include <http/webserver.h>
 #include <logging/logger.h>
+#include <memory>
 #include <scripting/engine.h>
-#include <string>
 #include <sig.h>
+#include <string>
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
@@ -30,6 +32,7 @@ namespace Framework::Integrations::Server {
         int32_t maxPlayers;
         std::string httpServeDir;
         bool enableSignals;
+        uint32_t tickInterval = 3334;
 
         int argc;
         char **argv;
@@ -42,9 +45,10 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        Scripting::Engine *_scriptingEngine;
-        Networking::Engine *_networkingEngine;
-        HTTP::Webserver *_webServer;
+        std::unique_ptr<Scripting::Engine> _scriptingEngine;
+        std::unique_ptr<Networking::Engine> _networkingEngine;
+        std::unique_ptr<HTTP::Webserver> _webServer;
+        std::unique_ptr<World::Engine> _worldEngine;
 
       public:
         Instance();
@@ -66,15 +70,15 @@ namespace Framework::Integrations::Server {
         }
 
         Scripting::Engine *GetScriptingEngine() const {
-            return _scriptingEngine;
+            return _scriptingEngine.get();
         }
 
         Networking::Engine *GetNetworkingEngine() const {
-            return _networkingEngine;
+            return _networkingEngine.get();
         }
 
         HTTP::Webserver *GetWebserver() const {
-            return _webServer;
+            return _webServer.get();
         }
     };
 } // namespace Framework::Integrations::Server
