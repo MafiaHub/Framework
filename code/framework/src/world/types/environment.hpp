@@ -14,21 +14,20 @@
 #include <flecs/flecs.h>
 
 namespace Framework::World::Archetypes {
-    class EnvFactory {
+    class EnvironmentFactory {
       private:
         flecs::world *_world = nullptr;
-        Modules::Network::Streamable::Events _events;
 
       public:
-        EnvFactory(flecs::world *world, Modules::Network::Streamable::Events &&events): _world(world), _events(events) {}
+        EnvironmentFactory(flecs::world *world): _world(world) {}
 
         template <typename... Args>
-        inline flecs::entity Create(Args &&...args) {
+        inline flecs::entity CreateWeather(Modules::Network::Streamable::Events &&events, Args &&...args) {
             auto e = _world->entity<Args...>(std::forward<Args>(args)...);
 
             e.add<Modules::Base::Environment>();
             auto streamable    = e.get_mut<Modules::Network::Streamable>();
-            streamable->events = _events;
+            streamable->events = events;
             streamable->alwaysVisible = true;
             return e;
         }

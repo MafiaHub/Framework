@@ -124,8 +124,8 @@ namespace Framework::Integrations::Server {
             return true;
         };
 
-        auto envFactory = World::Archetypes::EnvFactory(_worldEngine->GetWorld(), std::move(weatherEvents));
-        _weatherManager = envFactory.Create();
+        auto envFactory = World::Archetypes::EnvironmentFactory(_worldEngine->GetWorld());
+        _weatherManager = envFactory.CreateWeather(std::move(weatherEvents));
     }
 
     ServerError Instance::Shutdown() {
