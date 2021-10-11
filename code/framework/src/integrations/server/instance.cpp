@@ -120,7 +120,7 @@ namespace Framework::Integrations::Server {
             auto weather = _weatherManager.get<World::Modules::Base::Environment>();
             Framework::Networking::Messages::WeatherUpdate msg;
             msg.FromParameters(weather->timeHours, false, "");
-            _networkingEngine->GetNetworkServer()->Send(msg);
+            _networkingEngine->GetNetworkServer()->Send(msg, g);
             return true;
         };
 
