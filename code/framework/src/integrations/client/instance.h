@@ -11,6 +11,7 @@
 #include "errors.h"
 
 #include <external/discord/wrapper.h>
+#include <functional>
 #include <graphics/renderer.h>
 #include <memory>
 
@@ -34,12 +35,17 @@ namespace Framework::Integrations::Client {
 
       public:
         Instance();
+        ~Instance() = default;
 
         ClientError Init(InstanceOptions &);
         ClientError Shutdown();
 
         void Render();
         void Update();
+
+        virtual bool PostInit()    = 0;
+        virtual bool PreShutdown() = 0;
+        virtual void PostUpdate()  = 0;
 
         bool IsInitialized() const {
             return _initialized;

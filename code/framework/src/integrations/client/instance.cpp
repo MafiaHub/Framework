@@ -31,12 +31,16 @@ namespace Framework::Integrations::Client {
             }
         }
 
-        Framework::Logging::GetLogger("Application")->debug("Initialize success");
+        PostInit();
+
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Initialize success");
         _initialized = true;
         return ClientError::CLIENT_NONE;
     }
 
     ClientError Instance::Shutdown() {
+        PreShutdown();
+
         if (_renderer && _renderer->IsInitialized()) {
             _renderer->Shutdown();
         }
@@ -52,6 +56,8 @@ namespace Framework::Integrations::Client {
         if (_presence && _presence->IsInitialized()) {
             _presence->Update();
         }
+
+        PostUpdate();
     }
 
     void Instance::Render() {
