@@ -77,7 +77,6 @@ Ensure you have the cmake tools installed in your copy of Visual Studio first.
 Open your newly cloned Framework repository folder in Visual Studio and it will automagically set up everything for you!
 
 Things to note:
-- `code/projects` folder is hidden by default as it's ignored by Git, in Solution Explorer, enable **Show All Files** option to see your project files.
 - Changes in your project's cmake will not be auto-detected, cmake will only reload config on build, otherwise you can do it yourself in the Projects section in main menu.
 - Visual Studio 2019 embeds an old and unsupported version of ClangFormat, we highly recommend you to install [LLVM tools](https://releases.llvm.org/download.html) and set up a custom ClangFormat executable in VS's `Tools > Options > Text Editor > C/C++ > Code Style > Formatting > Use custom clang-format.exe file` property.
 
@@ -90,8 +89,7 @@ The guide on how to set up the project files for CLion is available [here](.gith
 Multi-player modifications are cloned into the `code/projects` directory and are automatically picked up by the framework. We use this approach so that we can easily manage the projects and their dependencies, perform mass changes and general maintenance during the development.
 
 ```sh
-# Create and navigate to folder
-mkdir -p code/projects
+# Navigate to projects folder
 cd code/projects
 
 # Clone a MP repo that uses the framework

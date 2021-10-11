@@ -28,7 +28,8 @@ CTestTestfile.cmake
 _deps
 cmake-build*
 
-code/projects
+code/projects/*
+!code/projects/.gitkeep
 
 vendors/cef/lib/osx
 
