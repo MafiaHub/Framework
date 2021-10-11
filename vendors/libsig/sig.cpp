@@ -9,11 +9,7 @@
 
 #include <map>
 #include <string.h>
-#ifndef WIN32
-#include <sys/signal.h>
-#else
 #include <csignal>
-#endif
 #include <vector>
 
 enum sig_reserved_context_id { kSigReservedContextId_Default = 0, kSigReservedContextId_Sys = 1 };
