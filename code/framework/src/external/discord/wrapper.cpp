@@ -22,6 +22,7 @@ namespace Framework::External::Discord {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
         });
 
+        _initialized = true;
         return DiscordError::DISCORD_NONE;
     }
 
@@ -31,6 +32,7 @@ namespace Framework::External::Discord {
         }
 
         _instance->UserManager().OnCurrentUserUpdate.DisconnectAll();
+        _initialized = false;
 
         return DiscordError::DISCORD_NONE;
     }

@@ -11,20 +11,25 @@
 #include "errors.h"
 
 #include <discord.h>
-#include <string>
 #include <functional>
+#include <string>
 
 namespace Framework::External::Discord {
     class Wrapper final {
       private:
+        bool _initialized = false;
         discord::User _user;
         discord::Core *_instance;
 
       public:
         using DiscordLoginProc = std::function<void(const std::string &token)>;
-        Wrapper() = default;
+        Wrapper()              = default;
         DiscordError Init(int64_t id);
         DiscordError Shutdown();
+
+        bool IsInitialized() const {
+            return _initialized;
+        }
 
         DiscordError Update();
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,

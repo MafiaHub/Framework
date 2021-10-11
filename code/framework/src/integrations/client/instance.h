@@ -15,6 +15,7 @@
 
 namespace Framework::Integrations::Client {
     struct InstanceOptions {
+        int64_t discordAppId = 0;
         bool usePresence   = true;
         bool useRenderer   = true;
         bool useNetworking = true;

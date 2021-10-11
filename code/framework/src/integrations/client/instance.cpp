@@ -17,16 +17,20 @@ namespace Framework::Integrations::Client {
     }
 
     Instance::~Instance() {
-        delete _presence;
-        delete _renderer;
+        if (_presence) {
+            delete _presence;
+        }
+        if (_renderer) {
+            delete _renderer;
+        }
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
         if (opts.usePresence) {
-            if (_presence) {
-                _presence->Init(763114144454672444);
+            if (_presence && opts.discordAppId > 0) {
+                _presence->Init(opts.discordAppId);
             }
         }
 
@@ -42,11 +46,11 @@ namespace Framework::Integrations::Client {
     }
 
     ClientError Instance::Shutdown() {
-        if (_renderer) {
+        if (_renderer && _renderer->IsInitialized()) {
             _renderer->Shutdown();
         }
 
-        if (_presence) {
+        if (_presence && _presence->IsInitialized()) {
             _presence->Shutdown();
         }
 
@@ -54,13 +58,13 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::Update() {
-        if (_presence) {
+        if (_presence && _presence->IsInitialized()) {
             _presence->Update();
         }
     }
 
     void Instance::Render() {
-        if (_renderer) {
+        if (_renderer && _renderer->IsInitialized()) {
             _renderer->Update();
         }
     }
