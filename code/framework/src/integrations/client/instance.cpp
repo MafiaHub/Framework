@@ -16,6 +16,11 @@ namespace Framework::Integrations::Client {
         _renderer = new Graphics::Renderer;
     }
 
+    Instance::~Instance() {
+        delete _presence;
+        delete _renderer;
+    }
+
     ClientError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
@@ -44,6 +49,8 @@ namespace Framework::Integrations::Client {
         if (_presence) {
             _presence->Shutdown();
         }
+
+        return ClientError::CLIENT_NONE;
     }
 
     void Instance::Update() {
