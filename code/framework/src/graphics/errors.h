@@ -8,6 +8,6 @@
 
 #pragma once
 
-namespace Framework::GUI {
-    enum class RendererError { RENDERER_NONE, RENDERER_UNKNOWN_API, RENDERER_ALREADY_INITIALIZED, RENDERER_NOT_INITIALIZED };
+namespace Framework::Graphics {
+    enum class RendererError { RENDERER_NONE, RENDERER_UNKNOWN_BACKEND, RENDERER_ALREADY_INITIALIZED, RENDERER_NOT_INITIALIZED };
 }

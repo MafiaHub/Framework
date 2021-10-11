@@ -9,7 +9,7 @@
 #define ID3D11DeviceContext void
 #endif
 
-namespace Framework::GUI {
+namespace Framework::Graphics {
     class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext*> {
       public:
         virtual bool Init(ID3D11Device *, ID3D11DeviceContext *) override;

@@ -52,7 +52,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/external/cef/render_handler.cpp
         src/external/cef/worker.hpp
 
-        src/gui/renderer.cpp
+        src/graphics/renderer.cpp
         src/gui/api/cef.cpp
 
         src/networking/network_client.cpp
@@ -65,8 +65,8 @@ set(FRAMEWORK_CLIENT_SRC
 # Append the platform-dependent files to the related lists
 if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC 
-        src/gui/backend/d3d9.cpp
-        src/gui/backend/d3d11.cpp
+        src/graphics/backend/d3d9.cpp
+        src/graphics/backend/d3d11.cpp
         src/utils/hashing.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp

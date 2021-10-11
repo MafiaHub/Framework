@@ -8,18 +8,14 @@
 
 #pragma once
 
-#include "api/api.h"
-#include "backend/d3d9.h"
 #include "backend/d3d11.h"
+#include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
 
-namespace Framework::GUI {
+namespace Framework::Graphics {
     struct RendererConfiguration {
-        RendererBackend backend; 
-        bool cef = false;
-        bool imgui = false;
-        bool ultralight = false;
+        RendererBackend backend;
     };
 
     class Renderer {
@@ -28,13 +24,8 @@ namespace Framework::GUI {
         RendererState _state;
         RendererBackend _backend;
 
-        API _cefApi;
-        API _imguiApi;
-        API _ultralightApi;
-
         D3D9Backend *_d3d9Backend;
         D3D11Backend *_d3d11Backend;
-
 
         bool _initialized = false;
 
@@ -51,7 +42,7 @@ namespace Framework::GUI {
             return _state;
         }
 
-        D3D9Backend* GetD3D9Backend() const {
+        D3D9Backend *GetD3D9Backend() const {
             return _d3d9Backend;
         }
 
@@ -63,4 +54,4 @@ namespace Framework::GUI {
             return _initialized;
         }
     };
-} // namespace Framework::GUI
+} // namespace Framework::Graphics

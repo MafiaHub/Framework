@@ -8,14 +8,13 @@
 
 #include "renderer.h"
 
-namespace Framework::GUI {
+namespace Framework::Graphics {
     RendererError Renderer::Init(RendererConfiguration config) {
         if (_initialized) {
             return RendererError::RENDERER_ALREADY_INITIALIZED;
         }
 
         _config = config;
-        // TODO: handle APIs
 
         if (config.backend == RendererBackend::BACKEND_D3D_11) {
             _d3d11Backend = new D3D11Backend;

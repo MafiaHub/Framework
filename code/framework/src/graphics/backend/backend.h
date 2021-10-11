@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Framework::GUI {
+namespace Framework::Graphics {
     template <typename TDevice, typename TContext>
     class Backend {
       protected:

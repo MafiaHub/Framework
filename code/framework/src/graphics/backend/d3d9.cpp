@@ -1,6 +1,6 @@
 #include "d3d9.h"
 
-namespace Framework::GUI {
+namespace Framework::Graphics {
     bool D3D9Backend::Init(IDirect3D9 *device, IDirect3D9 *_nothing) {
         _device = device;
 
