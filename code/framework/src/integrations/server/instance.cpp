@@ -89,6 +89,9 @@ namespace Framework::Integrations::Server {
         // Initialize built in managers
         InitManagers();
 
+        // Initialize mod subsystems
+        PostInit();
+
         // Init the signals handlers if enabled
         if (opts.enableSignals) {
             sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
@@ -175,6 +178,8 @@ namespace Framework::Integrations::Server {
                 _masterlistSync->Update(_firebaseWrapper.get());
             }
 
+            PostUpdate();
+
             _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(_opts.tickInterval);
         }
 
@@ -193,6 +198,8 @@ namespace Framework::Integrations::Server {
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Received shutdown signal. In progress...");
+
+        PreShutdown();
         Shutdown();
     }
 } // namespace Framework::Integrations::Server

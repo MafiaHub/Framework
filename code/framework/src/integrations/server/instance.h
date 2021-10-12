@@ -84,6 +84,12 @@ namespace Framework::Integrations::Server {
         ServerError Init(InstanceOptions &);
         ServerError Shutdown();
 
+        virtual void PostInit() {}
+
+        virtual void PostUpdate() {}
+
+        virtual void PreShutdown() {}
+
         void Update();
 
         void Run();
