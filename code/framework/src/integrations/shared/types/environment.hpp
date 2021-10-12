@@ -12,6 +12,7 @@
 #include "../messages/weather_update.h"
 #include "world/modules/base.hpp"
 #include "world/modules/network.hpp"
+#include "../modules/mod.hpp"
 
 #include <flecs/flecs.h>
 
@@ -28,7 +29,9 @@ namespace Framework::Integrations::Shared::Archetypes {
         inline flecs::entity CreateWeather(Args &&...args) {
             auto e = _world->entity<Args...>(std::forward<Args>(args)...);
 
-            e.add<Shared::Modules::Mod::Environment>();
+            auto weatherData = e.get_mut<Shared::Modules::Mod::Environment>();
+            weatherData->timeHours = 12.0f;
+
             auto streamable           = e.get_mut<World::Modules::Network::Streamable>();
             streamable->alwaysVisible = true;
 
