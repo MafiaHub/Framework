@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "base.hpp"
-#include "network.hpp"
 #include "utils/time.h"
+#include "world/modules/base.hpp"
+#include "world/modules/network.hpp"
 
 #include <flecs/addons/timer.h>
 #include <flecs/flecs.h>
@@ -19,7 +19,7 @@
 #include <slikenet/types.h>
 #include <unordered_map>
 
-namespace Framework::World::Modules {
+namespace Framework::Integrations::Shared::Modules {
     struct Server {
         flecs::entity GetStreamer() {
             return _streamEntities;
@@ -27,6 +27,8 @@ namespace Framework::World::Modules {
 
         Server(flecs::world &world) {
             world.module<Server>();
+            using namespace Framework::World;
+            using namespace Framework::World::Modules;
 
             auto allStreamableEntities = world.query_builder<Base::Transform, Network::Streamable>().term<Network::Streamer>().oper(flecs::Not).build();
 
@@ -54,7 +56,7 @@ namespace Framework::World::Modules {
                                               const auto id      = e.id();
                                               const auto map_it  = s[i].entities.find(id);
                                               if (map_it != s[i].entities.end()) {
-                                                  // If we can't stream an entity anymore, despawn it
+                                                  // If we can't stream an entity anymore, de-spawn it
                                                   if (!canSend) {
                                                       s[i].entities.erase(map_it);
                                                       if (otherS.events.despawnProc)
@@ -90,4 +92,4 @@ namespace Framework::World::Modules {
 
         flecs::entity _streamEntities;
     };
-} // namespace Framework::World::Modules
+} // namespace Framework::Integrations::Shared::Modules

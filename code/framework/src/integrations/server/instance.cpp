@@ -8,9 +8,10 @@
 
 #include "instance.h"
 
+#include "../shared/modules/server.hpp"
+#include "../shared/modules/mod.hpp"
+#include "../shared/types/environment.hpp"
 #include "integrations/shared/messages/weather_update.h"
-#include "world/modules/server.hpp"
-#include "world/types/environment.hpp"
 
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
@@ -119,23 +120,15 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitModules() {
         if (_worldEngine) {
-            _worldEngine->GetWorld()->import<World::Modules::Server>();
+            _worldEngine->GetWorld()->import<Integrations::Shared::Modules::Mod>();
+            _worldEngine->GetWorld()->import<Integrations::Shared::Modules::Server>();
         }
     }
 
     void Instance::InitManagers() {
         // weather
-        auto weatherEvents       = World::Modules::Network::Streamable::Events {};
-        weatherEvents.updateProc = [this](SLNet::RakNetGUID g, flecs::entity &e) {
-            auto weather = _weatherManager.get<World::Modules::Base::Environment>();
-            Framework::Integrations::Shared::Messages::WeatherUpdate msg;
-            msg.FromParameters(weather->timeHours, false, "");
-            _networkingEngine->GetNetworkServer()->Send(msg, g);
-            return true;
-        };
-
-        auto envFactory = World::Archetypes::EnvironmentFactory(_worldEngine->GetWorld());
-        _weatherManager = envFactory.CreateWeather(std::move(weatherEvents));
+        auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine.get());
+        _weatherManager = envFactory.CreateWeather();
     }
 
     ServerError Instance::Shutdown() {
