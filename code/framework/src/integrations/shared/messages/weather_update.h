@@ -8,13 +8,13 @@
 
 #pragma once
 
-#include "message.h"
+#include "messages.h"
 
 #include <BitStream.h>
 #include <string>
 
-namespace Framework::Networking::Messages {
-    class WeatherUpdate final: public IMessage {
+namespace Framework::Integrations::Shared::Messages {
+    class WeatherUpdate final: public Framework::Networking::Messages::IMessage {
       private:
         SLNet::RakString _weatherPreset;
         float _time        = 0.0f;
@@ -66,4 +66,4 @@ namespace Framework::Networking::Messages {
             return _updatePreset;
         }
     };
-} // namespace Framework::Networking::Messages
+} // namespace Framework::Integrations::Shared::Messages

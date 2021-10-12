@@ -8,7 +8,7 @@
 
 #include "instance.h"
 
-#include "networking/messages/weather_update.h"
+#include "integrations/shared/messages/weather_update.h"
 #include "world/modules/server.hpp"
 #include "world/types/environment.hpp"
 
@@ -128,7 +128,7 @@ namespace Framework::Integrations::Server {
         auto weatherEvents       = World::Modules::Network::Streamable::Events {};
         weatherEvents.updateProc = [this](SLNet::RakNetGUID g, flecs::entity &e) {
             auto weather = _weatherManager.get<World::Modules::Base::Environment>();
-            Framework::Networking::Messages::WeatherUpdate msg;
+            Framework::Integrations::Shared::Messages::WeatherUpdate msg;
             msg.FromParameters(weather->timeHours, false, "");
             _networkingEngine->GetNetworkServer()->Send(msg, g);
             return true;
