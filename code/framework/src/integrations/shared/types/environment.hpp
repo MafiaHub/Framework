@@ -28,13 +28,13 @@ namespace Framework::Integrations::Shared::Archetypes {
         inline flecs::entity CreateWeather(Args &&...args) {
             auto e = _world->entity<Args...>(std::forward<Args>(args)...);
 
-            e.add<World::Modules::Base::Environment>();
+            e.add<Shared::Modules::Mod::Environment>();
             auto streamable           = e.get_mut<World::Modules::Network::Streamable>();
             streamable->alwaysVisible = true;
 
             auto weatherEvents       = World::Modules::Network::Streamable::Events {};
             weatherEvents.updateProc = [this](SLNet::RakNetGUID g, flecs::entity &e) {
-                auto weather = e.get<World::Modules::Base::Environment>();
+                auto weather = e.get<Shared::Modules::Mod::Environment>();
                 Framework::Integrations::Shared::Messages::WeatherUpdate msg;
                 msg.FromParameters(weather->timeHours, false, "");
                 _networkingEngine->GetNetworkServer()->Send(msg, g);

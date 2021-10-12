@@ -25,17 +25,11 @@ namespace Framework::World::Modules {
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
         };
 
-        struct Environment {
-            flecs::string weatherName;
-            float timeHours;
-        };
-
         Base(flecs::world &world) {
             world.module<Base>();
 
             world.component<Transform>();
             world.component<Frame>();
-            world.component<Environment>();
         }
     };
 } // namespace Framework::World::Modules
