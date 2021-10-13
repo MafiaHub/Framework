@@ -7,6 +7,7 @@
  */
 
 #include "instance.h"
+#include "../shared/modules/mod.hpp"
 
 #include <logging/logger.h>
 
@@ -34,6 +35,8 @@ namespace Framework::Integrations::Client {
 
         if (_worldEngine) {
             _worldEngine->Init();
+
+            _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
         }
 
         PostInit();

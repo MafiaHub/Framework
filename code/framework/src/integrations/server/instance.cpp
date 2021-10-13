@@ -131,7 +131,7 @@ namespace Framework::Integrations::Server {
     void Instance::InitManagers() {
         // weather
         auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine.get());
-        _weatherManager = envFactory.CreateWeather();
+        _weatherManager = envFactory.CreateWeather("WeatherManager");
     }
 
     ServerError Instance::Shutdown() {
