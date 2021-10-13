@@ -30,7 +30,7 @@ namespace Framework::Integrations::Shared::Modules {
             using namespace Framework::World;
             using namespace Framework::World::Modules;
 
-            auto allStreamableEntities = world.query_builder<Base::Transform, Network::Streamable>().term<Network::Streamer>().oper(flecs::Not).build();
+            auto allStreamableEntities = world.query_builder<Base::Transform, Network::Streamable>().build();
 
             auto isVisible = [](Base::Transform &lhsTr, Network::Streamer &streamer, Network::Streamable &lhsS, Base::Transform &rhsTr, Network::Streamable rhsS) -> bool {
                 if (rhsS.alwaysVisible)
@@ -52,6 +52,10 @@ namespace Framework::Integrations::Shared::Modules {
                                   .iter([allStreamableEntities, isVisible](flecs::iter it, Base::Transform *tr, Network::Streamer *s, Network::Streamable *rs) {
                                       for (size_t i = 0; i < it.count(); i++) {
                                           allStreamableEntities.each([=](flecs::entity e, Base::Transform &otherTr, Network::Streamable &otherS) {
+                                              if (e == it.entity(i)) {
+                                                  // Skip ourselves, we handle such update separately
+                                                  return;
+                                              }
                                               const auto canSend = isVisible(tr[i], s[i], rs[i], otherTr, otherS);
                                               const auto id      = e.id();
                                               const auto map_it  = s[i].entities.find(id);
