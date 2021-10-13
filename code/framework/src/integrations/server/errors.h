@@ -11,6 +11,7 @@
 namespace Framework::Integrations::Server {
     enum class ServerError {
         SERVER_NONE,
+        SERVER_CONFIG_PARSE_ERROR,
         SERVER_ARGUMENT_PARSE_ERROR,
         SERVER_WEBSERVER_INIT_FAILED,
         SERVER_NETWORKING_INIT_FAILED,

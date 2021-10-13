@@ -8,8 +8,8 @@
 
 #include "instance.h"
 
-#include "../shared/modules/server.hpp"
 #include "../shared/modules/mod.hpp"
+#include "../shared/modules/server.hpp"
 #include "../shared/types/environment.hpp"
 #include "integrations/shared/messages/weather_update.h"
 
@@ -25,6 +25,7 @@ namespace Framework::Integrations::Server {
         _worldEngine      = std::make_unique<World::Engine>();
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _masterlistSync   = std::make_unique<Masterlist>(this);
+        _fileConfig       = std::make_unique<Utils::Config>();
     }
 
     Instance::~Instance() {
@@ -32,6 +33,11 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Init(InstanceOptions &opts) {
+        if (!LoadConfigFromJSON()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to parse JSON config file");
+            return ServerError::SERVER_CONFIG_PARSE_ERROR;
+        }
+
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(opts.modSlug, opts.modHelpText);
         options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))},
@@ -44,8 +50,6 @@ namespace Framework::Integrations::Server {
         opts.bindHost = result["host"].as<std::string>();
         opts.bindPort = result["port"].as<int32_t>();
         _opts         = opts;
-
-        // TODO: Load settings from JSON file and replace InstanceOptions fields.
 
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(opts.modSlug);
@@ -132,6 +136,40 @@ namespace Framework::Integrations::Server {
         // weather
         auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine.get());
         _weatherManager = envFactory.CreateWeather("WeatherManager");
+    }
+
+    bool Instance::LoadConfigFromJSON() {
+        auto configHandle = cppfs::fs::open(_opts.modConfigFile);
+
+        if (!configHandle.exists()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("JSON config file is not present, skipping load...");
+            return true;
+        }
+
+        auto configData = configHandle.readFile();
+
+        try {
+            // Parse our config data first
+            _fileConfig->Parse(configData);
+
+            if (!_fileConfig->IsParsed()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config load has failed: {}", _fileConfig->GetLastError());
+                return false;
+            }
+
+            // Retrieve fields and overwrite InstanceOptions defaults
+            _opts.bindHost      = _fileConfig->Get<std::string>("host");
+            _opts.bindName      = _fileConfig->Get<std::string>("name");
+            _opts.bindPort      = _fileConfig->Get<int>("port");
+            _opts.bindMapName   = _fileConfig->Get<std::string>("map");
+            _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
+            _opts.bindSecretKey = _fileConfig->Get<std::string>("server-token");
+        }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config has missing fields: {}", ex.what());
+            return false;
+        }
+        return true;
     }
 
     ServerError Instance::Shutdown() {

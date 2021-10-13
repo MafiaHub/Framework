@@ -13,6 +13,7 @@
 #include "masterlist.h"
 #include "networking/engine.h"
 #include "world/engine.h"
+#include "utils/config.h"
 
 #include <chrono>
 #include <http/webserver.h>
@@ -28,6 +29,7 @@ namespace Framework::Integrations::Server {
         std::string modHelpText;
         std::string modName;
         std::string modVersion;
+        std::string modConfigFile = "server.json";
 
         std::string bindName;
         std::string bindHost;
@@ -69,10 +71,12 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<World::Engine> _worldEngine;
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
         std::unique_ptr<Masterlist> _masterlistSync;
+        std::unique_ptr<Utils::Config> _fileConfig;
 
         void InitEndpoints();
         void InitModules();
         void InitManagers();
+        bool LoadConfigFromJSON();
 
         // managers
         flecs::entity _weatherManager;
