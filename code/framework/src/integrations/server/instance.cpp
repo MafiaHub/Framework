@@ -33,29 +33,35 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Init(InstanceOptions &opts) {
+        _opts = opts;
+
+        // First level is argument parser, because we might want to overwrite stuffs
+        cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
+        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))},
+                                    {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+                                    {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}});
+
+        // Try to parse and return if anything wrong happened
+        auto result = options.parse(_opts.argc, _opts.argv);
+
+        // Allow mod to specify custom JSON config file name
+        _opts.modConfigFile = result["config"].as<std::string>();
+
+        // Load JSON config if present
         if (!LoadConfigFromJSON()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to parse JSON config file");
             return ServerError::SERVER_CONFIG_PARSE_ERROR;
         }
 
-        // First level is argument parser, because we might want to overwrite stuffs
-        cxxopts::Options options(opts.modSlug, opts.modHelpText);
-        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(opts.bindPort))},
-                                    {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(opts.bindHost)}});
-
-        // Try to parse and return if anything wrong happened
-        auto result = options.parse(opts.argc, opts.argv);
-
         // Finally apply back to the structure that is used everywhere the settings from the parser
-        opts.bindHost = result["host"].as<std::string>();
-        opts.bindPort = result["port"].as<int32_t>();
-        _opts         = opts;
+        _opts.bindHost = result["host"].as<std::string>();
+        _opts.bindPort = result["port"].as<int32_t>();
 
         // Initialize the logging instance with the mod slug name
-        Logging::GetInstance()->SetLogName(opts.modSlug);
+        Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
-        if (!_webServer->Init(opts.bindHost, opts.bindPort, opts.httpServeDir)) {
+        if (!_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
@@ -67,7 +73,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize our networking engine
-        if (!_networkingEngine->Init(opts.bindPort, opts.bindHost, opts.maxPlayers, opts.bindPassword)) {
+        if (!_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }
@@ -97,17 +103,17 @@ namespace Framework::Integrations::Server {
         PostInit();
 
         // Init the signals handlers if enabled
-        if (opts.enableSignals) {
+        if (_opts.enableSignals) {
             sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
             sig_attach(SIGTERM, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
         }
 
         _alive = true;
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", opts.modName);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", opts.bindName);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", opts.bindHost);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", opts.bindPort);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", _opts.bindName);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         return ServerError::SERVER_NONE;
     }
 
