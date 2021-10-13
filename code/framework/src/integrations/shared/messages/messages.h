@@ -26,7 +26,7 @@ namespace Framework::Integrations::Shared::Messages {
 
         GAME_SYNC_WEATHER_UPDATE,
 
-        // Used by mods to define custom mod-specific messages, e.g. (MOD_SYNC_FOO = GAME_SYNC_USER_PAKET_ENUM + 1)
+        // Used by mods to define custom mod-specific messages, e.g. (MOD_SYNC_FOO = GAME_SYNC_USER_PACKET_ENUM + 1)
         GAME_SYNC_USER_PACKET_ENUM,
     };
 } // namespace Framework::Integrations::Shared::Messages

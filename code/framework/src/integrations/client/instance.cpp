@@ -7,6 +7,7 @@
  */
 
 #include "instance.h"
+
 #include "../shared/modules/mod.hpp"
 
 #include <logging/logger.h>

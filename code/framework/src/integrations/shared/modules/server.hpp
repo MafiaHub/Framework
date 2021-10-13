@@ -27,7 +27,6 @@ namespace Framework::Integrations::Shared::Modules {
 
         Server(flecs::world &world) {
             world.module<Server>();
-            using namespace Framework::World;
             using namespace Framework::World::Modules;
 
             auto allStreamableEntities = world.query_builder<Base::Transform, Network::Streamable>().build();
@@ -60,7 +59,7 @@ namespace Framework::Integrations::Shared::Modules {
                                               const auto id      = e.id();
                                               const auto map_it  = s[i].entities.find(id);
                                               if (map_it != s[i].entities.end()) {
-                                                  // If we can't stream an entity anymore, de-spawn it
+                                                  // If we can't stream an entity anymore, despawn it
                                                   if (!canSend) {
                                                       s[i].entities.erase(map_it);
                                                       if (otherS.events.despawnProc)
