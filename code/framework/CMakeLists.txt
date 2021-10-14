@@ -147,3 +147,9 @@ IF(WIN32)
     add_definitions(-D_USE_MATH_DEFINES)
     add_definitions(-DNOMINMAX)
 ENDIF()
+
+# Put framework projects in the framework folder in MSVC
+if (MSVC)
+    get_all_targets(all_targets)
+    set_target_properties(${all_targets} PROPERTIES FOLDER framework)
+endif ()
