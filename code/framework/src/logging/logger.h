@@ -76,5 +76,5 @@ namespace Framework::Logging {
 
     extern Logger *GetInstance();
 
-    extern std::shared_ptr<spdlog::logger> GetLogger(const char *name);
+    extern std::shared_ptr<spdlog::logger> GetLogger(const char *name = "default");
 } // namespace Framework::Logging

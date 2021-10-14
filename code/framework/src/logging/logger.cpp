@@ -23,7 +23,7 @@ namespace Framework::Logging {
         spdlog::init_thread_pool(10000, 4); // queue with 10K items and 4 backing threads.
     }
 
-    std::shared_ptr<spdlog::logger> Logger::Get(const char *logName) {
+    std::shared_ptr<spdlog::logger> Logger::Get(const char *logName = "default") {
         // Handle pause mode logs
         if (_loggingPaused) {
             constexpr auto suppressedLogger = "_suppressed_logger";
