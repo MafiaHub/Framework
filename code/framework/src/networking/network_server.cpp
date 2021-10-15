@@ -53,10 +53,14 @@ namespace Framework::Networking {
                 }
             } break;
 
-            case ID_DISCONNECTION_NOTIFICATION:
+            case ID_DISCONNECTION_NOTIFICATION: {
+                if (_onPlayerDisconnectCallback) {
+                    _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+                }
+            } break;
             case ID_CONNECTION_LOST: {
                 if (_onPlayerDisconnectCallback) {
-                    _onPlayerDisconnectCallback(_packet);
+                    _onPlayerDisconnectCallback(_packet, Messages::LOST);
                 }
             } break;
 
@@ -81,7 +85,12 @@ namespace Framework::Networking {
                 }
             } break;
 
-            default: Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Received unknown packet {}", _packet->data[offset]);
+            default: {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Received unknown packet {}", _packet->data[offset]);
+                if (_onPlayerDisconnectCallback) {
+                    _onPlayerDisconnectCallback(_packet, Messages::KICKED_INVALID_PACKET);
+                }
+            } break;
             }
         }
     }

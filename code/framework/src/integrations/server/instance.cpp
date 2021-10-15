@@ -9,6 +9,7 @@
 #include "instance.h"
 
 #include "../shared/modules/mod.hpp"
+#include "../shared/modules/network.hpp"
 #include "../shared/modules/server.hpp"
 #include "../shared/types/environment.hpp"
 #include "integrations/shared/messages/weather_update.h"
@@ -99,6 +100,9 @@ namespace Framework::Integrations::Server {
         // Initialize built in managers
         InitManagers();
 
+        // Initialize default messages
+        InitMessages();
+
         // Initialize mod subsystems
         PostInit();
 
@@ -133,8 +137,11 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitModules() {
         if (_worldEngine) {
-            _worldEngine->GetWorld()->import<Integrations::Shared::Modules::Mod>();
-            _worldEngine->GetWorld()->import<Integrations::Shared::Modules::Server>();
+            auto world = _worldEngine->GetWorld();
+
+            world->import<Integrations::Shared::Modules::Network>();
+            world->import<Integrations::Shared::Modules::Mod>();
+            _serverModule = world->import<Integrations::Shared::Modules::Server>();
         }
     }
 
@@ -176,6 +183,21 @@ namespace Framework::Integrations::Server {
             return false;
         }
         return true;
+    }
+
+    void Instance::InitMessages() {
+        _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
+            const auto guid = packet->guid;
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
+
+            // TODO send disconnect message
+            _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
+
+            auto e = GetServerModule()->GetEntityByGUID(guid);
+            if (e.is_valid()) {
+                e.add<Shared::Modules::Server::PendingDisconnect>();
+            }
+        });
     }
 
     ServerError Instance::Shutdown() {

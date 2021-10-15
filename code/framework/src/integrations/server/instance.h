@@ -8,12 +8,13 @@
 
 #pragma once
 
+#include "../shared/modules/server.hpp"
 #include "errors.h"
 #include "external/firebase/wrapper.h"
 #include "masterlist.h"
 #include "networking/engine.h"
-#include "world/engine.h"
 #include "utils/config.h"
+#include "world/engine.h"
 
 #include <chrono>
 #include <http/webserver.h>
@@ -76,10 +77,18 @@ namespace Framework::Integrations::Server {
         void InitEndpoints();
         void InitModules();
         void InitManagers();
+        void InitMessages();
         bool LoadConfigFromJSON();
+
+        // modules
+        flecs::entity _serverModule;
 
         // managers
         flecs::entity _weatherManager;
+
+        Shared::Modules::Server *GetServerModule() {
+            return _serverModule.get_mut<Shared::Modules::Server>();
+        }
 
       public:
         Instance();

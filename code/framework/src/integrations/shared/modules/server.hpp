@@ -10,7 +10,7 @@
 
 #include "utils/time.h"
 #include "world/modules/base.hpp"
-#include "world/modules/network.hpp"
+#include "network.hpp"
 
 #include <flecs/addons/timer.h>
 #include <flecs/flecs.h>
@@ -25,13 +25,31 @@ namespace Framework::Integrations::Shared::Modules {
             return _streamEntities;
         }
 
+        struct PendingDisconnect {};
+
+        flecs::entity GetEntityByGUID(SLNet::RakNetGUID guid) {
+            flecs::entity ourEntity;
+            _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Network::Streamer *s) {
+                for (auto i : it) {
+                    if (s[i].guid == guid) {
+                        ourEntity = it.entity(i);
+                        return;
+                    }
+                }
+            });
+
+            return ourEntity;
+        }
+
         Server(flecs::world &world) {
             world.module<Server>();
             using namespace Framework::World::Modules;
 
             auto allStreamableEntities = world.query_builder<Base::Transform, Network::Streamable>().build();
 
-            auto isVisible = [](Base::Transform &lhsTr, Network::Streamer &streamer, Network::Streamable &lhsS, Base::Transform &rhsTr, Network::Streamable rhsS) -> bool {
+            auto isVisible = [](flecs::entity &e, Base::Transform &lhsTr, Network::Streamer &streamer, Network::Streamable &lhsS, Base::Transform &rhsTr, Network::Streamable rhsS) -> bool {
+                if (e.get<PendingDisconnect>() != nullptr)
+                    return false;
                 if (rhsS.alwaysVisible)
                     return true;
                 if (!rhsS.isVisible)
@@ -42,6 +60,8 @@ namespace Framework::Integrations::Shared::Modules {
                 const auto dist = glm::distance(lhsTr.pos, rhsTr.pos);
                 return dist < streamer.range;
             };
+
+            _findAllStreamerEntities = world.query_builder<Network::Streamer>().build();
 
             float tickDelay = 7.813f;
 
@@ -55,15 +75,15 @@ namespace Framework::Integrations::Shared::Modules {
                                                   // Skip ourselves, we handle such update separately
                                                   return;
                                               }
-                                              const auto canSend = isVisible(tr[i], s[i], rs[i], otherTr, otherS);
                                               const auto id      = e.id();
+                                              const auto canSend = isVisible(e, tr[i], s[i], rs[i], otherTr, otherS);
                                               const auto map_it  = s[i].entities.find(id);
                                               if (map_it != s[i].entities.end()) {
                                                   // If we can't stream an entity anymore, despawn it
                                                   if (!canSend) {
                                                       s[i].entities.erase(map_it);
                                                       if (otherS.events.despawnProc)
-                                                          otherS.events.despawnProc(s[i].peer, e);
+                                                          otherS.events.despawnProc(s[i].guid, e);
                                                   }
 
                                                   // otherwise we do regular updates
@@ -71,7 +91,7 @@ namespace Framework::Integrations::Shared::Modules {
                                                       auto &data = map_it->second;
                                                       if (Utils::Time::GetTime() - data.lastUpdate > otherS.updateFrequency) {
                                                           if (otherS.events.updateProc)
-                                                              otherS.events.updateProc(s[i].peer, e);
+                                                              otherS.events.updateProc(s[i].guid, e);
                                                           data.lastUpdate = Utils::Time::GetTime();
                                                       }
                                                   }
@@ -79,7 +99,7 @@ namespace Framework::Integrations::Shared::Modules {
 
                                               // this is a new entity, spawn it unless user says otherwise
                                               else if (canSend && otherS.events.spawnProc) {
-                                                  if (otherS.events.spawnProc(s[i].peer, e)) {
+                                                  if (otherS.events.spawnProc(s[i].guid, e)) {
                                                       Network::Streamer::StreamData data;
                                                       data.lastUpdate   = Utils::Time::GetTime();
                                                       s[i].entities[id] = data;
@@ -88,11 +108,18 @@ namespace Framework::Integrations::Shared::Modules {
                                           });
 
                                           if (rs[i].events.selfUpdateProc)
-                                              rs[i].events.selfUpdateProc(s[i].peer, it.entity(i));
+                                              rs[i].events.selfUpdateProc(s[i].guid, it.entity(i));
                                       }
                                   });
+
+            world.system<PendingDisconnect>("RemoveDisconnectedPlayers").kind(flecs::PostUpdate).each([](flecs::entity &e, PendingDisconnect &pd) {
+                e.destruct();
+            });
         }
 
         flecs::entity _streamEntities;
+
+      private:
+        flecs::query<Network::Streamer> _findAllStreamerEntities;
     };
 } // namespace Framework::Integrations::Shared::Modules
