@@ -14,8 +14,6 @@
 
 namespace Framework::Networking {
     ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
-        _peer = SLNet::RakPeerInterface::GetInstance();
-
         SLNet::SocketDescriptor newSocketSd = SLNet::SocketDescriptor(port, host.c_str());
         if (_peer->Startup(maxPlayers, &newSocketSd, 1) != SLNet::RAKNET_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Failed to init the networking peer");

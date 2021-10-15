@@ -11,9 +11,7 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    NetworkClient::NetworkClient(): _state(PeerState::DISCONNECTED) {
-        _peer = SLNet::RakPeerInterface::GetInstance();
-    }
+    NetworkClient::NetworkClient(): NetworkPeer(), _state(PeerState::DISCONNECTED) {}
 
     NetworkClient::~NetworkClient() {
         Shutdown();
