@@ -23,10 +23,6 @@ namespace Framework::Networking {
       private:
         PeerState _state;
 
-        Messages::PacketCallback _onPlayerConnectionAcceptedCallback;
-        Messages::PacketCallback _onPlayerConnectionFinalizedCallback;
-        Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
-
       public:
         NetworkClient();
 
@@ -37,22 +33,10 @@ namespace Framework::Networking {
 
         void Update();
 
-        ClientError Connect(std::string &, int32_t, std::string &);
+        ClientError Connect(const std::string &host, int32_t port, const std::string &password = "");
 
         ClientError Disconnect();
 
         int GetPing();
-
-        void SetOnPlayerConnectionAcceptedCallback(Messages::PacketCallback callback) {
-            _onPlayerConnectionAcceptedCallback = callback;
-        }
-
-        void SetOnPlayerConnectionFinalizedCallback(Messages::PacketCallback callback) {
-            _onPlayerConnectionFinalizedCallback = callback;
-        }
-
-        void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
-            _onPlayerDisconnectedCallback = callback;
-        }
     };
 }; // namespace Framework::Networking

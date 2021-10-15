@@ -15,6 +15,8 @@ set(FRAMEWORK_SRC
         src/external/optick/wrapper.cpp
 
         src/world/engine.cpp
+
+        src/networking/network_peer.cpp
         )
 
 set(FRAMEWORK_SERVER_SRC
