@@ -9,9 +9,12 @@
 #include "network_peer.h"
 
 #include <logging/logger.h>
+#include <optick.h>
 
 namespace Framework::Networking {
     void NetworkPeer::Update() {
+        OPTICK_EVENT();
+
         if (!_peer) {
             return;
         }

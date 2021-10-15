@@ -9,7 +9,6 @@
 #include "network_client.h"
 
 #include <logging/logger.h>
-#include <optick.h>
 
 namespace Framework::Networking {
     NetworkClient::NetworkClient(): _state(PeerState::DISCONNECTED) {
@@ -71,8 +70,6 @@ namespace Framework::Networking {
     }
 
     void NetworkClient::Update() {
-        OPTICK_EVENT();
-
         if (_state != CONNECTING && _state != CONNECTED) {
             return;
         }

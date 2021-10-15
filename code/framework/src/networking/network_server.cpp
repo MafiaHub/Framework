@@ -11,7 +11,6 @@
 #include <BitStream.h>
 #include <MessageIdentifiers.h>
 #include <logging/logger.h>
-#include <optick.h>
 
 namespace Framework::Networking {
     ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
@@ -33,7 +32,6 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::Update() {
-        OPTICK_EVENT();
         NetworkPeer::Update();
     }
 
