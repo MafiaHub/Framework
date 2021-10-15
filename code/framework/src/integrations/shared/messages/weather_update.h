@@ -21,7 +21,7 @@ namespace Framework::Integrations::Shared::Messages {
         bool _updatePreset = false;
 
       public:
-        uint32_t GetMessageID() const override {
+        uint8_t GetMessageID() const override {
             return GAME_SYNC_WEATHER_UPDATE;
         }
 
@@ -31,23 +31,13 @@ namespace Framework::Integrations::Shared::Messages {
             _weatherPreset = SLNet::RakString(preset.c_str());
         }
 
-        void FromBitStream(SLNet::BitStream *stream) override {
-            stream->Read(_time);
-            stream->Read(_updatePreset);
+        void Serialize(SLNet::BitStream* bs, bool write) {
+            bs->Serialize(write, _time);
+            bs->Serialize(write, _updatePreset);
 
             if (_updatePreset) {
-                stream->Read(_weatherPreset);
+                bs->Serialize(write, _weatherPreset);
             }
-        }
-
-        SLNet::BitStream *ToBitStream(SLNet::BitStream *stream) override {
-            stream->Write(_time);
-            stream->Write(_updatePreset);
-
-            if (_weatherPreset) {
-                stream->Write(_weatherPreset);
-            }
-            return stream;
         }
 
         bool Valid() override {

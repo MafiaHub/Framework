@@ -16,7 +16,7 @@
 
 namespace Framework::Integrations::Shared::Messages {
     enum GameSyncMessages : uint32_t {
-        GAME_SYNC_PLAYER_SPAWN = Networking::Messages::GameMessages::GAME_SYNC + 1,
+        GAME_SYNC_PLAYER_SPAWN = Networking::Messages::GameMessages::GAME_NEXT_MESSAGE_ID,
         GAME_SYNC_PLAYER_DESPAWN,
         GAME_SYNC_PLAYER_SET_POSITION,
 
