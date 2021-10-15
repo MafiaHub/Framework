@@ -186,7 +186,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitMessages() {
-        /* _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
+        _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
@@ -197,7 +197,7 @@ namespace Framework::Integrations::Server {
             if (e.is_valid()) {
                 e.add<Server::Modules::Server::PendingRemoval>();
             }
-        });*/
+        });
     }
 
     ServerError Instance::Shutdown() {

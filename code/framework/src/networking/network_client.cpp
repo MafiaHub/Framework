@@ -77,6 +77,57 @@ namespace Framework::Networking {
         NetworkPeer::Update();
     }
 
+    bool NetworkClient::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
+        switch (packetID) {
+        case Messages::GAME_CONNECTION_FINALIZED: {
+            _state = CONNECTED;
+            break;
+        }
+        case ID_NO_FREE_INCOMING_CONNECTIONS: {
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::NO_FREE_SLOT);
+                return true;
+            }
+        } break;
+
+        case ID_DISCONNECTION_NOTIFICATION: {
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+                return true;
+            }
+        } break;
+
+        case ID_CONNECTION_LOST: {
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::LOST);
+                return true;
+            }
+        } break;
+
+        case ID_CONNECTION_ATTEMPT_FAILED: {
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::FAILED);
+                return true;
+            }
+        } break;
+
+        case ID_INVALID_PASSWORD: {
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::INVALID_PASSWORD);
+                return true;
+            }
+        } break;
+
+        case ID_CONNECTION_BANNED: {
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::BANNED);
+                return true;
+            }
+        } break;
+        }
+        return false;
+    }
+
     int NetworkClient::GetPing() {
         if (!_peer) {
             return 0;

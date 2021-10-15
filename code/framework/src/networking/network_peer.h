@@ -65,6 +65,7 @@ namespace Framework::Networking {
         }
 
         void Update();
+        virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
 
         void SetUnknownInternalPacketHandler(Messages::PacketCallback callback) {
             _onUnknownInternalPacketCallback = callback;

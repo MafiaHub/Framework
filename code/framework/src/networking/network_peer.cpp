@@ -30,28 +30,28 @@ namespace Framework::Networking {
 
             uint8_t packetID = _packet->data[offset];
 
-            if (packetID < ID_USER_PACKET_ENUM) {
-                if (_registeredInternalMessageCallbacks.find(packetID) != _registeredInternalMessageCallbacks.end()) {
-                    _registeredInternalMessageCallbacks[packetID](_packet);
-                    return;
-                }
-                else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown internal sync message {}", packetID);
-                    if (_onUnknownInternalPacketCallback) {
-                        _onUnknownInternalPacketCallback(_packet);
+            if (!HandlePacket(packetID, _packet)) {
+                if (packetID < ID_USER_PACKET_ENUM) {
+                    if (_registeredInternalMessageCallbacks.find(packetID) != _registeredInternalMessageCallbacks.end()) {
+                        _registeredInternalMessageCallbacks[packetID](_packet);
+                    }
+                    else {
+                        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown internal sync message {}", packetID);
+                        if (_onUnknownInternalPacketCallback) {
+                            _onUnknownInternalPacketCallback(_packet);
+                        }
                     }
                 }
-            }
-            else {
-                if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
-                    SLNet::BitStream bsIn(_packet->data + 1, _packet->length, false);
-                    _registeredMessageCallbacks[packetID](&bsIn);
-                    return;
-                }
                 else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", packetID);
-                    if (_onUnknownGamePacketCallback) {
-                        _onUnknownGamePacketCallback(_packet);
+                    if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
+                        SLNet::BitStream bsIn(_packet->data + 1, _packet->length, false);
+                        _registeredMessageCallbacks[packetID](&bsIn);
+                    }
+                    else {
+                        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", packetID);
+                        if (_onUnknownGamePacketCallback) {
+                            _onUnknownGamePacketCallback(_packet);
+                        }
                     }
                 }
             }

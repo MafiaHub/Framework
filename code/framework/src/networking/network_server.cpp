@@ -35,6 +35,24 @@ namespace Framework::Networking {
         NetworkPeer::Update();
     }
 
+    bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
+        switch (packetID) {
+        case ID_DISCONNECTION_NOTIFICATION: {
+            if (_onPlayerDisconnectCallback) {
+                _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+                return true;
+            }
+        } break;
+        case ID_CONNECTION_LOST: {
+            if (_onPlayerDisconnectCallback) {
+                _onPlayerDisconnectCallback(_packet, Messages::LOST);
+                return true;
+            }
+        } break;
+        }
+        return false;
+    }
+
     ServerError NetworkServer::Shutdown() {
         if (!_peer) {
             return SERVER_PEER_NULL;

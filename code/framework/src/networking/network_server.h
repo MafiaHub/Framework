@@ -19,12 +19,21 @@
 
 namespace Framework::Networking {
     class NetworkServer: public NetworkPeer {
+      private:
+        Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
+
       public:
         ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
         ServerError Shutdown();
 
         void Update();
 
+        bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
+
         int GetPing(SLNet::RakNetGUID guid);
+
+        void SetOnPlayerDisconnectCallback(Messages::DisconnectPacketCallback callback) {
+            _onPlayerDisconnectCallback = callback;
+        }
     };
 } // namespace Framework::Networking

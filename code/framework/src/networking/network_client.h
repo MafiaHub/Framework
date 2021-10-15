@@ -23,6 +23,8 @@ namespace Framework::Networking {
       private:
         PeerState _state;
 
+        Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
+
       public:
         NetworkClient();
 
@@ -32,11 +34,16 @@ namespace Framework::Networking {
         ClientError Shutdown();
 
         void Update();
+        bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
 
         ClientError Connect(const std::string &host, int32_t port, const std::string &password = "");
 
         ClientError Disconnect();
 
         int GetPing();
+
+        void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
+            _onPlayerDisconnectedCallback = callback;
+        }
     };
 }; // namespace Framework::Networking
