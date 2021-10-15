@@ -19,11 +19,6 @@
 
 namespace Framework::Networking {
     class NetworkServer: public NetworkPeer {
-      private:
-        Messages::PacketCallback _onPlayerDisconnectCallback;
-        Messages::PacketCallback _onPlayerHandshakeCallback;
-        Messages::PacketCallback _onNewIncomingConnection;
-
       public:
         ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
         ServerError Shutdown();
