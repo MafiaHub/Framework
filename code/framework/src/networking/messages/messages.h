@@ -10,6 +10,7 @@
 
 #include <BitStream.h>
 #include <MessageIdentifiers.h>
+#include <RakNetTypes.h>
 #include <functional>
 
 namespace Framework::Networking::Messages {
@@ -20,4 +21,13 @@ namespace Framework::Networking::Messages {
     enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
 
     enum GameMessages : uint8_t { GAME_CONNECTION_HANDSHAKE = ID_USER_PACKET_ENUM + 1, GAME_CONNECTION_FINALIZED, GAME_NEXT_MESSAGE_ID };
+
+    class IMessage {
+      public:
+        virtual uint8_t GetMessageID() const = 0;
+
+        virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
+
+        virtual bool Valid() = 0;
+    };
 } // namespace Framework::Networking::Messages
