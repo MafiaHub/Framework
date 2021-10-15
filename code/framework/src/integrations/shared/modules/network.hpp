@@ -8,7 +8,8 @@
 
 #pragma once
 
-#include "base.hpp"
+#include "world/modules/base.hpp"
+#include "logging/logger.h"
 #include "utils/time.h"
 
 #include <flecs/addons/timer.h>
@@ -18,7 +19,7 @@
 #include <slikenet/types.h>
 #include <unordered_map>
 
-namespace Framework::World::Modules {
+namespace Framework::Integrations::Shared::Modules {
     struct Network {
         struct Streamable {
             int virtualWorld        = 0;
@@ -43,7 +44,7 @@ namespace Framework::World::Modules {
             std::unordered_map<flecs::entity_t, StreamData> entities;
             float range = 100.0f;
 
-            SLNet::RakNetGUID peer = SLNet::UNASSIGNED_RAKNET_GUID;
+            SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID;
         };
 
         Network(flecs::world &world) {
@@ -53,4 +54,4 @@ namespace Framework::World::Modules {
             world.component<Streamer>();
         }
     };
-} // namespace Framework::World::Modules
+} // namespace Framework::Integrations::Shared::Modules
