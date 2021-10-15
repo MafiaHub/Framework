@@ -10,9 +10,9 @@
 
 #include "../shared/modules/mod.hpp"
 #include "../shared/modules/network.hpp"
-#include "../shared/modules/server.hpp"
 #include "../shared/types/environment.hpp"
 #include "integrations/shared/messages/weather_update.h"
+#include "modules/server.hpp"
 
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
@@ -141,7 +141,7 @@ namespace Framework::Integrations::Server {
 
             world->import<Integrations::Shared::Modules::Network>();
             world->import<Integrations::Shared::Modules::Mod>();
-            _serverModule = world->import<Integrations::Shared::Modules::Server>();
+            _serverModule = world->import<Integrations::Server::Modules::Server>();
         }
     }
 
@@ -195,7 +195,7 @@ namespace Framework::Integrations::Server {
 
             auto e = GetServerModule()->GetEntityByGUID(guid);
             if (e.is_valid()) {
-                e.add<Shared::Modules::Server::PendingDisconnect>();
+                e.add<Server::Modules::Server::PendingDisconnect>();
             }
         });
     }

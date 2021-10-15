@@ -8,10 +8,10 @@
 
 #pragma once
 
-#include "../shared/modules/server.hpp"
 #include "errors.h"
 #include "external/firebase/wrapper.h"
 #include "masterlist.h"
+#include "modules/server.hpp"
 #include "networking/engine.h"
 #include "utils/config.h"
 #include "world/engine.h"
@@ -86,8 +86,8 @@ namespace Framework::Integrations::Server {
         // managers
         flecs::entity _weatherManager;
 
-        Shared::Modules::Server *GetServerModule() {
-            return _serverModule.get_mut<Shared::Modules::Server>();
+        Server::Modules::Server *GetServerModule() {
+            return _serverModule.get_mut<Server::Modules::Server>();
         }
 
       public:

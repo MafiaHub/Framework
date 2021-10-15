@@ -10,7 +10,7 @@
 
 #include "utils/time.h"
 #include "world/modules/base.hpp"
-#include "network.hpp"
+#include "../../shared/modules/network.hpp"
 
 #include <flecs/addons/timer.h>
 #include <flecs/flecs.h>
@@ -19,7 +19,7 @@
 #include <slikenet/types.h>
 #include <unordered_map>
 
-namespace Framework::Integrations::Shared::Modules {
+namespace Framework::Integrations::Server::Modules {
     struct Server {
         flecs::entity GetStreamer() {
             return _streamEntities;
@@ -29,7 +29,7 @@ namespace Framework::Integrations::Shared::Modules {
 
         flecs::entity GetEntityByGUID(SLNet::RakNetGUID guid) {
             flecs::entity ourEntity;
-            _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Network::Streamer *s) {
+            _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Shared::Modules::Network::Streamer *s) {
                 for (auto i : it) {
                     if (s[i].guid == guid) {
                         ourEntity = it.entity(i);
@@ -44,6 +44,7 @@ namespace Framework::Integrations::Shared::Modules {
         Server(flecs::world &world) {
             world.module<Server>();
             using namespace Framework::World::Modules;
+            using namespace Shared::Modules;
 
             auto allStreamableEntities = world.query_builder<Base::Transform, Network::Streamable>().build();
 
@@ -120,6 +121,6 @@ namespace Framework::Integrations::Shared::Modules {
         flecs::entity _streamEntities;
 
       private:
-        flecs::query<Network::Streamer> _findAllStreamerEntities;
+        flecs::query<Shared::Modules::Network::Streamer> _findAllStreamerEntities;
     };
 } // namespace Framework::Integrations::Shared::Modules
