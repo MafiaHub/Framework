@@ -8,6 +8,7 @@ set(FRAMEWORK_SRC
         src/utils/time.cpp
         src/utils/job_system.cpp
         src/utils/command_processor.cpp
+        src/utils/hashing.cpp
 
         src/external/discord/wrapper.cpp
         src/external/sentry/wrapper.cpp
@@ -66,7 +67,6 @@ if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC 
         src/graphics/backend/d3d9.cpp
         src/graphics/backend/d3d11.cpp
-        src/utils/hashing.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp

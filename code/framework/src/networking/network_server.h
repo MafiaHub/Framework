@@ -23,6 +23,8 @@ namespace Framework::Networking {
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
 
       public:
+        NetworkServer::NetworkServer(): NetworkPeer() {}
+
         ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
         ServerError Shutdown();
 

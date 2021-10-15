@@ -13,34 +13,26 @@
 #include <PacketPriority.h>
 #include <RakPeerInterface.h>
 #include <unordered_map>
+#include <utils/hashing.h>
 
 namespace Framework::Networking {
     class NetworkPeer {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
+        std::unordered_map<uint32_t, Messages::MessageCallback> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::MessageCallback> _registeredMessageCallbacks;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredInternalMessageCallbacks;
         Messages::PacketCallback _onUnknownInternalPacketCallback;
         Messages::PacketCallback _onUnknownGamePacketCallback;
 
       public:
+        NetworkPeer();
+
         bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED) {
-            if (!_peer) {
-                return false;
-            }
+            PacketReliability reliability = RELIABLE_ORDERED);
 
-            SLNet::BitStream bsOut;
-            bsOut.Write(msg.GetMessageID());
-            msg.Serialize(&bsOut, true);
-
-            if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
-                return false;
-            }
-
-            return true;
-        }
+        void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
 
         template<typename T>
         void RegisterMessage(uint8_t message, std::function<void(T*)> callback) {
@@ -48,19 +40,42 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredMessageCallbacks[message] = [&](SLNet::BitStream *bs) {
+            _registeredMessageCallbacks[message] = [callback](SLNet::BitStream *bs) {
                 T msg;
                 msg.Serialize(bs, false);
                 callback(&msg);
             };
         }
 
-        void RegisterMessage(uint8_t message, Messages::PacketCallback callback) {
+        template <typename T>
+        void RegisterRPC(std::function<void(T *)> callback) {
+            T _rpc;
+
             if (callback == nullptr) {
                 return;
             }
 
-            _registeredInternalMessageCallbacks[message] = callback;
+            _registeredRPCs[_rpc.GetHashName()] = [callback](SLNet::BitStream *bs) {
+                T rpc;
+                rpc.Serialize(bs, false);
+                callback(&rpc);
+            };
+        }
+
+        template <typename T>
+        bool SendRPC(T& rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
+            PacketReliability reliability = RELIABLE_ORDERED) {
+            
+            SLNet::BitStream bs;
+            bs.Write(Messages::INTERNAL_RPC);
+            bs.Write(rpc.GetHashName());
+            rpc.Serialize(&bs, true);
+
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+                return false;
+            }
+
+            return true;
         }
 
         void Update();

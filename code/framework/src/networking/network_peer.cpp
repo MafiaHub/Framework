@@ -12,6 +12,44 @@
 #include <optick.h>
 
 namespace Framework::Networking {
+    NetworkPeer::NetworkPeer() {
+        _peer = SLNet::RakPeerInterface::GetInstance();
+
+        RegisterMessage(Messages::INTERNAL_RPC, [&](SLNet::Packet *p) {
+            SLNet::BitStream bs(p->data + 1, p->length, false);
+            uint32_t hashName;
+            bs.Read(hashName);
+
+            if (_registeredRPCs.find(hashName) != _registeredRPCs.end()) {
+                _registeredRPCs[hashName](&bs);
+            }
+        });
+    }
+
+    bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) {
+        if (!_peer) {
+            return false;
+        }
+
+        SLNet::BitStream bsOut;
+        bsOut.Write(msg.GetMessageID());
+        msg.Serialize(&bsOut, true);
+
+        if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    void NetworkPeer::RegisterMessage(uint8_t message, Messages::PacketCallback callback) {
+        if (callback == nullptr) {
+            return;
+        }
+
+        _registeredInternalMessageCallbacks[message] = callback;
+    }
+
     void NetworkPeer::Update() {
         OPTICK_EVENT();
 
@@ -31,7 +69,7 @@ namespace Framework::Networking {
             uint8_t packetID = _packet->data[offset];
 
             if (!HandlePacket(packetID, _packet)) {
-                if (packetID < ID_USER_PACKET_ENUM) {
+                if (packetID < Messages::INTERNAL_NEXT_MESSAGE_ID) {
                     if (_registeredInternalMessageCallbacks.find(packetID) != _registeredInternalMessageCallbacks.end()) {
                         _registeredInternalMessageCallbacks[packetID](_packet);
                     }
