@@ -195,7 +195,7 @@ namespace Framework::Integrations::Server {
 
             auto e = GetServerModule()->GetEntityByGUID(guid);
             if (e.is_valid()) {
-                e.add<Server::Modules::Server::PendingDisconnect>();
+                e.add<Server::Modules::Server::PendingRemoval>();
             }
         });
     }
