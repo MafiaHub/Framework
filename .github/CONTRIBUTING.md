@@ -4,8 +4,7 @@ There are many ways on how to get involved in the project:
 
 ## Report bugs
 
-If you stumble upon an issue, it would be time to describe it,
-how it did actually happen (and describe possible steps to reproduce it) or even your hints on solving it.
+If you stumble upon an issue, try to provide reproducible steps a description or a possible fix if you know how to solve it. Use the Issues page to report it or open a PR with a fix.
 
 ## Suggest new features
 

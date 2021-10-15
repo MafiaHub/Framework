@@ -9,7 +9,6 @@
 #include "engine.h"
 
 #include "modules/base.hpp"
-#include "modules/network.hpp"
 
 namespace Framework::World {
     EngineError Engine::Init() {
@@ -17,7 +16,6 @@ namespace Framework::World {
 
         // Register a base module
         _world->import<Modules::Base>();
-        _world->import<Modules::Network>();
 
         return EngineError::ENGINE_NONE;
     }

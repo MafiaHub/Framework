@@ -17,7 +17,7 @@ namespace Framework::Networking::Messages {
     using PacketCallback           = std::function<void(SLNet::Packet *)>;
     using DisconnectPacketCallback = std::function<void(SLNet::Packet *, uint32_t reason)>;
 
-    enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, BANNED, UNKNOWN };
+    enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
 
     enum GameMessages : uint8_t { GAME_CONNECTION_HANDSHAKE = ID_USER_PACKET_ENUM + 1, GAME_CONNECTION_FINALIZED, GAME_NEXT_MESSAGE_ID };
 } // namespace Framework::Networking::Messages
