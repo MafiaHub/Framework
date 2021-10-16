@@ -34,3 +34,5 @@ vendors/cef/lib/osx
 
 _external
 **/obj
+
+.gitmodules
