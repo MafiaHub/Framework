@@ -17,6 +17,8 @@ namespace Framework::World {
         // Register a base module
         _world->import<Modules::Base>();
 
+        _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
+
         return EngineError::ENGINE_NONE;
     }
 
@@ -26,5 +28,19 @@ namespace Framework::World {
 
     void Engine::Update() {
         _world->progress();
+    }
+    
+    flecs::entity Engine::GetEntityByGUID(SLNet::RakNetGUID guid) {
+        flecs::entity ourEntity;
+        _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {
+            for (auto i : it) {
+                if (s[i].guid == guid) {
+                    ourEntity = it.entity(i);
+                    return;
+                }
+            }
+        });
+
+        return ourEntity;
     }
 } // namespace Framework::World

@@ -9,10 +9,9 @@
 #include "instance.h"
 
 #include "../shared/modules/mod.hpp"
-#include "../shared/modules/network.hpp"
 #include "../shared/types/environment.hpp"
 #include "integrations/shared/messages/weather_update.h"
-#include "modules/server.hpp"
+#include "world/server.h"
 
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
@@ -23,7 +22,7 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = std::make_unique<Scripting::Engine>();
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
-        _worldEngine      = std::make_unique<World::Engine>();
+        _worldEngine      = std::make_unique<World::ServerEngine>();
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _masterlistSync   = std::make_unique<Masterlist>(this);
         _fileConfig       = std::make_unique<Utils::Config>();
@@ -139,9 +138,7 @@ namespace Framework::Integrations::Server {
         if (_worldEngine) {
             auto world = _worldEngine->GetWorld();
 
-            world->import<Integrations::Shared::Modules::Network>();
             world->import<Integrations::Shared::Modules::Mod>();
-            _serverModule = world->import<Integrations::Server::Modules::Server>();
         }
     }
 
@@ -193,9 +190,9 @@ namespace Framework::Integrations::Server {
             // TODO send disconnect message
             _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
 
-            auto e = GetServerModule()->GetEntityByGUID(guid);
+            auto e = _worldEngine->GetEntityByGUID(guid);
             if (e.is_valid()) {
-                e.add<Server::Modules::Server::PendingRemoval>();
+                e.add<World::Modules::Base::PendingRemoval>();
             }
         });
     }

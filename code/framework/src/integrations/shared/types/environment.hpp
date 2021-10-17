@@ -10,9 +10,8 @@
 
 #include "../../server/networking/engine.h"
 #include "../messages/weather_update.h"
-#include "world/modules/base.hpp"
-#include "../modules/network.hpp"
 #include "../modules/mod.hpp"
+#include "world/modules/base.hpp"
 
 #include <flecs/flecs.h>
 
@@ -31,13 +30,13 @@ namespace Framework::Integrations::Shared::Archetypes {
 
             e.add<World::Modules::Base::Transform>();
 
-            auto weatherData = e.get_mut<Shared::Modules::Mod::Environment>();
+            auto weatherData       = e.get_mut<Shared::Modules::Mod::Environment>();
             weatherData->timeHours = 12.0f;
 
-            auto streamable           = e.get_mut<Shared::Modules::Network::Streamable>();
+            auto streamable           = e.get_mut<World::Modules::Base::Streamable>();
             streamable->alwaysVisible = true;
 
-            auto weatherEvents       = Shared::Modules::Network::Streamable::Events {};
+            auto weatherEvents       = World::Modules::Base::Streamable::Events {};
             weatherEvents.updateProc = [this](SLNet::RakNetGUID g, flecs::entity &e) {
                 auto weather = e.get<Shared::Modules::Mod::Environment>();
                 Framework::Integrations::Shared::Messages::WeatherUpdate msg;
