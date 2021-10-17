@@ -11,10 +11,9 @@
 #include "errors.h"
 #include "external/firebase/wrapper.h"
 #include "masterlist.h"
-#include "modules/server.hpp"
 #include "networking/engine.h"
 #include "utils/config.h"
-#include "world/engine.h"
+#include "world/server.h"
 
 #include <chrono>
 #include <http/webserver.h>
@@ -69,7 +68,7 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Scripting::Engine> _scriptingEngine;
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
-        std::unique_ptr<World::Engine> _worldEngine;
+        std::unique_ptr<World::ServerEngine> _worldEngine;
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
         std::unique_ptr<Masterlist> _masterlistSync;
         std::unique_ptr<Utils::Config> _fileConfig;
@@ -80,15 +79,8 @@ namespace Framework::Integrations::Server {
         void InitMessages();
         bool LoadConfigFromJSON();
 
-        // modules
-        flecs::entity _serverModule;
-
         // managers
         flecs::entity _weatherManager;
-
-        Server::Modules::Server *GetServerModule() {
-            return _serverModule.get_mut<Server::Modules::Server>();
-        }
 
       public:
         Instance();

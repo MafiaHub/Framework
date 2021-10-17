@@ -9,21 +9,26 @@
 #pragma once
 
 #include "errors.h"
+#include "modules/base.hpp"
 
 #include <flecs/flecs.h>
 #include <memory>
+#include <slikenet/types.h>
 
 namespace Framework::World {
     class Engine {
-      private:
+      protected:
+        flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         std::unique_ptr<flecs::world> _world;
 
       public:
-        EngineError Init();
+        virtual EngineError Init();
 
-        EngineError Shutdown();
+        virtual EngineError Shutdown();
 
-        void Update();
+        virtual void Update();
+
+        flecs::entity GetEntityByGUID(SLNet::RakNetGUID guid);
 
         flecs::world *GetWorld() {
             return _world.get();
