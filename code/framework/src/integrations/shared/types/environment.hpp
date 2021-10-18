@@ -26,9 +26,7 @@ namespace Framework::Integrations::Shared::Archetypes {
 
         template <typename... Args>
         inline flecs::entity CreateWeather(Args &&...args) {
-            auto e = _world->entity<Args...>(std::forward<Args>(args)...);
-
-            e.add<World::Modules::Base::Transform>();
+            auto e = _world->entity().add<World::Modules::Base::Transform>();
 
             auto weatherData       = e.get_mut<Shared::Modules::Mod::Environment>();
             weatherData->timeHours = 12.0f;
