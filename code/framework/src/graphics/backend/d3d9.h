@@ -11,6 +11,7 @@
 #include "backend.h"
 
 #ifdef WIN32
+#define _WINSOCKAPI_
 #include <d3d9.h>
 #else
 #define IDirect3D9 void
