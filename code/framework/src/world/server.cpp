@@ -20,7 +20,7 @@ namespace Framework::World {
 
         auto allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
 
-        auto isVisible = [](flecs::entity &e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS, Modules::Base::Transform &rhsTr,
+        auto isVisible = [](flecs::entity e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS, Modules::Base::Transform &rhsTr,
                              Modules::Base::Streamable rhsS) -> bool {
             if (e.get<Modules::Base::PendingRemoval>() != nullptr)
                 return false;
@@ -82,7 +82,7 @@ namespace Framework::World {
         _world->system<Modules::Base::PendingRemoval>("RemoveEntities")
             .kind(flecs::PostUpdate)
             .interval(_tickDelay * 4.0f)
-            .each([](flecs::entity &e, Modules::Base::PendingRemoval &pd) {
+            .each([](flecs::entity e, Modules::Base::PendingRemoval &pd) {
                 e.destruct();
             });
 
