@@ -9,6 +9,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
+
 
 namespace Framework::Utils::Hashing {
     uint32_t CalculateCRC32(const char *data, size_t len);

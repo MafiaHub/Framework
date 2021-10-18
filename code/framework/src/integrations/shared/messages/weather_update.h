@@ -31,7 +31,7 @@ namespace Framework::Integrations::Shared::Messages {
             _weatherPreset = SLNet::RakString(preset.c_str());
         }
 
-        void Serialize(SLNet::BitStream* bs, bool write) {
+        void Serialize(SLNet::BitStream* bs, bool write) override {
             bs->Serialize(write, _time);
             bs->Serialize(write, _updatePreset);
 
