@@ -29,7 +29,7 @@ namespace Framework::World {
 
         void SetTickInterval(float ms) {
             _tickDelay = ms;
-            // todo
+            ecs_set_interval(_world->get_world(), _streamEntities.id(), ms);
         }
 
         float GetTickInterval() const {
