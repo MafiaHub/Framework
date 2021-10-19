@@ -7,6 +7,7 @@
  */
 
 #include "network_peer.h"
+#include "errors.h"
 
 #include <logging/logger.h>
 #include <optick.h>
@@ -98,5 +99,13 @@ namespace Framework::Networking {
                 }
             }
         }
+    }
+
+    const char *NetworkPeer::GetStartupResultString(uint8_t id) {
+        return StartupResultString[id];
+    }
+
+    const char *NetworkPeer::GetConnectionAttemptString(uint8_t id) {
+        return ConnectionAttemptString[id];
     }
 }

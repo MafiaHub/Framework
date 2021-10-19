@@ -21,7 +21,7 @@ namespace Framework::Networking {
         SLNet::SocketDescriptor sd;
         SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", StartupResultString[result]);
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
             return CLIENT_PEER_FAILED;
         }
         return CLIENT_NONE;
@@ -52,7 +52,7 @@ namespace Framework::Networking {
 
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", ConnectionAttemptString[result]);
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             return CLIENT_CONNECT_FAILED;
         }
 
