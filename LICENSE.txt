@@ -49,3 +49,6 @@ This codebase also depends on the following third-party libraries:
     ultralight      - https://ultralig.ht/
     flecs           - https://github.com/SanderMertens/flecs/
     fmt             - https://fmt.dev/latest/index.html
+    cxxopts         - https://github.com/jarro2783/cxxopts
+    libsig          - https://github.com/recp/libsig
+    sfd             - https://github.com/rxi/sfd

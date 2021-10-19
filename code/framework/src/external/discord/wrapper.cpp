@@ -22,6 +22,7 @@ namespace Framework::External::Discord {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
         });
 
+        _initialized = true;
         return DiscordError::DISCORD_NONE;
     }
 
@@ -31,6 +32,7 @@ namespace Framework::External::Discord {
         }
 
         _instance->UserManager().OnCurrentUserUpdate.DisconnectAll();
+        _initialized = false;
 
         return DiscordError::DISCORD_NONE;
     }
@@ -70,6 +72,15 @@ namespace Framework::External::Discord {
     }
     DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
+    }
+
+    void Wrapper::SignInWithDiscord(DiscordLoginProc proc) {
+        _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
+            if (result == discord::Result::Ok) {
+                proc(tokenData.GetAccessToken());
+            }
+            proc("");
+        });
     }
 
     discord::UserManager &Wrapper::GetUserManager() {

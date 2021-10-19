@@ -31,7 +31,7 @@ namespace Framework::External::Firebase {
         void OnAuthStateChanged(firebase::auth::Auth *) override;
 
       public:
-        FirebaseError Init(const std::string &, const std::string &, const std::string &);
+        FirebaseError Init(const std::string &projectId, const std::string &appId, const std::string &apiKey);
 
         FirebaseError SignInWithCustomToken(const std::string &);
         FirebaseError SignInWithEmailPassword(const std::string &, const std::string &);

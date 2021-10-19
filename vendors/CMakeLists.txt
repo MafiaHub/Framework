@@ -89,6 +89,12 @@ add_subdirectory(flecs)
 # Build FMT
 add_subdirectory(fmt)
 
+# Build libsig
+add_subdirectory(libsig)
+
+# Build sfd
+add_subdirectory(sfd)
+
 # Build OS specific libraries
 if (WIN32)
     add_subdirectory(minhook)
@@ -97,8 +103,3 @@ if (WIN32)
     add_subdirectory(ntdll)
 endif ()
 
-# Put vendor projects in the framework/vendors folder in MSVC
-if (MSVC)
-    get_all_targets(all_targets)
-    set_target_properties(${all_targets} PROPERTIES FOLDER framework/vendors)
-endif ()

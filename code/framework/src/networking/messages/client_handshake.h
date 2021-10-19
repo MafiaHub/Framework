@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "message.h"
+#include "messages.h"
 
 #include <BitStream.h>
 
@@ -20,7 +20,7 @@ namespace Framework::Networking::Messages {
         SLNet::RakString _playerDiscordId = "";
 
       public:
-        uint32_t GetMessageID() const override {
+        uint8_t GetMessageID() const override {
             return GAME_CONNECTION_HANDSHAKE;
         }
 
@@ -30,17 +30,10 @@ namespace Framework::Networking::Messages {
             _playerDiscordId = SLNet::RakString(playerDiscordId.c_str());
         }
 
-        void FromBitStream(SLNet::BitStream *stream) override {
-            stream->Read(_playerName);
-            stream->Read(_playerSteamId);
-            stream->Read(_playerDiscordId);
-        }
-
-        SLNet::BitStream *ToBitStream(SLNet::BitStream *stream) override {
-            stream->Write(_playerName);
-            stream->Write(_playerSteamId);
-            stream->Write(_playerDiscordId);
-            return stream;
+        void Serialize(SLNet::BitStream *bs, bool write) override {
+            bs->Serialize(write, _playerName);
+            bs->Serialize(write, _playerSteamId);
+            bs->Serialize(write, _playerDiscordId);
         }
 
         bool Valid() override {

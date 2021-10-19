@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "message.h"
+#include "messages.h"
 
 #include <BitStream.h>
 
@@ -18,7 +18,7 @@ namespace Framework::Networking::Messages {
         float _serverTickRate = 0.0f;
 
       public:
-        uint32_t GetMessageID() const override {
+        uint8_t GetMessageID() const override {
             return GAME_CONNECTION_FINALIZED;
         }
 
@@ -26,13 +26,8 @@ namespace Framework::Networking::Messages {
             _serverTickRate = tickRate;
         }
 
-        void FromBitStream(SLNet::BitStream *stream) override {
-            stream->Read(_serverTickRate);
-        }
-
-        SLNet::BitStream *ToBitStream(SLNet::BitStream *stream) override {
-            stream->Write(_serverTickRate);
-            return stream;
+        void Serialize(SLNet::BitStream *bs, bool write) override {
+            bs->Serialize(write, _serverTickRate);
         }
 
         bool Valid() override {

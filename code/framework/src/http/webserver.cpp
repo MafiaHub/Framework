@@ -38,9 +38,11 @@ namespace Framework::HTTP {
                 const auto uri      = std::string(hm->uri.ptr, hm->uri.len);
                 if (serveDir.empty()) {
                     Logging::GetLogger(FRAMEWORK_INNER_HTTP)->trace("[Webserver] Path not registered, sending 404: {}", uri);
-                    mg_http_reply(c, 404, "", "");
                     if (webServer->GetNotFoundCallback()) {
                         webServer->GetNotFoundCallback()(uri);
+                    }
+                    else {
+                        mg_http_reply(c, 404, "", "");
                     }
                 }
                 else {

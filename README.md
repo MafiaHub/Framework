@@ -48,21 +48,18 @@ If you're interested in development, please read our [Contribution Guidelines](.
 
 We use **CMake** to build our projects, so you can use any of the supported build systems. We support **Windows**, **Linux**, and **MacOS** operating systems at the moment. You can follow this guide to get started:
 
-### Build framework
 First make sure your Git client supports LFS objects, visit [Git LFS page](https://git-lfs.github.com/) for more info.
 
 ```sh
 # Clone the repo
-git clone git@github.com:MafiaHub/Framework.git
+git clone https://github.com/MafiaHub/Framework.git
 cd Framework
+```
+**Note:** If you have issues cloning the repository (Git LFS related errors), first ensure you have Git LFS support enabled. If you do and this looks to be a server issue, please contact [@ZaKlaus](https://github.com/zaklaus) on our [Discord](https://discord.gg/eBQ4QHX) server to investigate it.
 
-# OPTIONAL: Generate project files
-# NOT NECESSARY FOR CLION DEVS
-
+### Build on macOS/Linux
+```
 # Configure CMake project
-# On Windows (x86)
-cmake -B build -A Win32
-# On other platforms
 cmake -B build
 
 # Build framework
@@ -72,11 +69,25 @@ cmake --build build
 cmake --build build --target RunFrameworkTests
 ```
 
-**Note:** If you have issues cloning the repository (Git LFS related errors), first ensure you have Git LFS support enabled. If you do and this looks to be a server issue, please contact [@ZaKlaus](https://github.com/zaklaus) on our [Discord](https://discord.gg/eBQ4QHX) server to investigate it.
+### Build on Windows
+
+#### Visual Studio 2019+ support
+
+Ensure you have the cmake tools installed in your copy of Visual Studio first.
+Open your newly cloned Framework repository folder in Visual Studio and it will automagically set up everything for you!
+
+Things to note:
+- `code/projects` folder is hidden by default as it's ignored by Git, in Solution Explorer, enable **Show All Files** option to see your project files.
+- Changes in your project's cmake will not be auto-detected, cmake will only reload config on build, otherwise you can do it yourself in the Projects section in main menu.
+- Visual Studio 2019 embeds an old and unsupported version of ClangFormat, we highly recommend you to install [LLVM tools](https://releases.llvm.org/download.html) and set up a custom ClangFormat executable in VS's `Tools > Options > Text Editor > C/C++ > Code Style > Formatting > Use custom clang-format.exe file` property.
+
+#### CLion support
+
+The guide on how to set up the project files for CLion is available [here](.github/CLION_GUIDE.md).
 
 ## Add a multi-player project to the framework
 
-Multi-player modifications are cloned into the `code/projects` directory and automatically picked up by the framework. We use this approach so that we can easily manage the projects and their dependencies, perform mass changes and general maintenance during the development.
+Multi-player modifications are cloned into the `code/projects` directory and are automatically picked up by the framework. We use this approach so that we can easily manage the projects and their dependencies, perform mass changes and general maintenance during the development.
 
 ```sh
 # Create and navigate to folder
@@ -87,18 +98,10 @@ cd code/projects
 git clone git@github.com:<your-awesome-username>/<your-amazing-project>.git
 
 # e.g.
-git clone git@github.com:MafiaHub/fw-sandbox.git
-
-# Re-generate CMake project
-cd ../..
-cmake -B build
+git clone https://github.com/MafiaHub/MafiaMP.git
 ```
 
 Now you can access your targets and build them within the framework.
-
-### CLion support
-
-The guide on how to set up the project files for CLion is available [here](.github/CLION_GUIDE.md).
 
 ## License
 

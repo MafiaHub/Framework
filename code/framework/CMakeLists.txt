@@ -2,14 +2,12 @@
 set(FRAMEWORK_SRC
         src/logging/logger.cpp
 
-        src/networking/entities/entity.cpp
-        src/networking/entity_manager.cpp
-
         src/utils/delay_scope.cpp
         src/utils/config.cpp
         src/utils/interpolator.cpp
         src/utils/time.cpp
         src/utils/job_system.cpp
+        src/utils/command_processor.cpp
         src/utils/hashing.cpp
 
         src/external/discord/wrapper.cpp
@@ -18,6 +16,9 @@ set(FRAMEWORK_SRC
         src/external/optick/wrapper.cpp
 
         src/world/engine.cpp
+
+        src/networking/network_peer.cpp
+        src/networking/errors.cpp
         )
 
 set(FRAMEWORK_SERVER_SRC
@@ -37,11 +38,14 @@ set(FRAMEWORK_SERVER_SRC
         src/http/webserver.cpp
 
         src/services/masterlist.cpp
+        src/services/user.cpp
 
         src/networking/network_server.cpp
-        src/networking/entity_streamer.cpp
+
+        src/world/server.cpp
 
         src/integrations/server/instance.cpp
+        src/integrations/server/masterlist.cpp
         src/integrations/server/networking/engine.cpp
         )
 
@@ -51,11 +55,14 @@ set(FRAMEWORK_CLIENT_SRC
         src/external/cef/render_handler.cpp
         src/external/cef/worker.hpp
 
-        src/gui/web.cpp
+        src/graphics/renderer.cpp
+        src/gui/api/cef.cpp
 
         src/networking/network_client.cpp
 
         src/external/steam/wrapper.cpp
+
+        src/world/client.cpp
 
         src/integrations/client/instance.cpp
     )
@@ -63,6 +70,8 @@ set(FRAMEWORK_CLIENT_SRC
 # Append the platform-dependent files to the related lists
 if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC 
+        src/graphics/backend/d3d9.cpp
+        src/graphics/backend/d3d11.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
@@ -70,6 +79,7 @@ if(WIN32)
     )
     add_library(FrameworkLoader
         STATIC
+        src/utils/hashing.cpp
         src/launcher/project.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/external/steam/wrapper.cpp
@@ -115,7 +125,7 @@ link_shared_deps(Framework)
 link_shared_deps(FrameworkServer)
 link_shared_deps(FrameworkClient)
 
-target_link_libraries(FrameworkServer mongoose NodeJS)
+target_link_libraries(FrameworkServer mongoose NodeJS libsig)
 target_link_libraries(FrameworkClient DiscordSDK CefTarget)
 
 # OS specific libraries
@@ -127,7 +137,7 @@ if (WIN32)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll)
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll sfd)
     target_link_libraries(FrameworkLoaderData udis86 minhook)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage)
     
@@ -147,9 +157,3 @@ IF(WIN32)
     add_definitions(-D_USE_MATH_DEFINES)
     add_definitions(-DNOMINMAX)
 ENDIF()
-
-# Put framework projects in the framework folder in MSVC
-if (MSVC)
-    get_all_targets(all_targets)
-    set_target_properties(${all_targets} PROPERTIES FOLDER framework)
-endif ()

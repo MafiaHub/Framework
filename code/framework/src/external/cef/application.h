@@ -10,15 +10,23 @@
 
 #include <functional>
 #include <include/cef_app.h>
+#include <string>
+#include <vector>
 
 namespace Framework::External::CEF {
+    using ScriptingEvent = std::pair<CefRefPtr<CefV8Context>, CefRefPtr<CefV8Value>>;
     class Application
         : public CefApp
         , public CefRenderProcessHandler
         , public CefResourceBundleHandler
         , public CefV8Handler
         , public CefBrowserProcessHandler {
+      private:
+        std::vector<ScriptingEvent> _scriptingEvents;
+
       protected:
+        void InvokeEvent(const std::string &, const std::string &);
+
         virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar>) override;
 
         virtual bool GetDataResource(int, void *&, size_t &) override {

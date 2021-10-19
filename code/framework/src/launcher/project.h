@@ -14,6 +14,8 @@
 #include <vector>
 #include <windows.h>
 
+#include "utils/config.h"
+
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
 
@@ -32,12 +34,25 @@ namespace Framework::Launcher {
         // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
         bool loadClientManually = false;
 
-        // game exe integrity checks
+        // game exe integrity checks (uses CRC32 checksum)
         bool verifyGameIntegrity = false;
         std::vector<uint32_t> supportedGameVersions;
 
         // additional DLL search paths
         std::vector<std::wstring> additionalSearchPaths;
+
+        // prompt for game exe (only if CLASSIC platform is set)
+        bool promptForGameExe = false;
+        std::string promptTitle = "Select your game's executable";
+        std::string promptFilter = "Game.exe";
+        std::string promptFilterName = "Your Game.exe";
+        std::string promptExtension  = "*.exe";
+        std::function<std::wstring(std::wstring gameExePath)> promptSelectionFunctor;
+
+        // JSON config project settings
+        bool disablePersistentConfig = false;
+        bool overrideConfigFileName  = false; // Uses <config.name>_launcher.json by default
+        std::string configFileName = "launcher.json";
     };
 
     class Project {
@@ -48,6 +63,7 @@ namespace Framework::Launcher {
 
       private:
         ProjectConfiguration _config;
+        std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
         External::Steam::Wrapper *_steamWrapper;
 
@@ -73,6 +89,10 @@ namespace Framework::Launcher {
             _preLaunchFunctor = preLaunchFunctor;
         }
 
+        ProjectConfiguration& GetConfig() {
+            return _config;
+        }
+
       private:
         bool EnsureFilesExist(const std::vector<std::string> &);
         bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
@@ -80,6 +100,9 @@ namespace Framework::Launcher {
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();
+
+        bool LoadJSONConfig();
+        void SaveJSONConfig();
 
         void InvokeEntryPoint(void (*entryPoint)());
 

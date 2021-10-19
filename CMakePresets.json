@@ -1,0 +1,103 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 20,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "ninja-generator",
+            "hidden": true,
+            "generator": "Ninja"
+        },
+        {
+            "name": "x86",
+            "hidden": true,
+            "architecture": {
+                "value": "x86",
+                "strategy": "external"
+            }
+        },
+        {
+            "name": "x64",
+            "hidden": true,
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            }
+        },
+        {
+            "name": "build_options",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build-${presetName}",
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "false",
+                "BUILD_EXAMPLES": "false",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+            }
+        },
+        {
+            "name": "release",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "debug",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "x64-release",
+            "displayName": "x64-release",
+            "description": "x64-release",
+
+            "inherits": [
+                "ninja-generator",
+                "x64",
+                "build_options",
+                "release"
+            ]
+        },
+        {
+            "name": "x64-debug",
+            "displayName": "x64-debug",
+            "description": "x64-debug",
+
+            "inherits": [
+                "ninja-generator",
+                "x64",
+                "build_options",
+                "debug"
+            ]
+        },
+        {
+            "name": "x86-release",
+            "displayName": "x86-release",
+            "description": "x86-release",
+
+            "inherits": [
+                "ninja-generator",
+                "x86",
+                "build_options",
+                "release"
+            ]
+        },
+        {
+            "name": "x86-debug",
+            "displayName": "x86-debug",
+            "description": "x86-debug",
+
+            "inherits": [
+                "ninja-generator",
+                "x86",
+                "build_options",
+                "debug"
+            ]
+        }
+    ]
+}

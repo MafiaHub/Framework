@@ -8,45 +8,88 @@
 
 #pragma once
 
-#include "messages/message.h"
 #include "messages/messages.h"
 
 #include <PacketPriority.h>
 #include <RakPeerInterface.h>
 #include <unordered_map>
+#include <utils/hashing.h>
 
 namespace Framework::Networking {
     class NetworkPeer {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
-        std::unordered_map<uint32_t, Messages::MessageCallback> _registeredMessageCallbacks;
+        std::unordered_map<uint32_t, Messages::MessageCallback> _registeredRPCs;
+        std::unordered_map<uint8_t, Messages::MessageCallback> _registeredMessageCallbacks;
+        std::unordered_map<uint8_t, Messages::PacketCallback> _registeredInternalMessageCallbacks;
+        Messages::PacketCallback _onUnknownInternalPacketCallback;
+        Messages::PacketCallback _onUnknownGamePacketCallback;
 
       public:
+        NetworkPeer();
+
         bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED) {
-            if (!_peer) {
-                return false;
+            PacketReliability reliability = RELIABLE_ORDERED);
+
+        bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY,
+            PacketReliability reliability = RELIABLE_ORDERED);
+
+        void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
+
+        template<typename T>
+        void RegisterMessage(uint8_t message, std::function<void(T*)> callback) {
+            if (callback == nullptr) {
+                return;
             }
 
-            SLNet::BitStream bsOut;
-            bsOut.Write((SLNet::MessageID)msg.GetMessageID());
+            _registeredMessageCallbacks[message] = [callback](SLNet::BitStream *bs) {
+                T msg;
+                msg.Serialize(bs, false);
+                callback(&msg);
+            };
+        }
 
-            msg.ToBitStream(&bsOut);
+        template <typename T>
+        void RegisterRPC(std::function<void(T *)> callback) {
+            T _rpc;
 
-            if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+            if (callback == nullptr) {
+                return;
+            }
+
+            _registeredRPCs[_rpc.GetHashName()] = [callback](SLNet::BitStream *bs) {
+                T rpc;
+                rpc.Serialize(bs, false);
+                callback(&rpc);
+            };
+        }
+
+        template <typename T>
+        bool SendRPC(T& rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
+            PacketReliability reliability = RELIABLE_ORDERED) {
+            
+            SLNet::BitStream bs;
+            bs.Write(Messages::INTERNAL_RPC);
+            bs.Write(rpc.GetHashName());
+            rpc.Serialize(&bs, true);
+
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
                 return false;
             }
 
             return true;
         }
 
-        void RegisterMessage(uint32_t message, Messages::MessageCallback callback) {
-            if (callback == nullptr) {
-                return;
-            }
+        void Update();
+        virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
 
-            _registeredMessageCallbacks[message] = callback;
+        void SetUnknownInternalPacketHandler(Messages::PacketCallback callback) {
+            _onUnknownInternalPacketCallback = callback;
+        }
+
+        void SetUnknownGamePacketHandler(Messages::PacketCallback callback) {
+            _onUnknownGamePacketCallback = callback;
         }
 
         SLNet::Packet *GetPacket() const {
@@ -56,5 +99,8 @@ namespace Framework::Networking {
         SLNet::RakPeerInterface *GetPeer() const {
             return _peer;
         }
+
+        static const char *GetStartupResultString(uint8_t id);
+        static const char *GetConnectionAttemptString(uint8_t id);
     };
 } // namespace Framework::Networking

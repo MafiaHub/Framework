@@ -9,23 +9,28 @@
 #pragma once
 
 #include "errors.h"
+#include "modules/base.hpp"
 
 #include <flecs/flecs.h>
+#include <memory>
 
 namespace Framework::World {
     class Engine {
-      private:
-        flecs::world *_world = nullptr;
+      protected:
+        flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
+        std::unique_ptr<flecs::world> _world;
 
       public:
-        EngineError Init();
+        virtual EngineError Init();
 
-        EngineError Shutdown();
+        virtual EngineError Shutdown();
 
-        void Update(float dt = 0.0f);
+        virtual void Update();
+
+        flecs::entity GetEntityByGUID(uint64_t guid);
 
         flecs::world *GetWorld() {
-            return _world;
+            return _world.get();
         }
     };
 } // namespace Framework::World
