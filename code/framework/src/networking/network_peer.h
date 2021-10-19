@@ -32,6 +32,9 @@ namespace Framework::Networking {
         bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
             PacketReliability reliability = RELIABLE_ORDERED);
 
+        bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY,
+            PacketReliability reliability = RELIABLE_ORDERED);
+
         void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
 
         template<typename T>

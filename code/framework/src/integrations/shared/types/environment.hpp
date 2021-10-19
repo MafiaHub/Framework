@@ -39,7 +39,7 @@ namespace Framework::Integrations::Shared::Archetypes {
                 auto weather = e.get<Shared::Modules::Mod::Environment>();
                 Framework::Integrations::Shared::Messages::WeatherUpdate msg;
                 msg.FromParameters(weather->timeHours, false, "");
-                _networkingEngine->GetNetworkServer()->Send(msg, SLNet::RakNetGUID(g));
+                _networkingEngine->GetNetworkServer()->Send(msg, g);
                 return true;
             };
 

@@ -42,6 +42,10 @@ namespace Framework::Networking {
         return true;
     }
 
+    bool NetworkPeer::Send(Messages::IMessage& msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
+        return Send(msg, SLNet::RakNetGUID(guid), priority, reliability);
+    }
+
     void NetworkPeer::RegisterMessage(uint8_t message, Messages::PacketCallback callback) {
         if (callback == nullptr) {
             return;
