@@ -35,11 +35,11 @@ namespace Framework::Integrations::Shared::Archetypes {
             streamable->alwaysVisible = true;
 
             auto weatherEvents       = World::Modules::Base::Streamable::Events {};
-            weatherEvents.updateProc = [this](SLNet::RakNetGUID g, flecs::entity &e) {
+            weatherEvents.updateProc = [this](uint64_t g, flecs::entity &e) {
                 auto weather = e.get<Shared::Modules::Mod::Environment>();
                 Framework::Integrations::Shared::Messages::WeatherUpdate msg;
                 msg.FromParameters(weather->timeHours, false, "");
-                _networkingEngine->GetNetworkServer()->Send(msg, g);
+                _networkingEngine->GetNetworkServer()->Send(msg, SLNet::RakNetGUID(g));
                 return true;
             };
 

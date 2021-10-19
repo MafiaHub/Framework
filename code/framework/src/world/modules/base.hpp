@@ -11,7 +11,6 @@
 #include <flecs/flecs.h>
 #include <functional>
 #include <glm/ext.hpp>
-#include <slikenet/types.h>
 #include <string>
 #include <unordered_map>
 
@@ -38,7 +37,7 @@ namespace Framework::World::Modules {
             flecs::entity_t owner   = 0;
 
             struct Events {
-                using Proc = std::function<bool(SLNet::RakNetGUID, flecs::entity &)>;
+                using Proc = std::function<bool(uint64_t, flecs::entity &)>;
                 Proc spawnProc;
                 Proc despawnProc;
                 Proc selfUpdateProc;
@@ -53,7 +52,7 @@ namespace Framework::World::Modules {
             std::unordered_map<flecs::entity_t, StreamData> entities;
             float range = 100.0f;
 
-            SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID;
+            uint64_t guid = (uint64_t)-1;
         };
 
         Base(flecs::world &world) {

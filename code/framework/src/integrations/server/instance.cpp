@@ -190,7 +190,7 @@ namespace Framework::Integrations::Server {
             // TODO send disconnect message
             _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
 
-            auto e = _worldEngine->GetEntityByGUID(guid);
+            auto e = _worldEngine->GetEntityByGUID(guid.g);
             if (e.is_valid()) {
                 e.add<World::Modules::Base::PendingRemoval>();
             }

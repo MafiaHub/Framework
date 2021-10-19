@@ -13,7 +13,6 @@
 
 #include <flecs/flecs.h>
 #include <memory>
-#include <slikenet/types.h>
 
 namespace Framework::World {
     class Engine {
@@ -28,7 +27,7 @@ namespace Framework::World {
 
         virtual void Update();
 
-        flecs::entity GetEntityByGUID(SLNet::RakNetGUID guid);
+        flecs::entity GetEntityByGUID(uint64_t guid);
 
         flecs::world *GetWorld() {
             return _world.get();
