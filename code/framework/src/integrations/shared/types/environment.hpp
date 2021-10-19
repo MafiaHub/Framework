@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "../../server/networking/engine.h"
 #include "../messages/weather_update.h"
 #include "../modules/mod.hpp"
+#include "networking/network_peer.h"
 #include "world/modules/base.hpp"
 
 #include <flecs/flecs.h>
@@ -19,10 +19,10 @@ namespace Framework::Integrations::Shared::Archetypes {
     class EnvironmentFactory {
       private:
         flecs::world *_world = nullptr;
-        Integrations::Server::Networking::Engine *_networkingEngine;
+        Networking::NetworkPeer *_networkPeer;
 
       public:
-        EnvironmentFactory(flecs::world *world, Integrations::Server::Networking::Engine *networkingEngine): _world(world), _networkingEngine(networkingEngine) {}
+        EnvironmentFactory(flecs::world *world, Networking::NetworkPeer *networkPeer): _world(world), _networkPeer(networkPeer) {}
 
         template <typename... Args>
         inline flecs::entity CreateWeather(Args &&...args) {
@@ -39,7 +39,7 @@ namespace Framework::Integrations::Shared::Archetypes {
                 auto weather = e.get<Shared::Modules::Mod::Environment>();
                 Framework::Integrations::Shared::Messages::WeatherUpdate msg;
                 msg.FromParameters(weather->timeHours, false, "");
-                _networkingEngine->GetNetworkServer()->Send(msg, g);
+                _networkPeer->Send(msg, g);
                 return true;
             };
 
