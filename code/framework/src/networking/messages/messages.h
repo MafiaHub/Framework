@@ -24,11 +24,22 @@ namespace Framework::Networking::Messages {
     enum GameMessages : uint8_t { GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID, GAME_CONNECTION_FINALIZED, GAME_NEXT_MESSAGE_ID };
 
     class IMessage {
+      private:
+        SLNet::Packet *packet;
+
       public:
         virtual uint8_t GetMessageID() const = 0;
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
 
         virtual bool Valid() = 0;
+
+        void SetPacket(SLNet::Packet *p) {
+            packet = p;
+        }
+
+        SLNet::Packet* GetPacket() const {
+            return packet;
+        }
     };
 } // namespace Framework::Networking::Messages

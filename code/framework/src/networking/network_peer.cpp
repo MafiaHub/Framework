@@ -22,7 +22,7 @@ namespace Framework::Networking {
             bs.Read(hashName);
 
             if (_registeredRPCs.find(hashName) != _registeredRPCs.end()) {
-                _registeredRPCs[hashName](&bs);
+                _registeredRPCs[hashName](p);
             }
         });
     }
@@ -52,7 +52,7 @@ namespace Framework::Networking {
             return;
         }
 
-        _registeredInternalMessageCallbacks[message] = callback;
+        _registeredMessageCallbacks[message] = callback;
     }
 
     void NetworkPeer::Update() {
@@ -74,27 +74,13 @@ namespace Framework::Networking {
             uint8_t packetID = _packet->data[offset];
 
             if (!HandlePacket(packetID, _packet)) {
-                if (packetID < Messages::INTERNAL_NEXT_MESSAGE_ID) {
-                    if (_registeredInternalMessageCallbacks.find(packetID) != _registeredInternalMessageCallbacks.end()) {
-                        _registeredInternalMessageCallbacks[packetID](_packet);
-                    }
-                    else {
-                        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown internal sync message {}", packetID);
-                        if (_onUnknownInternalPacketCallback) {
-                            _onUnknownInternalPacketCallback(_packet);
-                        }
-                    }
+                if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
+                    _registeredMessageCallbacks[packetID](_packet);
                 }
                 else {
-                    if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
-                        SLNet::BitStream bsIn(_packet->data + 1, _packet->length, false);
-                        _registeredMessageCallbacks[packetID](&bsIn);
-                    }
-                    else {
-                        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown game sync message {}", packetID);
-                        if (_onUnknownGamePacketCallback) {
-                            _onUnknownGamePacketCallback(_packet);
-                        }
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown packet {}", packetID);
+                    if (_onUnknownPacketCallback) {
+                        _onUnknownPacketCallback(_packet);
                     }
                 }
             }
