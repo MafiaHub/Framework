@@ -92,6 +92,9 @@ add_subdirectory(fmt)
 # Build libsig
 add_subdirectory(libsig)
 
+# Build sfd
+add_subdirectory(sfd)
+
 # Build OS specific libraries
 if (WIN32)
     add_subdirectory(minhook)

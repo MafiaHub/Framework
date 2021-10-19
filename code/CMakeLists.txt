@@ -20,6 +20,7 @@ include_directories(PUBLIC
         "../vendors/curl/include"
         "../vendors/fmt/include"
         "../vendors/libsig"
+        "../vendors/sfd"
         "../vendors/cxxopts"
         "../vendors"
         )

@@ -8,8 +8,11 @@
 
 #pragma once
 
+#include "utils/string_utils.h"
+
 #include <nlohmann/json.hpp>
 #include <string>
+#include <type_traits>
 
 namespace Framework::Utils {
     class Config {
@@ -44,14 +47,37 @@ namespace Framework::Utils {
         T Get(const std::string &field) {
             if (!_lastError.empty())
                 return {};
+            if constexpr (std::is_same_v<T, std::wstring>) {
+                return Utils::StringUtils::NormalToWide((*_document)[field]);
+            }
             return (*_document)[field];
+        }
+
+        template <typename T>
+        T GetDefault(const std::string &field, T defaultValue) {
+            if (!_lastError.empty())
+                return {};
+
+            try {
+                if constexpr (std::is_same_v<T, std::wstring>) {
+                    return Utils::StringUtils::NormalToWide((*_document)[field]);
+                }
+                return (*_document)[field];
+            }
+            catch (const std::exception &) {
+                return defaultValue;
+            }
         }
 
         template <typename T>
         void Set(const std::string &field, T value) {
             if (!_lastError.empty())
                 return;
-            return _document->at(field) = value;
+            if constexpr (std::is_same_v<T, std::wstring>) {
+                (*_document)[field] = Utils::StringUtils::WideToNormal(value);
+                return;
+            }
+            (*_document)[field] = value;
         }
     };
 } // namespace Framework::Utils

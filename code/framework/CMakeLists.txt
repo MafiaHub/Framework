@@ -136,7 +136,7 @@ if (WIN32)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll)
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll sfd)
     target_link_libraries(FrameworkLoaderData udis86 minhook)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage)
     

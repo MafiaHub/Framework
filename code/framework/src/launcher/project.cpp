@@ -11,6 +11,7 @@
 #include "loaders/exe_ldr.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
+#include "logging/logger.h"
 
 #include <ShellScalingApi.h>
 #include <Windows.h>
@@ -23,8 +24,9 @@
 #include <ostream>
 #include <psapi.h>
 #include <utils/hooking/hooking.h>
+#include <sfd.h>
 
-// Fix for gpu-enabled games
+// Enforce discrete GPU on mobile units.
 extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement        = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -42,6 +44,8 @@ char fwgame_seg[0x1400000];
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
 HMODULE tlsDll {};
+
+static wchar_t gProjectDllPath[32768];
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
@@ -110,11 +114,22 @@ DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR 
 namespace Framework::Launcher {
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
         _steamWrapper = new External::Steam::Wrapper;
+        _fileConfig   = std::make_unique<Utils::Config>();
         gDllName      = _config.destinationDllName.c_str();
     }
 
     bool Project::Launch() {
-        // Run platform-dependant platform checks and init steps
+        // Fetch the current working directory
+        GetCurrentDirectoryW(32768, gProjectDllPath);
+
+        if (!_config.disablePersistentConfig) {
+            if (!LoadJSONConfig()) {
+                MessageBox(nullptr, "Failed to load JSON launcher config", _config.name.c_str(), MB_ICONERROR);
+                return false;
+            }
+        }
+
+        // Run platform-dependent platform checks and init steps
         if (_config.platform == ProjectPlatform::STEAM) {
             if (!RunInnerSteamChecks()) {
                 return false;
@@ -132,9 +147,9 @@ namespace Framework::Launcher {
             return 0;
         }
 
-        // Fetch the current working directory
-        static wchar_t projectDllPath[32768];
-        GetCurrentDirectoryW(32768, projectDllPath);
+        if (!_config.disablePersistentConfig) {
+            SaveJSONConfig();
+        }
 
         // Add the required DLL directories to the current process
         auto addDllDirectory          = (decltype(&AddDllDirectory))GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "AddDllDirectory");
@@ -149,8 +164,8 @@ namespace Framework::Launcher {
             for (auto &path : _config.additionalSearchPaths) { addDllDirectory((_gamePath + L"\\" + path).c_str()); }
 
             // add our own paths now
-            addDllDirectory(projectDllPath);
-            addDllDirectory((std::wstring(projectDllPath) + L"\\bin").c_str());
+            addDllDirectory(gProjectDllPath);
+            addDllDirectory((std::wstring(gProjectDllPath) + L"\\bin").c_str());
 
             SetCurrentDirectoryW(_gamePath.c_str());
         }
@@ -194,7 +209,7 @@ namespace Framework::Launcher {
             GetEnvironmentVariableW(L"PATH", pathBuf, sizeof(pathBuf));
 
             // append bin & game directories
-            std::wstring newPath = _gamePath + L";" + std::wstring(projectDllPath) + L";" + std::wstring(pathBuf);
+            std::wstring newPath = _gamePath + L";" + std::wstring(gProjectDllPath) + L";" + std::wstring(pathBuf);
             SetEnvironmentVariableW(L"PATH", newPath.c_str());
         }
 
@@ -279,10 +294,43 @@ namespace Framework::Launcher {
 
     bool Project::RunInnerClassicChecks() {
         cppfs::FileHandle handle = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath));
-        if (!handle.isDirectory()) {
+        if (!handle.isDirectory() && !_config.promptForGameExe) {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
             return 0;
         }
+        
+        if (!handle.isDirectory()) {
+            const auto exePath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+
+            sfd_Options sfd;
+            sfd.path        = exePath.c_str();
+            sfd.extension   = _config.promptExtension.c_str();
+            sfd.filter_name = _config.promptFilterName.c_str();
+            sfd.filter      = _config.promptFilter.c_str();
+            sfd.title       = _config.promptTitle.c_str();
+
+            char const *path = sfd_open_dialog(&sfd);
+            if (path) {
+                // Reset working directory
+                SetCurrentDirectoryW(gProjectDllPath);
+
+                handle = cppfs::fs::open(path);
+
+                if (!handle.isFile()) {
+                    MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(), _config.name.c_str(), MB_ICONERROR);
+                    return 0;
+                }
+
+                _config.classicGamePath = Utils::StringUtils::NormalToWide(path);
+                
+                std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
+                _config.classicGamePath = _config.classicGamePath.substr(0, _config.classicGamePath.length() - _config.executableName.length());
+            }
+            else {
+                ExitProcess(0);
+            }
+        }
+
         _gamePath = _config.classicGamePath;
         return true;
     }
@@ -423,6 +471,53 @@ namespace Framework::Launcher {
             }
         }
         return false;
+    }
+
+    bool Project::LoadJSONConfig() {
+        if (!_config.overrideConfigFileName) {
+            _config.configFileName = fmt::format("{}_launcher.json", _config.name);     
+        }
+        auto configHandle = cppfs::fs::open(_config.configFileName);
+
+        if (!configHandle.exists()) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("JSON config file is not present, skipping load...");
+            _fileConfig->Parse("{}");
+            return true;
+        }
+
+        auto configData = configHandle.readFile();
+
+        try {
+            // Parse our config data first
+            _fileConfig->Parse(configData);
+
+            if (!_fileConfig->IsParsed()) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->critical("JSON config load has failed: {}", _fileConfig->GetLastError());
+                return false;
+            }
+
+            // Retrieve fields and overwrite ProjectConfiguration defaults
+            _config.classicGamePath = _fileConfig->GetDefault<std::wstring>("gamePath", _config.classicGamePath);
+            _config.steamAppId      = _fileConfig->GetDefault<AppId_t>("steamAppId", _config.steamAppId);
+            _config.executableName  = _fileConfig->GetDefault<std::wstring>("exeName", _config.executableName);
+            _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("dllName", _config.destinationDllName);
+        }
+        catch (const std::exception &ex) {
+            return false;
+        }
+        return true;
+    }
+
+    void Project::SaveJSONConfig() {
+        auto configHandle = cppfs::fs::open(_config.configFileName);
+
+        // Retrieve fields from ProjectConfiguration and store data into a persistent config file
+        _fileConfig->Set<std::wstring>("gamePath", _config.classicGamePath);
+        _fileConfig->Set<AppId_t>("steamAppId", _config.steamAppId);
+        _fileConfig->Set<std::wstring>("exeName", _config.executableName);
+        _fileConfig->Set<std::wstring>("dllName", _config.destinationDllName);
+
+        configHandle.writeFile(_fileConfig->ToString());
     }
 
     bool Project::EnsureGameExecutableIsCompatible() {
