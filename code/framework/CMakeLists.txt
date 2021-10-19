@@ -40,6 +40,7 @@ set(FRAMEWORK_SERVER_SRC
         src/services/user.cpp
 
         src/networking/network_server.cpp
+        src/networking/errors.cpp
 
         src/world/server.cpp
 
@@ -58,6 +59,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/gui/api/cef.cpp
 
         src/networking/network_client.cpp
+        src/networking/errors.cpp
 
         src/external/steam/wrapper.cpp
 
