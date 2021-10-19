@@ -61,6 +61,8 @@ set(FRAMEWORK_CLIENT_SRC
 
         src/external/steam/wrapper.cpp
 
+        src/world/client.cpp
+
         src/integrations/client/instance.cpp
     )
 

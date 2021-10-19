@@ -16,7 +16,7 @@ namespace Framework::Integrations::Client {
     Instance::Instance() {
         _presence    = std::make_unique<External::Discord::Wrapper>();
         _renderer    = std::make_unique<Graphics::Renderer>();
-        _worldEngine = std::make_unique<World::Engine>();
+        _worldEngine = std::make_unique<World::ClientEngine>();
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {
