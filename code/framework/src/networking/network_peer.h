@@ -99,5 +99,8 @@ namespace Framework::Networking {
         SLNet::RakPeerInterface *GetPeer() const {
             return _peer;
         }
+
+        static const char *GetStartupResultString(uint8_t id);
+        static const char *GetConnectionAttemptString(uint8_t id);
     };
 } // namespace Framework::Networking
