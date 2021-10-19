@@ -115,7 +115,6 @@ namespace Framework::Launcher {
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
         _steamWrapper = new External::Steam::Wrapper;
         _fileConfig   = std::make_unique<Utils::Config>();
-        gDllName      = _config.destinationDllName.c_str();
     }
 
     bool Project::Launch() {
@@ -289,6 +288,10 @@ namespace Framework::Launcher {
         steamApps->GetAppInstallDir(_config.steamAppId, gamePath, _MAX_PATH);
 
         _gamePath = Utils::StringUtils::NormalToWide(gamePath);
+        std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
+
+        // Set classic game path to the one found by Steam just for sake of having that information stored in the config file.
+        _config.classicGamePath = _gamePath;
         return true;
     }
 
@@ -353,6 +356,7 @@ namespace Framework::Launcher {
         }
 
         gImagePath = _gamePath.c_str();
+        gDllName = _config.destinationDllName.c_str();
 
         // determine file length
         DWORD dwFileLength = SetFilePointer(hFile, 0, NULL, FILE_END);
@@ -505,6 +509,8 @@ namespace Framework::Launcher {
             _config.steamAppId      = _fileConfig->GetDefault<AppId_t>("steamAppId", _config.steamAppId);
             _config.executableName  = _fileConfig->GetDefault<std::wstring>("exeName", _config.executableName);
             _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("dllName", _config.destinationDllName);
+
+            std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
         }
         catch (const std::exception &ex) {
             return false;
