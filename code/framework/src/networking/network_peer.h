@@ -20,11 +20,9 @@ namespace Framework::Networking {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
-        std::unordered_map<uint32_t, Messages::MessageCallback> _registeredRPCs;
-        std::unordered_map<uint8_t, Messages::MessageCallback> _registeredMessageCallbacks;
-        std::unordered_map<uint8_t, Messages::PacketCallback> _registeredInternalMessageCallbacks;
-        Messages::PacketCallback _onUnknownInternalPacketCallback;
-        Messages::PacketCallback _onUnknownGamePacketCallback;
+        std::unordered_map<uint32_t, Messages::PacketCallback> _registeredRPCs;
+        std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
+        Messages::PacketCallback _onUnknownPacketCallback;
 
       public:
         NetworkPeer();
@@ -43,9 +41,11 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredMessageCallbacks[message] = [callback](SLNet::BitStream *bs) {
+            _registeredMessageCallbacks[message] = [callback](SLNet::Packet *p) {
+                SLNet::BitStream bs(p->data + 1, p->length, false);
                 T msg;
-                msg.Serialize(bs, false);
+                msg.SetPacket(p);
+                msg.Serialize(&bs, false);
                 callback(&msg);
             };
         }
@@ -58,9 +58,11 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()] = [callback](SLNet::BitStream *bs) {
+            _registeredRPCs[_rpc.GetHashName()] = [callback](SLNet::Packet *p) {
+                SLNet::BitStream bs(p->data + 5, p->length, false);
                 T rpc;
-                rpc.Serialize(bs, false);
+                rpc.SetPacket(p);
+                rpc.Serialize(&bs, false);
                 callback(&rpc);
             };
         }
@@ -84,12 +86,8 @@ namespace Framework::Networking {
         void Update();
         virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
 
-        void SetUnknownInternalPacketHandler(Messages::PacketCallback callback) {
-            _onUnknownInternalPacketCallback = callback;
-        }
-
-        void SetUnknownGamePacketHandler(Messages::PacketCallback callback) {
-            _onUnknownGamePacketCallback = callback;
+        void SetUnknownPacketHandler(Messages::PacketCallback callback) {
+            _onUnknownPacketCallback = callback;
         }
 
         SLNet::Packet *GetPacket() const {
