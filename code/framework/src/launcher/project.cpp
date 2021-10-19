@@ -324,7 +324,11 @@ namespace Framework::Launcher {
                 _config.classicGamePath = Utils::StringUtils::NormalToWide(path);
                 
                 std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
+
                 _config.classicGamePath = _config.classicGamePath.substr(0, _config.classicGamePath.length() - _config.executableName.length());
+                
+                if (_config.promptSelectionFunctor)
+                    _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
             }
             else {
                 ExitProcess(0);

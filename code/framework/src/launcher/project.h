@@ -47,6 +47,7 @@ namespace Framework::Launcher {
         std::string promptFilter = "Game.exe";
         std::string promptFilterName = "Your Game.exe";
         std::string promptExtension  = "*.exe";
+        std::function<std::wstring(std::wstring gameExePath)> promptSelectionFunctor;
 
         // JSON config project settings
         bool disablePersistentConfig = false;
