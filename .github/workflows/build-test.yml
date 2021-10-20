@@ -54,14 +54,14 @@ jobs:
                 if: runner.os == 'Windows'
                 uses: egor-tensin/vs-shell@v2
 
-            -   name: Build the projo   ect (Windows)
+            -   name: Build the project (Windows)
                 if: runner.os == 'Windows'
                 run: |
                     cmake -B build -G "Ninja"
-                    cmake --build build --target RunFrameworkTests
+                    cmake --build build
 
             -   name: Build the project
                 if: runner.os != 'Windows'
                 run: |
                     cmake -B build
-                    cmake --build build --target RunFrameworkTests
+                    cmake --build build
