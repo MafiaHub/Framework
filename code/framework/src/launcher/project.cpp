@@ -347,6 +347,17 @@ namespace Framework::Launcher {
                 
                 if (_config.promptSelectionFunctor)
                     _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
+
+                if (_config.preferSteam) {
+                    auto steamDllName = _config.arch == ProjectArchitecture::CPU_X64 ? "/steam_api64.dll" : "/steam_api.dll";
+                    auto steamDll     = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
+
+                    if (steamDll.exists()) {
+                        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Steam dll found in the game directory, switching to steam platform");
+                        _config.platform = ProjectPlatform::STEAM;
+                        return RunInnerSteamChecks();
+                    }
+                }
             }
             else {
                 ExitProcess(0);

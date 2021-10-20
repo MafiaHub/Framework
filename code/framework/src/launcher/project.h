@@ -34,6 +34,9 @@ namespace Framework::Launcher {
         // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
         bool loadClientManually = false;
 
+        // if promptForGameExe is true, and steam dll is found in the game's library, switch to steam platform
+        bool preferSteam = false;
+
         // game exe integrity checks (uses CRC32 checksum)
         bool verifyGameIntegrity = false;
         std::vector<uint32_t> supportedGameVersions;
