@@ -21,4 +21,5 @@ EOF
     -H "Content-Type:application/json" \
     --data-binary "$PAYLOAD" \
     "$1"
+  exit 1
 fi
