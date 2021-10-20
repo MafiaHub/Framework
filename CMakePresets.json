@@ -38,6 +38,22 @@
             }
         },
         {
+            "name": "windows",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl"
+            }
+        },
+        {
+            "name": "unix",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+        {
             "name": "release",
             "hidden": true,
             "cacheVariables": {
@@ -52,51 +68,83 @@
             }
         },
         {
-            "name": "x64-release",
-            "displayName": "x64-release",
-            "description": "x64-release",
-
+            "name": "x64-rel-win",
             "inherits": [
                 "ninja-generator",
                 "x64",
                 "build_options",
-                "release"
+                "release",
+                "windows"
             ]
         },
         {
-            "name": "x64-debug",
-            "displayName": "x64-debug",
-            "description": "x64-debug",
-
+            "name": "x64-deb-win",
             "inherits": [
                 "ninja-generator",
                 "x64",
                 "build_options",
-                "debug"
+                "debug",
+                "windows"
             ]
         },
         {
-            "name": "x86-release",
-            "displayName": "x86-release",
-            "description": "x86-release",
-
+            "name": "x86-rel-win",
             "inherits": [
                 "ninja-generator",
                 "x86",
                 "build_options",
-                "release"
+                "release",
+                "windows"
             ]
         },
         {
-            "name": "x86-debug",
-            "displayName": "x86-debug",
-            "description": "x86-debug",
-
+            "name": "x86-deb-win",
             "inherits": [
                 "ninja-generator",
                 "x86",
                 "build_options",
-                "debug"
+                "debug",
+                "windows"
+            ]
+        },
+        {
+            "name": "x64-rel-unix",
+            "inherits": [
+                "ninja-generator",
+                "x64",
+                "build_options",
+                "release",
+                "unix"
+            ]
+        },
+        {
+            "name": "x64-deb-unix",
+            "inherits": [
+                "ninja-generator",
+                "x64",
+                "build_options",
+                "debug",
+                "unix"
+            ]
+        },
+        {
+            "name": "x86-rel-unix",
+            "inherits": [
+                "ninja-generator",
+                "x86",
+                "build_options",
+                "release",
+                "unix"
+            ]
+        },
+        {
+            "name": "x86-deb-unix",
+            "inherits": [
+                "ninja-generator",
+                "x86",
+                "build_options",
+                "debug",
+                "unix"
             ]
         }
     ]
