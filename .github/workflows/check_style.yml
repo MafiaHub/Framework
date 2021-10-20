@@ -19,9 +19,5 @@ jobs:
       env:
         DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
       run: |
-        chmod +x scripts/check_style.sh
-        RESULT=$(scripts/check_style.sh)
-        CODE=$?
-        if [ $CODE -ne 0 ]; then
-          curl -i -H "Accept: application/json" -H "Content-Type:application/json" -X POST --data "{\"content\": \"$RESULT\"}" $DISCORD_WEBHOOK
-        fi
+        chmod +x scripts/check_style_ci.sh
+        ./scripts/check_style_ci.sh $DISCORD_WEBHOOK

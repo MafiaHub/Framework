@@ -49,15 +49,15 @@ done < <(git ls-files -- \
 
 exit_status=0
 if (( ${#BAD_LICENSE_HEADER_ERRORS[@]} )); then
-    echo -e "Files with missing or incorrect license header:\n${BAD_LICENSE_HEADER_ERRORS[*]}"
+    echo -e "Files with missing or incorrect license header: ${BAD_LICENSE_HEADER_ERRORS[*]}"
     exit_status=1
 fi
 if (( ${#MISSING_PRAGMA_ONCE_ERRORS[@]} )); then
-    echo -e "Header files missing \"#pragma once\":\n${MISSING_PRAGMA_ONCE_ERRORS[*]}"
+    echo -e "Header files missing #pragma once: ${MISSING_PRAGMA_ONCE_ERRORS[*]}"
     exit_status=1
 fi
 if (( ${#BAD_PRAGMA_ONCE_ERRORS[@]} )); then
-    echo -e "\"#pragma once\" should have a blank line before and after in these files:\n${BAD_PRAGMA_ONCE_ERRORS[*]}"
+    echo -e "#pragma once should have a blank line before and after in these files: ${BAD_PRAGMA_ONCE_ERRORS[*]}"
     exit_status=1
 fi
 exit "$exit_status"
