@@ -281,10 +281,7 @@ namespace Framework::Launcher {
 
         // If we don't have the app id file, create it
         cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
-        if (!appIdFile.exists()) {
-            auto outStream = appIdFile.createOutputStream();
-            (*outStream) << std::to_string(_config.steamAppId) << std::endl;
-        }
+        appIdFile.writeFile(std::to_string(_config.steamAppId) + "\n");
 
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
