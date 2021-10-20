@@ -121,6 +121,12 @@ namespace Framework::Launcher {
         // Fetch the current working directory
         GetCurrentDirectoryW(32768, gProjectDllPath);
 
+        Logging::GetInstance()->SetLogName(_config.name);
+
+        if (_config.allocateDeveloperConsole) {
+            AllocateDeveloperConsole();
+        }
+
         if (!_config.disablePersistentConfig) {
             if (!LoadJSONConfig()) {
                 MessageBox(nullptr, "Failed to load JSON launcher config", _config.name.c_str(), MB_ICONERROR);
@@ -458,6 +464,16 @@ namespace Framework::Launcher {
         }
         __except (HandleVariant(GetExceptionInformation())) {
         }
+    }
+
+    void Project::AllocateDeveloperConsole() {
+        AllocConsole();
+        AttachConsole(GetCurrentProcessId());
+        SetConsoleTitleW(_config.developerConsoleTitle.c_str());
+
+        (void)freopen("CON", "w", stdout);
+        (void)freopen("CONIN$", "r", stdin);
+        (void)freopen("CONIN$", "r", stderr);
     }
 
     bool Project::EnsureFilesExist(const std::vector<std::string> &files) {

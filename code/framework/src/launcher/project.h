@@ -53,6 +53,10 @@ namespace Framework::Launcher {
         bool disablePersistentConfig = false;
         bool overrideConfigFileName  = false; // Uses <config.name>_launcher.json by default
         std::string configFileName = "launcher.json";
+
+        // Console allocation
+        bool allocateDeveloperConsole = false;
+        std::wstring developerConsoleTitle = L"framework: dev-console";
     };
 
     class Project {
@@ -105,6 +109,8 @@ namespace Framework::Launcher {
         void SaveJSONConfig();
 
         void InvokeEntryPoint(void (*entryPoint)());
+
+        void AllocateDeveloperConsole();
 
         bool Run();
     };
