@@ -15,13 +15,13 @@ jobs:
       with:
         submodules: true
     
-    - name: Check if the adheres to the standard style
+    - name: Check if the code adheres to the standard style
       env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_CHANNEL }}
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
       run: |
         chmod +x scripts/check_style.sh
         RESULT=$(scripts/check_style.sh)
         CODE=$?
         if [ $CODE -ne 0 ]; then
-          curl -i -H "Accept: application/json" -H "Content-Type:application/json" -X POST --data "{\"content\": \"$RESULT\"}" https://discord.com/api/webhooks/882340318798835762/$DISCORD_WEBHOOK
+          curl -i -H "Accept: application/json" -H "Content-Type:application/json" -X POST --data "{\"content\": \"$RESULT\"}" $DISCORD_WEBHOOK
         fi
