@@ -29,16 +29,19 @@ jobs:
                 if: runner.os == 'macOS'
 
             -   name: Install tools on Ubuntu
-                run: sudo apt-get install -y ninja-build build-essential
+                run: sudo apt-get install -y ninja-build build-essential libcurl4-openssl-dev
                 if: runner.os == 'Linux'
 
             # Install latest CMake.
             -   uses: lukka/get-cmake@latest
 
+            -   uses: seanmiddleditch/gha-setup-ninja@master
+                if: runner.os == 'Windows'
+
             -   name: Build the project (Windows)
                 if: runner.os == 'Windows'
                 run: |
-                    cmake -B build -A Win32
+                    cmake -B build -G "Ninja"
                     cmake --build build --target RunFrameworkTests
 
             -   name: Build the project
