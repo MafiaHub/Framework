@@ -17,6 +17,7 @@ extern "C" extern uint8_t _tls_start;
 extern "C" extern uint32_t _tls_index;
 
 extern "C" __declspec(dllexport) void GetThreadLocalStorage(void **base, uint32_t *index) {
+    tls1[5] = 0;
     *base  = &_tls_start;
     *index = _tls_index;
 }
