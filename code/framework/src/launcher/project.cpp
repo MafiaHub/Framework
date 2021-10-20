@@ -66,6 +66,12 @@ void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
     return GetStartupInfoA(lpStartupInfo);
 }
 
+LPSTR WINAPI GetCommandLineA_Stub() {
+    Framework::Launcher::Project::InitialiseClientDLL();
+
+    return GetCommandLineA();
+}
+
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
     if (!hModule || hModule == GetModuleHandle(nullptr)) {
         auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
@@ -420,22 +426,28 @@ namespace Framework::Launcher {
                     return ret;
                 }
             }
-            if (!_config.loadClientManually && !_strcmpi(exportFn, "GetStartupInfoW")) {
+
+            const auto exportName = std::string(exportFn);
+
+            if (!_config.loadClientManually && exportName == "GetStartupInfoW") {
                 return static_cast<LPVOID>(GetStartupInfoW_Stub);
             }
-            if (!_config.loadClientManually && !_strcmpi(exportFn, "GetStartupInfoA")) {
+            if (!_config.loadClientManually && exportName == "GetStartupInfoA") {
                 return static_cast<LPVOID>(GetStartupInfoA_Stub);
             }
-            if (!_strcmpi(exportFn, "GetModuleFileNameA")) {
+            if (!_config.loadClientManually && exportName == "GetCommandLineA") {
+                return static_cast<LPVOID>(GetCommandLineA_Stub);
+            }
+            if (exportName == "GetModuleFileNameA") {
                 return static_cast<LPVOID>(GetModuleFileNameA_Hook);
             }
-            if (!_strcmpi(exportFn, "GetModuleFileNameExA")) {
+            if (exportName == "GetModuleFileNameExA") {
                 return static_cast<LPVOID>(GetModuleFileNameExA_Hook);
             }
-            if (!_strcmpi(exportFn, "GetModuleFileNameW")) {
+            if (exportName == "GetModuleFileNameW") {
                 return static_cast<LPVOID>(GetModuleFileNameW_Hook);
             }
-            if (!_strcmpi(exportFn, "GetModuleFileNameExW")) {
+            if (exportName == "GetModuleFileNameExW") {
                 return static_cast<LPVOID>(GetModuleFileNameExW_Hook);
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
