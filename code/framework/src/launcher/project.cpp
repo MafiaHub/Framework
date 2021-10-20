@@ -63,7 +63,7 @@ static void InitialiseClientDLL() {
         if (mod) {
             auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
             if (init) {
-                //init(gProjectDllPath);
+                init(gProjectDllPath);
             } else {
                 MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
                 ExitProcess(1);
