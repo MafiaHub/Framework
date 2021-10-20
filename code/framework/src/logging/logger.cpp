@@ -44,7 +44,7 @@ namespace Framework::Logging {
         consoleLogger->set_level(spdlog::level::debug);
         consoleLogger->set_pattern("[%H:%M:%S] [%n] [%^%l%$] %v");
 
-        const auto fileLogName = "logs/" + _logName + ".log";
+        const auto fileLogName = _logFolder + "/" + _logName + ".log";
         auto fileLogger        = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(fileLogName, _maxFileSize, _maxFileCount);
         fileLogger->set_level(spdlog::level::trace);
 

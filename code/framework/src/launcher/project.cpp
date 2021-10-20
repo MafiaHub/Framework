@@ -47,6 +47,9 @@ HMODULE tlsDll {};
 
 static wchar_t gProjectDllPath[32768];
 
+// Default entry point for the client DLL
+typedef void (*ClientEntryPoint)(const wchar_t *projectPath);
+
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
 }
@@ -58,9 +61,12 @@ void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
         auto mod = LoadLibraryW(gDllName);
 
         if (mod) {
-            auto init = reinterpret_cast<void *(*)()>(GetProcAddress(mod, "InitClient"));
+            auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
             if (init) {
-                init();
+                init(gProjectDllPath);
+            } else {
+                MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
+                ExitProcess(1);
             }
         }
         init = true;
@@ -113,16 +119,20 @@ DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR 
 
 namespace Framework::Launcher {
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
-        _steamWrapper = new External::Steam::Wrapper;
-        _fileConfig   = std::make_unique<Utils::Config>();
-    }
-
-    bool Project::Launch() {
         // Fetch the current working directory
         GetCurrentDirectoryW(32768, gProjectDllPath);
 
         Logging::GetInstance()->SetLogName(_config.name);
 
+        auto projectPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+        std::replace(projectPath.begin(), projectPath.end(), '\\', '/');
+        Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
+
+        _steamWrapper = new External::Steam::Wrapper;
+        _fileConfig   = std::make_unique<Utils::Config>();
+    }
+
+    bool Project::Launch() {
         if (_config.allocateDeveloperConsole) {
             AllocateDeveloperConsole();
         }
@@ -504,7 +514,7 @@ namespace Framework::Launcher {
         auto configHandle = cppfs::fs::open(_config.configFileName);
 
         if (!configHandle.exists()) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("JSON config file is not present, skipping load...");
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("JSON config file is not present, generating new instance...");
             _fileConfig->Parse("{}");
             return true;
         }
@@ -521,6 +531,7 @@ namespace Framework::Launcher {
             }
 
             // Retrieve fields and overwrite ProjectConfiguration defaults
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading launcher settings from JSON config file...");
             _config.classicGamePath = _fileConfig->GetDefault<std::wstring>("gamePath", _config.classicGamePath);
             _config.steamAppId      = _fileConfig->GetDefault<AppId_t>("steamAppId", _config.steamAppId);
             _config.executableName  = _fileConfig->GetDefault<std::wstring>("exeName", _config.executableName);

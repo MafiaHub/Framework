@@ -31,6 +31,7 @@ namespace Framework::Logging {
         std::chrono::time_point<std::chrono::system_clock> _sessionStart;
         std::unordered_map<const char *, std::shared_ptr<spdlog::logger>> _loggers;
         std::string _logName = "framework";
+        std::string _logFolder = "logs";
         size_t _maxFileSize  = 1024 * 1024 * 10;
         size_t _maxFileCount = 10;
         bool _loggingPaused  = false;
@@ -47,6 +48,14 @@ namespace Framework::Logging {
 
         const std::string &GetLogName() const {
             return _logName;
+        }
+
+        void SetLogFolder(const std::string &folder) {
+            _logFolder = folder;
+        }
+
+        const std::string &GetLogFolder() const {
+            return _logFolder;
         }
 
         void SetMaxFileSize(size_t size) {
