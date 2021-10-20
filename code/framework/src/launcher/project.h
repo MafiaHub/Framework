@@ -41,6 +41,10 @@ namespace Framework::Launcher {
         // additional DLL search paths
         std::vector<std::wstring> additionalSearchPaths;
 
+        // alternative game working directory
+        bool useAlternativeWorkDir = false; // Uses the game's root directory by default
+        std::wstring alternativeWorkDir;
+
         // prompt for game exe (only if CLASSIC platform is set)
         bool promptForGameExe = false;
         std::string promptTitle = "Select your game's executable";

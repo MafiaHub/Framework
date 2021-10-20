@@ -54,7 +54,7 @@ static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
 }
 
-void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
+static void InitialiseClientDLL() {
     static bool init = false;
 
     if (!init) {
@@ -63,7 +63,7 @@ void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
         if (mod) {
             auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
             if (init) {
-                init(gProjectDllPath);
+                //init(gProjectDllPath);
             } else {
                 MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
                 ExitProcess(1);
@@ -71,8 +71,18 @@ void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
         }
         init = true;
     }
+}
+
+void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
+    InitialiseClientDLL();
 
     return GetStartupInfoW(lpStartupInfo);
+}
+
+void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
+    InitialiseClientDLL();
+
+    return GetStartupInfoA(lpStartupInfo);
 }
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -181,6 +191,11 @@ namespace Framework::Launcher {
             // add our own paths now
             addDllDirectory(gProjectDllPath);
             addDllDirectory((std::wstring(gProjectDllPath) + L"\\bin").c_str());
+
+            if (_config.useAlternativeWorkDir) {
+                _gamePath += L"/" + _config.alternativeWorkDir;
+                addDllDirectory(_gamePath.c_str());
+            }
 
             SetCurrentDirectoryW(_gamePath.c_str());
         }
@@ -397,7 +412,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        printf("[Project] Loaded Game (%ld MB)\n", dwFileLength / 1024 / 1024);
+        printf("[Project] Loaded Game (%.02f MB)\n", dwFileLength / 1024.f / 1024.f);
 
         auto base = GetModuleHandle(nullptr);
 
@@ -426,6 +441,9 @@ namespace Framework::Launcher {
             }
             if (!_config.loadClientManually && !_strcmpi(exportFn, "GetStartupInfoW")) {
                 return static_cast<LPVOID>(GetStartupInfoW_Stub);
+            }
+            if (!_config.loadClientManually && !_strcmpi(exportFn, "GetStartupInfoA")) {
+                return static_cast<LPVOID>(GetStartupInfoA_Stub);
             }
             if (!_strcmpi(exportFn, "GetModuleFileNameA")) {
                 return static_cast<LPVOID>(GetModuleFileNameA_Hook);
