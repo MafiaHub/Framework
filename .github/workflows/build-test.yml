@@ -35,8 +35,9 @@ jobs:
             # Install latest CMake.
             -   uses: lukka/get-cmake@latest
 
-            -   uses: seanmiddleditch/gha-setup-ninja@master
+            -   name: Set up Visual Studio shell
                 if: runner.os == 'Windows'
+                uses: egor-tensin/vs-shell@v2
 
             -   name: Build the project (Windows)
                 if: runner.os == 'Windows'
