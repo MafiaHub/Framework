@@ -101,6 +101,8 @@ namespace Framework::Launcher {
             return _config;
         }
 
+        static void InitialiseClientDLL();
+
       private:
         bool EnsureFilesExist(const std::vector<std::string> &);
         bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);

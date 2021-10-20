@@ -54,33 +54,14 @@ static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
 }
 
-static void InitialiseClientDLL() {
-    static bool init = false;
-
-    if (!init) {
-        auto mod = LoadLibraryW(gDllName);
-
-        if (mod) {
-            auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
-            if (init) {
-                init(gProjectDllPath);
-            } else {
-                MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
-                ExitProcess(1);
-            }
-        }
-        init = true;
-    }
-}
-
 void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
-    InitialiseClientDLL();
+    Framework::Launcher::Project::InitialiseClientDLL();
 
     return GetStartupInfoW(lpStartupInfo);
 }
 
 void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
-    InitialiseClientDLL();
+    Framework::Launcher::Project::InitialiseClientDLL();
 
     return GetStartupInfoA(lpStartupInfo);
 }
@@ -599,5 +580,24 @@ namespace Framework::Launcher {
         }
 
         return false;
+    }
+
+    void Project::InitialiseClientDLL() {
+        static bool init = false;
+
+        if (!init) {
+            auto mod = LoadLibraryW(gDllName);
+
+            if (mod) {
+                auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
+                if (init) {
+                    init(gProjectDllPath);
+                } else {
+                    MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
+                    ExitProcess(1);
+                }
+            }
+            init = true;
+        }
     }
 } // namespace Framework::Launcher
