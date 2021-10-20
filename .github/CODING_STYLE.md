@@ -6,7 +6,7 @@ Our coding style is loosely based on the [Google C++ Style Guide](https://google
 
 ## Formatting
 
-We use our own [ClangFormat](.clang-format) config to format our code. The **ClangFormat** tool ensures we maintain style consistency and keeps it clean. Ensure your editor supports **ClangFormat** and your code gets formatted when you finish your work. You can find more information about **ClangFormat** in the [ClangFormat documentation](https://clang.llvm.org/docs/ClangFormatStyleGuide.html).
+We use our own [ClangFormat](.clang-format) config to format our code. The **ClangFormat** tool ensures we maintain style consistency and keeps it clean. Ensure your editor supports **ClangFormat** and your code gets formatted when you finish your work. You can find more information about **ClangFormat** in the [ClangFormat documentation](https://clang.llvm.org/docs/ClangFormat.html).
 
 ## Header Files
 
