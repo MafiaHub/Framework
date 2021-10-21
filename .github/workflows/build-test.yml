@@ -11,6 +11,17 @@ env:
     BUILD_TYPE: Debug
 
 jobs:
+    prep:
+        name: Notify about testing
+        runs-on: ubuntu-latest
+        steps:
+          - uses: inlife/actiord-action@v1
+            if: "always()"
+            continue-on-error: true
+            with:
+              url: ${{ secrets.DISCORD_WEBHOOK }}
+              icon: "https://cdn.zakto.pw/office/test.jpg"
+              state: started
     build:
         env:
             buildDir: '${{ github.workspace }}/build/'
@@ -71,3 +82,23 @@ jobs:
             -   name: Run the tests
                 run: |
                     cmake --build build --target RunFrameworkTests
+
+    done:
+        name: Notify about status
+        runs-on: ubuntu-latest
+        needs: build
+        if: "always()"
+        steps:
+          - uses: inlife/actiord-action@v1
+            if: ${{ contains(needs.build.result, 'success')) }}
+            continue-on-error: true
+            with:
+              url: ${{ secrets.DISCORD_WEBHOOK }}
+              state: succeeded
+          - uses: inlife/actiord-action@v1
+            if: ${{ !(contains(needs.build.result, 'success')) }}
+            continue-on-error: true
+            with:
+              url: ${{ secrets.DISCORD_WEBHOOK }}
+              icon: "https://cdn.zakto.pw/office/fail.jpg"
+              state: failed
