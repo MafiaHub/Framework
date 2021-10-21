@@ -19,7 +19,7 @@ jobs:
             if: "always()"
             continue-on-error: true
             with:
-              url: ${{ secrets.DISCORD_WEBHOOK }}
+              url: ${{ secrets.ACTIORD_URL }}
               icon: "https://cdn.zakto.pw/office/test.jpg"
               state: started
     build:
@@ -30,6 +30,7 @@ jobs:
                 os: [ macos-10.15, windows-2019, ubuntu-18.04 ]
             fail-fast: false
         runs-on: ${{ matrix.os }}
+        needs: prep
 
         steps:
             -   uses: actions/checkout@v2
@@ -93,12 +94,12 @@ jobs:
             if: ${{ contains(needs.build.result, 'success') }}
             continue-on-error: true
             with:
-              url: ${{ secrets.DISCORD_WEBHOOK }}
+              url: ${{ secrets.ACTIORD_URL }}
               state: succeeded
           - uses: inlife/actiord-action@v1
             if: ${{ !(contains(needs.build.result, 'success')) }}
             continue-on-error: true
             with:
-              url: ${{ secrets.DISCORD_WEBHOOK }}
+              url: ${{ secrets.ACTIORD_URL }}
               icon: "https://cdn.zakto.pw/office/fail.jpg"
               state: failed
