@@ -30,7 +30,7 @@ namespace Framework::Scripting {
       public:
         Engine() = default;
 
-        ~Engine();
+        ~Engine() = default;
 
         EngineError Init(SDKRegisterCallback = nullptr);
 
