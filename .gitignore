@@ -5,6 +5,7 @@
 *.a
 *.dylib
 *.DS_STORE
+*.tar.bz2
 
 *.vcxproj
 *.vcxproj.filters
@@ -30,7 +31,7 @@ cmake-build*
 
 code/projects
 
-vendors/cef/lib/osx
+vendors/cef/src
 
 _external
 **/obj
