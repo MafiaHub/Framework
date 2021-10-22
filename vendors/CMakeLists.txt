@@ -56,7 +56,6 @@ add_subdirectory(discord)
 
 # Build LibCEF
 add_subdirectory(cef)
-add_subdirectory(cef_target)
 
 # Build slikenet
 add_subdirectory(slikenet)
