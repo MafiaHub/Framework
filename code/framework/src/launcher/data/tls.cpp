@@ -16,8 +16,16 @@ __declspec(thread) uint8_t tls1[sizeof(int) * 7600];
 extern "C" extern uint8_t _tls_start;
 extern "C" extern uint32_t _tls_index;
 
+class TlsActivation {
+  public:
+    TlsActivation() {
+        tls1[5] = 0;
+    }
+};
+
+static TlsActivation TlsActivateItEarly;
+
 extern "C" __declspec(dllexport) void GetThreadLocalStorage(void **base, uint32_t *index) {
-    tls1[5] = 0;
     *base  = &_tls_start;
     *index = _tls_index;
 }
