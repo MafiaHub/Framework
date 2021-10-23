@@ -17,6 +17,12 @@
 #include <nlohmann/json.hpp>
 #include <optick.h>
 
+static const char envBootstrapper[] = R"(
+const publicRequire = require("module").createRequire(process.cwd() + "/resources/" + "{}" + "/");
+globalThis.require = publicRequire;
+require("vm").runInThisContext(process.argv[1]);
+)";
+
 namespace Framework::Scripting {
     Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _isShuttingDown(false), _path(path), _engine(engine), _regCb(cb) {
         if (LoadPackageFile()) {
@@ -158,14 +164,7 @@ namespace Framework::Scripting {
         node::IsolateSettings is;
         node::SetIsolateUpForNode(isolate, is);
 
-        std::string init = "const publicRequire ="
-                           "require('module').createRequire(process.cwd() + '/resources/"
-                           + _name
-                           + "/');"
-                             "globalThis.require = publicRequire;"
-                             "require('vm').runInThisContext(process.argv[1]);";
-
-        if (!node::LoadEnvironment(_environment, init.c_str()).IsEmpty())
+        if (!node::LoadEnvironment(_environment, fmt::format(envBootstrapper, _name).c_str()).IsEmpty())
             return false;
 
         Compile(content, entryPointFile.path());
