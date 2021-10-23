@@ -298,6 +298,8 @@ namespace Framework::Scripting {
 
                 script = v8::Script::Compile(context, source, &scriptOrigin);
             }
+            if (script.IsEmpty())
+                return false;
 
             _script.Reset(isolate, script.ToLocalChecked());
             return true;
