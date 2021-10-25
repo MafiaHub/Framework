@@ -11,6 +11,8 @@
 #include <logging/logger.h>
 #include <optick.h>
 
+#include "builtins/console.h"
+
 namespace Framework::Scripting {
     EngineError Engine::Init(SDKRegisterCallback cb) {
         // Define the arguments to be passed to the node instance
@@ -75,6 +77,10 @@ namespace Framework::Scripting {
 
         _isolate->SetCaptureStackTraceForUncaughtExceptions(true);
 
+        // Register our custom console definition
+        v8::debug::SetConsoleDelegate(_isolate, new Builtins::ConsoleDelegate);
+        
+        // Construct the global object template
         v8::HandleScope isolateHandleScope(_isolate);
         v8::Local<v8::ObjectTemplate> globalObjTemplate = v8::ObjectTemplate::New(_isolate);
         _globalObjectTemplate.Reset(_isolate, globalObjTemplate);
