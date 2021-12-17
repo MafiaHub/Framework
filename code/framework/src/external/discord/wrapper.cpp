@@ -79,7 +79,7 @@ namespace Framework::External::Discord {
             if (result == discord::Result::Ok) {
                 proc(tokenData.GetAccessToken());
             }
-            proc("");
+            else proc("");
         });
     }
 
