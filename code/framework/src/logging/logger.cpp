@@ -53,7 +53,12 @@ namespace Framework::Logging {
         spdLogger->set_level(spdlog::level::trace);
         spdlog::register_logger(spdLogger);
 
-        _loggers.emplace(logName, spdLogger);
+        try {
+            _loggers.emplace(logName, spdLogger);
+        }
+        catch (std::exception &ex) {
+        }
+
         return spdLogger;
     }
 
