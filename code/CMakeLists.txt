@@ -12,6 +12,7 @@ include_directories(PUBLIC
         "../vendors/spdlog/include"
         "../vendors/optick/src"
         "../vendors/steamworks/include"
+        "../vendors/galaxy/Include"
         "../vendors/udis86"
         "../vendors/httplib"
         "../vendors/cef"
