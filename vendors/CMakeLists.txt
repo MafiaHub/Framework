@@ -82,7 +82,7 @@ add_subdirectory(optick)
 add_subdirectory(nodejs)
 
 # Build flecs
-set(FLECS_SHARED_LIBBS CACHE BOOL "" OFF)
+set(FLECS_SHARED_LIBS CACHE BOOL "" OFF)
 add_subdirectory(flecs)
 
 # Build FMT
