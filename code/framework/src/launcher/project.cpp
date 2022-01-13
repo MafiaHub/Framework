@@ -38,7 +38,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 char fwgame_seg[0x13000000];
 #else
 #pragma bss_seg(".fwgame")
-char fwgame_seg[0x1400000];
+char fwgame_seg[0x2500000];
 #endif
 
 static const wchar_t *gImagePath;
