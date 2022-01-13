@@ -11,28 +11,33 @@
 // TODO make it work, it's currently not hooked up yet!!!
 
 #include "world/modules/base.hpp"
-#include "world/modules/network.hpp"
+#include "networking/network_peer.h"
 
 #include <flecs/flecs.h>
+
+#include "networking/messages/game_sync/entity_messages.h"
 
 namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
         flecs::world *_world = nullptr;
+        Networking::NetworkPeer *_networkPeer;
 
       public:
-        PlayerFactory(flecs::world *world): _world(world) {}
+        PlayerFactory(flecs::world *world, Networking::NetworkPeer *networkPeer): _world(world), _networkPeer(networkPeer) {}
 
-        template <typename... Args>
-        inline flecs::entity Create(Args &&...args) {
-            auto e = _world->entity<Args...>(std::forward<Args>(args)...);
+        inline flecs::entity Create(uint64_t guid) {
+            auto e = _world->entity();
 
-            e.add<Modules::Base::Transform>();
-            e.add<Modules::Base::Frame>();
-            e.add<Modules::Network::Streamer>();
-            auto streamable = e.get_mut<Modules::Network::Streamable>();
+            e.add<World::Modules::Base::Transform>();
+            e.add<World::Modules::Base::Frame>();
 
-            // TODO events
+            auto streamer = e.get_mut<World::Modules::Base::Streamer>();
+            streamer->guid = guid;
+
+            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
+            ENTITY_SETUP_DEFAULT_EVENTS(streamable, _networkPeer);
+
             return e;
         }
     };
