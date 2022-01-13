@@ -21,7 +21,7 @@ namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
         flecs::world *_world = nullptr;
-        Networking::NetworkPeer *_networkPeer;
+        Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:
         PlayerFactory(flecs::world *world, Networking::NetworkPeer *networkPeer): _world(world), _networkPeer(networkPeer) {}

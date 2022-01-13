@@ -22,6 +22,10 @@ namespace Framework::World {
 
         auto isVisible = [](flecs::entity e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS, Modules::Base::Transform &rhsTr,
                              Modules::Base::Streamable rhsS) -> bool {
+            if (!e.is_valid())
+                return false;
+            if (!e.is_alive())
+                return false;
             if (e.get<Modules::Base::PendingRemoval>() != nullptr)
                 return false;
             if (rhsS.alwaysVisible)
@@ -35,12 +39,25 @@ namespace Framework::World {
             return dist < streamer.range;
         };
 
+        _world->system<Modules::Base::PendingRemoval>("RemoveEntities")
+            .kind(flecs::PostUpdate)
+            .interval(_tickDelay * 4.0f)
+            .each([this](flecs::entity e, Modules::Base::PendingRemoval &pd) {
+                _findAllStreamerEntities.each([&e](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                    rhsS.entities.erase(e);
+                });
+
+                e.destruct();
+            });
+
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
                               .kind(flecs::PostUpdate)
                               .interval(_tickDelay)
                               .iter([allStreamableEntities, isVisible](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
                                   for (size_t i = 0; i < it.count(); i++) {
                                       allStreamableEntities.each([=](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
+                                          if (!e.is_alive())
+                                              return;
                                           if (e == it.entity(i) && rs[i].events.selfUpdateProc) {
                                               rs[i].events.selfUpdateProc(s[i].guid, e);
                                               return;
@@ -78,13 +95,6 @@ namespace Framework::World {
                                       });
                                   }
                               });
-
-        _world->system<Modules::Base::PendingRemoval>("RemoveEntities")
-            .kind(flecs::PostUpdate)
-            .interval(_tickDelay * 4.0f)
-            .each([](flecs::entity e, Modules::Base::PendingRemoval &pd) {
-                e.destruct();
-            });
 
         return EngineError::ENGINE_NONE;
     }

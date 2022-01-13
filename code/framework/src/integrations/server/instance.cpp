@@ -145,11 +145,11 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitManagers() {
         // weather
-        auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
+        static auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
         _weatherManager = envFactory.CreateWeather("WeatherManager");
 
         // TEST TEST TEST
-        auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
+        static auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
         auto testPlayer1 = playerFactory.Create((SLNet::UNASSIGNED_RAKNET_GUID).g);
 
         testPlayer1.add<World::Modules::Base::PendingRemoval>();

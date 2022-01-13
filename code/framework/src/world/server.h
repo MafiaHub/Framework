@@ -18,7 +18,7 @@ namespace Framework::World {
     class ServerEngine: public Engine {
       private:
         flecs::entity _streamEntities;
-        float _tickDelay = 7.183f;
+        float _tickDelay = 0.01667f;
 
       public:
         EngineError Init() override;

@@ -70,7 +70,9 @@ namespace Framework::World::Modules {
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
         };
 
-        struct PendingRemoval {};
+        struct PendingRemoval {
+            uint8_t _unused;
+        };
 
         struct Streamable {
             int virtualWorld        = 0;
