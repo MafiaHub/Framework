@@ -14,6 +14,49 @@
 #include <string>
 #include <unordered_map>
 
+#define CALL_CUSTOM_PROC(kind)                                                                                                                                                     \
+    const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();                                                                                                  \
+    if (streamable != nullptr) {                                                                                                                                                   \
+        if (streamable->modEvents.##kind != nullptr) {                                                                                                                             \
+            streamable->modEvents.##kind(guid, e);                                                                                                                                 \
+        }                                                                                                                                                                          \
+    }
+
+#define ENTITY_SETUP_DEFAULT_EVENTS(streamable, peer)                                                                                                                              \
+    streamable->events.spawnProc = [&](uint64_t guid, flecs::entity &e) {                                                                                                          \
+        Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn;                                                                                                          \
+        const auto tr = e.get<Framework::World::Modules::Base::Transform>();                                                                                                       \
+        if (tr)                                                                                                                                                                    \
+            entitySpawn.FromParameters(*tr);                                                                                                                                       \
+        peer->Send(entitySpawn, guid);                                                                                                                                             \
+        CALL_CUSTOM_PROC(spawnProc);                                                                                                                                               \
+        return true;                                                                                                                                                               \
+    };                                                                                                                                                                             \
+                                                                                                                                                                                   \
+    streamable->events.despawnProc = [&](uint64_t guid, flecs::entity &e) {                                                                                                        \
+        Framework::Networking::Messages::GameSyncEntityDespawn entityDespawn;                                                                                                      \
+        peer->Send(entityDespawn, guid);                                                                                                                                           \
+        CALL_CUSTOM_PROC(despawnProc);                                                                                                                                             \
+        return true;                                                                                                                                                               \
+    };                                                                                                                                                                             \
+                                                                                                                                                                                   \
+    streamable->events.selfUpdateProc = [&](uint64_t guid, flecs::entity &e) {                                                                                                     \
+        Framework::Networking::Messages::GameSyncEntitySelfUpdate entitySelfUpdate;                                                                                                \
+        peer->Send(entitySelfUpdate, guid);                                                                                                                                        \
+        CALL_CUSTOM_PROC(selfUpdateProc);                                                                                                                                          \
+        return true;                                                                                                                                                               \
+    };                                                                                                                                                                             \
+                                                                                                                                                                                   \
+    streamable->events.updateProc = [&](uint64_t guid, flecs::entity &e) {                                                                                                         \
+        Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;                                                                                                        \
+        const auto tr = e.get<Framework::World::Modules::Base::Transform>();                                                                                                       \
+        if (tr)                                                                                                                                                                    \
+            entityUpdate.FromParameters(*tr);                                                                                                                                      \
+        peer->Send(entityUpdate, guid);                                                                                                                                            \
+        CALL_CUSTOM_PROC(updateProc);                                                                                                                                              \
+        return true;                                                                                                                                                               \
+    };
+
 namespace Framework::World::Modules {
     struct Base {
         struct Transform {

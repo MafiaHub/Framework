@@ -15,13 +15,7 @@
 
 #include <flecs/flecs.h>
 
-#define CALL_CUSTOM_PROC(kind)\
-    if (e.get<World::Modules::Base::Streamable>() != nullptr) { \
-    const auto streamable = e.get_mut<World::Modules::Base::Streamable>(); \
-    if (streamable->modEvents.##kind ) { \
-        streamable->modEvents.##kind (guid, e); \
-    } \
-    } \
+#include "networking/messages/game_sync/entity_messages.h"
 
 namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
@@ -37,51 +31,14 @@ namespace Framework::Integrations::Shared::Archetypes {
 
             e.add<World::Modules::Base::Transform>();
             e.add<World::Modules::Base::Frame>();
-            auto streamer = e.get_mut<World::Modules::Base::Streamer>();
 
+            auto streamer = e.get_mut<World::Modules::Base::Streamer>();
             streamer->guid = guid;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-
-            auto events = World::Modules::Base::Streamable::Events {};
-
-            events.spawnProc = [&](uint64_t guid, flecs::entity &e) {
-                // TODO framework send message first
-
-                CALL_CUSTOM_PROC(spawnProc);
-
-                return true;
-            };
-
-            events.despawnProc = [&](uint64_t guid, flecs::entity &e) {
-                // TODO framework send message first
-                
-                CALL_CUSTOM_PROC(despawnProc);
-
-                return true;
-            };
-
-            events.selfUpdateProc = [&](uint64_t guid, flecs::entity &e) {
-                // TODO framework send message first
-                
-                CALL_CUSTOM_PROC(selfUpdateProc);
-
-                return true;
-            };
-
-            events.updateProc = [&](uint64_t guid, flecs::entity &e) {
-                // TODO framework send message first
-                
-                CALL_CUSTOM_PROC(updateProc);
-
-                return true;
-            };
-
-            streamable->events = events;
+            ENTITY_SETUP_DEFAULT_EVENTS(streamable, _networkPeer);
 
             return e;
         }
     };
 } // namespace Framework::Integrations::Shared::Archetypes
-
-#undef CALL_CUSTOM_PROC
