@@ -10,6 +10,7 @@
 
 #include "../shared/modules/mod.hpp"
 #include "../shared/types/environment.hpp"
+#include "../shared/types/player.hpp"
 #include "integrations/shared/messages/weather_update.h"
 #include "world/server.h"
 
@@ -146,6 +147,12 @@ namespace Framework::Integrations::Server {
         // weather
         auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
         _weatherManager = envFactory.CreateWeather("WeatherManager");
+
+        // TEST TEST TEST
+        auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
+        auto testPlayer1 = playerFactory.Create((SLNet::UNASSIGNED_RAKNET_GUID).g);
+
+        testPlayer1.add<World::Modules::Base::PendingRemoval>();
     }
 
     bool Instance::LoadConfigFromJSON() {

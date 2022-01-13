@@ -42,7 +42,12 @@ namespace Framework::World::Modules {
                 Proc despawnProc;
                 Proc selfUpdateProc;
                 Proc updateProc;
-            } events;
+            };
+
+            Events events;
+
+            // Extra set of events so mod can supply custom data.
+            Events modEvents;
         };
 
         struct Streamer {
