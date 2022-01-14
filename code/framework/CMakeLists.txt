@@ -9,6 +9,8 @@ set(FRAMEWORK_SRC
         src/utils/job_system.cpp
         src/utils/command_processor.cpp
         src/utils/hashing.cpp
+        src/utils/states/machine.cpp
+        src/utils/states/state.cpp
 
         src/external/discord/wrapper.cpp
         src/external/sentry/wrapper.cpp
