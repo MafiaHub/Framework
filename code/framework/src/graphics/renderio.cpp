@@ -10,27 +10,19 @@
 
 namespace Framework::Graphics {
 
-    void RenderIO::AddRenderTask(Proc proc) {
-        _renderQueue.push(proc);
+    void RenderIO::AddRenderTask(Utils::Channel::Proc proc) {
+        _mainChannel.PushTask(proc);
     }
 
-    void RenderIO::RespondTask(Proc proc) {
-        _mainQueue.push(proc);
+    void RenderIO::RespondTask(Utils::Channel::Proc proc) {
+        _renderChannel.PushTask(proc);
     }
 
     void RenderIO::UpdateMainThread() {
-        while (!_mainQueue.empty()) {
-            const auto proc = _mainQueue.front();
-            proc();
-            _mainQueue.pop();
-        }
+        _mainChannel.Update();
     }
 
     void RenderIO::UpdateRenderThread() {
-        while (!_renderQueue.empty()) {
-            const auto proc = _renderQueue.front();
-            proc();
-            _renderQueue.pop();
-        }
+        _renderChannel.Update();
     }
 } // namespace Framework::Graphics

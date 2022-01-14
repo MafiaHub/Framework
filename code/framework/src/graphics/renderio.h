@@ -8,21 +8,17 @@
 
 #pragma once
 
-#include <functional>
-#include <queue>
+#include "utils/channel.h"
 
 namespace Framework::Graphics {
     class RenderIO final {
-      public:
-        using Proc = std::function<void()>;
-
       private:
-        std::queue<Proc> _mainQueue;
-        std::queue<Proc> _renderQueue;
+        Utils::Channel _mainChannel;
+        Utils::Channel _renderChannel;
 
       public:
-        void AddRenderTask(Proc proc);
-        void RespondTask(Proc proc);
+        void AddRenderTask(Utils::Channel::Proc proc);
+        void RespondTask(Utils::Channel::Proc proc);
 
         // Poll these in distinct threads
         void UpdateMainThread();
