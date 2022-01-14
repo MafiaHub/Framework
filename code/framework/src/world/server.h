@@ -10,7 +10,6 @@
 
 #include "engine.h"
 #include "errors.h"
-
 #include "networking/network_peer.h"
 
 #include <flecs/flecs.h>
@@ -19,11 +18,12 @@
 namespace Framework::World {
     class ServerEngine: public Engine {
       private:
+        Framework::Networking::NetworkPeer *_networkPeer = nullptr;
         flecs::entity _streamEntities;
         float _tickDelay = 0.01667f;
 
       public:
-        EngineError Init(Framework::Networking::NetworkPeer *networkPeer) override;
+        EngineError Init(Framework::Networking::NetworkPeer *networkPeer);
 
         EngineError Shutdown() override;
 

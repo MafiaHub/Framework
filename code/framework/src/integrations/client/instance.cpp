@@ -35,7 +35,7 @@ namespace Framework::Integrations::Client {
         }
 
         if (_worldEngine) {
-            _worldEngine->Init(nullptr);
+            _worldEngine->Init();
 
             _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
         }
