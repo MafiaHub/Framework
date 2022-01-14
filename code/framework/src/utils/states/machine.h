@@ -3,6 +3,7 @@
 #include "state.h"
 
 #include <map>
+#include <memory>
 
 namespace Framework::Utils::States {
     enum class Context {
@@ -14,10 +15,10 @@ namespace Framework::Utils::States {
 
     class Machine {
       private:
-        std::map<int32_t, IState *> _states;
+        std::map<int32_t, std::shared_ptr<IState>> _states;
 
-        IState *_currentState;
-        IState *_nextState;
+        std::shared_ptr<IState> _currentState;
+        std::shared_ptr<IState> _nextState;
 
         Context _currentContext;
 
@@ -26,15 +27,20 @@ namespace Framework::Utils::States {
         ~Machine();
 
         bool RequestNextState(int32_t);
-        void RegisterState(IState *);
+
+        template<typename T>
+        void RegisterState() {
+            auto ptr = std::make_shared<T>();
+            _states.insert(std::make_pair(ptr->GetId(), ptr));
+        }
 
         bool Update();
 
-        IState *GetCurrentState() const {
+        std::shared_ptr<IState> GetCurrentState() const {
             return _currentState;
         }
 
-        IState *GetNextState() const {
+        std::shared_ptr<IState> GetNextState() const {
             return _nextState;
         }
     };
