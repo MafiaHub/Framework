@@ -45,7 +45,8 @@ namespace Framework::Integrations::Server {
         bool enableSignals;
 
         // update intervals
-        uint32_t tickInterval = 3334;
+        float tickInterval = 0.016667f;
+        float streamerTickInterval = 0.033334f;
 
         // args
         int argc;

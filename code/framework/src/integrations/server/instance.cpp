@@ -80,7 +80,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize the world
-        if (_worldEngine->Init(_networkingEngine->GetNetworkServer()) != World::EngineError::ENGINE_NONE) {
+        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
@@ -152,7 +152,7 @@ namespace Framework::Integrations::Server {
         static auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld());
         auto testPlayer1 = playerFactory.Create((SLNet::UNASSIGNED_RAKNET_GUID).g);
 
-        testPlayer1.add<World::Modules::Base::PendingRemoval>();
+        //testPlayer1.add<World::Modules::Base::PendingRemoval>();
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -250,10 +250,10 @@ namespace Framework::Integrations::Server {
 
             PostUpdate();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(_opts.tickInterval);
+            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(0));
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     void Instance::Run() {
         while (_alive) {

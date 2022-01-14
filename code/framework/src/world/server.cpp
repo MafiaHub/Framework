@@ -11,7 +11,7 @@
 #include "utils/time.h"
 
 namespace Framework::World {
-    EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer) {
+    EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval) {
         const auto status = Engine::Init();
 
         _networkPeer = networkPeer;
@@ -43,7 +43,7 @@ namespace Framework::World {
 
         _world->system<Modules::Base::PendingRemoval>("RemoveEntities")
             .kind(flecs::PostUpdate)
-            .interval(_tickDelay * 4.0f)
+            .interval(tickInterval * 4.0f)
             .each([this](flecs::entity e, Modules::Base::PendingRemoval &pd) {
                 _findAllStreamerEntities.each([&e](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     rhsS.entities.erase(e);
@@ -54,8 +54,11 @@ namespace Framework::World {
 
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
                               .kind(flecs::PostUpdate)
-                              .interval(_tickDelay)
+                              .interval(tickInterval)
                               .iter([allStreamableEntities, isVisible, this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
+                                  static int64_t lasttime = Utils::Time::GetTime();
+                                  printf("%lld\n", Utils::Time::GetTime() - lasttime);
+                                  lasttime = Utils::Time::GetTime();
                                   for (size_t i = 0; i < it.count(); i++) {
                                       allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
                                           if (!e.is_alive())

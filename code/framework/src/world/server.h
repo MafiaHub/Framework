@@ -20,22 +20,12 @@ namespace Framework::World {
       private:
         Framework::Networking::NetworkPeer *_networkPeer = nullptr;
         flecs::entity _streamEntities;
-        float _tickDelay = 0.01667f;
 
       public:
-        EngineError Init(Framework::Networking::NetworkPeer *networkPeer);
+        EngineError Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval);
 
         EngineError Shutdown() override;
 
         void Update() override;
-
-        void SetTickInterval(float ms) {
-            _tickDelay = ms;
-            ecs_set_interval(_world->get_world(), _streamEntities.id(), ms);
-        }
-
-        float GetTickInterval() const {
-            return _tickDelay;
-        }
     };
 } // namespace Framework::World
