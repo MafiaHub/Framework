@@ -65,6 +65,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/networking/network_client.cpp
 
         src/external/steam/wrapper.cpp
+        src/external/imgui/wrapper.cpp
 
         src/world/client.cpp
 
