@@ -131,7 +131,7 @@ link_shared_deps(FrameworkClient)
 add_dependencies(FrameworkClient libcef_dll_wrapper CEFTarget)
 
 target_link_libraries(FrameworkServer mongoose NodeJS libsig)
-target_link_libraries(FrameworkClient DiscordSDK CEFTarget libcef_dll_wrapper)
+target_link_libraries(FrameworkClient DiscordSDK CEFTarget libcef_dll_wrapper DearImGUI)
 
 # OS specific libraries
 if (WIN32)
