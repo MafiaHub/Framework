@@ -8,6 +8,8 @@
 
 #include "machine.h"
 
+#include <logging/logger.h>
+
 namespace Framework::Utils::States {
     Machine::Machine(): _currentState(nullptr), _nextState(nullptr), _currentContext(Context::Enter) {
 
@@ -36,6 +38,8 @@ namespace Framework::Utils::States {
         // Mark it for processing and force the actual state to exit
         _nextState = (*it).second;
         _currentContext = Context::Exit;
+        
+        Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_UTILS)->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
         return true;
     }
 
@@ -74,6 +78,6 @@ namespace Framework::Utils::States {
             return false;
         }
 
-
+        return true;
     }
 }
