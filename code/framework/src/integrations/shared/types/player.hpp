@@ -15,8 +15,6 @@
 
 #include <flecs/flecs.h>
 
-#include "networking/messages/game_sync/entity_messages.h"
-
 namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
@@ -36,7 +34,7 @@ namespace Framework::Integrations::Shared::Archetypes {
             streamer->guid = guid;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-            ENTITY_SETUP_DEFAULT_EVENTS(streamable, _networkPeer);
+            World::Modules::Base::SetupDefaultEvents(streamable, _networkPeer);
 
             return e;
         }
