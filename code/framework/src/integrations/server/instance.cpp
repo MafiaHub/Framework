@@ -247,7 +247,8 @@ namespace Framework::Integrations::Server {
             PostUpdate();
 
             _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
-        } else {
+        }
+        else {
             std::this_thread::sleep_for(std::chrono::milliseconds(0));
         }
     }

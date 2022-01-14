@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "entity_spawn.h"
 #include "entity_despawn.h"
-#include "entity_update.h"
 #include "entity_self_update.h"
+#include "entity_spawn.h"
+#include "entity_update.h"

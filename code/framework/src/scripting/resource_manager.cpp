@@ -10,12 +10,11 @@
 
 #include "engine.h"
 
-#include <regex>
-
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileIterator.h>
 #include <cppfs/fs.h>
 #include <logging/logger.h>
+#include <regex>
 
 namespace Framework::Scripting {
     ResourceManager::ResourceManager(Engine *engine): _engine(engine) {}
@@ -29,7 +28,7 @@ namespace Framework::Scripting {
     ResourceManagerError ResourceManager::Load(std::string name, SDKRegisterCallback cb) {
         // Make sure the package has an acceptable name
         std::regex exp("^[A-z_0-9]{0,}$");
-        if(!std::regex_match(name, exp)){
+        if (!std::regex_match(name, exp)) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to load package {} due to invalid name", name);
             return ResourceManagerError::RESOURCE_NAME_INVALID;
         }

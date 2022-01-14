@@ -10,8 +10,8 @@
 
 // TODO make it work, it's currently not hooked up yet!!!
 
-#include "world/modules/base.hpp"
 #include "networking/network_peer.h"
+#include "world/modules/base.hpp"
 
 #include <flecs/flecs.h>
 
@@ -29,7 +29,7 @@ namespace Framework::Integrations::Shared::Archetypes {
             e.add<World::Modules::Base::Transform>();
             e.add<World::Modules::Base::Frame>();
 
-            auto streamer = e.get_mut<World::Modules::Base::Streamer>();
+            auto streamer  = e.get_mut<World::Modules::Base::Streamer>();
             streamer->guid = guid;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();

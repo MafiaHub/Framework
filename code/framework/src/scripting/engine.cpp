@@ -122,8 +122,8 @@ namespace Framework::Scripting {
         _platform.reset();
         delete _resourceManager;
 
-        _isolate = nullptr;
-        _platform = nullptr;
+        _isolate         = nullptr;
+        _platform        = nullptr;
         _resourceManager = nullptr;
 
         return Framework::Scripting::EngineError::ENGINE_NONE;

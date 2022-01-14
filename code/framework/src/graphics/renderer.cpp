@@ -34,10 +34,11 @@ namespace Framework::Graphics {
 
         if (_d3d11Backend) {
             _d3d11Backend->Shutdown();
-        } else if (_d3d9Backend) {
+        }
+        else if (_d3d9Backend) {
             _d3d9Backend->Shutdown();
         }
-        
+
         _initialized = false;
         return RendererError::RENDERER_NONE;
     }
@@ -50,4 +51,4 @@ namespace Framework::Graphics {
             _d3d9Backend->Update();
         }
     }
-} // namespace Framework::GUI
+} // namespace Framework::Graphics
