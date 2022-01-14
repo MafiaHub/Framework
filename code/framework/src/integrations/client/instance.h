@@ -13,8 +13,8 @@
 #include <external/discord/wrapper.h>
 #include <functional>
 #include <graphics/renderer.h>
-#include <world/client.h>
 #include <memory>
+#include <world/client.h>
 
 namespace Framework::Integrations::Client {
     struct InstanceOptions {

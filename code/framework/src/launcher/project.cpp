@@ -9,9 +9,9 @@
 #include "project.h"
 
 #include "loaders/exe_ldr.h"
+#include "logging/logger.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
-#include "logging/logger.h"
 
 #include <ShellScalingApi.h>
 #include <Windows.h>
@@ -23,8 +23,8 @@
 #include <functional>
 #include <ostream>
 #include <psapi.h>
-#include <utils/hooking/hooking.h>
 #include <sfd.h>
+#include <utils/hooking/hooking.h>
 
 // Enforce discrete GPU on mobile units.
 extern "C" {
@@ -316,7 +316,7 @@ namespace Framework::Launcher {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
             return 0;
         }
-        
+
         if (!handle.isDirectory()) {
             const auto exePath = Utils::StringUtils::WideToNormal(gProjectDllPath);
 
@@ -335,16 +335,17 @@ namespace Framework::Launcher {
                 handle = cppfs::fs::open(path);
 
                 if (!handle.isFile()) {
-                    MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(), _config.name.c_str(), MB_ICONERROR);
+                    MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(),
+                        _config.name.c_str(), MB_ICONERROR);
                     return 0;
                 }
 
                 _config.classicGamePath = Utils::StringUtils::NormalToWide(path);
-                
+
                 std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
 
                 _config.classicGamePath = _config.classicGamePath.substr(0, _config.classicGamePath.length() - _config.executableName.length());
-                
+
                 if (_config.promptSelectionFunctor)
                     _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
 
@@ -382,7 +383,7 @@ namespace Framework::Launcher {
         }
 
         gImagePath = _gamePath.c_str();
-        gDllName = _config.destinationDllName.c_str();
+        gDllName   = _config.destinationDllName.c_str();
 
         // determine file length
         DWORD dwFileLength = SetFilePointer(hFile, 0, NULL, FILE_END);
@@ -528,7 +529,7 @@ namespace Framework::Launcher {
 
     bool Project::LoadJSONConfig() {
         if (!_config.overrideConfigFileName) {
-            _config.configFileName = fmt::format("{}_launcher.json", _config.name);     
+            _config.configFileName = fmt::format("{}_launcher.json", _config.name);
         }
         auto configHandle = cppfs::fs::open(_config.configFileName);
 
@@ -551,9 +552,9 @@ namespace Framework::Launcher {
 
             // Retrieve fields and overwrite ProjectConfiguration defaults
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading launcher settings from JSON config file...");
-            _config.classicGamePath = _fileConfig->GetDefault<std::wstring>("gamePath", _config.classicGamePath);
-            _config.steamAppId      = _fileConfig->GetDefault<AppId_t>("steamAppId", _config.steamAppId);
-            _config.executableName  = _fileConfig->GetDefault<std::wstring>("exeName", _config.executableName);
+            _config.classicGamePath    = _fileConfig->GetDefault<std::wstring>("gamePath", _config.classicGamePath);
+            _config.steamAppId         = _fileConfig->GetDefault<AppId_t>("steamAppId", _config.steamAppId);
+            _config.executableName     = _fileConfig->GetDefault<std::wstring>("exeName", _config.executableName);
             _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("dllName", _config.destinationDllName);
 
             std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
@@ -612,7 +613,8 @@ namespace Framework::Launcher {
                 auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
                 if (init) {
                     init(gProjectDllPath);
-                } else {
+                }
+                else {
                     MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
                     ExitProcess(1);
                 }

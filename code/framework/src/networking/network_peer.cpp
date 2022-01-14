@@ -7,6 +7,7 @@
  */
 
 #include "network_peer.h"
+
 #include "errors.h"
 
 #include <logging/logger.h>
@@ -43,7 +44,7 @@ namespace Framework::Networking {
         return true;
     }
 
-    bool NetworkPeer::Send(Messages::IMessage& msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
+    bool NetworkPeer::Send(Messages::IMessage &msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
         return Send(msg, SLNet::RakNetGUID(guid), priority, reliability);
     }
 
@@ -94,4 +95,4 @@ namespace Framework::Networking {
     const char *NetworkPeer::GetConnectionAttemptString(uint8_t id) {
         return ConnectionAttemptString[id];
     }
-}
+} // namespace Framework::Networking

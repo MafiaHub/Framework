@@ -80,7 +80,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize the world
-        if (_worldEngine->Init() != World::EngineError::ENGINE_NONE) {
+        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
@@ -145,14 +145,10 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitManagers() {
         // weather
-        auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
-        _weatherManager = envFactory.CreateWeather("WeatherManager");
+        _envFactory.reset(new Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld()));
+        _weatherManager = _envFactory->CreateWeather("WeatherManager");
 
-        // TEST TEST TEST
-        auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
-        auto testPlayer1 = playerFactory.Create((SLNet::UNASSIGNED_RAKNET_GUID).g);
-
-        testPlayer1.add<World::Modules::Base::PendingRemoval>();
+        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld()));
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -198,7 +194,7 @@ namespace Framework::Integrations::Server {
             _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
 
             auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (e.is_valid()) {
+            if (e.is_valid() && e.is_alive()) {
                 e.add<World::Modules::Base::PendingRemoval>();
             }
         });
@@ -250,10 +246,11 @@ namespace Framework::Integrations::Server {
 
             PostUpdate();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(_opts.tickInterval);
+            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(0));
+        }
     }
     void Instance::Run() {
         while (_alive) {

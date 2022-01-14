@@ -8,13 +8,13 @@
 
 #pragma once
 
+#include "utils/config.h"
+
 #include <external/steam/wrapper.h>
 #include <functional>
 #include <string>
 #include <vector>
 #include <windows.h>
-
-#include "utils/config.h"
 
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
@@ -49,9 +49,9 @@ namespace Framework::Launcher {
         std::wstring alternativeWorkDir;
 
         // prompt for game exe (only if CLASSIC platform is set)
-        bool promptForGameExe = false;
-        std::string promptTitle = "Select your game's executable";
-        std::string promptFilter = "Game.exe";
+        bool promptForGameExe        = false;
+        std::string promptTitle      = "Select your game's executable";
+        std::string promptFilter     = "Game.exe";
         std::string promptFilterName = "Your Game.exe";
         std::string promptExtension  = "*.exe";
         std::function<std::wstring(std::wstring gameExePath)> promptSelectionFunctor;
@@ -59,10 +59,10 @@ namespace Framework::Launcher {
         // JSON config project settings
         bool disablePersistentConfig = false;
         bool overrideConfigFileName  = false; // Uses <config.name>_launcher.json by default
-        std::string configFileName = "launcher.json";
+        std::string configFileName   = "launcher.json";
 
         // Console allocation
-        bool allocateDeveloperConsole = false;
+        bool allocateDeveloperConsole      = false;
         std::wstring developerConsoleTitle = L"framework: dev-console";
     };
 
@@ -100,7 +100,7 @@ namespace Framework::Launcher {
             _preLaunchFunctor = preLaunchFunctor;
         }
 
-        ProjectConfiguration& GetConfig() {
+        ProjectConfiguration &GetConfig() {
             return _config;
         }
 

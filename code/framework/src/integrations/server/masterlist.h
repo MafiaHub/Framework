@@ -17,8 +17,10 @@ namespace Framework::Integrations::Server {
     class Masterlist final: public Services::Masterlist {
       private:
         Instance *_instance = nullptr;
+
       public:
         Masterlist(Instance *instance);
+
       protected:
         virtual std::string GetGame() override;
 

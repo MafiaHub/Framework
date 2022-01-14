@@ -197,7 +197,6 @@ namespace hook {
     }
 #endif
 
-
     template <typename T>
     inline T *getRVA(uintptr_t rva) {
 #ifdef _M_IX86

@@ -28,20 +28,20 @@ namespace Framework::External::CEF {
     void Application::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {}
 
     void Application::OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) {
-        if(_scriptingEvents.empty()){
+        if (_scriptingEvents.empty()) {
             return;
         }
 
         // Erase the scripting events that only belongs to this context
         auto it = _scriptingEvents.begin();
-		while (it != _scriptingEvents.end()) {
-			if (it->first->IsSame(context)) {
-				it = _scriptingEvents.erase(it);
-			} else {
-				++it;
-			}
-		}
-
+        while (it != _scriptingEvents.end()) {
+            if (it->first->IsSame(context)) {
+                it = _scriptingEvents.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
     }
 
     void Application::OnBeforeCommandLineProcessing(const CefString &processType, CefRefPtr<CefCommandLine> commandLine) {

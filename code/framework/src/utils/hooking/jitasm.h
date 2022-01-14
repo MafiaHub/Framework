@@ -12117,22 +12117,22 @@ namespace jitasm {
         // void vpcomuw(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)	{AppendInstr(I_VPCOMUW, 0x6D, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
         // E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpcomw(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)	{AppendInstr(I_VPCOMW, 0xCD,
         // E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpcomw(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8&
-        // type)	{AppendInstr(I_VPCOMW, 0xCD, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpermil2pd(const XmmReg& dst, const XmmReg&
-        // src1, const XmmReg& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void
-        // vpermil2pd(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 |
-        // E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
+        // type)	{AppendInstr(I_VPCOMW, 0xCD, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpermil2pd(const XmmReg& dst, const
+        // XmmReg& src1, const XmmReg& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 |
+        // E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
         // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));} void vpermil2pd(const YmmReg& dst, const YmmReg&
-        // src1, const YmmReg& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void
-        // vpermil2pd(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 |
-        // E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
+        // src1, const YmmReg& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));}
+        // void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0
+        // | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
         // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));} void vpermil2ps(const XmmReg& dst, const XmmReg&
-        // src1, const XmmReg& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void
-        // vpermil2ps(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 |
-        // E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
+        // src1, const XmmReg& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));}
+        // void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0
+        // | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
         // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));} void vpermil2ps(const YmmReg& dst, const YmmReg&
-        // src1, const YmmReg& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void
-        // vpermil2ps(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 |
-        // E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
+        // src1, const YmmReg& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));}
+        // void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0
+        // | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
         // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));}
         void vphaddbd(const XmmReg &dst, const XmmReg &src) {
             AppendInstr(I_VPHADDBD, 0xC2, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
@@ -14925,8 +14925,9 @@ namespace jitasm {
                         JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin, block->successor[1]->instr_begin, constraint == 0 ? "true" : "false");
                     // if (block->dfs_parent) JITASM_TRACE("\t\"node%d\" -> \"node%d\" [color=\"#ff0000\"];\n", block->instr_begin, block->dfs_parent->instr_begin);
                     // if (block->immediate_dominator) JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=false, color=\"#0000ff\"];\n", block->instr_begin,
-                    // block->immediate_dominator->instr_begin); for (size_t i = 0; i < block->predecessor.size(); ++i) { 	JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=false,
-                    //color=\"#808080\"];\n", block->instr_begin, block->predecessor[i]->instr_begin);
+                    // block->immediate_dominator->instr_begin); for (size_t i = 0; i < block->predecessor.size(); ++i) { 	JITASM_TRACE("\t\"node%d\" -> \"node%d\"
+                    // [constraint=false,
+                    // color=\"#808080\"];\n", block->instr_begin, block->predecessor[i]->instr_begin);
                     //}
                 }
                 JITASM_TRACE("}\n");

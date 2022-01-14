@@ -9,6 +9,7 @@
 #include "engine.h"
 
 #include "modules/base.hpp"
+
 #include <slikenet/types.h>
 
 namespace Framework::World {
@@ -30,7 +31,7 @@ namespace Framework::World {
     void Engine::Update() {
         _world->progress();
     }
-    
+
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) {
         flecs::entity ourEntity;
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {

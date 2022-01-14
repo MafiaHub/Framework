@@ -21,7 +21,15 @@ namespace Framework::Networking::Messages {
     enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
 
     enum InternalMessages : uint8_t { INTERNAL_RPC = ID_USER_PACKET_ENUM + 1, INTERNAL_NEXT_MESSAGE_ID };
-    enum GameMessages : uint8_t { GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID, GAME_CONNECTION_FINALIZED, GAME_SYNC_ENTITY_SPAWN, GAME_SYNC_ENTITY_UPDATE, GAME_SYNC_ENTITY_SELF_UPDATE, GAME_SYNC_ENTITY_DESPAWN, GAME_NEXT_MESSAGE_ID };
+    enum GameMessages : uint8_t {
+        GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID,
+        GAME_CONNECTION_FINALIZED,
+        GAME_SYNC_ENTITY_SPAWN,
+        GAME_SYNC_ENTITY_UPDATE,
+        GAME_SYNC_ENTITY_SELF_UPDATE,
+        GAME_SYNC_ENTITY_DESPAWN,
+        GAME_NEXT_MESSAGE_ID
+    };
 
     class IMessage {
       private:
@@ -38,7 +46,7 @@ namespace Framework::Networking::Messages {
             packet = p;
         }
 
-        SLNet::Packet* GetPacket() const {
+        SLNet::Packet *GetPacket() const {
             return packet;
         }
     };

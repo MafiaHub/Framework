@@ -20,9 +20,7 @@ namespace Framework::Networking::Messages {
             return GAME_SYNC_ENTITY_DESPAWN;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
-
-        }
+        void Serialize(SLNet::BitStream *bs, bool write) override {}
 
         bool Valid() override {
             return true;

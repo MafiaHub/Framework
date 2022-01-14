@@ -8,11 +8,11 @@
 
 #pragma once
 
+#include <functional>
 #include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
-#include <functional>
 
 namespace Framework::Utils {
     using CommandCallback = std::function<void(const std::string &)>;
@@ -26,7 +26,7 @@ namespace Framework::Utils {
       public:
         CommandProcessor();
 
-        void SetCommandHandler(CommandCallback cb){
+        void SetCommandHandler(CommandCallback cb) {
             _cb = cb;
         }
 

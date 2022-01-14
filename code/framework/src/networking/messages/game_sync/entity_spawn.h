@@ -9,7 +9,6 @@
 #pragma once
 
 #include "../messages.h"
-
 #include "world/modules/base.hpp"
 
 #include <BitStream.h>

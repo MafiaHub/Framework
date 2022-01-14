@@ -19,7 +19,7 @@ namespace Framework::Graphics {
         Backend() = default;
 
         virtual bool Init(TDevice device, TContext context) = 0;
-        virtual bool Shutdown()     = 0;
+        virtual bool Shutdown()                             = 0;
 
         virtual void Update() = 0;
 
@@ -43,4 +43,4 @@ namespace Framework::Graphics {
             _context = ctx;
         }
     };
-} // namespace Framework::GUI
+} // namespace Framework::Graphics

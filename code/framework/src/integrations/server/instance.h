@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../shared/types/environment.hpp"
+#include "../shared/types/player.hpp"
 #include "errors.h"
 #include "external/firebase/wrapper.h"
 #include "masterlist.h"
@@ -45,7 +47,8 @@ namespace Framework::Integrations::Server {
         bool enableSignals;
 
         // update intervals
-        uint32_t tickInterval = 3334;
+        float tickInterval         = 0.016667f;
+        float streamerTickInterval = 0.033334f;
 
         // args
         int argc;
@@ -81,6 +84,10 @@ namespace Framework::Integrations::Server {
 
         // managers
         flecs::entity _weatherManager;
+
+        // entity factories
+        std::unique_ptr<Shared::Archetypes::EnvironmentFactory> _envFactory;
+        std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
 
       public:
         Instance();

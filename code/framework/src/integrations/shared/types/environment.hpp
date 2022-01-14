@@ -19,10 +19,9 @@ namespace Framework::Integrations::Shared::Archetypes {
     class EnvironmentFactory {
       private:
         flecs::world *_world = nullptr;
-        Networking::NetworkPeer *_networkPeer;
 
       public:
-        EnvironmentFactory(flecs::world *world, Networking::NetworkPeer *networkPeer): _world(world), _networkPeer(networkPeer) {}
+        EnvironmentFactory(flecs::world *world): _world(world) {}
 
         template <typename... Args>
         inline flecs::entity CreateWeather(Args &&...args) {
@@ -35,11 +34,11 @@ namespace Framework::Integrations::Shared::Archetypes {
             streamable->alwaysVisible = true;
 
             auto weatherEvents       = World::Modules::Base::Streamable::Events {};
-            weatherEvents.updateProc = [this](uint64_t g, flecs::entity &e) {
+            weatherEvents.updateProc = [this](Framework::Networking::NetworkPeer *peer, uint64_t g, flecs::entity &e) {
                 auto weather = e.get<Shared::Modules::Mod::Environment>();
                 Framework::Integrations::Shared::Messages::WeatherUpdate msg;
                 msg.FromParameters(weather->timeHours, false, "");
-                _networkPeer->Send(msg, g);
+                peer->Send(msg, g);
                 return true;
             };
 
