@@ -21,6 +21,7 @@
 #define FRAMEWORK_INNER_INTEGRATIONS "Integrations"
 #define FRAMEWORK_INNER_JOBS         "Jobs"
 #define FRAMEWORK_INNER_LAUNCHER     "Launcher"
+#define FRAMEWORK_INNER_UTILS        "Utils"
 
 #define FRAMEWORK_INNER_SERVER "Server"
 #define FRAMEWORK_INNER_CLIENT "Client"
