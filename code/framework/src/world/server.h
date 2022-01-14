@@ -11,6 +11,8 @@
 #include "engine.h"
 #include "errors.h"
 
+#include "networking/network_peer.h"
+
 #include <flecs/flecs.h>
 #include <memory>
 
@@ -21,7 +23,7 @@ namespace Framework::World {
         float _tickDelay = 0.01667f;
 
       public:
-        EngineError Init() override;
+        EngineError Init(Framework::Networking::NetworkPeer *networkPeer) override;
 
         EngineError Shutdown() override;
 

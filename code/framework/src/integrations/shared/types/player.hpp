@@ -19,10 +19,9 @@ namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
         flecs::world *_world = nullptr;
-        Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:
-        PlayerFactory(flecs::world *world, Networking::NetworkPeer *networkPeer): _world(world), _networkPeer(networkPeer) {}
+        PlayerFactory(flecs::world *world): _world(world) {}
 
         inline flecs::entity Create(uint64_t guid) {
             auto e = _world->entity();
@@ -34,7 +33,7 @@ namespace Framework::Integrations::Shared::Archetypes {
             streamer->guid = guid;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-            World::Modules::Base::SetupDefaultEvents(streamable, _networkPeer);
+            World::Modules::Base::SetupDefaultEvents(streamable);
 
             return e;
         }

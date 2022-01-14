@@ -16,7 +16,7 @@
 namespace Framework::World {
     class ClientEngine: public Engine {
       public:
-        EngineError Init() override;
+        EngineError Init(Framework::Networking::NetworkPeer *networkPeer) override;
 
         EngineError Shutdown() override;
 

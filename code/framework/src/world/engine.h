@@ -17,11 +17,12 @@
 namespace Framework::World {
     class Engine {
       protected:
+        Framework::Networking::NetworkPeer *_networkPeer = nullptr;
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         std::unique_ptr<flecs::world> _world;
 
       public:
-        virtual EngineError Init();
+        virtual EngineError Init(Framework::Networking::NetworkPeer *networkPeer);
 
         virtual EngineError Shutdown();
 

@@ -80,7 +80,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize the world
-        if (_worldEngine->Init() != World::EngineError::ENGINE_NONE) {
+        if (_worldEngine->Init(_networkingEngine->GetNetworkServer()) != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
@@ -145,11 +145,11 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitManagers() {
         // weather
-        static auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
+        static auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld());
         _weatherManager = envFactory.CreateWeather("WeatherManager");
 
         // TEST TEST TEST
-        static auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld(), _networkingEngine->GetNetworkServer());
+        static auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld());
         auto testPlayer1 = playerFactory.Create((SLNet::UNASSIGNED_RAKNET_GUID).g);
 
         testPlayer1.add<World::Modules::Base::PendingRemoval>();

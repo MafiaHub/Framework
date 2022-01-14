@@ -11,8 +11,8 @@
 #include "utils/time.h"
 
 namespace Framework::World {
-    EngineError ServerEngine::Init() {
-        const auto status = Engine::Init();
+    EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer) {
+        const auto status = Engine::Init(networkPeer);
 
         if (status != EngineError::ENGINE_NONE) {
             return status;
@@ -53,13 +53,13 @@ namespace Framework::World {
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
                               .kind(flecs::PostUpdate)
                               .interval(_tickDelay)
-                              .iter([allStreamableEntities, isVisible](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
+                              .iter([allStreamableEntities, isVisible, this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
                                   for (size_t i = 0; i < it.count(); i++) {
-                                      allStreamableEntities.each([=](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
+                                      allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
                                           if (!e.is_alive())
                                               return;
                                           if (e == it.entity(i) && rs[i].events.selfUpdateProc) {
-                                              rs[i].events.selfUpdateProc(s[i].guid, e);
+                                              rs[i].events.selfUpdateProc(_networkPeer, s[i].guid, e);
                                               return;
                                           }
                                           const auto id      = e.id();
@@ -70,7 +70,7 @@ namespace Framework::World {
                                               if (!canSend) {
                                                   s[i].entities.erase(map_it);
                                                   if (otherS.events.despawnProc)
-                                                      otherS.events.despawnProc(s[i].guid, e);
+                                                      otherS.events.despawnProc(_networkPeer, s[i].guid, e);
                                               }
 
                                               // otherwise we do regular updates
@@ -78,7 +78,7 @@ namespace Framework::World {
                                                   auto &data = map_it->second;
                                                   if (Utils::Time::GetTime() - data.lastUpdate > otherS.updateFrequency) {
                                                       if (otherS.events.updateProc)
-                                                          otherS.events.updateProc(s[i].guid, e);
+                                                          otherS.events.updateProc(_networkPeer, s[i].guid, e);
                                                       data.lastUpdate = Utils::Time::GetTime();
                                                   }
                                               }
@@ -86,7 +86,7 @@ namespace Framework::World {
 
                                           // this is a new entity, spawn it unless user says otherwise
                                           else if (canSend && otherS.events.spawnProc) {
-                                              if (otherS.events.spawnProc(s[i].guid, e)) {
+                                              if (otherS.events.spawnProc(_networkPeer, s[i].guid, e)) {
                                                   Modules::Base::Streamer::StreamData data;
                                                   data.lastUpdate   = Utils::Time::GetTime();
                                                   s[i].entities[id] = data;

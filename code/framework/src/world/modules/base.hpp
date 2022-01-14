@@ -14,7 +14,6 @@
 #include <string>
 #include <unordered_map>
 
-
 namespace Framework::Networking {
     class NetworkPeer;
 };
@@ -44,7 +43,7 @@ namespace Framework::World::Modules {
             flecs::entity_t owner   = 0;
 
             struct Events {
-                using Proc = std::function<bool(uint64_t, flecs::entity &)>;
+                using Proc = std::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity &)>;
                 Proc spawnProc;
                 Proc despawnProc;
                 Proc selfUpdateProc;
@@ -77,6 +76,6 @@ namespace Framework::World::Modules {
             world.component<PendingRemoval>();
         }
 
-        static void SetupDefaultEvents(Streamable *streamable, Framework::Networking::NetworkPeer *peer);
+        static void SetupDefaultEvents(Streamable *streamable);
     };
 } // namespace Framework::World::Modules

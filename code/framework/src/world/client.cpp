@@ -9,8 +9,8 @@
 #include "client.h"
 
 namespace Framework::World {
-    EngineError ClientEngine::Init() {
-        const auto status = Engine::Init();
+    EngineError ClientEngine::Init(Framework::Networking::NetworkPeer *networkPeer) {
+        const auto status = Engine::Init(networkPeer);
 
         if (status != EngineError::ENGINE_NONE) {
             return status;

@@ -12,13 +12,14 @@
 #include <slikenet/types.h>
 
 namespace Framework::World {
-    EngineError Engine::Init() {
+    EngineError Engine::Init(Framework::Networking::NetworkPeer *networkPeer) {
         _world = std::make_unique<flecs::world>();
 
         // Register a base module
         _world->import<Modules::Base>();
 
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
+        _networkPeer             = networkPeer;
 
         return EngineError::ENGINE_NONE;
     }
