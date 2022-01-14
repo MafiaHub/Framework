@@ -102,5 +102,6 @@ if (WIN32)
     add_subdirectory(udis86)
     add_subdirectory(ntdll)
     add_subdirectory(imgui)
+    add_subdirectory(sdl2)
 endif ()
 

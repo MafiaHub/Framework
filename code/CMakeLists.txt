@@ -10,6 +10,7 @@ include_directories(PUBLIC
         "../vendors/slikenet/Source"
         "../vendors/ntdll"
         "../vendors/imgui"
+        "../vendors/sdl2/include"
         "../vendors/spdlog/include"
         "../vendors/optick/src"
         "../vendors/steamworks/include"
