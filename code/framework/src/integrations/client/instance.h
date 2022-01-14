@@ -13,6 +13,7 @@
 #include <external/discord/wrapper.h>
 #include <functional>
 #include <graphics/renderer.h>
+#include <graphics/renderio.h>
 #include <memory>
 #include <world/client.h>
 
@@ -34,6 +35,7 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<External::Discord::Wrapper> _presence;
         std::unique_ptr<Graphics::Renderer> _renderer;
         std::unique_ptr<World::ClientEngine> _worldEngine;
+        std::unique_ptr<Graphics::RenderIO> _renderIO;
 
       public:
         Instance();
@@ -59,6 +61,10 @@ namespace Framework::Integrations::Client {
 
         Graphics::Renderer *GetRenderer() const {
             return _renderer.get();
+        }
+
+        Graphics::RenderIO* GetRenderIO() const {
+            return _renderIO.get();
         }
     };
 } // namespace Framework::Integrations::Client

@@ -17,6 +17,7 @@ namespace Framework::Integrations::Client {
         _presence    = std::make_unique<External::Discord::Wrapper>();
         _renderer    = std::make_unique<Graphics::Renderer>();
         _worldEngine = std::make_unique<World::ClientEngine>();
+        _renderIO    = std::make_unique<Graphics::RenderIO>();
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {
@@ -74,12 +75,20 @@ namespace Framework::Integrations::Client {
             _worldEngine->Update();
         }
 
+        if (_renderIO) {
+            _renderIO->UpdateMainThread();
+        }
+
         PostUpdate();
     }
 
     void Instance::Render() {
         if (_renderer && _renderer->IsInitialized()) {
             _renderer->Update();
+        }
+
+        if (_renderIO) {
+            _renderIO->UpdateRenderThread();
         }
     }
 } // namespace Framework::Integrations::Client
