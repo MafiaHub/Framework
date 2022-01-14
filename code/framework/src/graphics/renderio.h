@@ -9,7 +9,6 @@
 #pragma once
 
 #include <functional>
-#include <memory>
 #include <queue>
 
 namespace Framework::Graphics {
