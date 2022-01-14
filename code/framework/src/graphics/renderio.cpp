@@ -10,11 +10,11 @@
 
 namespace Framework::Graphics {
 
-    void RenderIO::AddRenderTask(Utils::Channel::Proc proc) {
+    void RenderIO::AddRenderTask(Utils::Channel<>::Proc proc) {
         _mainChannel.PushTask(proc);
     }
 
-    void RenderIO::RespondTask(Utils::Channel::Proc proc) {
+    void RenderIO::RespondTask(Utils::Channel<>::Proc proc) {
         _renderChannel.PushTask(proc);
     }
 

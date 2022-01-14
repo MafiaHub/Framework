@@ -13,12 +13,12 @@
 namespace Framework::Graphics {
     class RenderIO final {
       private:
-        Utils::Channel _mainChannel;
-        Utils::Channel _renderChannel;
+        Utils::Channel<> _mainChannel;
+        Utils::Channel<> _renderChannel;
 
       public:
-        void AddRenderTask(Utils::Channel::Proc proc);
-        void RespondTask(Utils::Channel::Proc proc);
+        void AddRenderTask(Utils::Channel<>::Proc proc);
+        void RespondTask(Utils::Channel<>::Proc proc);
 
         // Poll these in distinct threads
         void UpdateMainThread();

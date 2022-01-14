@@ -13,9 +13,10 @@
 #include <mutex>
 
 namespace Framework::Utils {
+    template <typename ProcT = std::function<void()>> 
     class Channel {
       public:
-        using Proc = std::function<void()>;
+        using Proc = ProcT;
 
       private:
         std::queue<Proc> _queue;
