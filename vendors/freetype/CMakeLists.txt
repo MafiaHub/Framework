@@ -185,6 +185,12 @@ endif ()
 
 
 # Find dependencies
+if (FT_WITH_HARFBUZZ)
+  find_package(HarfBuzz 1.3.0 REQUIRED)
+else ()
+  find_package(HarfBuzz 1.3.0)
+endif ()
+
 if (FT_WITH_PNG)
   find_package(PNG REQUIRED)
 else ()
@@ -408,6 +414,72 @@ if (HARFBUZZ_FOUND)
   list(APPEND PKG_CONFIG_REQUIRED_PRIVATE harfbuzz)
 endif ()
 
+
+# Installation
+include(GNUInstallDirs)
+
+if (NOT SKIP_INSTALL_HEADERS AND NOT SKIP_INSTALL_ALL)
+  install(
+    # Note the trailing slash in the argument to `DIRECTORY'!
+    DIRECTORY ${PROJECT_SOURCE_DIR}/include/
+      DESTINATION ${INSTALL_DIR}/freetype2
+      COMPONENT headers
+      PATTERN "internal" EXCLUDE
+      PATTERN "ftconfig.h" EXCLUDE
+      PATTERN "ftoption.h" EXCLUDE)
+  install(
+    FILES ${PROJECT_BINARY_DIR}/include/freetype/config/ftconfig.h
+          ${PROJECT_BINARY_DIR}/include/freetype/config/ftoption.h
+      DESTINATION ${INSTALL_DIR}/freetype2/freetype/config
+      COMPONENT headers)
+endif ()
+
+if (NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
+  # Generate the pkg-config file
+  if (UNIX)
+    file(READ ${PROJECT_SOURCE_DIR}/builds/unix/freetype2.in FREETYPE2_PC_IN)
+
+    string(REPLACE ";" ", " PKG_CONFIG_REQUIRED_PRIVATE "${PKG_CONFIG_REQUIRED_PRIVATE}")
+
+    string(REPLACE "%prefix%" ${CMAKE_INSTALL_PREFIX}
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+    string(REPLACE "%exec_prefix%" "\${prefix}"
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+    string(REPLACE "%libdir%" "\${prefix}/${INSTALL_DIR}"
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+    string(REPLACE "%includedir%" "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}"
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+    string(REPLACE "%ft_version%" "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+    string(REPLACE "%REQUIRES_PRIVATE%" "${PKG_CONFIG_REQUIRED_PRIVATE}"
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+    string(REPLACE "%LIBS_PRIVATE%" ""  # All libs support pkg-config
+           FREETYPE2_PC_IN ${FREETYPE2_PC_IN})
+
+    file(WRITE ${INSTALL_DIR}/freetype2.pc ${FREETYPE2_PC_IN})
+
+    install(
+      FILES ${PROJECT_BINARY_DIR}/freetype2.pc
+      DESTINATION ${INSTALL_DIR}/pkgconfig
+      COMPONENT pkgconfig)
+  endif ()
+
+  install(
+    TARGETS freetype
+      EXPORT freetype-targets
+      LIBRARY DESTINATION ${INSTALL_DIR}
+      ARCHIVE DESTINATION ${INSTALL_DIR}
+      RUNTIME DESTINATION ${INSTALL_DIR}
+      FRAMEWORK DESTINATION Library/Frameworks
+      COMPONENT libraries)
+  install(
+    EXPORT freetype-targets
+      DESTINATION ${INSTALL_DIR}
+      FILE freetype-config.cmake
+      COMPONENT headers)
+endif ()
+
+
 # Packaging
 set(CPACK_PACKAGE_NAME ${CMAKE_PROJECT_NAME})
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The FreeType font rendering library.")
@@ -436,7 +508,3 @@ set(CPACK_COMPONENT_LIBRARIES_GROUP "Development")
 set(CPACK_COMPONENT_HEADERS_GROUP "Development")
 
 include(CPack)
-
-set(FREETYPE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
-set(FREETYPE_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include" PARENT_SCOPE)
-set(FREETYPE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
