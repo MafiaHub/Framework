@@ -59,6 +59,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/external/cef/worker.hpp
 
         src/graphics/renderer.cpp
+        src/graphics/renderio.cpp
         src/gui/api/cef.cpp
 
         src/networking/network_client.cpp
