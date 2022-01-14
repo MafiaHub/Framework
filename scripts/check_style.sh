@@ -42,6 +42,7 @@ while IFS= read -r f; do
 done < <(git ls-files -- \
     '*.cpp' \
     '*.h' \
+    '*.hpp' \
 	':!:vendors' \
 	':!:code/tests/unit.h' \
 	':!:code/framework/utils/hooks' \
