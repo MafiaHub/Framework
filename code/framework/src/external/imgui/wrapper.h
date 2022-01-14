@@ -37,9 +37,7 @@ namespace Framework::External::ImGUI {
         Config _config;
 
       public:
-        Wrapper(Config &config): _config(config) {}
-
-        Error Init();
+        Error Init(Config &config);
         Error Shutdown();
 
         Error ProcessEvent(const SDL_Event *event);

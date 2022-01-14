@@ -15,7 +15,9 @@
 #include <imgui.h>
 
 namespace Framework::External::ImGUI {
-    Error Wrapper::Init() {
+    Error Wrapper::Init(Config &config) {
+        _config = config;
+
         if (!_config.renderer) {
             return Error::IMGUI_RENDERER_NOT_SET;
         }
