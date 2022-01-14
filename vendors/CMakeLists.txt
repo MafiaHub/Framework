@@ -1,4 +1,5 @@
 set(BUILD_SHARED_LIBS CACHE BOOL OFF)
+set(BUILD_SAMPLES CACHE BOOL OFF)
 
 # Add OpenSSL
 if (WIN32)
@@ -103,5 +104,11 @@ if (WIN32)
     add_subdirectory(ntdll)
     add_subdirectory(imgui)
     add_subdirectory(sdl2)
+
+    set(SKIP_INSTALL_ALL false)
+    add_subdirectory(freetype)
+
+    set(FREETYPE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/freetype")
+    add_subdirectory(rmlui)
 endif ()
 
