@@ -9,10 +9,13 @@
 #pragma once
 
 #include "errors.h"
-#include "graphics/renderer.h"
 #include "utils/safe_win32.h"
 
 #include <SDL.h>
+
+namespace Framework::Graphics {
+    class Renderer;
+} // namespace Framework::Graphics
 
 namespace Framework::External::ImGUI {
     enum class RenderBackend {

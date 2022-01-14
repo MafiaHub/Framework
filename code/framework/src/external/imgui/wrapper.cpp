@@ -8,6 +8,8 @@
 
 #include "wrapper.h"
 
+#include "graphics/renderer.h"
+
 #include <backends/imgui_impl_dx11.h>
 #include <backends/imgui_impl_dx9.h>
 #include <backends/imgui_impl_sdl.h>
