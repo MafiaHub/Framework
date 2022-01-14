@@ -9,9 +9,9 @@
 #pragma once
 
 #include "errors.h"
+#include "utils/safe_win32.h"
 
 #include <SDL.h>
-#include <Windows.h>
 
 namespace Framework::External::SDL2 {
     class Wrapper final {
