@@ -10,6 +10,7 @@
 
 #include "errors.h"
 #include "graphics/renderer.h"
+#include "utils/safe_win32.h"
 
 #include <SDL.h>
 
