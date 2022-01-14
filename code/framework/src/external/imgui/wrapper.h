@@ -22,6 +22,8 @@ namespace Framework::External::ImGUI {
 
     enum class WindowBackend { WIN_32, SDL2 };
 
+    enum class InputState { BLOCK, PASS, ERROR_MISMATCH };
+
     struct Config {
         WindowBackend windowBackend = WindowBackend::WIN_32;
         RenderBackend renderBackend = RenderBackend::D3D11;
@@ -40,8 +42,8 @@ namespace Framework::External::ImGUI {
         Error Init(Config &config);
         Error Shutdown();
 
-        Error ProcessEvent(const SDL_Event *event);
-        Error ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+        InputState ProcessEvent(const SDL_Event *event);
+        InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
         Error NewFrame();
         Error EndFrame();

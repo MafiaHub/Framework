@@ -14,6 +14,8 @@
 #include <backends/imgui_impl_win32.h>
 #include <imgui.h>
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 namespace Framework::External::ImGUI {
     Error Wrapper::Init(Config &config) {
         _config = config;
@@ -124,15 +126,27 @@ namespace Framework::External::ImGUI {
         return Error::IMGUI_NONE;
     }
 
-    Error Wrapper::ProcessEvent(const SDL_Event *event) {
+    InputState Wrapper::ProcessEvent(const SDL_Event *event) {
         if (_config.windowBackend != WindowBackend::SDL2) {
-            return Error::IMGUI_BACKEND_MISMATCH;
+            return InputState::ERROR_MISMATCH;
+        }
+
+        if (ImGui_ImplSDL2_ProcessEvent(event)) {
+            return InputState::BLOCK;
+        } else {
+            return InputState::PASS;
         }
     }
 
-    Error Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (_config.windowBackend != WindowBackend::WIN_32) {
-            return Error::IMGUI_BACKEND_MISMATCH;
+            return InputState::ERROR_MISMATCH;
+        }
+
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
+            return InputState::BLOCK;
+        } else {
+            return InputState::PASS;
         }
     }
 
