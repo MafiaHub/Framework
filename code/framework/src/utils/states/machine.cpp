@@ -48,16 +48,16 @@ namespace Framework::Utils::States {
             // Otherwise, we just process the current state
             if (_currentContext == Context::Enter) {
                 // If init succeed, next context is obviously the update, otherwise it means that something failed and exit is required
-                _currentContext = _currentState->OnEnter() ? Context::Update : Context::Exit;
+                _currentContext = _currentState->OnEnter(this) ? Context::Update : Context::Exit;
             }
             else if (_currentContext == Context::Update) {
                 // If the state answer true to update call, it means that it willed only a single tick, otherwise we keep ticking
-                if (_currentState->OnUpdate()) {
+                if (_currentState->OnUpdate(this)) {
                     _currentContext = Context::Exit;
                 }
             }
             else if (_currentContext == Context::Exit) {
-                _currentState->OnExit();
+                _currentState->OnExit(this);
                 _currentContext = Context::Next;
             }
             else if (_currentContext == Context::Next) {

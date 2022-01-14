@@ -11,6 +11,7 @@
 #include <cstdint>
 
 namespace Framework::Utils::States {
+    class Machine;
     class IState {
       public:
         IState();
@@ -19,8 +20,8 @@ namespace Framework::Utils::States {
         virtual const char *GetName() const = 0;
         virtual int32_t GetId() const       = 0;
 
-        virtual bool OnEnter() = 0;
-        virtual bool OnUpdate() = 0;
-        virtual bool OnExit()   = 0;
+        virtual bool OnEnter(Machine *) = 0;
+        virtual bool OnUpdate(Machine *) = 0;
+        virtual bool OnExit(Machine *)   = 0;
     };
 }
