@@ -145,14 +145,10 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitManagers() {
         // weather
-        static auto envFactory = Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld());
-        _weatherManager = envFactory.CreateWeather("WeatherManager");
+        _envFactory.reset(new Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld()));
+        _weatherManager = _envFactory->CreateWeather("WeatherManager");
 
-        // TEST TEST TEST
-        static auto playerFactory = Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld());
-        auto testPlayer1 = playerFactory.Create((SLNet::UNASSIGNED_RAKNET_GUID).g);
-
-        //testPlayer1.add<World::Modules::Base::PendingRemoval>();
+        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld()));
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -198,7 +194,7 @@ namespace Framework::Integrations::Server {
             _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
 
             auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (e.is_valid()) {
+            if (e.is_valid() && e.is_alive()) {
                 e.add<World::Modules::Base::PendingRemoval>();
             }
         });

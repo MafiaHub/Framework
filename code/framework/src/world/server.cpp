@@ -56,9 +56,6 @@ namespace Framework::World {
                               .kind(flecs::PostUpdate)
                               .interval(tickInterval)
                               .iter([allStreamableEntities, isVisible, this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
-                                  static int64_t lasttime = Utils::Time::GetTime();
-                                  printf("%lld\n", Utils::Time::GetTime() - lasttime);
-                                  lasttime = Utils::Time::GetTime();
                                   for (size_t i = 0; i < it.count(); i++) {
                                       allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
                                           if (!e.is_alive())
