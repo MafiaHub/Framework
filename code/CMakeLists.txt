@@ -25,6 +25,7 @@ include_directories(PUBLIC
         "../vendors/libsig"
         "../vendors/sfd"
         "../vendors/cxxopts"
+        "../vendors/freetype/include"
         "../vendors"
         )
 
