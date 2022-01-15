@@ -142,7 +142,7 @@ if (WIN32)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
 
     set(CLIENT_SHARED_LIBS minhook GalaxySDK SteamSDK udis86)
-    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS})
+    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} RmlCore ${FREETYPE_LIBRARY})
 
     link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll sfd)
