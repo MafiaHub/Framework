@@ -106,11 +106,11 @@ if (ENABLE_FREETYPE_FROM_SOURCE)
     if (NOT EXISTS ${BUILD_FREETYPE_INSTALL_DIR})
         message(STATUS "Building freetype.. at ${BUILD_FREETYPE_WORKING_DIR}, Install DIR ${BUILD_FREETYPE_INSTALL_DIR}")
         execute_process(
-                COMMAND ${CMAKE_COMMAND} ${BUILD_FREETYPE_SRC_DIR} -DINSTALL_DIR=${BUILD_FREETYPE_INSTALL_DIR}
+                COMMAND ${CMAKE_COMMAND} ${BUILD_FREETYPE_SRC_DIR} -DINSTALL_DIR=${BUILD_FREETYPE_INSTALL_DIR} -DCMAKE_BUILD_TYPE=$<CONFIG>
                 WORKING_DIRECTORY ${BUILD_FREETYPE_WORKING_DIR}
         )
         execute_process(
-                COMMAND ${CMAKE_COMMAND} --build .
+                COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG>
                 WORKING_DIRECTORY ${BUILD_FREETYPE_WORKING_DIR}
         )
         execute_process(
@@ -126,7 +126,7 @@ if (ENABLE_FREETYPE_FROM_SOURCE)
     set(FREETYPE_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/vendors/freetype/include;${BUILD_FREETYPE_INSTALL_DIR}/freetype2" CACHE INTERNAL "FREETYPE INCLUDE DIRS")
     include_directories("${BUILD_FREETYPE_INSTALL_DIR}/freetype2")
     link_directories(${BUILD_FREETYPE_INSTALL_DIR})
-    message("Setting FREETYPE ROOT DIR to newly built freetype ${FREETYPE_DIR}")
+    message("Setting FREETYPE ROOT DIR to newly built freetype ${BUILD_FREETYPE_INSTALL_DIR}")
 endif ()
 
 # Build OS specific libraries
