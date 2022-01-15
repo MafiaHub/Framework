@@ -10,6 +10,6 @@ MESSAGE(STATUS "BUILD-OPENSSL OpenSSL will be installed to ${INSTALL_DIR}, worki
 
 ExternalProject_Add(openssl-cmake
         PREFIX ${BUILD_DIR}
-        URL "https://github.com/janbar/openssl-cmake/archive/1.1.1g-20200510.zip"
+        URL "https://github.com/MafiaHub/openssl-cmake/archive/1.1.1g-20200510.zip"
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} -DWITH_APPS=OFF
         )
