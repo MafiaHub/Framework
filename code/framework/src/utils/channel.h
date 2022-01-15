@@ -31,7 +31,7 @@ namespace Framework::Utils {
         void Update() {
             std::lock_guard lock(_mtx);
             while (!_queue.empty()) {
-                const auto proc = _queue.front();
+                const auto &proc = _queue.front();
                 proc();
                 _queue.pop();
             }
