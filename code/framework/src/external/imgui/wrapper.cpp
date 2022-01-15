@@ -112,7 +112,7 @@ namespace Framework::External::ImGUI {
 
         // process all widgets
         while (!_renderQueue.empty()) {
-            const auto proc = _renderQueue.front();
+            const auto &proc = _renderQueue.front();
             proc();
             _renderQueue.pop();
         }
