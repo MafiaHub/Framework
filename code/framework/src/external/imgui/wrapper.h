@@ -13,6 +13,9 @@
 
 #include <SDL.h>
 
+#include <functional>
+#include <queue>
+
 namespace Framework::Graphics {
     class Renderer;
 } // namespace Framework::Graphics
@@ -39,9 +42,12 @@ namespace Framework::External::ImGUI {
     };
 
     class Wrapper final {
+      public:
+        using RenderProc = std::function<void()>;
       private:
         Config _config;
         bool _initialized = false;
+        std::queue<RenderProc> _renderQueue;
 
       public:
         Error Init(Config &config);
@@ -53,6 +59,10 @@ namespace Framework::External::ImGUI {
         Error NewFrame();
         Error EndFrame();
         Error Render();
+
+        inline void PushWidget(RenderProc proc) {
+            _renderQueue.push(proc);
+        }
 
         inline bool IsInitialized() const {
             return _initialized;

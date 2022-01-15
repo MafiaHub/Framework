@@ -112,6 +112,13 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::EndFrame() {
+        // process all widgets
+        while (!_renderQueue.empty()) {
+            const auto proc = _renderQueue.front();
+            proc();
+            _renderQueue.pop();
+        }
+
         ImGui::Render();
 
         return Error::IMGUI_NONE;
