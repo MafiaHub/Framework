@@ -142,7 +142,6 @@ namespace Framework::External::ImGUI {
     }
 
     InputState Wrapper::ProcessEvent(const SDL_Event *event) {
-        std::lock_guard _lock(_renderMtx);
         if (_config.windowBackend != WindowBackend::SDL2) {
             return InputState::ERROR_MISMATCH;
         }
@@ -155,7 +154,6 @@ namespace Framework::External::ImGUI {
     }
 
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-        std::lock_guard _lock(_renderMtx);
         if (_config.windowBackend != WindowBackend::WIN_32) {
             return InputState::ERROR_MISMATCH;
         }
