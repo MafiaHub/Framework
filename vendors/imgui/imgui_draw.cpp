@@ -1599,6 +1599,25 @@ void ImDrawList::AddText(const ImFont* font, float font_size, const ImVec2& pos,
         clip_rect.z = ImMin(clip_rect.z, cpu_fine_clip_rect->z);
         clip_rect.w = ImMin(clip_rect.w, cpu_fine_clip_rect->w);
     }
+    if (ImGui::custom_UseFontShadow) {
+        ImVec2 shadowPos1(pos);
+        ImVec2 shadowPos2(pos);
+        ImVec2 shadowPos3(pos);
+        ImVec2 shadowPos4(pos);
+
+        shadowPos1.x -= 1;
+        shadowPos1.y -= 1;
+        font->RenderText(this, font_size, shadowPos1, ImGui::custom_FontShadowColor, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL);
+        shadowPos2.x -= 1;
+        shadowPos2.y += 1;
+        font->RenderText(this, font_size, shadowPos2, ImGui::custom_FontShadowColor, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL);
+        shadowPos3.x += 1;
+        shadowPos3.y -= 1;
+        font->RenderText(this, font_size, shadowPos3, ImGui::custom_FontShadowColor, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL);
+        shadowPos4.x += 1;
+        shadowPos4.y += 1;
+        font->RenderText(this, font_size, shadowPos4, ImGui::custom_FontShadowColor, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL);
+    }
     font->RenderText(this, font_size, pos, col, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL);
 }
 
