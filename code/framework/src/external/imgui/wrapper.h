@@ -41,6 +41,7 @@ namespace Framework::External::ImGUI {
     class Wrapper final {
       private:
         Config _config;
+        bool _initialized = false;
 
       public:
         Error Init(Config &config);
@@ -52,5 +53,9 @@ namespace Framework::External::ImGUI {
         Error NewFrame();
         Error EndFrame();
         Error Render();
+
+        inline bool IsInitialized() const {
+            return _initialized;
+        };
     };
 } // namespace Framework::External::ImGUI

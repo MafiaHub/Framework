@@ -58,6 +58,7 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
+        _initialized = true;
         return Error::IMGUI_NONE;
     }
 
@@ -82,6 +83,7 @@ namespace Framework::External::ImGUI {
 
         ImGui::DestroyContext();
 
+        _initialized = false;
         return Error::IMGUI_NONE;
     }
 

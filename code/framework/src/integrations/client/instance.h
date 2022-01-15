@@ -11,6 +11,7 @@
 #include "errors.h"
 
 #include <external/discord/wrapper.h>
+#include <external/imgui/wrapper.h>
 #include <functional>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
@@ -23,6 +24,7 @@ namespace Framework::Integrations::Client {
         bool usePresence     = true;
         bool useRenderer     = true;
         bool useNetworking   = true;
+        bool useImGUI        = false;
 
         Graphics::RendererConfiguration rendererOptions = {};
     };
@@ -37,6 +39,8 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
 
+        // gui
+        std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
       public:
         Instance();
         ~Instance() = default;
@@ -57,6 +61,10 @@ namespace Framework::Integrations::Client {
 
         External::Discord::Wrapper *GetPresence() const {
             return _presence.get();
+        }
+
+        External::ImGUI::Wrapper *GetImGUI() const {
+            return _imguiApp.get();
         }
 
         Graphics::Renderer *GetRenderer() const {

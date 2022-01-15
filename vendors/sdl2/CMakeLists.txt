@@ -1,5 +1,6 @@
 add_library(SDL STATIC dummy.cpp)
 target_include_directories(SDL PUBLIC "include")
+target_include_directories(SDL PRIVATE "../sdl2/include")
 
 if (CMAKE_CL_64)
     target_link_directories(SDL PUBLIC "lib/x64")
