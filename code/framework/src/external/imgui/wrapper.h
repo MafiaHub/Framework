@@ -58,8 +58,7 @@ namespace Framework::External::ImGUI {
         InputState ProcessEvent(const SDL_Event *event);
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-        Error NewFrame();
-        Error EndFrame();
+        Error Update();
         Error Render();
 
         inline void PushWidget(RenderProc proc) {

@@ -87,8 +87,9 @@ namespace Framework::External::ImGUI {
         return Error::IMGUI_NONE;
     }
 
-    Error Wrapper::NewFrame() {
+    Error Wrapper::Update() {
         std::lock_guard _lock(_renderMtx);
+
         switch (_config.renderBackend) {
         case RenderBackend::D3D9: {
             ImGui_ImplDX9_NewFrame();
@@ -107,11 +108,8 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
-        return Error::IMGUI_NONE;
-    }
+        ImGui::NewFrame();
 
-    Error Wrapper::EndFrame() {
-        std::lock_guard _lock(_renderMtx);
         // process all widgets
         while (!_renderQueue.empty()) {
             const auto proc = _renderQueue.front();
@@ -130,12 +128,17 @@ namespace Framework::External::ImGUI {
 
     Error Wrapper::Render() {
         std::lock_guard _lock(_renderMtx);
+
+        auto drawData = ImGui::GetDrawData();
+        if (!drawData)
+            return Error::IMGUI_NONE;
+
         switch (_config.renderBackend) {
         case RenderBackend::D3D9: {
-            ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+            ImGui_ImplDX9_RenderDrawData(drawData);
         } break;
         case RenderBackend::D3D11: {
-            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+            ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
         }
 

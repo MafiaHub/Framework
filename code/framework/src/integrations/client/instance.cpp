@@ -80,6 +80,10 @@ namespace Framework::Integrations::Client {
             _worldEngine->Update();
         }
 
+        if (_imguiApp && _imguiApp->IsInitialized()) {
+            _imguiApp->Update();
+        }
+
         if (_renderIO) {
             _renderIO->UpdateMainThread();
         }
