@@ -15,6 +15,7 @@
 
 #include <functional>
 #include <queue>
+#include <mutex>
 
 namespace Framework::Graphics {
     class Renderer;
@@ -48,6 +49,7 @@ namespace Framework::External::ImGUI {
         Config _config;
         bool _initialized = false;
         std::queue<RenderProc> _renderQueue;
+        std::recursive_mutex _renderMtx;
 
       public:
         Error Init(Config &config);

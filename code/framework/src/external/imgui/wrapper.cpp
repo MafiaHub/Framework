@@ -88,6 +88,7 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::NewFrame() {
+        std::lock_guard _lock(_renderMtx);
         switch (_config.renderBackend) {
         case RenderBackend::D3D9: {
             ImGui_ImplDX9_NewFrame();
@@ -112,6 +113,7 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::EndFrame() {
+        std::lock_guard _lock(_renderMtx);
         // process all widgets
         while (!_renderQueue.empty()) {
             const auto proc = _renderQueue.front();
@@ -125,6 +127,7 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::Render() {
+        std::lock_guard _lock(_renderMtx);
         switch (_config.renderBackend) {
         case RenderBackend::D3D9: {
             ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
@@ -138,6 +141,7 @@ namespace Framework::External::ImGUI {
     }
 
     InputState Wrapper::ProcessEvent(const SDL_Event *event) {
+        std::lock_guard _lock(_renderMtx);
         if (_config.windowBackend != WindowBackend::SDL2) {
             return InputState::ERROR_MISMATCH;
         }
@@ -150,6 +154,7 @@ namespace Framework::External::ImGUI {
     }
 
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+        std::lock_guard _lock(_renderMtx);
         if (_config.windowBackend != WindowBackend::WIN_32) {
             return InputState::ERROR_MISMATCH;
         }
