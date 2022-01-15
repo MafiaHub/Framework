@@ -107,8 +107,6 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
-        ImGui::NewFrame();
-
         return Error::IMGUI_NONE;
     }
 
@@ -117,7 +115,11 @@ namespace Framework::External::ImGUI {
         // process all widgets
         while (!_renderQueue.empty()) {
             const auto proc = _renderQueue.front();
+
+            ImGui::NewFrame();
             proc();
+            ImGui::EndFrame();
+
             _renderQueue.pop();
         }
 
