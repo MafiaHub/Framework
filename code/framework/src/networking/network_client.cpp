@@ -89,6 +89,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::NO_FREE_SLOT);
             }
+            _state = DISCONNECTED;
             return true;
         } break;
 
@@ -96,6 +97,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
             }
+            _state = DISCONNECTED;
             return true;
         } break;
 
@@ -103,6 +105,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::LOST);
             }
+            _state = DISCONNECTED;
             return true;
         } break;
 
@@ -110,6 +113,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::FAILED);
             }
+            _state = DISCONNECTED;
             return true;
         } break;
 
@@ -117,6 +121,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::INVALID_PASSWORD);
             }
+            _state = DISCONNECTED;
             return true;
         } break;
 
@@ -124,6 +129,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::BANNED);
             }
+            _state = DISCONNECTED;
             return true;
         } break;
         }
