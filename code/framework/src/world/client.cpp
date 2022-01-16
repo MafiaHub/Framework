@@ -16,6 +16,16 @@ namespace Framework::World {
             return status;
         }
 
+        _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
+                .kind(flecs::PostUpdate)
+                .interval(tickInterval)
+                .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
+                    const auto myGUID = 
+                    for (size_t i = 0; i < it.count(); i++) {
+                        
+                    }
+                });
+
         return EngineError::ENGINE_NONE;
     }
 
