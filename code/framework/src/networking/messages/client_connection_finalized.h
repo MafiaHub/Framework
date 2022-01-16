@@ -12,22 +12,27 @@
 
 #include <BitStream.h>
 
+#include <flecs/flecs.h>
+
 namespace Framework::Networking::Messages {
     class ClientConnectionFinalized final: public IMessage {
       private:
         float _serverTickRate = 0.0f;
+        flecs::entity_t _entityID = NULL;
 
       public:
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_FINALIZED;
         }
 
-        void FromParameters(float tickRate) {
+        void FromParameters(float tickRate, flecs::entity_t entityID) {
             _serverTickRate = tickRate;
+            _entityID       = entityID;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _serverTickRate);
+            bs->Serialize(write, _entityID);
         }
 
         bool Valid() override {
@@ -36,6 +41,10 @@ namespace Framework::Networking::Messages {
 
         float GetServerTickRate() const {
             return _serverTickRate;
+        }
+
+        flecs::entity_t GetEntityID() const {
+            return _entityID;
         }
     };
 } // namespace Framework::Networking::Messages

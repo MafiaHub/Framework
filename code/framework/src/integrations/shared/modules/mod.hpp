@@ -18,10 +18,15 @@ namespace Framework::Integrations::Shared::Modules {
             float timeHours;
         };
 
+        struct GameActor {
+            void *_actor;
+        };
+
         Mod(flecs::world &world) {
             world.module<Mod>();
 
             world.component<Environment>();
+            world.component<GameActor>();
         }
     };
 } // namespace Framework::Integrations::Shared::Modules

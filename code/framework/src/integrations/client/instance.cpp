@@ -50,6 +50,7 @@ namespace Framework::Integrations::Client {
             _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
         }
 
+        InitManagers();
         InitNetworkingMessages();
         PostInit();
 
@@ -118,6 +119,10 @@ namespace Framework::Integrations::Client {
         }
     }
 
+    void Instance::InitManagers() {
+        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld()));
+    }
+
     void Instance::InitNetworkingMessages() {
         _networkingEngine->GetNetworkClient()->SetOnPlayerConnectedCallback([this](SLNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
@@ -132,7 +137,7 @@ namespace Framework::Integrations::Client {
 
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
-                _onConnectionFinalized();
+                _onConnectionFinalized(msg->GetEntityID());
             }
         });
         _networkingEngine->GetNetworkClient()->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {

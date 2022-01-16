@@ -190,20 +190,24 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitNetworkingMessages() {
-        _networkingEngine->GetNetworkServer()->RegisterMessage<Framework::Networking::Messages::ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientHandshake* msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
-            
-            // Make sure handshake payload was correctly formatted    
-            if (!msg->Valid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
-                _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
+        _networkingEngine->GetNetworkServer()->RegisterMessage<Framework::Networking::Messages::ClientHandshake>(
+            Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientHandshake *msg) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
 
-            // Send the connection finalized packet
-            Framework::Networking::Messages::ClientConnectionFinalized answer;
-            answer.FromParameters(_opts.tickInterval);
-            _networkingEngine->GetNetworkServer()->Send(answer, guid);
+                // Make sure handshake payload was correctly formatted
+                if (!msg->Valid()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
+                    _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
+                    return;
+                }
+
+                // Create player entity and add on world
+                auto newPlayerEntity = _playerFactory->CreateServer(guid.g);
+
+                // Send the connection finalized packet
+                Framework::Networking::Messages::ClientConnectionFinalized answer;
+                answer.FromParameters(_opts.tickInterval, newPlayerEntity);
+                _networkingEngine->GetNetworkServer()->Send(answer, guid);
         });
 
         _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {

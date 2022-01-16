@@ -22,8 +22,13 @@
 #include <memory>
 #include <world/client.h>
 
+#include "../shared/types/player.hpp"
+
+#include <flecs/flecs.h>
+
 namespace Framework::Integrations::Client {
-    using NetworkNotification = std::function<void()>;
+    using NetworkConnectionFinalizedCallback = std::function<void(flecs::entity_t)>;
+    using NetworkConnectionClosedCallback = std::function<void()>;
 
     struct InstanceOptions {
         int64_t discordAppId = 0;
@@ -57,9 +62,13 @@ namespace Framework::Integrations::Client {
 
         // Local state tracking
         CurrentState _currentState;
-        NetworkNotification _onConnectionFinalized;
-        NetworkNotification _onConnectionClosed;
+        NetworkConnectionFinalizedCallback _onConnectionFinalized;
+        NetworkConnectionClosedCallback _onConnectionClosed;
 
+        // Entity factories
+        std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
+
+        void InitManagers();
         void InitNetworkingMessages();
       public:
         Instance();
@@ -87,11 +96,11 @@ namespace Framework::Integrations::Client {
             _currentState = state;
         }
 
-        void SetOnConnectionFinalizedCallback(NetworkNotification cb) {
+        void SetOnConnectionFinalizedCallback(NetworkConnectionFinalizedCallback cb) {
             _onConnectionFinalized = cb;
         }
 
-        void SetOnConnectionClosedCallback(NetworkNotification cb) {
+        void SetOnConnectionClosedCallback(NetworkConnectionClosedCallback cb) {
             _onConnectionClosed = cb;
         }
 
@@ -113,6 +122,10 @@ namespace Framework::Integrations::Client {
 
         Graphics::RenderIO* GetRenderIO() const {
             return _renderIO.get();
+        }
+
+        Shared::Archetypes::PlayerFactory* GetPlayerFactory() const {
+            return _playerFactory.get();
         }
     };
 } // namespace Framework::Integrations::Client
