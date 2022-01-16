@@ -15,6 +15,9 @@
 #include <functional>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
+
+#include "networking/engine.h"
+
 #include <memory>
 #include <world/client.h>
 
@@ -34,6 +37,7 @@ namespace Framework::Integrations::Client {
         bool _initialized = false;
         InstanceOptions _opts;
 
+        std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<External::Discord::Wrapper> _presence;
         std::unique_ptr<Graphics::Renderer> _renderer;
         std::unique_ptr<World::ClientEngine> _worldEngine;
@@ -57,6 +61,10 @@ namespace Framework::Integrations::Client {
 
         bool IsInitialized() const {
             return _initialized;
+        }
+
+        Networking::Engine* GetNetworkingEngine() const {
+            return _networkingEngine.get();
         }
 
         External::Discord::Wrapper *GetPresence() const {

@@ -71,6 +71,7 @@ set(FRAMEWORK_CLIENT_SRC
         src/world/client.cpp
 
         src/integrations/client/instance.cpp
+        src/integrations/client/networking/engine.cpp
     )
 
 # Append the platform-dependent files to the related lists

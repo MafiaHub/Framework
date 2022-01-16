@@ -14,6 +14,7 @@
 
 namespace Framework::Integrations::Client {
     Instance::Instance() {
+        _networkingEngine = std::make_unique<Networking::Engine>();
         _presence    = std::make_unique<External::Discord::Wrapper>();
         _imguiApp    = std::make_unique<External::ImGUI::Wrapper>();
         _renderer    = std::make_unique<Graphics::Renderer>();
@@ -34,6 +35,10 @@ namespace Framework::Integrations::Client {
             if (_renderer) {
                 _renderer->Init(opts.rendererOptions);
             }
+        }
+
+        if (_networkingEngine) {
+            _networkingEngine->Init();
         }
 
         if (_worldEngine) {
@@ -60,6 +65,10 @@ namespace Framework::Integrations::Client {
             _presence->Shutdown();
         }
 
+        if (_networkingEngine) {
+            _networkingEngine->Shutdown();
+        }
+
         if (_imguiApp && _imguiApp->IsInitialized()) {
             _imguiApp->Shutdown();
         }
@@ -74,6 +83,10 @@ namespace Framework::Integrations::Client {
     void Instance::Update() {
         if (_presence && _presence->IsInitialized()) {
             _presence->Update();
+        }
+
+        if (_networkingEngine) {
+            _networkingEngine->Update();
         }
 
         if (_worldEngine) {
