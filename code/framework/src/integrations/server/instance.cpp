@@ -14,6 +14,9 @@
 #include "integrations/shared/messages/weather_update.h"
 #include "world/server.h"
 
+#include <networking/messages/messages.h>
+#include <networking/messages/client_handshake.h>
+
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
 #include <optick.h>
@@ -186,6 +189,11 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitMessages() {
+        _networkingEngine->GetNetworkServer()->RegisterMessage<Framework::Networking::Messages::ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this](Framework::Networking::Messages::ClientHandshake* msg) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Received handshake message for player {}", msg->GetPlayerName());
+            //TODO: validate params
+            //TODO: send finalize message
+        });
         _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);

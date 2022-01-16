@@ -32,6 +32,12 @@ namespace Framework::Integrations::Client {
         Graphics::RendererConfiguration rendererOptions = {};
     };
 
+    struct CurrentState {
+        std::string _host;
+        int32_t _port;
+        std::string _nickname;
+    };
+
     class Instance {
       private:
         bool _initialized = false;
@@ -45,6 +51,10 @@ namespace Framework::Integrations::Client {
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
+
+        CurrentState _currentState;
+
+        void InitMessages();
       public:
         Instance();
         ~Instance() = default;
@@ -61,6 +71,14 @@ namespace Framework::Integrations::Client {
 
         bool IsInitialized() const {
             return _initialized;
+        }
+
+        CurrentState GetCurrentState() const {
+            return _currentState;
+        }
+
+        void SetCurrentState(CurrentState state) {
+            _currentState = state;
         }
 
         Networking::Engine* GetNetworkingEngine() const {

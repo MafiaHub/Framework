@@ -10,6 +10,8 @@
 
 #include "../shared/modules/mod.hpp"
 
+#include <networking/messages/client_handshake.h>
+
 #include <logging/logger.h>
 
 namespace Framework::Integrations::Client {
@@ -47,6 +49,7 @@ namespace Framework::Integrations::Client {
             _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
         }
 
+        InitMessages();
         PostInit();
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Initialize success");
@@ -112,5 +115,16 @@ namespace Framework::Integrations::Client {
         if (_renderIO) {
             _renderIO->UpdateRenderThread();
         }
+    }
+
+    void Instance::InitMessages() {
+        _networkingEngine->GetNetworkClient()->SetOnPlayerConnectedCallback([this](SLNet::Packet *packet) {
+            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Connection accepted by server, sending handshake");
+
+            Framework::Networking::Messages::ClientHandshake msg;
+            msg.FromParameters(_currentState._nickname, "", "");
+
+            _networkingEngine->GetNetworkClient()->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+        });
     }
 } // namespace Framework::Integrations::Client

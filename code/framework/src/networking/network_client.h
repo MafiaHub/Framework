@@ -23,6 +23,7 @@ namespace Framework::Networking {
       private:
         PeerState _state;
 
+        Messages::PacketCallback _onPlayerConnectedCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
 
       public:
@@ -41,6 +42,10 @@ namespace Framework::Networking {
         ClientError Disconnect();
 
         int GetPing();
+
+        void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
+            _onPlayerConnectedCallback = callback;
+        }
 
         void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = callback;

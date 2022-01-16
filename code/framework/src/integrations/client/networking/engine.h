@@ -25,7 +25,7 @@ namespace Framework::Integrations::Client::Networking {
 
         void Update();
 
-        Framework::Networking::NetworkClient *GetNetworkServer() const {
+        Framework::Networking::NetworkClient *GetNetworkClient() const {
             return _networkClient;
         }
     };
