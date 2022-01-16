@@ -41,21 +41,22 @@ namespace Framework::Networking {
             if (_onPlayerConnectCallback) {
                 _onPlayerConnectCallback(packet);
             }
+            return true;
         } break;
 
         case ID_DISCONNECTION_NOTIFICATION: {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
-                return true;
             }
+            return true;
         } break;
         case ID_CONNECTION_LOST: {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::LOST);
-                return true;
             }
+            return true;
         } break;
         }
         return false;
