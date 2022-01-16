@@ -35,7 +35,7 @@ namespace Framework::Networking {
         void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
 
         template <typename T>
-        void RegisterMessage(uint8_t message, std::function<void(T *)> callback) {
+        void RegisterMessage(uint8_t message, std::function<void(SLNet::RakNetGUID, T *)> callback) {
             if (callback == nullptr) {
                 return;
             }
@@ -45,7 +45,7 @@ namespace Framework::Networking {
                 T msg;
                 msg.SetPacket(p);
                 msg.Serialize(&bs, false);
-                callback(&msg);
+                callback(p->guid, &msg);
             };
         }
 
