@@ -16,16 +16,6 @@ namespace Framework::World {
             return status;
         }
 
-        _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
-                .kind(flecs::PostUpdate)
-                .interval(tickInterval)
-                .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
-                    const auto myGUID = 
-                    for (size_t i = 0; i < it.count(); i++) {
-                        
-                    }
-                });
-
         return EngineError::ENGINE_NONE;
     }
 
@@ -36,4 +26,32 @@ namespace Framework::World {
     void ClientEngine::Update() {
         Engine::Update();
     }
+
+    void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
+        _peer = peer;
+
+        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
+                              .kind(flecs::PostUpdate)
+                              .interval(tickInterval)
+                              .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
+                                  const auto myGUID = _peer->GetPeer()->GetMyGUID();
+
+                                  for (size_t i = 0; i < it.count(); i++) {
+                                      const auto &es = &rs[i];
+
+                                      if (es->owner == myGUID.g) {
+                                          if (es->events.updateProc) {
+                                              es->events.updateProc(_peer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                                          }
+                                      }
+                                  }
+                              });
+    }
+
+    void ClientEngine::OnDisconnect() {
+        if (_streamEntities.is_alive()) {
+            _streamEntities.destruct();
+        }
+    }
+
 } // namespace Framework::World

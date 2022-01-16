@@ -134,6 +134,7 @@ namespace Framework::Integrations::Client {
         });
         _networkingEngine->GetNetworkClient()->RegisterMessage<Framework::Networking::Messages::ClientConnectionFinalized>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_FINALIZED, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
+            _worldEngine->OnConnect(_networkingEngine->GetNetworkClient(), msg->GetServerTickRate());
 
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
@@ -141,6 +142,8 @@ namespace Framework::Integrations::Client {
             }
         });
         _networkingEngine->GetNetworkClient()->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
+            _worldEngine->OnDisconnect();
+
             // Notify mod-level that network integration got closed
             if (_onConnectionClosed) {
                 _onConnectionClosed();

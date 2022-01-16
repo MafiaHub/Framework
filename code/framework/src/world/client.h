@@ -11,14 +11,22 @@
 #include "engine.h"
 #include "errors.h"
 
+#include "networking/network_peer.h"
+
 #include <flecs/flecs.h>
 
 namespace Framework::World {
     class ClientEngine: public Engine {
+      private:
+        flecs::entity _streamEntities;
+        Networking::NetworkPeer *_peer = nullptr;
       public:
         EngineError Init() override;
 
         EngineError Shutdown() override;
+
+        void OnConnect(Networking::NetworkPeer *peer, float tickInterval);
+        void OnDisconnect();
 
         void Update() override;
     };

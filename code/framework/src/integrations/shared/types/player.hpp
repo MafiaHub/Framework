@@ -15,6 +15,8 @@
 
 #include "../modules/mod.hpp"
 
+#include "networking/messages/game_sync/entity_update.h"
+
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Shared::Archetypes {
@@ -45,6 +47,22 @@ namespace Framework::Integrations::Shared::Archetypes {
 
             auto gameActor = e.get_mut<Modules::Mod::GameActor>();
             gameActor->_actor = actor;
+
+            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
+            streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
+                Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
+                const auto tr = e.get<Framework::World::Modules::Base::Transform>();
+                if (tr)
+                    entityUpdate.FromParameters(*tr);
+                peer->Send(entityUpdate, guid);
+                const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();
+                if (streamable != nullptr) {
+                    if (streamable->modEvents.updateProc != nullptr) {
+                        streamable->modEvents.updateProc(peer, guid, e);
+                    }
+                }
+                return true;
+            };
 
             return e;
         }
