@@ -29,5 +29,7 @@ namespace Framework::World {
         void OnDisconnect();
 
         void Update() override;
+
+        flecs::entity GetEntityByServerID(flecs::entity_t id);
     };
 } // namespace Framework::World

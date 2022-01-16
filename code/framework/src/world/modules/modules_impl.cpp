@@ -22,7 +22,7 @@
 
 namespace Framework::World::Modules {
     void Base::SetupDefaultEvents(Streamable *streamable) {
-        streamable->events.spawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
+        streamable->events.spawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             if (tr)
@@ -32,21 +32,21 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.despawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
+        streamable->events.despawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityDespawn entityDespawn;
             peer->Send(entityDespawn, guid);
             CALL_CUSTOM_PROC(despawnProc);
             return true;
         };
 
-        streamable->events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
+        streamable->events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntitySelfUpdate entitySelfUpdate;
             peer->Send(entitySelfUpdate, guid);
             CALL_CUSTOM_PROC(selfUpdateProc);
             return true;
         };
 
-        streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
+        streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();

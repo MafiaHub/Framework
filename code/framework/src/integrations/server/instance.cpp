@@ -206,7 +206,7 @@ namespace Framework::Integrations::Server {
 
                 // Send the connection finalized packet
                 Framework::Networking::Messages::ClientConnectionFinalized answer;
-                answer.FromParameters(_opts.tickInterval, newPlayerEntity);
+                answer.FromParameters(_opts.tickInterval, newPlayerEntity.id());
                 _networkingEngine->GetNetworkServer()->Send(answer, guid);
         });
 

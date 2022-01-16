@@ -42,23 +42,26 @@ namespace Framework::Integrations::Shared::Archetypes {
         PlayerFactory(flecs::world *world): _world(world) {}
 
         inline flecs::entity CreateClient(uint64_t guid, void* actor, flecs::entity_t entityID) {
-            auto e = _world->entity(entityID);
+            auto e = _world->entity();
             e = CreateCommon(e, guid);
+
+            auto serverID = e.get_mut<World::Modules::Base::ServerID>();
+            serverID->id  = entityID;
 
             auto gameActor = e.get_mut<Modules::Mod::GameActor>();
             gameActor->_actor = actor;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-            streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
+            streamable->events.updateProc = [](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity ent) {
                 Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
-                const auto tr = e.get<Framework::World::Modules::Base::Transform>();
+                const auto tr = ent.get<Framework::World::Modules::Base::Transform>();
+                const auto streamable = ent.get<Framework::World::Modules::Base::Streamable>();
                 if (tr)
                     entityUpdate.FromParameters(*tr, streamable->owner);
                 peer->Send(entityUpdate, guid);
-                const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();
                 if (streamable != nullptr) {
                     if (streamable->modEvents.updateProc != nullptr) {
-                        streamable->modEvents.updateProc(peer, guid, e);
+                        streamable->modEvents.updateProc(peer, guid, ent);
                     }
                 }
                 return true;

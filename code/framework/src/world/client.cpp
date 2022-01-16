@@ -27,6 +27,17 @@ namespace Framework::World {
         Engine::Update();
     }
 
+    flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) {
+        flecs::entity ent;
+        _world->query<Modules::Base::ServerID>().each([&ent, id, this](flecs::entity &e, Modules::Base::ServerID &rhs) {
+            if (id == rhs.id) {
+                ent = e;
+                return;
+            }
+        });
+        return ent;
+    }
+
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
         _peer = peer;
 

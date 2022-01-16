@@ -35,6 +35,10 @@ namespace Framework::World::Modules {
             uint8_t _unused;
         };
 
+        struct ServerID {
+            flecs::entity_t id;
+        };
+
         struct Streamable {
             int virtualWorld        = 0;
             bool isVisible          = true;
@@ -43,7 +47,7 @@ namespace Framework::World::Modules {
             flecs::entity_t owner   = 0;
 
             struct Events {
-                using Proc = std::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity &)>;
+                using Proc = std::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity)>;
                 Proc spawnProc;
                 Proc despawnProc;
                 Proc selfUpdateProc;
@@ -74,6 +78,7 @@ namespace Framework::World::Modules {
             world.component<Streamable>();
             world.component<Streamer>();
             world.component<PendingRemoval>();
+            world.component<ServerID>();
         }
 
         static void SetupDefaultEvents(Streamable *streamable);
