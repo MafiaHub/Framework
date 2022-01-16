@@ -36,13 +36,22 @@ namespace Framework::Networking {
 
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
         switch (packetID) {
+        case ID_NEW_INCOMING_CONNECTION: {
+            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", packet->guid.ToString());
+            if (_onPlayerConnectCallback) {
+                _onPlayerConnectCallback(packet);
+            }
+        } break;
+
         case ID_DISCONNECTION_NOTIFICATION: {
+            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
                 return true;
             }
         } break;
         case ID_CONNECTION_LOST: {
+            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::LOST);
                 return true;

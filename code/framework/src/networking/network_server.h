@@ -20,6 +20,7 @@
 namespace Framework::Networking {
     class NetworkServer: public NetworkPeer {
       private:
+        Messages::PacketCallback _onPlayerConnectCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
 
       public:
@@ -33,6 +34,10 @@ namespace Framework::Networking {
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
 
         int GetPing(SLNet::RakNetGUID guid);
+
+        void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
+            _onPlayerConnectCallback = callback;
+        }
 
         void SetOnPlayerDisconnectCallback(Messages::DisconnectPacketCallback callback) {
             _onPlayerDisconnectCallback = callback;

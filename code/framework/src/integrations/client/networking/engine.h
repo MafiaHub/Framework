@@ -21,7 +21,7 @@ namespace Framework::Integrations::Client::Networking {
         bool Init();
         bool Shutdown();
 
-        bool Connect(std::string &, int32_t, std::string password = "");
+        bool Connect(const std::string &, const int32_t, const std::string password = "");
 
         void Update();
 

@@ -23,14 +23,16 @@ namespace Framework::Integrations::Client::Networking {
         return true;
     }
 
-    bool Engine::Connect(std::string& host, int32_t port, std::string password) {
+    bool Engine::Connect(const std::string& host, const int32_t port, const std::string password) {
         if (!_networkClient) {
             return false;
         }
 
-        _networkClient->Connect(host, port, password);
+        if (_networkClient->Connect(host, port, password) != Framework::Networking::ClientError::CLIENT_NONE) {
+            return false;
+        }
 
-        //TODO: handle client error
+        return true;
     }
 
     bool Engine::Shutdown() {
