@@ -17,18 +17,21 @@ namespace Framework::Networking::Messages {
     class GameSyncEntityUpdate final: public IMessage {
       private:
         World::Modules::Base::Transform _transform;
+        uint64_t _owner;
 
       public:
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_UPDATE;
         }
 
-        void FromParameters(World::Modules::Base::Transform tr) {
+        void FromParameters(World::Modules::Base::Transform tr, uint64_t owner) {
             _transform = tr;
+            _owner     = owner;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _transform);
+            bs->Serialize(write, _owner);
         }
 
         bool Valid() override {
@@ -38,6 +41,10 @@ namespace Framework::Networking::Messages {
 
         World::Modules::Base::Transform GetTransform() {
             return _transform;
+        }
+
+        uint64_t GetOwner() const {
+            return _owner;
         }
     };
 } // namespace Framework::Networking::Messages

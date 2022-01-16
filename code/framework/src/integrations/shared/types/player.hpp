@@ -53,7 +53,7 @@ namespace Framework::Integrations::Shared::Archetypes {
                 Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
                 const auto tr = e.get<Framework::World::Modules::Base::Transform>();
                 if (tr)
-                    entityUpdate.FromParameters(*tr);
+                    entityUpdate.FromParameters(*tr, streamable->owner);
                 peer->Send(entityUpdate, guid);
                 const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();
                 if (streamable != nullptr) {

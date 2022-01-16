@@ -36,7 +36,7 @@ namespace Framework::Networking::Messages {
         }
 
         bool Valid() override {
-            return _serverTickRate > 0.0f;
+            return _serverTickRate > 0.0f && _entityID > 0;
         }
 
         float GetServerTickRate() const {

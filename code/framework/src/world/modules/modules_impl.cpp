@@ -49,8 +49,9 @@ namespace Framework::World::Modules {
         streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity &e) {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
-            if (tr)
-                entityUpdate.FromParameters(*tr);
+            const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+            if (tr && es)
+                entityUpdate.FromParameters(*tr, es->owner);
             peer->Send(entityUpdate, guid);
             CALL_CUSTOM_PROC(updateProc);
             return true;
