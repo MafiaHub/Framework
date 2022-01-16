@@ -18,7 +18,7 @@ namespace Framework::Networking::Messages {
     class ClientConnectionFinalized final: public IMessage {
       private:
         float _serverTickRate = 0.0f;
-        flecs::entity_t _entityID = NULL;
+        flecs::entity_t _entityID = 0;
 
       public:
         uint8_t GetMessageID() const override {
