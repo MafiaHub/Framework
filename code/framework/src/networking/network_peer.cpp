@@ -79,7 +79,7 @@ namespace Framework::Networking {
                     _registeredMessageCallbacks[packetID](_packet);
                 }
                 else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Received unknown packet {}", packetID);
+                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
                     if (_onUnknownPacketCallback) {
                         _onUnknownPacketCallback(_packet);
                     }

@@ -320,7 +320,7 @@ namespace Framework::Launcher {
         if (!handle.isDirectory()) {
             const auto exePath = Utils::StringUtils::WideToNormal(gProjectDllPath);
 
-            sfd_Options sfd;
+            sfd_Options sfd = {};
             sfd.path        = exePath.c_str();
             sfd.extension   = _config.promptExtension.c_str();
             sfd.filter_name = _config.promptFilterName.c_str();
