@@ -36,7 +36,7 @@ namespace Framework::Networking::Messages {
 
         bool Valid() override {
             // TODO is there anything to validate for transform data?
-            return true;
+            return _owner > 0;
         }
 
         World::Modules::Base::Transform GetTransform() {
