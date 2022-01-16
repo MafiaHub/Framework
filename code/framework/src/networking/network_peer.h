@@ -42,7 +42,7 @@ namespace Framework::Networking {
 
             _registeredMessageCallbacks[message] = [callback](SLNet::Packet *p) {
                 SLNet::BitStream bs(p->data + 1, p->length, false);
-                T msg;
+                T msg = {};
                 msg.SetPacket(p);
                 msg.Serialize(&bs, false);
                 callback(p->guid, &msg);
@@ -51,7 +51,7 @@ namespace Framework::Networking {
 
         template <typename T>
         void RegisterRPC(std::function<void(T *)> callback) {
-            T _rpc;
+            T _rpc = {};
 
             if (callback == nullptr) {
                 return;
@@ -59,7 +59,7 @@ namespace Framework::Networking {
 
             _registeredRPCs[_rpc.GetHashName()] = [callback](SLNet::Packet *p) {
                 SLNet::BitStream bs(p->data + 5, p->length, false);
-                T rpc;
+                T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
                 callback(&rpc);
