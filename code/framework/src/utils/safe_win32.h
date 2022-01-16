@@ -24,6 +24,7 @@
 #define NOMINMAX
 #endif
 
+#include <WinSock2.h>
 #include <Windows.h>
 
 #undef WIN32_LEAN_AND_MEAN
