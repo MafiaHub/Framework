@@ -18,10 +18,13 @@
 
 #include "networking/engine.h"
 
+#include <functional>
 #include <memory>
 #include <world/client.h>
 
 namespace Framework::Integrations::Client {
+    using NetworkNotification = std::function<void()>;
+
     struct InstanceOptions {
         int64_t discordAppId = 0;
         bool usePresence     = true;
@@ -52,7 +55,10 @@ namespace Framework::Integrations::Client {
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
 
+        // Local state tracking
         CurrentState _currentState;
+        NetworkNotification _onConnectionFinalized;
+        NetworkNotification _onConnectionClosed;
 
         void InitNetworkingMessages();
       public:
@@ -79,6 +85,14 @@ namespace Framework::Integrations::Client {
 
         void SetCurrentState(CurrentState state) {
             _currentState = state;
+        }
+
+        void SetOnConnectionFinalizedCallback(NetworkNotification cb) {
+            _onConnectionFinalized = cb;
+        }
+
+        void SetOnConnectionClosedCallback(NetworkNotification cb) {
+            _onConnectionClosed = cb;
         }
 
         Networking::Engine* GetNetworkingEngine() const {
