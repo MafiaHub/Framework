@@ -79,7 +79,7 @@ namespace Framework::Integrations::Server {
         void InitEndpoints();
         void InitModules();
         void InitManagers();
-        void InitMessages();
+        void InitNetworkingMessages();
         bool LoadConfigFromJSON();
 
         // managers

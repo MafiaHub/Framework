@@ -11,6 +11,7 @@
 #include "../shared/modules/mod.hpp"
 
 #include <networking/messages/client_handshake.h>
+#include <networking/messages/client_connection_finalized.h>
 
 #include <logging/logger.h>
 
@@ -49,10 +50,10 @@ namespace Framework::Integrations::Client {
             _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
         }
 
-        InitMessages();
+        InitNetworkingMessages();
         PostInit();
 
-        Framework::Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Initialize success");
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Initialize success");
         _initialized = true;
         return ClientError::CLIENT_NONE;
     }
@@ -117,12 +118,15 @@ namespace Framework::Integrations::Client {
         }
     }
 
-    void Instance::InitMessages() {
+    void Instance::InitNetworkingMessages() {
+        _networkingEngine->GetNetworkClient()->RegisterMessage<Framework::Networking::Messages::ClientConnectionFinalized>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_FINALIZED, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientConnectionFinalized *msg) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
+        });
         _networkingEngine->GetNetworkClient()->SetOnPlayerConnectedCallback([this](SLNet::Packet *packet) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Connection accepted by server, sending handshake");
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
             Framework::Networking::Messages::ClientHandshake msg;
-            msg.FromParameters(_currentState._nickname, "", "");
+            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
 
             _networkingEngine->GetNetworkClient()->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });

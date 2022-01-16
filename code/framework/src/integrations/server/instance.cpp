@@ -16,6 +16,7 @@
 
 #include <networking/messages/messages.h>
 #include <networking/messages/client_handshake.h>
+#include <networking/messages/client_connection_finalized.h>
 
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
@@ -104,7 +105,7 @@ namespace Framework::Integrations::Server {
         InitManagers();
 
         // Initialize default messages
-        InitMessages();
+        InitNetworkingMessages();
 
         // Initialize mod subsystems
         PostInit();
@@ -188,17 +189,27 @@ namespace Framework::Integrations::Server {
         return true;
     }
 
-    void Instance::InitMessages() {
-        _networkingEngine->GetNetworkServer()->RegisterMessage<Framework::Networking::Messages::ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this](Framework::Networking::Messages::ClientHandshake* msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Received handshake message for player {}", msg->GetPlayerName());
-            //TODO: validate params
-            //TODO: send finalize message
+    void Instance::InitNetworkingMessages() {
+        _networkingEngine->GetNetworkServer()->RegisterMessage<Framework::Networking::Messages::ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientHandshake* msg) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
+            
+            // Make sure handshake payload was correctly formatted    
+            if (!msg->Valid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
+                _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
+
+            // Send the connection finalized packet
+            Framework::Networking::Messages::ClientConnectionFinalized answer;
+            answer.FromParameters(_opts.tickInterval);
+            _networkingEngine->GetNetworkServer()->Send(answer, guid);
         });
+
         _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
             const auto guid = packet->guid;
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
-            // TODO send disconnect message
             _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
 
             auto e = _worldEngine->GetEntityByGUID(guid.g);

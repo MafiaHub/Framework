@@ -54,7 +54,7 @@ namespace Framework::Integrations::Client {
 
         CurrentState _currentState;
 
-        void InitMessages();
+        void InitNetworkingMessages();
       public:
         Instance();
         ~Instance() = default;
