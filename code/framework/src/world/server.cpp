@@ -12,9 +12,7 @@
 
 namespace Framework::World {
     EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval) {
-        const auto status = Engine::Init();
-
-        _networkPeer = networkPeer;
+        const auto status = Engine::Init(networkPeer);
 
         if (status != EngineError::ENGINE_NONE) {
             return status;

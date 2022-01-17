@@ -10,16 +10,12 @@
 
 #include "engine.h"
 #include "errors.h"
-#include "networking/network_peer.h"
 
 #include <flecs/flecs.h>
 #include <memory>
 
 namespace Framework::World {
     class ServerEngine: public Engine {
-      private:
-        Framework::Networking::NetworkPeer *_networkPeer = nullptr;
-
       public:
         EngineError Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval);
 

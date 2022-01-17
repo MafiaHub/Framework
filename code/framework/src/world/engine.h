@@ -11,6 +11,8 @@
 #include "errors.h"
 #include "modules/base.hpp"
 
+#include "networking/network_peer.h"
+
 #include <flecs/flecs.h>
 #include <memory>
 
@@ -19,9 +21,10 @@ namespace Framework::World {
       protected:
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         std::unique_ptr<flecs::world> _world;
+        Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:
-        virtual EngineError Init();
+        EngineError Init(Networking::NetworkPeer *networkPeer);
 
         virtual EngineError Shutdown();
 

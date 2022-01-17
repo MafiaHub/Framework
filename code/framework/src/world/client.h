@@ -11,8 +11,6 @@
 #include "engine.h"
 #include "errors.h"
 
-#include "networking/network_peer.h"
-
 #include <flecs/flecs.h>
 
 namespace Framework::World {
@@ -20,9 +18,8 @@ namespace Framework::World {
       private:
         flecs::entity _streamEntities;
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
-        Networking::NetworkPeer *_peer = nullptr;
       public:
-        EngineError Init() override;
+        EngineError Init();
 
         EngineError Shutdown() override;
 

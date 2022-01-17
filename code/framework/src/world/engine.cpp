@@ -13,7 +13,9 @@
 #include <slikenet/types.h>
 
 namespace Framework::World {
-    EngineError Engine::Init() {
+    EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
+        _networkPeer = networkPeer;
+
         _world = std::make_unique<flecs::world>();
 
         // Register a base module

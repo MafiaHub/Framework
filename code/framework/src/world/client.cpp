@@ -10,7 +10,7 @@
 
 namespace Framework::World {
     EngineError ClientEngine::Init() {
-        const auto status = Engine::Init();
+        const auto status = Engine::Init(nullptr); // assigned by OnConnect
 
         if (status != EngineError::ENGINE_NONE) {
             return status;
@@ -43,19 +43,19 @@ namespace Framework::World {
     }
 
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
-        _peer = peer;
+        _networkPeer = peer;
 
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
                               .kind(flecs::PostUpdate)
                               .interval(tickInterval)
                               .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
-                                  const auto myGUID = _peer->GetPeer()->GetMyGUID();
+                                  const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
                                   for (size_t i = 0; i < it.count(); i++) {
                                       const auto &es = &rs[i];
 
                                       if (es->events.updateProc && es->owner == myGUID.g) {
-                                          es->events.updateProc(_peer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                                          es->events.updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
                                       }
                                   }
                               });
