@@ -57,4 +57,15 @@ namespace Framework::World::Modules {
             return true;
         };
     }
+    void Base::SetupDefaultClientEvents(Streamable *streamable) {
+        streamable->events.clientUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+            Framework::Networking::Messages::GameSyncEntityClientUpdate entityUpdate;
+            const auto tr = e.get<Framework::World::Modules::Base::Transform>();
+            if (tr)
+                entityUpdate.FromParameters(*tr);
+            peer->Send(entityUpdate, guid);
+            CALL_CUSTOM_PROC(clientUpdateProc);
+            return true;
+        };
+    }
 } // namespace Framework::World::Modules

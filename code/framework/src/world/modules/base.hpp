@@ -54,6 +54,7 @@ namespace Framework::World::Modules {
                 Proc spawnProc;
                 Proc despawnProc;
                 Proc selfUpdateProc;
+                Proc clientUpdateProc; // client -> server
                 Proc updateProc;
             };
 
@@ -89,5 +90,6 @@ namespace Framework::World::Modules {
         }
 
         static void SetupDefaultEvents(Streamable *streamable);
+        static void SetupDefaultClientEvents(Streamable *streamable);
     };
 } // namespace Framework::World::Modules

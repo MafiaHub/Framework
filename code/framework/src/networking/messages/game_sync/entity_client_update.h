@@ -14,36 +14,29 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntityUpdate final: public IMessage {
+    class GameSyncEntityClientUpdate final: public IMessage {
       private:
         World::Modules::Base::Transform _transform;
-        uint64_t _owner;
 
       public:
         uint8_t GetMessageID() const override {
-            return GAME_SYNC_ENTITY_UPDATE;
+            return GAME_SYNC_ENTITY_CLIENT_UPDATE;
         }
 
-        void FromParameters(World::Modules::Base::Transform tr, uint64_t owner) {
+        void FromParameters(World::Modules::Base::Transform tr) {
             _transform = tr;
-            _owner     = owner;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _transform);
-            bs->Serialize(write, _owner);
         }
 
         bool Valid() override {
-            return _owner != SLNet::UNASSIGNED_RAKNET_GUID.g;
+            return true;
         }
 
         World::Modules::Base::Transform GetTransform() {
             return _transform;
-        }
-
-        uint64_t GetOwner() const {
-            return _owner;
         }
     };
 } // namespace Framework::Networking::Messages

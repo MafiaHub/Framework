@@ -52,21 +52,8 @@ namespace Framework::Integrations::Shared::Archetypes {
             gameActor->_actor = actor;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-            streamable->events.updateProc = [](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity ent) {
-                Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
-                const auto tr = ent.get<Framework::World::Modules::Base::Transform>();
-                const auto streamable = ent.get<Framework::World::Modules::Base::Streamable>();
-                if (tr)
-                    entityUpdate.FromParameters(*tr, streamable->owner);
-                peer->Send(entityUpdate, guid);
-                if (streamable != nullptr) {
-                    if (streamable->modEvents.updateProc != nullptr) {
-                        streamable->modEvents.updateProc(peer, guid, ent);
-                    }
-                }
-                return true;
-            };
-
+            World::Modules::Base::SetupDefaultClientEvents(streamable);
+            
             return e;
         }
 
