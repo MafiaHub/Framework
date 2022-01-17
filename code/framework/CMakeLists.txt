@@ -1,7 +1,11 @@
+include(UpdateGitHash)
+update_git_version()
+
 # List the source files
 set(FRAMEWORK_SRC
         src/logging/logger.cpp
-
+    
+        ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
         src/utils/delay_scope.cpp
         src/utils/config.cpp
         src/utils/interpolator.cpp

@@ -1,0 +1,15 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2022, MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
+#define FW_GIT_VERSION_LONG "@FW_GIT_VERSION_LONG@"
+#define FW_GIT_VERSION "@FW_GIT_VERSION@"
+
+namespace Framework::Utils::Version {
+    const char *git = FW_GIT_VERSION;
+    const char *gitLong = FW_GIT_VERSION_LONG;
+};
