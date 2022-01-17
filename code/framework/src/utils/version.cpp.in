@@ -17,15 +17,21 @@ namespace Framework::Utils::Version {
     const char *gitLong = FW_GIT_VERSION_LONG;
     const char *rel = FW_VERSION;
 
-    static semver_t BuildVersion(const char *ver) {
-        semver_t ctx;
-        semver_parse(ver, &ctx);
-        return ctx;
+    static bool BuildVersion(const char *ver, semver_t &ctx) {
+        return semver_parse(ver, &ctx);
     }
 
     bool VersionSatisfies(const char *a, const char *b) {
-        semver_t va = BuildVersion(a);
-        semver_t vb = BuildVersion(b);
+        semver_t va, vb;
+        if (!BuildVersion(a, va)) {
+            return false;
+        }
+        if (!BuildVersion(b, vb)) {
+            if (semver_is_valid(a)) {
+                semver_free(&va);
+            }
+            return false;
+        }
         const auto isCompatible = semver_satisfies_patch(va, vb);
         semver_free(&va);
         semver_free(&vb);
