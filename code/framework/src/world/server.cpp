@@ -42,17 +42,18 @@ namespace Framework::World {
             if (lhsS.virtualWorld != rhsS.virtualWorld)
                 return false;
 
-            const auto dist   = glm::distance(lhsTr.pos, rhsTr.pos);
-            const auto isNear = dist < streamer.range;
-
-            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
-                return rhsS.isVisibleProc(streamerEntity, e) && isNear;
-            }
-            else if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
+            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
                 return rhsS.isVisibleProc(streamerEntity, e);
             }
-            else
-                return isNear;
+
+            const auto dist   = glm::distance(lhsTr.pos, rhsTr.pos);
+            auto isVisible = dist < streamer.range;
+
+            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
+                isVisible = isVisible && rhsS.isVisibleProc(streamerEntity, e);
+            }
+            
+            return isVisible;
         };
 
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities")
