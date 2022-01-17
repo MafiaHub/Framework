@@ -41,7 +41,7 @@ namespace Framework::Networking {
 
         ClientError Disconnect();
 
-        int GetPing();
+        int GetPing(SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID);
 
         PeerState GetConnectionState() const {
             return _state;

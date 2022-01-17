@@ -64,6 +64,12 @@ namespace Framework::Networking {
             return CLIENT_PEER_NULL;
         }
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
+        
+        if (_onPlayerDisconnectedCallback) {
+            _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+        }
+        _state = DISCONNECTED;
+
         return CLIENT_NONE;
     }
 
@@ -136,11 +142,15 @@ namespace Framework::Networking {
         return false;
     }
 
-    int NetworkClient::GetPing() {
+    int NetworkClient::GetPing(SLNet::RakNetGUID guid) {
         if (!_peer) {
             return 0;
         }
 
-        return _peer->GetAveragePing(SLNet::UNASSIGNED_RAKNET_GUID);
+        if (guid == SLNet::UNASSIGNED_RAKNET_GUID) {
+            guid = _peer->GetMyGUID();
+        }
+
+        return _peer->GetAveragePing(guid);
     }
 } // namespace Framework::Networking
