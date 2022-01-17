@@ -8,12 +8,14 @@
 
 #define FW_GIT_VERSION_LONG "@FW_GIT_VERSION_LONG@"
 #define FW_GIT_VERSION "@FW_GIT_VERSION@"
+#define FW_VERSION     "@FW_VERSION@"
 
 #include <semver.h>
 
 namespace Framework::Utils::Version {
     const char *git = FW_GIT_VERSION;
     const char *gitLong = FW_GIT_VERSION_LONG;
+    const char *rel = FW_VERSION;
 
     static semver_t BuildVersion(const char *ver) {
         semver_t ctx;

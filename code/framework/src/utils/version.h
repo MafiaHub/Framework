@@ -8,11 +8,10 @@
 
 #pragma once
 
-#define FW_VERSION "1.0.0"
-
 namespace Framework::Utils::Version {
     extern const char *gitLong;
     extern const char *git;
+    extern const char *rel;
 
     extern bool VersionSatisfies(const char *a, const char *b);
 };
