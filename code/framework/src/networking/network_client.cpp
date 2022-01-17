@@ -56,7 +56,6 @@ namespace Framework::Networking {
 
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("{} {} {}", host, port, std::string(password));
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             _state = DISCONNECTED;
             return CLIENT_CONNECT_FAILED;
@@ -69,6 +68,12 @@ namespace Framework::Networking {
         if (!_peer) {
             return CLIENT_PEER_NULL;
         }
+
+        if (_state == DISCONNECTED) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Cannot disconnect, we are already disconnected.");
+            return CLIENT_NONE;
+        }
+
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
         
         if (_onPlayerDisconnectedCallback) {
