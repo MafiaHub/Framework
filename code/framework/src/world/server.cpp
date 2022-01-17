@@ -77,6 +77,8 @@ namespace Framework::World {
                 .interval(tickInterval)
                 .iter([allStreamableEntities, isVisible, this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
                     for (size_t i = 0; i < it.count(); i++) {
+                        if (it.entity(i).get<Modules::Base::PendingRemoval>() != nullptr)
+                            continue;
                         allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
                             if (!e.is_alive())
                                 return;
