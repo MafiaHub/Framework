@@ -17,7 +17,6 @@ namespace Framework::World {
         }
 
         _queryGetEntityByServerID = _world->query_builder<Modules::Base::ServerID>().build();
-        _queryGetEntityByGUID = _world->query_builder<Modules::Base::Streamable>().build();
 
         return EngineError::ENGINE_NONE;
     }
@@ -35,19 +34,6 @@ namespace Framework::World {
         _queryGetEntityByServerID.iter([&ent, id](flecs::iter it, Modules::Base::ServerID *rhs) {
             for (size_t i = 0; i < it.count(); i++) {
                 if (id == rhs[i].id) {
-                    ent = it.entity(i);
-                    return;
-                }
-            }
-        });
-        return ent;
-    }
-
-    flecs::entity ClientEngine::GetEntityByGUID(uint64_t id) {
-        flecs::entity ent = {};
-        _queryGetEntityByGUID.iter([&ent, id](flecs::iter it, Modules::Base::Streamable *rhs) {
-            for (size_t i = 0; i < it.count(); i++) {
-                if (id == rhs[i].owner) {
                     ent = it.entity(i);
                     return;
                 }
