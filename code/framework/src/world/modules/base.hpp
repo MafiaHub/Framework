@@ -46,7 +46,7 @@ namespace Framework::World::Modules {
             int virtualWorld        = 0;
             bool isVisible          = true;
             bool alwaysVisible      = false;
-            int64_t updateFrequency = 1667;
+            double updateInterval = (1000.0/60.0); // 16.1667~ ms interval
             flecs::entity_t owner   = 0;
 
             struct Events {
@@ -69,7 +69,7 @@ namespace Framework::World::Modules {
 
         struct Streamer {
             struct StreamData {
-                int64_t lastUpdate = 0;
+                double lastUpdate = 0.0;
             };
             std::unordered_map<flecs::entity_t, StreamData> entities;
             float range = 100.0f;

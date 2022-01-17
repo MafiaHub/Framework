@@ -23,8 +23,7 @@ namespace Framework::World {
         auto allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
 
         auto isVisible = [](flecs::entity streamerEntity, flecs::entity e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS,
-                             Modules::Base::Transform &rhsTr,
-                             Modules::Base::Streamable rhsS) -> bool {
+                             Modules::Base::Transform &rhsTr, Modules::Base::Streamable rhsS) -> bool {
             if (!e.is_valid())
                 return false;
             if (!e.is_alive())
@@ -43,7 +42,7 @@ namespace Framework::World {
             if (lhsS.virtualWorld != rhsS.virtualWorld)
                 return false;
 
-            const auto dist = glm::distance(lhsTr.pos, rhsTr.pos);
+            const auto dist   = glm::distance(lhsTr.pos, rhsTr.pos);
             const auto isNear = dist < streamer.range;
 
             if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
@@ -52,7 +51,8 @@ namespace Framework::World {
             else if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
                 return rhsS.isVisibleProc(streamerEntity, e);
             }
-            else return isNear;
+            else
+                return isNear;
         };
 
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities")
@@ -95,10 +95,10 @@ namespace Framework::World {
                                 // otherwise we do regular updates
                                 else if (rs[i].owner != otherS.owner) {
                                     auto &data = map_it->second;
-                                    if (Utils::Time::GetTime() - data.lastUpdate > otherS.updateFrequency) {
+                                    if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
                                         if (otherS.events.updateProc)
                                             otherS.events.updateProc(_networkPeer, s[i].guid, e);
-                                        data.lastUpdate = Utils::Time::GetTime();
+                                        data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }
                                 }
                             }
@@ -107,7 +107,7 @@ namespace Framework::World {
                             else if (canSend && otherS.events.spawnProc) {
                                 if (otherS.events.spawnProc(_networkPeer, s[i].guid, e)) {
                                     Modules::Base::Streamer::StreamData data;
-                                    data.lastUpdate   = Utils::Time::GetTime();
+                                    data.lastUpdate   = static_cast<double>(Utils::Time::GetTime());
                                     s[i].entities[id] = data;
                                 }
                             }
