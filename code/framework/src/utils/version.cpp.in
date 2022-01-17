@@ -9,7 +9,24 @@
 #define FW_GIT_VERSION_LONG "@FW_GIT_VERSION_LONG@"
 #define FW_GIT_VERSION "@FW_GIT_VERSION@"
 
+#include <semver.h>
+
 namespace Framework::Utils::Version {
     const char *git = FW_GIT_VERSION;
     const char *gitLong = FW_GIT_VERSION_LONG;
+
+    static semver_t BuildVersion(const char *ver) {
+        semver_t ctx;
+        semver_parse(ver, &ctx);
+        return ctx;
+    }
+
+    bool VersionSatisfies(const char *a, const char *b) {
+        semver_t va = BuildVersion(a);
+        semver_t vb = BuildVersion(b);
+        const auto isCompatible = semver_satisfies_patch(va, vb);
+        semver_free(&va);
+        semver_free(&vb);
+        return isCompatible;
+    }
 };

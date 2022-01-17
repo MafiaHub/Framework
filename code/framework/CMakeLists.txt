@@ -97,8 +97,7 @@ if(WIN32)
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
-        src/utils/memory.cpp
-    )
+        src/utils/memory.cpp)
     target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /SUBSYSTEM:windows /SECTIONLAYOUT:@${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/SectionLayout.txt)
 
     if (CMAKE_CL_64)
@@ -129,7 +128,7 @@ macro(link_shared_deps target_name)
         target_link_libraries(${target_name} "-framework CoreFoundation" "-framework Foundation" "-framework GSS" "-framework Security" "-framework CoreText" "-framework CoreGraphics" bsm)
     endif()
 
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Firebase Curl OptickCore flecs_static)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Firebase Curl OptickCore flecs_static semver)
 endmacro()
 
 link_shared_deps(Framework)

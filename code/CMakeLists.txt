@@ -9,6 +9,7 @@ include_directories(PUBLIC
         "../vendors/json/include"
         "../vendors/slikenet/Source"
         "../vendors/ntdll"
+        "../vendors/semver"
         "../vendors/imgui"
         "../vendors/sdl2/include"
         "../vendors/spdlog/include"

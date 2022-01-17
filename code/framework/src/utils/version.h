@@ -11,4 +11,6 @@
 namespace Framework::Utils::Version {
     extern const char *gitLong;
     extern const char *git;
+
+    extern bool CompareVersions(const char *a, const char *b);
 };

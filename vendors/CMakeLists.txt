@@ -34,6 +34,9 @@ endif ()
 # Build mongoose
 add_subdirectory(mongoose)
 
+# Build semver
+add_subdirectory(semver)
+
 # Build SPDLOG
 set(SPDLOG_BUILD_SHARED OFF)
 add_subdirectory(spdlog)
