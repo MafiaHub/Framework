@@ -43,6 +43,10 @@ namespace Framework::Networking {
 
         int GetPing();
 
+        PeerState GetConnectionState() const {
+            return _state;
+        }
+
         void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
             _onPlayerConnectedCallback = callback;
         }
