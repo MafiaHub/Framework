@@ -154,15 +154,11 @@ namespace Framework::Networking {
         return false;
     }
 
-    int NetworkClient::GetPing(SLNet::RakNetGUID guid) {
-        if (!_peer) {
+    int NetworkClient::GetPing() {
+        if (!_peer || _state != CONNECTED) {
             return 0;
         }
 
-        if (guid == SLNet::UNASSIGNED_RAKNET_GUID) {
-            guid = _peer->GetMyGUID();
-        }
-
-        return _peer->GetAveragePing(guid);
+        return _peer->GetAveragePing(_peer->GetSystemAddressFromIndex(0));
     }
 } // namespace Framework::Networking
