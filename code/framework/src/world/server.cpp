@@ -61,9 +61,11 @@ namespace Framework::World {
             .interval(tickInterval * 4.0f)
             .each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
                 _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                    rhsS.entities.erase(e);
-                    if (streamable.events.despawnProc)
-                        streamable.events.despawnProc(_networkPeer, rhsS.guid, e);
+                    if (rhsS.entities.find(e) != rhsS.entities.end()) {
+                        rhsS.entities.erase(e);
+                        if (streamable.events.despawnProc)
+                            streamable.events.despawnProc(_networkPeer, rhsS.guid, e);
+                    }
                 });
 
                 e.destruct();
