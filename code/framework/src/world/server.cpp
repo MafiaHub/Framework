@@ -111,4 +111,10 @@ namespace Framework::World {
     void ServerEngine::Update() {
         Engine::Update();
     }
+
+    void ServerEngine::RemoveEntity(flecs::entity e) {
+        if (e.is_alive()) {
+            e.add<Modules::Base::PendingRemoval>();
+        }
+    }
 } // namespace Framework::World

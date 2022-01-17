@@ -27,5 +27,7 @@ namespace Framework::World {
         EngineError Shutdown() override;
 
         void Update() override;
+
+        void RemoveEntity(flecs::entity e);
     };
 } // namespace Framework::World
