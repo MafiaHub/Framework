@@ -31,5 +31,6 @@ namespace Framework::World {
         void Update() override;
 
         flecs::entity GetEntityByServerID(flecs::entity_t id);
+        flecs::entity GetEntityByGUID(uint64_t id);
     };
 } // namespace Framework::World

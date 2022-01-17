@@ -28,10 +28,23 @@ namespace Framework::World {
     }
 
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) {
-        flecs::entity ent;
+        flecs::entity ent = {};
         _world->query<Modules::Base::ServerID>().iter([&ent, id, this](flecs::iter it, Modules::Base::ServerID *rhs) {
             for (size_t i = 0; i < it.count(); i++) {
                 if (id == rhs[i].id) {
+                    ent = it.entity(i);
+                    return;
+                }
+            }
+        });
+        return ent;
+    }
+
+    flecs::entity ClientEngine::GetEntityByGUID(uint64_t id) {
+        flecs::entity ent = {};
+        _world->query<Modules::Base::Streamable>().iter([&ent, id, this](flecs::iter it, Modules::Base::Streamable *rhs) {
+            for (size_t i = 0; i < it.count(); i++) {
+                if (id == rhs[i].owner) {
                     ent = it.entity(i);
                     return;
                 }
@@ -52,10 +65,8 @@ namespace Framework::World {
                                   for (size_t i = 0; i < it.count(); i++) {
                                       const auto &es = &rs[i];
 
-                                      if (es->owner == myGUID.g) {
-                                          if (es->events.updateProc) {
-                                              es->events.updateProc(_peer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
-                                          }
+                                      if (es->events.updateProc && es->owner == myGUID.g) {
+                                          es->events.updateProc(_peer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
                                       }
                                   }
                               });
