@@ -41,7 +41,7 @@ namespace Framework::World::Modules {
 
         struct Streamable {
             using IsVisibleProc = std::function<bool(flecs::entity lhs, flecs::entity rhs)>;
-            enum class HeuristicMode { ADD, REPLACE };
+            enum class HeuristicMode { ADD, REPLACE, REPLACE_POSITION };
 
             int virtualWorld        = 0;
             bool isVisible          = true;

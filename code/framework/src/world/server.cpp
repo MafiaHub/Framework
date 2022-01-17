@@ -49,6 +49,9 @@ namespace Framework::World {
             if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
                 return rhsS.isVisibleProc(streamerEntity, e) && isNear;
             }
+            else if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
+                return rhsS.isVisibleProc(streamerEntity, e);
+            }
             else return isNear;
         };
 
