@@ -75,6 +75,7 @@ namespace Framework::Networking {
         }
 
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
+        Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
         
         if (_onPlayerDisconnectedCallback) {
             _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
