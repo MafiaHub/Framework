@@ -19,6 +19,8 @@ namespace Framework::World {
     class ClientEngine: public Engine {
       private:
         flecs::entity _streamEntities;
+        flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
+        flecs::query<Modules::Base::Streamable> _queryGetEntityByGUID;
         Networking::NetworkPeer *_peer = nullptr;
       public:
         EngineError Init() override;
