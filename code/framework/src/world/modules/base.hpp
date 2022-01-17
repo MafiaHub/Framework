@@ -40,6 +40,9 @@ namespace Framework::World::Modules {
         };
 
         struct Streamable {
+            using IsVisibleProc = std::function<bool(flecs::entity lhs, flecs::entity rhs)>;
+            enum class HeuristicMode { ADD, REPLACE };
+
             int virtualWorld        = 0;
             bool isVisible          = true;
             bool alwaysVisible      = false;
@@ -58,6 +61,10 @@ namespace Framework::World::Modules {
 
             // Extra set of events so mod can supply custom data.
             Events modEvents;
+
+            // Custom visibility proc that either complements the existing heuristic or replaces it
+            HeuristicMode isVisibleHeuristic = HeuristicMode::ADD;
+            IsVisibleProc isVisibleProc;
         };
 
         struct Streamer {

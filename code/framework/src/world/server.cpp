@@ -22,7 +22,8 @@ namespace Framework::World {
 
         auto allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
 
-        auto isVisible = [](flecs::entity e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS, Modules::Base::Transform &rhsTr,
+        auto isVisible = [](flecs::entity streamerEntity, flecs::entity e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS,
+                             Modules::Base::Transform &rhsTr,
                              Modules::Base::Streamable rhsS) -> bool {
             if (!e.is_valid())
                 return false;
@@ -30,6 +31,11 @@ namespace Framework::World {
                 return false;
             if (e.get<Modules::Base::PendingRemoval>() != nullptr)
                 return false;
+
+            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE) {
+                return rhsS.isVisibleProc(streamerEntity, e);
+            }
+
             if (rhsS.alwaysVisible)
                 return true;
             if (!rhsS.isVisible)
@@ -38,7 +44,12 @@ namespace Framework::World {
                 return false;
 
             const auto dist = glm::distance(lhsTr.pos, rhsTr.pos);
-            return dist < streamer.range;
+            const auto isNear = dist < streamer.range;
+
+            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
+                return rhsS.isVisibleProc(streamerEntity, e) && isNear;
+            }
+            else return isNear;
         };
 
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities")
@@ -68,7 +79,7 @@ namespace Framework::World {
                                 return;
                             }
                             const auto id      = e.id();
-                            const auto canSend = isVisible(e, tr[i], s[i], rs[i], otherTr, otherS);
+                            const auto canSend = isVisible(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
                             const auto map_it  = s[i].entities.find(id);
                             if (map_it != s[i].entities.end()) {
                                 // If we can't stream an entity anymore, despawn it
