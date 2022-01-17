@@ -29,10 +29,12 @@ namespace Framework::World {
 
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) {
         flecs::entity ent;
-        _world->query<Modules::Base::ServerID>().each([&ent, id, this](flecs::entity &e, Modules::Base::ServerID &rhs) {
-            if (id == rhs.id) {
-                ent = e;
-                return;
+        _world->query<Modules::Base::ServerID>().iter([&ent, id, this](flecs::iter it, Modules::Base::ServerID *rhs) {
+            for (size_t i = 0; i < it.count(); i++) {
+                if (id == rhs[i].id) {
+                    ent = it.entity(i);
+                    return;
+                }
             }
         });
         return ent;
