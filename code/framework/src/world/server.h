@@ -19,7 +19,6 @@ namespace Framework::World {
     class ServerEngine: public Engine {
       private:
         Framework::Networking::NetworkPeer *_networkPeer = nullptr;
-        flecs::entity _streamEntities;
 
       public:
         EngineError Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval);
