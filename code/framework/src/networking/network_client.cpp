@@ -48,11 +48,17 @@ namespace Framework::Networking {
             return CLIENT_PEER_NULL;
         }
 
+        if (!_peer->IsActive()) {
+            Init();
+        }
+
         _state = CONNECTING;
 
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("{} {} {}", host, port, std::string(password));
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
+            _state = DISCONNECTED;
             return CLIENT_CONNECT_FAILED;
         }
 
