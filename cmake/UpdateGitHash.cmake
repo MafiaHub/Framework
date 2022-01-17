@@ -2,7 +2,7 @@ include(GetGitRevisionDescription)
 
 macro(update_git_version mod_prefix in_file out_file)
     GET_GIT_HEAD_REVISION(GIT_REFSPEC ${mod_prefix}_GIT_VERSION_LONG)
-    file(STRINGS ${CMAKE_SOURCE_DIR}/VERSION ${mod_prefix}_VERSION)
+    file(STRINGS ${PROJECT_SOURCE_DIR}/VERSION ${mod_prefix}_VERSION)
 
     if(NOT GIT_FOUND)
         find_package(Git QUIET)
