@@ -22,10 +22,7 @@
 namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
-        flecs::world *_world = nullptr;
-
-        inline flecs::entity CreateCommon(flecs::entity e, uint64_t guid) {
-
+        inline flecs::entity SetupDefaults(flecs::entity e, uint64_t guid) {
             e.add<World::Modules::Base::Transform>();
             e.add<World::Modules::Base::Frame>();
 
@@ -39,27 +36,20 @@ namespace Framework::Integrations::Shared::Archetypes {
         }
 
       public:
-        PlayerFactory(flecs::world *world): _world(world) {}
+        inline flecs::entity SetupClient(flecs::entity e, uint64_t guid, void *actor) {
+            e = SetupDefaults(e, guid);
 
-        inline flecs::entity CreateClient(uint64_t guid, void* actor, flecs::entity_t entityID) {
-            auto e = _world->entity();
-            e = CreateCommon(e, guid);
-
-            auto serverID = e.get_mut<World::Modules::Base::ServerID>();
-            serverID->id  = entityID;
-
-            auto gameActor = e.get_mut<Modules::Mod::GameActor>();
+            auto gameActor    = e.get_mut<Modules::Mod::GameActor>();
             gameActor->_actor = actor;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             World::Modules::Base::SetupDefaultClientEvents(streamable);
-            
+
             return e;
         }
 
-        inline flecs::entity CreateServer(uint64_t guid) {
-            auto e = _world->entity();
-            e      = CreateCommon(e, guid);
+        inline flecs::entity SetupServer(flecs::entity e, uint64_t guid) {
+            e = SetupDefaults(e, guid);
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             World::Modules::Base::SetupDefaultEvents(streamable);

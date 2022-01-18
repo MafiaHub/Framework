@@ -128,6 +128,19 @@ namespace Framework::World {
         Engine::Update();
     }
 
+    flecs::entity ServerEngine::CreateEntity(std::string name) {
+        if (name.empty()) {
+            return _world->entity();
+        }
+        else {
+            return _world->entity(name.c_str());
+        }
+    }
+
+    flecs::entity ServerEngine::WrapEntity(flecs::entity_t serverID) {
+        return flecs::entity(_world->get_world(), serverID);
+    }
+
     void ServerEngine::RemoveEntity(flecs::entity e) {
         if (e.is_alive()) {
             e.add<Modules::Base::PendingRemoval>();

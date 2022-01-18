@@ -9,12 +9,13 @@
 #pragma once
 
 #include "../messages.h"
+#include "message.h"
 #include "world/modules/base.hpp"
 
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntitySpawn final: public IMessage {
+    class GameSyncEntitySpawn final: public GameSyncMessage {
       private:
         World::Modules::Base::Transform _transform;
 
@@ -23,17 +24,19 @@ namespace Framework::Networking::Messages {
             return GAME_SYNC_ENTITY_SPAWN;
         }
 
-        void FromParameters(World::Modules::Base::Transform tr) {
+        void FromParameters(flecs::entity_t serverID, World::Modules::Base::Transform tr) {
             _transform = tr;
+            _serverID  = serverID;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _transform);
+            bs->Serialize(write, _serverID);
         }
 
         bool Valid() override {
             // TODO is there anything to validate for transform data?
-            return true;
+            return ValidServerID();
         }
 
         World::Modules::Base::Transform GetTransform() {

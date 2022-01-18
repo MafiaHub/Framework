@@ -12,7 +12,9 @@
 #include "errors.h"
 
 #include <flecs/flecs.h>
+
 #include <memory>
+#include <string>
 
 namespace Framework::World {
     class ServerEngine: public Engine {
@@ -22,6 +24,9 @@ namespace Framework::World {
         EngineError Shutdown() override;
 
         void Update() override;
+
+        flecs::entity CreateEntity(std::string name = "");
+        flecs::entity WrapEntity(flecs::entity_t serverID);
 
         void RemoveEntity(flecs::entity e);
     };

@@ -14,9 +14,10 @@
 #include "integrations/shared/messages/weather_update.h"
 #include "world/server.h"
 
-#include <networking/messages/messages.h>
-#include <networking/messages/client_handshake.h>
 #include <networking/messages/client_connection_finalized.h>
+#include <networking/messages/client_handshake.h>
+#include <networking/messages/game_sync/entity_client_update.h>
+#include <networking/messages/messages.h>
 
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
@@ -152,7 +153,7 @@ namespace Framework::Integrations::Server {
         _envFactory.reset(new Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld()));
         _weatherManager = _envFactory->CreateWeather("WeatherManager");
 
-        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld()));
+        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -190,36 +191,65 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitNetworkingMessages() {
-        _networkingEngine->GetNetworkServer()->RegisterMessage<Framework::Networking::Messages::ClientHandshake>(
-            Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientHandshake *msg) {
+        using namespace Framework::Networking::Messages;
+        const auto net = _networkingEngine->GetNetworkServer();
+        net->RegisterMessage<ClientHandshake>(
+            Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
 
                 // Make sure handshake payload was correctly formatted
                 if (!msg->Valid()) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
-                    _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
+                    net->GetPeer()->CloseConnection(guid, true);
                     return;
                 }
 
                 // Create player entity and add on world
-                auto newPlayerEntity = _playerFactory->CreateServer(guid.g);
+                const auto newPlayer = _worldEngine->CreateEntity();
+                auto newPlayerEntity = _playerFactory->SetupServer(newPlayer, guid.g);
 
                 // Send the connection finalized packet
                 Framework::Networking::Messages::ClientConnectionFinalized answer;
                 answer.FromParameters(_opts.tickInterval, newPlayerEntity.id());
-                _networkingEngine->GetNetworkServer()->Send(answer, guid);
+                net->Send(answer, guid);
         });
 
-        _networkingEngine->GetNetworkServer()->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
+        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
-            _networkingEngine->GetNetworkServer()->GetPeer()->CloseConnection(guid, true);
+            net->GetPeer()->CloseConnection(guid, true);
 
             auto e = _worldEngine->GetEntityByGUID(guid.g);
             if (e.is_valid() && e.is_alive()) {
                 e.add<World::Modules::Base::PendingRemoval>();
             }
+        });
+
+        // default entity events
+        net->RegisterMessage<GameSyncEntityClientUpdate>(GameMessages::GAME_SYNC_ENTITY_CLIENT_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityClientUpdate *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+
+            const auto e = _worldEngine->WrapEntity(msg->GetServerID());
+
+            if (!e.is_alive()) {
+                return;
+            }
+            
+            const auto es = e.get<World::Modules::Base::Streamable>();
+
+            if (!es) {
+                return;
+            }
+
+            if (es->owner != guid.g) {
+                return;
+            }
+
+            auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr     = msg->GetTransform();
         });
     }
 

@@ -9,21 +9,28 @@
 #pragma once
 
 #include "../messages.h"
+#include "message.h"
 #include "world/modules/base.hpp"
 
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntitySelfUpdate final: public IMessage {
+    class GameSyncEntitySelfUpdate final: public GameSyncMessage {
       public:
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_SELF_UPDATE;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {}
+        void FromParameters(flecs::entity_t serverID) {
+            _serverID = serverID;
+        }
+
+        void Serialize(SLNet::BitStream *bs, bool write) override {
+            bs->Serialize(write, _serverID);
+        }
 
         bool Valid() override {
-            return true;
+            return ValidServerID();
         }
     };
 } // namespace Framework::Networking::Messages

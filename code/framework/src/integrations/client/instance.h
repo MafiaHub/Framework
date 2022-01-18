@@ -108,6 +108,10 @@ namespace Framework::Integrations::Client {
             return _networkingEngine.get();
         }
 
+        World::ClientEngine *GetWorldEngine() const {
+            return _worldEngine.get();
+        }
+
         External::Discord::Wrapper *GetPresence() const {
             return _presence.get();
         }

@@ -42,6 +42,14 @@ namespace Framework::World {
         return ent;
     }
 
+    flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) {
+        const auto e = _world->entity();
+
+        auto sid = e.get_mut<Modules::Base::ServerID>();
+        sid->id  = serverID;
+        return e;
+    }
+
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
         _networkPeer = peer;
 

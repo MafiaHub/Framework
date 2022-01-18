@@ -12,6 +12,7 @@
 
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_connection_finalized.h>
+#include <networking/messages/game_sync/entity_messages.h>
 
 #include <logging/logger.h>
 
@@ -120,34 +121,93 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::InitManagers() {
-        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory(_worldEngine->GetWorld()));
+        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
     }
 
     void Instance::InitNetworkingMessages() {
-        _networkingEngine->GetNetworkClient()->SetOnPlayerConnectedCallback([this](SLNet::Packet *packet) {
+        using namespace Framework::Networking::Messages;
+        const auto net = _networkingEngine->GetNetworkClient();
+        net->SetOnPlayerConnectedCallback([this, net](SLNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
-            Framework::Networking::Messages::ClientHandshake msg;
+            ClientHandshake msg;
             msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
 
-            _networkingEngine->GetNetworkClient()->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+            net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
-        _networkingEngine->GetNetworkClient()->RegisterMessage<Framework::Networking::Messages::ClientConnectionFinalized>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_FINALIZED, [this](SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientConnectionFinalized *msg) {
+        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
-            _worldEngine->OnConnect(_networkingEngine->GetNetworkClient(), msg->GetServerTickRate());
+            _worldEngine->OnConnect(net, msg->GetServerTickRate());
 
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(msg->GetEntityID());
             }
         });
-        _networkingEngine->GetNetworkClient()->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
+        net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             _worldEngine->OnDisconnect();
 
             // Notify mod-level that network integration got closed
             if (_onConnectionClosed) {
                 _onConnectionClosed();
             }
+        });
+
+        // default entity events
+        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [this](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+            if (_worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
+                return;
+            }
+            const auto e = _worldEngine->CreateEntity(msg->GetServerID());
+
+            auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr     = msg->GetTransform();
+        });
+        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [this](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+
+            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+            if (!e.is_alive()) {
+                return;
+            }
+
+            e.destruct();
+        });
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+
+            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+            
+            if (!e.is_alive()) {
+                return;
+            }
+
+            auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr     = msg->GetTransform();
+
+            auto es = e.get_mut<World::Modules::Base::Streamable>();
+            es->owner = msg->GetOwner();
+        });
+        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+
+            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+            if (!e.is_alive()) {
+                return;
+            }
+
+            // Nothing to do for now.
         });
     }
 } // namespace Framework::Integrations::Client
