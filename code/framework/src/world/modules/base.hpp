@@ -83,6 +83,10 @@ namespace Framework::World::Modules {
             const Events GetBaseEvents() const {
                 return events;
             }
+
+            const Events GetModEvents() const {
+                return modEvents;
+            }
         };
 
         struct Streamer {
