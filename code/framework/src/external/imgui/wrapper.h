@@ -11,6 +11,8 @@
 #include "errors.h"
 #include "utils/safe_win32.h"
 
+#include "graphics/types.h"
+
 #include <SDL.h>
 
 #include <functional>
@@ -22,19 +24,11 @@ namespace Framework::Graphics {
 } // namespace Framework::Graphics
 
 namespace Framework::External::ImGUI {
-    enum class RendererBackend {
-        D3D9,
-        D3D11,
-        // D3D12,
-    };
-
-    enum class WindowBackend { WIN_32, SDL2 };
-
     enum class InputState { BLOCK, PASS, ERROR_MISMATCH };
 
     struct Config {
-        WindowBackend windowBackend = WindowBackend::WIN_32;
-        RendererBackend renderBackend = RendererBackend::D3D11;
+        Framework::Graphics::PlatformBackend windowBackend = Framework::Graphics::PlatformBackend::PLATFORM_WIN32;
+        Framework::Graphics::RendererBackend renderBackend = Framework::Graphics::RendererBackend::BACKEND_D3D_11;
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;

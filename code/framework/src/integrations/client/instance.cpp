@@ -58,6 +58,35 @@ namespace Framework::Integrations::Client {
         InitNetworkingMessages();
         PostInit();
 
+        // Init the render device
+        if (opts.useRenderer) {
+            _renderer->SetWindow(opts.rendererOptions.windowHandle);
+
+            switch (opts.rendererOptions.backend) {
+                case Graphics::RendererBackend::BACKEND_D3D_9:
+                    _renderer->GetD3D9Backend()->Init(opts.rendererOptions.d3d9.device, nullptr);
+                    break;
+                case Graphics::RendererBackend::BACKEND_D3D_11:
+                    _renderer->GetD3D11Backend()->Init(opts.rendererOptions.d3d11.device, opts.rendererOptions.d3d11.deviceContext);
+                    break;
+                default:
+                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented");
+                    break;
+            }
+        }
+
+        if (opts.useImGUI) {
+            // Init the ImGui internal instance
+            External::ImGUI::Config imguiConfig;
+            imguiConfig.renderBackend = opts.rendererOptions.backend;
+            imguiConfig.windowBackend = opts.rendererOptions.platform;
+            imguiConfig.renderer      = _renderer.get();
+            imguiConfig.windowHandle  = _renderer->GetWindow();
+            if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
+                Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init");
+            }
+        }
+
         Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Initialize success");
         _initialized = true;
         return ClientError::CLIENT_NONE;

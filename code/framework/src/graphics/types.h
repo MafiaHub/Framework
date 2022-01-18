@@ -13,5 +13,7 @@ namespace Framework::Graphics {
 
     enum class RendererAPI { CEF, IMGUI, ULTRALIGHT };
 
+    enum class PlatformBackend { PLATFORM_WIN32, PLATFORM_SDL2 };
+
     enum class RendererState { STATE_NOT_INITIALIZED, STATE_READY, STATE_DEVICE_LOST, STATE_DEVICE_NOT_RESET, STATE_DRIVER_ERROR };
 } // namespace Framework::Graphics

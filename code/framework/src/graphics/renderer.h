@@ -18,6 +18,18 @@
 namespace Framework::Graphics {
     struct RendererConfiguration {
         RendererBackend backend;
+        PlatformBackend platform;
+        HWND windowHandle;
+
+        union {
+            struct sd3d9 {
+                IDirect3DDevice9 *device;
+            } d3d9;
+            struct sd3d11 {
+                ID3D11Device *device;
+                ID3D11DeviceContext *deviceContext;
+            } d3d11;
+        };
     };
 
     class Renderer {
