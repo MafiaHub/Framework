@@ -18,6 +18,14 @@ namespace Framework::Networking {
     class NetworkPeer;
 };
 
+namespace Framework::Integrations::Server {
+    class Instance;
+}
+
+namespace Framework::Integrations::Client {
+    class Instance;
+}
+
 namespace Framework::World::Modules {
     struct Base {
         struct Transform {
@@ -59,14 +67,22 @@ namespace Framework::World::Modules {
                 Proc updateProc;
             };
 
-            Events events;
-
             // Extra set of events so mod can supply custom data.
             Events modEvents;
 
             // Custom visibility proc that either complements the existing heuristic or replaces it
             HeuristicMode isVisibleHeuristic = HeuristicMode::ADD;
             IsVisibleProc isVisibleProc;
+
+            // Framework-level events.
+            friend Base;
+            private:
+            Events events;
+
+            public:
+            const Events GetBaseEvents() const {
+                return events;
+            }
         };
 
         struct Streamer {

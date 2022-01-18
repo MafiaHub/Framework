@@ -15,6 +15,8 @@
 
 #include <flecs/flecs.h>
 
+// OBSOLETE: Use only as a reference
+
 namespace Framework::Integrations::Shared::Archetypes {
     class EnvironmentFactory {
       private:
@@ -33,16 +35,16 @@ namespace Framework::Integrations::Shared::Archetypes {
             auto streamable           = e.get_mut<World::Modules::Base::Streamable>();
             streamable->alwaysVisible = true;
 
-            auto weatherEvents       = World::Modules::Base::Streamable::Events {};
-            weatherEvents.updateProc = [this](Framework::Networking::NetworkPeer *peer, uint64_t g, flecs::entity &e) {
-                auto weather = e.get<Shared::Modules::Mod::Environment>();
-                Framework::Integrations::Shared::Messages::WeatherUpdate msg;
-                msg.FromParameters(weather->timeHours, false, "");
-                peer->Send(msg, g);
-                return true;
-            };
+            // auto weatherEvents       = World::Modules::Base::Streamable::Events {};
+            // weatherEvents.updateProc = [this](Framework::Networking::NetworkPeer *peer, uint64_t g, flecs::entity &e) {
+            //     auto weather = e.get<Shared::Modules::Mod::Environment>();
+            //     Framework::Integrations::Shared::Messages::WeatherUpdate msg;
+            //     msg.FromParameters(weather->timeHours, false, "");
+            //     peer->Send(msg, g);
+            //     return true;
+            // };
 
-            streamable->events = weatherEvents;
+            //streamable->events = weatherEvents;
             return e;
         }
     };

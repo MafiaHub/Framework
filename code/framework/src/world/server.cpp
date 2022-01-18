@@ -61,8 +61,8 @@ namespace Framework::World {
                 _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     if (rhsS.entities.find(e) != rhsS.entities.end()) {
                         rhsS.entities.erase(e);
-                        if (streamable.events.despawnProc)
-                            streamable.events.despawnProc(_networkPeer, rhsS.guid, e);
+                        if (streamable.GetBaseEvents().despawnProc)
+                            streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
                     }
                 });
 
@@ -79,8 +79,8 @@ namespace Framework::World {
                     _allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
                         if (!e.is_alive())
                             return;
-                        if (e == it.entity(i) && rs[i].events.selfUpdateProc) {
-                            rs[i].events.selfUpdateProc(_networkPeer, s[i].guid, e);
+                        if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc) {
+                            rs[i].GetBaseEvents().selfUpdateProc(_networkPeer, s[i].guid, e);
                             return;
                         }
                         const auto id      = e.id();
@@ -90,24 +90,24 @@ namespace Framework::World {
                             // If we can't stream an entity anymore, despawn it
                             if (!canSend) {
                                 s[i].entities.erase(map_it);
-                                if (otherS.events.despawnProc)
-                                    otherS.events.despawnProc(_networkPeer, s[i].guid, e);
+                                if (otherS.GetBaseEvents().despawnProc)
+                                    otherS.GetBaseEvents().despawnProc(_networkPeer, s[i].guid, e);
                             }
 
                             // otherwise we do regular updates
                             else if (rs[i].owner != otherS.owner) {
                                 auto &data = map_it->second;
                                 if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                    if (otherS.events.updateProc)
-                                        otherS.events.updateProc(_networkPeer, s[i].guid, e);
+                                    if (otherS.GetBaseEvents().updateProc)
+                                        otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
                                     data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                 }
                             }
                         }
 
                         // this is a new entity, spawn it unless user says otherwise
-                        else if (canSend && otherS.events.spawnProc) {
-                            if (otherS.events.spawnProc(_networkPeer, s[i].guid, e)) {
+                        else if (canSend && otherS.GetBaseEvents().spawnProc) {
+                            if (otherS.GetBaseEvents().spawnProc(_networkPeer, s[i].guid, e)) {
                                 Modules::Base::Streamer::StreamData data;
                                 data.lastUpdate   = static_cast<double>(Utils::Time::GetTime());
                                 s[i].entities[id] = data;
