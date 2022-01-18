@@ -120,6 +120,10 @@ namespace Framework::Integrations::Server {
             return _scriptingEngine.get();
         }
 
+        World::ServerEngine *GetWorldEngine() const {
+            return _worldEngine.get();
+        }
+
         Networking::Engine *GetNetworkingEngine() const {
             return _networkingEngine.get();
         }
