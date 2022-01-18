@@ -61,6 +61,8 @@ namespace Framework::Integrations::Server {
         std::string firebaseApiKey;
     };
 
+    using OnPlayerConnectionCallback = std::function<void(flecs::entity)>;
+
     class Instance {
       private:
         bool _alive;
@@ -89,6 +91,10 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Shared::Archetypes::EnvironmentFactory> _envFactory;
         std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
 
+        // callbacks
+        OnPlayerConnectionCallback _onPlayerConnectedCallback;
+        OnPlayerConnectionCallback _onPlayerDisconnectedCallback;
+
       public:
         Instance();
         ~Instance();
@@ -110,6 +116,14 @@ namespace Framework::Integrations::Server {
 
         bool IsAlive() const {
             return _alive;
+        }
+
+        void SetOnPlayerConnectedCallback(OnPlayerConnectionCallback onPlayerConnectedCallback) {
+            _onPlayerConnectedCallback = onPlayerConnectedCallback;
+        }
+
+        void SetOnPlayerDisconnectedCallback(OnPlayerConnectionCallback onPlayerDisconnectedCallback) {
+            _onPlayerDisconnectedCallback = onPlayerDisconnectedCallback;
         }
 
         InstanceOptions &GetOpts() {

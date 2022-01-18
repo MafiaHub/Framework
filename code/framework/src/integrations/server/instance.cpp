@@ -208,6 +208,9 @@ namespace Framework::Integrations::Server {
                 const auto newPlayer = _worldEngine->CreateEntity();
                 auto newPlayerEntity = _playerFactory->SetupServer(newPlayer, guid.g);
 
+                if (_onPlayerConnectedCallback)
+                    _onPlayerConnectedCallback(newPlayerEntity);
+
                 // Send the connection finalized packet
                 Framework::Networking::Messages::ClientConnectionFinalized answer;
                 answer.FromParameters(_opts.tickInterval, newPlayerEntity.id());
@@ -218,12 +221,16 @@ namespace Framework::Integrations::Server {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
-            net->GetPeer()->CloseConnection(guid, true);
-
             auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (e.is_valid() && e.is_alive()) {
-                e.add<World::Modules::Base::PendingRemoval>();
+            
+            if (e.is_valid()) {
+                if (_onPlayerDisconnectedCallback)
+                    _onPlayerDisconnectedCallback(e);
+
+                _worldEngine->RemoveEntity(e);
             }
+
+            net->GetPeer()->CloseConnection(guid, true);
         });
 
         // default entity events
