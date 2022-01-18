@@ -22,7 +22,7 @@ namespace Framework::Graphics {
 } // namespace Framework::Graphics
 
 namespace Framework::External::ImGUI {
-    enum class RenderBackend {
+    enum class RendererBackend {
         D3D9,
         D3D11,
         // D3D12,
@@ -34,7 +34,7 @@ namespace Framework::External::ImGUI {
 
     struct Config {
         WindowBackend windowBackend = WindowBackend::WIN_32;
-        RenderBackend renderBackend = RenderBackend::D3D11;
+        RendererBackend renderBackend = RendererBackend::D3D11;
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;

@@ -40,10 +40,10 @@ namespace Framework::External::ImGUI {
         ImGui::StyleColorsDark();
 
         switch (_config.renderBackend) {
-        case RenderBackend::D3D9: {
+        case RendererBackend::D3D9: {
             ImGui_ImplDX9_Init(_config.renderer->GetD3D9Backend()->GetDevice());
         } break;
-        case RenderBackend::D3D11: {
+        case RendererBackend::D3D11: {
             const auto renderBackend = _config.renderer->GetD3D11Backend();
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
         } break;
@@ -64,10 +64,10 @@ namespace Framework::External::ImGUI {
 
     Error Wrapper::Shutdown() {
         switch (_config.renderBackend) {
-        case RenderBackend::D3D9: {
+        case RendererBackend::D3D9: {
             ImGui_ImplDX9_Shutdown();
         } break;
-        case RenderBackend::D3D11: {
+        case RendererBackend::D3D11: {
             ImGui_ImplDX11_Shutdown();
         } break;
         }
@@ -91,10 +91,10 @@ namespace Framework::External::ImGUI {
         std::lock_guard _lock(_renderMtx);
 
         switch (_config.renderBackend) {
-        case RenderBackend::D3D9: {
+        case RendererBackend::D3D9: {
             ImGui_ImplDX9_NewFrame();
         } break;
-        case RenderBackend::D3D11: {
+        case RendererBackend::D3D11: {
             ImGui_ImplDX11_NewFrame();
         } break;
         }
@@ -130,10 +130,10 @@ namespace Framework::External::ImGUI {
             return Error::IMGUI_NONE;
 
         switch (_config.renderBackend) {
-        case RenderBackend::D3D9: {
+        case RendererBackend::D3D9: {
             ImGui_ImplDX9_RenderDrawData(drawData);
         } break;
-        case RenderBackend::D3D11: {
+        case RendererBackend::D3D11: {
             ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
         }
