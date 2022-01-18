@@ -28,6 +28,7 @@ namespace Framework::World::Modules {
 
         struct Frame {
             flecs::string modelName;
+            uint64_t modelHash;
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
         };
 
