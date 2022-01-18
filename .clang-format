@@ -37,7 +37,7 @@ BraceWrapping:
     IndentBraces:    false
 BreakConstructorInitializers: BeforeComma
 BreakInheritanceList: BeforeComma
-ColumnLimit: '180'
+ColumnLimit: '280'
 CommentPragmas: 'NOTE:'
 CompactNamespaces: 'false'
 ConstructorInitializerAllOnOneLineOrOnePerLine: 'true'
