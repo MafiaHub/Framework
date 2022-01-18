@@ -12,9 +12,12 @@
 
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_connection_finalized.h>
+#include <networking/messages/client_kick.h>
 #include <networking/messages/game_sync/entity_messages.h>
 
 #include <logging/logger.h>
+
+#include "utils/version.h"
 
 namespace Framework::Integrations::Client {
     Instance::Instance() {
@@ -131,7 +134,7 @@ namespace Framework::Integrations::Client {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
             ClientHandshake msg;
-            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
+            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Utils::Version::rel);
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
@@ -143,6 +146,19 @@ namespace Framework::Integrations::Client {
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(msg->GetEntityID());
             }
+        });
+        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [this, net](SLNet::RakNetGUID guid, ClientKick *msg) {
+            std::string reason = "Unknown.";
+
+            switch (msg->GetDisconnectionReason()) {
+            case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
+            case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
+            case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
+            case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
+            case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
+            default: break;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             _worldEngine->OnDisconnect();

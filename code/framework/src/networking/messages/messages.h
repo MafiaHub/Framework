@@ -18,12 +18,13 @@ namespace Framework::Networking::Messages {
     using PacketCallback           = std::function<void(SLNet::Packet *)>;
     using DisconnectPacketCallback = std::function<void(SLNet::Packet *, uint32_t reason)>;
 
-    enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
+    enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, WRONG_VERSION, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
 
     enum InternalMessages : uint8_t { INTERNAL_RPC = ID_USER_PACKET_ENUM + 1, INTERNAL_NEXT_MESSAGE_ID };
     enum GameMessages : uint8_t {
         GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID,
         GAME_CONNECTION_FINALIZED,
+        GAME_CONNECTION_KICKED,
         GAME_SYNC_ENTITY_SPAWN,
         GAME_SYNC_ENTITY_UPDATE,
         GAME_SYNC_ENTITY_CLIENT_UPDATE, // client -> server

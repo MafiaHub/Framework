@@ -17,7 +17,10 @@
 #include <networking/messages/client_connection_finalized.h>
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/game_sync/entity_client_update.h>
+#include <networking/messages/client_kick.h>
 #include <networking/messages/messages.h>
+
+#include "utils/version.h"
 
 #include <cxxopts.hpp>
 #include <nlohmann/json.hpp>
@@ -200,6 +203,17 @@ namespace Framework::Integrations::Server {
                 // Make sure handshake payload was correctly formatted
                 if (!msg->Valid()) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
+                    net->GetPeer()->CloseConnection(guid, true);
+                    return;
+                }
+
+                const auto clientVersion = msg->GetClientVersion();
+
+                if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
+                    Framework::Networking::Messages::ClientKick kick;
+                    kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                    net->Send(kick, guid);
                     net->GetPeer()->CloseConnection(guid, true);
                     return;
                 }

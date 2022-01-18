@@ -18,7 +18,7 @@ namespace Framework::Utils::Version {
     const char *rel = FW_VERSION;
 
     static bool BuildVersion(const char *ver, semver_t &ctx) {
-        return semver_parse(ver, &ctx);
+        return semver_parse(ver, &ctx) == 0;
     }
 
     bool VersionSatisfies(const char *a, const char *b) {
