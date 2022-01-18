@@ -29,7 +29,7 @@ namespace Framework::World {
         Engine::Update();
     }
 
-    flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) {
+    flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
         flecs::entity ent = {};
         _queryGetEntityByServerID.iter([&ent, id](flecs::iter it, Modules::Base::ServerID *rhs) {
             for (size_t i = 0; i < it.count(); i++) {
@@ -50,7 +50,7 @@ namespace Framework::World {
         return e;
     }
 
-    void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
+    void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval)  {
         _networkPeer = peer;
 
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")

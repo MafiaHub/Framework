@@ -30,7 +30,7 @@ namespace Framework::World {
 
         virtual void Update();
 
-        flecs::entity GetEntityByGUID(uint64_t guid);
+        flecs::entity GetEntityByGUID(uint64_t guid) const;
 
         flecs::world *GetWorld() {
             return _world.get();

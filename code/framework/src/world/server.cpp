@@ -18,10 +18,10 @@ namespace Framework::World {
             return status;
         }
 
-        auto allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
+        _allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
 
-        auto isVisible = [](flecs::entity streamerEntity, flecs::entity e, Modules::Base::Transform &lhsTr, Modules::Base::Streamer &streamer, Modules::Base::Streamable &lhsS,
-                             Modules::Base::Transform &rhsTr, Modules::Base::Streamable rhsS) -> bool {
+        _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS,
+                             const Modules::Base::Transform &rhsTr, const Modules::Base::Streamable rhsS) -> bool {
             if (!e.is_valid())
                 return false;
             if (!e.is_alive())
@@ -72,11 +72,11 @@ namespace Framework::World {
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
             .kind(flecs::PostUpdate)
             .interval(tickInterval)
-            .iter([allStreamableEntities, isVisible, this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
+            .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
                 for (size_t i = 0; i < it.count(); i++) {
                     if (it.entity(i).get<Modules::Base::PendingRemoval>() != nullptr)
                         continue;
-                    allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
+                    _allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
                         if (!e.is_alive())
                             return;
                         if (e == it.entity(i) && rs[i].events.selfUpdateProc) {
@@ -84,7 +84,7 @@ namespace Framework::World {
                             return;
                         }
                         const auto id      = e.id();
-                        const auto canSend = isVisible(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
+                        const auto canSend = _isEntityVisible(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
                         const auto map_it  = s[i].entities.find(id);
                         if (map_it != s[i].entities.end()) {
                             // If we can't stream an entity anymore, despawn it
@@ -137,17 +137,52 @@ namespace Framework::World {
         }
     }
 
-    flecs::entity ServerEngine::WrapEntity(flecs::entity_t serverID) {
+    flecs::entity ServerEngine::WrapEntity(flecs::entity_t serverID) const {
         return flecs::entity(_world->get_world(), serverID);
     }
 
-    bool ServerEngine::IsEntityOwner(flecs::entity e, uint64_t guid) {
+    bool ServerEngine::IsEntityOwner(flecs::entity e, uint64_t guid) const {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return false;
         }
         return (es->owner == guid);
     }
+
+    void ServerEngine::SetOwner(flecs::entity e, uint64_t guid) {
+        auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        if (!es) {
+            return;
+        }
+        es->owner = guid;
+    }
+
+    flecs::entity ServerEngine::GetOwner(flecs::entity e) const {
+        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        if (!es) {
+            return flecs::entity();
+        }
+        return GetEntityByGUID(es->owner);
+    }
+
+    std::vector<flecs::entity> ServerEngine::FindVisibleStreamers(flecs::entity e) const {
+        std::vector<flecs::entity> streamers;
+        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        if (!es) {
+            return {};
+        }
+        _findAllStreamerEntities.each([this, e, &streamers, es](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+            const auto rhsTr = rhsE.get<Modules::Base::Transform>();
+            const auto rhsST = rhsE.get<Modules::Base::Streamable>();
+            const auto lhsTr = e.get<Modules::Base::Transform>();
+
+            if (_isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsST, *lhsTr, *es)) {
+                streamers.push_back(rhsE);
+            }
+        });
+        return streamers;
+    }
+
 
     void ServerEngine::RemoveEntity(flecs::entity e) {
         if (e.is_alive()) {

@@ -34,7 +34,7 @@ namespace Framework::World {
         _world->progress();
     }
 
-    flecs::entity Engine::GetEntityByGUID(uint64_t guid) {
+    flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {
             for (auto i : it) {
