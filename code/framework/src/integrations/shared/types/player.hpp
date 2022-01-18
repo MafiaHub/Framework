@@ -36,11 +36,8 @@ namespace Framework::Integrations::Shared::Archetypes {
         }
 
       public:
-        inline flecs::entity SetupClient(flecs::entity e, uint64_t guid, void *actor) {
+        inline flecs::entity SetupClient(flecs::entity e, uint64_t guid) {
             e = SetupDefaults(e, guid);
-
-            auto gameActor    = e.get_mut<Modules::Mod::GameActor>();
-            gameActor->_actor = actor;
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             World::Modules::Base::SetupDefaultClientEvents(streamable);
