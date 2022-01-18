@@ -73,6 +73,8 @@ namespace Framework::World {
         if (_streamEntities.is_alive()) {
             _streamEntities.destruct();
         }
+
+        _networkPeer = nullptr;
     }
 
 } // namespace Framework::World
