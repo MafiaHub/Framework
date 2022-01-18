@@ -53,10 +53,10 @@ namespace Framework::World {
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval)  {
         _networkPeer = peer;
 
-        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
+        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities")
                               .kind(flecs::PostUpdate)
                               .interval(tickInterval)
-                              .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s, Modules::Base::Streamable *rs) {
+                              .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
                                   const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
                                   for (size_t i = 0; i < it.count(); i++) {
