@@ -15,7 +15,7 @@
 
 namespace Framework::World {
     class ClientEngine: public Engine {
-      private:
+      protected:
         flecs::entity _streamEntities;
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
       public:
