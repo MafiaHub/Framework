@@ -27,6 +27,7 @@ namespace Framework::World {
 
         flecs::entity CreateEntity(std::string name = "");
         flecs::entity WrapEntity(flecs::entity_t serverID);
+        bool IsEntityOwner(flecs::entity e, uint64_t guid);
 
         void RemoveEntity(flecs::entity e);
     };

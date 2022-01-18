@@ -141,6 +141,14 @@ namespace Framework::World {
         return flecs::entity(_world->get_world(), serverID);
     }
 
+    bool ServerEngine::IsEntityOwner(flecs::entity e, uint64_t guid) {
+        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        if (!es) {
+            return false;
+        }
+        return (es->owner == guid);
+    }
+
     void ServerEngine::RemoveEntity(flecs::entity e) {
         if (e.is_alive()) {
             e.add<Modules::Base::PendingRemoval>();

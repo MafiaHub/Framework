@@ -245,13 +245,7 @@ namespace Framework::Integrations::Server {
                 return;
             }
             
-            const auto es = e.get<World::Modules::Base::Streamable>();
-
-            if (!es) {
-                return;
-            }
-
-            if (es->owner != guid.g) {
+            if (!GetWorldEngine()->IsEntityOwner(e, guid.g)) {
                 return;
             }
 
