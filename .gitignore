@@ -37,3 +37,4 @@ _external
 **/obj
 
 .gitmodules
+CMakeUserPresets.json

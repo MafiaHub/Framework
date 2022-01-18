@@ -1,0 +1,27 @@
+{
+    "version": 2,
+    "configurePresets": [
+        {
+            "name": "build-64",
+            "displayName": "x64 debug",
+            "description": "Builds a debug version of FW for x64",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "",
+            }
+        },
+        {
+            "name": "build-release-64",
+            "displayName": "x64 release",
+            "description": "Builds a release version of FW for x64",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_TOOLCHAIN_FILE": "",
+            }
+        }
+    ]
+}
