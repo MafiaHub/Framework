@@ -31,6 +31,7 @@ namespace Framework::World {
         virtual void Update();
 
         flecs::entity GetEntityByGUID(uint64_t guid) const;
+        flecs::entity WrapEntity(flecs::entity_t serverID) const;
 
         flecs::world *GetWorld() {
             return _world.get();

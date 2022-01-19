@@ -154,10 +154,6 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitManagers() {
-        // weather
-        _envFactory.reset(new Integrations::Shared::Archetypes::EnvironmentFactory(_worldEngine->GetWorld()));
-        _weatherManager = _envFactory->CreateWeather("WeatherManager");
-
         _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
     }
 
@@ -222,14 +218,14 @@ namespace Framework::Integrations::Server {
 
                 // Create player entity and add on world
                 const auto newPlayer = _worldEngine->CreateEntity();
-                auto newPlayerEntity = _playerFactory->SetupServer(newPlayer, guid.g);
+                _playerFactory->SetupServer(newPlayer, guid.g);
 
                 if (_onPlayerConnectedCallback)
-                    _onPlayerConnectedCallback(newPlayerEntity);
+                    _onPlayerConnectedCallback(newPlayer);
 
                 // Send the connection finalized packet
                 Framework::Networking::Messages::ClientConnectionFinalized answer;
-                answer.FromParameters(_opts.tickInterval, newPlayerEntity.id());
+                answer.FromParameters(_opts.tickInterval, newPlayer.id());
                 net->Send(answer, guid);
         });
 

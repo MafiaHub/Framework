@@ -22,7 +22,7 @@
 namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
-        inline flecs::entity SetupDefaults(flecs::entity e, uint64_t guid) {
+        inline void SetupDefaults(flecs::entity e, uint64_t guid) {
             e.add<World::Modules::Base::Transform>();
             e.add<World::Modules::Base::Frame>();
 
@@ -31,27 +31,21 @@ namespace Framework::Integrations::Shared::Archetypes {
 
             auto streamable   = e.get_mut<World::Modules::Base::Streamable>();
             streamable->owner = guid;
-
-            return e;
         }
 
       public:
-        inline flecs::entity SetupClient(flecs::entity e, uint64_t guid) {
-            e = SetupDefaults(e, guid);
+        inline void SetupClient(flecs::entity e, uint64_t guid) {
+            SetupDefaults(e, guid);
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             World::Modules::Base::SetupDefaultClientEvents(streamable);
-
-            return e;
         }
 
-        inline flecs::entity SetupServer(flecs::entity e, uint64_t guid) {
-            e = SetupDefaults(e, guid);
+        inline void SetupServer(flecs::entity e, uint64_t guid) {
+            SetupDefaults(e, guid);
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             World::Modules::Base::SetupDefaultEvents(streamable);
-
-            return e;
         }
     };
 } // namespace Framework::Integrations::Shared::Archetypes

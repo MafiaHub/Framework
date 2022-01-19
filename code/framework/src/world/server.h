@@ -33,7 +33,6 @@ namespace Framework::World {
         void Update() override;
 
         flecs::entity CreateEntity(std::string name = "");
-        flecs::entity WrapEntity(flecs::entity_t serverID) const;
 
         bool IsEntityOwner(flecs::entity e, uint64_t guid) const;
         void SetOwner(flecs::entity e, uint64_t guid);

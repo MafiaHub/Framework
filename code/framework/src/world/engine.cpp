@@ -50,4 +50,8 @@ namespace Framework::World {
 
         return ourEntity;
     }
+
+    flecs::entity Engine::WrapEntity(flecs::entity_t serverID) const {
+        return flecs::entity(_world->get_world(), serverID);
+    }
 } // namespace Framework::World

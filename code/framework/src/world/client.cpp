@@ -66,8 +66,8 @@ namespace Framework::World {
                                   for (size_t i = 0; i < it.count(); i++) {
                                       const auto &es = &rs[i];
 
-                                      if (es->GetBaseEvents().updateProc && es->owner == myGUID.g) {
-                                          es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                                      if (es->GetBaseEvents().clientUpdateProc && es->owner == myGUID.g) {
+                                          es->GetBaseEvents().clientUpdateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
                                       }
                                   }
                               });

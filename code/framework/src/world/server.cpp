@@ -141,10 +141,6 @@ namespace Framework::World {
         }
     }
 
-    flecs::entity ServerEngine::WrapEntity(flecs::entity_t serverID) const {
-        return flecs::entity(_world->get_world(), serverID);
-    }
-
     bool ServerEngine::IsEntityOwner(flecs::entity e, uint64_t guid) const {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
@@ -164,7 +160,7 @@ namespace Framework::World {
     flecs::entity ServerEngine::GetOwner(flecs::entity e) const {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
-            return flecs::entity();
+            return flecs::entity::null();
         }
         return GetEntityByGUID(es->owner);
     }
