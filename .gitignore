@@ -15,6 +15,7 @@
 Bin/
 Build/
 Build*/
+[Bb]uilds/
 
 CMakeLists.txt.user
 CMakeCache.txt
