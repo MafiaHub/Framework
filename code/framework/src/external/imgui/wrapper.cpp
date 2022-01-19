@@ -125,7 +125,7 @@ namespace Framework::External::ImGUI {
     Error Wrapper::Render() {
         std::lock_guard _lock(_renderMtx);
 
-        auto drawData = ImGui::GetDrawData();
+        const auto drawData = ImGui::GetDrawData();
         if (!drawData)
             return Error::IMGUI_NONE;
 
