@@ -51,6 +51,7 @@ namespace Framework::External::ImGUI {
 
         InputState ProcessEvent(const SDL_Event *event);
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+        void ShowCursor(bool show);
 
         Error Update();
         Error Render();

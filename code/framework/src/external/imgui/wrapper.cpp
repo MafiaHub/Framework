@@ -165,4 +165,9 @@ namespace Framework::External::ImGUI {
         }
     }
 
+    void Wrapper::ShowCursor(bool show) {
+        ImGuiIO &io = ImGui::GetIO();
+        io.MouseDrawCursor = show;
+    }
+
 } // namespace Framework::External::ImGUI
