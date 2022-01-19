@@ -52,3 +52,6 @@ This codebase also depends on the following third-party libraries:
     cxxopts         - https://github.com/jarro2783/cxxopts
     libsig          - https://github.com/recp/libsig
     sfd             - https://github.com/rxi/sfd
+    freetype        - https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT
+    rmlui           - https://github.com/mikke89/RmlUi
+    sdl2            - https://www.libsdl.org/license.php
