@@ -72,7 +72,7 @@ namespace Framework::Integrations::Client {
         void InitNetworkingMessages();
       public:
         Instance();
-        ~Instance() = default;
+        virtual ~Instance();
 
         ClientError Init(InstanceOptions &);
         ClientError Shutdown();

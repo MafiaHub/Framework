@@ -8,6 +8,8 @@
 
 #include "renderer.h"
 
+#include <optick.h>
+
 namespace Framework::Graphics {
     RendererError Renderer::Init(RendererConfiguration config) {
         if (_initialized) {
@@ -44,6 +46,7 @@ namespace Framework::Graphics {
     }
 
     void Renderer::Update() {
+        OPTICK_EVENT();
         if (_d3d11Backend) {
             _d3d11Backend->Update();
         }

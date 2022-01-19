@@ -28,6 +28,7 @@
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
+        OPTICK_START_CAPTURE();
         _scriptingEngine  = std::make_unique<Scripting::Engine>();
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
@@ -39,6 +40,7 @@ namespace Framework::Integrations::Server {
 
     Instance::~Instance() {
         sig_detach(this);
+        OPTICK_STOP_CAPTURE();
     }
 
     ServerError Instance::Init(InstanceOptions &opts) {
@@ -296,6 +298,7 @@ namespace Framework::Integrations::Server {
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
+            OPTICK_EVENT();
             if (_networkingEngine) {
                 _networkingEngine->Update();
             }
@@ -322,7 +325,6 @@ namespace Framework::Integrations::Server {
     }
     void Instance::Run() {
         while (_alive) {
-            OPTICK_FRAME("MainThread");
             Update();
         }
     }

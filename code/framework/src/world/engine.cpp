@@ -12,6 +12,8 @@
 
 #include <slikenet/types.h>
 
+#include <optick.h>
+
 namespace Framework::World {
     EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
         _networkPeer = networkPeer;
@@ -31,6 +33,7 @@ namespace Framework::World {
     }
 
     void Engine::Update() {
+        OPTICK_EVENT();
         _world->progress();
     }
 

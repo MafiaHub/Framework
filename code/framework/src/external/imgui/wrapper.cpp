@@ -16,6 +16,8 @@
 #include <backends/imgui_impl_win32.h>
 #include <imgui.h>
 
+#include <optick.h>
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace Framework::External::ImGUI {
@@ -89,6 +91,7 @@ namespace Framework::External::ImGUI {
 
     Error Wrapper::Update() {
         std::lock_guard _lock(_renderMtx);
+        OPTICK_EVENT();
 
         switch (_config.renderBackend) {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {

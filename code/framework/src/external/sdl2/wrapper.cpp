@@ -8,6 +8,8 @@
 
 #include "wrapper.h"
 
+#include <optick.h>
+
 namespace Framework::External::SDL2 {
     Error Wrapper::Init(HWND windowHandle) {
         if (!windowHandle) {
@@ -36,6 +38,7 @@ namespace Framework::External::SDL2 {
     }
 
     const SDL_Event Wrapper::PollEvent() {
+        OPTICK_EVENT();
         SDL_Event event;
         SDL_PollEvent(&event);
         return event;

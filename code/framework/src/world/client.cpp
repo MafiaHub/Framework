@@ -8,6 +8,8 @@
 
 #include "client.h"
 
+#include <optick.h>
+
 namespace Framework::World {
     EngineError ClientEngine::Init() {
         const auto status = Engine::Init(nullptr); // assigned by OnConnect
@@ -26,6 +28,7 @@ namespace Framework::World {
     }
 
     void ClientEngine::Update() {
+        OPTICK_EVENT();
         Engine::Update();
     }
 
@@ -57,6 +60,7 @@ namespace Framework::World {
                               .kind(flecs::PostUpdate)
                               .interval(tickInterval)
                               .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
+                                  OPTICK_EVENT();
                                   const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
                                   for (size_t i = 0; i < it.count(); i++) {
