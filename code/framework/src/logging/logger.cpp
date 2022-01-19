@@ -51,13 +51,14 @@ namespace Framework::Logging {
         std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger};
         auto spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
         spdLogger->set_level(spdlog::level::trace);
-        spdlog::register_logger(spdLogger);
-
+        
         try {
-            _loggers.emplace(logName, spdLogger);
+            spdlog::register_logger(spdLogger);
         }
         catch (std::exception &ex) {
         }
+
+        _loggers.emplace(logName, spdLogger);
 
         return spdLogger;
     }
