@@ -78,16 +78,22 @@ namespace Framework::World {
             _streamEntities.destruct();
         }
 
-        _allStreamableEntities.each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &s) {
+        _world->defer_begin();
+        _allStreamableEntities.iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *s) {
             (void)tr;
             (void)s;
 
-            if (_onEntityDestroyCallback) {
-                _onEntityDestroyCallback(e);
-            }
+            for (size_t i = 0; i < it.count(); i++) {
+                if (_onEntityDestroyCallback) {
+                    if (!_onEntityDestroyCallback(it.entity(i))) {
+                        return;
+                    }
+                }
 
-            e.destruct();
+                it.entity(i).destruct();
+            }
         });
+        _world->defer_end();
 
         _networkPeer = nullptr;
     }

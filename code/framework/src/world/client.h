@@ -18,7 +18,7 @@
 namespace Framework::World {
     class ClientEngine: public Engine {
       public:
-        using OnEntityDestroyCallback = std::function<void(flecs::entity)>;
+        using OnEntityDestroyCallback = std::function<bool(flecs::entity)>;
       protected:
         flecs::entity _streamEntities;
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
