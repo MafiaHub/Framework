@@ -163,6 +163,7 @@ namespace Framework::Integrations::Client {
 
     void Instance::InitManagers() {
         _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
+        _streamingFactory.reset(new Integrations::Shared::Archetypes::StreamingFactory);
     }
 
     void Instance::InitNetworkingMessages() {
@@ -176,13 +177,18 @@ namespace Framework::Integrations::Client {
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
-        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID guid, ClientConnectionFinalized *msg) {
+        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID __guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
             _worldEngine->OnConnect(net, msg->GetServerTickRate());
+            const auto guid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
+
+            const auto newPlayer = GetWorldEngine()->CreateEntity(msg->GetEntityID());
+            GetStreamingFactory()->SetupClient(newPlayer, guid.g);
+            GetPlayerFactory()->SetupClient(newPlayer, guid.g);
 
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
-                _onConnectionFinalized(msg->GetEntityID());
+                _onConnectionFinalized(newPlayer);
             }
         });
         net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [this, net](SLNet::RakNetGUID guid, ClientKick *msg) {
@@ -216,6 +222,7 @@ namespace Framework::Integrations::Client {
                 return;
             }
             const auto e = _worldEngine->CreateEntity(msg->GetServerID());
+            _streamingFactory->SetupClient(e, msg->GetServerID());
 
             auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr     = msg->GetTransform();

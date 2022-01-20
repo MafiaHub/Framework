@@ -15,25 +15,31 @@
 
 #include "networking/messages/game_sync/entity_update.h"
 
-#include "streaming.hpp"
-
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Shared::Archetypes {
-    class PlayerFactory {
+    class StreamingFactory {
       private:
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
-            auto streamer  = e.get_mut<World::Modules::Base::Streamer>();
-            streamer->guid = guid;
+            e.add<World::Modules::Base::Transform>();
+
+            auto streamable   = e.get_mut<World::Modules::Base::Streamable>();
+            streamable->owner = guid;
         }
 
       public:
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
+
+            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
+            World::Modules::Base::SetupDefaultClientEvents(streamable);
         }
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
+
+            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
+            World::Modules::Base::SetupDefaultEvents(streamable);
         }
     };
 } // namespace Framework::Integrations::Shared::Archetypes

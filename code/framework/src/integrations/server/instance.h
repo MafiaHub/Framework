@@ -9,6 +9,7 @@
 #pragma once
 
 #include "../shared/types/environment.hpp"
+#include "../shared/types/streaming.hpp"
 #include "../shared/types/player.hpp"
 #include "errors.h"
 #include "external/firebase/wrapper.h"
@@ -61,7 +62,7 @@ namespace Framework::Integrations::Server {
         std::string firebaseApiKey;
     };
 
-    using OnPlayerConnectionCallback = std::function<void(flecs::entity)>;
+    using OnPlayerConnectionCallback = std::function<void(flecs::entity, uint64_t)>;
 
     class Instance {
       private:
@@ -90,6 +91,7 @@ namespace Framework::Integrations::Server {
         // entity factories
         std::unique_ptr<Shared::Archetypes::EnvironmentFactory> _envFactory;
         std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
+        std::unique_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
 
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectedCallback;
@@ -144,6 +146,14 @@ namespace Framework::Integrations::Server {
 
         HTTP::Webserver *GetWebserver() const {
             return _webServer.get();
+        }
+
+        Shared::Archetypes::PlayerFactory* GetPlayerFactory() const {
+            return _playerFactory.get();
+        }
+
+        Shared::Archetypes::StreamingFactory* GetStreamingFactory() const {
+            return _streamingFactory.get();
         }
     };
 } // namespace Framework::Integrations::Server

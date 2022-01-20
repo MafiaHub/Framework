@@ -23,11 +23,12 @@
 #include <world/client.h>
 
 #include "../shared/types/player.hpp"
+#include "../shared/types/streaming.hpp"
 
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Client {
-    using NetworkConnectionFinalizedCallback = std::function<void(flecs::entity_t)>;
+    using NetworkConnectionFinalizedCallback = std::function<void(flecs::entity)>;
     using NetworkConnectionClosedCallback = std::function<void()>;
 
     struct InstanceOptions {
@@ -67,6 +68,7 @@ namespace Framework::Integrations::Client {
 
         // Entity factories
         std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
+        std::unique_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
 
         void InitManagers();
         void InitNetworkingMessages();
@@ -130,6 +132,10 @@ namespace Framework::Integrations::Client {
 
         Shared::Archetypes::PlayerFactory* GetPlayerFactory() const {
             return _playerFactory.get();
+        }
+
+        Shared::Archetypes::StreamingFactory* GetStreamingFactory() const {
+            return _streamingFactory.get();
         }
     };
 } // namespace Framework::Integrations::Client

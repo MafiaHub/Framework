@@ -155,6 +155,7 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitManagers() {
         _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
+        _streamingFactory.reset(new Integrations::Shared::Archetypes::StreamingFactory);
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -218,10 +219,11 @@ namespace Framework::Integrations::Server {
 
                 // Create player entity and add on world
                 const auto newPlayer = _worldEngine->CreateEntity();
+                _streamingFactory->SetupServer(newPlayer, guid.g);
                 _playerFactory->SetupServer(newPlayer, guid.g);
 
                 if (_onPlayerConnectedCallback)
-                    _onPlayerConnectedCallback(newPlayer);
+                    _onPlayerConnectedCallback(newPlayer, guid.g);
 
                 // Send the connection finalized packet
                 Framework::Networking::Messages::ClientConnectionFinalized answer;
@@ -234,10 +236,10 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
             auto e = _worldEngine->GetEntityByGUID(guid.g);
-            
+
             if (e.is_valid()) {
                 if (_onPlayerDisconnectedCallback)
-                    _onPlayerDisconnectedCallback(e);
+                    _onPlayerDisconnectedCallback(e, guid.g);
 
                 _worldEngine->RemoveEntity(e);
             }
