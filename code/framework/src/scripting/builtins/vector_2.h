@@ -216,7 +216,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        auto vec3Class = new Helpers::V8Class(
+        auto vec2Class = new Helpers::V8Class(
             GetKeyName(Keys::KEY_VECTOR_2), Vector2Constructor, V8_CLASS_CB {
                 v8::Isolate *isolate = v8::Isolate::GetCurrent();
                 V8Helpers::SetAccessor(isolate, tpl, "length", Vector2Length);
@@ -230,6 +230,6 @@ namespace Framework::Scripting::Builtins {
                 V8Helpers::SetMethod(isolate, tpl, "toString", Vector2ToString);
             });
 
-        rootModule->AddClass(vec3Class);
+        rootModule->AddClass(vec2Class);
     }
 } // namespace Framework::Scripting::Builtins

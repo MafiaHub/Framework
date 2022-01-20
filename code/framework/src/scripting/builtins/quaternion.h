@@ -254,7 +254,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        auto vec3Class = new Helpers::V8Class(
+        auto quatClass = new Helpers::V8Class(
             GetKeyName(Keys::KEY_QUATERNION), QuaternionConstructor, V8_CLASS_CB {
                 v8::Isolate *isolate = v8::Isolate::GetCurrent();
                 V8Helpers::SetAccessor(isolate, tpl, "length", QuaternionLength);
@@ -272,6 +272,6 @@ namespace Framework::Scripting::Builtins {
                 V8Helpers::SetMethod(isolate, tpl, "slerp", QuaternionSlerp);
             });
 
-        rootModule->AddClass(vec3Class);
+        rootModule->AddClass(quatClass);
     }
 } // namespace Framework::Scripting::Builtins
