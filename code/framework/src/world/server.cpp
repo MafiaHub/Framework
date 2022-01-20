@@ -20,8 +20,6 @@ namespace Framework::World {
             return status;
         }
 
-        _allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
-
         _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS,
                              const Modules::Base::Transform &rhsTr, const Modules::Base::Streamable rhsS) -> bool {
             if (!e.is_valid())

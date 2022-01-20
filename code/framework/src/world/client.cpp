@@ -78,6 +78,12 @@ namespace Framework::World {
             _streamEntities.destruct();
         }
 
+        _allStreamableEntities.each([](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &s) {
+            (void)tr;
+            (void)s;
+            e.destruct();
+        });
+
         _networkPeer = nullptr;
     }
 

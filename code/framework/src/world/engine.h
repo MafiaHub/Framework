@@ -20,6 +20,7 @@ namespace Framework::World {
     class Engine {
       protected:
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
+        flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
         std::unique_ptr<flecs::world> _world;
         Networking::NetworkPeer *_networkPeer = nullptr;
 

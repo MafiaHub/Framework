@@ -24,7 +24,6 @@ namespace Framework::World {
         using IsVisibleProc = std::function<bool(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS,
                              const Modules::Base::Transform &rhsTr, const Modules::Base::Streamable rhsS)>;
         IsVisibleProc _isEntityVisible;
-        flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
       public:
         EngineError Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval);
 

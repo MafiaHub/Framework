@@ -23,6 +23,7 @@ namespace Framework::World {
         // Register a base module
         _world->import<Modules::Base>();
 
+        _allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
 
         return EngineError::ENGINE_NONE;

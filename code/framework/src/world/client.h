@@ -29,7 +29,6 @@ namespace Framework::World {
         void Update() override;
 
         flecs::entity CreateEntity(flecs::entity_t serverID);
-
         flecs::entity GetEntityByServerID(flecs::entity_t id) const;
     };
 } // namespace Framework::World
