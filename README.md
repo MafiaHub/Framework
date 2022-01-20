@@ -103,6 +103,8 @@ git clone https://github.com/MafiaHub/MafiaMP.git
 
 Now you can access your targets and build them within the framework.
 
+To exclude a project from compilation, simply create an empty file called `IGNORE` in the root of the project.
+
 ## License
 
 The code is licensed under the [MafiaHub OSS](LICENSE.txt) license.

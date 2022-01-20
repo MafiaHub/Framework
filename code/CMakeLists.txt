@@ -34,23 +34,12 @@ include_directories(PUBLIC
 add_subdirectory(framework)
 add_subdirectory(tests)
 
-function(string_starts_with str search result)
-  string(FIND "${str}" "${search}" out)
-  if("${out}" EQUAL 0)
-    set("${result}" true PARENT_SCOPE)
-    return()
-  endif()
-  set("${result}" false PARENT_SCOPE)
-endfunction()
-
 # Load the projects
 file(GLOB projects "projects/*")
 foreach (proj ${projects})
     get_filename_component(proj_name ${proj} NAME)
-    string(SUBSTRING ${proj_name} 0 1 proj_ignored)
 
-    string_starts_with(${proj_name} "_" is_ignored)
-    if (NOT ${is_ignored})
+    if (NOT EXISTS "${proj_name}/IGNORE")
         add_subdirectory("projects/${proj_name}")
     endif ()
 endforeach ()
