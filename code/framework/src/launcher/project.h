@@ -22,6 +22,8 @@ namespace Framework::Launcher {
     enum class ProjectArchitecture { CPU_X64, CPU_X86 };
 
     struct ProjectConfiguration {
+        using DialogPromptSelectorProc = std::function<std::wstring(std::wstring gameExePath)>;
+
         std::wstring executableName;
         std::wstring destinationDllName;
         std::wstring classicGamePath;
@@ -54,7 +56,7 @@ namespace Framework::Launcher {
         std::string promptFilter     = "Game.exe";
         std::string promptFilterName = "Your Game.exe";
         std::string promptExtension  = "*.exe";
-        std::function<std::wstring(std::wstring gameExePath)> promptSelectionFunctor;
+        DialogPromptSelectorProc promptSelectionFunctor;
 
         // JSON config project settings
         bool disablePersistentConfig = false;
