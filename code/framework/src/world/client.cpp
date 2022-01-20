@@ -45,6 +45,15 @@ namespace Framework::World {
         return ent;
     }
 
+    flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) const {
+        if (!entity.is_alive()) {
+            return 0;
+        }
+
+        const auto serverID = entity.get<Modules::Base::ServerID>();
+        return serverID->id;
+    }
+
     flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) {
         const auto e = _world->entity();
 
