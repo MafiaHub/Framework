@@ -241,7 +241,7 @@ namespace Framework::Launcher {
             }
         }
 
-        wprintf(L"[Project] Loading game (%s)\n", _gamePath.c_str());
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading game {}", Utils::StringUtils::WideToNormal(_gamePath));
 
         // Inner run the project
         if (!Run()) {
@@ -408,7 +408,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        printf("[Project] Loaded Game (%.02f MB)\n", dwFileLength / 1024.f / 1024.f);
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loaded game ({:.02f} MB)", (dwFileLength / 1024.0f / 1024.0f));
 
         auto base = GetModuleHandle(nullptr);
 
