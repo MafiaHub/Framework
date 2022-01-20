@@ -27,7 +27,6 @@ namespace Framework::Networking::Messages {
         GAME_CONNECTION_KICKED,
         GAME_SYNC_ENTITY_SPAWN,
         GAME_SYNC_ENTITY_UPDATE,
-        GAME_SYNC_ENTITY_CLIENT_UPDATE, // client -> server
         GAME_SYNC_ENTITY_SELF_UPDATE, // server sends data to streamer
         GAME_SYNC_ENTITY_DESPAWN,
         GAME_NEXT_MESSAGE_ID

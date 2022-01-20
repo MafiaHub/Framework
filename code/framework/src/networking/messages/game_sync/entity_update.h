@@ -18,7 +18,7 @@ namespace Framework::Networking::Messages {
     class GameSyncEntityUpdate final: public GameSyncMessage {
       private:
         World::Modules::Base::Transform _transform;
-        uint64_t _owner;
+        uint64_t _owner = 0;
 
       public:
         uint8_t GetMessageID() const override {

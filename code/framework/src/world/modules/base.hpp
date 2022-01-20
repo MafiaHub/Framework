@@ -63,7 +63,6 @@ namespace Framework::World::Modules {
                 Proc spawnProc;
                 Proc despawnProc;
                 Proc selfUpdateProc;
-                Proc clientUpdateProc; // client -> server
                 Proc updateProc;
             };
 

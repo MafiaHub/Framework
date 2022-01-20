@@ -16,7 +16,6 @@
 
 #include <networking/messages/client_connection_finalized.h>
 #include <networking/messages/client_handshake.h>
-#include <networking/messages/game_sync/entity_client_update.h>
 #include <networking/messages/client_kick.h>
 #include <networking/messages/messages.h>
 
@@ -248,7 +247,7 @@ namespace Framework::Integrations::Server {
         });
 
         // default entity events
-        net->RegisterMessage<GameSyncEntityClientUpdate>(GameMessages::GAME_SYNC_ENTITY_CLIENT_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityClientUpdate *msg) {
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -258,7 +257,7 @@ namespace Framework::Integrations::Server {
             if (!e.is_alive()) {
                 return;
             }
-            
+
             if (!GetWorldEngine()->IsEntityOwner(e, guid.g)) {
                 return;
             }

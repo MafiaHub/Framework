@@ -246,7 +246,7 @@ namespace Framework::Integrations::Client {
             }
 
             const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-            
+
             if (!e.is_alive()) {
                 return;
             }
