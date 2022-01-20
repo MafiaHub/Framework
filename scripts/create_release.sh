@@ -8,4 +8,5 @@ git reset --hard master
 git merge develop --squash --allow-unrelated-histories -X theirs
 git commit
 git push origin master
+git checkout develop
 echo Done!
