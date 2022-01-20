@@ -13,11 +13,16 @@
 
 #include <flecs/flecs.h>
 
+#include <functional>
+
 namespace Framework::World {
     class ClientEngine: public Engine {
+      public:
+        using OnEntityDestroyCallback = std::function<void(flecs::entity)>;
       protected:
         flecs::entity _streamEntities;
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
+        OnEntityDestroyCallback _onEntityDestroyCallback;
       public:
         EngineError Init();
 
@@ -30,5 +35,9 @@ namespace Framework::World {
 
         flecs::entity CreateEntity(flecs::entity_t serverID);
         flecs::entity GetEntityByServerID(flecs::entity_t id) const;
+
+        void SetOnEntityDestroyCallback(OnEntityDestroyCallback cb) {
+            _onEntityDestroyCallback = cb;
+        }
     };
 } // namespace Framework::World

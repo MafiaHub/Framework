@@ -78,9 +78,14 @@ namespace Framework::World {
             _streamEntities.destruct();
         }
 
-        _allStreamableEntities.each([](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &s) {
+        _allStreamableEntities.each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &s) {
             (void)tr;
             (void)s;
+
+            if (_onEntityDestroyCallback) {
+                _onEntityDestroyCallback(e);
+            }
+
             e.destruct();
         });
 
