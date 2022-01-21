@@ -79,7 +79,7 @@ Open your newly cloned Framework repository folder in Visual Studio and it will 
 Things to note:
 - `code/projects` folder is hidden by default as it's ignored by Git, in Solution Explorer, enable **Show All Files** option to see your project files.
 - Changes in your project's cmake will not be auto-detected, cmake will only reload config on build, otherwise you can do it yourself in the Projects section in main menu.
-- Visual Studio 2019 embeds an old and unsupported version of ClangFormat, we highly recommend you to install [LLVM tools](https://releases.llvm.org/download.html) and set up a custom ClangFormat executable in VS's `Tools > Options > Text Editor > C/C++ > Code Style > Formatting > Use custom clang-format.exe file` property.
+- Visual Studio 2022 embeds an old and unsupported version of ClangFormat, we highly recommend you to install [LLVM tools](https://releases.llvm.org/download.html) and set up a custom ClangFormat executable in VS's `Tools > Options > Text Editor > C/C++ > Code Style > Formatting > Use custom clang-format.exe file` property.
 
 #### CLion support
 
