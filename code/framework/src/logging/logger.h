@@ -39,6 +39,7 @@ namespace Framework::Logging {
         size_t _maxFileCount   = 10;
         bool _loggingPaused    = false;
         std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> ringbuffer_sink;
+        static inline size_t _maxRingBufferSize = 128;
 
       public:
         Logger();
@@ -84,6 +85,10 @@ namespace Framework::Logging {
 
         size_t GetMaxFileCount() const {
             return _maxFileCount;
+        }
+
+        static inline void InitRingBufferCapacity(size_t capacity) {
+            _maxRingBufferSize = capacity;
         }
 
         std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> GetRingBuffer() {

@@ -49,7 +49,7 @@ namespace Framework::Logging {
         fileLogger->set_level(spdlog::level::trace);
 
         if (!ringbuffer_sink) {
-            ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(128); // TODO 128 for now
+            ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(_maxRingBufferSize);
             ringbuffer_sink->set_level(spdlog::level::info);
         }
 
