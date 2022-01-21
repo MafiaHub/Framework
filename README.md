@@ -71,7 +71,7 @@ cmake --build build --target RunFrameworkTests
 
 ### Build on Windows
 
-#### Visual Studio 2019+ support
+#### Visual Studio 2022 support
 
 Ensure you have the cmake tools installed in your copy of Visual Studio first.
 Open your newly cloned Framework repository folder in Visual Studio and it will automagically set up everything for you!
