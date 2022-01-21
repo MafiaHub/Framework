@@ -13,6 +13,7 @@
 #include <spdlog/async.h>
 #include <spdlog/spdlog.h>
 #include <unordered_map>
+#include <spdlog/sinks/ringbuffer_sink.h>
 
 #define FRAMEWORK_INNER_NETWORKING   "Networking"
 #define FRAMEWORK_INNER_SCRIPTING    "Scripting"
@@ -37,6 +38,7 @@ namespace Framework::Logging {
         size_t _maxFileSize    = 1024 * 1024 * 10;
         size_t _maxFileCount   = 10;
         bool _loggingPaused    = false;
+        std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> ringbuffer_sink;
 
       public:
         Logger();
@@ -82,6 +84,10 @@ namespace Framework::Logging {
 
         size_t GetMaxFileCount() const {
             return _maxFileCount;
+        }
+
+        std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> GetRingBuffer() {
+            return ringbuffer_sink;
         }
     };
 

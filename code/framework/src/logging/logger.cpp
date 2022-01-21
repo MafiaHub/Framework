@@ -48,7 +48,12 @@ namespace Framework::Logging {
         auto fileLogger        = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(fileLogName, _maxFileSize, _maxFileCount);
         fileLogger->set_level(spdlog::level::trace);
 
-        std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger};
+        if (!ringbuffer_sink) {
+            ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(128); // TODO 128 for now
+            ringbuffer_sink->set_level(spdlog::level::info);
+        }
+
+        std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink};
         auto spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
         spdLogger->set_level(spdlog::level::trace);
         
