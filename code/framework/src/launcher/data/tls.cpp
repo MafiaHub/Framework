@@ -9,7 +9,7 @@
 
 #include <cstdint>
 
-__declspec(thread) uint8_t tls1[sizeof(int) * 7600];
+__declspec(thread) uint8_t tls1[sizeof(int) * 17600];
 
 #include <Windows.h>
 
