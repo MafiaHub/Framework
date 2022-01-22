@@ -58,7 +58,7 @@ namespace Framework::Utils {
         sw.SetSymPath(symbolPath.c_str());
         sw.LoadModules();
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
-        Framework::Logging::GetLogger("MiniDump")->error(sw.GetOutputDump());
+        Framework::Logging::GetLogger("MiniDump")->error("Unhandled exception:\n" + sw.GetOutputDump());
         Framework::Logging::GetLogger("MiniDump")->flush();
 
         Sleep(1000);
