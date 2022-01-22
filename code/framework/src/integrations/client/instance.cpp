@@ -188,7 +188,7 @@ namespace Framework::Integrations::Client {
 
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
-                _onConnectionFinalized(newPlayer);
+                _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
             }
         });
         net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [this, net](SLNet::RakNetGUID guid, ClientKick *msg) {

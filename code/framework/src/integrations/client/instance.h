@@ -28,7 +28,7 @@
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Client {
-    using NetworkConnectionFinalizedCallback = std::function<void(flecs::entity)>;
+    using NetworkConnectionFinalizedCallback = std::function<void(flecs::entity, float)>;
     using NetworkConnectionClosedCallback = std::function<void()>;
 
     struct InstanceOptions {
