@@ -9,5 +9,10 @@
 #pragma once
 
 namespace Framework::GUI {
-    class API {};
+    class Backend {
+      public:
+        virtual bool Init() = 0;
+        virtual bool Shutdown() = 0;
+        virtual void Update()   = 0;
+    };
 }; // namespace Framework::GUI

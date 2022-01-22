@@ -64,7 +64,7 @@ set(FRAMEWORK_CLIENT_SRC
 
         src/graphics/renderer.cpp
         src/graphics/renderio.cpp
-        src/gui/api/cef.cpp
+        src/gui/backends/cef.cpp
 
         src/networking/network_client.cpp
 
