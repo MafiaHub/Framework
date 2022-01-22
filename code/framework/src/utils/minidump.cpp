@@ -10,10 +10,13 @@
 #include <winnt.h>
 
 #include "logging/logger.h"
+#include <fmt/core.h>
 
 #include <StackWalker.h>
 
 #include <string>
+
+#include <psapi.h>
 
 typedef void(__cdecl *CoreSetExceptionOverride)(LONG (*handler)(EXCEPTION_POINTERS *));
 
@@ -38,7 +41,7 @@ namespace Framework::Utils {
 
       public:
         StackWalkerSentry() {
-            StackWalker();
+            StackWalker(StackWalkOptions::RetrieveSymbol|StackWalkOptions::RetrieveLine|StackWalkOptions::SymUseSymSrv);
         }
 
         inline std::string GetOutputDump() const {
@@ -54,14 +57,38 @@ namespace Framework::Utils {
             return EXCEPTION_CONTINUE_EXECUTION;
         }
 
+        isCaptureEnabled = false;
         StackWalkerSentry sw;
         sw.SetSymPath(symbolPath.c_str());
-        sw.LoadModules();
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
-        Framework::Logging::GetLogger("MiniDump")->error("Unhandled exception:\n" + sw.GetOutputDump());
-        Framework::Logging::GetLogger("MiniDump")->flush();
+#ifdef _M_AMD64
+        std::string crashInfo = fmt::format("Crash address: {:X} Code: {:X} \nRegisters: \n"
+		"RAX: {:<8x} RCX: {:<8x} \n"
+		"RDX: {:<8x} RBX: {:<8x} \n"
+		"RSP: {:<8x} RBP: {:<8x} \n"
+		"RSI: {:<8x} RDI: {:<8x} \n",
+		(DWORD64)exceptionInfo->ExceptionRecord->ExceptionAddress,
+		exceptionInfo->ExceptionRecord->ExceptionCode, exceptionInfo->ContextRecord->Rax,
+		exceptionInfo->ContextRecord->Rcx, exceptionInfo->ContextRecord->Rdx, exceptionInfo->ContextRecord->Rbx,
+		exceptionInfo->ContextRecord->Rsp, exceptionInfo->ContextRecord->Rbp, exceptionInfo->ContextRecord->Rsi, exceptionInfo->ContextRecord->Rdi);
+#elif _M_X86
+        std::string crashInfo = fmt::format("Crash address: {:X} Code: {:X} \nRegisters: \n"
+		"EAX: {:<8x} ECX: {:<8x} \n"
+		"EDX: {:<8x} EBX: {:<8x} \n"
+		"ESP: {:<8x} EBP: {:<8x} \n"
+		"ESI: {:<8x} EDI: {:<8x} \n",
+		(DWORD)exceptionInfo->ExceptionRecord->ExceptionAddress,
+		exceptionInfo->ExceptionRecord->ExceptionCode, exceptionInfo->ContextRecord->Eax,
+		exceptionInfo->ContextRecord->Ecx, exceptionInfo->ContextRecord->Edx, exceptionInfo->ContextRecord->Ebx,
+		exceptionInfo->ContextRecord->Esp, exceptionInfo->ContextRecord->Ebp, exceptionInfo->ContextRecord->Esi,
+		exceptionInfo->ContextRecord->Edi);
+#endif
 
-        Sleep(1000);
+        Framework::Logging::GetLogger("MiniDump")->error(fmt::format("{}\nStack trace:\n {}", crashInfo, sw.GetOutputDump()));
+        Framework::Logging::GetLogger("MiniDump")->flush();
+        isCaptureEnabled = true;
+
+        Sleep(2000);
 
         // uncomment to break here
         //__debugbreak();
