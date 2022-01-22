@@ -8,13 +8,13 @@
 
 #pragma once
 
-#include "api.h"
-
-#include <external/cef/application.h>
 #include <string>
 
+#include <external/cef/application.h>
+#include "../api/backend.h"
+
 namespace Framework::GUI {
-    class CEF: public API {
+    class CEF: public Backend {
       private:
         CefRefPtr<External::CEF::Application> _application;
 
