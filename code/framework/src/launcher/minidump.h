@@ -8,12 +8,21 @@
 
 #pragma once
 
+#include <Windows.h>
+
 namespace Framework::Launcher {
     class MiniDump {
       private:
+        static inline bool isCaptureEnabled = true;
         void InitExceptionOverride();
+
+        static LONG WINAPI MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo);
 
       public:
         MiniDump();
+
+        inline void SetCaptureEnabled(bool enabled) {
+            isCaptureEnabled = enabled;
+        }
     };
 }; // namespace Framework::Launcher

@@ -56,3 +56,4 @@ This codebase also depends on the following third-party libraries:
     rmlui           - https://github.com/mikke89/RmlUi
     sdl2            - https://www.libsdl.org/license.php
     lua             - https://www.lua.org/license.html
+    stackwalker     - https://github.com/JochenKalmbach/StackWalker/blob/master/LICENSE

@@ -146,6 +146,9 @@ if (WIN32)
     add_subdirectory(sdl2)
     add_subdirectory(rmlui)
 
+    set(StackWalker_DISABLE_TESTS CACHE BOOL "" ON)
+    add_subdirectory(StackWalker)
+
     target_compile_options(libcef_dll_wrapper PRIVATE "/MT")
     target_link_libraries(libcef_dll_wrapper PRIVATE ${CEF_LIBRARY})
 endif ()

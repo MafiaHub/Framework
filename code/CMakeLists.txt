@@ -28,6 +28,7 @@ include_directories(PUBLIC
         "../vendors/sfd"
         "../vendors/cxxopts"
         "../vendors/freetype/include"
+        "../vendors/StackWalker/Main/StackWalker"
         "../vendors"
         )
 

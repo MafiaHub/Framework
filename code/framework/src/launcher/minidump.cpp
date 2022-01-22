@@ -7,15 +7,50 @@
  */
 
 #include "minidump.h"
-#include "utils/safe_win32.h"
 #include <winnt.h>
+
+#include "logging/logger.h"
+
+#include <StackWalker.h>
+
+#include <string>
 
 typedef void(__cdecl *CoreSetExceptionOverride)(LONG (*handler)(EXCEPTION_POINTERS *));
 
 namespace Framework::Launcher {
 
-    static LONG WINAPI MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo) {
-        return true;
+    class StackWalkerSentry final : public StackWalker {
+        private:
+        std::string outputDump;
+        protected:
+        virtual void OnOutput(LPCSTR dump) override {
+            outputDump = dump;
+        }
+        public:
+        StackWalkerSentry() {
+            StackWalker(StackWalkOptions::RetrieveSymbol | StackWalkOptions::RetrieveLine);
+        }
+
+        inline std::string GetOutputDump() const {
+            return outputDump;
+        }
+    };
+
+    LONG WINAPI MiniDump::MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo) {
+        if (!isCaptureEnabled) {
+            return EXCEPTION_EXECUTE_HANDLER;
+        }
+        if (exceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT) {
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+
+        StackWalkerSentry sw;
+        sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
+        Framework::Logging::GetLogger("MiniDump")->error(sw.GetOutputDump());
+
+        // todo send to sentry
+
+        return EXCEPTION_EXECUTE_HANDLER;
     }
 
     void MiniDump::InitExceptionOverride() {
