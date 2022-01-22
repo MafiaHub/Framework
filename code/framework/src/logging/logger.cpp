@@ -50,7 +50,7 @@ namespace Framework::Logging {
 
         if (!ringbuffer_sink) {
             ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(_maxRingBufferSize);
-            ringbuffer_sink->set_level(spdlog::level::info);
+            ringbuffer_sink->set_level(spdlog::level::debug);
         }
 
         std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink};
