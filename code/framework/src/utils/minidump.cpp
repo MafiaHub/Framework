@@ -63,20 +63,20 @@ namespace Framework::Utils {
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
 #ifdef _M_AMD64
         std::string crashInfo = fmt::format("{:X} with code: {:X} \n\nRegisters: \n"
-		"RAX: {:<8x} RCX: {:<8x} \n"
-		"RDX: {:<8x} RBX: {:<8x} \n"
-		"RSP: {:<8x} RBP: {:<8x} \n"
-		"RSI: {:<8x} RDI: {:<8x} \n",
+		"RAX: {:<12x} RCX: {:<12x} \n"
+		"RDX: {:<12x} RBX: {:<12x} \n"
+		"RSP: {:<12x} RBP: {:<12x} \n"
+		"RSI: {:<12x} RDI: {:<12x} \n",
 		(DWORD64)exceptionInfo->ExceptionRecord->ExceptionAddress,
 		exceptionInfo->ExceptionRecord->ExceptionCode, exceptionInfo->ContextRecord->Rax,
 		exceptionInfo->ContextRecord->Rcx, exceptionInfo->ContextRecord->Rdx, exceptionInfo->ContextRecord->Rbx,
 		exceptionInfo->ContextRecord->Rsp, exceptionInfo->ContextRecord->Rbp, exceptionInfo->ContextRecord->Rsi, exceptionInfo->ContextRecord->Rdi);
 #elif _M_X86
         std::string crashInfo = fmt::format("{:X} with code: {:X} \n\nRegisters: \n"
-		"EAX: {:<8x} ECX: {:<8x} \n"
-		"EDX: {:<8x} EBX: {:<8x} \n"
-		"ESP: {:<8x} EBP: {:<8x} \n"
-		"ESI: {:<8x} EDI: {:<8x} \n",
+		"EAX: {:<12x} ECX: {:<12x} \n"
+		"EDX: {:<12x} EBX: {:<12x} \n"
+		"ESP: {:<12x} EBP: {:<12x} \n"
+		"ESI: {:<12x} EDI: {:<12x} \n",
 		(DWORD)exceptionInfo->ExceptionRecord->ExceptionAddress,
 		exceptionInfo->ExceptionRecord->ExceptionCode, exceptionInfo->ContextRecord->Eax,
 		exceptionInfo->ContextRecord->Ecx, exceptionInfo->ContextRecord->Edx, exceptionInfo->ContextRecord->Ebx,
