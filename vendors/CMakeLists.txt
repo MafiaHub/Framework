@@ -143,8 +143,6 @@ if (WIN32)
     add_subdirectory(sdl2)
     add_subdirectory(rmlui)
 
-    if (WIN32)
-        target_compile_options(libcef_dll_wrapper PRIVATE "/MT")
-    endif ()
+    target_compile_options(libcef_dll_wrapper PRIVATE "/MT")
 endif ()
 
