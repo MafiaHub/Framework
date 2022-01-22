@@ -144,5 +144,6 @@ if (WIN32)
     add_subdirectory(rmlui)
 
     target_compile_options(libcef_dll_wrapper PRIVATE "/MT")
+    target_link_libraries(libcef_dll_wrapper PRIVATE ${CEF_LIBRARY})
 endif ()
 

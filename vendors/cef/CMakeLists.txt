@@ -44,6 +44,7 @@ add_library(CEFTarget STATIC dummy.cpp)
 
 target_include_directories(CEFTarget PUBLIC "src")
 target_link_directories(CEFTarget PUBLIC ${CEF_COPY_DIR})
+target_link_libraries(CEFTarget PUBLIC ${CEF_COPY_DIR}/libcef.lib ${CEF_COPY_DIR}/cef_sandbox.lib)
 
 if(APPLE)
     add_custom_command(TARGET CEFTarget POST_BUILD
