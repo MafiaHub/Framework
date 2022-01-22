@@ -98,6 +98,7 @@ namespace Framework::Utils {
         Framework::Logging::GetLogger("MiniDump")->flush();
         isCaptureEnabled = true;
 
+        // Give async logger some time to flush the log
         Sleep(2000);
 
         // uncomment to break here
@@ -105,7 +106,7 @@ namespace Framework::Utils {
 
         // todo send to sentry
 
-        return EXCEPTION_EXECUTE_HANDLER;
+        return EXCEPTION_CONTINUE_SEARCH;
     }
 
     void MiniDump::InitExceptionOverride() {
