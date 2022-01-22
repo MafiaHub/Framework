@@ -35,10 +35,6 @@ endif()
 
 add_subdirectory(src)
 
-if (WIN32)
-    string(REPLACE "/MTd" "/MT" ${CMAKE_CXX_FLAGS} "${CMAKE_CXX_FLAGS}")
-endif ()
-
 set(CEF_COPY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Release")
 
 #
