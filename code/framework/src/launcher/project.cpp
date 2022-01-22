@@ -53,7 +53,7 @@ static wchar_t gProjectDllPath[32768];
 typedef void (*ClientEntryPoint)(const wchar_t *projectPath);
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
-    const auto result = Framework::Utils::MiniDump::MiniDumpExceptionHandler(exceptionInfo);
+    const auto result = Framework::Utils::MiniDump::ExceptionFilter(exceptionInfo);
     if (result == EXCEPTION_CONTINUE_EXECUTION)
         return result;
     else if (result != EXCEPTION_EXECUTE_HANDLER)

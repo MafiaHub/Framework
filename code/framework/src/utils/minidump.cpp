@@ -49,7 +49,7 @@ namespace Framework::Utils {
         }
     };
 
-    LONG WINAPI MiniDump::MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo) {
+    LONG WINAPI MiniDump::ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo) {
         if (!isCaptureEnabled) {
             return EXCEPTION_EXECUTE_HANDLER;
         }
@@ -112,10 +112,10 @@ namespace Framework::Utils {
     void MiniDump::InitExceptionOverride() {
         const auto coreSetExceptionOverride = reinterpret_cast<CoreSetExceptionOverride>(GetProcAddress(GetModuleHandleA("FrameworkLoaderData.dll"), "CoreSetExceptionOverride"));
         if (coreSetExceptionOverride) {
-            coreSetExceptionOverride(MiniDumpExceptionHandler);
+            coreSetExceptionOverride(ExceptionFilter);
         }
 
-        SetUnhandledExceptionFilter(MiniDumpExceptionHandler);
+        SetUnhandledExceptionFilter(ExceptionFilter);
     }
 
     MiniDump::MiniDump() {

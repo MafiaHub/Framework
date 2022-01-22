@@ -30,6 +30,6 @@ namespace Framework::Utils {
             symbolPath = path;
         }
 
-        static LONG WINAPI MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo);
+        static LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo);
     };
 }; // namespace Framework::Utils
