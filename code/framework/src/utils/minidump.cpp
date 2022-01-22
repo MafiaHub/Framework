@@ -81,7 +81,7 @@ namespace Framework::Utils {
         exceptionInfo->ContextRecord->R10, exceptionInfo->ContextRecord->R11,
         exceptionInfo->ContextRecord->R12, exceptionInfo->ContextRecord->R13,
         exceptionInfo->ContextRecord->R14, exceptionInfo->ContextRecord->R15);
-#elif _M_X86
+#elif _M_IX86
         std::string crashInfo = fmt::format("{:X} with code: {:X} \n\nRegisters: \n"
 		"EAX: {:<12x} ECX: {:<12x} \n"
 		"EDX: {:<12x} EBX: {:<12x} \n"
