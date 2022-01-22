@@ -11,6 +11,7 @@ include_directories(PUBLIC
         "../vendors/ntdll"
         "../vendors/semver"
         "../vendors/imgui"
+        "../vendors/lua/src"
         "../vendors/sdl2/include"
         "../vendors/spdlog/include"
         "../vendors/optick/src"

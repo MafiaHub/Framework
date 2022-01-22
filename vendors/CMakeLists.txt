@@ -132,6 +132,9 @@ if (ENABLE_FREETYPE_FROM_SOURCE)
     message("Setting FREETYPE ROOT DIR to newly built freetype ${BUILD_FREETYPE_INSTALL_DIR}")
 endif ()
 
+# Add lua 5.2.1
+add_subdirectory(lua-5.2.1)
+
 # Build OS specific libraries
 if (WIN32)
     add_subdirectory(minhook)
