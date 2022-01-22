@@ -55,3 +55,4 @@ This codebase also depends on the following third-party libraries:
     freetype        - https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT
     rmlui           - https://github.com/mikke89/RmlUi
     sdl2            - https://www.libsdl.org/license.php
+    lua             - https://www.lua.org/license.html
