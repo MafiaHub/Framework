@@ -92,6 +92,7 @@ if(WIN32)
         STATIC
         src/utils/hashing.cpp
         src/launcher/project.cpp
+        src/launcher/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/external/steam/wrapper.cpp
         src/utils/hooking/hook_function.cpp
@@ -152,7 +153,7 @@ if (WIN32)
     link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll sfd)
     target_link_libraries(FrameworkLoaderData udis86 minhook)
-    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage)
+    target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
 
     if (NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")

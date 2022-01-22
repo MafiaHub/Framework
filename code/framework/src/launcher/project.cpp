@@ -125,7 +125,8 @@ namespace Framework::Launcher {
         std::replace(projectPath.begin(), projectPath.end(), '\\', '/');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
-        _steamWrapper = new External::Steam::Wrapper;
+        _steamWrapper = std::make_unique<External::Steam::Wrapper>();
+        _minidump = std::make_unique<MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
     }
 

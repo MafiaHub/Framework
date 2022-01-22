@@ -8,13 +8,16 @@
 
 #pragma once
 
-#include "utils/config.h"
 
+#include "minidump.h"
+#include "utils/config.h"
 #include <external/steam/wrapper.h>
+
+#include <Windows.h>
+
 #include <functional>
 #include <string>
 #include <vector>
-#include <windows.h>
 
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
@@ -78,7 +81,8 @@ namespace Framework::Launcher {
         ProjectConfiguration _config;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
-        External::Steam::Wrapper *_steamWrapper;
+        std::unique_ptr<External::Steam::Wrapper> _steamWrapper;
+        std::unique_ptr<MiniDump> _minidump;
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;
