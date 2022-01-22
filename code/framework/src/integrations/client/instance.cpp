@@ -30,7 +30,6 @@ namespace Framework::Integrations::Client {
         _renderer    = std::make_unique<Graphics::Renderer>();
         _worldEngine = std::make_unique<World::ClientEngine>();
         _renderIO    = std::make_unique<Graphics::RenderIO>();
-        _minidump    = std::make_unique<Utils::MiniDump>();
     }
 
     Instance::~Instance() {

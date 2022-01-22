@@ -24,12 +24,21 @@ namespace Framework::Utils {
 
       protected:
         virtual void OnOutput(LPCSTR dump) override {
-            outputDump = dump;
+            outputDump += dump;
         }
+
+        // todo implement these to get extra information
+        //
+        // virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
+        // virtual void OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size,
+        //                         DWORD result, LPCSTR symType, LPCSTR pdbName,
+        //                         ULONGLONG fileVersion);
+        // virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &entry);
+        // virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
 
       public:
         StackWalkerSentry() {
-            StackWalker(StackWalkOptions::RetrieveSymbol | StackWalkOptions::RetrieveLine);
+            StackWalker();
         }
 
         inline std::string GetOutputDump() const {
@@ -46,9 +55,16 @@ namespace Framework::Utils {
         }
 
         StackWalkerSentry sw;
+        sw.SetSymPath(symbolPath.c_str());
+        sw.LoadModules();
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
         Framework::Logging::GetLogger("MiniDump")->error(sw.GetOutputDump());
         Framework::Logging::GetLogger("MiniDump")->flush();
+
+        Sleep(1000);
+
+        // uncomment to break here
+        //__debugbreak();
 
         // todo send to sentry
 

@@ -10,13 +10,14 @@
 
 #include <Windows.h>
 
+#include <string>
+
 namespace Framework::Utils {
     class MiniDump {
       private:
+        static inline std::string symbolPath;
         static inline bool isCaptureEnabled = true;
         void InitExceptionOverride();
-
-        static LONG WINAPI MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo);
 
       public:
         MiniDump();
@@ -24,5 +25,11 @@ namespace Framework::Utils {
         inline void SetCaptureEnabled(bool enabled) {
             isCaptureEnabled = enabled;
         }
+
+        inline void SetSymbolPath(const std::string &path) {
+            symbolPath = path;
+        }
+
+        static LONG WINAPI MiniDumpExceptionHandler(EXCEPTION_POINTERS *exceptionInfo);
     };
 }; // namespace Framework::Utils

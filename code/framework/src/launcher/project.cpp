@@ -24,7 +24,9 @@
 #include <ostream>
 #include <psapi.h>
 #include <sfd.h>
+
 #include <utils/hooking/hooking.h>
+#include <utils/minidump.h>
 
 // Enforce discrete GPU on mobile units.
 extern "C" {
@@ -51,7 +53,10 @@ static wchar_t gProjectDllPath[32768];
 typedef void (*ClientEntryPoint)(const wchar_t *projectPath);
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
-    return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
+    const auto result = Framework::Utils::MiniDump::MiniDumpExceptionHandler(exceptionInfo);
+    if (result != EXCEPTION_EXECUTE_HANDLER)
+        return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
+    return result;
 }
 
 void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
@@ -128,6 +133,8 @@ namespace Framework::Launcher {
         _steamWrapper = std::make_unique<External::Steam::Wrapper>();
         _minidump = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
+
+        _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(gProjectDllPath));
     }
 
     bool Project::Launch() {
