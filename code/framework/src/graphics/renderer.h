@@ -8,12 +8,12 @@
 
 #pragma once
 
+#include "utils/safe_win32.h"
+
 #include "backend/d3d11.h"
 #include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
-
-#include <Windows.h>
 
 namespace Framework::Graphics {
     struct RendererConfiguration {
@@ -22,10 +22,10 @@ namespace Framework::Graphics {
         HWND windowHandle;
 
         union {
-            struct sd3d9 {
+            struct {
                 IDirect3DDevice9 *device;
             } d3d9;
-            struct sd3d11 {
+            struct {
                 ID3D11Device *device;
                 ID3D11DeviceContext *deviceContext;
             } d3d11;
