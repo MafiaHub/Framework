@@ -126,7 +126,7 @@ namespace Framework::Launcher {
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
         _steamWrapper = std::make_unique<External::Steam::Wrapper>();
-        _minidump = std::make_unique<MiniDump>();
+        _minidump = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
     }
 

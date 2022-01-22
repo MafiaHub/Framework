@@ -9,7 +9,7 @@
 #pragma once
 
 
-#include "minidump.h"
+#include "utils/minidump.h"
 #include "utils/config.h"
 #include <external/steam/wrapper.h>
 
@@ -82,7 +82,7 @@ namespace Framework::Launcher {
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
         std::unique_ptr<External::Steam::Wrapper> _steamWrapper;
-        std::unique_ptr<MiniDump> _minidump;
+        std::unique_ptr<Utils::MiniDump> _minidump;
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;

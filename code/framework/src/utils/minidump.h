@@ -10,7 +10,7 @@
 
 #include <Windows.h>
 
-namespace Framework::Launcher {
+namespace Framework::Utils {
     class MiniDump {
       private:
         static inline bool isCaptureEnabled = true;
@@ -25,4 +25,4 @@ namespace Framework::Launcher {
             isCaptureEnabled = enabled;
         }
     };
-}; // namespace Framework::Launcher
+}; // namespace Framework::Utils

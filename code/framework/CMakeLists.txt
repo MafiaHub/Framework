@@ -87,12 +87,13 @@ if(WIN32)
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp
+        src/utils/minidump.cpp
     )
     add_library(FrameworkLoader
         STATIC
         src/utils/hashing.cpp
         src/launcher/project.cpp
-        src/launcher/minidump.cpp
+        src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/external/steam/wrapper.cpp
         src/utils/hooking/hook_function.cpp

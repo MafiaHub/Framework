@@ -17,16 +17,17 @@
 
 typedef void(__cdecl *CoreSetExceptionOverride)(LONG (*handler)(EXCEPTION_POINTERS *));
 
-namespace Framework::Launcher {
-
-    class StackWalkerSentry final : public StackWalker {
-        private:
+namespace Framework::Utils {
+    class StackWalkerSentry final: public StackWalker {
+      private:
         std::string outputDump;
-        protected:
+
+      protected:
         virtual void OnOutput(LPCSTR dump) override {
             outputDump = dump;
         }
-        public:
+
+      public:
         StackWalkerSentry() {
             StackWalker(StackWalkOptions::RetrieveSymbol | StackWalkOptions::RetrieveLine);
         }
@@ -47,6 +48,7 @@ namespace Framework::Launcher {
         StackWalkerSentry sw;
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
         Framework::Logging::GetLogger("MiniDump")->error(sw.GetOutputDump());
+        Framework::Logging::GetLogger("MiniDump")->flush();
 
         // todo send to sentry
 
@@ -58,9 +60,11 @@ namespace Framework::Launcher {
         if (coreSetExceptionOverride) {
             coreSetExceptionOverride(MiniDumpExceptionHandler);
         }
+
+        SetUnhandledExceptionFilter(MiniDumpExceptionHandler);
     }
 
     MiniDump::MiniDump() {
         InitExceptionOverride();
     }
-};
+}; // namespace Framework::Utils

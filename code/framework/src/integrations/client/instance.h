@@ -15,6 +15,7 @@
 #include <functional>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
+#include <utils/minidump.h>
 
 #include "networking/engine.h"
 
@@ -57,6 +58,7 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Graphics::Renderer> _renderer;
         std::unique_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
+        std::unique_ptr<Utils::MiniDump> _minidump;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
