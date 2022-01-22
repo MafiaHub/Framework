@@ -54,7 +54,9 @@ typedef void (*ClientEntryPoint)(const wchar_t *projectPath);
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     const auto result = Framework::Utils::MiniDump::MiniDumpExceptionHandler(exceptionInfo);
-    if (result != EXCEPTION_EXECUTE_HANDLER)
+    if (result == EXCEPTION_CONTINUE_EXECUTION)
+        return result;
+    else if (result != EXCEPTION_EXECUTE_HANDLER)
         return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
     return result;
 }

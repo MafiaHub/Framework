@@ -41,7 +41,7 @@ namespace Framework::Utils {
 
       public:
         StackWalkerSentry() {
-            StackWalker(StackWalkOptions::RetrieveSymbol|StackWalkOptions::RetrieveLine|StackWalkOptions::SymUseSymSrv);
+            m_options = StackWalkOptions::RetrieveSymbol|StackWalkOptions::RetrieveLine|StackWalkOptions::SymUseSymSrv|StackWalkOptions::SymBuildPath;
         }
 
         inline std::string GetOutputDump() const {
@@ -62,7 +62,7 @@ namespace Framework::Utils {
         sw.SetSymPath(symbolPath.c_str());
         sw.ShowCallstack(GetCurrentThread(), exceptionInfo->ContextRecord);
 #ifdef _M_AMD64
-        std::string crashInfo = fmt::format("Crash address: {:X} Code: {:X} \nRegisters: \n"
+        std::string crashInfo = fmt::format("{:X} with code: {:X} \n\nRegisters: \n"
 		"RAX: {:<8x} RCX: {:<8x} \n"
 		"RDX: {:<8x} RBX: {:<8x} \n"
 		"RSP: {:<8x} RBP: {:<8x} \n"
@@ -72,7 +72,7 @@ namespace Framework::Utils {
 		exceptionInfo->ContextRecord->Rcx, exceptionInfo->ContextRecord->Rdx, exceptionInfo->ContextRecord->Rbx,
 		exceptionInfo->ContextRecord->Rsp, exceptionInfo->ContextRecord->Rbp, exceptionInfo->ContextRecord->Rsi, exceptionInfo->ContextRecord->Rdi);
 #elif _M_X86
-        std::string crashInfo = fmt::format("Crash address: {:X} Code: {:X} \nRegisters: \n"
+        std::string crashInfo = fmt::format("{:X} with code: {:X} \n\nRegisters: \n"
 		"EAX: {:<8x} ECX: {:<8x} \n"
 		"EDX: {:<8x} EBX: {:<8x} \n"
 		"ESP: {:<8x} EBP: {:<8x} \n"
@@ -84,7 +84,7 @@ namespace Framework::Utils {
 		exceptionInfo->ContextRecord->Edi);
 #endif
 
-        Framework::Logging::GetLogger("MiniDump")->error(fmt::format("{}\nStack trace:\n {}", crashInfo, sw.GetOutputDump()));
+        Framework::Logging::GetLogger("MiniDump")->error(fmt::format("Unhandled exception at address: {}\nStack trace:\n\n{}", crashInfo, sw.GetOutputDump()));
         Framework::Logging::GetLogger("MiniDump")->flush();
         isCaptureEnabled = true;
 
