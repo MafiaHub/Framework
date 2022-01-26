@@ -8,28 +8,53 @@
 
 #pragma once
 
+#include <cxxopts.hpp>
+#include <spdlog/spdlog.h>
+
+#include "wrapped_error.h"
+
+#include <memory>
+#include <vector>
+#include <unordered_map>
 #include <functional>
-#include <mutex>
-#include <queue>
-#include <string>
-#include <thread>
 
 namespace Framework::Utils {
-    using CommandCallback = std::function<void(const std::string &)>;
+    enum CommandProcessorError {
+        ERROR_NONE,
+        ERROR_NONE_PRINT_HELP,
+        ERROR_EMPTY_INPUT,
+        ERROR_CMD_ALREADY_EXISTS,
+        ERROR_CMD_UNSPECIFIED_NAME,
+        ERROR_CMD_UNKNOWN,
+        ERROR_INTERNAL
+    };
+
+    using CommandProc = std::function<void(cxxopts::ParseResult &)>;
     class CommandProcessor {
       private:
-        std::shared_ptr<std::thread> _currentThread;
-        std::queue<std::string> _queue;
-        std::mutex _mutex;
-        CommandCallback _cb;
+        struct CommandInfo {
+            std::unique_ptr<cxxopts::Options> options;
+            CommandProc proc;
+        };
+        std::unordered_map<std::string, CommandInfo> _commands;
 
       public:
-        CommandProcessor();
+        CommandProcessor() = default;
 
-        void SetCommandHandler(CommandCallback cb) {
-            _cb = cb;
+        inline const std::vector<std::string> GetCommandNames() const {
+            std::vector<std::string> names;
+            for (auto &cmd : _commands) {
+                names.push_back(cmd.first);
+            }
+            return names;
         }
 
-        void Update();
+        inline const CommandInfo *GetCommandInfo(const std::string &name) const {
+            return &_commands.at(name);
+        }
+
+        WrappedError<CommandProcessorError> ProcessCommand(const std::string &input);
+
+        WrappedError<CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
     };
 } // namespace Framework::Utils
