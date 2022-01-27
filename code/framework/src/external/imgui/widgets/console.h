@@ -1,8 +1,5 @@
 #pragma once
 
-#include <utils/safe_win32.h>
-
-#include <external/imgui/wrapper.h>
 #include <utils/command_processor.h>
 
 #include <spdlog/spdlog.h>

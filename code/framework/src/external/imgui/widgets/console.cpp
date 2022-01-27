@@ -1,11 +1,14 @@
 #include "console.h"
 
+#include <utils/safe_win32.h>
+#include <external/optick/wrapper.h>
 #include <logging/logger.h>
+
+#include <imgui/imgui.h>
+#include <fmt/core.h>
+
 #include <regex>
 #include <sstream>
-#include <imgui/imgui.h>
-#include <external/optick/wrapper.h>
-#include <fmt/core.h>
 #include <numeric>
 
 namespace Framework::External::ImGUI::Widgets {
