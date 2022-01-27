@@ -26,8 +26,8 @@ namespace Framework::External::ImGUI::Widgets {
         bool _autoScroll          = true;
         bool _isOpen              = false;
         bool _focusOnConsole      = false;
-        bool _focusInput          = false;
         bool _consoleControl      = false;
+        std::string _autocompleteWord = "";
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
         std::vector<MenuBarProc> _menuBarDrawers;
         spdlog::logger *_logger;

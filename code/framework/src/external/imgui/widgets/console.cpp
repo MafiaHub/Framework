@@ -10,6 +10,7 @@
 
 #include <utils/safe_win32.h>
 #include <external/optick/wrapper.h>
+#include <external/imgui/helpers.hpp>
 #include <logging/logger.h>
 
 #include <imgui/imgui.h>
@@ -128,7 +129,18 @@ namespace Framework::External::ImGUI::Widgets {
         ImGui::Separator();
 
         static char consoleText[512] = "";
-        if (ImGui::InputText("##console_text", consoleText, 512, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine)) {
+        auto inputEditCallback = [&](ImGuiInputTextCallbackData *data) {
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion && !_autocompleteWord.empty()) {
+                data->DeleteChars(0, data->BufTextLen);
+                data->InsertChars(0, _autocompleteWord.c_str());
+
+                ImGui::SetKeyboardFocusHere(-1);
+                _focusOnConsole = true;
+            }
+            return 0;
+        };
+
+        if (ImGui::InputText("##console_text", consoleText, 512, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize, getCallback(inputEditCallback), &inputEditCallback)) {
             SendCommand(consoleText);
             consoleText[0] = '\0';
             ImGui::SetKeyboardFocusHere(-1);
@@ -136,11 +148,6 @@ namespace Framework::External::ImGUI::Widgets {
         if (_focusOnConsole) {
             ImGui::SetKeyboardFocusHere(-1);
             _focusOnConsole = false;
-        }
-        if (_focusInput) {
-            //TODO cursor at the end can't make this work for the life of me
-            ImGui::SetKeyboardFocusHere(-1);
-            _focusInput = false;
         }
         ImGui::SameLine();
 
@@ -163,6 +170,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         bool isFocused = ImGui::IsItemFocused();
         isAutocompleteOpen |= ImGui::IsItemActive();
+        _autocompleteWord.clear();
 
         if (isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
             ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
@@ -186,10 +194,8 @@ namespace Framework::External::ImGUI::Widgets {
                     }
                 }
 
-                if (foundCommandCount == 1 && GetAsyncKeyState(VK_TAB) & 0x1) {
-                    ImGui::SetKeyboardFocusHere(-1);
-                    strcpy(consoleText, foundCommand.c_str());
-                    _focusInput = true;
+                if (foundCommandCount == 1) {
+                    _autocompleteWord = foundCommand;
                 }
             }
             ImGui::End();
