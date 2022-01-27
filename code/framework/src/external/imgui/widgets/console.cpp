@@ -195,13 +195,12 @@ namespace Framework::External::ImGUI::Widgets {
             if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_Tooltip)) {
                 isFocused |= ImGui::IsWindowFocused();
                 int foundCommandCount    = 0;
-                std::string foundCommand = "";
+                std::vector<std::string> foundCommands;
                 for (auto &command : allCommands) {
                     if (command._Starts_with(commandPreview) == NULL)
                         continue;
 
-                    foundCommand = command;
-                    foundCommandCount++;
+                    foundCommands.push_back(command);
                     auto help                      = _commandProcessor->GetCommandInfo(command)->options->help();
                     const auto formattedSelectable = fmt::format("{} {}", command, help);
                     //TODO ImGui::Selectable(formattedSelectable.c_str(), true)
@@ -211,8 +210,21 @@ namespace Framework::External::ImGUI::Widgets {
                     }
                 }
 
-                if (foundCommandCount == 1) {
-                    _autocompleteWord = foundCommand;
+                if (foundCommands.size() == 1) {
+                    _autocompleteWord = foundCommands.at(0);
+                } else if (foundCommands.size() > 1) {
+                    // find a common prefix among found commands
+                    std::string commonPrefix = foundCommands.at(0);
+                    for (const auto &cmd : foundCommands) {
+                        commonPrefix = commonPrefix.substr(0, std::min(commonPrefix.size(), cmd.size()));
+                        for (size_t i = 0; i < commonPrefix.size(); i++) {
+                            if (commonPrefix[i] != cmd[i]) {
+                                commonPrefix = commonPrefix.substr(0, i);
+                                break;
+                            }
+                        }
+                    }
+                    _autocompleteWord = commonPrefix;
                 }
             }
             ImGui::End();
