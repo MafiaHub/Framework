@@ -12,23 +12,23 @@
 #include <cstdint>
 
 namespace Framework::Utils {
-    template <typename T = uint32_t>
-    class WrappedError {
+    template <typename ResultType = std::string, typename ErrorType = uint32_t>
+    class Result {
     private:
-        std::string _message;
-        T _errorCode;
+        ResultType _message{};
+        ErrorType _errorCode{};
     public:
-        WrappedError(T error, const std::string &message = "") : _errorCode(error), _message(message) {}
+        Result(ErrorType error, const ResultType &message = {}) : _errorCode(error), _message(message) {}
 
-        inline const T GetError() const {
+        inline const ErrorType GetError() const {
             return _errorCode;
         }
 
-        inline const std::string &GetMsg() const {
+        inline const ResultType &Unwrap() const {
             return _message;
         }
 
-        inline bool Equals(const T &rhs) const {
+        inline bool Equals(const ErrorType &rhs) const {
             return _errorCode == rhs;
         }
     };

@@ -223,22 +223,22 @@ namespace Framework::External::ImGUI::Widgets {
 
         switch (result.GetError()) {
             case Framework::Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
-                _logger->info("{}", result.GetMsg());
+                _logger->info("{}", result.Unwrap());
             } break;
             case Framework::Utils::CommandProcessorError::ERROR_EMPTY_INPUT: {
                 _logger->warn("Input was empty");
             } break;
             case Framework::Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
-                _logger->warn("Command already exists: {}", result.GetMsg());
+                _logger->warn("Command already exists: {}", result.Unwrap());
             } break;
             case Framework::Utils::CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME: {
                 _logger->warn("Command name was unspecified");
             } break;
             case Framework::Utils::CommandProcessorError::ERROR_CMD_UNKNOWN: {
-                _logger->warn("Command not found: {}", result.GetMsg());
+                _logger->warn("Command not found: {}", result.Unwrap());
             } break;
             case Framework::Utils::CommandProcessorError::ERROR_INTERNAL: {
-                _logger->warn("Internal error: {}", result.GetMsg());
+                _logger->warn("Internal error: {}", result.Unwrap());
             } break;
 
             default: break;

@@ -10,7 +10,7 @@
 #include "logging/logger.h"
 
 namespace Framework::Utils {
-    WrappedError<CommandProcessorError> CommandProcessor::ProcessCommand(const std::string &input) {
+    Result<std::string, CommandProcessorError> CommandProcessor::ProcessCommand(const std::string &input) {
         std::string command = "";
         std::vector<std::string> args;
         std::stringstream parts(input);
@@ -23,7 +23,7 @@ namespace Framework::Utils {
             return CommandProcessorError::ERROR_EMPTY_INPUT;
         }
 
-        WrappedError<CommandProcessorError> error = CommandProcessorError::ERROR_NONE;
+        Result<std::string, CommandProcessorError> error = CommandProcessorError::ERROR_NONE;
 
         command = args[0];
 
@@ -63,7 +63,7 @@ namespace Framework::Utils {
         return error;
     }
 
-    WrappedError<CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc) {
+    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc) {
         if (name.empty()) {
             return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
         }

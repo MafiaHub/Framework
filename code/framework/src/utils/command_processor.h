@@ -11,7 +11,7 @@
 #include <cxxopts.hpp>
 #include <spdlog/spdlog.h>
 
-#include "wrapped_error.h"
+#include "result.h"
 
 #include <memory>
 #include <vector>
@@ -53,8 +53,7 @@ namespace Framework::Utils {
             return &_commands.at(name);
         }
 
-        WrappedError<CommandProcessorError> ProcessCommand(const std::string &input);
-
-        WrappedError<CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
+        Result<std::string, CommandProcessorError> ProcessCommand(const std::string &input);
+        Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
     };
 } // namespace Framework::Utils
