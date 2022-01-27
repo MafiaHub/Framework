@@ -8,11 +8,10 @@
 
 #pragma once
 
-#include <string>
 #include <cstdint>
 
 namespace Framework::Utils {
-    template <typename ResultType = std::string, typename ErrorType = uint32_t>
+    template <typename ResultType, typename ErrorType = uint32_t>
     class Result {
     private:
         ResultType _message{};
