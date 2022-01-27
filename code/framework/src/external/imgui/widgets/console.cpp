@@ -70,57 +70,69 @@ namespace Framework::External::ImGUI::Widgets {
         }
         else {
             ImGui::SetNextWindowBgAlpha(_consoleUnfocusedAlpha);
+            ImGui::PushFontShadow(0xFF000000);
         }
 
-        if (!ImGui::Begin("Console", &_shouldDisplayWidget, ImGuiWindowFlags_MenuBar)) {
+        auto windowFlags = ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse;
+
+        if (_consoleControl) {
+            windowFlags |= ImGuiWindowFlags_MenuBar;
+        }
+
+        if (!ImGui::Begin("Console", &_shouldDisplayWidget, windowFlags)) {
             ImGui::End();
             return false;
         }
 
-        if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu("Tools")) {
-                if (ImGui::MenuItem("Close", "F8")) {
-                    Close();
+        if (_consoleControl) {
+            if (ImGui::BeginMenuBar()) {
+                if (ImGui::BeginMenu("Tools")) {
+                    if (ImGui::MenuItem("Close", "F8")) {
+                        Close();
+                    }
+                    ImGui::EndMenu();
                 }
-                ImGui::EndMenu();
+
+                if (ImGui::BeginMenu("Log Level")) {
+                    if (ImGui::MenuItem("Trace")) {
+                        ringBuffer->set_level(spdlog::level::trace);
+                    }
+                    if (ImGui::MenuItem("Debug")) {
+                        ringBuffer->set_level(spdlog::level::debug);
+                    }
+                    if (ImGui::MenuItem("Info")) {
+                        ringBuffer->set_level(spdlog::level::info);
+                    }
+                    if (ImGui::MenuItem("Warn")) {
+                        ringBuffer->set_level(spdlog::level::warn);
+                    }
+                    if (ImGui::MenuItem("Error")) {
+                        ringBuffer->set_level(spdlog::level::err);
+                    }
+                    if (ImGui::MenuItem("Critical")) {
+                        ringBuffer->set_level(spdlog::level::critical);
+                    }
+                    if (ImGui::MenuItem("Off")) {
+                        ringBuffer->set_level(spdlog::level::off);
+                    }
+                    ImGui::EndMenu();
+                }
+
+                for (auto &menuBarDrawer : _menuBarDrawers) { menuBarDrawer(); }
+
+                ImGui::EndMenuBar();
             }
 
-            if (ImGui::BeginMenu("Log Level")) {
-                if (ImGui::MenuItem("Trace")) {
-                    ringBuffer->set_level(spdlog::level::trace);
-                }
-                if (ImGui::MenuItem("Debug")) {
-                    ringBuffer->set_level(spdlog::level::debug);
-                }
-                if (ImGui::MenuItem("Info")) {
-                    ringBuffer->set_level(spdlog::level::info);
-                }
-                if (ImGui::MenuItem("Warn")) {
-                    ringBuffer->set_level(spdlog::level::warn);
-                }
-                if (ImGui::MenuItem("Error")) {
-                    ringBuffer->set_level(spdlog::level::err);
-                }
-                if (ImGui::MenuItem("Critical")) {
-                    ringBuffer->set_level(spdlog::level::critical);
-                }
-                if (ImGui::MenuItem("Off")) {
-                    ringBuffer->set_level(spdlog::level::off);
-                }
-                ImGui::EndMenu();
-            }
-
-            for (auto &menuBarDrawer : _menuBarDrawers) { menuBarDrawer(); }
-
-            ImGui::EndMenuBar();
+            ImGui::Checkbox("Auto-scroll", &_autoScroll);
+            ImGui::SameLine();
+            ImGui::Checkbox("Multi-line", &_isMultiline);
+            ImGui::Separator();
         }
 
-        ImGui::TextColored(ImVec4(1, 1, 0, 1), "Output");
-        ImGui::Checkbox("Auto-scroll", &_autoScroll);
-        ImGui::Separator();
-
-        const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
-        ImGui::BeginChild("ScrollingRegion", ImVec2(0, -footer_height_to_reserve), false, ImGuiWindowFlags_HorizontalScrollbar);
+        const float reservedHeightMultiline = (_consoleControl && _isMultiline) ? 30.0f : 0.0f;
+        const float reservedHeightFocus = _consoleControl ? 20.0f : 0.0f;
+        const float reservedHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() + reservedHeightFocus /* extra space for more items */ + reservedHeightMultiline /* for multiline input */;
+        ImGui::BeginChild("ScrollingRegion", ImVec2(0, -reservedHeight), false, ImGuiWindowFlags_HorizontalScrollbar);
         if (ringBuffer != nullptr) {
             std::vector<std::string> log_message = ringBuffer->last_formatted();
             for (std::string &log : log_message) { FormatLog(log); }
@@ -129,117 +141,129 @@ namespace Framework::External::ImGUI::Widgets {
             ImGui::SetScrollHereY(0.0f);
         ImGui::EndChild();
 
-        ImGui::Separator();
+        if (_consoleControl) {
+            ImGui::Separator();
 
-        static char consoleText[512] = "";
-        auto inputEditCallback       = [&](ImGuiInputTextCallbackData *data) {
-            if ((_updateInputText || data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) && !_autocompleteWord.empty()) {
-                data->DeleteChars(0, data->BufTextLen);
-                data->InsertChars(0, _autocompleteWord.c_str());
+            static char consoleText[512] = "";
+            auto inputEditCallback       = [&](ImGuiInputTextCallbackData *data) {
+                if ((_updateInputText || data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) && !_autocompleteWord.empty()) {
+                    data->DeleteChars(0, data->BufTextLen);
+                    data->InsertChars(0, _autocompleteWord.c_str());
 
+                    ImGui::SetKeyboardFocusHere(-1);
+                    _focusOnInput  = true;
+                }
+                return 0;
+            };
+
+            auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize;
+
+            if (_consoleControl == false) {
+                // Block input if console is unfocused
+                flags = ImGuiInputTextFlags_ReadOnly;
+            } else if (_updateInputText) {
+                flags = ImGuiInputTextFlags_CallbackAlways;
+            }
+
+            bool wasInputProcessed = false;
+            if (_isMultiline) {
+                wasInputProcessed = ImGui::InputTextMultiline("##console_text", consoleText, 512, {0, 50.0f}, flags, getCallback(inputEditCallback), &inputEditCallback);
+            } else {
+                wasInputProcessed = ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback);
+            }
+
+            if (wasInputProcessed && !_updateInputText) {
+                SendCommand(consoleText);
+                consoleText[0] = '\0';
                 ImGui::SetKeyboardFocusHere(-1);
-                _focusOnConsole  = true;
             }
-            return 0;
-        };
-
-        auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize;
-
-        if (_consoleControl == false) {
-            // Block input if console is unfocused
-            flags = ImGuiInputTextFlags_ReadOnly;
-        }
-        else if (_updateInputText) {
-            flags = ImGuiInputTextFlags_CallbackAlways;
-        }
-
-        if (ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback) && !_updateInputText) {
-            SendCommand(consoleText);
-            consoleText[0] = '\0';
-            ImGui::SetKeyboardFocusHere(-1);
-        }
-        if (_focusOnConsole) {
-            ImGui::SetKeyboardFocusHere(-1);
-            _focusOnConsole = false;
-        }
-        ImGui::SameLine();
-
-        // show autocomplete
-        static bool isAutocompleteOpen = false;
-        std::vector<std::string> allCommands;
-
-        // very ugly: extract command name from the current input
-        std::string commandPreview;
-        std::stringstream ss(consoleText);
-        std::getline(ss, commandPreview, ' ');
-
-        auto commands = _commandProcessor->GetCommandNames();
-
-        for (const auto &command : commands) {
-            if (command._Starts_with(commandPreview)) {
-                allCommands.push_back(command);
+            if (_focusOnInput) {
+                ImGui::SetKeyboardFocusHere(-1);
+                _focusOnInput = false;
             }
-        }
+            ImGui::SameLine();
 
-        bool isFocused = ImGui::IsItemFocused();
-        isAutocompleteOpen |= ImGui::IsItemActive();
-        _autocompleteWord.clear();
-        _updateInputText = false;
+            // show autocomplete
+            static bool isAutocompleteOpen = false;
+            std::vector<std::string> allCommands;
 
-        if (_consoleControl && isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
-            ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
-            ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
-            if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_Tooltip)) {
-                isFocused |= ImGui::IsWindowFocused();
-                std::vector<std::string> foundCommands;
-                for (auto &command : allCommands) {
-                    if (command._Starts_with(commandPreview) == NULL)
-                        continue;
+            // very ugly: extract command name from the current input
+            std::string commandPreview;
+            std::stringstream ss(consoleText);
+            std::getline(ss, commandPreview, ' ');
 
-                    foundCommands.push_back(command);
-                    auto help                      = _commandProcessor->GetCommandInfo(command)->options->help();
-                    const auto formattedSelectable = fmt::format("{} {}", command, help);
-                    // TODO ImGui::Selectable(formattedSelectable.c_str(), true)
-                    if (ImGui::Selectable(formattedSelectable.c_str()) || (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
-                        _autocompleteWord  = command;
-                        _updateInputText   = true;
-                        isAutocompleteOpen = false;
-                        _focusOnConsole    = true;
-                    }
+            auto commands = _commandProcessor->GetCommandNames();
+
+            for (const auto &command : commands) {
+                if (command._Starts_with(commandPreview)) {
+                    allCommands.push_back(command);
                 }
+            }
 
-                if (foundCommands.size() == 1) {
-                    _autocompleteWord = foundCommands.at(0) + " ";
-                }
-                else if (foundCommands.size() > 1) {
-                    // find a common prefix among found commands
-                    std::string commonPrefix = foundCommands.at(0);
-                    for (const auto &cmd : foundCommands) {
-                        commonPrefix = commonPrefix.substr(0, std::min(commonPrefix.size(), cmd.size()));
-                        for (size_t i = 0; i < commonPrefix.size(); i++) {
-                            if (commonPrefix[i] != cmd[i]) {
-                                commonPrefix = commonPrefix.substr(0, i);
-                                break;
-                            }
+            bool isFocused = ImGui::IsItemFocused();
+            isAutocompleteOpen |= ImGui::IsItemActive();
+            _autocompleteWord.clear();
+            _updateInputText = false;
+
+            if (_consoleControl && isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
+                ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
+                ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
+                if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_Tooltip)) {
+                    isFocused |= ImGui::IsWindowFocused();
+                    std::vector<std::string> foundCommands;
+                    for (auto &command : allCommands) {
+                        if (command._Starts_with(commandPreview) == NULL)
+                            continue;
+
+                        foundCommands.push_back(command);
+                        auto help                      = _commandProcessor->GetCommandInfo(command)->options->help();
+                        const auto formattedSelectable = fmt::format("{} {}", command, help);
+                        // TODO ImGui::Selectable(formattedSelectable.c_str(), true)
+                        if (ImGui::Selectable(formattedSelectable.c_str()) || (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
+                            _autocompleteWord  = command;
+                            _updateInputText   = true;
+                            isAutocompleteOpen = false;
+                            _focusOnInput    = true;
                         }
                     }
-                    _autocompleteWord = commonPrefix;
+
+                    if (foundCommands.size() == 1) {
+                        _autocompleteWord = foundCommands.at(0) + " ";
+                    }
+                    else if (foundCommands.size() > 1) {
+                        // find a common prefix among found commands
+                        std::string commonPrefix = foundCommands.at(0);
+                        for (const auto &cmd : foundCommands) {
+                            commonPrefix = commonPrefix.substr(0, std::min(commonPrefix.size(), cmd.size()));
+                            for (size_t i = 0; i < commonPrefix.size(); i++) {
+                                if (commonPrefix[i] != cmd[i]) {
+                                    commonPrefix = commonPrefix.substr(0, i);
+                                    break;
+                                }
+                            }
+                        }
+                        _autocompleteWord = commonPrefix;
+                    }
                 }
+                ImGui::End();
+                isAutocompleteOpen &= isFocused;
             }
-            ImGui::End();
-            isAutocompleteOpen &= isFocused;
-        }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Send") && _consoleControl) {
-            SendCommand(consoleText);
+            ImGui::SameLine();
+            if (ImGui::Button("Send") && _consoleControl) {
+                SendCommand(consoleText);
 
-            consoleText[0]  = '\0';
-            _focusOnConsole = true;
+                consoleText[0]  = '\0';
+                _focusOnInput = true;
+            }
         }
 
         ImGui::Separator();
         ImGui::TextColored(ImVec4(1, 0, 0, 1), "Press ALT to return controls to game or console");
+
+        if (!_consoleControl) {
+            ImGui::PopFontShadow();
+        }
 
         ImGui::End();
 
@@ -277,7 +301,7 @@ namespace Framework::External::ImGUI::Widgets {
         LockControls(true);
 
         _isOpen         = true;
-        _focusOnConsole = true;
+        _focusOnInput = true;
         _consoleControl = true;
 
         return true;

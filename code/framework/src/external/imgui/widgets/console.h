@@ -26,7 +26,8 @@ namespace Framework::External::ImGUI::Widgets {
         bool _autoScroll              = true;
         bool _isOpen                  = false;
         bool _updateInputText         = false;
-        bool _focusOnConsole          = false;
+        bool _focusOnInput            = false;
+        bool _isMultiline             = false;
         bool _consoleControl          = false;
         float _consoleUnfocusedAlpha  = 0.25f;
         std::string _autocompleteWord = "";
