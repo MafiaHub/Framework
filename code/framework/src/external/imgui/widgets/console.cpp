@@ -107,9 +107,6 @@ namespace Framework::External::ImGUI::Widgets {
                 if (ImGui::MenuItem("Off")) {
                     ringBuffer->set_level(spdlog::level::off);
                 }
-                if (ImGui::MenuItem("N")) {
-                    ringBuffer->set_level(spdlog::level::n_levels);
-                }
                 ImGui::EndMenu();
             }
 
