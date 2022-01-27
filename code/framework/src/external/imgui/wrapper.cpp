@@ -22,6 +22,10 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace Framework::External::ImGUI {
     Error Wrapper::Init(Config &config) {
+        if (isContextInitialized) {
+            return Error::IMGUI_NONE;
+        }
+
         _config = config;
 
         if (!_config.renderer) {
@@ -63,11 +67,15 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
-        _initialized = isInitialized = true;
+        _initialized = isContextInitialized = true;
         return Error::IMGUI_NONE;
     }
 
     Error Wrapper::Shutdown() {
+        if (!isContextInitialized) {
+            return Error::IMGUI_NONE;
+        }
+
         switch (_config.renderBackend) {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_Shutdown();
@@ -88,7 +96,7 @@ namespace Framework::External::ImGUI {
 
         ImGui::DestroyContext();
 
-        _initialized = isInitialized = false;
+        _initialized = isContextInitialized = false;
         return Error::IMGUI_NONE;
     }
 
@@ -131,7 +139,7 @@ namespace Framework::External::ImGUI {
     Error Wrapper::Render() {
         std::lock_guard _lock(_renderMtx);
 
-        if (!isInitialized) {
+        if (!isContextInitialized) {
             return Error::IMGUI_NOT_INITIALIZED;
         }
 

@@ -46,7 +46,7 @@ namespace Framework::External::ImGUI {
         std::queue<RenderProc> _renderQueue;
         std::recursive_mutex _renderMtx;
 
-        static inline std::atomic_bool isInitialized = false;
+        static inline std::atomic_bool isContextInitialized = false;
 
       public:
         Error Init(Config &config);
