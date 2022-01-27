@@ -277,9 +277,6 @@ namespace Framework::External::ImGUI::Widgets {
         case Framework::Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
             _logger->info("{}", result.Unwrap());
         } break;
-        case Framework::Utils::CommandProcessorError::ERROR_EMPTY_INPUT: {
-            _logger->warn("Input was empty");
-        } break;
         case Framework::Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
             _logger->warn("Command already exists: {}", result.Unwrap());
         } break;
@@ -290,7 +287,7 @@ namespace Framework::External::ImGUI::Widgets {
             _logger->warn("Command not found: {}", result.Unwrap());
         } break;
         case Framework::Utils::CommandProcessorError::ERROR_INTERNAL: {
-            _logger->warn("Internal error: {}", result.Unwrap());
+            _logger->warn("Input error: {}", result.Unwrap());
         } break;
 
         default: break;

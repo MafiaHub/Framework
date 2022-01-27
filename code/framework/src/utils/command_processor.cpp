@@ -28,13 +28,9 @@ namespace Framework::Utils {
         command = args[0];
 
         if (_commands.find(command) != _commands.end()) {
-            std::vector<char *> vArgs;
-            for (auto arg : args) {
-                //TODO don't like this whole copy mem thing C++ sucks
-                const std::string::size_type size = arg.size();
-                char *buffer                      = new char[size + 1];
-                memcpy(buffer, arg.c_str(), size + 1);
-                vArgs.push_back(buffer);
+            std::vector<const char *> vArgs;
+            for (auto &arg : args) {
+                vArgs.push_back(arg.c_str());
             }
 
             try {
@@ -51,11 +47,6 @@ namespace Framework::Utils {
             catch (const std::exception &e) {
                 error = {CommandProcessorError::ERROR_INTERNAL, e.what()};
             }
-
-            for (auto arg : vArgs) {
-                delete arg;
-            }
-
         } else {
             return {CommandProcessorError::ERROR_CMD_UNKNOWN, input};
         }
