@@ -18,6 +18,7 @@
 #include <functional>
 #include <queue>
 #include <mutex>
+#include <atomic>
 
 namespace Framework::Graphics {
     class Renderer;
@@ -44,6 +45,8 @@ namespace Framework::External::ImGUI {
         bool _initialized = false;
         std::queue<RenderProc> _renderQueue;
         std::recursive_mutex _renderMtx;
+
+        static inline std::atomic_bool isInitialized = false;
 
       public:
         Error Init(Config &config);

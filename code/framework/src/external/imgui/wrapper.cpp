@@ -38,7 +38,10 @@ namespace Framework::External::ImGUI {
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        (void)ImGui::GetIO();
+        auto &io = ImGui::GetIO();
+
+        io.ConfigWindowsResizeFromEdges = true;
+
         ImGui::StyleColorsDark();
 
         switch (_config.renderBackend) {
@@ -60,7 +63,7 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
-        _initialized = true;
+        _initialized = isInitialized = true;
         return Error::IMGUI_NONE;
     }
 
@@ -85,7 +88,7 @@ namespace Framework::External::ImGUI {
 
         ImGui::DestroyContext();
 
-        _initialized = false;
+        _initialized = isInitialized = false;
         return Error::IMGUI_NONE;
     }
 
@@ -127,6 +130,10 @@ namespace Framework::External::ImGUI {
 
     Error Wrapper::Render() {
         std::lock_guard _lock(_renderMtx);
+
+        if (!isInitialized) {
+            return Error::IMGUI_NOT_INITIALIZED;
+        }
 
         const auto drawData = ImGui::GetDrawData();
         if (!drawData)

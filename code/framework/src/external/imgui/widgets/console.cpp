@@ -136,12 +136,12 @@ namespace Framework::External::ImGUI::Widgets {
 
         static char consoleText[512] = "";
         auto inputEditCallback       = [&](ImGuiInputTextCallbackData *data) {
-            if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion && !_autocompleteWord.empty()) {
+            if ((_updateInputText || data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) && !_autocompleteWord.empty()) {
                 data->DeleteChars(0, data->BufTextLen);
                 data->InsertChars(0, _autocompleteWord.c_str());
 
                 ImGui::SetKeyboardFocusHere(-1);
-                _focusOnConsole = true;
+                _focusOnConsole  = true;
             }
             return 0;
         };
@@ -152,8 +152,11 @@ namespace Framework::External::ImGUI::Widgets {
             // Block input if console is unfocused
             flags = ImGuiInputTextFlags_ReadOnly;
         }
+        else if (_updateInputText) {
+            flags = ImGuiInputTextFlags_CallbackAlways;
+        }
 
-        if (ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback)) {
+        if (ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback) && !_updateInputText) {
             SendCommand(consoleText);
             consoleText[0] = '\0';
             ImGui::SetKeyboardFocusHere(-1);
@@ -184,6 +187,7 @@ namespace Framework::External::ImGUI::Widgets {
         bool isFocused = ImGui::IsItemFocused();
         isAutocompleteOpen |= ImGui::IsItemActive();
         _autocompleteWord.clear();
+        _updateInputText = false;
 
         if (_consoleControl && isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
             ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
@@ -201,7 +205,9 @@ namespace Framework::External::ImGUI::Widgets {
                     // TODO ImGui::Selectable(formattedSelectable.c_str(), true)
                     if (ImGui::Selectable(formattedSelectable.c_str()) || (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
                         _autocompleteWord  = command;
+                        _updateInputText   = true;
                         isAutocompleteOpen = false;
+                        _focusOnConsole    = true;
                     }
                 }
 

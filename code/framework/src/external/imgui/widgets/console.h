@@ -25,6 +25,7 @@ namespace Framework::External::ImGUI::Widgets {
         bool _shouldDisplayWidget     = true;
         bool _autoScroll              = true;
         bool _isOpen                  = false;
+        bool _updateInputText         = false;
         bool _focusOnConsole          = false;
         bool _consoleControl          = false;
         float _consoleUnfocusedAlpha  = 0.25f;
