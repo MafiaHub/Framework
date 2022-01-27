@@ -27,6 +27,7 @@ namespace Framework::External::ImGUI::Widgets {
         bool _isOpen              = false;
         bool _focusOnConsole      = false;
         bool _consoleControl      = false;
+        float _consoleUnfocusedAlpha = 0.25f;
         std::string _autocompleteWord = "";
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
         std::vector<MenuBarProc> _menuBarDrawers;

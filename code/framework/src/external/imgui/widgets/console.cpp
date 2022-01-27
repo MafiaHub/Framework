@@ -62,6 +62,16 @@ namespace Framework::External::ImGUI::Widgets {
 
         auto ringBuffer = Framework::Logging::GetInstance()->GetRingBuffer();
 
+        if (_consoleControl) {
+            ImVec4 *colors = ImGui::GetStyle().Colors;
+
+            if (colors) {
+                ImGui::SetNextWindowBgAlpha(colors[ImGuiCol_WindowBg].w);
+            }
+        } else {
+            ImGui::SetNextWindowBgAlpha(_consoleUnfocusedAlpha);
+        }
+
         if (!ImGui::Begin("Console", &_shouldDisplayWidget, ImGuiWindowFlags_MenuBar)) {
             ImGui::End();
             return false;
@@ -140,7 +150,14 @@ namespace Framework::External::ImGUI::Widgets {
             return 0;
         };
 
-        if (ImGui::InputText("##console_text", consoleText, 512, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize, getCallback(inputEditCallback), &inputEditCallback)) {
+        auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize;
+
+        if (_consoleControl == false) {
+            // Block input if console is unfocused
+            flags = ImGuiInputTextFlags_ReadOnly;
+        }
+
+        if (ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback)) {
             SendCommand(consoleText);
             consoleText[0] = '\0';
             ImGui::SetKeyboardFocusHere(-1);
@@ -172,7 +189,7 @@ namespace Framework::External::ImGUI::Widgets {
         isAutocompleteOpen |= ImGui::IsItemActive();
         _autocompleteWord.clear();
 
-        if (isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
+        if (_consoleControl && isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
             ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
             ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
             if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_Tooltip)) {
@@ -203,7 +220,7 @@ namespace Framework::External::ImGUI::Widgets {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Send")) {
+        if (ImGui::Button("Send") && _consoleControl) {
             SendCommand(consoleText);
 
             consoleText[0]  = '\0';
