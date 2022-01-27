@@ -8,21 +8,20 @@
 
 #include "console.h"
 
-#include <utils/safe_win32.h>
-#include <external/optick/wrapper.h>
 #include <external/imgui/helpers.hpp>
+#include <external/optick/wrapper.h>
 #include <logging/logger.h>
+#include <utils/safe_win32.h>
 
-#include <imgui/imgui.h>
 #include <fmt/core.h>
+#include <imgui/imgui.h>
 
+#include <numeric>
 #include <regex>
 #include <sstream>
-#include <numeric>
 
 namespace Framework::External::ImGUI::Widgets {
-    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor): _commandProcessor(commandProcessor), _logger(Framework::Logging::GetLogger("Console").get())
-    {}
+    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor): _commandProcessor(commandProcessor), _logger(Framework::Logging::GetLogger("Console").get()) {}
 
     void Console::Toggle() {
         if (_isOpen)
@@ -34,7 +33,7 @@ namespace Framework::External::ImGUI::Widgets {
     bool Console::Close() {
         LockControls(false);
 
-        _isOpen = false;
+        _isOpen         = false;
         _consoleControl = false;
 
         return true;
@@ -68,7 +67,8 @@ namespace Framework::External::ImGUI::Widgets {
             if (colors) {
                 ImGui::SetNextWindowBgAlpha(colors[ImGuiCol_WindowBg].w);
             }
-        } else {
+        }
+        else {
             ImGui::SetNextWindowBgAlpha(_consoleUnfocusedAlpha);
         }
 
@@ -113,9 +113,7 @@ namespace Framework::External::ImGUI::Widgets {
                 ImGui::EndMenu();
             }
 
-            for (auto &menuBarDrawer: _menuBarDrawers) {
-                menuBarDrawer();
-            }
+            for (auto &menuBarDrawer : _menuBarDrawers) { menuBarDrawer(); }
 
             ImGui::EndMenuBar();
         }
@@ -127,10 +125,8 @@ namespace Framework::External::ImGUI::Widgets {
         const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
         ImGui::BeginChild("ScrollingRegion", ImVec2(0, -footer_height_to_reserve), false, ImGuiWindowFlags_HorizontalScrollbar);
         if (ringBuffer != nullptr) {
-            std::vector<std::string> log_message = ringBuffer -> last_formatted();
-            for (std::string &log : log_message) {
-                FormatLog(log);
-            }
+            std::vector<std::string> log_message = ringBuffer->last_formatted();
+            for (std::string &log : log_message) { FormatLog(log); }
         }
         if (_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
             ImGui::SetScrollHereY(0.0f);
@@ -139,7 +135,7 @@ namespace Framework::External::ImGUI::Widgets {
         ImGui::Separator();
 
         static char consoleText[512] = "";
-        auto inputEditCallback = [&](ImGuiInputTextCallbackData *data) {
+        auto inputEditCallback       = [&](ImGuiInputTextCallbackData *data) {
             if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion && !_autocompleteWord.empty()) {
                 data->DeleteChars(0, data->BufTextLen);
                 data->InsertChars(0, _autocompleteWord.c_str());
@@ -192,9 +188,8 @@ namespace Framework::External::ImGUI::Widgets {
         if (_consoleControl && isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
             ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
             ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
-            if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_Tooltip)) {
+            if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_Tooltip)) {
                 isFocused |= ImGui::IsWindowFocused();
-                int foundCommandCount    = 0;
                 std::vector<std::string> foundCommands;
                 for (auto &command : allCommands) {
                     if (command._Starts_with(commandPreview) == NULL)
@@ -203,16 +198,17 @@ namespace Framework::External::ImGUI::Widgets {
                     foundCommands.push_back(command);
                     auto help                      = _commandProcessor->GetCommandInfo(command)->options->help();
                     const auto formattedSelectable = fmt::format("{} {}", command, help);
-                    //TODO ImGui::Selectable(formattedSelectable.c_str(), true)
+                    // TODO ImGui::Selectable(formattedSelectable.c_str(), true)
                     if (ImGui::Selectable(formattedSelectable.c_str()) || (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
-                        strcpy(consoleText, command.c_str());
+                        _autocompleteWord  = command;
                         isAutocompleteOpen = false;
                     }
                 }
 
                 if (foundCommands.size() == 1) {
                     _autocompleteWord = foundCommands.at(0) + " ";
-                } else if (foundCommands.size() > 1) {
+                }
+                else if (foundCommands.size() > 1) {
                     // find a common prefix among found commands
                     std::string commonPrefix = foundCommands.at(0);
                     for (const auto &cmd : foundCommands) {
@@ -251,33 +247,33 @@ namespace Framework::External::ImGUI::Widgets {
         const auto result = _commandProcessor->ProcessCommand(command);
 
         switch (result.GetError()) {
-            case Framework::Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
-                _logger->info("{}", result.Unwrap());
-            } break;
-            case Framework::Utils::CommandProcessorError::ERROR_EMPTY_INPUT: {
-                _logger->warn("Input was empty");
-            } break;
-            case Framework::Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
-                _logger->warn("Command already exists: {}", result.Unwrap());
-            } break;
-            case Framework::Utils::CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME: {
-                _logger->warn("Command name was unspecified");
-            } break;
-            case Framework::Utils::CommandProcessorError::ERROR_CMD_UNKNOWN: {
-                _logger->warn("Command not found: {}", result.Unwrap());
-            } break;
-            case Framework::Utils::CommandProcessorError::ERROR_INTERNAL: {
-                _logger->warn("Internal error: {}", result.Unwrap());
-            } break;
+        case Framework::Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
+            _logger->info("{}", result.Unwrap());
+        } break;
+        case Framework::Utils::CommandProcessorError::ERROR_EMPTY_INPUT: {
+            _logger->warn("Input was empty");
+        } break;
+        case Framework::Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
+            _logger->warn("Command already exists: {}", result.Unwrap());
+        } break;
+        case Framework::Utils::CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME: {
+            _logger->warn("Command name was unspecified");
+        } break;
+        case Framework::Utils::CommandProcessorError::ERROR_CMD_UNKNOWN: {
+            _logger->warn("Command not found: {}", result.Unwrap());
+        } break;
+        case Framework::Utils::CommandProcessorError::ERROR_INTERNAL: {
+            _logger->warn("Internal error: {}", result.Unwrap());
+        } break;
 
-            default: break;
+        default: break;
         }
     }
 
     bool Console::Open() {
         LockControls(true);
 
-        _isOpen = true;
+        _isOpen         = true;
         _focusOnConsole = true;
         _consoleControl = true;
 
@@ -327,4 +323,4 @@ namespace Framework::External::ImGUI::Widgets {
             logCount++;
         }
     }
-} // namespace MafiaMP::Core::Modules
+} // namespace Framework::External::ImGUI::Widgets

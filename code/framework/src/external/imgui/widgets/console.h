@@ -22,12 +22,12 @@ namespace Framework::External::ImGUI::Widgets {
         using MenuBarProc = std::function<void()>;
 
       protected:
-        bool _shouldDisplayWidget = true;
-        bool _autoScroll          = true;
-        bool _isOpen              = false;
-        bool _focusOnConsole      = false;
-        bool _consoleControl      = false;
-        float _consoleUnfocusedAlpha = 0.25f;
+        bool _shouldDisplayWidget     = true;
+        bool _autoScroll              = true;
+        bool _isOpen                  = false;
+        bool _focusOnConsole          = false;
+        bool _consoleControl          = false;
+        float _consoleUnfocusedAlpha  = 0.25f;
         std::string _autocompleteWord = "";
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
         std::vector<MenuBarProc> _menuBarDrawers;
