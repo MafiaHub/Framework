@@ -75,6 +75,8 @@ set(FRAMEWORK_CLIENT_SRC
 
         src/world/client.cpp
 
+        src/external/imgui/widgets/console.cpp
+
         src/integrations/client/instance.cpp
         src/integrations/client/networking/engine.cpp
     )
