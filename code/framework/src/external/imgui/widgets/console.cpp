@@ -211,7 +211,7 @@ namespace Framework::External::ImGUI::Widgets {
                 }
 
                 if (foundCommands.size() == 1) {
-                    _autocompleteWord = foundCommands.at(0);
+                    _autocompleteWord = foundCommands.at(0) + " ";
                 } else if (foundCommands.size() > 1) {
                     // find a common prefix among found commands
                     std::string commonPrefix = foundCommands.at(0);
