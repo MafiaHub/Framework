@@ -88,12 +88,7 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        const auto sdkCallback = [this](Scripting::SDK *sdk) {
-            // todo integration builtins
-
-            // mod-specific builtins
-            _opts.sdkRegisterCallback(sdk);
-        };
+        auto sdkCallback = std::bind(&Instance::RegisterScriptingBuiltins, this, std::placeholders::_1);
 
         // Initialize the scripting engine
         if (_scriptingEngine->Init(sdkCallback, _worldEngine) != Scripting::EngineError::ENGINE_NONE) {
@@ -342,5 +337,14 @@ namespace Framework::Integrations::Server {
 
         PreShutdown();
         Shutdown();
+    }
+
+    void Instance::RegisterScriptingBuiltins(Scripting::SDK *sdk) {
+        // todo integration builtins
+
+        // mod-specific builtins
+        if (_opts.sdkRegisterCallback) {
+            _opts.sdkRegisterCallback(sdk);
+        }
     }
 } // namespace Framework::Integrations::Server

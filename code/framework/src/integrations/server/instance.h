@@ -100,6 +100,8 @@ namespace Framework::Integrations::Server {
         OnPlayerConnectionCallback _onPlayerConnectedCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectedCallback;
 
+        void RegisterScriptingBuiltins(Scripting::SDK *);
+
       public:
         Instance();
         ~Instance();
