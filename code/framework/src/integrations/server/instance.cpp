@@ -88,7 +88,9 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        auto sdkCallback = std::bind(&Instance::RegisterScriptingBuiltins, this, std::placeholders::_1);
+        const auto sdkCallback = [this](Scripting::SDK *sdk) {
+            this->RegisterScriptingBuiltins(sdk);
+        };
 
         // Initialize the scripting engine
         if (_scriptingEngine->Init(sdkCallback, _worldEngine) != Scripting::EngineError::ENGINE_NONE) {
