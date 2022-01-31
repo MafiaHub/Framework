@@ -31,10 +31,10 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = std::make_unique<Scripting::Engine>();
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
-        _worldEngine      = std::make_unique<World::ServerEngine>();
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _masterlistSync   = std::make_unique<Masterlist>(this);
         _fileConfig       = std::make_unique<Utils::Config>();
+        _worldEngine      = std::make_shared<World::ServerEngine>();
     }
 
     Instance::~Instance() {
@@ -76,12 +76,6 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
 
-        // Initialize the scripting engine
-        if (_scriptingEngine->Init() != Scripting::EngineError::ENGINE_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
-            return ServerError::SERVER_SCRIPTING_INIT_FAILED;
-        }
-
         // Initialize our networking engine
         if (!_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
@@ -92,6 +86,19 @@ namespace Framework::Integrations::Server {
         if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
+        }
+
+        const auto sdkCallback = [this](Scripting::SDK *sdk) {
+            // todo integration builtins
+
+            // mod-specific builtins
+            _opts.sdkRegisterCallback(sdk);
+        };
+
+        // Initialize the scripting engine
+        if (_scriptingEngine->Init(sdkCallback, _worldEngine) != Scripting::EngineError::ENGINE_NONE) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
+            return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
         if (_opts.firebaseEnabled

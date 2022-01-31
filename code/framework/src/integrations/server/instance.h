@@ -60,6 +60,9 @@ namespace Framework::Integrations::Server {
         std::string firebaseProjectId;
         std::string firebaseAppId;
         std::string firebaseApiKey;
+
+        // scripting
+        Scripting::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = std::function<void(flecs::entity, uint64_t)>;
@@ -74,10 +77,10 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Scripting::Engine> _scriptingEngine;
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
-        std::unique_ptr<World::ServerEngine> _worldEngine;
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
         std::unique_ptr<Masterlist> _masterlistSync;
         std::unique_ptr<Utils::Config> _fileConfig;
+        std::shared_ptr<World::ServerEngine> _worldEngine;
 
         void InitEndpoints();
         void InitModules();
@@ -136,8 +139,8 @@ namespace Framework::Integrations::Server {
             return _scriptingEngine.get();
         }
 
-        World::ServerEngine *GetWorldEngine() const {
-            return _worldEngine.get();
+        std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
+            return _worldEngine;
         }
 
         Networking::Engine *GetNetworkingEngine() const {

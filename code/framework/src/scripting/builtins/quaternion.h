@@ -47,10 +47,10 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "w", v8::Number::New(isolate, w), v8::PropertyAttribute::ReadOnly);
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "x", v8::Number::New(isolate, x), v8::PropertyAttribute::ReadOnly);
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "y", v8::Number::New(isolate, y), v8::PropertyAttribute::ReadOnly);
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "z", v8::Number::New(isolate, z), v8::PropertyAttribute::ReadOnly);
+        V8_DEF_PROP("w", v8::Number::New(isolate, w));
+        V8_DEF_PROP("x", v8::Number::New(isolate, x));
+        V8_DEF_PROP("y", v8::Number::New(isolate, y));
+        V8_DEF_PROP("z", v8::Number::New(isolate, z));
     }
 
     static void QuaternionConj(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -63,7 +63,7 @@ namespace Framework::Scripting::Builtins {
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
-        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::conjugate(oldQuat)));
+        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::conjugate(oldQuat)));
     }
 
     static void QuaternionCross(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -87,7 +87,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::cross(oldQuat, newQuat)));
+        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::cross(oldQuat, newQuat)));
     }
 
     static void QuaternionDot(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -124,7 +124,7 @@ namespace Framework::Scripting::Builtins {
 
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
-        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::inverse(oldQuat)));
+        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::inverse(oldQuat)));
     }
 
     static void QuaternionRotateVector3(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -146,7 +146,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::vec3 point(pX, pY, pZ);
-        V8_RETURN(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, oldQuat * point));
+        V8_RETURN(CreateVector3(V8_RES_GETROOT(resource), ctx, oldQuat * point));
     }
 
     static void QuaternionSlerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -174,7 +174,7 @@ namespace Framework::Scripting::Builtins {
         // Construct our objects
         glm::quat oldQuat(w, x, y, z);
         glm::quat newQuat(newW, newX, newY, newZ);
-        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
+        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
     }
 
     static void QuaternionLength(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
@@ -230,7 +230,7 @@ namespace Framework::Scripting::Builtins {
         }
         glm::quat newQuat(glm::vec3(x, y, z));
 
-        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
+        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, newQuat));
     }
 
     static void QuaternionFromAxisAngle(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -246,7 +246,7 @@ namespace Framework::Scripting::Builtins {
 
         glm::quat newQuat(glm::angleAxis(static_cast<float>(angle), glm::vec3(axisX, axisY, axisZ)));
 
-        V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, newQuat));
+        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, newQuat));
     }
 
     static void QuaternionRegister(Scripting::Helpers::V8Module *rootModule) {

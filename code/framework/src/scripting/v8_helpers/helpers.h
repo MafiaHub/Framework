@@ -112,6 +112,14 @@ namespace Framework::Scripting::V8Helpers {
         return true;
     }
 
+    inline bool SafeToInteger(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, uint64_t &out) {
+        v8::MaybeLocal maybeVal = val->ToBigInt(ctx);
+        if (maybeVal.IsEmpty())
+            return false;
+        out = maybeVal.ToLocalChecked()->Uint64Value();
+        return true;
+    }
+
     inline bool GetVec3(v8::Local<v8::Context> ctx, ArgumentStack &stack, double &x, double &y, double &z) {
         v8::Local<v8::Value> front = stack.Peek();
         if (front->IsObject() && Helpers::ToString(front.As<v8::Object>()->GetConstructorName()) == GetKeyName(Keys::KEY_VECTOR_3)) {
@@ -263,3 +271,7 @@ namespace Framework::Scripting::V8Helpers {
 
 #define V8_EVENT_ARGS std::vector<v8::Local<v8::Value>>
 #define V8_EVENT_CB   [=](v8::Isolate * isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
+
+#define V8_DEF_PROP(param, value) V8Helpers::DefineOwnProperty(isolate, ctx, _this, param, value, v8::PropertyAttribute::ReadOnly);
+
+#define V8_RES_GETROOT(res) (res->GetSDK()->GetRootModule())

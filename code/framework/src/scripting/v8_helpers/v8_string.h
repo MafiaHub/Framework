@@ -15,13 +15,13 @@
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
-    inline const char *ToCString(v8::Local<v8::String> str) {
-        v8::String::Utf8Value value(v8::Isolate::GetCurrent(), str);
+    inline const char *ToCString(v8::Local<v8::String> str, v8::Isolate *isolate = nullptr) {
+        v8::String::Utf8Value value(isolate ? isolate : v8::Isolate::GetCurrent(), str);
         return *value ? *value : "<string conversion failed>";
     }
 
-    inline const std::string ToString(v8::Local<v8::String> str) {
-        v8::String::Utf8Value value(v8::Isolate::GetCurrent(), str);
+    inline const std::string ToString(v8::Local<v8::String> str, v8::Isolate *isolate = nullptr) {
+        v8::String::Utf8Value value(isolate ? isolate : v8::Isolate::GetCurrent(), str);
         return *value ? *value : "<string conversion failed>";
     }
 

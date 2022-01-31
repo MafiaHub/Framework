@@ -85,6 +85,10 @@ namespace Framework::Scripting {
 
         void InvokeEvent(const std::string &, std::vector<v8::Local<v8::Value>> &, bool suppressLog = false);
 
+        Engine *GetEngine() const {
+            return _engine;
+        }
+
       private:
         bool LoadPackageFile();
         bool WatchChanges();

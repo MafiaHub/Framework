@@ -11,21 +11,25 @@
 #include <string>
 
 namespace Framework::Scripting {
-    enum class Keys {
+    enum Keys {
         KEY_VECTOR_2,
         KEY_VECTOR_3,
         KEY_QUATERNION,
+
+        KEY_ENTITY,
+
+        NUM_KEYS,
     };
 
-    const inline std::string GetKeyName(Keys k) {
-        switch (k) {
-        case Keys::KEY_VECTOR_2: return std::string("Vector2");
+    inline std::string GetKeyName(Keys k) {
+        constexpr const char* keys[] = {
+            "Vector2",
+            "Vector3",
+            "Quaternion",
+            "Entity",
+        };
 
-        case Keys::KEY_VECTOR_3: return std::string("Vector3");
-
-        case Keys::KEY_QUATERNION: return std::string("Quaternion");
-
-        default: return std::string("Unknown");
-        }
+        static_assert(sizeof(keys) / sizeof(keys[0]) == static_cast<size_t>(Keys::NUM_KEYS), "Keys enum is not complete");
+        return keys[k];
     }
 } // namespace Framework::Scripting
