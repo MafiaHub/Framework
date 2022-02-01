@@ -49,7 +49,7 @@ namespace Framework::Scripting::Builtins {
     }
 
     inline bool EntityInvalid(flecs::entity ent) {
-        if (!ent.is_alive()) {
+        if (!ent.is_alive() || (ent.is_alive() && ent.get<World::Modules::Base::PendingRemoval>())) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Entity {} is invalid", ent.id());
             return true;
         }
@@ -67,18 +67,13 @@ namespace Framework::Scripting::Builtins {
 
         flecs::entity ent;
 
-        if (info.Length() > 0) {
-            v8::MaybeLocal maybeID = info[0]->ToBigInt(ctx);
-            if (!maybeID.IsEmpty()) {
-                const auto id = maybeID.ToLocalChecked()->Uint64Value();
-                ent           = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
-            }
-            else {
-                auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
-                ent       = resource->GetEngine()->GetWorldEngine()->CreateEntity(name);
-            }
-        }
-        else {
+        if (info.Length() > 0 && info[0]->IsBigInt()) {
+            const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
+            ent           = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
+        } else if (info.Length() > 0) {
+            auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
+            ent       = resource->GetEngine()->GetWorldEngine()->CreateEntity(name);
+        } else {
             ent = resource->GetEngine()->GetWorldEngine()->CreateEntity();
         }
 
@@ -93,7 +88,7 @@ namespace Framework::Scripting::Builtins {
         flecs::entity ent;
         EntityGetID(ctx, _this, ent);
 
-        V8_RETURN(v8::Boolean::New(isolate, ent.is_alive()));
+        V8_RETURN(v8::Boolean::New(isolate, !ent.is_alive() || (ent.is_alive() && !ent.get<World::Modules::Base::PendingRemoval>())));
     }
 
     static void EntityDestroy(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -127,7 +122,7 @@ namespace Framework::Scripting::Builtins {
         EntityGetID(ctx, _this, ent);
 
         std::ostringstream ss;
-        ss << "Entity{ id: " << ent.id() << ", baseId: " << ent.base_id() << ", alive: " << ent.is_alive() << " }";
+        ss << "Entity{ id: " << ent.id() << ", baseId: " << ent.base_id() << ", alive: " << (ent.is_alive() ? "true" : "false") << " }";
         V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
