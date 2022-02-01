@@ -71,8 +71,9 @@ namespace Framework::Scripting::Builtins {
             v8::MaybeLocal maybeID = info[0]->ToBigInt(ctx);
             if (!maybeID.IsEmpty()) {
                 const auto id = maybeID.ToLocalChecked()->Uint64Value();
-                ent = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
-            } else {
+                ent           = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
+            }
+            else {
                 auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
                 ent       = resource->GetEngine()->GetWorldEngine()->CreateEntity(name);
             }
@@ -143,6 +144,28 @@ namespace Framework::Scripting::Builtins {
         V8_RETURN(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, tr->pos));
     }
 
+    static void EntitySetPos(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        GET_ENTITY();
+
+        auto tr = ent.get_mut<World::Modules::Base::Transform>();
+
+        if (!tr) {
+            V8_RETURN_NULL();
+            return;
+        }
+
+        // Acquire new values
+        V8_DEFINE_STACK();
+
+        double newX, newY, newZ;
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
+
+        tr->pos = {newX, newY, newZ};
+    }
+
     static void EntityGetRot(const v8::FunctionCallbackInfo<v8::Value> &info) {
         GET_ENTITY();
 
@@ -154,6 +177,28 @@ namespace Framework::Scripting::Builtins {
         }
 
         V8_RETURN(CreateQuaternion(resource->GetSDK()->GetRootModule(), ctx, tr->rot));
+    }
+
+    static void EntitySetRot(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        GET_ENTITY();
+
+        auto tr = ent.get_mut<World::Modules::Base::Transform>();
+
+        if (!tr) {
+            V8_RETURN_NULL();
+            return;
+        }
+
+        // Acquire new values
+        V8_DEFINE_STACK();
+
+        double newW, newX, newY, newZ;
+        if (!V8Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
+            return;
+        }
+
+        tr->rot = glm::quat(static_cast<float>(newW), static_cast<float>(newX), static_cast<float>(newY), static_cast<float>(newZ));
     }
 
     static void EntityGetVelocity(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -169,6 +214,28 @@ namespace Framework::Scripting::Builtins {
         V8_RETURN(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, tr->vel));
     }
 
+    static void EntitySetVelocity(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        GET_ENTITY();
+
+        auto tr = ent.get_mut<World::Modules::Base::Transform>();
+
+        if (!tr) {
+            V8_RETURN_NULL();
+            return;
+        }
+
+        // Acquire new values
+        V8_DEFINE_STACK();
+
+        double newX, newY, newZ;
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
+
+        tr->vel = {newX, newY, newZ};
+    }
+
     static void EntityGetFrameInfo(const v8::FunctionCallbackInfo<v8::Value> &info) {
         GET_ENTITY();
 
@@ -182,7 +249,6 @@ namespace Framework::Scripting::Builtins {
         auto obj       = v8::Object::New(isolate);
         auto frameName = Helpers::MakeString(isolate, frame->modelName.c_str()).ToLocalChecked();
         auto modelHash = v8::BigInt::NewFromUnsigned(isolate, frame->modelHash);
-        auto scale     = CreateVector3(resource->GetSDK()->GetRootModule(), ctx, frame->scale);
         V8Helpers::Set(ctx, isolate, obj, "modelName", frameName);
         V8Helpers::Set(ctx, isolate, obj, "modelHash", modelHash);
 
@@ -200,6 +266,28 @@ namespace Framework::Scripting::Builtins {
         }
 
         V8_RETURN(CreateVector3(resource->GetSDK()->GetRootModule(), ctx, frame->scale));
+    }
+
+    static void EntitySetScale(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        GET_ENTITY();
+
+        auto frame = ent.get_mut<World::Modules::Base::Frame>();
+
+        if (!frame) {
+            V8_RETURN_NULL();
+            return;
+        }
+
+        // Acquire new values
+        V8_DEFINE_STACK();
+
+        double newX, newY, newZ;
+        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+            return;
+        }
+
+        frame->scale = {newX, newY, newZ};
     }
 
     static void EntityGetVirtualWorld(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -335,18 +423,28 @@ namespace Framework::Scripting::Builtins {
                 V8Helpers::SetMethod(isolate, tpl, "destroy", EntityDestroy);
 
                 V8Helpers::SetMethod(isolate, tpl, "getPos", EntityGetPos);
+                V8Helpers::SetMethod(isolate, tpl, "setPos", EntitySetPos);
+
                 V8Helpers::SetMethod(isolate, tpl, "getVel", EntityGetVelocity);
+                V8Helpers::SetMethod(isolate, tpl, "setVel", EntitySetVelocity);
+
                 V8Helpers::SetMethod(isolate, tpl, "getRot", EntityGetRot);
+                V8Helpers::SetMethod(isolate, tpl, "setRot", EntitySetRot);
 
                 V8Helpers::SetMethod(isolate, tpl, "getFrame", EntityGetFrameInfo);
+
                 V8Helpers::SetMethod(isolate, tpl, "getScale", EntityGetScale);
+                V8Helpers::SetMethod(isolate, tpl, "setScale", EntitySetScale);
 
                 V8Helpers::SetMethod(isolate, tpl, "getVirtualWorld", EntityGetVirtualWorld);
                 V8Helpers::SetMethod(isolate, tpl, "setVirtualWorld", EntitySetVirtualWorld);
+
                 V8Helpers::SetMethod(isolate, tpl, "getVisible", EntityGetVisible);
                 V8Helpers::SetMethod(isolate, tpl, "setVisible", EntitySetVisible);
+
                 V8Helpers::SetMethod(isolate, tpl, "getAlwaysVisible", EntityGetAlwaysVisible);
                 V8Helpers::SetMethod(isolate, tpl, "setAlwaysVisible", EntitySetAlwaysVisible);
+
                 V8Helpers::SetMethod(isolate, tpl, "getUpdateRate", EntityGetUpdateRate);
                 V8Helpers::SetMethod(isolate, tpl, "setUpdateRate", EntitySetUpdateRate);
             });
