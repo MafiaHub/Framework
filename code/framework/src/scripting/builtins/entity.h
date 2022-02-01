@@ -22,6 +22,9 @@
 
 #include "world/modules/base.hpp"
 
+// HACK: This is a hack to get around the fact that the scripting engine relies on integration components.
+#include "integrations/shared/types/streaming.hpp"
+
 #include <sstream>
 
 #include <flecs/flecs.h>
@@ -48,9 +51,11 @@ namespace Framework::Scripting::Builtins {
         handle = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
     }
 
-    inline bool EntityInvalid(flecs::entity ent) {
+    inline bool EntityInvalid(flecs::entity ent, bool suppressLog = false) {
         if (!ent.is_alive() || (ent.is_alive() && ent.get<World::Modules::Base::PendingRemoval>())) {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Entity {} is invalid", ent.id());
+            if (!suppressLog) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Entity {} is invalid", ent.id());
+            }
             return true;
         }
         return false;
@@ -66,6 +71,7 @@ namespace Framework::Scripting::Builtins {
         V8_GET_RESOURCE();
 
         flecs::entity ent;
+        auto entCtor = Integrations::Shared::Archetypes::StreamingFactory();
 
         if (info.Length() > 0 && info[0]->IsBigInt()) {
             const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
@@ -73,8 +79,10 @@ namespace Framework::Scripting::Builtins {
         } else if (info.Length() > 0) {
             auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
             ent       = resource->GetEngine()->GetWorldEngine()->CreateEntity(name);
+            entCtor.SetupServer(ent, 0);
         } else {
             ent = resource->GetEngine()->GetWorldEngine()->CreateEntity();
+            entCtor.SetupServer(ent, 0);
         }
 
         V8_DEF_PROP("id", v8::BigInt::NewFromUnsigned(isolate, ent.id()));
@@ -88,7 +96,7 @@ namespace Framework::Scripting::Builtins {
         flecs::entity ent;
         EntityGetID(ctx, _this, ent);
 
-        V8_RETURN(v8::Boolean::New(isolate, !ent.is_alive() || (ent.is_alive() && !ent.get<World::Modules::Base::PendingRemoval>())));
+        V8_RETURN(v8::Boolean::New(isolate, !EntityInvalid(ent, true)));
     }
 
     static void EntityDestroy(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -122,7 +130,7 @@ namespace Framework::Scripting::Builtins {
         EntityGetID(ctx, _this, ent);
 
         std::ostringstream ss;
-        ss << "Entity{ id: " << ent.id() << ", baseId: " << ent.base_id() << ", alive: " << (ent.is_alive() ? "true" : "false") << " }";
+        ss << "Entity { id: " << ent.id() << ", alive: " << (ent.is_alive() ? "true" : "false") << " }";
         V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
