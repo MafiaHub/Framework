@@ -96,6 +96,12 @@ namespace Framework::Scripting::V8Helpers {
         return true;
     }
 
+    inline bool SafeToBoolean(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, bool &out) {
+        v8::Local maybeVal = val->ToBoolean(ctx->GetIsolate());
+        out = maybeVal->Value();
+        return true;
+    }
+
     inline bool SafeToInteger(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, int32_t &out) {
         v8::MaybeLocal maybeVal = val->ToInteger(ctx);
         if (maybeVal.IsEmpty())

@@ -74,9 +74,9 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        std::unique_ptr<Scripting::Engine> _scriptingEngine;
-        std::unique_ptr<Networking::Engine> _networkingEngine;
-        std::unique_ptr<HTTP::Webserver> _webServer;
+        std::shared_ptr<Scripting::Engine> _scriptingEngine;
+        std::shared_ptr<Networking::Engine> _networkingEngine;
+        std::shared_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
         std::unique_ptr<Masterlist> _masterlistSync;
         std::unique_ptr<Utils::Config> _fileConfig;
@@ -92,9 +92,9 @@ namespace Framework::Integrations::Server {
         flecs::entity _weatherManager;
 
         // entity factories
-        std::unique_ptr<Shared::Archetypes::EnvironmentFactory> _envFactory;
-        std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
-        std::unique_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
+        std::shared_ptr<Shared::Archetypes::EnvironmentFactory> _envFactory;
+        std::shared_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
+        std::shared_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
 
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectedCallback;
@@ -137,28 +137,28 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        Scripting::Engine *GetScriptingEngine() const {
-            return _scriptingEngine.get();
+        std::shared_ptr<Scripting::Engine> GetScriptingEngine() const {
+            return _scriptingEngine;
         }
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
             return _worldEngine;
         }
 
-        Networking::Engine *GetNetworkingEngine() const {
-            return _networkingEngine.get();
+        std::shared_ptr<Networking::Engine> GetNetworkingEngine() const {
+            return _networkingEngine;
         }
 
-        HTTP::Webserver *GetWebserver() const {
-            return _webServer.get();
+        std::shared_ptr<HTTP::Webserver> GetWebserver() const {
+            return _webServer;
         }
 
-        Shared::Archetypes::PlayerFactory* GetPlayerFactory() const {
-            return _playerFactory.get();
+        std::shared_ptr<Shared::Archetypes::PlayerFactory> GetPlayerFactory() const {
+            return _playerFactory;
         }
 
-        Shared::Archetypes::StreamingFactory* GetStreamingFactory() const {
-            return _streamingFactory.get();
+        std::shared_ptr<Shared::Archetypes::StreamingFactory> GetStreamingFactory() const {
+            return _streamingFactory;
         }
     };
 } // namespace Framework::Integrations::Server

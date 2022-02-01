@@ -35,4 +35,11 @@ namespace Framework::Scripting::Builtins {
         Helpers::V8Class *cls = module->GetClass(GetKeyName(Keys::KEY_QUATERNION));
         return cls->CreateInstance(isolate, ctx, args);
     }
+
+    v8::Local<v8::Value> CreateEntity(Helpers::V8Module *module, v8::Local<v8::Context> ctx, flecs::entity e) {
+        auto isolate = v8::Isolate::GetCurrent();
+        std::vector<v8::Local<v8::Value>> args {v8::BigInt::NewFromUnsigned(isolate, e.id())};
+        Helpers::V8Class *cls = module->GetClass(GetKeyName(Keys::KEY_ENTITY));
+        return cls->CreateInstance(isolate, ctx, args);
+    }
 } // namespace Framework::Scripting::Builtins

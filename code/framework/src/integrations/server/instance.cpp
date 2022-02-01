@@ -28,12 +28,12 @@
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
         OPTICK_START_CAPTURE();
-        _scriptingEngine  = std::make_unique<Scripting::Engine>();
-        _networkingEngine = std::make_unique<Networking::Engine>();
-        _webServer        = std::make_unique<HTTP::Webserver>();
-        _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
+        _scriptingEngine  = std::make_shared<Scripting::Engine>();
+        _networkingEngine = std::make_shared<Networking::Engine>();
+        _webServer        = std::make_shared<HTTP::Webserver>();
         _masterlistSync   = std::make_unique<Masterlist>(this);
         _fileConfig       = std::make_unique<Utils::Config>();
+        _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
     }
 
