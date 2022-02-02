@@ -77,6 +77,8 @@ namespace Framework::External::ImGUI::Widgets {
 
         if (_consoleControl) {
             windowFlags |= ImGuiWindowFlags_MenuBar;
+        } else {
+            windowFlags |= ImGuiWindowFlags_NoMouseInputs|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize;
         }
 
         if (!ImGui::Begin("Console", &_shouldDisplayWidget, windowFlags)) {
