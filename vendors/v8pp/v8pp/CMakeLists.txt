@@ -60,15 +60,15 @@ else()
 	)
 endif()
 
-#set(CMAKE_CXX_RTTI OFF)
+set(CMAKE_CXX_RTTI ON)
 if(MSVC)
-	set(V8PP_COMPILE_OPTIONS /GR- /EHsc /permissive- /W4)
+	#set(V8PP_COMPILE_OPTIONS /GR- /EHsc /permissive- /W4)
 	# disable specific warnings
 	list(APPEND V8PP_COMPILE_OPTIONS /wd4190)
 	# set warning level 3 for system headers
-	list(APPEND V8PP_COMPILE_OPTIONS /experimental:external /external:anglebrackets /external:W3)
+	#list(APPEND V8PP_COMPILE_OPTIONS /experimental:external /external:anglebrackets /external:W3)
 else()
-	set(V8PP_COMPILE_OPTIONS -fno-rtti -fexceptions -Wall -Wextra -Wpedantic)
+	set(V8PP_COMPILE_OPTIONS -fexceptions -Wall -Wextra -Wpedantic)
 endif()
 
 if(V8PP_HEADER_ONLY)
