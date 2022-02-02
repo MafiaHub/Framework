@@ -58,9 +58,6 @@ add_subdirectory(httplib)
 # Build Discord SDK
 add_subdirectory(discord)
 
-# Build LibCEF
-add_subdirectory(cef)
-
 # Build slikenet
 add_subdirectory(slikenet)
 
@@ -135,6 +132,7 @@ if (WIN32)
     endif ()
 
     # Build other win32 deps
+    add_subdirectory(cef)
     add_subdirectory(minhook)
     add_subdirectory(steamworks)
     add_subdirectory(galaxy)
