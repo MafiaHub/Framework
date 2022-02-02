@@ -6,10 +6,11 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 add_library(V8::v8 SHARED IMPORTED)
 add_library(V8::libplatform SHARED IMPORTED)
 if(WIN32)
+    message(STATUS "${V8_DLL}")
     set_target_properties(V8::v8 PROPERTIES
-        IMPORTED_IMPLIB ${V8_LIB} IMPORTED_LOCATION ${V8_DLL})
+        IMPORTED_IMPLIB ${V8_LIB} IMPORTED_LOCATION "no.dll")
     set_target_properties(V8::libplatform PROPERTIES
-        IMPORTED_IMPLIB ${V8_LIBPLATFORM} IMPORTED_LOCATION ${V8_LIBPLATFORMDLL})
+        IMPORTED_IMPLIB ${V8_LIBPLATFORM} IMPORTED_LOCATION "no.dll")
 else()
     set_target_properties(V8::v8 PROPERTIES IMPORTED_LOCATION ${V8_LIB})
     set_target_properties(V8::libplatform PROPERTIES IMPORTED_LOCATION ${V8_LIBPLATFORM})
