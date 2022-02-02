@@ -17,7 +17,7 @@
 namespace Framework::Scripting {
     SDK::SDK(SDKRegisterCallback cb): _rootModule(nullptr) {
         _rootModule = new Helpers::V8Module("sdk", [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj) {
-            V8Helpers::RegisterFunc(ctx, obj, "on", &Builtins::OnEvent);
+            Helpers::RegisterFunc(ctx, obj, "on", &Builtins::OnEvent);
         });
 
         if (!_rootModule) {

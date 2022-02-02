@@ -8,7 +8,7 @@
 
 #include "argstack.h"
 
-namespace Framework::Scripting::V8Helpers {
+namespace Framework::Scripting::Helpers {
     ArgumentStack::ArgumentStack(const v8::FunctionCallbackInfo<v8::Value> &info) {
         _isolate = info.GetIsolate();
         for (size_t i = 0; i < info.Length(); i++) { _args.push(info[i]); }
@@ -27,4 +27,4 @@ namespace Framework::Scripting::V8Helpers {
             return v8::Null(_isolate);
         return _args.front();
     }
-} // namespace Framework::Scripting::V8Helpers
+} // namespace Framework::Scripting::Helpers

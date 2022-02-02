@@ -17,7 +17,7 @@
 
 #include <v8.h>
 
-namespace Framework::Scripting::V8Helpers {
+namespace Framework::Scripting::Helpers {
     inline void Throw(v8::Isolate *isolate, const std::string &msg) {
         isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, msg.data(), v8::NewStringType::kNormal, msg.size()).ToLocalChecked()));
     }
@@ -242,7 +242,7 @@ namespace Framework::Scripting::V8Helpers {
             return "";
         return *v8::String::Utf8Value(isolate, stackTrace->GetFrame(isolate, 0)->GetScriptName());
     }
-} // namespace Framework::Scripting::V8Helpers
+} // namespace Framework::Scripting::Helpers
 
 #define V8_GET_ISOLATE() v8::Isolate *isolate = info.GetIsolate()
 #define V8_GET_CONTEXT() v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext()
@@ -263,11 +263,11 @@ namespace Framework::Scripting::V8Helpers {
 
 #define V8_GET_SELF() v8::Local<v8::Object> _this = info.This()
 
-#define V8_DEFINE_STACK() V8Helpers::ArgumentStack stack(info)
+#define V8_DEFINE_STACK() Helpers::ArgumentStack stack(info)
 
 #define V8_VALIDATE_CTOR_CALL()                                                                                                                                                    \
     if (!info.IsConstructCall()) {                                                                                                                                                 \
-        V8Helpers::Throw(isolate, "Function cannot be called without new keyword");                                                                                                \
+        Helpers::Throw(isolate, "Function cannot be called without new keyword");                                                                                                \
         return;                                                                                                                                                                    \
     }
 
@@ -278,6 +278,6 @@ namespace Framework::Scripting::V8Helpers {
 #define V8_EVENT_ARGS std::vector<v8::Local<v8::Value>>
 #define V8_EVENT_CB   [=](v8::Isolate * isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
 
-#define V8_DEF_PROP(param, value) V8Helpers::DefineOwnProperty(isolate, ctx, _this, param, value, v8::PropertyAttribute::ReadOnly);
+#define V8_DEF_PROP(param, value) Helpers::DefineOwnProperty(isolate, ctx, _this, param, value, v8::PropertyAttribute::ReadOnly);
 
 #define V8_RES_GETROOT(res) (res->GetSDK()->GetRootModule())

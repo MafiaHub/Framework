@@ -21,8 +21,8 @@
 
 namespace Framework::Scripting::Builtins {
     inline void Vector2Extract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &x, double &y) {
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "y"), ctx, y);
+        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "x"), ctx, x);
+        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "y"), ctx, y);
     }
 
     static void Vector2Constructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -34,13 +34,13 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double x, y;
-        if (!V8Helpers::GetVec2(ctx, stack, x, y)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+        if (!Helpers::GetVec2(ctx, stack, x, y)) {
+            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
             return;
         }
 
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "x", v8::Number::New(isolate, x), v8::PropertyAttribute::ReadOnly);
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "y", v8::Number::New(isolate, y), v8::PropertyAttribute::ReadOnly);
+        Helpers::DefineOwnProperty(isolate, ctx, _this, "x", v8::Number::New(isolate, x), v8::PropertyAttribute::ReadOnly);
+        Helpers::DefineOwnProperty(isolate, ctx, _this, "y", v8::Number::New(isolate, y), v8::PropertyAttribute::ReadOnly);
     }
 
     static void Vector2Add(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -52,8 +52,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY;
-        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
+            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
             return;
         }
 
@@ -77,8 +77,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY;
-        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
+            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
             return;
         }
 
@@ -102,8 +102,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY;
-        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
+            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
             return;
         }
 
@@ -127,8 +127,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY;
-        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
+            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
             return;
         }
 
@@ -152,14 +152,14 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY;
-        if (!V8Helpers::GetVec2(ctx, stack, newX, newY)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
+        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
+            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
             return;
         }
 
         // Acquire factor
         double f;
-        V8Helpers::SafeToNumber(stack.Pop(), ctx, f);
+        Helpers::SafeToNumber(stack.Pop(), ctx, f);
 
         // Acquire old values
         double x, y;
@@ -219,15 +219,15 @@ namespace Framework::Scripting::Builtins {
         auto vec2Class = new Helpers::V8Class(
             GetKeyName(Keys::KEY_VECTOR_2), Vector2Constructor, V8_CLASS_CB {
                 v8::Isolate *isolate = v8::Isolate::GetCurrent();
-                V8Helpers::SetAccessor(isolate, tpl, "length", Vector2Length);
+                Helpers::SetAccessor(isolate, tpl, "length", Vector2Length);
 
-                V8Helpers::SetMethod(isolate, tpl, "add", Vector2Add);
-                V8Helpers::SetMethod(isolate, tpl, "sub", Vector2Sub);
-                V8Helpers::SetMethod(isolate, tpl, "mul", Vector2Mul);
-                V8Helpers::SetMethod(isolate, tpl, "div", Vector2Div);
-                V8Helpers::SetMethod(isolate, tpl, "lerp", Vector2Lerp);
-                V8Helpers::SetMethod(isolate, tpl, "toArray", Vector2ToArray);
-                V8Helpers::SetMethod(isolate, tpl, "toString", Vector2ToString);
+                Helpers::SetMethod(isolate, tpl, "add", Vector2Add);
+                Helpers::SetMethod(isolate, tpl, "sub", Vector2Sub);
+                Helpers::SetMethod(isolate, tpl, "mul", Vector2Mul);
+                Helpers::SetMethod(isolate, tpl, "div", Vector2Div);
+                Helpers::SetMethod(isolate, tpl, "lerp", Vector2Lerp);
+                Helpers::SetMethod(isolate, tpl, "toArray", Vector2ToArray);
+                Helpers::SetMethod(isolate, tpl, "toString", Vector2ToString);
             });
 
         rootModule->AddClass(vec2Class);

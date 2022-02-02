@@ -21,9 +21,9 @@
 
 namespace Framework::Scripting::Builtins {
     inline void Vector3Extract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &x, double &y, double &z) {
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "x"), ctx, x);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "y"), ctx, y);
-        V8Helpers::SafeToNumber(V8Helpers::Get(ctx, obj, "z"), ctx, z);
+        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "x"), ctx, x);
+        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "y"), ctx, y);
+        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "z"), ctx, z);
     }
 
     static void Vector3Constructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -35,14 +35,14 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double x, y, z;
-        if (!V8Helpers::GetVec3(ctx, stack, x, y, z)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, x, y, z)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "x", v8::Number::New(isolate, x), v8::PropertyAttribute::ReadOnly);
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "y", v8::Number::New(isolate, y), v8::PropertyAttribute::ReadOnly);
-        V8Helpers::DefineOwnProperty(isolate, ctx, _this, "z", v8::Number::New(isolate, z), v8::PropertyAttribute::ReadOnly);
+        Helpers::DefineOwnProperty(isolate, ctx, _this, "x", v8::Number::New(isolate, x), v8::PropertyAttribute::ReadOnly);
+        Helpers::DefineOwnProperty(isolate, ctx, _this, "y", v8::Number::New(isolate, y), v8::PropertyAttribute::ReadOnly);
+        Helpers::DefineOwnProperty(isolate, ctx, _this, "z", v8::Number::New(isolate, z), v8::PropertyAttribute::ReadOnly);
     }
 
     static void Vector3Add(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -54,8 +54,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -79,8 +79,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -104,8 +104,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -129,8 +129,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -154,14 +154,14 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
         // Acquire factor
         double f;
-        V8Helpers::SafeToNumber(stack.Pop(), ctx, f);
+        Helpers::SafeToNumber(stack.Pop(), ctx, f);
 
         // Acquire old values
         double x, y, z;
@@ -221,15 +221,15 @@ namespace Framework::Scripting::Builtins {
         auto vec3Class = new Helpers::V8Class(
             GetKeyName(Keys::KEY_VECTOR_3), Vector3Constructor, V8_CLASS_CB {
                 v8::Isolate *isolate = v8::Isolate::GetCurrent();
-                V8Helpers::SetAccessor(isolate, tpl, "length", Vector3Length);
+                Helpers::SetAccessor(isolate, tpl, "length", Vector3Length);
 
-                V8Helpers::SetMethod(isolate, tpl, "add", Vector3Add);
-                V8Helpers::SetMethod(isolate, tpl, "sub", Vector3Sub);
-                V8Helpers::SetMethod(isolate, tpl, "mul", Vector3Mul);
-                V8Helpers::SetMethod(isolate, tpl, "div", Vector3Div);
-                V8Helpers::SetMethod(isolate, tpl, "lerp", Vector3Lerp);
-                V8Helpers::SetMethod(isolate, tpl, "toArray", Vector3ToArray);
-                V8Helpers::SetMethod(isolate, tpl, "toString", Vector3ToString);
+                Helpers::SetMethod(isolate, tpl, "add", Vector3Add);
+                Helpers::SetMethod(isolate, tpl, "sub", Vector3Sub);
+                Helpers::SetMethod(isolate, tpl, "mul", Vector3Mul);
+                Helpers::SetMethod(isolate, tpl, "div", Vector3Div);
+                Helpers::SetMethod(isolate, tpl, "lerp", Vector3Lerp);
+                Helpers::SetMethod(isolate, tpl, "toArray", Vector3ToArray);
+                Helpers::SetMethod(isolate, tpl, "toString", Vector3ToString);
             });
 
         rootModule->AddClass(vec3Class);

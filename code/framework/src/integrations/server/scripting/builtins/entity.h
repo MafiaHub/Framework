@@ -45,7 +45,7 @@ namespace Framework::Scripting::Builtins {
 
     inline void EntityGetID(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, flecs::entity &handle) {
         uint64_t id;
-        V8Helpers::SafeToInteger(V8Helpers::Get(ctx, obj, "id"), ctx, id);
+        Helpers::SafeToInteger(Helpers::Get(ctx, obj, "id"), ctx, id);
 
         V8_GET_RESOURCE();
 
@@ -163,8 +163,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -198,8 +198,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newW, newX, newY, newZ;
-        if (!V8Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
+        if (!Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
             return;
         }
 
@@ -233,8 +233,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -254,8 +254,8 @@ namespace Framework::Scripting::Builtins {
         auto obj       = v8::Object::New(isolate);
         auto frameName = Helpers::MakeString(isolate, frame->modelName.c_str()).ToLocalChecked();
         auto modelHash = v8::BigInt::NewFromUnsigned(isolate, frame->modelHash);
-        V8Helpers::Set(ctx, isolate, obj, "modelName", frameName);
-        V8Helpers::Set(ctx, isolate, obj, "modelHash", modelHash);
+        Helpers::Set(ctx, isolate, obj, "modelName", frameName);
+        Helpers::Set(ctx, isolate, obj, "modelHash", modelHash);
 
         V8_RETURN(obj);
     }
@@ -287,8 +287,8 @@ namespace Framework::Scripting::Builtins {
         V8_DEFINE_STACK();
 
         double newX, newY, newZ;
-        if (!V8Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
-            V8Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
+        if (!Helpers::GetVec3(ctx, stack, newX, newY, newZ)) {
+            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
@@ -318,7 +318,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        V8Helpers::SafeToInteger(info[0], ctx, st->virtualWorld);
+        Helpers::SafeToInteger(info[0], ctx, st->virtualWorld);
     }
 
     static void EntityGetVisible(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -344,7 +344,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        V8Helpers::SafeToBoolean(info[0], ctx, st->isVisible);
+        Helpers::SafeToBoolean(info[0], ctx, st->isVisible);
     }
 
     static void EntityGetAlwaysVisible(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -370,7 +370,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        V8Helpers::SafeToBoolean(info[0], ctx, st->alwaysVisible);
+        Helpers::SafeToBoolean(info[0], ctx, st->alwaysVisible);
     }
 
     static void EntityGetUpdateRate(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -396,7 +396,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        V8Helpers::SafeToNumber(info[0], ctx, st->updateInterval);
+        Helpers::SafeToNumber(info[0], ctx, st->updateInterval);
     }
 
     static void EntityGetOwnerID(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
@@ -421,37 +421,37 @@ namespace Framework::Scripting::Builtins {
             GetKeyName(Keys::KEY_ENTITY), EntityConstructor, V8_CLASS_CB {
                 v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-                V8Helpers::SetAccessor(isolate, tpl, "owner", EntityGetOwnerID);
+                Helpers::SetAccessor(isolate, tpl, "owner", EntityGetOwnerID);
 
-                V8Helpers::SetMethod(isolate, tpl, "toString", EntityToString);
-                V8Helpers::SetMethod(isolate, tpl, "alive", EntityAlive);
-                V8Helpers::SetMethod(isolate, tpl, "destroy", EntityDestroy);
+                Helpers::SetMethod(isolate, tpl, "toString", EntityToString);
+                Helpers::SetMethod(isolate, tpl, "alive", EntityAlive);
+                Helpers::SetMethod(isolate, tpl, "destroy", EntityDestroy);
 
-                V8Helpers::SetMethod(isolate, tpl, "getPos", EntityGetPos);
-                V8Helpers::SetMethod(isolate, tpl, "setPos", EntitySetPos);
+                Helpers::SetMethod(isolate, tpl, "getPos", EntityGetPos);
+                Helpers::SetMethod(isolate, tpl, "setPos", EntitySetPos);
 
-                V8Helpers::SetMethod(isolate, tpl, "getVel", EntityGetVelocity);
-                V8Helpers::SetMethod(isolate, tpl, "setVel", EntitySetVelocity);
+                Helpers::SetMethod(isolate, tpl, "getVel", EntityGetVelocity);
+                Helpers::SetMethod(isolate, tpl, "setVel", EntitySetVelocity);
 
-                V8Helpers::SetMethod(isolate, tpl, "getRot", EntityGetRot);
-                V8Helpers::SetMethod(isolate, tpl, "setRot", EntitySetRot);
+                Helpers::SetMethod(isolate, tpl, "getRot", EntityGetRot);
+                Helpers::SetMethod(isolate, tpl, "setRot", EntitySetRot);
 
-                V8Helpers::SetMethod(isolate, tpl, "getFrame", EntityGetFrameInfo);
+                Helpers::SetMethod(isolate, tpl, "getFrame", EntityGetFrameInfo);
 
-                V8Helpers::SetMethod(isolate, tpl, "getScale", EntityGetScale);
-                V8Helpers::SetMethod(isolate, tpl, "setScale", EntitySetScale);
+                Helpers::SetMethod(isolate, tpl, "getScale", EntityGetScale);
+                Helpers::SetMethod(isolate, tpl, "setScale", EntitySetScale);
 
-                V8Helpers::SetMethod(isolate, tpl, "getVirtualWorld", EntityGetVirtualWorld);
-                V8Helpers::SetMethod(isolate, tpl, "setVirtualWorld", EntitySetVirtualWorld);
+                Helpers::SetMethod(isolate, tpl, "getVirtualWorld", EntityGetVirtualWorld);
+                Helpers::SetMethod(isolate, tpl, "setVirtualWorld", EntitySetVirtualWorld);
 
-                V8Helpers::SetMethod(isolate, tpl, "getVisible", EntityGetVisible);
-                V8Helpers::SetMethod(isolate, tpl, "setVisible", EntitySetVisible);
+                Helpers::SetMethod(isolate, tpl, "getVisible", EntityGetVisible);
+                Helpers::SetMethod(isolate, tpl, "setVisible", EntitySetVisible);
 
-                V8Helpers::SetMethod(isolate, tpl, "getAlwaysVisible", EntityGetAlwaysVisible);
-                V8Helpers::SetMethod(isolate, tpl, "setAlwaysVisible", EntitySetAlwaysVisible);
+                Helpers::SetMethod(isolate, tpl, "getAlwaysVisible", EntityGetAlwaysVisible);
+                Helpers::SetMethod(isolate, tpl, "setAlwaysVisible", EntitySetAlwaysVisible);
 
-                V8Helpers::SetMethod(isolate, tpl, "getUpdateRate", EntityGetUpdateRate);
-                V8Helpers::SetMethod(isolate, tpl, "setUpdateRate", EntitySetUpdateRate);
+                Helpers::SetMethod(isolate, tpl, "getUpdateRate", EntityGetUpdateRate);
+                Helpers::SetMethod(isolate, tpl, "setUpdateRate", EntitySetUpdateRate);
             });
 
         rootModule->AddClass(entClass);

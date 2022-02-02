@@ -11,7 +11,7 @@
 #include <queue>
 #include <v8.h>
 
-namespace Framework::Scripting::V8Helpers {
+namespace Framework::Scripting::Helpers {
     class ArgumentStack final {
       private:
         std::queue<v8::Local<v8::Value>> _args;
@@ -28,4 +28,4 @@ namespace Framework::Scripting::V8Helpers {
             return _args.empty();
         }
     };
-} // namespace Framework::Scripting::V8Helpers
+} // namespace Framework::Scripting::Helpers
