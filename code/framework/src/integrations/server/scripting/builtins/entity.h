@@ -413,6 +413,47 @@ namespace Framework::Scripting::Builtins {
         V8_RETURN(v8::BigInt::NewFromUnsigned(isolate, st->owner));
     }
 
+    static void EntityGetData(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        GET_ENTITY();
+
+        const auto customData = ent.get<Integrations::Shared::Modules::Mod::CustomData>();
+
+        if (!customData) {
+            V8_RETURN_NULL();
+            return;
+        }
+
+        auto val = Helpers::Serialization::Deserialize(ctx, customData->data);
+        if (val.IsEmpty()) {
+            V8_RETURN_NULL();
+            return;
+        }
+
+        V8_RETURN(val.ToLocalChecked());
+    }
+
+    static void EntitySetData(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        GET_ENTITY();
+
+        auto customData = ent.get_mut<Integrations::Shared::Modules::Mod::CustomData>();
+
+        if (!customData) {
+            Helpers::Throw(isolate, "Entity does not have custom data component");
+            return;
+        }
+
+        if (info.Length() == 0) {
+            Helpers::Throw(isolate, "No data provided, call setData(null) to remove data explicitly");
+            return;
+        } else if (info.Length() > 1) {
+            Helpers::Throw(isolate, "Too many arguments, expected 1");
+            return;
+        }
+
+        auto val = Helpers::Serialization::Serialize(ctx, info[0], false);
+        customData->data = val;
+    }
+
     static void EntityRegister(Scripting::Helpers::V8Module *rootModule) {
         if (!rootModule) {
             return;
@@ -427,6 +468,9 @@ namespace Framework::Scripting::Builtins {
                 Helpers::SetMethod(isolate, tpl, "toString", EntityToString);
                 Helpers::SetMethod(isolate, tpl, "isAlive", EntityAlive);
                 Helpers::SetMethod(isolate, tpl, "destroy", EntityDestroy);
+
+                Helpers::SetMethod(isolate, tpl, "getData", EntityGetData);
+                Helpers::SetMethod(isolate, tpl, "setData", EntitySetData);
 
                 Helpers::SetMethod(isolate, tpl, "getPosition", EntityGetPos);
                 Helpers::SetMethod(isolate, tpl, "setPosition", EntitySetPos);

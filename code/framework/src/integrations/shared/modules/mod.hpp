@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "scripting/v8_helpers/v8_serialization.h"
+
 #include <flecs/flecs.h>
 #include <string>
 
@@ -18,10 +20,15 @@ namespace Framework::Integrations::Shared::Modules {
             float timeHours;
         };
 
+        struct CustomData {
+            Framework::Scripting::Helpers::Serialization::Value data{};
+        };
+
         Mod(flecs::world &world) {
             world.module<Mod>();
 
             world.component<Environment>();
+            world.component<CustomData>();
         }
     };
 } // namespace Framework::Integrations::Shared::Modules
