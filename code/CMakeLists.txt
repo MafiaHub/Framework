@@ -23,7 +23,7 @@ include_directories(PUBLIC
         "../vendors/discord/src"
         "../vendors/sentry/include"
         "../vendors/curl/include"
-        "../vendors/v8pp/v8pp"
+        "../vendors/v8pp"
         "../vendors/fmt/include"
         "../vendors/libsig"
         "../vendors/sfd"
