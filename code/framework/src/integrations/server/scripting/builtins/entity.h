@@ -36,7 +36,7 @@
     V8_GET_SELF();                                                                                                                                                                                                                                                                     \
     flecs::entity ent;                                                                                                                                                                                                                                                                 \
     EntityGetID(ctx, _this, ent);                                                                                                                                                                                                                                                      \
-    if (EntityInvalid(ent)) {                                                                                                                                                                                                                                                          \
+    if (EntityInvalid(isolate, ent)) {                                                                                                                                                                                                                                                          \
         V8_RETURN_NULL();                                                                                                                                                                                                                                                              \
         return;                                                                                                                                                                                                                                                                        \
     }
@@ -51,10 +51,10 @@ namespace Framework::Scripting::Builtins {
         handle = V8_IN_GET_WORLD()->WrapEntity(id);
     }
 
-    inline bool EntityInvalid(flecs::entity ent, bool suppressLog = false) {
+    inline bool EntityInvalid(v8::Isolate *isolate, flecs::entity ent, bool suppressLog = false) {
         if (!ent.is_alive() || (ent.is_alive() && ent.get<World::Modules::Base::PendingRemoval>())) {
             if (!suppressLog) {
-                Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Entity {} is invalid", ent.id());
+                Helpers::Throw(isolate, fmt::format("Entity {} is invalid", ent.id()));
             }
             return true;
         }
@@ -98,7 +98,7 @@ namespace Framework::Scripting::Builtins {
         flecs::entity ent;
         EntityGetID(ctx, _this, ent);
 
-        V8_RETURN(v8::Boolean::New(isolate, !EntityInvalid(ent, true)));
+        V8_RETURN(v8::Boolean::New(isolate, !EntityInvalid(isolate, ent, true)));
     }
 
     static void EntityDestroy(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -109,10 +109,11 @@ namespace Framework::Scripting::Builtins {
         flecs::entity ent;
         EntityGetID(ctx, _this, ent);
 
-        if (EntityInvalid(ent)) {
+        if (EntityInvalid(isolate, ent)) {
             return;
         }
 
+        // HACK - this is a hack to prevent the player from being destroyed if wrapped into sdk.Entity
         if (ent.get<World::Modules::Base::Streamer>()) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Can't destroy player entity {}", ent.id());
             return;
@@ -133,7 +134,7 @@ namespace Framework::Scripting::Builtins {
 
         const auto name = ent.is_alive() ? ent.name() : "invalid";
 
-        const auto str = fmt::format("Entity {{ id: {}, name: \"{}\", alive: {} }}", ent.id(), name ? name : "none", !EntityInvalid(ent, true));
+        const auto str = fmt::format("Entity {{ id: {}, name: \"{}\", alive: {} }}", ent.id(), name ? name : "none", !EntityInvalid(isolate, ent, true));
         V8_RETURN(v8::String::NewFromUtf8(isolate, (str.c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 

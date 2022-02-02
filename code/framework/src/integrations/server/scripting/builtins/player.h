@@ -71,7 +71,7 @@ namespace Framework::Scripting::Builtins {
 
         const auto name = ent.is_alive() ? ent.name() : "invalid";
 
-        const auto str = fmt::format("Player {{ id: {}, name: \"{}\", alive: {} }}", ent.id(), name ? name : "none", !EntityInvalid(ent, true));
+        const auto str = fmt::format("Player {{ id: {}, name: \"{}\", alive: {} }}", ent.id(), name ? name : "none", !EntityInvalid(isolate, ent, true));
         V8_RETURN(v8::String::NewFromUtf8(isolate, (str.c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
