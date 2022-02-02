@@ -9,12 +9,12 @@
 #pragma once
 
 #include "../server.h"
+#include "scripting/builtins/factory.h"
 #include "scripting/keys.h"
 #include "scripting/resource.h"
 #include "scripting/v8_helpers/helpers.h"
 #include "scripting/v8_helpers/v8_class.h"
 #include "scripting/v8_helpers/v8_module.h"
-#include "scripting/builtins/factory.h"
 
 #include "logging/logger.h"
 
@@ -40,7 +40,6 @@
         V8_RETURN_NULL();                                                                                                                                                                                                                                                              \
         return;                                                                                                                                                                                                                                                                        \
     }
-
 
 namespace Framework::Scripting::Builtins {
     inline void EntityGetID(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, flecs::entity &handle) {
@@ -77,11 +76,13 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() > 0 && info[0]->IsBigInt()) {
             const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
             ent           = V8_IN_GET_WORLD()->WrapEntity(id);
-        } else if (info.Length() > 0) {
+        }
+        else if (info.Length() > 0) {
             auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
             ent       = V8_IN_GET_WORLD()->CreateEntity(name);
             entCtor.SetupServer(ent, 0);
-        } else {
+        }
+        else {
             ent = V8_IN_GET_WORLD()->CreateEntity();
             entCtor.SetupServer(ent, 0);
         }

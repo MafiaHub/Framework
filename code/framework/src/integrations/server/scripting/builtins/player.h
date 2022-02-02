@@ -9,12 +9,12 @@
 #pragma once
 
 #include "../server.h"
+#include "scripting/builtins/factory.h"
 #include "scripting/keys.h"
 #include "scripting/resource.h"
 #include "scripting/v8_helpers/helpers.h"
 #include "scripting/v8_helpers/v8_class.h"
 #include "scripting/v8_helpers/v8_module.h"
-#include "scripting/builtins/factory.h"
 
 #include "logging/logger.h"
 
@@ -45,7 +45,8 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() > 0 && info[0]->IsBigInt()) {
             const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
             ent           = V8_IN_GET_WORLD()->WrapEntity(id);
-        } else {
+        }
+        else {
             Helpers::Throw(isolate, "Can't instantiate Player class!");
             V8_RETURN_NULL();
             return;
@@ -89,6 +90,4 @@ namespace Framework::Scripting::Builtins {
 
         rootModule->AddClass(entClass);
     }
-
-#undef GET_ENTITY
 }; // namespace Framework::Scripting::Builtins
