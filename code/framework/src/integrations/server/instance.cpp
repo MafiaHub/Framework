@@ -21,6 +21,8 @@
 
 #include "scripting/builtins/entity.h"
 
+#include "scripting/builtins/player.h"
+
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
@@ -341,6 +343,7 @@ namespace Framework::Integrations::Server {
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
         using namespace Framework::Scripting;
         Builtins::EntityRegister(sdk->GetRootModule());
+        Builtins::PlayerRegister(sdk->GetRootModule());
 
         // mod-specific builtins
         if (_opts.sdkRegisterCallback) {

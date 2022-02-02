@@ -17,6 +17,7 @@ namespace Framework::Scripting {
         KEY_QUATERNION,
 
         KEY_ENTITY,
+        KEY_PLAYER,
 
         NUM_KEYS,
     };
@@ -27,6 +28,7 @@ namespace Framework::Scripting {
             "Vector3",
             "Quaternion",
             "Entity",
+            "Player",
         };
 
         static_assert(sizeof(keys) / sizeof(keys[0]) == static_cast<size_t>(Keys::NUM_KEYS), "Keys enum is not complete");

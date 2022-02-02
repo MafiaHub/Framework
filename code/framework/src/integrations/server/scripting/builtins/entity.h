@@ -30,8 +30,6 @@
 
 #include <flecs/flecs.h>
 
-namespace Framework::Scripting::Builtins {
-
 #define GET_ENTITY()                                                                                                                                                                                                                                                                   \
     V8_GET_ISOLATE_CONTEXT();                                                                                                                                                                                                                                                          \
     V8_GET_RESOURCE();                                                                                                                                                                                                                                                                 \
@@ -43,6 +41,8 @@ namespace Framework::Scripting::Builtins {
         return;                                                                                                                                                                                                                                                                        \
     }
 
+
+namespace Framework::Scripting::Builtins {
     inline void EntityGetID(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, flecs::entity &handle) {
         uint64_t id;
         Helpers::SafeToInteger(Helpers::Get(ctx, obj, "id"), ctx, id);
@@ -456,6 +456,4 @@ namespace Framework::Scripting::Builtins {
 
         rootModule->AddClass(entClass);
     }
-
-#undef GET_ENTITY
 }; // namespace Framework::Scripting::Builtins
