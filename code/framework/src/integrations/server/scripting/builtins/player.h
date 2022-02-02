@@ -37,7 +37,7 @@ namespace Framework::Scripting::Builtins {
         V8_VALIDATE_CTOR_CALL();
 
         if (info.Length() == 1 && info[0]->IsBigInt()) {
-            EntityConstructor(info);
+            EntityWrapFromInfo(info);
         }
         else {
             Helpers::Throw(isolate, "Can't instantiate Player class!");

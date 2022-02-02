@@ -61,6 +61,28 @@ namespace Framework::Scripting::Builtins {
         return false;
     }
 
+    static void EntityDefineProperties(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> _this, flecs::entity ent) {
+        if (EntityInvalid(isolate, ent)) {
+            return;
+        }
+
+        V8_DEF_PROP("id", v8::BigInt::NewFromUnsigned(isolate, ent.id()));
+    }
+
+    static flecs::entity EntityWrapFromInfo(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        V8_GET_ISOLATE_CONTEXT();
+        V8_GET_RESOURCE();
+        V8_GET_SELF();
+
+        if (info.Length() == 1 && info[0]->IsBigInt()) {
+            const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
+            const auto ent = V8_IN_GET_WORLD()->WrapEntity(id);
+            EntityDefineProperties(isolate, ctx, _this, ent);
+            return ent;
+        }
+        return flecs::entity::null();
+    }
+
     static void EntityConstructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_ISOLATE_CONTEXT();
 
@@ -70,24 +92,27 @@ namespace Framework::Scripting::Builtins {
 
         V8_GET_RESOURCE();
 
-        flecs::entity ent;
-        auto entCtor = Integrations::Shared::Archetypes::StreamingFactory();
+        flecs::entity ent = EntityWrapFromInfo(info);
 
-        if (info.Length() > 0 && info[0]->IsBigInt()) {
-            const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
-            ent           = V8_IN_GET_WORLD()->WrapEntity(id);
-        }
-        else if (info.Length() > 0) {
-            auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
-            ent       = V8_IN_GET_WORLD()->CreateEntity(name);
-            entCtor.SetupServer(ent, 0);
-        }
-        else {
-            ent = V8_IN_GET_WORLD()->CreateEntity();
-            entCtor.SetupServer(ent, 0);
-        }
+        if (!ent.is_valid()) {
+            if (info.Length() > 0) {
+                auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
+                ent       = V8_IN_GET_WORLD()->CreateEntity(name);
+            }
+            else {
+                ent = V8_IN_GET_WORLD()->CreateEntity();
+            }
 
-        V8_DEF_PROP("id", v8::BigInt::NewFromUnsigned(isolate, ent.id()));
+            auto entCtor = Integrations::Shared::Archetypes::StreamingFactory();
+            entCtor.SetupServer(ent, 0);
+
+            EntityDefineProperties(isolate, ctx, _this, ent);
+
+            if (!ent.is_alive()) {
+                Helpers::Throw(isolate, "Failed to create entity");
+                return;
+            }
+        }
     }
 
     static void EntityAlive(const v8::FunctionCallbackInfo<v8::Value> &info) {
