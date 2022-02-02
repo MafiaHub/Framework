@@ -32,27 +32,18 @@
 
 namespace Framework::Scripting::Builtins {
     static void PlayerConstructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
+        V8_GET_ISOLATE();
 
         V8_VALIDATE_CTOR_CALL();
 
-        V8_GET_SELF();
-
-        V8_GET_RESOURCE();
-
-        flecs::entity ent;
-
-        if (info.Length() > 0 && info[0]->IsBigInt()) {
-            const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
-            ent           = V8_IN_GET_WORLD()->WrapEntity(id);
+        if (info.Length() == 1 && info[0]->IsBigInt()) {
+            EntityConstructor(info);
         }
         else {
             Helpers::Throw(isolate, "Can't instantiate Player class!");
             V8_RETURN_NULL();
             return;
         }
-
-        V8_DEF_PROP("id", v8::BigInt::NewFromUnsigned(isolate, ent.id()));
     }
 
     static void PlayerDestroy(const v8::FunctionCallbackInfo<v8::Value> &info) {
