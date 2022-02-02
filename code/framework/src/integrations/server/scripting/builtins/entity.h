@@ -130,9 +130,10 @@ namespace Framework::Scripting::Builtins {
         flecs::entity ent;
         EntityGetID(ctx, _this, ent);
 
-        std::ostringstream ss;
-        ss << "Entity { id: " << ent.id() << ", alive: " << (ent.is_alive() ? "true" : "false") << " }";
-        V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
+        const auto name = ent.is_alive() ? ent.name() : "invalid";
+
+        const auto str = fmt::format("Entity {{ id: {}, name: \"{}\", alive: {} }}", ent.id(), name ? name : "none", !EntityInvalid(ent, true));
+        V8_RETURN(v8::String::NewFromUtf8(isolate, (str.c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
     static void EntityGetPos(const v8::FunctionCallbackInfo<v8::Value> &info) {
