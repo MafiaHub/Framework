@@ -20,10 +20,10 @@ namespace Framework::Scripting {
         std::unordered_set<Helpers::V8Module *> _modules;
         Helpers::V8Module *_rootModule;
 
-        void RegisterBuiltins(bool isEcsPresent);
+        void RegisterBuiltins();
 
       public:
-        SDK(bool isEcsPresent, SDKRegisterCallback = nullptr);
+        SDK(SDKRegisterCallback = nullptr);
         ~SDK() = default;
 
         bool RegisterModules(v8::Local<v8::Context>);

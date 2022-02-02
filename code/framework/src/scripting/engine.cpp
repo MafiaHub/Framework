@@ -12,9 +12,7 @@
 #include <optick.h>
 
 namespace Framework::Scripting {
-    EngineError Engine::Init(SDKRegisterCallback cb, std::shared_ptr<World::ServerEngine> world) {
-        _world = world;
-
+    EngineError Engine::Init(SDKRegisterCallback cb) {
         // Define the arguments to be passed to the node instance
         std::vector<std::string> argv = {"main.exe"};
         std::vector<std::string> eav  = {};

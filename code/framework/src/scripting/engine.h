@@ -26,7 +26,6 @@ namespace Framework::Scripting {
         v8::Isolate *_isolate = nullptr;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
-        std::shared_ptr<World::ServerEngine> _world;
 
         ResourceManager *_resourceManager = nullptr;
 
@@ -35,7 +34,7 @@ namespace Framework::Scripting {
 
         ~Engine() = default;
 
-        EngineError Init(SDKRegisterCallback = nullptr, std::shared_ptr<World::ServerEngine> = nullptr);
+        EngineError Init(SDKRegisterCallback = nullptr);
 
         EngineError Shutdown();
 
@@ -55,10 +54,6 @@ namespace Framework::Scripting {
 
         ResourceManager *GetResourceManager() const {
             return _resourceManager;
-        }
-
-        std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
-            return _world;
         }
     };
 } // namespace Framework::Scripting

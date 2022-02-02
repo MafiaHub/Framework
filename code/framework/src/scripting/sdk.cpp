@@ -9,14 +9,13 @@
 #include "sdk.h"
 
 #include "builtins/core.h"
-#include "builtins/entity.h"
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
 #include "logging/logger.h"
 
 namespace Framework::Scripting {
-    SDK::SDK(bool isEcsPresent, SDKRegisterCallback cb): _rootModule(nullptr) {
+    SDK::SDK(SDKRegisterCallback cb): _rootModule(nullptr) {
         _rootModule = new Helpers::V8Module("sdk", [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj) {
             V8Helpers::RegisterFunc(ctx, obj, "on", &Builtins::OnEvent);
         });
@@ -27,7 +26,7 @@ namespace Framework::Scripting {
         }
 
         // Before inserting the reference, we create the required builtins
-        RegisterBuiltins(isEcsPresent);
+        RegisterBuiltins();
 
         // Call the SDK register callback for mod-provided implementations
         if (cb) {
@@ -37,15 +36,10 @@ namespace Framework::Scripting {
         _modules.insert(_rootModule);
     }
 
-    void SDK::RegisterBuiltins(bool isEcsPresent) {
+    void SDK::RegisterBuiltins() {
         Builtins::Vector2Register(_rootModule);
         Builtins::Vector3Register(_rootModule);
         Builtins::QuaternionRegister(_rootModule);
-
-        // Modules enabled only if ECS is present
-        if (isEcsPresent) {
-            Builtins::EntityRegister(_rootModule);
-        }
     }
 
     bool SDK::RegisterModules(v8::Local<v8::Context> context) {

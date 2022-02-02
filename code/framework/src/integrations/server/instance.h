@@ -9,20 +9,20 @@
 #pragma once
 
 #include "../shared/types/environment.hpp"
-#include "../shared/types/streaming.hpp"
 #include "../shared/types/player.hpp"
+#include "../shared/types/streaming.hpp"
 #include "errors.h"
 #include "external/firebase/wrapper.h"
+#include "http/webserver.h"
+#include "logging/logger.h"
 #include "masterlist.h"
 #include "networking/engine.h"
+#include "scripting/server.h"
 #include "utils/config.h"
 #include "world/server.h"
 
 #include <chrono>
-#include <http/webserver.h>
-#include <logging/logger.h>
 #include <memory>
-#include <scripting/engine.h>
 #include <sig.h>
 #include <string>
 
@@ -62,7 +62,7 @@ namespace Framework::Integrations::Server {
         std::string firebaseApiKey;
 
         // scripting
-        Scripting::SDKRegisterCallback sdkRegisterCallback;
+        Framework::Scripting::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = std::function<void(flecs::entity, uint64_t)>;
@@ -74,7 +74,7 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        std::shared_ptr<Scripting::Engine> _scriptingEngine;
+        std::shared_ptr<Scripting::ServerEngine> _scriptingEngine;
         std::shared_ptr<Networking::Engine> _networkingEngine;
         std::shared_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
@@ -100,7 +100,7 @@ namespace Framework::Integrations::Server {
         OnPlayerConnectionCallback _onPlayerConnectedCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectedCallback;
 
-        void RegisterScriptingBuiltins(Scripting::SDK *);
+        void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
 
       public:
         Instance();
@@ -137,7 +137,7 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Scripting::Engine> GetScriptingEngine() const {
+        std::shared_ptr<Framework::Scripting::Engine> GetScriptingEngine() const {
             return _scriptingEngine;
         }
 

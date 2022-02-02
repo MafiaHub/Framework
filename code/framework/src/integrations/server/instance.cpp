@@ -14,27 +14,30 @@
 #include "integrations/shared/messages/weather_update.h"
 #include "world/server.h"
 
-#include <networking/messages/client_connection_finalized.h>
-#include <networking/messages/client_handshake.h>
-#include <networking/messages/client_kick.h>
-#include <networking/messages/messages.h>
+#include "networking/messages/client_connection_finalized.h"
+#include "networking/messages/client_handshake.h"
+#include "networking/messages/client_kick.h"
+#include "networking/messages/messages.h"
+
+#include "scripting/builtins/entity.h"
 
 #include "utils/version.h"
 
-#include <cxxopts.hpp>
-#include <nlohmann/json.hpp>
-#include <optick.h>
+#include "cxxopts.hpp"
+#include "nlohmann/json.hpp"
+#include "optick.h"
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
         OPTICK_START_CAPTURE();
-        _scriptingEngine  = std::make_shared<Scripting::Engine>();
         _networkingEngine = std::make_shared<Networking::Engine>();
         _webServer        = std::make_shared<HTTP::Webserver>();
         _masterlistSync   = std::make_unique<Masterlist>(this);
         _fileConfig       = std::make_unique<Utils::Config>();
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
+
+        _scriptingEngine.reset(new Scripting::ServerEngine(_worldEngine));
     }
 
     Instance::~Instance() {
@@ -47,8 +50,7 @@ namespace Framework::Integrations::Server {
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
-        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))},
-                                    {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
                                     {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}});
 
         // Try to parse and return if anything wrong happened
@@ -88,18 +90,17 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        const auto sdkCallback = [this](Scripting::SDK *sdk) {
+        const auto sdkCallback = [this](Framework::Scripting::SDK *sdk) {
             this->RegisterScriptingBuiltins(sdk);
         };
 
         // Initialize the scripting engine
-        if (_scriptingEngine->Init(sdkCallback, _worldEngine) != Scripting::EngineError::ENGINE_NONE) {
+        if (_scriptingEngine->Init(sdkCallback) != Framework::Scripting::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
-        if (_opts.firebaseEnabled
-            && _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) != External::Firebase::FirebaseError::FIREBASE_NONE) {
+        if (_opts.firebaseEnabled && _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) != External::Firebase::FirebaseError::FIREBASE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the firebase wrapper");
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
@@ -198,40 +199,39 @@ namespace Framework::Integrations::Server {
     void Instance::InitNetworkingMessages() {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
-        net->RegisterMessage<ClientHandshake>(
-            Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
+        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
 
-                // Make sure handshake payload was correctly formatted
-                if (!msg->Valid()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
-                    net->GetPeer()->CloseConnection(guid, true);
-                    return;
-                }
+            // Make sure handshake payload was correctly formatted
+            if (!msg->Valid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
 
-                const auto clientVersion = msg->GetClientVersion();
+            const auto clientVersion = msg->GetClientVersion();
 
-                if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
-                    Framework::Networking::Messages::ClientKick kick;
-                    kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                    net->Send(kick, guid);
-                    net->GetPeer()->CloseConnection(guid, true);
-                    return;
-                }
+            if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
 
-                // Create player entity and add on world
-                const auto newPlayer = _worldEngine->CreateEntity();
-                _streamingFactory->SetupServer(newPlayer, guid.g);
-                _playerFactory->SetupServer(newPlayer, guid.g);
+            // Create player entity and add on world
+            const auto newPlayer = _worldEngine->CreateEntity();
+            _streamingFactory->SetupServer(newPlayer, guid.g);
+            _playerFactory->SetupServer(newPlayer, guid.g);
 
-                if (_onPlayerConnectedCallback)
-                    _onPlayerConnectedCallback(newPlayer, guid.g);
+            if (_onPlayerConnectedCallback)
+                _onPlayerConnectedCallback(newPlayer, guid.g);
 
-                // Send the connection finalized packet
-                Framework::Networking::Messages::ClientConnectionFinalized answer;
-                answer.FromParameters(_opts.tickInterval, newPlayer.id());
-                net->Send(answer, guid);
+            // Send the connection finalized packet
+            Framework::Networking::Messages::ClientConnectionFinalized answer;
+            answer.FromParameters(_opts.tickInterval, newPlayer.id());
+            net->Send(answer, guid);
         });
 
         net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
@@ -325,9 +325,7 @@ namespace Framework::Integrations::Server {
         }
     }
     void Instance::Run() {
-        while (_alive) {
-            Update();
-        }
+        while (_alive) { Update(); }
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
@@ -341,8 +339,9 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Scripting::SDK *sdk) {
-        // todo integration builtins
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
+        using namespace Framework::Scripting;
+        Builtins::EntityRegister(sdk->GetRootModule());
 
         // mod-specific builtins
         if (_opts.sdkRegisterCallback) {

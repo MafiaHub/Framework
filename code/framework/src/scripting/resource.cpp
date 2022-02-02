@@ -138,7 +138,7 @@ namespace Framework::Scripting {
         }
 
         // Register the SDK
-        _sdk = new SDK(_engine->GetWorldEngine() != nullptr, cb);
+        _sdk = new SDK(cb);
         _sdk->RegisterModules(context);
 
         // We put the local resource instance inside the context

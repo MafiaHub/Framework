@@ -8,21 +8,22 @@
 
 #pragma once
 
-#include "../engine.h"
-#include "../keys.h"
-#include "../resource.h"
-#include "../v8_helpers/helpers.h"
-#include "../v8_helpers/v8_class.h"
-#include "../v8_helpers/v8_module.h"
-#include "factory.h"
+#include "../server.h"
+#include "scripting/keys.h"
+#include "scripting/resource.h"
+#include "scripting/v8_helpers/helpers.h"
+#include "scripting/v8_helpers/v8_class.h"
+#include "scripting/v8_helpers/v8_module.h"
+#include "scripting/builtins/factory.h"
 
 #include "logging/logger.h"
 
 #include "world/engine.h"
 
+#include "../helpers.h"
+
 #include "world/modules/base.hpp"
 
-// HACK: This is a hack to get around the fact that the scripting engine relies on integration components.
 #include "integrations/shared/types/streaming.hpp"
 
 #include <sstream>
@@ -48,7 +49,7 @@ namespace Framework::Scripting::Builtins {
 
         V8_GET_RESOURCE();
 
-        handle = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
+        handle = V8_IN_GET_WORLD()->WrapEntity(id);
     }
 
     inline bool EntityInvalid(flecs::entity ent, bool suppressLog = false) {
@@ -75,13 +76,13 @@ namespace Framework::Scripting::Builtins {
 
         if (info.Length() > 0 && info[0]->IsBigInt()) {
             const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
-            ent           = resource->GetEngine()->GetWorldEngine()->WrapEntity(id);
+            ent           = V8_IN_GET_WORLD()->WrapEntity(id);
         } else if (info.Length() > 0) {
             auto name = Helpers::ToString(info[0]->ToString(ctx).ToLocalChecked());
-            ent       = resource->GetEngine()->GetWorldEngine()->CreateEntity(name);
+            ent       = V8_IN_GET_WORLD()->CreateEntity(name);
             entCtor.SetupServer(ent, 0);
         } else {
-            ent = resource->GetEngine()->GetWorldEngine()->CreateEntity();
+            ent = V8_IN_GET_WORLD()->CreateEntity();
             entCtor.SetupServer(ent, 0);
         }
 
@@ -118,7 +119,7 @@ namespace Framework::Scripting::Builtins {
 
         V8_GET_RESOURCE();
 
-        resource->GetEngine()->GetWorldEngine()->RemoveEntity(ent);
+        V8_IN_GET_WORLD()->RemoveEntity(ent);
     }
 
     static void EntityToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
