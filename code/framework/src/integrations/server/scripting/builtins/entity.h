@@ -492,6 +492,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
+#if 0
         class Entity {
           private:
             flecs::entity_t id;
@@ -527,6 +528,7 @@ namespace Framework::Scripting::Builtins {
 
         auto entClassNewTest = v8pp::class_<Entity>(v8::Isolate::GetCurrent());
         entClassNewTest.ctor<const v8::FunctionCallbackInfo<v8::Value> &>();
+#endif
 
         auto entClass = new Helpers::V8Class(
             GetKeyName(Keys::KEY_ENTITY), EntityConstructor, V8_CLASS_CB {
