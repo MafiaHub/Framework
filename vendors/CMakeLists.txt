@@ -153,3 +153,6 @@ if (WIN32)
     target_link_libraries(libcef_dll_wrapper PRIVATE ${CEF_LIBRARY})
 endif ()
 
+# Build v8pp
+set(V8PP_ISOLATE_DATA_SLOT 1 CACHE STRING "v8::Isolate data slot number, used in v8pp for shared data")
+add_subdirectory(v8pp)
