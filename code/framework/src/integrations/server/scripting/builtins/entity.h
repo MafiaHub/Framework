@@ -30,13 +30,15 @@
 
 #include <flecs/flecs.h>
 
+#include <v8pp/class.hpp>
+
 #define GET_ENTITY()                                                                                                                                                                                                                                                                   \
     V8_GET_ISOLATE_CONTEXT();                                                                                                                                                                                                                                                          \
     V8_GET_RESOURCE();                                                                                                                                                                                                                                                                 \
     V8_GET_SELF();                                                                                                                                                                                                                                                                     \
     flecs::entity ent;                                                                                                                                                                                                                                                                 \
     EntityGetID(ctx, _this, ent);                                                                                                                                                                                                                                                      \
-    if (EntityInvalid(isolate, ent)) {                                                                                                                                                                                                                                                          \
+    if (EntityInvalid(isolate, ent)) {                                                                                                                                                                                                                                                 \
         V8_RETURN_NULL();                                                                                                                                                                                                                                                              \
         return;                                                                                                                                                                                                                                                                        \
     }
@@ -75,7 +77,7 @@ namespace Framework::Scripting::Builtins {
         V8_GET_SELF();
 
         if (info.Length() == 1 && info[0]->IsBigInt()) {
-            const auto id = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
+            const auto id  = info[0]->ToBigInt(ctx).ToLocalChecked()->Uint64Value();
             const auto ent = V8_IN_GET_WORLD()->WrapEntity(id);
             EntityDefineProperties(isolate, ctx, _this, ent);
             return ent;
@@ -476,7 +478,8 @@ namespace Framework::Scripting::Builtins {
         if (info.Length() == 0) {
             Helpers::Throw(isolate, "No data provided, call setData(null) to remove data explicitly");
             return;
-        } else if (info.Length() > 1) {
+        }
+        else if (info.Length() > 1) {
             Helpers::Throw(isolate, "Too many arguments, expected 1");
             return;
         }
@@ -484,10 +487,46 @@ namespace Framework::Scripting::Builtins {
         Helpers::Serialization::Serialize(ctx, info[0], customData->data);
     }
 
-    static void EntityRegister(Scripting::Helpers::V8Module *rootModule) {
+    static void EntityRegister(std::shared_ptr<World::ServerEngine> engine, Scripting::Helpers::V8Module *rootModule) {
         if (!rootModule) {
             return;
         }
+
+        class Entity {
+          private:
+            flecs::entity_t id;
+            flecs::entity ent;
+
+          public:
+            explicit Entity(const v8::FunctionCallbackInfo<v8::Value> &info) {
+                V8_GET_ISOLATE_CONTEXT();
+                V8_GET_SELF();
+                V8_GET_RESOURCE();
+
+                ent = EntityWrapFromInfo(info);
+
+                if (!ent.is_valid()) {
+                    if (info.Length() > 0) {
+                        auto name = v8pp::from_v8<std::string>(isolate, info[0]);
+                        ent       = V8_IN_GET_WORLD()->CreateEntity(name);
+                    }
+                    else {
+                        ent = V8_IN_GET_WORLD()->CreateEntity();
+                    }
+
+                    auto entCtor = Integrations::Shared::Archetypes::StreamingFactory();
+                    entCtor.SetupServer(ent, 0);
+
+                    if (!ent.is_alive()) {
+                        Helpers::Throw(isolate, "Failed to create entity");
+                        return;
+                    }
+                }
+            }
+        };
+
+        auto entClassNewTest = v8pp::class_<Entity>(v8::Isolate::GetCurrent());
+        entClassNewTest.ctor<const v8::FunctionCallbackInfo<v8::Value> &>();
 
         auto entClass = new Helpers::V8Class(
             GetKeyName(Keys::KEY_ENTITY), EntityConstructor, V8_CLASS_CB {
