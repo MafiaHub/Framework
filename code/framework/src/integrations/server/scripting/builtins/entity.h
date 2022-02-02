@@ -419,7 +419,12 @@ namespace Framework::Scripting::Builtins {
         const auto customData = ent.get<Integrations::Shared::Modules::Mod::CustomData>();
 
         if (!customData) {
-            V8_RETURN_NULL();
+            Helpers::Throw(isolate, "Entity does not have custom data component");
+            return;
+        }
+
+        if (!customData->data.Valid()) {
+            Helpers::Throw(isolate, "Entity does not have valid custom data");
             return;
         }
 
