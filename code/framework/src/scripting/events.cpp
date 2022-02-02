@@ -6,13 +6,11 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#pragma once
+#include "events.h"
 
 #include <map>
 #include <string>
 
 namespace Framework::Scripting {
-    enum class EventIDs { RESOURCE_LOADED, RESOURCE_UNLOADING };
-
-    extern std::map<EventIDs, std::string> Events;
+    std::map<EventIDs, std::string> Events = {{EventIDs::RESOURCE_LOADED, "resourceLoaded"}, {EventIDs::RESOURCE_UNLOADING, "resourceUnloading"}};
 } // namespace Framework::Scripting

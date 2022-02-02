@@ -10,7 +10,6 @@
 
 #include "errors.h"
 #include "init.h"
-#include "resource.h"
 
 #include <functional>
 #include <map>
@@ -18,9 +17,9 @@
 #include <v8.h>
 
 namespace Framework::Scripting {
-    using InvokeEventCallback = std::function<std::vector<v8::Local<v8::Value>>(v8::Isolate *, v8::Local<v8::Context>)>;
-
     class Engine;
+    class Resource;
+
     class ResourceManager {
       private:
         Engine *_engine = nullptr;
@@ -49,6 +48,22 @@ namespace Framework::Scripting {
 
         void InvokeErrorEvent(const std::string &, const std::string &, const std::string &, int32_t);
 
-        void InvokeEvent(const std::string &, InvokeEventCallback cb);
+        template <typename... Args>
+        void InvokeEvent(const std::string &eventName, Args &&... args) {
+            auto isolate = _engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+
+            for (auto resPair : _resources) {
+                const auto res = resPair.second;
+
+                auto ctx = res->GetContext();
+                v8::Context::Scope contextScope(ctx);
+
+                auto args = cb(isolate, ctx);
+                res->InvokeEvent(eventName, false, std::forward(args...));
+            }
+        }
     };
 } // namespace Framework::Scripting

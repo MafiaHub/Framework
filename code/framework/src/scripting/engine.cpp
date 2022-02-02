@@ -7,6 +7,7 @@
  */
 
 #include "engine.h"
+#include "resource.h"
 
 #include <logging/logger.h>
 #include <optick.h>

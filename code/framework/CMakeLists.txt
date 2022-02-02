@@ -32,6 +32,7 @@ set(FRAMEWORK_SRC
 set(FRAMEWORK_SERVER_SRC
         src/scripting/sdk.cpp
         src/scripting/engine.cpp
+        src/scripting/events.cpp
         src/scripting/resource.cpp
         src/scripting/resource_manager.cpp
 

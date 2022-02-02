@@ -8,12 +8,6 @@
 
 #include "resource.h"
 
-#include "engine.h"
-#include "events.h"
-#include "v8_helpers/v8_string.h"
-#include "v8_helpers/v8_try_catch.h"
-
-#include <logging/logger.h>
 #include <nlohmann/json.hpp>
 #include <optick.h>
 
@@ -171,8 +165,7 @@ namespace Framework::Scripting {
         Run();
 
         // Notify the resource load
-        std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
-        InvokeEvent(Events[EventIDs::RESOURCE_LOADED], args);
+        InvokeEvent(Events[EventIDs::RESOURCE_LOADED], false, _name);
 
         _loaded = true;
         return true;
@@ -242,8 +235,7 @@ namespace Framework::Scripting {
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
 
-            std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(isolate, _name).ToLocalChecked()};
-            InvokeEvent(Events[EventIDs::RESOURCE_UNLOADING], args);
+            InvokeEvent(Events[EventIDs::RESOURCE_UNLOADING], false, _name);
         }
 
         // Tick one last time
@@ -334,46 +326,8 @@ namespace Framework::Scripting {
     }
 
     void Resource::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
-        std::vector<v8::Local<v8::Value>> args = {Helpers::MakeString(_engine->GetIsolate(), error).ToLocalChecked(),
-            Helpers::MakeString(_engine->GetIsolate(), stackTrace).ToLocalChecked(), Helpers::MakeString(_engine->GetIsolate(), file).ToLocalChecked(),
-            v8::Integer::New(_engine->GetIsolate(), line)};
-        InvokeEvent("resourceError", args);
+        InvokeEvent("resourceError", false, error, file, line);
     }
-
-    void Resource::InvokeEvent(const std::string &eventName, std::vector<v8::Local<v8::Value>> &args, bool suppressLog) {
-        auto entry = _remoteHandlers.find(eventName);
-        if (entry == _remoteHandlers.end()) {
-            if (!suppressLog)
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find such event '{}' for resource '{}'", eventName, _name);
-            return;
-        }
-
-        auto callback = &entry->second;
-        if (callback->_removed) {
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("Event '{}' in '{}' was already fired, not supposed to be here", eventName, _name);
-            return;
-        }
-
-        const auto isolate = _engine->GetIsolate();
-
-        Helpers::TryCatch(
-            [&] {
-                v8::MaybeLocal<v8::Value> retn = callback->_fn.Get(isolate)->Call(_context.Get(isolate), v8::Undefined(isolate), args.size(), args.data());
-                if (retn.IsEmpty()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to invoke event '{}' for '{}'", eventName, _name);
-                    return false;
-                }
-
-                if (!suppressLog)
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event '{}' for '{}'", eventName, _name);
-                return true;
-            },
-            isolate, _context.Get(isolate));
-
-        if (callback->_once) {
-            callback->_removed = true;
-        }
-    };
 
     v8::Local<v8::Context> Resource::GetContext() {
         auto isolate = _engine->GetIsolate();

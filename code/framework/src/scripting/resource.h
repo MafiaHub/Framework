@@ -8,12 +8,19 @@
 
 #pragma once
 
-#include "errors.h"
 #include "init.h"
+
+#include "engine.h"
+#include "errors.h"
+#include "events.h"
+#include "logging/logger.h"
 #include "sdk.h"
 #include "utils/time.h"
+
 #include "v8_helpers/v8_event_callback.h"
 #include "v8_helpers/v8_source_location.h"
+#include "v8_helpers/v8_string.h"
+#include "v8_helpers/v8_try_catch.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileWatcher.h>
@@ -23,7 +30,7 @@
 #include <unordered_map>
 #include <uv.h>
 #include <v8.h>
-
+#include <v8pp/convert.hpp>
 namespace Framework::Scripting {
     class Engine;
     class Resource {
@@ -83,7 +90,47 @@ namespace Framework::Scripting {
 
         void InvokeErrorEvent(const std::string &, const std::string &, const std::string &, int32_t);
 
-        void InvokeEvent(const std::string &, std::vector<v8::Local<v8::Value>> &, bool suppressLog = false);
+        template <typename... Args>
+        void InvokeEvent(const std::string &eventName, bool suppressLog, Args &&... args) {
+            auto entry = _remoteHandlers.find(eventName);
+            if (entry == _remoteHandlers.end()) {
+                if (!suppressLog)
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find such event '{}' for resource '{}'", eventName, _name);
+                return;
+            }
+
+            auto callback = &entry->second;
+            if (callback->_removed) {
+                Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("Event '{}' in '{}' was already fired, not supposed to be here", eventName, _name);
+                return;
+            }
+
+            const auto isolate = _engine->GetIsolate();
+
+            Helpers::TryCatch(
+                [&] {
+                    int const arg_count = sizeof...(Args);
+                    // +1 to allocate array for arg_count == 0
+                    v8::Local<v8::Value> v8_args[arg_count + 1] =
+                    {
+                        v8pp::to_v8(isolate, std::forward<Args>(args))...
+                    };
+                    v8::MaybeLocal<v8::Value> retn = callback->_fn.Get(isolate)->Call(_context.Get(isolate), v8::Undefined(isolate), arg_count, v8_args);
+                    if (retn.IsEmpty()) {
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to invoke event '{}' for '{}'", eventName, _name);
+                        return false;
+                    }
+
+                    if (!suppressLog)
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Successfully invoked event '{}' for '{}'", eventName, _name);
+                    return true;
+                },
+                isolate, _context.Get(isolate));
+
+            if (callback->_once) {
+                callback->_removed = true;
+            }
+        };
 
         Engine *GetEngine() const {
             return _engine;

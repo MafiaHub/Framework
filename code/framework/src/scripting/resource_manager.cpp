@@ -7,6 +7,7 @@
  */
 
 #include "resource_manager.h"
+#include "resource.h"
 
 #include "engine.h"
 
@@ -89,23 +90,6 @@ namespace Framework::Scripting {
         }
 
         for (auto it = dir.begin(); it != dir.end(); ++it) { Unload(*it); }
-    }
-
-    void ResourceManager::InvokeEvent(const std::string &eventName, InvokeEventCallback cb) {
-        auto isolate = _engine->GetIsolate();
-        v8::Locker locker(isolate);
-        v8::Isolate::Scope isolateScope(isolate);
-        v8::HandleScope handleScope(isolate);
-
-        for (auto resPair : _resources) {
-            const auto res = resPair.second;
-
-            auto ctx = res->GetContext();
-            v8::Context::Scope contextScope(ctx);
-
-            auto args = cb(isolate, ctx);
-            res->InvokeEvent(eventName, args);
-        }
     }
 
     void ResourceManager::InvokeErrorEvent(const std::string &error, const std::string &stackTrace, const std::string &file, int32_t line) {
