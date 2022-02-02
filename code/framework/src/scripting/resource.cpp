@@ -68,7 +68,7 @@ namespace Framework::Scripting {
         try {
             _name       = root["name"].get<std::string>();
             _version    = root["version"].get<std::string>();
-            _entryPoint = root["entry_point"].get<std::string>();
+            _entryPoint = root["main"].get<std::string>();
         }
         catch (nlohmann::detail::type_error &err) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The package.json is not valid:\n\t{}", err.what());
