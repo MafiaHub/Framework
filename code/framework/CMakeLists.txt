@@ -145,16 +145,15 @@ link_shared_deps(Framework)
 link_shared_deps(FrameworkServer)
 link_shared_deps(FrameworkClient)
 
-add_dependencies(FrameworkClient libcef_dll_wrapper CEFTarget)
-
-target_link_libraries(FrameworkServer mongoose NodeJS libsig)
-target_link_libraries(FrameworkClient DiscordSDK CEFTarget libcef libcef_dll_wrapper DearImGUI SDL)
-target_link_options(FrameworkClient PUBLIC "/DELAYLOAD:libcef.dll")
+target_link_libraries(FrameworkServer mongoose NodeJS libsig v8pp)
 
 # OS specific libraries
 if (WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
+    add_dependencies(FrameworkClient libcef_dll_wrapper CEFTarget)
+    target_link_libraries(FrameworkClient DiscordSDK CEFTarget libcef libcef_dll_wrapper DearImGUI SDL)
+    target_link_options(FrameworkClient PUBLIC "/DELAYLOAD:libcef.dll")
 
     set(CLIENT_SHARED_LIBS minhook GalaxySDK SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} RmlCore ${FREETYPE_LIBRARY})
