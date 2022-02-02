@@ -424,7 +424,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         if (!customData->data.Valid()) {
-            Helpers::Throw(isolate, "Entity does not have valid custom data");
+            V8_RETURN_NULL();
             return;
         }
 
