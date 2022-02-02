@@ -425,17 +425,17 @@ namespace Framework::Scripting::Builtins {
                 Helpers::SetAccessor(isolate, tpl, "owner", EntityGetOwnerID);
 
                 Helpers::SetMethod(isolate, tpl, "toString", EntityToString);
-                Helpers::SetMethod(isolate, tpl, "alive", EntityAlive);
+                Helpers::SetMethod(isolate, tpl, "isAlive", EntityAlive);
                 Helpers::SetMethod(isolate, tpl, "destroy", EntityDestroy);
 
-                Helpers::SetMethod(isolate, tpl, "getPos", EntityGetPos);
-                Helpers::SetMethod(isolate, tpl, "setPos", EntitySetPos);
+                Helpers::SetMethod(isolate, tpl, "getPosition", EntityGetPos);
+                Helpers::SetMethod(isolate, tpl, "setPosition", EntitySetPos);
 
-                Helpers::SetMethod(isolate, tpl, "getVel", EntityGetVelocity);
-                Helpers::SetMethod(isolate, tpl, "setVel", EntitySetVelocity);
+                Helpers::SetMethod(isolate, tpl, "getVelocity", EntityGetVelocity);
+                Helpers::SetMethod(isolate, tpl, "setVelocity", EntitySetVelocity);
 
-                Helpers::SetMethod(isolate, tpl, "getRot", EntityGetRot);
-                Helpers::SetMethod(isolate, tpl, "setRot", EntitySetRot);
+                Helpers::SetMethod(isolate, tpl, "getRotation", EntityGetRot);
+                Helpers::SetMethod(isolate, tpl, "setRotation", EntitySetRot);
 
                 Helpers::SetMethod(isolate, tpl, "getFrame", EntityGetFrameInfo);
 
