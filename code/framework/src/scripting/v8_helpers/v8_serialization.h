@@ -30,13 +30,15 @@ namespace Framework::Scripting::Helpers::Serialization {
 
     // Serializes a JS value to a binary format
     // Make sure the context is entered before calling this function
-    inline Value Serialize(v8::Local<v8::Context> context, v8::Local<v8::Value> value, bool ownPtr = true) {
+    inline void Serialize(v8::Local<v8::Context> context, v8::Local<v8::Value> value, Value &out, bool ownPtr = true) {
         v8::ValueSerializer serializer(context->GetIsolate());
         serializer.WriteHeader();
         if (serializer.WriteValue(context, value).IsNothing())
-            return Value {};
+            return;
         std::pair<uint8_t *, size_t> data = serializer.Release();
-        return Value {data.first, data.second, ownPtr};
+        out.data = data.first;
+        out.size = data.second;
+        out.ownPtr = ownPtr;
     }
 
     // Deserializes a JS value from a binary format

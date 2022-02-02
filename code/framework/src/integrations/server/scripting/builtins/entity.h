@@ -455,8 +455,7 @@ namespace Framework::Scripting::Builtins {
             return;
         }
 
-        auto val = Helpers::Serialization::Serialize(ctx, info[0], false);
-        customData->data = val;
+        Helpers::Serialization::Serialize(ctx, info[0], customData->data);
     }
 
     static void EntityRegister(Scripting::Helpers::V8Module *rootModule) {
