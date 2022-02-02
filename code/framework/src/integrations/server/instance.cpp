@@ -36,8 +36,7 @@ namespace Framework::Integrations::Server {
         _fileConfig       = std::make_unique<Utils::Config>();
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
-
-        _scriptingEngine.reset(new Scripting::ServerEngine(_worldEngine));
+        _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
     }
 
     Instance::~Instance() {
