@@ -61,7 +61,6 @@ namespace Framework::Scripting {
                 auto ctx = res->GetContext();
                 v8::Context::Scope contextScope(ctx);
 
-                auto args = cb(isolate, ctx);
                 res->InvokeEvent(eventName, false, std::forward(args...));
             }
         }
