@@ -39,6 +39,8 @@ namespace Framework::Integrations::Server {
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
+        _playerFactory    = std::make_shared<Integrations::Shared::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_shared<Integrations::Shared::Archetypes::StreamingFactory>();
     }
 
     Instance::~Instance() {
@@ -112,9 +114,6 @@ namespace Framework::Integrations::Server {
         // Register built in modules
         InitModules();
 
-        // Initialize built in managers
-        InitManagers();
-
         // Initialize default messages
         InitNetworkingMessages();
 
@@ -156,11 +155,6 @@ namespace Framework::Integrations::Server {
 
             world->import<Integrations::Shared::Modules::Mod>();
         }
-    }
-
-    void Instance::InitManagers() {
-        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
-        _streamingFactory.reset(new Integrations::Shared::Archetypes::StreamingFactory);
     }
 
     bool Instance::LoadConfigFromJSON() {

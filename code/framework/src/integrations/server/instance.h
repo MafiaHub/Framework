@@ -84,7 +84,6 @@ namespace Framework::Integrations::Server {
 
         void InitEndpoints();
         void InitModules();
-        void InitManagers();
         void InitNetworkingMessages();
         bool LoadConfigFromJSON();
 

@@ -30,6 +30,8 @@ namespace Framework::Integrations::Client {
         _renderer    = std::make_unique<Graphics::Renderer>();
         _worldEngine = std::make_unique<World::ClientEngine>();
         _renderIO    = std::make_unique<Graphics::RenderIO>();
+        _playerFactory    = std::make_unique<Integrations::Shared::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_unique<Integrations::Shared::Archetypes::StreamingFactory>();
     }
 
     Instance::~Instance() {
@@ -61,7 +63,6 @@ namespace Framework::Integrations::Client {
             _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
         }
 
-        InitManagers();
         InitNetworkingMessages();
         PostInit();
 
@@ -159,11 +160,6 @@ namespace Framework::Integrations::Client {
         if (_renderIO) {
             _renderIO->UpdateRenderThread();
         }
-    }
-
-    void Instance::InitManagers() {
-        _playerFactory.reset(new Integrations::Shared::Archetypes::PlayerFactory);
-        _streamingFactory.reset(new Integrations::Shared::Archetypes::StreamingFactory);
     }
 
     void Instance::InitNetworkingMessages() {

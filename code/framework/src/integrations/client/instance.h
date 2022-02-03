@@ -70,7 +70,6 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
         std::unique_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
 
-        void InitManagers();
         void InitNetworkingMessages();
 
       public:
