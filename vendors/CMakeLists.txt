@@ -141,7 +141,11 @@ if (WIN32)
     add_subdirectory(imgui)
     add_subdirectory(sdl2)
     add_subdirectory(rmlui)
+
+    # Lua
     add_subdirectory(lua-5.2.1)
+    add_subdirectory(lua-5.3.6)
+    add_subdirectory(lua-5.4.4)
 
     set(StackWalker_DISABLE_TESTS CACHE BOOL "" ON)
     add_subdirectory(StackWalker)

@@ -146,7 +146,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Firebase Curl OptickCore flecs_static semver Lua52)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Firebase Curl OptickCore flecs_static semver)
 
     # Required libraries for windows
     if (WIN32)
