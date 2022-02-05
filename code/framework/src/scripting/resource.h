@@ -32,7 +32,6 @@
 #include <v8.h>
 #include <v8pp/convert.hpp>
 namespace Framework::Scripting {
-    class Engine;
     class Resource {
       private:
         std::string _path;

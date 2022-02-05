@@ -11,14 +11,15 @@
 #include "errors.h"
 #include "init.h"
 
+#include "resource.h"
+#include "engine.h"
+
 #include <functional>
 #include <map>
 #include <string>
 #include <v8.h>
 
 namespace Framework::Scripting {
-    class Engine;
-    class Resource;
 
     class ResourceManager {
       private:

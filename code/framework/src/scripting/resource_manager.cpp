@@ -7,9 +7,6 @@
  */
 
 #include "resource_manager.h"
-#include "resource.h"
-
-#include "engine.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileIterator.h>

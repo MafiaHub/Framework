@@ -10,7 +10,6 @@
 
 #include "errors.h"
 #include "init.h"
-#include "resource_manager.h"
 #include "world/server.h"
 
 #include <node.h>
@@ -21,6 +20,8 @@
 #include <vector>
 
 namespace Framework::Scripting {
+    class ResourceManager;
+
     class Engine {
       private:
         v8::Isolate *_isolate = nullptr;

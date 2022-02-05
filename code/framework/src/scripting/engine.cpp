@@ -8,6 +8,7 @@
 
 #include "engine.h"
 #include "resource.h"
+#include "resource_manager.h"
 
 #include <logging/logger.h>
 #include <optick.h>
