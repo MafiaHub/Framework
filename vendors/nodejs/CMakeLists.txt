@@ -1,5 +1,10 @@
 add_library(NodeJS INTERFACE)
 
+# Build nghttp2
+if (UNIX)
+    add_subdirectory(nghttp2)
+endif ()
+
 if (CMAKE_CL_64)
     target_link_directories(NodeJS INTERFACE "../../vendors/nodejs/lib/win64")
     file(GLOB NODEJS_LIBS "../../vendors/nodejs/lib/win64/*.lib")
@@ -14,6 +19,7 @@ elseif (APPLE)
     set(NODEJS_ARCH "osx")
 elseif (UNIX)
     target_link_directories(NodeJS INTERFACE "../../vendors/nodejs/lib/linux")
+    target_link_libraries(NodeJS INTERFACE nghttp2)
     file(GLOB NODEJS_LIBS "../../vendors/nodejs/lib/linux/*.a")
     set(NODEJS_ARCH "linux")
 endif ()

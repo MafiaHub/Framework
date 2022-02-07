@@ -31,12 +31,13 @@ namespace Framework::Utils {
     }
 
     void CommandListener::Update() {
+        if (!_cb) {
+            return;
+        }
         std::lock_guard<std::mutex> lock(_mutex);
         while (!_queue.empty()) {
             const auto &cmdLine = _queue.front();
-            if (_cb) {
-                _cb(cmdLine);
-            }
+            _cb(cmdLine);
             _queue.pop();
         }
     }

@@ -21,11 +21,13 @@ if (MSVC)
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DFW_DEBUG")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-else ()
-    add_definitions("-Wno-unused-result" "-Wno-deprecated-declarations" "-Winvalid-offsetof")
 endif ()
 
 add_subdirectory(vendors)
 add_subdirectory(code)
+
+if (UNIX OR APPLE)
+    add_definitions("-Wno-pedantic -Wno-unused-parameter -Wno-unused-result" "-Wno-deprecated-declarations" "-Winvalid-offsetof")
+endif ()
 
 set(CMAKE_CXX_FLAGS "-std=c++20 ${CMAKE_CXX_FLAGS}")
