@@ -9,6 +9,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <cstdint>
 
 namespace Framework::Networking {
     enum ServerError { SERVER_NONE, SERVER_PEER_FAILED, SERVER_PEER_NULL };

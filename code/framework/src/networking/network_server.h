@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "errors.h"
 #include "messages/messages.h"
 #include "network_peer.h"

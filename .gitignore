@@ -13,8 +13,8 @@
 *.sln
 
 Bin/
-Build/
-Build*/
+[Bb]uild/
+[Bb]uild*/
 [Bb]uilds/
 
 CMakeLists.txt.user

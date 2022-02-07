@@ -55,9 +55,6 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
 add_subdirectory(httplib)
 
-# Build Discord SDK
-add_subdirectory(discord)
-
 # Build slikenet
 add_subdirectory(slikenet)
 
@@ -141,6 +138,7 @@ if (WIN32)
     add_subdirectory(imgui)
     add_subdirectory(sdl2)
     add_subdirectory(rmlui)
+    add_subdirectory(discord)
 
     # Lua
     add_subdirectory(lua-5.2.1)

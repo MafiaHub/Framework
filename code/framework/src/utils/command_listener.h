@@ -13,6 +13,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <memory>
 
 namespace Framework::Utils {
     using CommandCallback = std::function<void(const std::string &)>;

@@ -17,7 +17,6 @@ set(FRAMEWORK_SRC
     src/utils/states/machine.cpp
     src/utils/states/state.cpp
 
-    src/external/discord/wrapper.cpp
     src/external/sentry/wrapper.cpp
     src/external/firebase/wrapper.cpp
     src/external/optick/wrapper.cpp
@@ -72,6 +71,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/networking/network_client.cpp
 
     src/external/steam/wrapper.cpp
+    src/external/discord/wrapper.cpp
     src/external/imgui/wrapper.cpp
     src/external/sdl2/wrapper.cpp
 

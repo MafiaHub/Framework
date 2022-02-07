@@ -11,9 +11,6 @@ if(WIN32)
         IMPORTED_IMPLIB ${V8_LIB} IMPORTED_LOCATION "no.dll")
     set_target_properties(V8::libplatform PROPERTIES
         IMPORTED_IMPLIB ${V8_LIBPLATFORM} IMPORTED_LOCATION "no.dll")
-else()
-    set_target_properties(V8::v8 PROPERTIES IMPORTED_LOCATION ${V8_LIB})
-    set_target_properties(V8::libplatform PROPERTIES IMPORTED_LOCATION ${V8_LIBPLATFORM})
 endif()
 target_include_directories(V8::v8 INTERFACE ${V8_INCLUDE_DIRS})
 target_include_directories(V8::libplatform INTERFACE ${V8_INCLUDE_DIRS})
@@ -80,7 +77,7 @@ if(V8PP_HEADER_ONLY)
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
 		$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-	target_link_libraries(v8pp INTERFACE V8::v8 V8::libplatform)
+    # target_link_libraries(v8pp INTERFACE V8::v8 V8::libplatform)
 else()
 	add_library(v8pp ${V8PP_HEADERS} ${V8PP_SOURCES})
 	target_compile_definitions(v8pp PUBLIC ${V8PP_DEFINES})

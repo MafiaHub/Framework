@@ -15,8 +15,8 @@
 #define CALL_CUSTOM_PROC(kind)                                                                                                                                                     \
     const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();                                                                                                  \
     if (streamable != nullptr) {                                                                                                                                                   \
-        if (streamable->modEvents.##kind != nullptr) {                                                                                                                             \
-            streamable->modEvents.##kind(peer, guid, e);                                                                                                                           \
+        if (streamable->modEvents.kind != nullptr) {                                                                                                                             \
+            streamable->modEvents.kind(peer, guid, e);                                                                                                                           \
         }                                                                                                                                                                          \
     }
 

@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <mutex>
+#include <thread>
 
 namespace Framework::Utils {
     CommandListener::CommandListener() {
