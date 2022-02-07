@@ -11,7 +11,7 @@
 #include <nlohmann/json.hpp>
 #include <optick.h>
 
-static const char envBootstrapper[] = R"(
+static constexpr char envBootstrapper[] = R"(
 const publicRequire = require("module").createRequire(process.cwd() + "/resources/" + "{}" + "/");
 globalThis.require = publicRequire;
 require("vm").runInThisContext(process.argv[1]);

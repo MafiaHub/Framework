@@ -27,7 +27,10 @@ add_subdirectory(vendors)
 add_subdirectory(code)
 
 if (UNIX OR APPLE)
-    add_definitions("-Wno-pedantic -Wno-unused-parameter -Wno-unused-result" "-Wno-deprecated-declarations" "-Winvalid-offsetof")
+    set(DISABLED_WARNS "-Wno-pedantic -Wno-unused-parameter -Wno-unused-result"
+        "-Wno-deprecated-declarations" "-Wno-invalid-offsetof")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${DISABLED_WARNS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DISABLED_WARNS}")
 endif ()
 
 set(CMAKE_CXX_FLAGS "-std=c++20 ${CMAKE_CXX_FLAGS}")
