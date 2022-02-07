@@ -1,3 +1,6 @@
+include(UpdateGitHash)
+update_git_version(FW "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/version.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/version.cpp")
+
 # List the source files
 set(FRAMEWORK_SRC
     src/logging/logger.cpp
