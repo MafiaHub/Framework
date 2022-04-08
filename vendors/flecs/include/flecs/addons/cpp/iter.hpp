@@ -6,8 +6,7 @@ namespace flecs
  * This class can be used when a system does not know the type of a column at
  * compile time.
  */
-class unsafe_column {
-public:
+struct unsafe_column {
     unsafe_column(void* array, size_t size, size_t count, bool is_shared = false)
         : m_array(array)
         , m_size(size)
@@ -26,24 +25,6 @@ public:
         return ECS_OFFSET(m_array, m_size * index);
     }
 
-    /** Return whether component is set.
-     * If the column is optional, this method may return false.
-     * 
-     * @return True if component is set, false if component is not set.
-     */
-    bool is_set() const {
-        return m_array != nullptr;
-    }
-
-    /** Return whether component is shared.
-     * If the column is shared, this method returns true.
-     * 
-     * @return True if component is shared, false if component is owned.
-     */
-    bool is_shared() const {
-        return m_is_shared;
-    }
-
 protected:
     void* m_array;
     size_t m_size;
@@ -56,8 +37,7 @@ protected:
  * @tparam T component type of the column.
  */
 template <typename T>
-class column {
-public:
+struct column {
     static_assert(std::is_empty<T>::value == false, 
         "invalid type for column, cannot iterate empty type");
 
@@ -112,33 +92,6 @@ public:
         return m_array;
     }
 
-    /** Return whether component is set.
-     * If the column is optional, this method may return false.
-     * 
-     * @return True if component is set, false if component is not set.
-     */
-    bool is_set() const {
-        return m_array != nullptr;
-    }
-
-    /** Return whether component is shared.
-     * If the column is shared, this method returns true.
-     * 
-     * @return True if component is shared, false if component is owned.
-     */
-    bool is_shared() const {
-        return m_is_shared;
-    }
-
-    /** Return whether component is owned.
-     * If the column is shared, this method returns true.
-     * 
-     * @return True if component is shared, false if component is owned.
-     */
-    bool is_owned() const {
-        return !m_is_shared;
-    }    
-
 protected:
     T* m_array;
     size_t m_count;
@@ -154,12 +107,11 @@ namespace _ {
 
 /** Iterate over an integer range (used to iterate over entity range).
  *
- * @tparam Type of the iterator
+ * @tparam T of the iterator
  */
 template <typename T>
-class range_iterator
+struct range_iterator
 {
-public:
     explicit range_iterator(T value)
         : m_value(value){}
 
@@ -187,16 +139,6 @@ private:
 
 } // namespace flecs
 
-#ifdef FLECS_DEPRECATED
-#include "../addons/deprecated/iter.hpp"
-#else
-namespace flecs
-{
-template <typename Base>
-class iter_deprecated { };
-}
-#endif
-
 namespace flecs
 {
 
@@ -204,15 +146,17 @@ namespace flecs
 
 /** Class that enables iterating over table columns.
  */
-class iter : public iter_deprecated<iter> {
+struct iter {
+private:
     using row_iterator = _::range_iterator<size_t>;
+    
 public:
     /** Construct iterator from C iterator object.
      * This operation is typically not invoked directly by the user.
      *
      * @param it Pointer to C iterator.
      */
-    iter(const ecs_iter_t *it) : m_iter(it) { 
+    iter(ecs_iter_t *it) : m_iter(it) { 
         m_begin = 0;
         m_end = static_cast<std::size_t>(it->count);
     }
@@ -249,10 +193,6 @@ public:
         return m_iter->delta_system_time;
     }
 
-    FLECS_FLOAT world_time() const {
-        return m_iter->world_time;
-    }
-
     flecs::type type() const;
 
     /** Is current type a module or does it contain module contents? */
@@ -277,6 +217,15 @@ public:
      */
     void* param() {
         return m_iter->param;
+    }
+
+    /** Access param. 
+     * param contains the pointer passed to the param argument of system::run
+     */
+    template <typename T>
+    T* param() {
+        /* TODO: type check */
+        return static_cast<T*>(m_iter->param);
     }
 
     /** Obtain mutable handle to entity being iterated over.
@@ -319,7 +268,7 @@ public:
      *
      * @param index The term id.
      */
-    size_t term_size(int32_t index) const {
+    size_t size(int32_t index) const {
         return ecs_term_size(m_iter, index);
     }
 
@@ -327,13 +276,27 @@ public:
      *
      * @param index The term index.
      */    
-    flecs::entity term_source(int32_t index) const;
+    flecs::entity source(int32_t index) const;
 
-    /** Obtain component/tag entity of term.
+    /** Obtain component id of term.
      *
      * @param index The term index.
      */
-    flecs::entity term_id(int32_t index) const;
+    flecs::entity id(int32_t index) const;
+
+    /** Obtain pair id of term.
+     * This operation will fail if the term is not a pair.
+     * 
+     * @param index The term index.
+     */
+    flecs::id pair(int32_t index) const;
+
+    /** Convert current iterator result to string.
+     */
+    flecs::string str() const {
+        char *s = ecs_iter_str(m_iter);
+        return flecs::string(s);
+    }
 
     /** Obtain term with const type.
      * If the specified term index does not match with the provided type, the
@@ -381,7 +344,7 @@ public:
     /** Obtain owned term.
      * Same as iter::term, but ensures that term is owned.
      *
-     * @tparam Type of the term.
+     * @tparam T of the term.
      * @param index The term index.
      * @return The term data.
      */
@@ -394,7 +357,7 @@ public:
     /** Obtain shared term.
      * Same as iter::term, but ensures that term is shared.
      *
-     * @tparam Type of the term.
+     * @tparam T of the term.
      * @param index The term index.
      * @return The component term.
      */
@@ -419,11 +382,11 @@ public:
 
     /** Obtain untyped pointer to table column.
      *
-     * @param table_column Id of table column (corresponds with location in table type).
+     * @param column Id of table column (corresponds with location in table type).
      * @return Pointer to table column.
      */
-    void* table_column(int32_t col) const {
-        return ecs_iter_column_w_size(m_iter, 0, col);
+    void* table_column(int32_t column) const {
+        return ecs_iter_column_w_size(m_iter, 0, column);
     }
 
     /** Obtain typed pointer to table column.
@@ -449,14 +412,43 @@ public:
 
         return flecs::column<T>(static_cast<T*>(ecs_iter_column_w_size(m_iter,
             sizeof(T), col)), static_cast<std::size_t>(m_iter->count), false);
-    }    
+    }
+
+    /** Check if the current table has changed since the last iteration.
+     * Can only be used when iterating queries and/or systems. */
+    bool changed() {
+        return ecs_query_changed(nullptr, m_iter);
+    }
+
+    /** Skip current table.
+     * This indicates to the query that the data in the current table is not
+     * modified. By default, iterating a table with a query will mark the 
+     * iterated components as dirty if they are annotated with InOut or Out.
+     * 
+     * When this operation is invoked, the components of the current table will
+     * not be marked dirty. */
+    void skip() {
+        ecs_query_skip(m_iter);
+    }
+
+#ifdef FLECS_RULES
+    /** Get value of variable by id.
+     * Get value of a query variable for current result.
+     */
+    flecs::entity get_var(int var_id) const;
+
+    /** Get value of variable by name.
+     * Get value of a query variable for current result.
+     */
+    flecs::entity get_var(const char *name) const;
+#endif
 
 private:
     /* Get term, check if correct type is used */
     template <typename T, typename A = actual_type_t<T>>
     flecs::column<T> get_term(int32_t index) const {
 
-#ifndef NDEBUG
+#ifndef FLECS_NDEBUG
         ecs_entity_t term_id = ecs_term_id(m_iter, index);
         ecs_assert(term_id & ECS_PAIR || term_id & ECS_SWITCH || 
             term_id & ECS_CASE ||
@@ -503,7 +495,7 @@ private:
             ecs_term_w_size(m_iter, 0, index), size, count, is_shared);
     }     
 
-    const flecs::iter_t *m_iter;
+    flecs::iter_t *m_iter;
     std::size_t m_begin;
     std::size_t m_end;
 };

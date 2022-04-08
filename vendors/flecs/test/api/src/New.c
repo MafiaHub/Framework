@@ -1,7 +1,7 @@
 #include <api.h>
 
 void New_setup() {
-    ecs_tracing_enable(-2);
+    ecs_log_set_level(-2);
 }
 
 void New_empty() {
@@ -223,7 +223,7 @@ void New_new_w_entity_0() {
     ecs_fini(world);
 }
 
-ECS_ENTITY_DECLARE(Foo);
+ECS_DECLARE(Foo);
 
 void New_create_w_explicit_id_2_worlds() {
     ecs_world_t *world_1 = ecs_init();

@@ -3,13 +3,12 @@
     "type": "application",
     "value": {
         "author": "Sander Mertens",
-        "description": "Test project for flecs",
+        "description": "Test project for flecs C++ API",
         "public": false,
         "coverage": false,
         "language": "c++",
         "use": [
-            "flecs",
-            "flecs.os_api.bake"
+            "flecs"
         ]
     },
     "test": {
@@ -91,6 +90,7 @@
                 "set_deduced",
                 "override",
                 "set_override",
+                "set_override_lvalue",
                 "implicit_name_to_char",
                 "implicit_path_to_char",
                 "implicit_type_str_to_char",
@@ -173,7 +173,37 @@
                 "child_of",
                 "child_of_w_type",
                 "id_get_entity",
-                "id_get_invalid_entity"
+                "id_get_invalid_entity",
+                "each_in_stage",
+                "iter_recycled_parent",
+                "get_lambda_from_stage",
+                "default_ctor",
+                "get_obj_by_template",
+                "create_named_twice_deferred",
+                "clone",
+                "clone_w_value",
+                "clone_to_existing",
+                "clone_to_existing_overlap",
+                "set_doc_name",
+                "set_doc_brief",
+                "set_doc_detail",
+                "set_doc_link",
+                "entity_w_root_name",
+                "entity_w_root_name_from_scope",
+                "entity_w_type",
+                "entity_w_nested_type",
+                "entity_w_type_defer",
+                "entity_array",
+                "add_if_true_T",
+                "add_if_false_T",
+                "add_if_true_id",
+                "add_if_false_id",
+                "add_if_true_R_O",
+                "add_if_false_R_O",
+                "add_if_true_R_o",
+                "add_if_false_R_o",
+                "add_if_true_r_o",
+                "add_if_false_r_o"
             ]
         }, {
             "id": "Pairs",
@@ -210,7 +240,7 @@
                 "each",
                 "each_pair",
                 "each_pair_by_type",
-                "each_pair_w_childof",
+                "each_pair_w_isa",
                 "each_pair_w_recycled_rel",
                 "each_pair_w_recycled_obj",
                 "match_pair",
@@ -239,11 +269,41 @@
                 "get_object_for_id_not_found"
             ]
         }, {
+            "id": "Enum",
+            "testcases": [
+                "standard_enum_reflection",
+                "sparse_enum_reflection",
+                "enum_class_reflection",
+                "prefixed_enum_reflection",
+                "constant_with_num_reflection",
+                "get_constant_id",
+                "add_enum_constant",
+                "add_enum_class_constant",
+                "replace_enum_constants",
+                "has_enum",
+                "has_enum_wildcard",
+                "get_enum",
+                "remove_enum",
+                "remove_wildcard",
+                "enum_as_component",
+                "query_enum_wildcard",
+                "query_enum_constant",
+                "enum_type_from_stage",
+                "add_enum_from_stage",
+                "enum_w_2_worlds",
+                "add_enum_constant_w_tag",
+                "remove_enum_constant_w_tag",
+                "set_enum_constant_w_tag",
+                "enum_w_incorrect_size"
+            ]
+        }, {
             "id": "Switch",
             "testcases": [
                 "add_case",
                 "get_case",
                 "system_w_case",
+                "system_w_case_builder",
+                "system_w_sw_type_builder",
                 "system_w_switch",
                 "add_case_w_type",
                 "add_switch_w_type",
@@ -276,15 +336,19 @@
                 "has_pair_type",
                 "has_pair_entity",
                 "get",
-                "get_out_of_range"
+                "get_out_of_range",
+                "has_from_stage",
+                "create_type_from_system",
+                "type_from_iter",
+                "type_from_staged_iter"
             ]
         }, {
             "id": "System",
             "testcases": [
-                "action",
-                "action_const",
-                "action_shared",
-                "action_optional",
+                "iter",
+                "iter_const",
+                "iter_shared",
+                "iter_optional",
                 "each",
                 "each_const",
                 "each_shared",
@@ -296,7 +360,6 @@
                 "copy_name_on_create",
                 "nested_system",
                 "empty_signature",
-                "action_tag",
                 "iter_tag",
                 "each_tag",
                 "system_from_id",
@@ -322,7 +385,37 @@
                 "test_auto_defer_each",
                 "test_auto_defer_iter",
                 "custom_pipeline",
-                "system_w_self"
+                "system_w_self",
+                "instanced_query_w_singleton_each",
+                "instanced_query_w_base_each",
+                "un_instanced_query_w_singleton_each",
+                "un_instanced_query_w_base_each",
+                "instanced_query_w_singleton_iter",
+                "instanced_query_w_base_iter",
+                "un_instanced_query_w_singleton_iter",
+                "un_instanced_query_w_base_iter",
+                "create_w_no_template_args",
+                "system_w_type_kind",
+                "system_w_type_kind_type_pipeline"
+            ]
+        }, {
+            "id": "Event",
+            "testcases": [
+                "evt_1_id_entity",
+                "evt_2_ids_entity",
+                "evt_1_id_table",
+                "evt_2_ids_table",
+                "evt_type",
+                "evt_1_component",
+                "evt_2_components",
+                "evt_void_ctx",
+                "evt_typed_ctx",
+                "evt_implicit_typed_ctx",
+                "evt_1_id_pair_rel_id_obj_id_entity",
+                "evt_1_id_pair_rel_obj_id_entity",
+                "evt_1_id_pair_rel_obj_entity",
+                "emit_staged_from_world",
+                "emit_staged_from_stage"
             ]
         }, {
             "id": "Trigger",
@@ -335,7 +428,17 @@
                 "trigger_w_self",
                 "on_add_id",
                 "on_add_id_arg",
-                "on_add_expr"
+                "on_add_expr",
+                "create_w_no_template_args",
+                "yield_existing"
+            ]
+        }, {
+            "id": "Iterable",
+            "testcases": [
+                "page_each",
+                "page_iter",
+                "worker_each",
+                "worker_iter"
             ]
         }, {
             "id": "Query",
@@ -361,6 +464,7 @@
                 "changed",
                 "orphaned",
                 "default_ctor",
+                "default_ctor_no_assign",
                 "expr_w_template",
                 "query_type_w_template",
                 "compare_term_id",
@@ -384,7 +488,23 @@
                 "each_pair_object",
                 "iter_pair_object",
                 "iter_query_in_system",
-                "iter_type"
+                "iter_type",
+                "instanced_query_w_singleton_each",
+                "instanced_query_w_base_each",
+                "un_instanced_query_w_singleton_each",
+                "un_instanced_query_w_base_each",
+                "instanced_query_w_singleton_iter",
+                "instanced_query_w_base_iter",
+                "un_instanced_query_w_singleton_iter",
+                "un_instanced_query_w_base_iter",
+                "query_each_from_component",
+                "query_iter_from_component",
+                "query_each_w_func_ptr",
+                "query_iter_w_func_ptr",
+                "query_each_w_func_no_ptr",
+                "query_iter_w_func_no_ptr",
+                "query_each_w_iter",
+                "change_tracking"
             ]
         }, {
             "id": "QueryBuilder",
@@ -444,7 +564,10 @@
                 "2_subsequent_args",
                 "optional_tag_is_set",
                 "10_terms",
-                "20_terms"
+                "20_terms",
+                "group_by_raw",
+                "group_by_template",
+                "create_w_no_template_args"
             ]         
         }, {
             "id": "FilterBuilder",
@@ -455,6 +578,7 @@
                 "builder_build",
                 "builder_build_to_auto",
                 "builder_build_n_statements",
+                "builder_force_assign_operator",
                 "1_type",
                 "add_1_type",
                 "add_2_types",
@@ -510,13 +634,36 @@
                 "world_each_filter_2_components_no_entity",
                 "10_terms",
                 "20_terms",
-                "term_after_arg"
-            ]         
+                "term_after_arg",
+                "name_arg",
+                "const_in_term",
+                "create_w_no_template_args",
+                "2_terms_w_expr",
+                "assert_on_multiple_expr_calls",
+                "assert_on_uninitialized_term"
+            ]
+        }, {
+            "id": "RuleBuilder",
+            "testcases": [
+                "1_type",
+                "2_types",
+                "id_term",
+                "type_term",
+                "id_pair_term",
+                "id_pair_wildcard_term",
+                "type_pair_term",
+                "pair_term_w_var",
+                "2_pair_terms_w_var",
+                "set_var",
+                "set_2_vars",
+                "set_var_by_name",
+                "set_2_vars_by_name",
+                "expr_w_var"
+            ]
         }, {
             "id": "SystemBuilder",
             "testcases": [
                 "builder_assign_same_type",
-                "builder_assign_from_empty",
                 "builder_build_to_auto",
                 "builder_build_n_statements",
                 "1_type",
@@ -533,7 +680,10 @@
                 "string_term",
                 "singleton_term",
                 "10_terms",
-                "20_terms"
+                "20_terms",
+                "name_arg",
+                "create_w_no_template_args",
+                "write_annotation"
             ]  
         }, {
             "id": "Observer",
@@ -544,7 +694,13 @@
                 "2_terms_un_set",
                 "observer_w_self",
                 "10_terms",
-                "20_terms"
+                "20_terms",
+                "2_entities_iter",
+                "2_entities_table_column",
+                "2_entities_each",
+                "create_w_no_template_args",
+                "yield_existing",
+                "yield_existing_2_terms"
             ]
         }, {
             "id": "Filter",
@@ -555,7 +711,8 @@
                 "term_each_pair_type",
                 "term_each_pair_id",
                 "term_each_pair_relation_wildcard",
-                "term_each_pair_object_wildcard"
+                "term_each_pair_object_wildcard",
+                "default_ctor_no_assign"
             ]
         }, {
             "id": "ComponentLifecycle",
@@ -588,22 +745,24 @@
                 "no_copy",
                 "no_move",
                 "no_dtor",
-                "flecs_ctor",
-                "flecs_ctor_w_default_ctor",
                 "default_ctor_w_value_ctor",
-                "flecs_ctor_w_value_ctor",
                 "no_default_ctor_move_ctor_on_set",
                 "emplace_w_ctor",
                 "emplace_no_default_ctor",
                 "emplace_existing",
                 "emplace_singleton",
                 "dtor_w_non_trivial_implicit_move",
-                "dtor_w_non_trivial_explicit_move"
+                "dtor_w_non_trivial_explicit_move",
+                "grow_no_default_ctor",
+                "grow_no_default_ctor_move",
+                "grow_no_default_ctor_move_w_component",
+                "delete_no_default_ctor"
             ]
         }, {
             "id": "Refs",
             "testcases": [
-                "get_ref",
+                "get_ref_by_ptr",
+                "get_ref_by_method",
                 "ref_after_add",
                 "ref_after_remove",
                 "ref_after_set",
@@ -653,8 +812,7 @@
         }, {
             "id": "Snapshot",
             "testcases": [
-                "simple_snapshot",
-                "snapshot_iter"
+                "simple_snapshot"
             ]
         }, {
             "id": "WorldFactory",
@@ -682,6 +840,8 @@
                 "multi_world_component",
                 "multi_world_component_namespace",
                 "multi_world_module",
+                "multi_world_recycled_component",
+                "multi_world_recycled_component_different_generation",
                 "type_id",
                 "different_comp_same_name",
                 "reregister_after_reset",
@@ -689,6 +849,7 @@
                 "reregister_namespace",
                 "implicit_reregister_after_reset",
                 "reregister_after_reset_different_name",
+                "register_short_template",
                 "reimport",
                 "reimport_module_after_reset",
                 "reimport_module_new_world",
@@ -697,6 +858,10 @@
                 "c_interop_after_reset",
                 "implicit_register_w_new_world",
                 "count",
+                "count_id",
+                "count_pair",
+                "count_pair_type_id",
+                "count_pair_id",
                 "staged_count",
                 "async_stage_add",
                 "with_tag",
@@ -707,6 +872,10 @@
                 "with_tag_nested",
                 "with_scope",
                 "with_scope_nested",
+                "with_scope_type",
+                "with_scope_type_staged",
+                "with_scope_no_lambda",
+                "with_scope_type_no_lambda",
                 "recursive_lookup",
                 "type_w_tag_name",
                 "entity_w_tag_name",
@@ -724,7 +893,30 @@
                 "entity_as_component_2_worlds_implicit_namespaced",
                 "type_as_component",
                 "type_w_name_as_component",
-                "component_as_component"
+                "delete_with_id",
+                "delete_with_type",
+                "delete_with_pair",
+                "delete_with_pair_type",
+                "remove_all_id",
+                "remove_all_type",
+                "remove_all_pair",
+                "remove_all_pair_type",
+                "get_scope",
+                "get_scope_type",
+                "register_namespace_after_component",
+                "is_alive",
+                "is_valid",
+                "exists",
+                "get_alive",
+                "ensure",
+                "reset_all",
+                "get_tick",
+                "register_from_scope",
+                "register_nested_from_scope",
+                "register_w_root_name",
+                "register_nested_w_root_name",
+                "set_lookup_path",
+                "run_post_frame"
             ]
         }, {
             "id": "Singleton",
@@ -738,7 +930,9 @@
                 "has_singleton",
                 "singleton_system",
                 "get_singleton",
-                "type_id_from_world"
+                "type_id_from_world",
+                "set_lambda",
+                "get_lambda"
             ]
         }, {
             "id": "Misc",
@@ -751,7 +945,23 @@
                 "string_view_compare_w_string",
                 "string_compare_nullptr",
                 "nullptr_string_compare",
-                "nullptr_string_compare_nullptr"
+                "nullptr_string_compare_nullptr",
+                "c_macros",
+                "app_run",
+                "app_run_target_fps"
+            ]
+        }, {
+            "id": "Meta",
+            "testcases": [
+                "struct",
+                "nested_struct",
+                "struct_w_portable_type",
+                "partial_struct",
+                "partial_struct_custom_offset",
+                "units",
+                "unit_w_quantity",
+                "unit_w_prefix",
+                "unit_w_over"
             ]
         }]
     }

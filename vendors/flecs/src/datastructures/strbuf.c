@@ -1,4 +1,201 @@
 #include "../private_api.h"
+#include <stdio.h>
+#include <math.h>
+
+/**
+ *  stm32tpl --  STM32 C++ Template Peripheral Library
+ *  Visit https://github.com/antongus/stm32tpl for new versions
+ *
+ *  Copyright (c) 2011-2020 Anton B. Gusev aka AHTOXA
+ */
+
+#define MAX_PRECISION	(10)
+#define EXP_THRESHOLD   (3)
+#define INT64_MAX_F ((double)INT64_MAX)
+
+static const double rounders[MAX_PRECISION + 1] =
+{
+	0.5,				// 0
+	0.05,				// 1
+	0.005,				// 2
+	0.0005,				// 3
+	0.00005,			// 4
+	0.000005,			// 5
+	0.0000005,			// 6
+	0.00000005,			// 7
+	0.000000005,		// 8
+	0.0000000005,		// 9
+	0.00000000005		// 10
+};
+
+static
+char* strbuf_itoa(
+    char *buf,
+    int64_t v)
+{
+    char *ptr = buf;
+    char * p1;
+	char c;
+
+	if (!v) {
+		*ptr++ = '0';
+    } else {
+		char *p = ptr;
+		while (v) {
+			*p++ = (char)('0' + v % 10);
+			v /= 10;
+		}
+
+		p1 = p;
+
+		while (p > ptr) {
+			c = *--p;
+			*p = *ptr;
+			*ptr++ = c;
+		}
+		ptr = p1;
+	}
+    return ptr;
+}
+
+static
+int ecs_strbuf_ftoa(
+    ecs_strbuf_t *out, 
+    double f, 
+    int precision,
+    char nan_delim)
+{
+    char buf[64];
+	char * ptr = buf;
+	char c;
+	int64_t intPart;
+    int64_t exp = 0;
+
+    if (isnan(f)) {
+        if (nan_delim) {
+            ecs_strbuf_appendch(out, nan_delim);
+            ecs_strbuf_appendstr(out, "NaN");
+            return ecs_strbuf_appendch(out, nan_delim);
+        } else {
+            return ecs_strbuf_appendstr(out, "NaN");
+        }
+    }
+    if (isinf(f)) {
+        if (nan_delim) {
+            ecs_strbuf_appendch(out, nan_delim);
+            ecs_strbuf_appendstr(out, "Inf");
+            return ecs_strbuf_appendch(out, nan_delim);
+        } else {
+            return ecs_strbuf_appendstr(out, "Inf");
+        }
+    }
+
+	if (precision > MAX_PRECISION) {
+		precision = MAX_PRECISION;
+    }
+
+	if (f < 0) {
+		f = -f;
+		*ptr++ = '-';
+	}
+
+	if (precision < 0) {
+		if (f < 1.0) precision = 6;
+		else if (f < 10.0) precision = 5;
+		else if (f < 100.0) precision = 4;
+		else if (f < 1000.0) precision = 3;
+		else if (f < 10000.0) precision = 2;
+		else if (f < 100000.0) precision = 1;
+		else precision = 0;
+	}
+
+	if (precision) {
+		f += rounders[precision];
+    }
+
+    /* Make sure that number can be represented as 64bit int, increase exp */
+    while (f > INT64_MAX_F) {
+        f /= 1000 * 1000 * 1000;
+        exp += 9;
+    }
+
+	intPart = (int64_t)f;
+	f -= (double)intPart;
+
+    ptr = strbuf_itoa(ptr, intPart);
+
+	if (precision) {
+		*ptr++ = '.';
+		while (precision--) {
+			f *= 10.0;
+			c = (char)f;
+			*ptr++ = (char)('0' + c);
+			f -= c;
+		}
+	}
+	*ptr = 0;
+
+    /* Remove trailing 0s */
+    while ((&ptr[-1] != buf) && (ptr[-1] == '0')) {
+        ptr[-1] = '\0';
+        ptr --;
+    }
+    if (ptr != buf && ptr[-1] == '.') {
+        ptr[-1] = '\0';
+        ptr --;
+    }
+
+    /* If 0s before . exceed threshold, convert to exponent to save space 
+     * without losing precision. */
+    char *cur = ptr;
+    while ((&cur[-1] != buf) && (cur[-1] == '0')) {
+        cur --;
+    }
+
+    if (exp || ((ptr - cur) > EXP_THRESHOLD)) {
+        cur[0] = '\0';
+        exp += (ptr - cur);
+        ptr = cur;
+    }
+
+    if (exp) {
+        char *p1 = &buf[1];
+        if (nan_delim) {
+            ecs_os_memmove(buf + 1, buf, 1 + (ptr - buf));
+            buf[0] = nan_delim;
+            p1 ++;
+        }
+
+        /* Make sure that exp starts after first character */
+        c = p1[0];
+
+        if (c) {
+            p1[0] = '.';
+            do {
+                char t = (++p1)[0];
+                p1[0] = c;
+                c = t;
+                exp ++;
+            } while (c);
+            ptr = p1 + 1;
+        } else {
+            ptr = p1;
+        }
+
+
+        ptr[0] = 'e';
+        ptr = strbuf_itoa(ptr + 1, exp);
+
+        if (nan_delim) {
+            ptr[0] = nan_delim;
+            ptr ++;
+        }
+
+        ptr[0] = '\0';
+    }
+    
+    return ecs_strbuf_appendstrn(out, buf, (int32_t)(ptr - buf));
+}
 
 /* Add an extra element to the buffer */
 static
@@ -6,7 +203,7 @@ void ecs_strbuf_grow(
     ecs_strbuf_t *b)
 {
     /* Allocate new element */
-    ecs_strbuf_element_embedded *e = ecs_os_malloc(sizeof(ecs_strbuf_element_embedded));
+    ecs_strbuf_element_embedded *e = ecs_os_malloc_t(ecs_strbuf_element_embedded);
     b->size += b->current->pos;
     b->current->next = (ecs_strbuf_element*)e;
     b->current = (ecs_strbuf_element*)e;
@@ -26,7 +223,7 @@ void ecs_strbuf_grow_str(
     int32_t size)
 {
     /* Allocate new element */
-    ecs_strbuf_element_str *e = ecs_os_malloc(sizeof(ecs_strbuf_element_str));
+    ecs_strbuf_element_str *e = ecs_os_malloc_t(ecs_strbuf_element_str);
     b->size += b->current->pos;
     b->current->next = (ecs_strbuf_element*)e;
     b->current = (ecs_strbuf_element*)e;
@@ -89,36 +286,9 @@ void ecs_strbuf_init(
     }
 }
 
-/* Quick custom function to copy a maxium number of characters and
- * simultaneously determine length of source string. */
-static
-int32_t fast_strncpy(
-    char * dst,
-    const char * src,
-    int n_cpy,
-    int n)
-{
-    ecs_assert(n_cpy >= 0, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(n >= 0, ECS_INTERNAL_ERROR, NULL);
-
-    const char *ptr, *orig = src;
-    char ch;
-
-    for (ptr = src; (ptr - orig < n) && (ch = *ptr); ptr ++) {
-        if (ptr - orig < n_cpy) {
-            *dst = ch;
-            dst ++;
-        }
-    }
-
-    ecs_assert(ptr - orig < INT32_MAX, ECS_INTERNAL_ERROR, NULL);
-
-    return (int32_t)(ptr - orig);
-}
-
 /* Append a format string to a buffer */
 static
-bool ecs_strbuf_vappend_intern(
+bool vappend(
     ecs_strbuf_t *b,
     const char* str,
     va_list args)
@@ -182,84 +352,99 @@ bool ecs_strbuf_vappend_intern(
             ecs_os_vsprintf(dst, str, arg_cpy);
             ecs_strbuf_grow_str(b, dst, dst, memRequired);
         }
-    } else {
-        /* Buffer max has been reached */
-        result = false;
     }
 
     va_end(arg_cpy);
 
-    return result;
+    return ecs_strbuf_memLeft(b) > 0;
 }
 
 static
-bool ecs_strbuf_append_intern(
+bool appendstr(
     ecs_strbuf_t *b,
     const char* str,
     int n)
 {
-    bool result = true;
-
-    if (!str) {
-        return result;
-    }
-
     ecs_strbuf_init(b);
 
     int32_t memLeftInElement = ecs_strbuf_memLeftInCurrentElement(b);
     int32_t memLeft = ecs_strbuf_memLeft(b);
-
     if (memLeft <= 0) {
         return false;
     }
 
-    /* Compute the memory required to add the string to the buffer. If user
-     * provided buffer, use space left in buffer, otherwise use space left in
-     * current element. */
-    int32_t max_copy = b->buf ? memLeft : memLeftInElement;
-    int32_t memRequired;
+    /* Never write more than what the buffer can store */
+    if (n > memLeft) {
+        n = memLeft;
+    }
 
-    if (n < 0) n = INT_MAX;
-
-    memRequired = fast_strncpy(ecs_strbuf_ptr(b), str, max_copy, n);
-
-    if (memRequired <= memLeftInElement) {
+    if (n <= memLeftInElement) {
         /* Element was large enough to fit string */
-        b->current->pos += memRequired;
-    } else if ((memRequired - memLeftInElement) < memLeft) {
+        ecs_os_strncpy(ecs_strbuf_ptr(b), str, n);
+        b->current->pos += n;
+    } else if ((n - memLeftInElement) < memLeft) {
+        ecs_os_strncpy(ecs_strbuf_ptr(b), str, memLeftInElement);
+
         /* Element was not large enough, but buffer still has space */
         b->current->pos += memLeftInElement;
-        memRequired -= memLeftInElement;
+        n -= memLeftInElement;
 
         /* Current element was too small, copy remainder into new element */
-        if (memRequired < ECS_STRBUF_ELEMENT_SIZE) {
+        if (n < ECS_STRBUF_ELEMENT_SIZE) {
             /* A standard-size buffer is large enough for the new string */
             ecs_strbuf_grow(b);
 
             /* Copy the remainder to the new buffer */
             if (n) {
                 /* If a max number of characters to write is set, only a
-                    * subset of the string should be copied to the buffer */
+                 * subset of the string should be copied to the buffer */
                 ecs_os_strncpy(
                     ecs_strbuf_ptr(b),
                     str + memLeftInElement,
-                    (size_t)memRequired);
+                    (size_t)n);
             } else {
                 ecs_os_strcpy(ecs_strbuf_ptr(b), str + memLeftInElement);
             }
 
             /* Update to number of characters copied to new buffer */
-            b->current->pos += memRequired;
+            b->current->pos += n;
         } else {
+            /* String doesn't fit in a single element, strdup */
             char *remainder = ecs_os_strdup(str + memLeftInElement);
-            ecs_strbuf_grow_str(b, remainder, remainder, memRequired);
+            ecs_strbuf_grow_str(b, remainder, remainder, n);
         }
     } else {
         /* Buffer max has been reached */
-        result = false;
+        return false;
     }
 
-    return result;
+    return ecs_strbuf_memLeft(b) > 0;
+}
+
+static
+bool appendch(
+    ecs_strbuf_t *b,
+    char ch)
+{
+    ecs_strbuf_init(b);
+
+    int32_t memLeftInElement = ecs_strbuf_memLeftInCurrentElement(b);
+    int32_t memLeft = ecs_strbuf_memLeft(b);
+    if (memLeft <= 0) {
+        return false;
+    }
+
+    if (memLeftInElement) {
+        /* Element was large enough to fit string */
+        ecs_strbuf_ptr(b)[0] = ch;
+        b->current->pos ++;
+    } else {
+        ecs_strbuf_grow(b);
+        ecs_strbuf_ptr(b)[0] = ch;
+        b->current->pos ++;
+    }
+
+    return ecs_strbuf_memLeft(b) > 0;
 }
 
 bool ecs_strbuf_vappend(
@@ -267,11 +452,9 @@ bool ecs_strbuf_vappend(
     const char* fmt,
     va_list args)
 {
-    bool result = ecs_strbuf_vappend_intern(
-        b, fmt, args
-    );
-
-    return result;
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(fmt != NULL, ECS_INVALID_PARAMETER, NULL);
+    return vappend(b, fmt, args);
 }
 
 bool ecs_strbuf_append(
@@ -279,11 +462,12 @@ bool ecs_strbuf_append(
     const char* fmt,
     ...)
 {
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(fmt != NULL, ECS_INVALID_PARAMETER, NULL);
+
     va_list args;
     va_start(args, fmt);
-    bool result = ecs_strbuf_vappend_intern(
-        b, fmt, args
-    );
+    bool result = vappend(b, fmt, args);
     va_end(args);
 
     return result;
@@ -294,15 +478,34 @@ bool ecs_strbuf_appendstrn(
     const char* str,
     int32_t len)
 {
-    return ecs_strbuf_append_intern(
-        b, str, len
-    );
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
+    return appendstr(b, str, len);
+}
+
+bool ecs_strbuf_appendch(
+    ecs_strbuf_t *b,
+    char ch)
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL); 
+    return appendch(b, ch);
+}
+
+bool ecs_strbuf_appendflt(
+    ecs_strbuf_t *b,
+    double flt,
+    char nan_delim)
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL); 
+    return ecs_strbuf_ftoa(b, flt, 10, nan_delim);
 }
 
 bool ecs_strbuf_appendstr_zerocpy(
     ecs_strbuf_t *b,
     char* str)
 {
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_strbuf_init(b);
     ecs_strbuf_grow_str(b, str, str, 0);
     return true;
@@ -312,6 +515,8 @@ bool ecs_strbuf_appendstr_zerocpy_const(
     ecs_strbuf_t *b,
     const char* str)
 {
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
     /* Removes const modifier, but logic prevents changing / delete string */
     ecs_strbuf_init(b);
     ecs_strbuf_grow_str(b, (char*)str, NULL, 0);
@@ -322,9 +527,9 @@ bool ecs_strbuf_appendstr(
     ecs_strbuf_t *b,
     const char* str)
 {
-    return ecs_strbuf_append_intern(
-        b, str, -1
-    );
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
+    return appendstr(b, str, ecs_os_strlen(str));
 }
 
 bool ecs_strbuf_mergebuff(
@@ -352,9 +557,12 @@ bool ecs_strbuf_mergebuff(
     return true;
 }
 
-char* ecs_strbuf_get(ecs_strbuf_t *b) {
-    char* result = NULL;
+char* ecs_strbuf_get(
+    ecs_strbuf_t *b) 
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
 
+    char* result = NULL;
     if (b->elementCount) {
         if (b->buf) {
             b->buf[b->current->pos] = '\0';
@@ -381,6 +589,7 @@ char* ecs_strbuf_get(ecs_strbuf_t *b) {
             } while ((e = next));
 
             result[len - 1] = '\0';
+            b->length = len;
         }
     } else {
         result = NULL;
@@ -388,10 +597,28 @@ char* ecs_strbuf_get(ecs_strbuf_t *b) {
 
     b->elementCount = 0;
 
+    b->content = result;
+
     return result;
 }
 
-void ecs_strbuf_reset(ecs_strbuf_t *b) {
+char *ecs_strbuf_get_small(
+    ecs_strbuf_t *b)
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    int32_t written = ecs_strbuf_written(b);
+    ecs_assert(written <= ECS_STRBUF_ELEMENT_SIZE, ECS_INVALID_OPERATION, NULL);
+    char *buf = b->firstElement.buf;
+    buf[written] = '\0';
+    return buf;
+}
+
+void ecs_strbuf_reset(
+    ecs_strbuf_t *b) 
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+
     if (b->elementCount && !b->buf) {
         void *next = NULL;
         ecs_strbuf_element *e = (ecs_strbuf_element*)&b->firstElement;
@@ -407,61 +634,81 @@ void ecs_strbuf_reset(ecs_strbuf_t *b) {
 }
 
 void ecs_strbuf_list_push(
-    ecs_strbuf_t *buffer,
+    ecs_strbuf_t *b,
     const char *list_open,
     const char *separator)
 {
-    buffer->list_sp ++;
-    buffer->list_stack[buffer->list_sp].count = 0;
-    buffer->list_stack[buffer->list_sp].separator = separator;
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(list_open != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(separator != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    b->list_sp ++;
+    b->list_stack[b->list_sp].count = 0;
+    b->list_stack[b->list_sp].separator = separator;
 
     if (list_open) {
-        ecs_strbuf_appendstr(buffer, list_open);
+        ecs_strbuf_appendstr(b, list_open);
     }
 }
 
 void ecs_strbuf_list_pop(
-    ecs_strbuf_t *buffer,
+    ecs_strbuf_t *b,
     const char *list_close)
 {
-    buffer->list_sp --;
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(list_close != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    b->list_sp --;
     
     if (list_close) {
-        ecs_strbuf_appendstr(buffer, list_close);
+        ecs_strbuf_appendstr(b, list_close);
     }
 }
 
 void ecs_strbuf_list_next(
-    ecs_strbuf_t *buffer)
+    ecs_strbuf_t *b)
 {
-    int32_t list_sp = buffer->list_sp;
-    if (buffer->list_stack[list_sp].count != 0) {
-        ecs_strbuf_appendstr(buffer, buffer->list_stack[list_sp].separator);
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    int32_t list_sp = b->list_sp;
+    if (b->list_stack[list_sp].count != 0) {
+        ecs_strbuf_appendstr(b, b->list_stack[list_sp].separator);
     }
-    buffer->list_stack[list_sp].count ++;
+    b->list_stack[list_sp].count ++;
 }
 
 bool ecs_strbuf_list_append(
-    ecs_strbuf_t *buffer,
+    ecs_strbuf_t *b,
     const char *fmt,
     ...)
 {
-    ecs_strbuf_list_next(buffer);
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(fmt != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_strbuf_list_next(b);
 
     va_list args;
     va_start(args, fmt);
-    bool result = ecs_strbuf_vappend_intern(
-        buffer, fmt, args
-    );
+    bool result = vappend(b, fmt, args);
     va_end(args);
 
     return result;
 }
 
 bool ecs_strbuf_list_appendstr(
-    ecs_strbuf_t *buffer,
+    ecs_strbuf_t *b,
     const char *str)
 {
-    ecs_strbuf_list_next(buffer);
-    return ecs_strbuf_appendstr(buffer, str);
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_strbuf_list_next(b);
+    return ecs_strbuf_appendstr(b, str);
+}
+
+int32_t ecs_strbuf_written(
+    const ecs_strbuf_t *b)
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    return b->size + b->current->pos;
 }

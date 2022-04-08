@@ -43,7 +43,7 @@ void Filter_term_each_tag() {
     e_3.add<Tag>();
 
     int32_t count = 0;
-    ecs.each<Foo>([&](flecs::entity e, Foo&) {
+    ecs.each<Foo>([&](flecs::entity e, Foo) {
         if (e == e_1 || e == e_2 || e == e_3) {
             count ++;
         }            
@@ -161,4 +161,11 @@ void Filter_term_each_pair_object_wildcard() {
     });
 
     test_int(count, 3);
+}
+
+void Filter_default_ctor_no_assign() {
+    flecs::filter<> f;
+    
+    // Make sure code compiles & works
+    test_assert(true);
 }

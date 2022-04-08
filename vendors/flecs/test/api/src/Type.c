@@ -1,15 +1,15 @@
 #include <api.h>
-#include <flecs/type.h>
+#include <stdio.h>
 
 static
 char* type_str(ecs_world_t *world, ecs_entity_t type_ent) {
     const EcsType *type_comp = ecs_get(world, type_ent, EcsType);
     test_assert(type_comp != NULL);
-    return ecs_type_str(world, type_comp->normalized);
+    return ecs_type_str(world, ecs_table_get_type(type_comp->normalized));
 }
 
 void Type_setup() {
-    ecs_tracing_enable(-2);
+    ecs_log_set_level(-2);
 }
 
 void Type_type_of_1_tostr() {
@@ -23,7 +23,7 @@ void Type_type_of_1_tostr() {
     
     test_str(str, "Position");
 
-    free(str);
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -38,9 +38,9 @@ void Type_type_of_2_tostr() {
 
     char *str = type_str(world, Type);
     
-    test_str(str, "Position,Velocity");
+    test_str(str, "Position, Velocity");
 
-    free(str);
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -54,9 +54,9 @@ void Type_type_of_2_tostr_no_id() {
     
     char *str = ecs_type_str(world, t);
     
-    test_str(str, "100,200");
+    test_str(str, "100, 200");
 
-    free(str);
+    ecs_os_free(str);
 
     ecs_vector_free(t);
 
@@ -191,7 +191,7 @@ void Type_type_to_expr_2_comp() {
     ECS_TYPE(world, Type, Position, Velocity);
 
     char *expr = type_str(world, Type);
-    test_str(expr, "Position,Velocity");
+    test_str(expr, "Position, Velocity");
     ecs_os_free(expr);
 
     ecs_fini(world);
@@ -262,7 +262,7 @@ void Type_type_to_expr_scope() {
     ecs_set_scope(world, 0);
 
     char *expr = type_str(world, Type);
-    test_str(expr, "Position,scope.Velocity");
+    test_str(expr, "Position, scope.Velocity");
     ecs_os_free(expr);
 
     ecs_fini(world);
@@ -273,10 +273,9 @@ void Type_entity_str() {
 
     ECS_ENTITY(world, e, 0);
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "e");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "e");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -287,10 +286,9 @@ void Type_entity_path_str() {
     ECS_ENTITY(world, parent, 0);
     ECS_ENTITY(world, e, (ChildOf, parent));
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "parent.e");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "parent.e");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -302,10 +300,9 @@ void Type_entity_instanceof_str() {
 
     ecs_entity_t e = ecs_pair(EcsIsA, Foo);
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "(IsA,Foo)");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "(IsA,Foo)");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -317,10 +314,9 @@ void Type_entity_childof_str() {
 
     ecs_entity_t e = ecs_pair(EcsChildOf, Foo);
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "(ChildOf,Foo)");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "(ChildOf,Foo)");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -333,10 +329,9 @@ void Type_entity_pair_str() {
 
     ecs_entity_t e = ecs_pair(Bar, Foo);
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "(Bar,Foo)");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "(Bar,Foo)");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -348,10 +343,9 @@ void Type_entity_switch_str() {
 
     ecs_entity_t e = ECS_SWITCH | Foo;
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "SWITCH|Foo");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "SWITCH|Foo");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -360,13 +354,13 @@ void Type_entity_case_str() {
     ecs_world_t *world = ecs_init();
 
     ECS_ENTITY(world, Foo, 0);
+    ECS_ENTITY(world, Bar, 0);
 
-    ecs_entity_t e = ECS_CASE | Foo;
+    ecs_entity_t e = ecs_case(Foo, Bar);
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "CASE|Foo");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "CASE|(Foo,Bar)");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -378,10 +372,9 @@ void Type_entity_and_str() {
 
     ecs_entity_t e = ECS_AND | Foo;
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "AND|Foo");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "AND|Foo");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -393,10 +386,9 @@ void Type_entity_or_str() {
 
     ecs_entity_t e = ECS_OR | Foo;
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "OR|Foo");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "OR|Foo");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -408,10 +400,9 @@ void Type_entity_xor_str() {
 
     ecs_entity_t e = ECS_XOR | Foo;
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "XOR|Foo");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "XOR|Foo");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -423,10 +414,9 @@ void Type_entity_not_str() {
 
     ecs_entity_t e = ECS_NOT | Foo;
 
-    char buffer[256];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 256);
-    test_str(buffer, "NOT|Foo");
-    test_int(strlen(buffer), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "NOT|Foo");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -438,11 +428,9 @@ void Type_entity_str_small_buffer() {
 
     ecs_entity_t e = ecs_pair(EcsChildOf, Foo);
 
-    char buffer[10];
-    size_t result = ecs_id_str_w_buf(world, e, buffer, 10);
-    test_str(buffer, "(ChildOf,");
-    test_int(strlen(buffer), 9);
-    test_int(strlen("(ChildOf,Foo)"), result);
+    char *str = ecs_id_str(world, e);
+    test_str(str, "(ChildOf,Foo)");
+    ecs_os_free(str);
 
     ecs_fini(world);
 }
@@ -519,7 +507,7 @@ void Type_large_type_expr() {
     const EcsType *ptr = ecs_get(world, type_ent, EcsType);
     test_assert(ptr != NULL);
     test_assert(ecs_vector_count(ptr->type) == 64);
-    test_assert(ecs_vector_count(ptr->normalized) == 64);
+    test_assert(ecs_vector_count(ecs_table_get_type(ptr->normalized)) == 64);
 
     for (i = 0; i < 64; i ++) {
         char buff[4] = { 'e' };
@@ -528,7 +516,7 @@ void Type_large_type_expr() {
         test_assert(e != 0);
         test_str(ecs_get_name(world, e), buff);
 
-        test_assert(ecs_type_index_of(ptr->type, 0, e) == i);
+        test_assert(ecs_search(world, ptr->normalized, e, 0) == i);
     }
 
     ecs_fini(world);
@@ -537,7 +525,7 @@ void Type_large_type_expr() {
 void Type_large_type_expr_limit() {
     ecs_world_t *world = ecs_init();
 
-    test_assert(ECS_MAX_ADD_REMOVE == 32);
+    test_assert(ECS_ID_CACHE_SIZE == 32);
 
     int i;
     for (i = 0; i < 32; i ++) {
@@ -560,7 +548,7 @@ void Type_large_type_expr_limit() {
     const EcsType *ptr = ecs_get(world, type_ent, EcsType);
     test_assert(ptr != NULL);
     test_assert(ecs_vector_count(ptr->type) == 32);
-    test_assert(ecs_vector_count(ptr->normalized) == 32);
+    test_assert(ecs_vector_count(ecs_table_get_type(ptr->normalized)) == 32);
 
     for (i = 0; i < 32; i ++) {
         char buff[4] = { 'e' };
@@ -569,7 +557,7 @@ void Type_large_type_expr_limit() {
         test_assert(e != 0);
         test_str(ecs_get_name(world, e), buff);
 
-        test_assert(ecs_type_index_of(ptr->type, 0, e) == i);
+        test_assert(ecs_search(world, ptr->normalized, e, 0) == i);
     }
 
     ecs_fini(world);

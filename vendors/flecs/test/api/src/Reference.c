@@ -1,7 +1,7 @@
 #include <api.h>
 
 void Reference_setup() {
-    ecs_tracing_enable(-3);
+    ecs_log_set_level(-3);
 }
 
 void Reference_get_ref() {
@@ -219,20 +219,9 @@ void Reference_get_nonexisting() {
     ecs_fini(world);
 }
 
-static
-void comp_move(
-    ecs_world_t *world,
-    ecs_entity_t component,    
-    const ecs_entity_t *dst_entity,
-    const ecs_entity_t *src_entity,
-    void *dst_ptr,
-    void *src_ptr,
-    size_t size,
-    int32_t count,
-    void *ctx)
-{
-    memcpy(dst_ptr, src_ptr, size * count);
-}
+static ECS_MOVE(Position, dst, src, {
+    ecs_os_memcpy_t(dst, src, Position);
+})
 
 void Reference_get_ref_after_realloc_w_lifecycle() {
     ecs_world_t *world = ecs_init();
@@ -240,7 +229,7 @@ void Reference_get_ref_after_realloc_w_lifecycle() {
     ECS_COMPONENT(world, Position);
 
     ecs_set(world, ecs_id(Position), EcsComponentLifecycle, {
-        .move = comp_move
+        .move = ecs_move(Position)
     });
 
     ECS_ENTITY(world, e, Position);

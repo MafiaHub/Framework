@@ -3,6 +3,8 @@
 
 #include "private_types.h"
 #include "table_cache.h"
+#include "datastructures/qsort.h"
+#include "datastructures/name_index.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Core bootstrap functions
@@ -11,10 +13,6 @@
 /* Bootstrap world */
 void flecs_bootstrap(
     ecs_world_t *world);
-
-ecs_type_t flecs_bootstrap_type(
-    ecs_world_t *world,
-    ecs_entity_t entity);
 
 #define flecs_bootstrap_component(world, id)\
     ecs_component_init(world, &(ecs_component_desc_t){\
@@ -28,9 +26,11 @@ ecs_type_t flecs_bootstrap_type(
     });
 
 #define flecs_bootstrap_tag(world, name)\
-    ecs_set_name(world, name, (char*)&#name[ecs_os_strlen("Ecs")]);\
-    ecs_set_symbol(world, name, #name);\
-    ecs_add_pair(world, name, EcsChildOf, ecs_get_scope(world))
+    ecs_add_id(world, name, EcsFinal);\
+    ecs_add_pair(world, name, EcsChildOf, ecs_get_scope(world));\
+    ecs_set(world, name, EcsComponent, {.size = 0});\
+    ecs_set_name(world, name, (char*)&#name[ecs_os_strlen(world->name_prefix)]);\
+    ecs_set_symbol(world, name, #name)
 
 
 /* Bootstrap functions for other parts in the code */
@@ -42,9 +42,10 @@ void flecs_bootstrap_hierarchy(ecs_world_t *world);
 
 /* Mark an entity as being watched. This is used to trigger automatic rematching
  * when entities used in system expressions change their components. */
-void flecs_set_watch(
+void flecs_add_flag(
     ecs_world_t *world,
-    ecs_entity_t entity);
+    ecs_entity_t entity,
+    uint32_t flag);
 
 /* Obtain entity info */
 bool flecs_get_info(
@@ -75,26 +76,38 @@ const ecs_stage_t* flecs_stage_from_readonly_world(
     const ecs_world_t *world);
 
 /* Get component callbacks */
-const ecs_type_info_t *flecs_get_c_info(
+const ecs_type_info_t *flecs_get_type_info(
     const ecs_world_t *world,
     ecs_entity_t component);
 
 /* Get or create component callbacks */
-ecs_type_info_t* flecs_get_or_create_c_info(
+ecs_type_info_t* flecs_ensure_type_info(
     ecs_world_t *world,
     ecs_entity_t component);
+
+void flecs_init_type_info(
+    ecs_world_t *world,
+    ecs_entity_t component,
+    ecs_size_t size,
+    ecs_size_t alignment);
+
+#define flecs_init_type_info_t(world, T)\
+    flecs_init_type_info(world, ecs_id(T), ECS_SIZEOF(T), ECS_ALIGNOF(T))
 
 void flecs_eval_component_monitors(
     ecs_world_t *world);
 
 void flecs_monitor_mark_dirty(
     ecs_world_t *world,
-    ecs_entity_t relation,
     ecs_entity_t id);
 
 void flecs_monitor_register(
     ecs_world_t *world,
-    ecs_entity_t relation,
+    ecs_entity_t id,
+    ecs_query_t *query);
+
+void flecs_monitor_unregister(
+    ecs_world_t *world,
     ecs_entity_t id,
     ecs_query_t *query);
 
@@ -123,7 +136,21 @@ ecs_id_record_t* flecs_ensure_id_record(
     ecs_world_t *world,
     ecs_id_t id);
 
+void flecs_register_for_id_record(
+    ecs_world_t *world,
+    ecs_id_t id,
+    const ecs_table_t *table,
+    ecs_table_record_t *tr);
+
 ecs_id_record_t* flecs_get_id_record(
+    const ecs_world_t *world,
+    ecs_id_t id);
+
+ecs_hashmap_t* flecs_ensure_id_name_index(
+    ecs_world_t *world,
+    ecs_id_t id);
+
+ecs_hashmap_t* flecs_get_id_name_index(
     const ecs_world_t *world,
     ecs_id_t id);
 
@@ -136,45 +163,62 @@ const ecs_table_record_t* flecs_id_record_table(
     ecs_id_record_t *idr,
     ecs_table_t *table);
 
-const ecs_table_record_t* flecs_id_record_tables(
-    const ecs_id_record_t *idr);
+void flecs_process_pending_tables(
+    const ecs_world_t *world);
 
-const ecs_table_record_t* flecs_id_record_empty_tables(
-    const ecs_id_record_t *idr);
-
-int32_t flecs_id_record_count(
-    const ecs_id_record_t *idr);
-
-int32_t flecs_id_record_empty_count(
-    const ecs_id_record_t *idr);
-
-void flecs_register_add_ref(
+ecs_id_record_t* flecs_table_iter(
     ecs_world_t *world,
-    const ecs_table_t *table,
-    ecs_id_t id);
+    ecs_id_t id,
+    ecs_table_cache_iter_t *out);
 
-void flecs_register_remove_ref(
+ecs_id_record_t* flecs_empty_table_iter(
     ecs_world_t *world,
-    const ecs_table_t *table,
-    ecs_id_t id);
+    ecs_id_t id,
+    ecs_table_cache_iter_t *out);
+
+bool flecs_table_cache_iter(
+    ecs_table_cache_t *cache,
+    ecs_table_cache_iter_t *out);
+
+bool flecs_table_cache_empty_iter(
+    ecs_table_cache_t *cache,
+    ecs_table_cache_iter_t *out);
+
+ecs_table_cache_hdr_t* _flecs_table_cache_next(
+    ecs_table_cache_iter_t *it);
+
+#define flecs_table_cache_next(it, T)\
+    (ECS_CAST(T*, _flecs_table_cache_next(it)))
 
 void flecs_clear_id_record(
     ecs_world_t *world,
-    ecs_id_t id);
+    ecs_id_t id,
+    ecs_id_record_t *idr);
+
+void flecs_remove_id_record(
+    ecs_world_t *world,
+    ecs_id_t id,
+    ecs_id_record_t *idr);
+
+void flecs_name_index_erase(
+    ecs_hashmap_t *map,
+    ecs_entity_t entity,
+    uint64_t hash);
 
 void flecs_triggers_notify(
-    ecs_world_t *world,
-    ecs_poly_t *observable,
+    ecs_iter_t *it,
+    ecs_observable_t *observable,
+    ecs_ids_t *ids,
+    ecs_entity_t event);
+
+void flecs_set_triggers_notify(
+    ecs_iter_t *it,
+    ecs_observable_t *observable,
     ecs_ids_t *ids,
     ecs_entity_t event,
-    ecs_entity_t entity,
-    ecs_table_t *table,
-    ecs_table_t *other_table,
-    int32_t row,
-    int32_t count,
-    void *param);
+    ecs_id_t set_id);
 
-ecs_id_triggers_t* flecs_triggers_for_id(
+bool flecs_check_triggers_for_event(
     const ecs_poly_t *world,
     ecs_id_t id,
     ecs_entity_t event);
@@ -187,6 +231,44 @@ void flecs_observer_fini(
     ecs_world_t *world,
     ecs_observer_t *observer);
 
+/* Suspend/resume readonly state. To fully support implicit registration of
+ * components, it should be possible to register components while the world is
+ * in readonly mode. It is not uncommon that a component is used first from
+ * within a system, which are often ran while in readonly mode.
+ * 
+ * Suspending readonly mode is only allowed when the world is not multithreaded.
+ * When a world is multithreaded, it is not safe to (even temporarily) leave
+ * readonly mode, so a multithreaded application should always explicitly
+ * register components in advance. 
+ * 
+ * These operations also suspend deferred mode.
+ */
+typedef struct {
+    bool is_readonly;
+    bool is_deferred;
+    int32_t defer_count;
+    ecs_entity_t scope;
+    ecs_entity_t with;
+    ecs_vector_t *defer_queue;
+    ecs_stage_t *stage;
+} ecs_suspend_readonly_state_t;
+
+ecs_world_t* flecs_suspend_readonly(
+    const ecs_world_t *world,
+    ecs_suspend_readonly_state_t *state);
+
+void flecs_resume_readonly(
+    ecs_world_t *world,
+    ecs_suspend_readonly_state_t *state);
+
+void flecs_emit( 
+    ecs_world_t *world,
+    ecs_world_t *stage,
+    ecs_event_desc_t *desc);
+
+ecs_entity_t flecs_get_oneof(
+    const ecs_world_t *world,
+    ecs_entity_t e);
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Stage API
@@ -257,6 +339,12 @@ bool flecs_defer_clear(
     ecs_stage_t *stage,
     ecs_entity_t entity);
 
+bool flecs_defer_on_delete_action(
+    ecs_world_t *world,
+    ecs_stage_t *stage,
+    ecs_id_t id,
+    ecs_entity_t action);
+
 bool flecs_defer_enable(
     ecs_world_t *world,
     ecs_stage_t *stage,
@@ -279,7 +367,7 @@ bool flecs_defer_remove(
 bool flecs_defer_set(
     ecs_world_t *world,
     ecs_stage_t *stage,
-    ecs_op_kind_t op_kind,
+    ecs_defer_op_kind_t op_kind,
     ecs_entity_t entity,
     ecs_entity_t component,
     ecs_size_t size,
@@ -298,17 +386,7 @@ bool flecs_defer_purge(
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Notifications
-////////////////////////////////////////////////////////////////////////////////
-
-void flecs_notify_on_add(
-    ecs_world_t *world,
-    ecs_table_t *table,
-    ecs_table_t *other_table,
-    ecs_data_t *data,
-    int32_t row,
-    int32_t count,
-    ecs_table_diff_t *diff,
-    bool run_on_set);   
+//////////////////////////////////////////////////////////////////////////////// 
 
 void flecs_notify_on_remove(
     ecs_world_t *world,
@@ -383,6 +461,25 @@ void flecs_table_delete(
     int32_t index,
     bool destruct);
 
+/* Increase refcount of table (prevents deletion) */
+void flecs_table_claim(
+    ecs_world_t *world,
+    ecs_table_t *table);
+
+/* Decrease refcount of table (may delete) */
+bool flecs_table_release(
+    ecs_world_t *world,
+    ecs_table_t *table);
+
+/* Unregister table cache records */
+void flecs_table_records_unregister(
+    ecs_world_t *world,
+    ecs_table_t *table);
+
+/* Make sure table records are in correct table cache list */
+bool flecs_table_records_update_empty(
+    ecs_table_t *table);
+
 /* Move a row from one table to another */
 void flecs_table_move(
     ecs_world_t *world,
@@ -411,6 +508,11 @@ void flecs_table_set_size(
     ecs_table_t *table,
     ecs_data_t *data,
     int32_t count);
+
+/* Shrink table to contents */
+bool flecs_table_shrink(
+    ecs_world_t *world,
+    ecs_table_t *table);
 
 /* Get dirty state for table columns */
 int32_t* flecs_table_get_dirty_state(
@@ -472,6 +574,7 @@ ecs_table_t *flecs_table_traverse_remove(
     ecs_table_diff_t *diff);
 
 void flecs_table_mark_dirty(
+    ecs_world_t *world,
     ecs_table_t *table,
     ecs_entity_t component);
 
@@ -493,14 +596,6 @@ void flecs_table_clear_edges(
     ecs_world_t *world,
     ecs_table_t *table);
 
-void flecs_table_clear_add_edge(
-    ecs_table_t *table,
-    ecs_id_t id);
-
-void flecs_table_clear_remove_edge(
-    ecs_table_t *table,
-    ecs_id_t id);
-
 void flecs_table_delete_entities(
     ecs_world_t *world,
     ecs_table_t *table);
@@ -509,6 +604,7 @@ ecs_column_t *ecs_table_column_for_id(
     const ecs_world_t *world,
     const ecs_table_t *table,
     ecs_id_t id);
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Query API
@@ -520,36 +616,26 @@ bool flecs_term_match_table(
     const ecs_term_t *term,
     const ecs_table_t *table,
     ecs_type_t type,
-    int32_t offset,
     ecs_id_t *id_out,
     int32_t *column_out,
     ecs_entity_t *subject_out,
-    ecs_size_t *size_out,
-    void **ptr_out,
     int32_t *match_indices,
-    bool first);
+    bool first,
+    ecs_flags32_t iter_flags);
 
 /* Match table with filter */
 bool flecs_filter_match_table(
     ecs_world_t *world,
     const ecs_filter_t *filter,
     const ecs_table_t *table,
-    ecs_type_t type,
-    int32_t offset,
     ecs_id_t *ids,
     int32_t *columns,
     ecs_entity_t *subjects,
-    ecs_size_t *sizes,
-    void **ptrs,
     int32_t *match_indices,
     int32_t *matches_left,
     bool first,
-    int32_t skip_term);
-
-bool flecs_query_match(
-    const ecs_world_t *world,
-    const ecs_table_t *table,
-    const ecs_query_t *query);
+    int32_t skip_term,
+    ecs_flags32_t iter_flags);
 
 void flecs_query_notify(
     ecs_world_t *world,
@@ -557,28 +643,27 @@ void flecs_query_notify(
     ecs_query_event_t *event);
 
 void flecs_iter_init(
+    ecs_iter_t *it,
+    ecs_flags8_t fields);
+
+void flecs_iter_validate(
     ecs_iter_t *it);
 
-void flecs_iter_fini(
+void flecs_iter_populate_data(
+    ecs_world_t *world,
+    ecs_iter_t *it,
+    ecs_table_t *table,
+    int32_t offset,
+    int32_t count,
+    void **ptrs,
+    ecs_size_t *sizes);
+
+bool flecs_iter_next_row(
     ecs_iter_t *it);
 
-
-////////////////////////////////////////////////////////////////////////////////
-//// Time API
-////////////////////////////////////////////////////////////////////////////////
-
-void flecs_os_time_setup(void);
-
-uint64_t flecs_os_time_now(void);
-
-void flecs_os_time_sleep(
-    int32_t sec, 
-    int32_t nanosec);
-
-/* Increase or reset timer resolution (Windows only) */
-FLECS_API
-void flecs_increase_timer_resolution(
-    bool enable);
+bool flecs_iter_next_instanced(
+    ecs_iter_t *it,
+    bool result);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -586,14 +671,14 @@ void flecs_increase_timer_resolution(
 ////////////////////////////////////////////////////////////////////////////////
 
 /* Initialize object header & mixins for specified type */
-void _ecs_poly_init(
+void* _ecs_poly_init(
     ecs_poly_t *object,
     int32_t kind,
     ecs_size_t size,
     ecs_mixins_t *mixins);
 
 #define ecs_poly_init(object, type)\
-    _ecs_poly_init(object, ECS_##type##_MAGIC, sizeof(type), &type##_mixins)
+    _ecs_poly_init(object, type##_magic, sizeof(type), &type##_mixins)
 
 /* Deinitialize object for specified type */
 void _ecs_poly_fini(
@@ -601,18 +686,18 @@ void _ecs_poly_fini(
     int32_t kind);
 
 #define ecs_poly_fini(object, type)\
-    _ecs_poly_fini(object, ECS_##type##_MAGIC)
+    _ecs_poly_fini(object, type##_magic)
 
 /* Utility functions for creating an object on the heap */
 #define ecs_poly_new(type)\
-    ecs_poly_init(ecs_os_calloc_t(type), type)
+    (type*)ecs_poly_init(ecs_os_calloc_t(type), type)
 
 #define ecs_poly_free(obj, type)\
     ecs_poly_fini(obj, type);\
     ecs_os_free(obj)
 
 /* Utilities for testing/asserting an object type */
-#ifndef NDEBUG
+#ifndef FLECS_NDEBUG
 void _ecs_poly_assert(
     const ecs_poly_t *object,
     int32_t type,
@@ -620,7 +705,7 @@ void _ecs_poly_assert(
     int32_t line);
 
 #define ecs_poly_assert(object, type)\
-    _ecs_poly_assert(object, ECS_##type##_MAGIC, __FILE__, __LINE__)
+    _ecs_poly_assert(object, type##_magic, __FILE__, __LINE__)
 #else
 #define ecs_poly_assert(object, type)
 #endif
@@ -630,9 +715,12 @@ bool _ecs_poly_is(
     int32_t type);
 
 #define ecs_poly_is(object, type)\
-    _ecs_poly_is(object, ECS_##type##_MAGIC)
+    _ecs_poly_is(object, type##_magic)
 
 /* Utility functions for getting a mixin from an object */
+ecs_iterable_t* ecs_get_iterable(
+    const ecs_poly_t *poly);
+
 ecs_observable_t* ecs_get_observable(
     const ecs_poly_t *object);
 
@@ -649,32 +737,70 @@ void flecs_observable_fini(
 
 
 ////////////////////////////////////////////////////////////////////////////////
+//// Safe(r) integer casting
+////////////////////////////////////////////////////////////////////////////////
+
+#define FLECS_CONVERSION_ERR(T, value)\
+    "illegal conversion from value " #value " to type " #T
+
+#define flecs_signed_char__ (CHAR_MIN < 0)
+#define flecs_signed_short__ true
+#define flecs_signed_int__ true
+#define flecs_signed_long__ true
+#define flecs_signed_size_t__ false
+#define flecs_signed_int8_t__ true
+#define flecs_signed_int16_t__ true
+#define flecs_signed_int32_t__ true
+#define flecs_signed_int64_t__ true
+#define flecs_signed_intptr_t__ true
+#define flecs_signed_uint8_t__ false
+#define flecs_signed_uint16_t__ false
+#define flecs_signed_uint32_t__ false
+#define flecs_signed_uint64_t__ false
+#define flecs_signed_uintptr_t__ false
+#define flecs_signed_ecs_size_t__ true
+#define flecs_signed_ecs_entity_t__ false
+
+uint64_t _flecs_ito(
+    size_t dst_size,
+    bool dst_signed,
+    bool lt_zero,
+    uint64_t value,
+    const char *err);
+
+#ifndef FLECS_NDEBUG
+#define flecs_ito(T, value)\
+    (T)_flecs_ito(\
+        sizeof(T),\
+        flecs_signed_##T##__,\
+        (value) < 0,\
+        (uint64_t)(value),\
+        FLECS_CONVERSION_ERR(T, (value)))
+
+#define flecs_uto(T, value)\
+    (T)_flecs_ito(\
+        sizeof(T),\
+        flecs_signed_##T##__,\
+        false,\
+        (uint64_t)(value),\
+        FLECS_CONVERSION_ERR(T, (value)))
+#else
+#define flecs_ito(T, value) (T)(value)
+#define flecs_uto(T, value) (T)(value)
+#endif
+
+#define flecs_itosize(value) flecs_ito(size_t, (value))
+#define flecs_utosize(value) flecs_uto(ecs_size_t, (value))
+#define flecs_itoi16(value) flecs_ito(int16_t, (value))
+#define flecs_itoi32(value) flecs_ito(int32_t, (value))
+
+////////////////////////////////////////////////////////////////////////////////
 //// Utilities
 ////////////////////////////////////////////////////////////////////////////////
 
 uint64_t flecs_hash(
     const void *data,
     ecs_size_t length);
-
-/* Convert 64 bit signed integer to 16 bit */
-int8_t flecs_to_i8(
-    int64_t v);
-
-/* Convert 64 bit signed integer to 16 bit */
-int16_t flecs_to_i16(
-    int64_t v);
-
-/* Convert 64 bit unsigned integer to 32 bit */
-uint32_t flecs_to_u32(
-    uint64_t v);        
-
-/* Convert signed integer to size_t */
-size_t flecs_to_size_t(
-    int64_t size);
-
-/* Convert size_t to ecs_size_t */
-ecs_size_t flecs_from_size_t(
-    size_t size);    
 
 /* Get next power of 2 */
 int32_t flecs_next_pow_of_2(
@@ -690,13 +816,13 @@ uint64_t flecs_from_row(
     ecs_record_t record);
 
 /* Get actual row from record row */
-int32_t flecs_record_to_row(
-    int32_t row, 
+uint32_t flecs_record_to_row(
+    uint32_t row, 
     bool *is_watched_out);
 
 /* Convert actual row to record row */
-int32_t flecs_row_to_record(
-    int32_t row, 
+uint32_t flecs_row_to_record(
+    uint32_t row, 
     bool is_watched);
 
 /* Convert type to entity array */
@@ -720,11 +846,27 @@ int flecs_entity_compare_qsort(
     const void *e1,
     const void *e2);
 
+/* Convert floating point to string */
+char * ecs_ftoa(
+    double f, 
+    char * buf, 
+    int precision);
+
+/* Create allocated string from format */
+char* ecs_vasprintf(
+    const char *fmt,
+    va_list args);
+
+/* Create allocated string from format */
+char* ecs_asprintf(
+    const char *fmt,
+    ...);
+
 uint64_t flecs_string_hash(
     const void *ptr);
 
-ecs_hashmap_t flecs_table_hashmap_new(void);
-ecs_hashmap_t flecs_string_hashmap_new(void);
+void flecs_table_hashmap_init(
+    ecs_hashmap_t *hm);
 
 #define assert_func(cond) _assert_func(cond, #cond, __FILE__, __LINE__, __func__)
 void _assert_func(

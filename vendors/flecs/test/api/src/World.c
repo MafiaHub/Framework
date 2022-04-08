@@ -1,7 +1,8 @@
 #include <api.h>
+#include <stdlib.h>
 
 void World_setup() {
-    ecs_tracing_enable(-3);
+    ecs_log_set_level(-3);
 }
 
 static
@@ -186,49 +187,41 @@ void World_entity_range_check_after_delete() {
     ecs_fini(world);
 }
 
-
-void AddToExisting(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
-
-    int i;
-    for (i = 0; i < it->count; i ++) {
-        ecs_add(it->world, it->entities[i], Velocity);
-    }
-}
-
-void World_entity_range_add_existing_in_progress() {
-    ecs_world_t *world = ecs_init();
+void World_entity_range_add_existing_staged() {
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ECS_SYSTEM(world, AddToExisting, EcsOnUpdate, Position, Velocity());
-
     ecs_entity_t e = ecs_new(world, Position);
     test_assert(e != 0);
-    test_assert(e < 500);
+    test_assert(e < 1000);
 
-    ecs_set_entity_range(world, 500, 1000);
+    ecs_set_entity_range(world, 1000, 1500);
 
-    ecs_progress(world, 1);
+    ecs_staging_begin(world);
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+    ecs_add(stage, e, Velocity);
+    ecs_staging_end(world);
 
     ecs_fini(world);
 }
 
-void World_entity_range_add_in_range_in_progress() {
-    ecs_world_t *world = ecs_init();
+void World_entity_range_add_in_range_staged() {
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-
-    ECS_SYSTEM(world, AddToExisting, EcsOnUpdate, Position, Velocity());
 
     ecs_set_entity_range(world, 500, 1000);
 
     ecs_entity_t e = ecs_new(world, Position);
     test_assert(e == 500);
 
-    ecs_progress(world, 1);
+    ecs_staging_begin(world);
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+    ecs_add(stage, e, Velocity);
+    ecs_staging_end(world);
 
     ecs_fini(world);
 }
@@ -243,15 +236,13 @@ void AddOutOfRange(ecs_iter_t *it) {
     }
 }
 
-void World_entity_range_add_out_of_range_in_progress() {
+void World_entity_range_add_out_of_range_staged() {
     install_test_abort();
 
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-
-    ECS_SYSTEM(world, AddOutOfRange, EcsOnUpdate, Position, Velocity());
 
     ecs_enable_range_check(world, true);
     ecs_set_entity_range(world, 500, 1000);
@@ -260,7 +251,10 @@ void World_entity_range_add_out_of_range_in_progress() {
     ecs_entity_t e = ecs_new(world, Position);
     test_assert(e == 500);
 
-    ecs_progress(world, 1);
+    ecs_staging_begin(world);
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+    ecs_add(stage, e, Velocity);
+    ecs_staging_end(world);
 
     ecs_fini(world);
 }
@@ -308,7 +302,7 @@ void World_dim() {
     os_api.malloc_ = test_malloc;
     os_api.calloc_ = test_calloc;
     os_api.realloc_ = test_realloc;
-    ecs_os_set_api(&os_api);    
+    ecs_os_set_api(&os_api);
 
     ecs_world_t *world = ecs_init();
 
@@ -1000,17 +994,6 @@ void World_is_entity_enabled() {
     ecs_fini(world);
 }
 
-void World_get_stats() {
-    ecs_world_t *world = ecs_init();
-
-    ecs_world_stats_t stats = {0};
-    ecs_get_world_stats(world, &stats);
-
-    test_int(stats.t, 1);
-
-    ecs_fini(world);
-}
-
 static int zero_time_scale_invoked = 0;
 
 void ZeroTimeScale(ecs_iter_t *it) {
@@ -1062,8 +1045,8 @@ void World_register_alias_twice_same_entity() {
 
     ecs_entity_t e = ecs_new_id(world);
 
-    ecs_use(world, e, "Foo");
-    ecs_use(world, e, "Foo");
+    ecs_set_alias(world, e, "Foo");
+    ecs_set_alias(world, e, "Foo");
 
     ecs_entity_t f = ecs_lookup(world, "Foo");
     test_assert(f == e);
@@ -1079,8 +1062,323 @@ void World_register_alias_twice_different_entity() {
     ecs_entity_t e = ecs_new_id(world);
     ecs_entity_t f = ecs_new_id(world);
 
-    ecs_use(world, e, "Foo");
+    ecs_set_alias(world, e, "Foo");
     
     test_expect_abort();
-    ecs_use(world, f, "Foo");
+    ecs_set_alias(world, f, "Foo");
+}
+
+void World_redefine_component() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t c = ecs_component_init(world, &(ecs_component_desc_t) {
+        .entity.name = "flecs.core.Component",
+        .entity.symbol = "EcsComponent",
+        .size = ECS_SIZEOF(EcsComponent),
+        .alignment = ECS_ALIGNOF(EcsComponent)
+    });
+
+    test_assert(c == ecs_id(EcsComponent));
+
+    ecs_fini(world);
+}
+
+FLECS_API
+int32_t ecs_delete_empty_tables(
+    ecs_world_t *world,
+    ecs_id_t id,
+    uint16_t clear_generation,
+    uint16_t delete_generation,
+    int32_t min_id_count,
+    double time_budget_seconds);
+
+
+void World_delete_empty_tables_after_mini() {
+    ecs_world_t *world = ecs_mini();
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    int32_t old_empty_table_count = info->empty_table_count;
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0); /* Increase to 1 */
+    test_int(deleted, 0);
+
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0); /* Delete */
+    test_assert(deleted != 0);
+    test_int(info->empty_table_count + deleted, old_empty_table_count);
+
+    ecs_fini(world);
+}
+
+void World_delete_empty_tables_after_init() {
+    ecs_world_t *world = ecs_init();
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    int32_t old_empty_table_count = info->empty_table_count;
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0); /* Increase to 1 */
+    test_int(deleted, 0);
+
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0); /* Delete */
+    test_assert(deleted != 0);
+    test_int(info->empty_table_count + deleted, old_empty_table_count);
+
+    ecs_fini(world);
+}
+
+void World_delete_1000_empty_tables() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tag);
+    ecs_force_aperiodic(world);
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    int32_t old_empty_table_count = info->empty_table_count;
+
+    ecs_entity_t e = ecs_new(world, Tag);
+    for (int i = 0; i < 1000; i ++) {
+        ecs_add_id(world, e, ecs_new_id(world));
+    }
+
+    ecs_force_aperiodic(world);
+    test_int(info->empty_table_count, old_empty_table_count + 1000);
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0); /* Increase to 1 */
+    test_int(deleted, 0);
+
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0); /* Delete */
+    test_assert(deleted != 0);
+    test_assert(deleted >= 1000);
+
+    test_assert(info->empty_table_count <= old_empty_table_count);
+
+    ecs_fini(world);
+}
+
+void World_delete_empty_tables_for_id() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+    ecs_force_aperiodic(world);
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    int32_t old_empty_table_count = info->empty_table_count;
+
+    ecs_entity_t e1 = ecs_new(world, TagA);
+    for (int i = 0; i < 500; i ++) {
+        ecs_add_id(world, e1, ecs_new_id(world));
+    }
+
+    ecs_entity_t e2 = ecs_new(world, TagB);
+    for (int i = 0; i < 500; i ++) {
+        ecs_add_id(world, e2, ecs_new_id(world));
+    }
+
+    ecs_force_aperiodic(world);
+    test_int(info->empty_table_count, old_empty_table_count + 1000);
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, TagA, 0, 1, 0, 0); /* Increase to 1 */
+    test_int(deleted, 0);
+
+    deleted = ecs_delete_empty_tables(world, TagA, 0, 1, 0, 0); /* Delete */
+    test_assert(deleted != 0);
+    test_assert(deleted >= 500);
+    test_assert(deleted < 1000);
+
+    test_assert((info->empty_table_count - 500) <= old_empty_table_count);
+
+    ecs_fini(world);
+}
+
+void World_use_after_delete_empty() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add(world, e, TagA);
+    ecs_add(world, e, TagB);
+
+    ecs_remove(world, e, TagA);
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0);
+    test_assert(deleted == 0);
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0);
+    test_assert(deleted != 0);
+    ecs_add(world, e, TagA);
+
+    test_assert( ecs_has(world, e, TagA));
+    test_assert( ecs_has(world, e, TagB));
+
+    ecs_fini(world);
+}
+
+void World_use_after_clear_empty() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add(world, e, TagA);
+    ecs_add(world, e, TagB);
+
+    ecs_remove(world, e, TagA);
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    ecs_add(world, e, TagA);
+
+    test_assert( ecs_has(world, e, TagA));
+    test_assert( ecs_has(world, e, TagB));
+
+    ecs_fini(world);
+}
+
+void World_use_after_delete_empty_w_component() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add(world, e, Position);
+    ecs_add(world, e, Velocity);
+
+    test_assert( ecs_has(world, e, Position));
+
+    ecs_remove(world, e, Velocity);
+    test_assert( ecs_has(world, e, Position));
+    test_assert( !ecs_has(world, e, Velocity));
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0);
+    test_assert(deleted == 0);
+    test_bool(true, ecs_is_alive(world, ecs_id(Position)));
+    test_bool(true, ecs_is_alive(world, ecs_id(Velocity)));
+    test_assert( ecs_has(world, e, Position));
+
+    deleted = ecs_delete_empty_tables(world, 0, 0, 1, 0, 0);
+    test_assert(deleted != 0);
+    test_bool(true, ecs_is_alive(world, ecs_id(Position)));
+    test_bool(true, ecs_is_alive(world, ecs_id(Velocity)));
+    test_assert( ecs_has(world, e, Position));
+    
+    ecs_add(world, e, Velocity);
+
+    test_assert( ecs_has(world, e, Position));
+    test_assert( ecs_has(world, e, Velocity));
+
+    ecs_fini(world);
+}
+
+void World_use_after_clear_empty_w_component() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add(world, e, Position);
+    ecs_add(world, e, Velocity);
+
+    test_assert( ecs_has(world, e, Position));
+
+    ecs_remove(world, e, Velocity);
+    test_assert( ecs_has(world, e, Position));
+    test_assert( !ecs_has(world, e, Velocity));
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    test_bool(true, ecs_is_alive(world, ecs_id(Position)));
+    test_bool(true, ecs_is_alive(world, ecs_id(Velocity)));
+    test_assert( ecs_has(world, e, Position));
+
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    test_bool(true, ecs_is_alive(world, ecs_id(Position)));
+    test_bool(true, ecs_is_alive(world, ecs_id(Velocity)));
+    test_assert( ecs_has(world, e, Position));
+    
+    ecs_add(world, e, Velocity);
+
+    test_assert( ecs_has(world, e, Position));
+    test_assert( ecs_has(world, e, Velocity));
+
+    ecs_fini(world);
+}
+
+void World_use_after_clear_empty_w_component_w_lifecycle() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_set_component_actions(world, Position, { 
+        .ctor = ecs_default_ctor 
+    });
+    ecs_set_component_actions(world, Velocity, { 
+        .ctor = ecs_default_ctor 
+    });
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add(world, e, Position);
+    ecs_add(world, e, Velocity);
+
+    test_assert( ecs_has(world, e, Position));
+
+    ecs_remove(world, e, Velocity);
+    test_assert( ecs_has(world, e, Position));
+    test_assert( !ecs_has(world, e, Velocity));
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    test_bool(true, ecs_is_alive(world, ecs_id(Position)));
+    test_bool(true, ecs_is_alive(world, ecs_id(Velocity)));
+    test_assert( ecs_has(world, e, Position));
+
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    test_bool(true, ecs_is_alive(world, ecs_id(Position)));
+    test_bool(true, ecs_is_alive(world, ecs_id(Velocity)));
+    test_assert( ecs_has(world, e, Position));
+    
+    ecs_add(world, e, Velocity);
+
+    test_assert( ecs_has(world, e, Position));
+    test_assert( ecs_has(world, e, Velocity));
+
+    ecs_fini(world);
+}
+
+void World_use_after_clear_unused() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+    ECS_TYPE(world, Type, TagA, TagB);
+
+    int32_t deleted;
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+    deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
+    test_assert(deleted == 0);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add(world, e, TagA);
+    ecs_add(world, e, TagB);
+
+    test_assert(ecs_has(world, e, TagA));
+    test_assert(ecs_has(world, e, TagB));
+
+    ecs_fini(world);
 }

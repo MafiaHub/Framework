@@ -19,6 +19,57 @@ void Trigger_w_value(ecs_iter_t *it) {
     test_int(p->y, 20);
 }
 
+static
+void Trigger_w_value_from_entity(ecs_iter_t *it) {
+    probe_system_w_ctx(it, it->ctx);
+
+    test_int(it->count, 1);
+    test_assert(it->entities != NULL);
+    test_assert(it->entities[0] == 0);
+    test_assert(it->subjects[0] != 0);
+
+    Position *p = ecs_term(it, Position, 1);
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+static
+void Trigger_w_value_instanced(ecs_iter_t *it) {
+    probe_system_w_ctx(it, it->ctx);
+
+    test_assert(it->count > 1);
+
+    Position *p = ecs_term(it, Position, 1);
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+static
+void Trigger_w_filter_term(ecs_iter_t *it) {
+    probe_system_w_ctx(it, it->ctx);
+
+    test_assert(it->entities != NULL);
+    test_assert(it->entities[0] != 0);
+
+    test_bool(it->flags & EcsIterIsFilter, true);
+}
+
+static
+void Trigger_n_w_values(ecs_iter_t *it) {
+    probe_system_w_ctx(it, it->ctx);
+
+    Position *p = ecs_term(it, Position, 1);
+
+    test_assert(it->entities != NULL);
+
+    int i;
+    for (i = 0; i < it->count; i ++) {
+        test_assert(it->entities[i] != 0);    
+        test_int(p[i].x, 10 + i * 20);
+        test_int(p[i].y, 20 + i * 20);
+    }
+}
+
 void TriggerAdd(ecs_iter_t *it) {
     ecs_id_t id = *(ecs_id_t*)it->ctx;
 
@@ -277,7 +328,7 @@ void Trigger_on_add_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add_id(world, e, TagB);
 
@@ -359,7 +410,7 @@ void Trigger_on_add_pair_obj_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], ecs_pair(Pred, ObjA));
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add_pair(world, e, Pred, ObjB);
 
@@ -408,7 +459,7 @@ void Trigger_on_add_pair_pred_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], ecs_pair(PredA, Obj));
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add_pair(world, e, PredB, Obj);
 
@@ -558,7 +609,7 @@ void Trigger_on_remove_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_remove_id(world, e, TagB);
 
@@ -646,7 +697,7 @@ void Trigger_on_remove_pair_obj_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], ecs_pair(Pred, ObjA));
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add_pair(world, e, Pred, ObjB);
 
@@ -700,7 +751,7 @@ void Trigger_on_remove_pair_pred_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], ecs_pair(PredA, Obj));
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_remove_pair(world, e, PredB, Obj);
 
@@ -751,6 +802,9 @@ void Trigger_on_remove_pair_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], ecs_pair(Pred, Obj));
 
+    // Delete trigger so it doesn't go crazy while shutting down the world
+    ecs_delete(world, t);
+
     ecs_fini(world);
 }
 
@@ -793,7 +847,7 @@ void Trigger_wildcard_pair_w_pred_component() {
     p->x = 30;
     p->y = 40;
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_set_pair(world, e, Position, ObjB, {10, 20});
 
@@ -848,7 +902,7 @@ void Trigger_wildcard_pair_w_obj_component() {
     p->x = 30;
     p->y = 40;
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_set_pair_object(world, e, RelB, Position, {10, 20});
 
@@ -1107,7 +1161,7 @@ void Trigger_on_add_remove() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_remove_id(world, e, TagA);
 
@@ -1384,6 +1438,9 @@ void Trigger_un_set_pair_wildcard() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], ecs_pair(Rel, Obj));
 
+    // Delete trigger so it doesn't go crazy while shutting down the world
+    ecs_delete(world, t);
+
     ecs_fini(world);
 }
 
@@ -1418,7 +1475,7 @@ void Trigger_on_add_not_tag() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add_id(world, e, TagA);
 
@@ -1454,7 +1511,7 @@ void Trigger_on_remove_not_tag() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_remove(world, e, TagA);
 
@@ -1471,7 +1528,7 @@ void Trigger_on_add_superset() {
     Probe ctx = {0};
     ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
         .term.id = TagA,
-        .term.args[0].set.mask = EcsSuperSet,
+        .term.subj.set.mask = EcsSuperSet,
         .events = {EcsOnAdd},
         .callback = Trigger,
         .ctx = &ctx
@@ -1500,7 +1557,57 @@ void Trigger_on_add_superset() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, e, TagA);
+
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_superset_2_levels() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .term.subj.set.mask = EcsSuperSet,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base_no_comp = ecs_new_id(world);
+    test_int(ctx.invoked, 0);
+
+    ecs_entity_t base_of_base = ecs_new(world, TagA);
+    test_int(ctx.invoked, 0);
+
+    ecs_entity_t base = ecs_new_w_pair(world, EcsIsA, base_of_base);
+    test_int(ctx.invoked, 1);
     ctx = (Probe){0};
+
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base_no_comp);
+    test_assert(e != 0);
+    test_int(ctx.invoked, 0);
+
+    ecs_add_pair(world, e, EcsIsA, base);
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e);
+    test_int(ctx.c[0][0], TagA);
+
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
 
@@ -1517,7 +1624,7 @@ void Trigger_on_remove_superset() {
     Probe ctx = {0};
     ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
         .term.id = TagA,
-        .term.args[0].set.mask = EcsSuperSet,
+        .term.subj.set.mask = EcsSuperSet,
         .events = {EcsOnRemove},
         .callback = Trigger,
         .ctx = &ctx
@@ -1549,7 +1656,7 @@ void Trigger_on_remove_superset() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
 
@@ -1566,7 +1673,7 @@ void Trigger_on_add_superset_childof() {
     Probe ctx = {0};
     ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
         .term.id = TagA,
-        .term.args[0].set = {
+        .term.subj.set = {
             .relation = EcsChildOf,
             .mask = EcsSuperSet,
         },
@@ -1598,7 +1705,7 @@ void Trigger_on_add_superset_childof() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
 
@@ -1615,7 +1722,7 @@ void Trigger_on_remove_superset_childof() {
     Probe ctx = {0};
     ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
         .term.id = TagA,
-        .term.args[0].set = {
+        .term.subj.set = {
             .relation = EcsChildOf,
             .mask = EcsSuperSet,
         },
@@ -1650,7 +1757,7 @@ void Trigger_on_remove_superset_childof() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
 
@@ -1667,7 +1774,7 @@ void Trigger_on_add_self_superset() {
     Probe ctx = {0};
     ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
         .term.id = TagA,
-        .term.args[0].set.mask = EcsSelf | EcsSuperSet,
+        .term.subj.set.mask = EcsSelf | EcsSuperSet,
         .events = {EcsOnAdd},
         .callback = Trigger,
         .ctx = &ctx
@@ -1687,7 +1794,7 @@ void Trigger_on_add_self_superset() {
     test_int(ctx.e[0], base);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base_no_comp);
     test_assert(e != 0);
@@ -1705,7 +1812,7 @@ void Trigger_on_add_self_superset() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
 
@@ -1719,7 +1826,7 @@ void Trigger_on_add_self_superset() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_remove_pair(world, e, EcsIsA, base);
 
@@ -1740,7 +1847,7 @@ void Trigger_on_remove_self_superset() {
     Probe ctx = {0};
     ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
         .term.id = TagA,
-        .term.args[0].set.mask = EcsSelf | EcsSuperSet,
+        .term.subj.set.mask = EcsSelf | EcsSuperSet,
         .events = {EcsOnRemove},
         .callback = Trigger,
         .ctx = &ctx
@@ -1752,7 +1859,7 @@ void Trigger_on_remove_self_superset() {
     ecs_entity_t base = ecs_new(world, TagA);
     test_int(ctx.invoked, 0);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base_no_comp);
     test_assert(e != 0);
@@ -1773,7 +1880,7 @@ void Trigger_on_remove_self_superset() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
     test_int(ctx.invoked, 0);
@@ -1790,7 +1897,7 @@ void Trigger_on_remove_self_superset() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, TagA);
 
@@ -1834,7 +1941,7 @@ void Trigger_add_twice() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add_id(world, e, TagA);
 
@@ -1872,7 +1979,7 @@ void Trigger_remove_twice() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_remove_id(world, e, TagA);
 
@@ -2005,7 +2112,7 @@ void Trigger_on_add_w_clone() {
     test_int(ctx.e[0], e);
     test_int(ctx.c[0][0], TagA);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_entity_t e2 = ecs_clone(world, 0, e, true);
 
@@ -2440,8 +2547,8 @@ void Trigger_trigger_on_prefab() {
     ecs_new(world, TagA);
     test_int(ctx_1.invoked, 1);
     test_int(ctx_2.invoked, 1);
-    ctx_1 = (Probe){0};
-    ctx_2 = (Probe){0};
+    ecs_os_zeromem(&ctx_1);
+    ecs_os_zeromem(&ctx_2);
 
     ecs_entity_t e = ecs_new_w_id(world, EcsPrefab);
     test_int(ctx_1.invoked, 0);
@@ -2449,7 +2556,7 @@ void Trigger_trigger_on_prefab() {
     ecs_add(world, e, TagA);
     test_int(ctx_1.invoked, 0);
     test_int(ctx_2.invoked, 1);
-    ctx_2 = (Probe){0};
+    ecs_os_zeromem(&ctx_2);
 
     e = ecs_new_w_id(world, EcsDisabled);
     test_int(ctx_1.invoked, 0);
@@ -2487,8 +2594,8 @@ void Trigger_trigger_on_disabled() {
     ecs_new(world, TagA);
     test_int(ctx_1.invoked, 1);
     test_int(ctx_2.invoked, 1);
-    ctx_1 = (Probe){0};
-    ctx_2 = (Probe){0};
+    ecs_os_zeromem(&ctx_1);
+    ecs_os_zeromem(&ctx_2);
 
     ecs_entity_t e = ecs_new_w_id(world, EcsPrefab);
     test_int(ctx_1.invoked, 0);
@@ -2496,7 +2603,7 @@ void Trigger_trigger_on_disabled() {
     ecs_add(world, e, TagA);
     test_int(ctx_1.invoked, 0);
     test_int(ctx_2.invoked, 0);
-    ctx_2 = (Probe){0};
+    ecs_os_zeromem(&ctx_2);
 
     e = ecs_new_w_id(world, EcsDisabled);
     test_int(ctx_1.invoked, 0);
@@ -2504,6 +2611,1589 @@ void Trigger_trigger_on_disabled() {
     ecs_add(world, e, TagA);
     test_int(ctx_1.invoked, 0);
     test_int(ctx_2.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Trigger_trigger_on_prefab_tag() {
+    ecs_world_t *world = ecs_init();
+
+    Probe ctx_1 = {0};
+
+    ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term = { EcsPrefab },
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx_1
+    });
+
+    ecs_new_w_id(world, EcsPrefab);
+    test_int(ctx_1.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Trigger_trigger_on_disabled_tag() {
+    ecs_world_t *world = ecs_init();
+
+    Probe ctx_1 = {0};
+
+    ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term = { EcsDisabled },
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx_1
+    });
+
+    ecs_new_w_id(world, EcsDisabled);
+    test_int(ctx_1.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Trigger_trigger_cleanup_2_w_self_super_id() {
+    ecs_world_t * world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+        .term = { .id = Tag, .subj.set.mask = EcsSuperSet },
+        .events = { EcsOnAdd },
+        .callback = Trigger
+    });
+
+    ecs_entity_t t2 = ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+        .term = { Tag },
+        .events = { EcsOnAdd },
+        .callback = Trigger
+    });
+
+    test_assert(t1 != 0);
+    test_assert(t2 != 0);
+
+    ecs_fini(world);
+
+    /* Ensure two triggers for Tag and Tag(super) are cleaned up correctly */
+}
+
+void Trigger_on_add_yield_existing() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    /* Create entities before trigger */
+    ecs_entity_t e1 = ecs_new(world, Tag);
+    ecs_entity_t e2 = ecs_new(world, Tag);
+    ecs_entity_t e3 = ecs_new(world, Tag);
+
+    test_assert(e1 != 0);
+    test_assert(e2 != 0);
+    test_assert(e3 != 0);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = Tag,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx,
+        .yield_existing = true
+    });
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 3);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, Tag);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+    test_int(ctx.e[2], e3);
+    test_int(ctx.c[0][0], Tag);
+
+    // Ensure normal triggering also still works
+    ecs_os_zeromem(&ctx);
+    ecs_new(world, Tag);
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_yield_existing_2_tables() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    /* Create entities before trigger */
+    ecs_entity_t e1 = ecs_new(world, TagA);
+    ecs_entity_t e2 = ecs_new(world, TagA);
+    ecs_entity_t e3 = ecs_new(world, TagA);
+
+    test_assert(e1 != 0);
+    test_assert(e2 != 0);
+    test_assert(e3 != 0);
+
+    ecs_add(world, e3, TagB);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx,
+        .yield_existing = true
+    });
+
+    test_int(ctx.invoked, 2);
+    test_int(ctx.count, 3);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+    test_int(ctx.e[2], e3);
+    test_int(ctx.c[0][0], TagA);
+    test_int(ctx.c[1][0], TagA);
+
+    // Ensure normal triggering also still works
+    ecs_os_zeromem(&ctx);
+    ecs_new(world, TagA);
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_yield_existing_wildcard_pair() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, ObjA);
+    ECS_TAG(world, ObjB);
+
+    /* Create entities before trigger */
+    ecs_entity_t e1 = ecs_new_w_pair(world, Rel, ObjA);
+    ecs_entity_t e2 = ecs_new_w_pair(world, Rel, ObjA);
+    ecs_entity_t e3 = ecs_new_w_pair(world, Rel, ObjB);
+
+    test_assert(e1 != 0);
+    test_assert(e2 != 0);
+    test_assert(e3 != 0);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, EcsWildcard),
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx,
+        .yield_existing = true
+    });
+
+    test_int(ctx.invoked, 2);
+    test_int(ctx.count, 3);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, ecs_pair(Rel, ObjB)); /* last triggered id */
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+    test_int(ctx.e[2], e3);
+    test_int(ctx.c[0][0], ecs_pair(Rel, ObjA));
+    test_int(ctx.c[1][0], ecs_pair(Rel, ObjB));
+
+    // Ensure normal triggering also still works
+    ecs_os_zeromem(&ctx);
+    ecs_new_w_pair(world, Rel, ObjA);
+    test_int(ctx.invoked, 1);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_set_yield_existing() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+
+    /* Create entities before trigger */
+    ecs_entity_t e1 = ecs_set(world, 0, Position, {10, 20});
+    ecs_entity_t e2 = ecs_set(world, 0, Position, {30, 40});
+    ecs_entity_t e3 = ecs_set(world, 0, Position, {50, 60});
+
+    test_assert(e1 != 0);
+    test_assert(e2 != 0);
+    test_assert(e3 != 0);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position),
+        .events = {EcsOnSet},
+        .callback = Trigger_n_w_values,
+        .ctx = &ctx,
+        .yield_existing = true
+    });
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 3);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+    test_int(ctx.e[2], e3);
+    test_int(ctx.c[0][0], ecs_id(Position));
+
+    // Ensure normal triggering also still works
+    ecs_os_zeromem(&ctx);
+    ecs_entity_t e = ecs_new(world, Position);
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, e, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.event, EcsOnSet);
+
+    ecs_fini(world);
+}
+
+void Trigger_filter_term() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term = { .id = ecs_id(Position), .inout = EcsInOutFilter },
+        .events = {EcsOnSet},
+        .callback = Trigger_w_filter_term,
+        .ctx = &ctx
+    });
+
+    /* Create entities before trigger */
+    ecs_entity_t e1 = ecs_set(world, 0, Position, {10, 20});
+    test_assert(e1 != 0);
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e1);
+    test_int(ctx.c[0][0], ecs_id(Position));
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_remove_after_exclusive_add() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_ENTITY(world, Rel, Exclusive);
+    ECS_TAG(world, ObjA);
+    ECS_TAG(world, ObjB);
+
+    Probe ctx_add = {0};
+    ecs_entity_t t_add = ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+        .term.id = ecs_pair(Rel, EcsWildcard),
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx_add
+    });
+
+    Probe ctx_remove = {0};
+    ecs_entity_t t_remove = ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+        .term.id = ecs_pair(Rel, EcsWildcard),
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx_remove
+    });
+
+    ecs_entity_t e = ecs_new_id(world);
+
+    ecs_add_pair(world, e, Rel, ObjA);
+    test_assert( ecs_has_pair(world, e, Rel, ObjA));
+
+    test_int(ctx_add.invoked, 1);
+    test_int(ctx_add.count, 1);
+    test_int(ctx_add.system, t_add);
+    test_int(ctx_add.event, EcsOnAdd);
+    test_int(ctx_add.event_id, ecs_pair(Rel, ObjA));
+    test_int(ctx_add.term_count, 1);
+    test_null(ctx_add.param);
+
+    test_int(ctx_remove.invoked, 0);
+
+    ecs_os_zeromem(&ctx_add);
+
+    ecs_add_pair(world, e, Rel, ObjB);
+    test_assert( ecs_has_pair(world, e, Rel, ObjB));
+    test_assert( !ecs_has_pair(world, e, Rel, ObjA));
+
+    test_int(ctx_add.invoked, 1);
+    test_int(ctx_add.count, 1);
+    test_int(ctx_add.system, t_add);
+    test_int(ctx_add.event, EcsOnAdd);
+    test_int(ctx_add.event_id, ecs_pair(Rel, ObjB));
+    test_int(ctx_add.term_count, 1);
+    test_null(ctx_add.param);
+
+    test_int(ctx_remove.invoked, 1);
+    test_int(ctx_remove.count, 1);
+    test_int(ctx_remove.system, t_remove);
+    test_int(ctx_remove.event, EcsOnRemove);
+    test_int(ctx_remove.event_id, ecs_pair(Rel, ObjA));
+    test_int(ctx_remove.term_count, 1);
+    test_null(ctx_remove.param);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_base() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA, /* Implicitly also listens to IsA */
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, base, TagA);
+    ecs_add(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_remove_base() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA, /* Implicitly also listens to IsA */
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base, TagA);
+    ecs_add(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_remove(world, base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnRemove);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_remove(world, base, TagA);
+    ecs_remove(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_set_base() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position), /* Implicitly also listens to IsA */
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Velocity, {1, 2});
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_unset_base() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position), /* Implicitly also listens to IsA */
+        .events = {EcsUnSet},
+        .callback = Trigger_w_value,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, base, Position, {10, 20});
+    ecs_set(world, base, Velocity, {1, 2});
+    test_int(ctx.invoked, 0);
+
+    ecs_remove(world, base, Position);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsUnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_remove(world, base, Position);
+    ecs_remove(world, base, Velocity);
+    test_int(ctx.invoked, 0);
+    
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_add_base_superset_trigger() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .term.subj.set.mask = EcsSuperSet,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, base, TagA);
+    ecs_add(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_base_superset_trigger_2_lvls() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .term.subj.set.mask = EcsSuperSet,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base_of_base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_add_pair(world, base, EcsIsA, base_of_base);
+
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base_of_base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, base_of_base, TagA);
+    ecs_add(world, base_of_base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_add_base_2_entities() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA, /* Implicitly also listens to IsA */
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e1 = ecs_new_w_pair(world, EcsIsA, base);
+    ecs_entity_t e2 = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 2);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, base, TagA);
+    ecs_add(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_add_base_2_entities_filter() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA, /* Implicitly also listens to IsA */
+        .term.inout = EcsInOutFilter,
+        .events = {EcsOnAdd},
+        .callback = Trigger_w_filter_term,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e1 = ecs_new_w_pair(world, EcsIsA, base);
+    ecs_entity_t e2 = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 2);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, base, TagA);
+    ecs_add(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_set_base_w_value_2_entities() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position), /* Implicitly also listens to IsA */
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e1 = ecs_new_w_pair(world, EcsIsA, base);
+    ecs_entity_t e2 = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 2);
+    test_int(ctx.count, 2);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 2);
+    test_int(ctx.count, 2);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Velocity, {1, 2});
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_set_base_w_value_2_entities_instanced() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position), /* Implicitly also listens to IsA */
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value_instanced,
+        .ctx = &ctx,
+        .instanced = true
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e1 = ecs_new_w_pair(world, EcsIsA, base);
+    ecs_entity_t e2 = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 2);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 2);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e1);
+    test_int(ctx.e[1], e2);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Velocity, {1, 2});
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_base_w_override() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA, /* Implicitly also listens to IsA */
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+    test_int(ctx.s[0][0], base);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add(world, e, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+    test_int(ctx.s[0][0], 0);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_remove(world, base, TagA);
+    ecs_add(world, base, TagA);
+    ecs_add(world, base, TagB);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_on_set_base_w_override() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position), /* Implicitly also listens to IsA */
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+    test_int(ctx.s[0][0], base);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, e, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], e);
+    test_int(ctx.s[0][0], 0);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 0); // no trigger, overridden
+
+    ecs_set(world, base, Velocity, {1, 2});
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 0);
+}
+
+void Trigger_entity_source_1_trigger() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t subj = ecs_new_id(world);
+    ecs_entity_t dummy = ecs_new_id(world);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position),
+        .term.subj.entity = subj,
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value_from_entity,
+        .ctx = &ctx
+    });
+
+    ecs_set(world, dummy, Position, {10, 20});
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, subj, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], 0);
+    test_int(ctx.s[0][0], subj);
+
+    ecs_fini(world);
+}
+
+void Trigger_entity_source_2_triggers() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t subj_a = ecs_new_id(world);
+    ecs_entity_t subj_b = ecs_new_id(world);
+    ecs_entity_t dummy = ecs_new_id(world);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position),
+        .term.subj.entity = subj_a,
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value_from_entity,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t t2 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position),
+        .term.subj.entity = subj_b,
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value_from_entity,
+        .ctx = &ctx
+    });
+
+    ecs_set(world, dummy, Position, {10, 20});
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, subj_a, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t1);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], 0);
+    test_int(ctx.s[0][0], subj_a);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_set(world, subj_b, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t2);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], 0);
+    test_int(ctx.s[0][0], subj_b);
+
+    ecs_fini(world);
+}
+
+void Trigger_entity_source_base_set() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t base = ecs_new_w_id(world, EcsPrefab);
+    ecs_entity_t subj = ecs_new_w_pair(world, EcsIsA, base);
+    ecs_entity_t dummy = ecs_new_w_pair(world, EcsIsA, base);
+    ecs_entity_t dummy_no_base = ecs_new_w_pair(world, EcsIsA, base);
+
+    /* Create trigger before table */
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position),
+        .term.subj.entity = subj,
+        .events = {EcsOnSet},
+        .callback = Trigger_w_value_from_entity,
+        .ctx = &ctx
+    });
+
+    ecs_set(world, dummy, Position, {10, 20});
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, dummy_no_base, Position, {10, 20});
+    test_int(ctx.invoked, 0);
+
+    ecs_set(world, base, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnSet);
+    test_int(ctx.event_id, ecs_id(Position));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], 0);
+    test_int(ctx.s[0][0], base);
+
+    ecs_fini(world);
+}
+
+void Trigger_not_from_superset() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    Probe ctx = {0};
+    ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = Tag,
+        .term.oper = EcsNot,
+        .term.subj.set.mask = EcsSuperSet,
+        .events = {EcsOnAdd},
+        .callback = Trigger_w_value_from_entity,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t base = ecs_new(world, Tag);
+    ecs_new_w_pair(world, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+void Trigger_create_stresstest() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    /* Make sure we can create & delete 100k triggers without running out of
+     * memory to verify there are no leaks in the administration (sanitizer 
+     * builds don't detect leaks that are cleaned up @ ecs_fini). */
+    for (int i = 0; i < 100 * 1000; i ++) {
+        ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+            .term.id = Tag,
+            .term.subj.set.mask = EcsSelf | EcsSuperSet,
+            .events = {EcsOnAdd},
+            .callback = Trigger
+        });
+
+        ecs_delete(world, t);
+    }
+
+    test_assert(true);
+
+    ecs_fini(world);
+}
+
+static
+void Trigger_w_new_entity_value(ecs_iter_t *it) {
+    probe_iter(it);
+}
+
+void Trigger_add_non_existing_entity() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Rel);
+
+    Probe ctx = {0};
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, EcsWildcard),
+        .events = {EcsOnAdd},
+        .callback = Trigger_w_new_entity_value,
+        .ctx = &ctx
+    });
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add_pair(world, e, Rel, 1000);
+
+    test_assert( ecs_has_pair(world, e, Rel, 1000));
+    test_assert( ecs_is_alive(world, 1000));
+
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t1);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, ecs_pair(Rel, 1000));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_add_self_trigger_with_add_isa() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    Probe ctx = {0};
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = Tag,
+        .term.subj.set.mask = EcsSelf,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    test_assert(t1 != 0);
+    test_int(ctx.invoked, 0);
+
+    ecs_entity_t base = ecs_new_id(world);
+    ecs_add(world, base, Tag);
+    test_int(ctx.invoked, 1);
+
+    ctx = (Probe){0};
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add_pair(world, e, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_set_self_trigger_with_add_isa() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    Probe ctx = {0};
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_id(Position),
+        .term.subj.set.mask = EcsSelf,
+        .events = {EcsOnSet},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+
+    test_assert(t1 != 0);
+    test_int(ctx.invoked, 0);
+
+    ecs_entity_t base = ecs_set(world, 0, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+
+    ctx = (Probe){0};
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add_pair(world, e, EcsIsA, base);
+    test_int(ctx.invoked, 0);
+
+    ecs_fini(world);
+}
+
+static int invoke_count = 0;
+static ecs_entity_t base_ent = 0;
+static ecs_entity_t inst_ent_a = 0;
+static ecs_entity_t inst_ent_b = 0;
+
+static void TriggerTwice(ecs_iter_t *it) {
+    probe_system_w_ctx(it, it->ctx);
+
+    test_assert(base_ent != 0);
+    test_assert(inst_ent_a != 0);
+    test_assert(inst_ent_b != 0);
+    test_int(it->count, 1);
+
+    if (invoke_count == 0) {
+        test_assert(it->entities[0] == base_ent);
+        invoke_count ++;
+    } else if (invoke_count == 1) {
+        test_assert(it->entities[0] == inst_ent_b);
+        invoke_count ++;
+    } else {
+        test_int(invoke_count, 2);
+        test_assert(it->entities[0] == inst_ent_a);
+        invoke_count ++;
+    }
+}
+
+void Trigger_notify_propagated_twice() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    Probe ctx = {0};
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .events = {EcsOnAdd},
+        .callback = TriggerTwice,
+        .ctx = &ctx
+    });
+    test_assert(t1 != 0);
+
+    base_ent = ecs_new_id(world);
+    inst_ent_a = ecs_new_w_pair(world, EcsIsA, base_ent);
+    ecs_add(world, inst_ent_a, TagB);
+    inst_ent_b = ecs_new_w_pair(world, EcsIsA, base_ent);
+
+    test_int(ctx.invoked, 0);
+
+    ecs_add(world, base_ent, TagA);
+
+    test_int(ctx.invoked, 3);
+    test_int(invoke_count, 3);
+
+    ecs_fini(world);
+}
+
+void Trigger_trigger_superset_wildcard() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, ObjA);
+    ECS_TAG(world, ObjB);
+
+    ecs_entity_t base = ecs_new_id(world);
+    ecs_entity_t inst = ecs_new_id(world);
+    ecs_add_pair(world, inst, EcsIsA, base);
+
+    Probe ctx = {0};
+    ecs_entity_t t = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, EcsWildcard), 
+        .term.subj.set.mask = EcsSuperSet,
+        .events = {EcsOnAdd},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+    test_assert(t != 0);
+
+    test_int(ctx.invoked, 0);
+
+    ecs_add_pair(world, base, Rel, ObjA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, ecs_pair(Rel, ObjA));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], inst);
+    test_int(ctx.s[0][0], base);
+
+    ecs_os_zeromem(&ctx);
+
+    ecs_add_pair(world, base, Rel, ObjB);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, t);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, ecs_pair(Rel, ObjB));
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+    test_int(ctx.e[0], inst);
+    test_int(ctx.s[0][0], base);
+
+    ecs_fini(world);
+}
+
+void Trigger_remove_wildcard_1_id() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, ObjA);
+
+    ecs_entity_t e = ecs_new_w_pair(world, Rel, ObjA);
+    test_assert( ecs_has_pair(world, e, Rel, ObjA));
+    test_assert( ecs_has_pair(world, e, Rel, EcsWildcard));
+
+    Probe ctx_a = {0};
+    ecs_entity_t t_a = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, ObjA), 
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx_a
+    });
+    test_assert(t_a != 0);
+
+    Probe ctx_b = {0};
+    ecs_entity_t t_b = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, EcsWildcard),
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx_b
+    });
+    test_assert(t_b != 0);
+
+    test_int(ctx_a.invoked, 0);
+    test_int(ctx_b.invoked, 0);
+
+    ecs_remove_pair(world, e, Rel, EcsWildcard);
+    test_assert( !ecs_has_pair(world, e, Rel, ObjA));
+    test_assert( !ecs_has_pair(world, e, Rel, EcsWildcard));
+
+    test_int(ctx_a.invoked, 1);
+    test_int(ctx_a.count, 1);
+    test_int(ctx_a.system, t_a);
+    test_int(ctx_a.event, EcsOnRemove);
+    test_int(ctx_a.event_id, ecs_pair(Rel, ObjA));
+    test_int(ctx_a.term_count, 1);
+    test_int(ctx_a.e[0], e);
+
+    test_int(ctx_b.invoked, 1);
+    test_int(ctx_b.count, 1);
+    test_int(ctx_b.system, t_b);
+    test_int(ctx_b.event, EcsOnRemove);
+    test_int(ctx_b.event_id, ecs_pair(Rel, ObjA));
+    test_int(ctx_b.term_count, 1);
+    test_int(ctx_b.e[0], e);
+
+    ecs_fini(world);
+}
+
+void Trigger_remove_wildcard_2_ids() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, ObjA);
+    ECS_TAG(world, ObjB);
+
+    ecs_entity_t e = ecs_new_w_pair(world, Rel, ObjA);
+    ecs_add_pair(world, e, Rel, ObjB);
+    test_assert( ecs_has_pair(world, e, Rel, ObjA));
+    test_assert( ecs_has_pair(world, e, Rel, ObjB));
+    test_assert( ecs_has_pair(world, e, Rel, EcsWildcard));
+
+    Probe ctx_a = {0};
+    ecs_entity_t t_a = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, EcsWildcard), 
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx_a
+    });
+    test_assert(t_a != 0);
+
+    Probe ctx_b = {0};
+    ecs_entity_t t_b = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, ObjA),
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx_b
+    });
+    test_assert(t_b != 0);
+
+    Probe ctx_c = {0};
+    ecs_entity_t t_c = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = ecs_pair(Rel, ObjB),
+        .events = {EcsOnRemove},
+        .callback = Trigger,
+        .ctx = &ctx_c
+    });
+    test_assert(t_c != 0);
+
+    test_int(ctx_a.invoked, 0);
+    test_int(ctx_b.invoked, 0);
+    test_int(ctx_c.invoked, 0);
+
+    ecs_remove_pair(world, e, Rel, EcsWildcard);
+    test_assert( !ecs_has_pair(world, e, Rel, ObjA));
+    test_assert( !ecs_has_pair(world, e, Rel, ObjB));
+    test_assert( !ecs_has_pair(world, e, Rel, EcsWildcard));
+
+    test_int(ctx_a.invoked, 2);
+    test_int(ctx_a.count, 2);
+    test_int(ctx_a.system, t_a);
+    test_int(ctx_a.event, EcsOnRemove);
+    test_int(ctx_a.event_id, ecs_pair(Rel, ObjB));
+    test_int(ctx_a.term_count, 1);
+    test_int(ctx_a.e[0], e);
+
+    test_int(ctx_b.invoked, 1);
+    test_int(ctx_b.count, 1);
+    test_int(ctx_b.system, t_b);
+    test_int(ctx_b.event, EcsOnRemove);
+    test_int(ctx_b.event_id, ecs_pair(Rel, ObjA));
+    test_int(ctx_b.term_count, 1);
+    test_int(ctx_b.e[0], e);
+
+    test_int(ctx_c.invoked, 1);
+    test_int(ctx_c.count, 1);
+    test_int(ctx_c.system, t_c);
+    test_int(ctx_c.event, EcsOnRemove);
+    test_int(ctx_c.event_id, ecs_pair(Rel, ObjB));
+    test_int(ctx_c.term_count, 1);
+    test_int(ctx_c.e[0], e);
+
+    ecs_fini(world);
+}
+
+void Trigger_on_set_w_tag() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+
+    Probe ctx = {0};
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .events = {EcsOnSet},
+        .callback = Trigger,
+        .ctx = &ctx
+    });
+    test_assert(t1 != 0);
+
+    ecs_entity_t e = ecs_new_id(world);
+    test_assert(e != 0);
+
+    ecs_add(world, e, TagA);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.e[0], e);
+    test_int(ctx.event, EcsOnAdd);
+    test_int(ctx.event_id, TagA);
+
+    ecs_fini(world);
+}
+
+static int nested_trigger_invoked = 0;
+
+static void NestedTrigger(ecs_iter_t *it) {
+    nested_trigger_invoked ++;
+}
+
+static int create_trigger_invoked = 0;
+
+typedef struct {
+    int32_t count;
+    ecs_entity_t first;
+} CreateTriggers_ctx;
+
+static void CreateTriggers(ecs_iter_t *it) {
+    CreateTriggers_ctx *ctx = it->ctx;
+
+    create_trigger_invoked ++;
+
+    ctx->first = ecs_new_id(it->world);
+
+    int i;
+    for (i = 0; i < ctx->count - 1; i ++) {
+        ecs_new_id(it->world);
+    }
+
+    for (i = 0; i < ctx->count; i ++) {
+        ecs_trigger_init(it->world, &(ecs_trigger_desc_t) {
+            .term.id = ctx->first + i,
+            .events = {EcsOnAdd},
+            .callback = NestedTrigger
+        });
+    }
+}
+
+void Trigger_create_triggers_in_trigger() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    int CreateCount = 10;
+
+    CreateTriggers_ctx ctx = { .count = CreateCount };
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t){
+        .term.id = TagA,
+        .events = {EcsOnAdd},
+        .callback = CreateTriggers,
+        .ctx = &ctx
+    });
+    test_assert(t1 != 0);
+
+    ecs_entity_t e = ecs_new_id(world);
+    test_assert(e != 0);
+
+    ecs_add(world, e, TagA);
+    test_int(create_trigger_invoked, 1);
+    test_int(nested_trigger_invoked, 0);
+
+    int i;
+    for (i = 0; i < CreateCount; i ++) {
+        ecs_entity_t t = ecs_new_id(world);
+        ecs_add_id(world, t, ctx.first + i);
+        test_int(nested_trigger_invoked, i + 1);
+    }
+
+    test_int(create_trigger_invoked, 1);
+    test_int(nested_trigger_invoked, i);
+
+    ecs_fini(world);
+}
+
+static
+void Trigger_w_nonzero_value(ecs_iter_t *it) {
+    probe_system_w_ctx(it, it->ctx);
+
+    test_int(it->count, 1);
+    test_assert(it->entities != NULL);
+    test_assert(it->entities[0] != 0);
+
+    Position *p = ecs_term(it, Position, 1);
+    test_assert(p != NULL);
+}
+
+void Trigger_trigger_on_add_superset_w_component() {
+	ecs_world_t *world = ecs_mini();
+
+	ECS_COMPONENT(world, Position);
+
+    Probe ctx = {0};
+	ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+		.term.id = ecs_id(Position),
+		.events = {EcsOnAdd},
+		.callback = Trigger_w_nonzero_value,
+        .ctx = &ctx
+	});
+
+	ecs_entity_t b = ecs_new(world, 0);
+	ecs_set(world, b, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.e[0], b);
+    test_int(ctx.s[0][0], 0);
+
+    ecs_os_zeromem(&ctx);
+	
+	ecs_entity_t i = ecs_new_w_pair(world, EcsIsA, b);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.e[0], i);
+    test_int(ctx.s[0][0], b);
+
+    ecs_fini(world);
+}
+
+void Trigger_trigger_on_set_superset_w_component() {
+	ecs_world_t *world = ecs_mini();
+
+	ECS_COMPONENT(world, Position);
+
+    Probe ctx = {0};
+	ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+		.term.id = ecs_id(Position),
+		.events = {EcsOnSet},
+		.callback = Trigger_w_value,
+        .ctx = &ctx
+	});
+
+	ecs_entity_t b = ecs_new(world, 0);
+	ecs_set(world, b, Position, {10, 20});
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.e[0], b);
+    test_int(ctx.s[0][0], 0);
+
+    ecs_os_zeromem(&ctx);
+	
+	ecs_entity_t i = ecs_new_w_pair(world, EcsIsA, b);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.e[0], i);
+    test_int(ctx.s[0][0], b);
 
     ecs_fini(world);
 }

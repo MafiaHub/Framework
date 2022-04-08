@@ -33,8 +33,22 @@
 extern "C" {
 #endif
 
-typedef struct ecs_map_t ecs_map_t;
 typedef uint64_t ecs_map_key_t;
+
+/* Map type */
+typedef struct ecs_bucket_t {
+    ecs_map_key_t *keys;    /* Array with keys */
+    void *payload;          /* Payload array */
+    int32_t count;          /* Number of elements in bucket */
+} ecs_bucket_t;
+
+typedef struct ecs_map_t {
+    ecs_bucket_t *buckets;
+    int16_t elem_size;
+    uint8_t bucket_shift;
+    int32_t bucket_count;
+    int32_t count;
+} ecs_map_t;
 
 typedef struct ecs_map_iter_t {
     const ecs_map_t *map;
@@ -44,15 +58,35 @@ typedef struct ecs_map_iter_t {
     void *payload;
 } ecs_map_iter_t;
 
+#define ECS_MAP_INIT(T) { .elem_size = ECS_SIZEOF(T) }
+
+/** Initialize new map. */
+FLECS_API
+void _ecs_map_init(
+    ecs_map_t *map,
+    ecs_size_t elem_size,
+    int32_t elem_count);
+
+#define ecs_map_init(map, T, elem_count)\
+    _ecs_map_init(map, sizeof(T), elem_count)
+
+/** Deinitialize map. */
+FLECS_API
+void ecs_map_fini(
+    ecs_map_t *map);
+
 /** Create new map. */
 FLECS_API
 ecs_map_t* _ecs_map_new(
     ecs_size_t elem_size,
-    ecs_size_t alignment,
     int32_t elem_count);
 
 #define ecs_map_new(T, elem_count)\
-    _ecs_map_new(sizeof(T), ECS_ALIGNOF(T), elem_count)
+    _ecs_map_new(sizeof(T), elem_count)
+
+/** Is map initialized */
+bool ecs_map_is_initialized(
+    const ecs_map_t *result);
 
 /** Get element for key, returns NULL if they key doesn't exist. */
 FLECS_API
@@ -90,7 +124,7 @@ void* _ecs_map_ensure(
     ecs_map_key_t key);
 
 #define ecs_map_ensure(map, T, key)\
-    (T*)_ecs_map_ensure(map, sizeof(T), (ecs_map_key_t)key)
+    ((T*)_ecs_map_ensure(map, sizeof(T), (ecs_map_key_t)key))
 
 /** Set element. */
 FLECS_API
@@ -101,16 +135,21 @@ void* _ecs_map_set(
     const void *payload);
 
 #define ecs_map_set(map, key, payload)\
-    _ecs_map_set(map, sizeof(*payload), (ecs_map_key_t)key, payload);
+    _ecs_map_set(map, sizeof(*payload), (ecs_map_key_t)key, payload)
+
+#define ecs_map_set_ptr(map, key, payload)\
+    _ecs_map_set(map, sizeof(payload), (ecs_map_key_t)key, &payload)
 
 /** Free map. */
 FLECS_API
 void ecs_map_free(
     ecs_map_t *map);
 
-/** Remove key from map. */
+/** Remove key from map.
+ * Returns number of remaining elements.
+ */
 FLECS_API
-void ecs_map_remove(
+int32_t ecs_map_remove(
     ecs_map_t *map,
     ecs_map_key_t key);
 
@@ -165,6 +204,11 @@ void ecs_map_set_size(
     ecs_map_t *map,
     int32_t elem_count);
 
+/** Copy map. */
+FLECS_API
+ecs_map_t* ecs_map_copy(
+    ecs_map_t *map);
+
 /** Return memory occupied by map. */
 FLECS_API
 void ecs_map_memory(
@@ -185,71 +229,9 @@ void ecs_map_memory(
         }\
     }
 #endif
+
 #ifdef __cplusplus
 }
-#endif
-
-/** C++ wrapper for map. */
-#ifdef __cplusplus
-#ifndef FLECS_NO_CPP
-
-#include <initializer_list>
-#include <utility>
-
-namespace flecs {
-
-/* C++ class mainly used as wrapper around internal ecs_map_t. Do not use
- * this class as a replacement for STL datastructures! */
-template <typename K, typename T>
-class map {
-public:
-    map(size_t count = 0) {
-        init(count);
-    }
-
-    map(std::initializer_list<std::pair<K, T>> elems) {
-        init(elems.size());
-        *this = elems;
-    }
-
-    void operator=(std::initializer_list<std::pair<K, T>> elems) {
-        for (auto elem : elems) {
-            this->set(elem.first, elem.second);
-        }
-    }
-
-    void clear() {
-        ecs_map_clear(m_map);
-    }
-
-    int32_t count() {
-        return ecs_map_count(m_map);
-    }
-
-    void set(K& key, T& value) {
-        _ecs_map_set(m_map, sizeof(T), reinterpret_cast<ecs_map_key_t>(key), &value);
-    }
-
-    T& get(K& key) {
-        static_cast<T*>(_ecs_map_get(m_map, sizeof(T),
-            reinterpret_cast<ecs_map_key_t>(key)));
-    }
-
-    void destruct() {
-        ecs_map_free(m_map);
-    }
-
-private:
-    void init(size_t count) {
-        m_map = ecs_map_new(T, static_cast<ecs_size_t>(count));
-    }
-
-    ecs_map_t *m_map;
-};
-
-}
-
-#endif
 #endif
 
 #endif

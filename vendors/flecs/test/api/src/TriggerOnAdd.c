@@ -1,7 +1,7 @@
 #include <api.h>
 
 void TriggerOnAdd_setup() {
-    ecs_tracing_enable(-3);
+    ecs_log_set_level(-3);
 }
 
 void Init(ecs_iter_t *it) {
@@ -503,10 +503,10 @@ void TriggerOnAdd_override_after_add_in_on_add() {
     ECS_PREFAB(world, Prefab, Position);
     ecs_set(world, Prefab, Position, {1, 2});
 
-    ECS_TRIGGER(world, AddVelocity, EcsOnAdd, Position);
+    ECS_TRIGGER(world, AddVelocity, EcsOnAdd, Position(self));
 
     ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .entity = {AddVelocity}, .ctx = &ecs_id(Velocity)
+        .entity = { .entity = AddVelocity}, .ctx = &ecs_id(Velocity)
     });
 
     Probe ctx = {0};
@@ -558,7 +558,7 @@ void TriggerOnAdd_set_after_add_in_on_add() {
     ECS_TRIGGER(world, OnSetPosition, EcsOnSet, Position);
 
     ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .entity = {AddVelocity}, .ctx = &ecs_id(Velocity)
+        .entity = {.entity = AddVelocity}, .ctx = &ecs_id(Velocity)
     });
 
     Probe ctx = {0};
@@ -729,7 +729,7 @@ void TriggerOnAdd_sys_context() {
     ECS_TRIGGER(world, TestContext, EcsOnAdd, Position);
 
     ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .entity = {TestContext}, .ctx = &param
+        .entity = {.entity = TestContext}, .ctx = &param
     });
 
     test_assert(ecs_get_trigger_ctx(world, TestContext) == &param);
@@ -746,7 +746,7 @@ void TriggerOnAdd_get_sys_context_from_param() {
     ECS_TRIGGER(world, TestContext, EcsOnAdd, Position);
 
     ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .entity = {TestContext}, .ctx = &param
+        .entity = {.entity = TestContext}, .ctx = &param
     });
 
     /* Set world context so system can compare if pointer is correct */

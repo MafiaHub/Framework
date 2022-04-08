@@ -3,6 +3,7 @@
 
 /* This generated file contains includes for project dependencies */
 #include <api/bake_config.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,6 +12,10 @@ extern "C" {
 #define MAX_SYS_COLUMNS (20)
 #define MAX_ENTITIES (256)
 #define MAX_INVOCATIONS (1024)
+
+/* Multiline strings */
+#define HEAD
+#define LINE "\n"
 
 typedef struct Probe {
     ecs_entity_t system;
@@ -75,7 +80,7 @@ void install_test_abort();
 #define ITER_MAX_TERMS (16)
 #define ITER_MAX_VARIABLES (16)
 
-typedef struct ecs_iter_result_t {
+typedef struct test_iter_result_t {
     ecs_entity_t entities[ITER_MAX_ENTITIES];
     ecs_id_t term_ids[ITER_MAX_ENTITIES][ITER_MAX_TERMS];
     void *term_columns[ITER_MAX_TERMS];
@@ -92,13 +97,13 @@ typedef struct ecs_iter_result_t {
         ecs_entity_t entities[ITER_MAX_ENTITIES];
         char *entity_names[ITER_MAX_ENTITIES];
     } variables[ITER_MAX_VARIABLES];
-} ecs_iter_result_t;
+} test_iter_result_t;
 
 // Utility for doing order-independent validation of iterator output
 bool test_iter(
     ecs_iter_t *it, 
     ecs_iter_next_action_t next, 
-    ecs_iter_result_t *expect);
+    test_iter_result_t *expect);
 
 const ecs_entity_t* bulk_new_w_type(
     ecs_world_t *world, ecs_entity_t type_ent, int32_t count);

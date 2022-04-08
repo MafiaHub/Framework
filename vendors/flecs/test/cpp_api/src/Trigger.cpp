@@ -81,7 +81,7 @@ void Trigger_on_add_tag_each() {
 
     world.trigger<MyTag>()
         .event(flecs::OnAdd)
-        .each([&](flecs::entity e, MyTag&) {
+        .each([&](flecs::entity e, MyTag) {
             invoked ++;
         });
 
@@ -138,7 +138,8 @@ void Trigger_on_add_id_arg() {
 
     auto tag = world.component<Tag>();
 
-    world.trigger<>(nullptr, tag)
+    world.trigger<>()
+        .id(tag)
         .event(flecs::OnAdd)
         .each([&](flecs::entity e) {
             invoked ++;
@@ -175,3 +176,46 @@ void Trigger_on_add_expr() {
     test_int(invoked, 1);
 }
 
+void Trigger_create_w_no_template_args() {
+    flecs::world world;
+
+    auto entity = world.entity();
+
+    int invoked = 0;
+
+    world.trigger()
+        .id<Position>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e) {
+            invoked ++;
+            test_assert(e == entity);
+        });
+
+    entity.add<Position>();
+
+    test_int(invoked, 1);
+}
+
+void Trigger_yield_existing() {
+    flecs::world world;
+
+    struct TagA { };
+    struct TagB { };
+
+    auto e1 = world.entity().add<TagA>();
+    auto e2 = world.entity().add<TagA>();
+    auto e3 = world.entity().add<TagA>().add<TagB>();
+
+    int32_t count = 0;
+
+    world.trigger<TagA>()
+        .event(flecs::OnAdd)
+        .yield_existing()
+        .each([&](flecs::entity e, TagA) {
+            if (e == e1) count ++;
+            if (e == e2) count += 2;
+            if (e == e3) count += 3;
+        });
+
+    test_int(count, 6);
+}

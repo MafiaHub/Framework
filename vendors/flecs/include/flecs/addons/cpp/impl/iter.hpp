@@ -24,12 +24,7 @@ inline flecs::world iter::world() const {
 
 inline flecs::entity iter::entity(size_t row) const {
     ecs_assert(row < static_cast<size_t>(m_iter->count), ECS_COLUMN_INDEX_OUT_OF_RANGE, NULL);
-    if (!this->world().is_readonly()) {
-        return flecs::entity(m_iter->entities[row])
-            .mut(this->world());
-    } else {
-        return flecs::entity(this->world().c_ptr(), m_iter->entities[row]);
-    }
+    return flecs::entity(m_iter->world, m_iter->entities[row]);
 }
 
 template <typename T>
@@ -37,17 +32,45 @@ inline column<T>::column(iter &iter, int32_t index) {
     *this = iter.term<T>(index);
 }
 
-inline flecs::entity iter::term_source(int32_t index) const {
+inline flecs::entity iter::source(int32_t index) const {
     return flecs::entity(m_iter->world, ecs_term_source(m_iter, index));
 }
 
-inline flecs::entity iter::term_id(int32_t index) const {
+inline flecs::entity iter::id(int32_t index) const {
     return flecs::entity(m_iter->world, ecs_term_id(m_iter, index));
+}
+
+inline flecs::id iter::pair(int32_t index) const {
+    flecs::id_t id = ecs_term_id(m_iter, index);
+    ecs_check(ECS_HAS_ROLE(id, PAIR), ECS_INVALID_PARAMETER, NULL);
+    return flecs::id(m_iter->world, id);
+error:
+    return flecs::id();
 }
 
 /* Obtain type of iter */
 inline flecs::type iter::type() const {
-    return flecs::type(m_iter->world, m_iter->type);
+    return flecs::type(m_iter->world, m_iter->table);
 }
+
+#ifdef FLECS_RULES
+inline flecs::entity iter::get_var(int var_id) const {
+    ecs_assert(m_iter->next == ecs_rule_next, ECS_INVALID_OPERATION, NULL);
+    ecs_assert(var_id != -1, ECS_INVALID_PARAMETER, 0);
+    return flecs::entity(m_iter->world, ecs_iter_get_var(m_iter, var_id));
+}
+
+/** Get value of variable by name.
+ * Get value of a query variable for current result.
+ */
+inline flecs::entity iter::get_var(const char *name) const {
+    ecs_assert(m_iter->next == ecs_rule_next, ECS_INVALID_OPERATION, NULL);
+    ecs_rule_iter_t *rit = &m_iter->priv.iter.rule;
+    const flecs::rule_t *r = rit->rule;
+    int var_id = ecs_rule_find_var(r, name);
+    ecs_assert(var_id != -1, ECS_INVALID_PARAMETER, name);
+    return flecs::entity(m_iter->world, ecs_iter_get_var(m_iter, var_id));
+}
+#endif
 
 } // namespace flecs

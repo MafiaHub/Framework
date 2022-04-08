@@ -16,8 +16,7 @@ struct term_ptr {
 };
 
 template <typename ... Components>
-class term_ptrs {
-public:
+struct term_ptrs {
     using array = flecs::array<_::term_ptr, sizeof...(Components)>;
 
     bool populate(const ecs_iter_t *iter) {
@@ -43,7 +42,7 @@ private:
     }  
 };    
 
-class invoker { };
+struct invoker { };
 
 // Template that figures out from the template parameters of a query/system
 // how to pass the value to the each callback
@@ -62,8 +61,9 @@ protected:
 
 // If type is not a pointer, return a reference to the type (default case)
 template <typename T>
-struct each_column<T, if_t< !is_pointer<T>::value && is_actual<T>::value > > 
-    : public each_column_base 
+struct each_column<T, if_t< !is_pointer<T>::value && 
+        !is_empty<actual_type_t<T>>::value && is_actual<T>::value > > 
+    : each_column_base 
 {
     each_column(const _::term_ptr& term, size_t row) 
         : each_column_base(term, row) { }
@@ -77,8 +77,9 @@ struct each_column<T, if_t< !is_pointer<T>::value && is_actual<T>::value > >
 // This requires that the actual type can be converted to the type.
 // A typical scenario where this happens is when using flecs::pair types.
 template <typename T>
-struct each_column<T, if_t< !is_pointer<T>::value && !is_actual<T>::value> > 
-    : public each_column_base 
+struct each_column<T, if_t< !is_pointer<T>::value &&
+        !is_empty<actual_type_t<T>>::value && !is_actual<T>::value> > 
+    : each_column_base 
 {
     each_column(const _::term_ptr& term, size_t row) 
         : each_column_base(term, row) { }
@@ -88,10 +89,28 @@ struct each_column<T, if_t< !is_pointer<T>::value && !is_actual<T>::value> >
     }  
 };
 
+
+// If type is empty (indicating a tag) the query will pass a nullptr. To avoid
+// returning nullptr to reference arguments, return a temporary value.
+template <typename T>
+struct each_column<T, if_t< is_empty<actual_type_t<T>>::value && 
+        !is_pointer<T>::value > > 
+    : each_column_base 
+{
+    each_column(const _::term_ptr& term, size_t row) 
+        : each_column_base(term, row) { }
+
+    T get_row() {
+        return actual_type_t<T>();
+    }
+};
+
+
 // If type is a pointer (indicating an optional value) return the type as is
 template <typename T>
-struct each_column<T, if_t< is_pointer<T>::value > > 
-    : public each_column_base 
+struct each_column<T, if_t< is_pointer<T>::value && 
+        !is_empty<actual_type_t<T>>::value > > 
+    : each_column_base 
 {
     each_column(const _::term_ptr& term, size_t row) 
         : each_column_base(term, row) { }
@@ -127,20 +146,25 @@ struct each_ref_column : public each_column<T> {
 };
 
 template <typename Func, typename ... Components>
-class each_invoker : public invoker {
-public:    
+struct each_invoker : public invoker {
     // If the number of arguments in the function signature is one more than the
     // number of components in the query, an extra entity arg is required.
     static constexpr bool PassEntity = 
-        sizeof...(Components) == (arity<Func>::value - 1);
+        (sizeof...(Components) + 1) == (arity<Func>::value);
+
+    // If the number of arguments in the function is two more than the number of
+    // components in the query, extra iter + index arguments are required.
+    static constexpr bool PassIter = 
+        (sizeof...(Components) + 2) == (arity<Func>::value);
 
     static_assert(arity<Func>::value > 0, 
         "each() must have at least one argument");
 
     using Terms = typename term_ptrs<Components ...>::array;
 
+    template < if_not_t< is_same< void(Func), void(Func)& >::value > = 0>
     explicit each_invoker(Func&& func) noexcept 
-        : m_func(std::move(func)) { }
+        : m_func(FLECS_MOV(func)) { }
 
     explicit each_invoker(const Func& func) noexcept 
         : m_func(func) { }
@@ -165,6 +189,11 @@ public:
         self->invoke(iter);
     }
 
+    // Each invokers always use instanced iterators
+    static bool instanced() {
+        return true;
+    }
+
 private:
     // Number of function arguments is one more than number of components, pass
     // entity as argument.
@@ -174,31 +203,47 @@ private:
     static void invoke_callback(
         ecs_iter_t *iter, const Func& func, size_t, Terms&, Args... comps) 
     {
-#ifndef NDEBUG
-        ecs_table_t *table = iter->table;
-        if (table) {
-            ecs_table_lock(iter->world, table);
-        }
-#endif
+        ECS_TABLE_LOCK(iter->world, iter->table);
 
-        flecs::iter it(iter);
-        for (auto row : it) {
-            func(it.entity(row),
-                (ColumnType< remove_reference_t<Components> >(comps, row)
+        ecs_world_t *world = iter->world;
+        size_t count = static_cast<size_t>(iter->count);
+
+        for (size_t i = 0; i < count; i ++) {
+            func(flecs::entity(world, iter->entities[i]),
+                (ColumnType< remove_reference_t<Components> >(comps, i)
                     .get_row())...);
         }
 
-#ifndef NDEBUG
-        if (table) {
-            ecs_table_unlock(iter->world, table);
-        }
-#endif        
+        ECS_TABLE_UNLOCK(iter->world, iter->table);
     }
+
+
+    // Number of function arguments is two more than number of components, pass
+    // iter + index as argument.
+    template <template<typename X, typename = int> class ColumnType, 
+        typename... Args, int Enabled = PassIter, if_t< 
+            sizeof...(Components) == sizeof...(Args) && Enabled> = 0>
+    static void invoke_callback(
+        ecs_iter_t *iter, const Func& func, size_t, Terms&, Args... comps) 
+    {
+        ECS_TABLE_LOCK(iter->world, iter->table);
+
+        size_t count = static_cast<size_t>(iter->count);
+        flecs::iter it(iter);
+
+        for (size_t i = 0; i < count; i ++) {
+            func(it, i, (ColumnType< remove_reference_t<Components> >(comps, i)
+                .get_row())...);
+        }
+
+        ECS_TABLE_UNLOCK(iter->world, iter->table);
+    }
+
 
     // Number of function arguments is equal to number of components, no entity
     template <template<typename X, typename = int> class ColumnType, 
         typename... Args, if_t< 
-            sizeof...(Components) == sizeof...(Args) && !PassEntity> = 0>
+            sizeof...(Components) == sizeof...(Args) && !PassEntity && !PassIter> = 0>
     static void invoke_callback(
         ecs_iter_t *iter, const Func& func, size_t, Terms&, Args... comps) 
     {
@@ -227,14 +272,16 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename Func, typename ... Components>
-class iter_invoker : public invoker {
+struct iter_invoker : invoker {
+private:
     static constexpr bool IterOnly = arity<Func>::value == 1;
 
     using Terms = typename term_ptrs<Components ...>::array;
 
 public:
+    template < if_not_t< is_same< void(Func), void(Func)& >::value > = 0>
     explicit iter_invoker(Func&& func) noexcept 
-        : m_func(std::move(func)) { }
+        : m_func(FLECS_MOV(func)) { }
 
     explicit iter_invoker(const Func& func) noexcept 
         : m_func(func) { }
@@ -255,6 +302,11 @@ public:
         self->invoke(iter);
     }
 
+    // Instancing needs to be enabled explicitly for iter invokers
+    static bool instanced() {
+        return false;
+    }
+
 private:
     template <typename... Args, if_t<!sizeof...(Args) && IterOnly> = 0>
     static void invoke_callback(ecs_iter_t *iter, const Func& func, 
@@ -271,12 +323,7 @@ private:
     {
         flecs::iter it(iter);
 
-#ifndef NDEBUG
-        ecs_table_t *table = iter->table;
-        if (table) {
-            ecs_table_lock(iter->world, table);
-        }
-#endif
+        ECS_TABLE_LOCK(iter->world, iter->table);
 
         func(it, ( static_cast< 
             remove_reference_t< 
@@ -284,11 +331,7 @@ private:
                     actual_type_t<Components> > >* >
                         (comps.ptr))...);
 
-#ifndef NDEBUG
-        if (table) {
-            ecs_table_unlock(iter->world, table);
-        }
-#endif                        
+        ECS_TABLE_UNLOCK(iter->world, iter->table);
     }
 
     template <typename... Targs, if_t<!IterOnly &&
@@ -309,11 +352,10 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template<typename ... Args>
-class entity_with_invoker_impl;
+struct entity_with_invoker_impl;
 
 template<typename ... Args>
-class entity_with_invoker_impl<arg_list<Args ...>> {
-public:
+struct entity_with_invoker_impl<arg_list<Args ...>> {
     using ColumnArray = flecs::array<int32_t, sizeof...(Args)>;
     using ConstPtrArray = flecs::array<const void*, sizeof...(Args)>;
     using PtrArray = flecs::array<void*, sizeof...(Args)>;
@@ -321,19 +363,23 @@ public:
     using IdArray = flecs::array<id_t, sizeof...(Args)>;
 
     template <typename ArrayType>
-    static bool get_ptrs(world& w, ecs_record_t *r, ecs_table_t *table, 
+    static bool get_ptrs(world_t *world, ecs_record_t *r, ecs_table_t *table,
         ArrayType& ptrs) 
     {
         ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
-        ecs_type_t type = ecs_table_get_type(table);
-        if (!type) {
+        ecs_table_t *storage_table = ecs_table_get_storage_table(table);
+        if (!storage_table) {
             return false;
         }
 
+        /* table_index_of needs real world */
+        const flecs::world_t *real_world = ecs_get_world(world);
+
         /* Get column indices for components */
         ColumnArray columns ({
-            ecs_type_index_of(type, 0, w.id<Args>())...
+            ecs_search_offset(real_world, storage_table, 0, 
+                _::cpp_type<Args>().id(world), 0)...
         });
 
         /* Get pointers for columns for entity */
@@ -350,13 +396,12 @@ public:
     }
 
     template <typename ArrayType>
-    static bool get_mut_ptrs(world& w, ecs_entity_t e, ArrayType& ptrs) {        
-        world_t *world = w.c_ptr();
-
+    static bool get_mut_ptrs(world_t *world, ecs_entity_t e, ArrayType& ptrs) {
         /* Get pointers w/get_mut */
         size_t i = 0;
         DummyArray dummy ({
-            (ptrs[i ++] = ecs_get_mut_id(world, e, w.id<Args>(), NULL), 0)...
+            (ptrs[i ++] = ecs_get_mut_id(world, e, 
+                _::cpp_type<Args>().id(world), NULL), 0)...
         });
 
         return true;
@@ -364,8 +409,6 @@ public:
 
     template <typename Func>
     static bool invoke_get(world_t *world, entity_t id, const Func& func) {
-        flecs::world w(world);
-
         ecs_record_t *r = ecs_record_find(world, id);
         if (!r) {
             return false;
@@ -377,7 +420,7 @@ public:
         }
 
         ConstPtrArray ptrs;
-        if (!get_ptrs(w, r, table, ptrs)) {
+        if (!get_ptrs(world, r, table, ptrs)) {
             return false;
         }
 
@@ -445,7 +488,7 @@ public:
 
         // When deferred, obtain pointers with regular get_mut
         } else {
-            get_mut_ptrs(w, id, ptrs);
+            get_mut_ptrs(world, id, ptrs);
         }
 
         invoke_callback(func, 0, ptrs);
@@ -478,13 +521,13 @@ private:
 };
 
 template <typename Func, typename U = int>
-class entity_with_invoker {
+struct entity_with_invoker {
     static_assert(function_traits<Func>::value, "type is not callable");
 };
 
 template <typename Func>
-class entity_with_invoker<Func, if_t< is_callable<Func>::value > >
-    : public entity_with_invoker_impl< arg_list_t<Func> >
+struct entity_with_invoker<Func, if_t< is_callable<Func>::value > >
+    : entity_with_invoker_impl< arg_list_t<Func> >
 {
     static_assert(function_traits<Func>::arity > 0,
         "function must have at least one argument");

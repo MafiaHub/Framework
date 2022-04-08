@@ -27,6 +27,9 @@ extern "C" {
  * cycle detected error */
 #define ECS_MAX_RECURSION (512)
 
+/** Maximum length of a parser token (used by parser-related addons) */
+#define ECS_MAX_TOKEN_SIZE (256)
+
 ////////////////////////////////////////////////////////////////////////////////
 //// Global type handles
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,11 +50,6 @@ bool ecs_component_has_actions(
     const ecs_world_t *world,
     ecs_entity_t component);
 
-FLECS_API
-void ecs_add_module_tag(
-    ecs_world_t *world,
-    ecs_entity_t module);
-
 ////////////////////////////////////////////////////////////////////////////////
 //// Signature API
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,12 +60,32 @@ bool ecs_identifier_is_0(
 const char* ecs_identifier_is_var(
     const char *id);
 
+////////////////////////////////////////////////////////////////////////////////
+//// Ctor that initializes component to 0
+////////////////////////////////////////////////////////////////////////////////
+
+FLECS_API
+void ecs_default_ctor(
+    void *ptr, 
+    int32_t count, 
+    const ecs_type_info_t *ctx);
+
 /** Calculate offset from address */
 #ifdef __cplusplus
 #define ECS_OFFSET(o, offset) reinterpret_cast<void*>((reinterpret_cast<uintptr_t>(o)) + (static_cast<uintptr_t>(offset)))
 #else
 #define ECS_OFFSET(o, offset) (void*)(((uintptr_t)(o)) + ((uintptr_t)(offset)))
 #endif
+
+#define ECS_ELEM(ptr, size, index) ECS_OFFSET(ptr, (size) * (index))
+
+/** Enable/disable bitsets */
+#define ECS_BIT_SET(flags, bit) (flags) |= (bit)
+#define ECS_BIT_CLEAR(flags, bit) (flags) &= ~(bit) 
+#define ECS_BIT_COND(flags, bit, cond) ((cond) \
+    ? (ECS_BIT_SET(flags, bit)) \
+    : (ECS_BIT_CLEAR(flags, bit)))
+#define ECS_BIT_IS_SET(flags, bit) ((flags) & (bit))
 
 #ifdef __cplusplus
 }

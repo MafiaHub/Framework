@@ -1,19 +1,27 @@
 #ifndef FLECS_SYSTEM_PRIVATE_H
 #define FLECS_SYSTEM_PRIVATE_H
 
+#ifdef FLECS_SYSTEM
+
 #include "../../private_api.h"
 
 typedef struct EcsSystem {
-    ecs_iter_action_t action;       /* Callback to be invoked for matching it */
+    ecs_run_action_t run;           /* See ecs_system_desc_t */
+    ecs_iter_action_t action;       /* See ecs_system_desc_t */
 
     ecs_entity_t entity;            /* Entity id of system, used for ordering */
     ecs_query_t *query;             /* System query */
     ecs_system_status_action_t status_action; /* Status action */   
     ecs_entity_t tick_source;       /* Tick source associated with system */
     
+    /* Schedule parameters */
+    bool multi_threaded;
+    bool no_staging;
+
     int32_t invoke_count;           /* Number of times system is invoked */
-    FLECS_FLOAT time_spent;         /* Time spent on running system */
+    float time_spent;               /* Time spent on running system */
     FLECS_FLOAT time_passed;        /* Time passed since last invocation */
+    int32_t last_frame;             /* Last frame for which the system was considered */
 
     ecs_entity_t self;              /* Entity associated with system */
 
@@ -45,5 +53,7 @@ ecs_entity_t ecs_run_intern(
     int32_t offset,
     int32_t limit,
     void *param);
+
+#endif
 
 #endif

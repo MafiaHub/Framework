@@ -3,7 +3,7 @@
     "type": "application",
     "value": {
         "author": "Sander Mertens",
-        "description": "Test project for flecs",
+        "description": "Test project for flecs data structures",
         "public": false,
         "coverage": false,
         "use": [
@@ -116,7 +116,16 @@
                 "append_zerocopy_const",
                 "reset",
                 "merge",
-                "app_buffer"
+                "app_buffer",
+                "append_char",
+                "append_511_chars",
+                "append_512_chars",
+                "append_513_chars",
+                "append_flt",
+                "append_nan",
+                "append_inf",
+                "append_nan_delim",
+                "append_inf_delim"
             ]
         }]
     }

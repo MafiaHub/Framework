@@ -1,6 +1,6 @@
 #include "../private_api.h"
 
-#ifndef _MSC_VER
+#ifdef ECS_TARGET_GNU
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #endif
 
@@ -8,7 +8,7 @@
  * into the hashing function, but only at word boundaries. This should be safe,
  * but trips up address sanitizers and valgrind.
  * This ensures clean valgrind logs in debug mode & the best perf in release */
-#if !defined(NDEBUG) || defined(ADDRESS_SANITIZER)
+#if !defined(FLECS_NDEBUG) || defined(ADDRESS_SANITIZER)
 #ifndef VALGRIND
 #define VALGRIND
 #endif
@@ -21,12 +21,12 @@ lookup3.c, by Bob Jenkins, May 2006, Public Domain.
 -------------------------------------------------------------------------------
 */
 
-#ifdef _MSC_VER
+#ifdef ECS_TARGET_MSVC
 //FIXME
 #else
 #include <sys/param.h>  /* attempt to define endianness */
 #endif
-#ifdef linux
+#ifdef ECS_TARGET_LINUX
 # include <endian.h>    /* attempt to define endianness */
 #endif
 
@@ -328,7 +328,7 @@ uint64_t flecs_hash(
 
     hashlittle2(
         data,
-        flecs_to_size_t(length),
+        flecs_ito(size_t, length),
         &h_1,
         &h_2);
 

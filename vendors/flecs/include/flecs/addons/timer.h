@@ -19,8 +19,6 @@
 #ifndef FLECS_TIMER_H
 #define FLECS_TIMER_H
 
-#include "pipeline.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -219,7 +217,7 @@ ecs_entity_t ecs_set_rate(
  *
  * @param world The world.
  * @param system The system to associate with the timer.
- * @param timer The timer to associate with the system.
+ * @param tick_source The tick source to associate with the system.
  */ 
 FLECS_API
 void ecs_set_tick_source(
@@ -232,16 +230,9 @@ void ecs_set_tick_source(
 //// Module
 ////////////////////////////////////////////////////////////////////////////////
 
-/* Timers module component */
-typedef struct FlecsTimer {
-    int32_t dummy;
-} FlecsTimer;
-
 FLECS_API
 void FlecsTimerImport(
     ecs_world_t *world);
-
-#define FlecsTimerImportHandles(handles)
 
 #ifdef __cplusplus
 }

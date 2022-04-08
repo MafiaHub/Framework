@@ -1,11 +1,24 @@
 #include "private_api.h"
+#include <stdio.h>
+#include <ctype.h>
 
 void ecs_os_api_impl(ecs_os_api_t *api);
 
 static bool ecs_os_api_initialized = false;
+static bool ecs_os_api_initializing = false;
 static int ecs_os_api_init_count = 0;
 
-ecs_os_api_t ecs_os_api;
+#ifndef __EMSCRIPTEN__
+ecs_os_api_t ecs_os_api = {
+    .log_with_color_ = true,
+    .log_level_ = -1 /* disable tracing by default, but enable >= warnings */
+};
+#else
+/* Disable colors by default for emscripten */
+ecs_os_api_t ecs_os_api = {
+    .log_level_ = -1
+};
+#endif
 
 int64_t ecs_os_api_malloc_count = 0;
 int64_t ecs_os_api_realloc_count = 0;
@@ -42,74 +55,179 @@ void ecs_os_fini(void) {
     }
 }
 
+#if !defined(ECS_TARGET_WINDOWS) && !defined(ECS_TARGET_EM) && !defined(ECS_TARGET_ANDROID)
+#include <execinfo.h>
+#define ECS_BT_BUF_SIZE 100
 static
-void ecs_log(const char *fmt, va_list args) {
-    vfprintf(stdout, fmt, args);
-    fprintf(stdout, "\n");
-}
-
-static
-void ecs_log_error(const char *fmt, va_list args) {
-    vfprintf(stderr, fmt, args);
-    fprintf(stderr, "\n");
-}
-
-static
-void ecs_log_debug(const char *fmt, va_list args) {
-    vfprintf(stdout, fmt, args);
-    fprintf(stdout, "\n");
-}
-
-static
-void ecs_log_warning(const char *fmt, va_list args) {
-    vfprintf(stderr, fmt, args);
-    fprintf(stderr, "\n");
-}
-
-void ecs_os_dbg(const char *fmt, ...) {
-#ifndef NDEBUG
-    va_list args;
-    va_start(args, fmt);
-    if (ecs_os_api.log_debug_) {
-        ecs_os_api.log_debug_(fmt, args);
-    }
-    va_end(args);
-#else
-    (void)fmt;
-#endif
-}
-
-void ecs_os_warn(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    if (ecs_os_api.log_warning_) {
-        ecs_os_api.log_warning_(fmt, args);
-    }
-    va_end(args);
-}
-
-void ecs_os_log(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    if (ecs_os_api.log_) {
-        ecs_os_api.log_(fmt, args);
-    }
-    va_end(args);
-}
-
-void ecs_os_err(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    if (ecs_os_api.log_error_) {
-        ecs_os_api.log_error_(fmt, args);
-    }
-    va_end(args);
-}
-
-static
-void ecs_os_gettime(ecs_time_t *time)
+void dump_backtrace(
+    FILE *stream) 
 {
-    uint64_t now = flecs_os_time_now();
+    int nptrs;
+    void *buffer[ECS_BT_BUF_SIZE];
+    char **strings;
+
+    nptrs = backtrace(buffer, ECS_BT_BUF_SIZE);
+
+    strings = backtrace_symbols(buffer, nptrs);
+    if (strings == NULL) {
+        return;
+    }
+
+    for (int j = 3; j < nptrs; j++) {
+        fprintf(stream, "%s\n", strings[j]);
+    }
+
+    free(strings);
+}
+#else
+static
+void dump_backtrace(
+    FILE *stream)
+{ 
+    (void)stream;
+}
+#endif
+
+static
+void log_msg(
+    int32_t level,
+    const char *file, 
+    int32_t line,  
+    const char *msg)
+{
+    FILE *stream;
+    if (level >= 0) {
+        stream = stdout;
+    } else {
+        stream = stderr;
+    }
+
+    if (level >= 0) {
+        if (level == 0) {
+            if (ecs_os_api.log_with_color_) fputs(ECS_MAGENTA, stream);
+        } else {
+            if (ecs_os_api.log_with_color_) fputs(ECS_GREY, stream);
+        }
+        fputs("info", stream);
+    } else if (level == -2) {
+        if (ecs_os_api.log_with_color_) fputs(ECS_YELLOW, stream);
+        fputs("warning", stream);
+    } else if (level == -3) {
+        if (ecs_os_api.log_with_color_) fputs(ECS_RED, stream);
+        fputs("error", stream);
+    } else if (level == -4) {
+        if (ecs_os_api.log_with_color_) fputs(ECS_RED, stream);
+        fputs("fatal", stream);
+    }
+
+    if (ecs_os_api.log_with_color_) fputs(ECS_NORMAL, stream);
+    fputs(": ", stream);
+
+    if (level >= 0) {
+        if (ecs_os_api.log_indent_) {
+            char indent[32];
+            int i, indent_count = ecs_os_api.log_indent_;
+            if (indent_count > 15) indent_count = 15;
+
+            for (i = 0; i < indent_count; i ++) {
+                indent[i * 2] = '|';
+                indent[i * 2 + 1] = ' ';
+            }
+
+            if (ecs_os_api.log_indent_ != indent_count) {
+                indent[i * 2 - 2] = '+';
+            }
+
+            indent[i * 2] = '\0';
+
+            fputs(indent, stream);
+        }
+    }
+
+    if (level < 0) {
+        if (file) {
+            const char *file_ptr = strrchr(file, '/');
+            if (!file_ptr) {
+                file_ptr = strrchr(file, '\\');
+            }
+
+            if (file_ptr) {
+                file = file_ptr + 1;
+            }
+
+            fputs(file, stream);
+            fputs(": ", stream);
+        }
+
+        if (line) {
+            fprintf(stream, "%d: ", line);
+        }
+    }
+
+    fputs(msg, stream);
+
+    fputs("\n", stream);
+
+    if (level == -4) {
+        dump_backtrace(stream);
+    }
+}
+
+void ecs_os_dbg(
+    const char *file, 
+    int32_t line, 
+    const char *msg)
+{
+    if (ecs_os_api.log_) {
+        ecs_os_api.log_(1, file, line, msg);
+    }
+}
+
+void ecs_os_trace(
+    const char *file, 
+    int32_t line, 
+    const char *msg) 
+{
+    if (ecs_os_api.log_) {
+        ecs_os_api.log_(0, file, line, msg);
+    }
+}
+
+void ecs_os_warn(
+    const char *file, 
+    int32_t line, 
+    const char *msg) 
+{
+    if (ecs_os_api.log_) {
+        ecs_os_api.log_(-2, file, line, msg);
+    }
+}
+
+void ecs_os_err(
+    const char *file, 
+    int32_t line, 
+    const char *msg) 
+{
+    if (ecs_os_api.log_) {
+        ecs_os_api.log_(-3, file, line, msg);
+    }
+}
+
+void ecs_os_fatal(
+    const char *file, 
+    int32_t line, 
+    const char *msg) 
+{
+    if (ecs_os_api.log_) {
+        ecs_os_api.log_(-4, file, line, msg);
+    }
+}
+
+static
+void ecs_os_gettime(ecs_time_t *time) {
+    ecs_assert(ecs_os_has_time() == true, ECS_MISSING_OS_API, NULL);
+    
+    uint64_t now = ecs_os_now();
     uint64_t sec = now / 1000000000;
 
     assert(sec < UINT32_MAX);
@@ -189,18 +307,18 @@ char* ecs_os_api_module_to_dl(const char *module) {
     /* Best guess, use module name with underscores + OS library extension */
     char *file_base = module_file_base(module, '_');
 
-#if defined(ECS_OS_LINUX)
+#   if defined(ECS_TARGET_LINUX) || defined(ECS_TARGET_FREEBSD)
     ecs_strbuf_appendstr(&lib, "lib");
     ecs_strbuf_appendstr(&lib, file_base);
     ecs_strbuf_appendstr(&lib, ".so");
-#elif defined(ECS_OS_DARWIN)
+#   elif defined(ECS_TARGET_DARWIN)
     ecs_strbuf_appendstr(&lib, "lib");
     ecs_strbuf_appendstr(&lib, file_base);
     ecs_strbuf_appendstr(&lib, ".dylib");
-#elif defined(ECS_OS_WINDOWS)
+#   elif defined(ECS_TARGET_WINDOWS)
     ecs_strbuf_appendstr(&lib, file_base);
     ecs_strbuf_appendstr(&lib, ".dll");
-#endif
+#   endif
 
     ecs_os_free(file_base);
 
@@ -229,7 +347,11 @@ void ecs_os_set_api_defaults(void)
         return;
     }
 
-    flecs_os_time_setup();
+    if (ecs_os_api_initializing != 0) {
+        return;
+    }
+
+    ecs_os_api_initializing = true;
     
     /* Memory management */
     ecs_os_api.malloc_ = ecs_os_api_malloc;
@@ -241,14 +363,10 @@ void ecs_os_set_api_defaults(void)
     ecs_os_api.strdup_ = ecs_os_api_strdup;
 
     /* Time */
-    ecs_os_api.sleep_ = flecs_os_time_sleep;
     ecs_os_api.get_time_ = ecs_os_gettime;
 
     /* Logging */
-    ecs_os_api.log_ = ecs_log;
-    ecs_os_api.log_error_ = ecs_log_error;
-    ecs_os_api.log_debug_ = ecs_log_debug;
-    ecs_os_api.log_warning_ = ecs_log_warning;
+    ecs_os_api.log_ = log_msg;
 
     /* Modules */
     if (!ecs_os_api.module_to_dl_) {
@@ -260,6 +378,15 @@ void ecs_os_set_api_defaults(void)
     }
 
     ecs_os_api.abort_ = abort;
+
+#   ifdef FLECS_OS_API_IMPL
+    /* Initialize defaults to OS API IMPL addon, but still allow for overriding
+     * by the application */
+    ecs_set_os_api_impl();
+    ecs_os_api_initialized = false;
+#   endif
+
+    ecs_os_api_initializing = false;
 }
 
 bool ecs_os_has_heap(void) {
@@ -288,15 +415,13 @@ bool ecs_os_has_threading(void) {
 bool ecs_os_has_time(void) {
     return 
         (ecs_os_api.get_time_ != NULL) &&
-        (ecs_os_api.sleep_ != NULL);
+        (ecs_os_api.sleep_ != NULL) &&
+        (ecs_os_api.now_ != NULL) &&
+        (ecs_os_api.enable_high_timer_resolution_ != NULL);
 }
 
 bool ecs_os_has_logging(void) {
-    return 
-        (ecs_os_api.log_ != NULL) &&
-        (ecs_os_api.log_error_ != NULL) &&
-        (ecs_os_api.log_debug_ != NULL) &&
-        (ecs_os_api.log_warning_ != NULL);
+    return (ecs_os_api.log_ != NULL);
 }
 
 bool ecs_os_has_dl(void) {
@@ -312,15 +437,24 @@ bool ecs_os_has_modules(void) {
         (ecs_os_api.module_to_etc_ != NULL);
 }
 
-#if defined(_MSC_VER)
+void ecs_os_enable_high_timer_resolution(bool enable) {
+    if (ecs_os_api.enable_high_timer_resolution_) {
+        ecs_os_api.enable_high_timer_resolution_(enable);
+    } else {
+        ecs_assert(enable == false, ECS_MISSING_OS_API, 
+            "enable_high_timer_resolution");
+    }
+}
+
+#if defined(ECS_TARGET_WINDOWS)
 static char error_str[255];
 #endif
 
 const char* ecs_os_strerror(int err) {
-#if defined(_MSC_VER)
+#   if defined(ECS_TARGET_WINDOWS)
     strerror_s(error_str, 255, err);
     return error_str;
-#else
+#   else
     return strerror(err);
-#endif
+#   endif
 }

@@ -2,224 +2,143 @@
  * @file flecs.hpp
  * @brief Flecs C++ API.
  *
- * This is a C++11 wrapper around the Flecs C API.
+ * Modern C++11 API
  */
 
 #pragma once
 
-// The C++ API does not use STL, save for type_traits
+// STL includes
 #include <type_traits>
 
-// Allows overriding flecs_static_assert, which is useful when testing
-#ifndef flecs_static_assert
-#define flecs_static_assert(cond, str) static_assert(cond, str)
-#endif
+// Forward declarations
+namespace flecs 
+{
 
-namespace flecs {
+struct world;
+struct world_async_stage;
+struct iter;
+struct entity_view;
+struct entity;
+struct untyped_component;
 
-////////////////////////////////////////////////////////////////////////////////
-//// Forward declarations and types
-////////////////////////////////////////////////////////////////////////////////
+template <typename T>
+struct component;
 
-using world_t = ecs_world_t;
-using id_t = ecs_id_t;
-using entity_t = ecs_entity_t;
-using type_t = ecs_type_t;
-using table_t = ecs_table_t;
-using snapshot_t = ecs_snapshot_t;
-using filter_t = ecs_filter_t;
-using query_t = ecs_query_t;
-using ref_t = ecs_ref_t;
-using iter_t = ecs_iter_t;
-using ComponentLifecycle = EcsComponentLifecycle;
-
-enum inout_kind_t {
-    InOutDefault = EcsInOutDefault,
-    InOut = EcsInOut,
-    In = EcsIn,
-    Out = EcsOut
-};
-
-enum oper_kind_t {
-    And = EcsAnd,
-    Or = EcsOr,
-    Not = EcsNot,
-    Optional = EcsOptional,
-    AndFrom = EcsAndFrom,
-    OrFrom = EcsOrFrom,
-    NotFrom = EcsNotFrom
-};
-
-enum var_kind_t {
-    VarDefault = EcsVarDefault,
-    VarIsEntity = EcsVarIsEntity,
-    VarIsVariable = EcsVarIsVariable
-};
-
-class world;
-class world_async_stage;
-class snapshot;
-class id;
-class entity;
-class entity_view;
-class type;
-class pipeline;
-class iter;
-class term;
-class filter_iterator;
-class world_filter;
-class snapshot_filter;
-class query_base;
-
-template<typename ... Components>
-class filter;
-
-template<typename ... Components>
-class query;
-
-template<typename ... Components>
-class system;
-
-template<typename ... Components>
-class trigger;
-
-template<typename ... Components>
-class observer;
-
-template <typename ... Components>
-class filter_builder;
-
-template <typename ... Components>
-class query_builder;
-
-template <typename ... Components>
-class system_builder;
-
-template <typename ... Components>
-class trigger_builder;
-
-template <typename ... Components>
-class observer_builder;
-
-namespace _
+namespace _ 
 {
 template <typename T, typename U = int>
-class cpp_type;
+struct cpp_type;
 
 template <typename Func, typename ... Components>
-class each_invoker;
-}
+struct each_invoker;
 
-////////////////////////////////////////////////////////////////////////////////
-//// Builtin components and tags 
-////////////////////////////////////////////////////////////////////////////////
+} // namespace _
+} // namespace flecs
 
-/* Builtin components */
-using Component = EcsComponent;
-using Type = EcsType;
-using Identifier = EcsIdentifier;
-using Timer = EcsTimer;
-using RateFilter = EcsRateFilter;
-using TickSource = EcsTickSource;
-using Query = EcsQuery;
-using Trigger = EcsTrigger;
-using Observer = EcsObserver;
+// Types imported from C API
+#include "c_types.hpp"
 
-/* Builtin opaque components */
-static const flecs::entity_t System = ecs_id(EcsSystem);
+// C++ utilities
+#include "utils/utils.hpp"
 
-/* Builtin set constants */
-static const uint8_t DefaultSet = EcsDefaultSet;
-static const uint8_t Self = EcsSelf;
-static const uint8_t SuperSet = EcsSuperSet;
-static const uint8_t SubSet = EcsSubSet;
-static const uint8_t Cascade = EcsCascade;
-static const uint8_t All = EcsAll;
-static const uint8_t Nothing = EcsNothing;
-static const uint8_t Parent = EcsParent;
+// Mixin forward declarations
+#include "mixins/id/decl.hpp"
+#include "mixins/type/decl.hpp"
+#include "mixins/term/decl.hpp"
+#include "mixins/filter/decl.hpp"
+#include "mixins/event/decl.hpp"
+#include "mixins/query/decl.hpp"
+#include "mixins/trigger/decl.hpp"
+#include "mixins/observer/decl.hpp"
+#ifdef FLECS_SYSTEM
+#include "mixins/system/decl.hpp"
+#endif
+#ifdef FLECS_PIPELINE
+#include "mixins/pipeline/decl.hpp"
+#endif
+#ifdef FLECS_TIMER
+#include "mixins/timer/decl.hpp"
+#endif
+#ifdef FLECS_SNAPSHOT
+#include "mixins/snapshot/decl.hpp"
+#endif
+#ifdef FLECS_DOC
+#include "mixins/doc/decl.hpp"
+#endif
+#ifdef FLECS_REST
+#include "mixins/rest/decl.hpp"
+#endif
+#ifdef FLECS_RULES
+#include "mixins/rule/decl.hpp"
+#endif
+#ifdef FLECS_META
+#include "mixins/meta/decl.hpp"
+#endif
+#ifdef FLECS_UNITS
+#include "mixins/units/decl.hpp"
+#endif
+#ifdef FLECS_JSON
+#include "mixins/json/decl.hpp"
+#endif
+#ifdef FLECS_APP
+#include "mixins/app/decl.hpp"
+#endif
 
-/* Builtin tag ids */
-static const flecs::entity_t Module = EcsModule;
-static const flecs::entity_t Prefab = EcsPrefab;
-static const flecs::entity_t Hidden = EcsHidden;
-static const flecs::entity_t Disabled = EcsDisabled;
-static const flecs::entity_t Inactive = EcsInactive;
-static const flecs::entity_t Monitor = EcsMonitor;
-static const flecs::entity_t Pipeline = EcsPipeline;
-
-/* Trigger tags */
-static const flecs::entity_t OnAdd = EcsOnAdd;
-static const flecs::entity_t OnRemove = EcsOnRemove;
-static const flecs::entity_t OnSet = EcsOnSet;
-static const flecs::entity_t UnSet = EcsUnSet;
-
-/* Builtin pipeline tags */
-static const flecs::entity_t PreFrame = EcsPreFrame;
-static const flecs::entity_t OnLoad = EcsOnLoad;
-static const flecs::entity_t PostLoad = EcsPostLoad;
-static const flecs::entity_t PreUpdate = EcsPreUpdate;
-static const flecs::entity_t OnUpdate = EcsOnUpdate;
-static const flecs::entity_t OnValidate = EcsOnValidate;
-static const flecs::entity_t PostUpdate = EcsPostUpdate;
-static const flecs::entity_t PreStore = EcsPreStore;
-static const flecs::entity_t OnStore = EcsOnStore;
-static const flecs::entity_t PostFrame = EcsPostFrame;
-
-/** Builtin roles */
-static const flecs::entity_t Pair = ECS_PAIR;
-static const flecs::entity_t Switch = ECS_SWITCH;
-static const flecs::entity_t Case = ECS_CASE;
-static const flecs::entity_t Owned = ECS_OVERRIDE;
-
-/* Builtin entity ids */
-static const flecs::entity_t Flecs = EcsFlecs;
-static const flecs::entity_t FlecsCore = EcsFlecsCore;
-static const flecs::entity_t World = EcsWorld;
-
-/* Relation properties */
-static const flecs::entity_t Wildcard = EcsWildcard;
-static const flecs::entity_t This = EcsThis;
-static const flecs::entity_t Transitive = EcsTransitive;
-static const flecs::entity_t Inclusive = EcsInclusive;
-static const flecs::entity_t Final = EcsFinal;
-static const flecs::entity_t Tag = EcsTag;
-
-/* Builtin relationships */
-static const flecs::entity_t IsA = EcsIsA;
-static const flecs::entity_t ChildOf = EcsChildOf;
-
-/* Builtin identifiers */
-static const flecs::entity_t Name = EcsName;
-static const flecs::entity_t Symbol = EcsSymbol;
-
-/* Cleanup rules */
-static const flecs::entity_t OnDelete = EcsOnDelete;
-static const flecs::entity_t OnDeleteObject = EcsOnDeleteObject;
-static const flecs::entity_t Remove = EcsRemove;
-static const flecs::entity_t Delete = EcsDelete;
-static const flecs::entity_t Throw = EcsThrow;
-
-}
-
-#include "util.hpp"
+#include "log.hpp"
 #include "pair.hpp"
-#include "function_traits.hpp"
 #include "lifecycle_traits.hpp"
-#include "iter.hpp"
 #include "world.hpp"
-#include "id.hpp"
-#include "entity_view.hpp"
+#include "iter.hpp"
+#include "ref.hpp"
 #include "entity.hpp"
-#include "component.hpp"
 #include "invoker.hpp"
-#include "builder.hpp"
+#include "utils/iterable.hpp"
+#include "component.hpp"
 #include "type.hpp"
-#include "module.hpp"
-#include "filter.hpp"
-#include "snapshot.hpp"
-#include "filter_iterator.hpp"
-#include "query.hpp"
-#include "system.hpp"
-#include "trigger.hpp"
-#include "observer.hpp"
+
+// Mixin implementations
+#include "mixins/id/impl.hpp"
+#include "mixins/entity/impl.hpp"
+#include "mixins/component/impl.hpp"
+#include "mixins/type/impl.hpp"
+#include "mixins/term/impl.hpp"
+#include "mixins/filter/impl.hpp"
+#include "mixins/event/impl.hpp"
+#include "mixins/query/impl.hpp"
+#include "mixins/trigger/impl.hpp"
+#include "mixins/observer/impl.hpp"
+#ifdef FLECS_MODULE
+#include "mixins/module/impl.hpp"
+#endif
+#ifdef FLECS_SYSTEM
+#include "mixins/system/impl.hpp"
+#endif
+#ifdef FLECS_PIPELINE
+#include "mixins/pipeline/impl.hpp"
+#endif
+#ifdef FLECS_TIMER
+#include "mixins/timer/impl.hpp"
+#endif
+#ifdef FLECS_SNAPSHOT
+#include "mixins/snapshot/impl.hpp"
+#endif
+#ifdef FLECS_DOC
+#include "mixins/doc/impl.hpp"
+#endif
+#ifdef FLECS_DOC
+#include "mixins/doc/impl.hpp"
+#endif
+#ifdef FLECS_REST
+#include "mixins/rest/impl.hpp"
+#endif
+#ifdef FLECS_RULES
+#include "mixins/rule/impl.hpp"
+#endif
+#ifdef FLECS_META
+#include "mixins/meta/impl.hpp"
+#endif
+#ifdef FLECS_UNITS
+#include "mixins/units/impl.hpp"
+#endif
+
 #include "impl.hpp"

@@ -1,4 +1,5 @@
 #include <api.h>
+#include <stdio.h>
 
 void probe_system_w_ctx(
     ecs_iter_t *it,
@@ -34,7 +35,12 @@ void probe_system_w_ctx(
             test_assert(it->entities == e);
             
             for (i = 0; i < it->count; i ++) {
-                ctx->e[i + ctx->count] = e[i];
+                if (i + ctx->count < 256) {
+                    ctx->e[i + ctx->count] = e[i];
+                } else {
+                    /* can't store more than that, tests shouldn't rely on
+                     * getting back more than 256 results */
+                }
             }
             ctx->count += it->count;
         }
@@ -69,8 +75,7 @@ void install_test_abort() {
     ecs_os_api_t os_api = ecs_os_api;
     os_api.abort_ = test_abort;
     ecs_os_set_api(&os_api);
-
-    ecs_tracing_enable(-5);
+    ecs_log_set_level(-5);
 }
 
 const ecs_entity_t* bulk_new_w_type(
@@ -78,7 +83,7 @@ const ecs_entity_t* bulk_new_w_type(
 {
     const EcsType *type_comp = ecs_get(world, type_ent, EcsType);
     test_assert(type_comp != NULL);
-    ecs_type_t type = type_comp->normalized;
+    ecs_type_t type = ecs_table_get_type(type_comp->normalized);
 
     ecs_id_t *ids = ecs_vector_first(type, ecs_id_t);
     const ecs_entity_t *result = ecs_bulk_new_w_id(world, ids[0], count);
@@ -93,7 +98,7 @@ const ecs_entity_t* bulk_new_w_type(
 
 int32_t find_entity(
     ecs_world_t *world,
-    ecs_iter_result_t *expect, 
+    test_iter_result_t *expect, 
     ecs_entity_t e)
 {
     int i;
@@ -143,7 +148,7 @@ int32_t find_entity(
 bool test_iter(
     ecs_iter_t *it, 
     ecs_iter_next_action_t next, 
-    ecs_iter_result_t *expect) 
+    test_iter_result_t *expect) 
 {
     int32_t entity_index = -1;
 
@@ -225,8 +230,7 @@ bool test_iter(
                     break;
                 }
 
-                char id_found[256];
-                ecs_id_str_w_buf(it->world, ecs_term_id(it, t + 1), id_found, 256);
+                char *id_found = ecs_id_str(it->world, ecs_term_id(it, t + 1));
                 if (!if_test_str(id_found, ids_expect[t])) {
                     printf(" - term %d\n", t);
                     if (e) {
@@ -246,9 +250,9 @@ bool test_iter(
                     }
 
                     printf(" - @ result index %d\n", entity_index);
-
                     return false;
                 }
+                ecs_os_free(id_found);
             }
 
             if (!if_test_assert(ids_expect[t] == NULL)) {
@@ -269,7 +273,7 @@ bool test_iter(
                     e = expect->variables[v].entities[0];
                 }
                 if (e) {
-                    ecs_entity_t var = ecs_rule_variable(it, id);
+                    ecs_entity_t var = ecs_iter_get_var(it, id);
                     if (!if_test_assert(e == var)) {
                         return false;
                     }
@@ -280,7 +284,7 @@ bool test_iter(
                     name = expect->variables[v].entity_names[0];
                 }
                 if (name) {
-                    ecs_entity_t var = ecs_rule_variable(it, id);
+                    ecs_entity_t var = ecs_iter_get_var(it, id);
                     if (!if_test_str(name, ecs_get_name(it->world, var))) {
                         printf(" - variable id %d\n", id);
                         printf(" - index %d\n", entity_index);

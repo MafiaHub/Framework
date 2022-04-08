@@ -1,39 +1,39 @@
 #include "private_api.h"
+#include <time.h>
 
-int8_t flecs_to_i8(
-    int64_t v)
-{
-    ecs_assert(v < INT8_MAX, ECS_INTERNAL_ERROR, NULL);
-    return (int8_t)v;
-}
+#ifndef FLECS_NDEBUG
+static int64_t s_min[] = { 
+    [1] = INT8_MIN, [2] = INT16_MIN, [4] = INT32_MIN, [8] = INT64_MIN };
+static int64_t s_max[] = { 
+    [1] = INT8_MAX, [2] = INT16_MAX, [4] = INT32_MAX, [8] = INT64_MAX };
+static uint64_t u_max[] = { 
+    [1] = UINT8_MAX, [2] = UINT16_MAX, [4] = UINT32_MAX, [8] = UINT64_MAX };
 
-int16_t flecs_to_i16(
-    int64_t v)
+uint64_t _flecs_ito(
+    size_t size,
+    bool is_signed,
+    bool lt_zero,
+    uint64_t u,
+    const char *err)
 {
-    ecs_assert(v < INT16_MAX, ECS_INTERNAL_ERROR, NULL);
-    return (int16_t)v;
-}
+    union {
+        uint64_t u;
+        int64_t s;
+    } v;
 
-uint32_t flecs_to_u32(
-    uint64_t v)
-{
-    ecs_assert(v < UINT32_MAX, ECS_INTERNAL_ERROR, NULL);
-    return (uint32_t)v;    
-}
+    v.u = u;
 
-size_t flecs_to_size_t(
-    int64_t size)
-{
-    ecs_assert(size >= 0, ECS_INTERNAL_ERROR, NULL);
-    return (size_t)size;
-}
+    if (is_signed) {
+        ecs_assert(v.s >= s_min[size], ECS_INVALID_CONVERSION, err);
+        ecs_assert(v.s <= s_max[size], ECS_INVALID_CONVERSION, err);
+    } else {
+        ecs_assert(lt_zero == false, ECS_INVALID_CONVERSION, err);
+        ecs_assert(u <= u_max[size], ECS_INVALID_CONVERSION, err);
+    }
 
-ecs_size_t flecs_from_size_t(
-    size_t size)
-{
-   ecs_assert(size < INT32_MAX, ECS_INTERNAL_ERROR, NULL); 
-   return (ecs_size_t)size;
+    return u;
 }
+#endif
 
 int32_t flecs_next_pow_of_2(
     int32_t n)
@@ -133,7 +133,7 @@ int flecs_entity_compare_qsort(
 uint64_t flecs_string_hash(
     const void *ptr)
 {
-    const ecs_string_t *str = ptr;
+    const ecs_hashed_string_t *str = ptr;
     ecs_assert(str->hash != 0, ECS_INTERNAL_ERROR, NULL);
     return str->hash;
 }
@@ -158,159 +158,3 @@ uint64_t flecs_string_hash(
         3. This notice may not be removed or altered from any source
         distribution.
 */
-
-#include "private_api.h"
-
-static int ecs_os_time_initialized;
-
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-static double _ecs_os_time_win_freq;
-static LARGE_INTEGER _ecs_os_time_win_start;
-#elif defined(__APPLE__) && defined(__MACH__)
-#include <mach/mach_time.h>
-static mach_timebase_info_data_t _ecs_os_time_osx_timebase;
-static uint64_t _ecs_os_time_osx_start;
-#else /* anything else, this will need more care for non-Linux platforms */
-#include <time.h>
-static uint64_t _ecs_os_time_posix_start;
-#endif
-
-/* prevent 64-bit overflow when computing relative timestamp
-    see https://gist.github.com/jspohr/3dc4f00033d79ec5bdaf67bc46c813e3
-*/
-#if defined(_WIN32) || (defined(__APPLE__) && defined(__MACH__))
-int64_t int64_muldiv(int64_t value, int64_t numer, int64_t denom) {
-    int64_t q = value / denom;
-    int64_t r = value % denom;
-    return q * numer + r * numer / denom;
-}
-#endif
-
-void flecs_os_time_setup(void) {
-    if ( ecs_os_time_initialized) {
-        return;
-    }
-    
-    ecs_os_time_initialized = 1;
-    #if defined(_WIN32)
-        LARGE_INTEGER freq;
-        QueryPerformanceFrequency(&freq);
-        QueryPerformanceCounter(&_ecs_os_time_win_start);
-        _ecs_os_time_win_freq = (double)freq.QuadPart / 1000000000.0;
-    #elif defined(__APPLE__) && defined(__MACH__)
-        mach_timebase_info(&_ecs_os_time_osx_timebase);
-        _ecs_os_time_osx_start = mach_absolute_time();
-    #else
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        _ecs_os_time_posix_start = (uint64_t)ts.tv_sec*1000000000 + (uint64_t)ts.tv_nsec; 
-    #endif
-}
-
-uint64_t flecs_os_time_now(void) {
-    ecs_assert(ecs_os_time_initialized != 0, ECS_INTERNAL_ERROR, NULL);
-
-    uint64_t now;
-
-    #if defined(_WIN32)
-        LARGE_INTEGER qpc_t;
-        QueryPerformanceCounter(&qpc_t);
-        now = (uint64_t)(qpc_t.QuadPart / _ecs_os_time_win_freq);
-    #elif defined(__APPLE__) && defined(__MACH__)
-        now = (uint64_t) int64_muldiv((int64_t)mach_absolute_time(), (int64_t)_ecs_os_time_osx_timebase.numer, (int64_t)_ecs_os_time_osx_timebase.denom);
-    #else
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        now = ((uint64_t)ts.tv_sec * 1000000000 + (uint64_t)ts.tv_nsec);
-    #endif
-
-    return now;
-}
-
-void flecs_os_time_sleep(
-    int32_t sec, 
-    int32_t nanosec) 
-{
-#ifndef _WIN32
-    struct timespec sleepTime;
-    ecs_assert(sec >= 0, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(nanosec >= 0, ECS_INTERNAL_ERROR, NULL);
-
-    sleepTime.tv_sec = sec;
-    sleepTime.tv_nsec = nanosec;
-    if (nanosleep(&sleepTime, NULL)) {
-        ecs_os_err("nanosleep failed");
-    }
-#else
-    HANDLE timer;
-    LARGE_INTEGER ft;
-
-    ft.QuadPart = -((int64_t)sec * 10000000 + (int64_t)nanosec / 100);
-
-    timer = CreateWaitableTimer(NULL, TRUE, NULL);
-    SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
-    WaitForSingleObject(timer, INFINITE);
-    CloseHandle(timer);
-#endif
-}
-
-
-#if defined(_WIN32)
-
-static ULONG win32_current_resolution;
-
-void flecs_increase_timer_resolution(bool enable)
-{
-    HMODULE hntdll = GetModuleHandle((LPCTSTR)"ntdll.dll");
-    if (!hntdll) {
-        return;
-    }
-
-    LONG (__stdcall *pNtSetTimerResolution)(
-        ULONG desired, BOOLEAN set, ULONG * current);
-
-    pNtSetTimerResolution = (LONG(__stdcall*)(ULONG, BOOLEAN, ULONG*))
-        GetProcAddress(hntdll, "NtSetTimerResolution");
-
-    if(!pNtSetTimerResolution) {
-        return;
-    }
-
-    ULONG current, resolution = 10000; /* 1 ms */
-
-    if (!enable && win32_current_resolution) {
-        pNtSetTimerResolution(win32_current_resolution, 0, &current);
-        win32_current_resolution = 0;
-        return;
-    } else if (!enable) {
-        return;
-    }
-
-    if (resolution == win32_current_resolution) {
-        return;
-    }
-
-    if (win32_current_resolution) {
-        pNtSetTimerResolution(win32_current_resolution, 0, &current);
-    }
-
-    if (pNtSetTimerResolution(resolution, 1, &current)) {
-        /* Try setting a lower resolution */
-        resolution *= 2;
-        if(pNtSetTimerResolution(resolution, 1, &current)) return;
-    }
-
-    win32_current_resolution = resolution;
-}
-
-#else
-void flecs_increase_timer_resolution(bool enable)
-{
-    (void)enable;
-    return;
-}
-#endif

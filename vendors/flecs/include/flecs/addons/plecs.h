@@ -34,7 +34,9 @@
 
 #ifdef FLECS_PLECS
 
+#ifndef FLECS_PARSER
 #define FLECS_PARSER
+#endif
 
 #ifndef FLECS_PLECS_H
 #define FLECS_PLECS_H
@@ -63,7 +65,7 @@ int ecs_plecs_from_str(
  * ecs_plecs_from_str.
  *
  * @param world The world.
- * @param file The plecs file name.
+ * @param filename The plecs file name.
  * @return Zero if success, non-zero otherwise.
  */
 FLECS_API

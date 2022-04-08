@@ -8,34 +8,13 @@ void SystemBuilder_builder_assign_same_type() {
 
     int32_t count = 0;
 
-    flecs::system<Position, Velocity> s = 
+    flecs::system s = 
         ecs.system<Position, Velocity>()
             .each([&](flecs::entity e, Position& p, Velocity& v) {
                 count ++;
                 test_assert(e == e1);
             });
 
-    test_int(count, 0);
-    s.run();
-    test_int(count, 1);
-}
-
-void SystemBuilder_builder_assign_from_empty() {
-    flecs::world ecs;
-
-    auto e1 = ecs.entity().add<Position>().add<Velocity>();
-    ecs.entity().add<Position>();
-
-    int32_t count = 0;
-
-    flecs::system<> s = ecs.system<>()
-        .term<Position>()
-        .term<Velocity>()
-        .each([&](flecs::entity e) {
-            count ++;
-            test_assert(e == e1);
-        });
-    
     test_int(count, 0);
     s.run();
     test_int(count, 1);
@@ -348,7 +327,7 @@ void SystemBuilder_singleton_term() {
         .term<Singleton>().singleton()
         .iter([&](flecs::iter& it, Entity *e) {
             auto s = it.term<const Singleton>(2);
-            test_assert(!s.is_owned());
+            test_assert(!it.is_owned(2));
             test_int(s->value, 10);
             
             const Singleton& s_ref = *s;
@@ -468,4 +447,70 @@ void SystemBuilder_20_terms() {
     s.run();
 
     test_int(count, 1);
+}
+
+void SystemBuilder_name_arg() {
+    flecs::world ecs;
+
+    auto s = ecs.system<const Position>("MySystem")
+        .arg(1).subj().name("MySystem")
+        .iter([](flecs::iter& Iter, const Position* Config)
+        { });
+
+    test_assert(s.has<Position>());
+}
+
+void SystemBuilder_create_w_no_template_args() {
+    flecs::world ecs;
+
+    auto e1 = ecs.entity().add<Position>();
+
+    int32_t count = 0;
+
+    auto s = ecs.system()
+        .term<Position>()
+        .each([&](flecs::entity e) {
+            count ++;
+            test_assert(e == e1);
+        });
+
+    test_int(count, 0);
+    s.run();
+    test_int(count, 1);
+}
+
+void SystemBuilder_write_annotation() {
+    flecs::world ecs;
+
+    struct TagA { };
+    struct TagB { };
+
+    auto e1 = ecs.entity().add<TagA>();
+
+    int32_t a_count = 0, b_count = 0;
+
+    ecs.system<TagA>()
+        .term<TagB>().write()
+        .each([&](flecs::entity e, TagA) {
+            a_count ++;
+            test_assert(e == e1);
+            e.add<TagB>();
+        });
+    
+    ecs.system<TagB>()
+        .each([&](flecs::entity e, TagB) {
+            b_count ++;
+            test_assert(e == e1);
+            test_assert(e.has<TagB>());
+        });
+
+    test_int(a_count, 0);
+    test_int(b_count, 0);
+    
+    ecs.progress();
+    
+    test_int(a_count, 1);
+    test_int(b_count, 1);
+
+    test_assert(e1.has<TagB>());
 }

@@ -263,7 +263,7 @@ static int position_ctor_invoked = 0;
 
 ECS_CTOR(Position, ptr, {
     position_ctor_invoked ++;
-});
+})
 
 void ImplicitComponents_reinit_w_lifecycle() {
     flecs::world world;
@@ -367,8 +367,6 @@ void ImplicitComponents_use_const_w_stage() {
 }
 
 void ImplicitComponents_use_const_w_threads() {
-    bake_set_os_api();
-
     flecs::world world;
 
     world.use<const Velocity>();

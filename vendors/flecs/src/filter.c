@@ -1,5 +1,6 @@
 
 #include "private_api.h"
+#include <ctype.h>
 
 static
 void term_error(
@@ -20,101 +21,24 @@ void term_error(
 }
 
 static
-ecs_entity_t term_id_entity(
-    const ecs_world_t *world,
-    ecs_term_id_t *term_id)
-{
-    if (term_id->entity && term_id->entity != EcsThis && 
-        term_id->entity != EcsWildcard) 
-    {
-        if (!(term_id->entity & ECS_ROLE_MASK)) {
-            return term_id->entity;
-        } else {
-            return 0;
-        }
-    } else if (term_id->name) {
-        if (term_id->var == EcsVarIsEntity || 
-           (term_id->var == EcsVarDefault && 
-            !ecs_identifier_is_var(term_id->name))) 
-        {
-            return ecs_lookup_fullpath(world, term_id->name);
-        } else {
-            return 0;
-        }
-    } else {
-        return 0;
-    }
-}
-
-static
-void finalize_default_substitution(
-    const ecs_world_t *world,
-    ecs_term_t *terms,
-    int32_t term_count)
-{
-    int i;
-    for (i = 0; i < term_count; i ++) {
-        ecs_term_id_t *pred = &terms[i].pred;
-        ecs_term_id_t *subj = &terms[i].args[0];
-        ecs_term_id_t *obj = &terms[i].args[1];
-
-        bool pred_transitive = false;
-        if (pred->set.mask == EcsDefaultSet) {
-            ecs_entity_t e = term_id_entity(world, pred);
-            if (e) {
-                if (ecs_has_id(world, e, EcsFinal)) {
-                    /* Final predicates are never substituted */
-                    pred->set.mask = EcsSelf;
-                } else {
-                    pred->set.mask = EcsSelf|EcsSuperSet;
-                    pred->set.relation = EcsIsA;
-                }
-                pred_transitive = ecs_has_id(world, e, EcsTransitive);
-            }
-        }
-
-        if (subj->set.mask == EcsDefaultSet) {
-            /* By default subjects are substituted with their supersets */
-            subj->set.mask = EcsSelf|EcsSuperSet;
-            subj->set.relation = EcsIsA;
-        }
-
-        if (obj->set.mask == EcsDefaultSet) {
-            /* By default subjects are substituted with their supersets */
-            if (!pred_transitive) {
-                obj->set.mask = EcsSelf|EcsSuperSet;
-                obj->set.relation = EcsIsA;
-            } else {
-                /* If query is transitive substitute object. If object is fixed
-                 * insert SubSet ("is <subj> <rel> <obj>"). If object is a
-                 * variable, insert SuperSet ("find <rel> <obj> for <subj>") */
-                ecs_entity_t e = term_id_entity(world, obj);
-                obj->set.relation = EcsIsA;
-                if (!e) {
-                    obj->set.mask = EcsSelf|EcsSuperSet;
-                } else {
-                    obj->set.mask = EcsSelf|EcsSubSet;
-                }
-            }
-        }
-    }
-}
-
-static
-int finalize_term_identifier(
+int finalize_term_set(
     const ecs_world_t *world,
     ecs_term_t *term,
     ecs_term_id_t *identifier,
     const char *name)
 {
-    /* Default set is Self */
-    if (identifier->set.mask == EcsDefaultSet) {
-        identifier->set.mask |= EcsSelf;
-    }
-
     if (identifier->set.mask & EcsParent) {
         identifier->set.mask |= EcsSuperSet;
         identifier->set.relation = EcsChildOf;
+    }
+
+    if (identifier->set.mask & EcsCascade && 
+       !(identifier->set.mask & EcsSuperSet) && 
+       !(identifier->set.mask & EcsSubSet))
+    {
+        /* If cascade is used without specifying super or sub, assume
+         * super */
+        identifier->set.mask |= EcsSuperSet;
     }
 
     /* Default relation for superset/subset is EcsIsA */
@@ -150,16 +74,46 @@ int finalize_term_identifier(
         return -1;
     }
 
-    if (identifier->var == EcsVarDefault) {
-        const char *var = ecs_identifier_is_var(identifier->name);
-        if (ecs_identifier_is_var(identifier->name)) {
-            char *var_id = ecs_os_strdup(var);
-            ecs_os_free(identifier->name);
-            identifier->name = var_id;
-            identifier->var = EcsVarIsVariable;
+    return 0;
+}
+
+static
+void finalize_term_id_resources(
+    ecs_term_t *term,
+    ecs_term_id_t *id)
+{
+    if (id->entity) {
+        if (term->move) {
+            ecs_os_free(id->name);
+        }
+        id->name = NULL;
+    } else if (id->name) {
+        if (!term->move) {
+            id->name = ecs_os_strdup(id->name);
         }
     }
+}
 
+static
+void finalize_term_resources(
+    ecs_term_t *term)
+{
+    finalize_term_id_resources(term, &term->pred);
+    finalize_term_id_resources(term, &term->subj);
+    finalize_term_id_resources(term, &term->obj);
+    if (term->name) {
+        term->name = ecs_os_strdup(term->name);
+    }
+    term->move = false;
+}
+
+static
+int finalize_term_var(
+    const ecs_world_t *world,
+    ecs_term_t *term,
+    ecs_term_id_t *identifier,
+    const char *name)
+{
     if (identifier->var == EcsVarDefault && identifier->set.mask != EcsNothing){
         identifier->var = EcsVarIsEntity;
     }
@@ -171,11 +125,40 @@ int finalize_term_identifier(
     if (identifier->var != EcsVarIsVariable) {
         if (ecs_identifier_is_0(identifier->name)) {
             identifier->entity = 0;
-        } else {
+        } else if (identifier->name) {
+            ecs_entity_t oneof = 0;
+            ecs_entity_t pred = 0;
+            if (term->pred.var == EcsVarIsEntity) {
+                pred = term->pred.entity;
+                if (pred) {
+                    oneof = flecs_get_oneof(world, pred);
+                }
+            }
+
             ecs_entity_t e = ecs_lookup_symbol(world, identifier->name, true);
+            if (oneof && identifier != &term->pred) {
+                if (!e) {
+                    e = ecs_lookup_child(world, oneof, identifier->name);
+                } else if (e) {
+                    if (!ecs_has_pair(world, e, EcsChildOf, oneof)) {
+                        char *rel_str = ecs_get_fullpath(world, pred);
+                        term_error(world, term, name, 
+                            "invalid object '%s' for relation %s",
+                            identifier->name, rel_str);
+                        ecs_os_free(rel_str);
+                        return -1;
+                    }
+                }
+            }
+
             if (!e) {
                 term_error(world, term, name,
                     "unresolved identifier '%s'", identifier->name);
+                return -1;
+            }
+
+            if (identifier->entity && identifier->entity != e) {
+                term_error(world, term, name, "name/entity mismatch");
                 return -1;
             }
 
@@ -190,7 +173,107 @@ int finalize_term_identifier(
         return -1;
     }
 
+    if (identifier->var == EcsVarIsEntity) {
+        if (identifier->entity && !ecs_is_alive(world, identifier->entity)) {
+            term_error(world, term, name, 
+                "cannot use not alive entity %u in query",
+                (uint32_t)identifier->entity);
+            return -1;
+        }
+    }
+
     return 0;
+}
+
+static
+int finalize_term_identifier(
+    const ecs_world_t *world,
+    ecs_term_t *term,
+    ecs_term_id_t *identifier,
+    const char *name)
+{
+    if (finalize_term_set(world, term, identifier, name)) {
+        return -1;
+    }
+    if (finalize_term_var(world, term, identifier, name)) {
+        return -1;
+    }
+    return 0;
+}
+
+static
+bool term_can_inherit(
+    ecs_term_t *term) 
+{
+    /* Hardcoded components that can't be inherited. TODO: replace with
+     * relationship property. */
+    if (term->pred.entity == EcsChildOf ||
+       (term->id == ecs_pair(ecs_id(EcsIdentifier), EcsName)) ||
+       (term->id == EcsPrefab) ||
+       (term->id == EcsDisabled))
+    {
+        return false;
+    }
+    return true;
+}
+
+static
+ecs_entity_t term_id_entity(
+    const ecs_world_t *world,
+    ecs_term_id_t *term_id)
+{
+    if (term_id->entity && term_id->entity != EcsThis && 
+        term_id->entity != EcsWildcard && term_id->entity != EcsAny) 
+    {
+        if (!(term_id->entity & ECS_ROLE_MASK)) {
+            return term_id->entity;
+        } else {
+            return 0;
+        }
+    } else if (term_id->name) {
+        if (term_id->var == EcsVarIsEntity || 
+           (term_id->var == EcsVarDefault && 
+            !ecs_identifier_is_var(term_id->name))) 
+        {
+            ecs_entity_t e = ecs_lookup_fullpath(world, term_id->name);
+            if (e != EcsWildcard && e != EcsThis && e != EcsAny) {
+                return e;
+            }
+            return 0;
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+static
+int finalize_term_vars(
+    const ecs_world_t *world,
+    ecs_term_t *term,
+    const char *name)
+{
+    if (finalize_term_var(world, term, &term->pred, name)) {
+        return -1;
+    }
+    if (finalize_term_var(world, term, &term->subj, name)) {
+        return -1;
+    }
+    if (finalize_term_var(world, term, &term->obj, name)) {
+        return -1;
+    }
+    return 0;
+}
+
+static
+bool entity_is_var(
+    ecs_entity_t e)
+{
+    if (e == EcsThis || e == EcsWildcard || e == EcsAny || e == EcsVariable) {
+        return true;
+    }
+    return false;
 }
 
 static
@@ -199,13 +282,44 @@ int finalize_term_identifiers(
     ecs_term_t *term,
     const char *name)
 {
-    if (finalize_term_identifier(world, term, &term->pred, name)) {
+    /* By default select subsets for predicates. For example, when the term 
+     * matches "Tree", also include "Oak", "Pine", "Elm". */
+    if (term->pred.set.mask == EcsDefaultSet) {
+        ecs_entity_t e = term_id_entity(world, &term->pred);
+
+        if (e && !ecs_has_id(world, e, EcsFinal)) {
+            term->pred.set.mask = EcsSelf|EcsSubSet;
+        } else {
+            /* If predicate is final, don't search subsets */
+            term->pred.set.mask = EcsSelf;
+        }
+    }
+
+    /* By default select supersets for subjects. For example, when an entity has
+     * (IsA, SpaceShip), also search the components of SpaceShip. */
+    if (term->subj.set.mask == EcsDefaultSet) {
+        ecs_entity_t e = term_id_entity(world, &term->pred);
+
+        /* If the component has the DontInherit tag, use EcsSelf */
+        if (!e || !ecs_has_id(world, e, EcsDontInherit)) {
+            term->subj.set.mask = EcsSelf|EcsSuperSet;
+        } else {
+            term->subj.set.mask = EcsSelf;
+        }
+    }
+
+    /* By default select self for objects. */
+    if (term->obj.set.mask == EcsDefaultSet) {
+        term->obj.set.mask = EcsSelf;
+    }
+
+    if (finalize_term_set(world, term, &term->pred, name)) {
         return -1;
     }
-    if (finalize_term_identifier(world, term, &term->args[0], name)) {
+    if (finalize_term_set(world, term, &term->subj, name)) {
         return -1;
     }
-    if (finalize_term_identifier(world, term, &term->args[1], name)) {
+    if (finalize_term_set(world, term, &term->obj, name)) {
         return -1;
     }
 
@@ -215,28 +329,47 @@ int finalize_term_identifiers(
         return -1;
     }
 
-    if (term->args[1].set.mask & EcsNothing) {
+    if (term->obj.set.mask & EcsNothing) {
         term_error(world, term, name, 
             "invalid Nothing value for object set mask");
         return -1;
     }
 
-    if (!(term->args[0].set.mask & EcsNothing) && 
-        !term->args[0].entity && 
-        term->args[0].var == EcsVarIsEntity) 
+    if (!(term->subj.set.mask & EcsNothing) && 
+        !term->subj.entity && 
+        term->subj.var == EcsVarIsEntity) 
     {
-        term->args[0].entity = EcsThis;
+        term->subj.entity = EcsThis;
     }
-    
-    if (term->pred.entity == EcsThis) {
+
+    if (entity_is_var(term->pred.entity)) {
         term->pred.var = EcsVarIsVariable;
     }
-    if (term->args[0].entity == EcsThis) {
-        term->args[0].var = EcsVarIsVariable;
+
+    if (term->pred.entity == EcsVariable) {
+        term_error(world, term, name, 
+            "invalid usage of Variable ($) as predicate");
+        return -1;
     }
-    if (term->args[1].entity == EcsThis) {
-        term->args[1].var = EcsVarIsVariable;
+
+    /* If EcsVariable is used by itself, assign to predicate (singleton) */
+    if (term->subj.entity == EcsVariable) {
+        term->subj.entity = term->pred.entity;
+        term->subj.var = term->pred.var;
     }
+    if (term->obj.entity == EcsVariable) {
+        term->obj.entity = term->pred.entity;
+        term->obj.var = term->pred.var;
+    }
+    
+    if (entity_is_var(term->subj.entity)) {
+        term->subj.var = EcsVarIsVariable;
+    }
+    if (entity_is_var(term->obj.entity)) {
+        term->obj.var = EcsVarIsVariable;
+    }
+
+    finalize_term_resources(term);
 
     return 0;
 }
@@ -250,7 +383,13 @@ ecs_entity_t entity_from_identifier(
     } else if (identifier->var == EcsVarIsEntity) {
         return identifier->entity;
     } else if (identifier->var == EcsVarIsVariable) {
-        return EcsWildcard;
+        if (identifier->entity != EcsAny) {
+            /* Any variable should not use wildcard, as this would return all
+             * ids matching a wildcard, whereas Any returns the first match */
+            return EcsWildcard;
+        } else {
+            return EcsAny;
+        }
     } else {
         /* This should've been caught earlier */
         ecs_abort(ECS_INTERNAL_ERROR, NULL);
@@ -264,7 +403,7 @@ int finalize_term_id(
     const char *name)
 {
     ecs_entity_t pred = entity_from_identifier(&term->pred);
-    ecs_entity_t obj = entity_from_identifier(&term->args[1]);
+    ecs_entity_t obj = entity_from_identifier(&term->obj);
     ecs_id_t role = term->role;
 
     if (ECS_HAS_ROLE(pred, PAIR)) {
@@ -274,25 +413,32 @@ int finalize_term_id(
             return -1;
         }
 
-        obj = ECS_PAIR_OBJECT(pred);
-        pred = ECS_PAIR_RELATION(pred);
+        obj = ECS_PAIR_SECOND(pred);
+        pred = ECS_PAIR_FIRST(pred);
 
         term->pred.entity = pred;
-        term->args[1].entity = obj;
+        term->obj.entity = obj;
 
-        finalize_term_identifier(world, term, &term->args[1], name);
+        if (finalize_term_identifier(world, term, &term->obj, name)) {
+            return -1;
+        }
     }
 
     if (!obj && role != ECS_PAIR) {
         term->id = pred | role;
     } else {
-        if (role && role != ECS_PAIR) {
-            term_error(world, term, name, "invalid role for pair");
-            return -1;
+        if (role) {
+            if (role && role != ECS_PAIR && role != ECS_CASE) {
+                term_error(world, term, name, "invalid role for pair");
+                return -1;
+            }
+
+            term->role = role;
+        } else {
+            term->role = ECS_PAIR;
         }
 
-        term->id = ecs_pair(pred, obj);
-        term->role = ECS_PAIR;
+        term->id = term->role | ecs_entity_t_comb(obj, pred);
     }
 
     return 0;
@@ -320,9 +466,9 @@ int populate_from_term_id(
 
     term->role = role;
 
-    if (ECS_HAS_ROLE(term->id, PAIR)) {
-        pred = ECS_PAIR_RELATION(term->id);
-        obj = ECS_PAIR_OBJECT(term->id);
+    if (ECS_HAS_ROLE(term->id, PAIR) || ECS_HAS_ROLE(term->id, CASE)) {
+        pred = ECS_PAIR_FIRST(term->id);
+        obj = ECS_PAIR_SECOND(term->id);
 
         if (!pred) {
             term_error(world, term, name, "missing predicate in term.id pair");
@@ -356,16 +502,16 @@ int populate_from_term_id(
         }
     }
 
-    ecs_entity_t term_obj = entity_from_identifier(&term->args[1]);
+    ecs_entity_t term_obj = entity_from_identifier(&term->obj);
     if (term_obj) {
-        if (term_obj != obj) {
+        if (ecs_entity_t_lo(term_obj) != obj) {
             term_error(world, term, name, 
                 "mismatch between term.id and term.obj");
             return -1;
         }
     } else {
-        term->args[1].entity = obj;
-        if (finalize_term_identifier(world, term, &term->args[1], name)) {
+        term->obj.entity = obj;
+        if (finalize_term_identifier(world, term, &term->obj, name)) {
             return -1;
         }
     }
@@ -380,13 +526,20 @@ int verify_term_consistency(
     const char *name)
 {
     ecs_entity_t pred = entity_from_identifier(&term->pred);
-    ecs_entity_t obj = entity_from_identifier(&term->args[1]);
+    ecs_entity_t obj = entity_from_identifier(&term->obj);
     ecs_id_t role = term->role;
     ecs_id_t id = term->id;
+    bool wildcard = pred == EcsWildcard || obj == EcsWildcard;
 
-    if (obj && (!role || (role != ECS_PAIR))) {
+    if (obj && (!role || (role != ECS_PAIR && role != ECS_CASE))) {
         term_error(world, term, name, 
             "invalid role for term with pair (expected ECS_PAIR)");
+        return -1;
+    }
+
+    if (role == ECS_CASE && !obj) {
+        term_error(world, term, name, 
+            "missing object for term with ECS_CASE role");
         return -1;
     }
 
@@ -400,25 +553,71 @@ int verify_term_consistency(
         return -1;
     }
 
-    if (obj && !(ECS_HAS_ROLE(id, PAIR))) {
+    if (obj && !ECS_HAS_ROLE(id, PAIR) && !ECS_HAS_ROLE(id, CASE)) {
         term_error(world, term, name, "term has object but id is not a pair");
         return -1;
     }
 
-    if (ECS_HAS_ROLE(id, PAIR)) {
-        if (id != ecs_pair(pred, obj)) {
-            char *id_str = ecs_id_str(world, ecs_pair(pred, obj));
-            term_error(world, term, name, 
-                "term id does not match pred/obj (%s)", id_str);
-            ecs_os_free(id_str);
+    if (ECS_HAS_ROLE(id, PAIR) || ECS_HAS_ROLE(id, CASE)) {
+        if (!wildcard) {
+            role = ECS_ROLE_MASK & id;
+            if (id != (role | ecs_entity_t_comb(
+                term->obj.entity, term->pred.entity))) 
+            {
+                char *id_str = ecs_id_str(world, ecs_pair(pred, obj));
+                term_error(world, term, name, 
+                    "term id does not match pred/obj (%s)", id_str);
+                ecs_os_free(id_str);
+                return -1;
+            }
+        }
+    } else if (term->pred.entity != (id & ECS_COMPONENT_MASK)) {
+        if (!wildcard) {
+            char *pred_str = ecs_get_fullpath(world, term->pred.entity);
+            term_error(world, term, name, "term id does not match pred '%s'",
+                pred_str);
+            ecs_os_free(pred_str);
             return -1;
         }
-    } else if (pred != (id & ECS_COMPONENT_MASK)) {
-        char *pred_str = ecs_get_fullpath(world, pred);
-        term_error(world, term, name, "term id does not match pred '%s'",
-            pred_str);
-        ecs_os_free(pred_str);
-        return -1;
+    }
+
+    if (term->pred.var == EcsVarIsEntity) {
+        const ecs_term_id_t *tsubj = &term->subj;
+        const ecs_term_id_t *tobj = &term->obj;
+
+        if (ecs_term_id_is_set(tsubj) && ecs_term_id_is_set(tobj)) {
+            if (tsubj->var == tobj->var) {
+                bool is_same = false;
+
+                if (tsubj->var == EcsVarIsEntity) {
+                    is_same = tsubj->entity == tobj->entity;
+                } else if (tsubj->name && tobj->name) {
+                    is_same = !ecs_os_strcmp(tsubj->name, tobj->name);
+                }
+
+                if (is_same && ecs_has_id(world, term->pred.entity, EcsAcyclic)
+                    && !ecs_has_id(world, term->pred.entity, EcsReflexive)) 
+                {
+                    char *pred_str = ecs_get_fullpath(world, term->pred.entity);
+                    term_error(world, term, name, "term with acyclic relation"
+                        " '%s' cannot have same subject and object",
+                            pred_str);
+                    ecs_os_free(pred_str);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    if (term->subj.set.relation && !term->subj.set.max_depth) {
+        if (!ecs_has_id(world, term->subj.set.relation, EcsAcyclic)) {
+            char *r_str = ecs_get_fullpath(world, term->subj.set.relation);
+            term_error(world, term, name, 
+                "relation '%s' is used with SuperSet/SubSet but is not acyclic", 
+                    r_str);
+            ecs_os_free(r_str);
+            return -1;
+        }
     }
 
     return 0;
@@ -443,13 +642,8 @@ const char* ecs_identifier_is_var(
     }
 
     /* Identifiers that start with _ are variables */
-    if (id[0] == '_') {
+    if (id[0] == '_' && id[1] != 0) {
         return &id[1];
-    }
-
-    /* Identifiers that have a single uppercase character are variables */
-    if (ecs_os_strlen(id) == 1 && isupper(id[0])) {
-        return id;
     }
 
     return NULL;
@@ -468,16 +662,16 @@ bool ecs_id_match(
             return false;
         }
 
-        ecs_entity_t id_rel = ECS_PAIR_RELATION(id);
-        ecs_entity_t id_obj = ECS_PAIR_OBJECT(id);
-        ecs_entity_t pattern_rel = ECS_PAIR_RELATION(pattern);
-        ecs_entity_t pattern_obj = ECS_PAIR_OBJECT(pattern);
+        ecs_entity_t id_rel = ECS_PAIR_FIRST(id);
+        ecs_entity_t id_obj = ECS_PAIR_SECOND(id);
+        ecs_entity_t pattern_rel = ECS_PAIR_FIRST(pattern);
+        ecs_entity_t pattern_obj = ECS_PAIR_SECOND(pattern);
 
-        ecs_assert(id_rel != 0, ECS_INVALID_PARAMETER, NULL);
-        ecs_assert(id_obj != 0, ECS_INVALID_PARAMETER, NULL);
+        ecs_check(id_rel != 0, ECS_INVALID_PARAMETER, NULL);
+        ecs_check(id_obj != 0, ECS_INVALID_PARAMETER, NULL);
 
-        ecs_assert(pattern_rel != 0, ECS_INVALID_PARAMETER, NULL);
-        ecs_assert(pattern_obj != 0, ECS_INVALID_PARAMETER, NULL);
+        ecs_check(pattern_rel != 0, ECS_INVALID_PARAMETER, NULL);
+        ecs_check(pattern_obj != 0, ECS_INVALID_PARAMETER, NULL);
         
         if (pattern_rel == EcsWildcard) {
             if (pattern_obj == EcsWildcard || pattern_obj == id_obj) {
@@ -498,6 +692,7 @@ bool ecs_id_match(
         }
     }
 
+error:
     return false;
 }
 
@@ -510,14 +705,41 @@ bool ecs_id_is_pair(
 bool ecs_id_is_wildcard(
     ecs_id_t id)
 {
-    if (id == EcsWildcard) {
-        return true;
-    } else if (ECS_HAS_ROLE(id, PAIR)) {
-        return ECS_PAIR_RELATION(id) == EcsWildcard || 
-               ECS_PAIR_OBJECT(id) == EcsWildcard;
+    return
+        (id == EcsWildcard) || (ECS_HAS_ROLE(id, PAIR) && (
+            (ECS_PAIR_FIRST(id) == EcsWildcard) ||
+            (ECS_PAIR_SECOND(id) == EcsWildcard)
+        )) ||
+        (id == EcsAny) || (ECS_HAS_ROLE(id, PAIR) && (
+            (ECS_PAIR_FIRST(id) == EcsAny) ||
+            (ECS_PAIR_SECOND(id) == EcsAny)
+        ));
+}
+
+bool ecs_id_is_valid(
+    const ecs_world_t *world,
+    ecs_id_t id)
+{
+    if (!id) {
+        return false;
+    }
+    if (ecs_id_is_wildcard(id)) {
+        return false;
+    }
+    if (ECS_HAS_ROLE(id, PAIR)) {
+        if (!ECS_PAIR_FIRST(id)) {
+            return false;
+        }
+        if (!ECS_PAIR_SECOND(id)) {
+            return false;
+        }
+    } else if (id & ECS_ROLE_MASK) {
+        if (!ecs_is_valid(world, id & ECS_COMPONENT_MASK)) {
+            return false;
+        }
     }
 
-    return false;
+    return true;
 }
 
 bool ecs_term_id_is_set(
@@ -539,11 +761,11 @@ bool ecs_term_is_trivial(
         return false;
     }
 
-    if (term->args[0].entity != EcsThis) {
+    if (term->subj.entity != EcsThis) {
         return false;
     }
 
-    if (term->args[0].set.mask && (term->args[0].set.mask != EcsSelf)) {
+    if (term->subj.set.mask && (term->subj.set.mask != EcsSelf)) {
         return false;
     }
 
@@ -563,7 +785,7 @@ int ecs_term_finalize(
     const char *name,
     ecs_term_t *term)
 {
-    if (finalize_term_identifiers(world, term, name)) {
+    if (finalize_term_vars(world, term, name)) {
         return -1;
     }
 
@@ -575,6 +797,42 @@ int ecs_term_finalize(
         if (populate_from_term_id(world, term, name)) {
             return -1;
         }
+    }
+
+    if (finalize_term_identifiers(world, term, name)) {
+        return -1;
+    }
+
+    if (!term_can_inherit(term)) {
+        if (term->subj.set.relation == EcsIsA) {
+            term->subj.set.relation = 0;
+            term->subj.set.mask = EcsSelf;
+        }
+    }
+
+    if (term->role == ECS_AND || term->role == ECS_OR || term->role == ECS_NOT){
+        /* AND/OR terms match >1 component, which is only valid as filter */
+        if (term->inout != EcsInOutDefault && term->inout != EcsInOutFilter) {
+            term_error(world, term, name, "AND/OR terms must be filters");
+            return -1;
+        }
+
+        term->inout = EcsInOutFilter;
+
+        /* Translate role to operator */
+        if (term->role == ECS_AND) {
+            term->oper = EcsAndFrom;
+        } else
+        if (term->role == ECS_OR) {
+            term->oper = EcsOrFrom;
+        } else
+        if (term->role == ECS_NOT) {
+            term->oper = EcsNotFrom;
+        }
+
+        /* Zero out role & strip from id */
+        term->id &= ECS_COMPONENT_MASK;
+        term->role = 0;
     }
 
     if (verify_term_consistency(world, term, name)) {
@@ -590,8 +848,8 @@ ecs_term_t ecs_term_copy(
     ecs_term_t dst = *src;
     dst.name = ecs_os_strdup(src->name);
     dst.pred.name = ecs_os_strdup(src->pred.name);
-    dst.args[0].name = ecs_os_strdup(src->args[0].name);
-    dst.args[1].name = ecs_os_strdup(src->args[1].name);
+    dst.subj.name = ecs_os_strdup(src->subj.name);
+    dst.obj.name = ecs_os_strdup(src->obj.name);
     return dst;
 }
 
@@ -602,11 +860,14 @@ ecs_term_t ecs_term_move(
         ecs_term_t dst = *src;
         src->name = NULL;
         src->pred.name = NULL;
-        src->args[0].name = NULL;
-        src->args[1].name = NULL;
+        src->subj.name = NULL;
+        src->obj.name = NULL;
+        dst.move = false;
         return dst;
     } else {
-        return ecs_term_copy(src);
+        ecs_term_t dst = ecs_term_copy(src);
+        dst.move = false;
+        return dst;
     }
 }
 
@@ -614,13 +875,13 @@ void ecs_term_fini(
     ecs_term_t *term)
 {
     ecs_os_free(term->pred.name);
-    ecs_os_free(term->args[0].name);
-    ecs_os_free(term->args[1].name);
+    ecs_os_free(term->subj.name);
+    ecs_os_free(term->obj.name);
     ecs_os_free(term->name);
 
     term->pred.name = NULL;
-    term->args[0].name = NULL;
-    term->args[1].name = NULL;
+    term->subj.name = NULL;
+    term->obj.name = NULL;
     term->name = NULL;
 }
 
@@ -631,6 +892,7 @@ int ecs_filter_finalize(
     int32_t i, term_count = f->term_count, actual_count = 0;
     ecs_term_t *terms = f->terms;
     bool is_or = false, prev_or = false;
+    int32_t filter_terms = 0;
 
     for (i = 0; i < term_count; i ++) {
         ecs_term_t *term = &terms[i];
@@ -644,9 +906,9 @@ int ecs_filter_finalize(
         term->index = actual_count - 1;
         prev_or = is_or;
 
-        if (term->args[0].entity == EcsThis) {
+        if (term->subj.entity == EcsThis) {
             f->match_this = true;
-            if (term->args[0].set.mask != EcsSelf) {
+            if (term->subj.set.mask != EcsSelf) {
                 f->match_only_this = false;
             }
         } else {
@@ -659,11 +921,45 @@ int ecs_filter_finalize(
         if (term->id == EcsDisabled) {
             f->match_disabled = true;
         }
+
+        if (f->filter) {
+            term->inout = EcsInOutFilter;
+        }
+
+        if (term->inout == EcsInOutFilter) {
+            filter_terms ++;
+        }
+
+        if (term->oper != EcsNot || term->subj.entity != EcsThis) {
+            f->match_anything = false;
+        }
     }
 
     f->term_count_actual = actual_count;
 
+    if (filter_terms == term_count) {
+        f->filter = true;
+    }
+
     return 0;
+}
+
+/* Implementation for iterable mixin */
+static
+void filter_iter_init(
+    const ecs_world_t *world,
+    const ecs_poly_t *poly,
+    ecs_iter_t *iter,
+    ecs_term_t *filter)
+{
+    ecs_poly_assert(poly, ecs_filter_t);
+
+    if (filter) {
+        iter[1] = ecs_filter_iter(world, (ecs_filter_t*)poly);
+        iter[0] = ecs_term_chain_iter(&iter[1], filter);
+    } else {
+        iter[0] = ecs_filter_iter(world, (ecs_filter_t*)poly);
+    }
 }
 
 int ecs_filter_init(
@@ -671,9 +967,13 @@ int ecs_filter_init(
     ecs_filter_t *filter_out,
     const ecs_filter_desc_t *desc)    
 {
-    ecs_assert(stage != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(filter_out != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(desc != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_filter_t f;
+    ecs_poly_init(&f, ecs_filter_t);
+
+    ecs_check(stage != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(filter_out != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(desc != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(desc->_canary == 0, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_world_t *world = ecs_get_world(stage);
 
@@ -682,15 +982,15 @@ int ecs_filter_init(
     const char *name = desc->name;
     const char *expr = desc->expr;
 
-    ecs_filter_t f = {
-        /* Temporarily set the fields to the values provided in desc, until the
-         * filter has been validated. */
-        .name = (char*)name,
-        .expr = (char*)expr
-    };
+    /* Temporarily set the fields to the values provided in desc, until the
+     * filter has been validated. */
+    f.name = (char*)name;
+    f.filter = desc->filter;
+    f.instanced = desc->instanced;
+    f.match_empty_tables = desc->match_empty_tables;
+    f.match_anything = true;
 
     if (terms) {
-        terms = desc->terms_buffer;
         term_count = desc->terms_buffer_count;
     } else {
         terms = (ecs_term_t*)desc->terms;
@@ -734,6 +1034,11 @@ int ecs_filter_init(
                     buffer_count * ECS_SIZEOF(ecs_term_t));
             }
 
+            /* Check for identifiers that have a name that starts with _. If the
+             * variable kind is left to Default, the kind should be set to 
+             * variable and the _ prefix should be removed. */
+            finalize_term_vars(world, &term, name);
+
             terms[term_count] = term;
             term_count ++;
 
@@ -753,15 +1058,25 @@ int ecs_filter_init(
 #endif
     }
 
-    /* If default substitution is enabled, replace DefaultSet with SuperSet */
-    if (desc->substitute_default) {
-        finalize_default_substitution(world, terms, term_count);
-    } else {
-        for (i = 0; i < term_count; i ++) {
-            if (terms[i].args[0].set.mask == EcsDefaultSet) {
-                terms[i].args[0].set.mask = EcsSelf;
-            }            
+    /* Copy term resources. */
+    if (term_count) {
+        ecs_term_t *dst_terms = terms;
+        if (!expr) {
+            if (term_count <= ECS_TERM_CACHE_SIZE) {
+                dst_terms = f.term_cache;
+                f.term_cache_used = true;
+            } else {
+                dst_terms = ecs_os_malloc_n(ecs_term_t, term_count);
+            }
         }
+
+        if (terms != dst_terms) {
+            ecs_os_memcpy_n(dst_terms, terms, ecs_term_t, term_count);
+        }
+
+        f.terms = dst_terms;
+    } else {
+        f.terms = NULL;
     }
 
     /* Ensure all fields are consistent and properly filled out */
@@ -770,41 +1085,26 @@ int ecs_filter_init(
     }
 
     *filter_out = f;
-
-    /* Copy term resources. */
-    if (term_count) {
-        if (!filter_out->expr) {
-            if (term_count < ECS_TERM_CACHE_SIZE) {
-                filter_out->terms = filter_out->term_cache;
-                filter_out->term_cache_used = true;
-            } else {
-                filter_out->terms = ecs_os_malloc_n(ecs_term_t, term_count);
-            }
-        }
-
-        for (i = 0; i < term_count; i ++) {
-            filter_out->terms[i] = ecs_term_move(&terms[i]);
-        }        
-    } else {
-        filter_out->terms = NULL;
+    if (f.term_cache_used) {
+        filter_out->terms = filter_out->term_cache;
     }
 
     filter_out->name = ecs_os_strdup(desc->name);
-    filter_out->expr = ecs_os_strdup(desc->expr);
+    filter_out->variable_names[0] = (char*)".";
 
     ecs_assert(!filter_out->term_cache_used || 
         filter_out->terms == filter_out->term_cache,
         ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(filter_out->term_count == f.term_count,
+        ECS_INTERNAL_ERROR, NULL);
+
+    filter_out->iterable.init = filter_iter_init;
 
     return 0;
 error:
-    /* NULL members that point to non-owned resources */
-    if (!f.expr) {
-        f.terms = NULL;
+    if (f.name == desc->name) {
+        f.name = NULL;
     }
-
-    f.name = NULL;
-    f.expr = NULL;
 
     ecs_filter_fini(&f);
 
@@ -846,8 +1146,10 @@ void ecs_filter_move(
             dst->terms = dst->term_cache;
         }
 
-        src->terms = NULL;
-        src->term_count = 0;
+        if (dst != src) {
+            src->terms = NULL;
+            src->term_count = 0;
+        }
     } else {
         ecs_os_memset_t(dst, 0, ecs_filter_t);
     }
@@ -868,7 +1170,9 @@ void ecs_filter_fini(
     }
 
     ecs_os_free(filter->name);
-    ecs_os_free(filter->expr);
+
+    filter->terms = NULL;
+    filter->name = NULL;
 }
 
 static
@@ -876,7 +1180,8 @@ void filter_str_add_id(
     const ecs_world_t *world,
     ecs_strbuf_t *buf,
     const ecs_term_id_t *id,
-    bool is_subject)
+    bool is_subject,
+    uint8_t default_set_mask)
 {
     if (id->name) {
         ecs_strbuf_appendstr(buf, id->name);
@@ -889,7 +1194,7 @@ void filter_str_add_id(
             id_added = true;
         }
 
-        if (id->set.mask != EcsSelf) {
+        if (id->set.mask != default_set_mask) {
             if (id_added) {
                 ecs_strbuf_list_push(buf, ":", "|");
             } else {
@@ -928,17 +1233,16 @@ void term_str_w_strbuf(
     const ecs_term_t *term,
     ecs_strbuf_t *buf)
 {
-    const ecs_term_id_t *subj = &term->args[0];
-    const ecs_term_id_t *obj = &term->args[1];
+    const ecs_term_id_t *subj = &term->subj;
+    const ecs_term_id_t *obj = &term->obj;
+
+    const uint8_t def_pred_mask = EcsSelf|EcsSubSet;
+    const uint8_t def_subj_mask = EcsSelf|EcsSuperSet;
+    const uint8_t def_obj_mask = EcsSelf;
 
     bool pred_set = ecs_term_id_is_set(&term->pred);
     bool subj_set = ecs_term_id_is_set(subj);
     bool obj_set = ecs_term_id_is_set(obj);
-
-    if (term->role && term->role != ECS_PAIR) {
-        ecs_strbuf_appendstr(buf, ecs_role_str(term->role));
-        ecs_strbuf_appendstr(buf, " ");
-    }
 
     if (term->oper == EcsNot) {
         ecs_strbuf_appendstr(buf, "!");
@@ -947,24 +1251,30 @@ void term_str_w_strbuf(
     }
 
     if (!subj_set) {
-        filter_str_add_id(world, buf, &term->pred, false);
+        filter_str_add_id(world, buf, &term->pred, false, def_pred_mask);
         ecs_strbuf_appendstr(buf, "()");
-    } else if (subj_set && subj->entity == EcsThis && subj->set.mask == EcsSelf)
+    } else if (subj_set && subj->entity == EcsThis && 
+        subj->set.mask == def_subj_mask)
     {
         if (term->id) {
             char *str = ecs_id_str(world, term->id);
             ecs_strbuf_appendstr(buf, str);
             ecs_os_free(str);
         } else if (pred_set) {
-            filter_str_add_id(world, buf, &term->pred, false);   
+            filter_str_add_id(world, buf, &term->pred, false, def_pred_mask);   
         }
     } else {
-        filter_str_add_id(world, buf, &term->pred, false);
+        if (term->role && term->role != ECS_PAIR) {
+            ecs_strbuf_appendstr(buf, ecs_role_str(term->role));
+            ecs_strbuf_appendch(buf, '|');
+        }
+
+        filter_str_add_id(world, buf, &term->pred, false, def_pred_mask);
         ecs_strbuf_appendstr(buf, "(");
-        filter_str_add_id(world, buf, &term->args[0], true);
+        filter_str_add_id(world, buf, &term->subj, true, def_subj_mask);
         if (obj_set) {
             ecs_strbuf_appendstr(buf, ",");
-            filter_str_add_id(world, buf, &term->args[1], false);
+            filter_str_add_id(world, buf, &term->obj, false, def_obj_mask);
         }
         ecs_strbuf_appendstr(buf, ")");
     }
@@ -985,8 +1295,8 @@ char* ecs_filter_str(
 {
     ecs_strbuf_t buf = ECS_STRBUF_INIT;
 
-    ecs_assert(!filter->term_cache_used || filter->terms == filter->term_cache,
-        ECS_INTERNAL_ERROR, NULL);
+    ecs_check(!filter->term_cache_used || filter->terms == filter->term_cache,
+        ECS_INVALID_PARAMETER, NULL);
 
     ecs_term_t *terms = filter->terms;
     int32_t i, count = filter->term_count;
@@ -1003,6 +1313,10 @@ char* ecs_filter_str(
             }
         }
 
+        if (term->oper != EcsOr) {
+            or_count = 0;
+        }
+
         if (or_count < 1) {
             if (term->inout == EcsIn) {
                 ecs_strbuf_appendstr(&buf, "[in] ");
@@ -1010,105 +1324,132 @@ char* ecs_filter_str(
                 ecs_strbuf_appendstr(&buf, "[inout] ");
             } else if (term->inout == EcsOut) {
                 ecs_strbuf_appendstr(&buf, "[out] ");
+            } else if (term->inout == EcsInOutFilter) {
+                ecs_strbuf_appendstr(&buf, "[filter] ");
             }
         }
 
         if (term->oper == EcsOr) {
             or_count ++;
-        } else {
-            or_count = 0;
         }
 
         term_str_w_strbuf(world, term, &buf);
     }
 
     return ecs_strbuf_get(&buf);
+error:
+    return NULL;
+}
+
+int32_t ecs_filter_find_this_var(
+    const ecs_filter_t *filter)
+{
+    ecs_check(filter != NULL, ECS_INVALID_PARAMETER, NULL);
+    
+    if (filter->match_this) {
+        /* Filters currently only support the This variable at index 0. Only
+         * return 0 if filter actually has terms for the This variable. */
+        return 0;
+    }
+
+error:
+    return -1;
+}
+
+/* Check if the id is a pair that has Any as first or second element. Any 
+ * pairs behave just like Wildcard pairs and reuses the same data structures,
+ * with as only difference that the number of results returned for an Any pair
+ * is never more than one. This function is used to tell the difference. */
+static
+bool is_any_pair(
+    ecs_id_t id)
+{
+    if (!ECS_HAS_ROLE(id, PAIR)) {
+        return false;
+    }
+
+    if (ECS_PAIR_FIRST(id) == EcsAny) {
+        return true;
+    }
+    if (ECS_PAIR_SECOND(id) == EcsAny) {
+        return true;
+    }
+
+    return false;
 }
 
 static
-bool populate_from_column(
+ecs_id_t actual_match_id(
+    ecs_id_t id)
+{
+    /* Table types don't store CASE, so replace it with corresponding SWITCH */
+    if (ECS_HAS_ROLE(id, CASE)) {
+        return ECS_SWITCH | ECS_PAIR_FIRST(id);
+    }
+
+    /* If the id is a pair and contains Any wildcards, replace them with * */
+    if (ECS_HAS_ROLE(id, PAIR)) {
+        if (ECS_PAIR_FIRST(id) == EcsAny) {
+            id = ecs_pair(EcsWildcard, ECS_PAIR_SECOND(id));
+        }
+        if (ECS_PAIR_SECOND(id) == EcsAny) {
+            id = ecs_pair(ECS_PAIR_FIRST(id), EcsWildcard);
+        }
+    }
+
+    return id;
+}
+
+static
+bool flecs_n_term_match_table(
     ecs_world_t *world,
+    const ecs_term_t *term,
     const ecs_table_t *table,
-    int32_t offset,
-    ecs_id_t id,
-    int32_t column,
-    ecs_entity_t source,
+    ecs_type_t type,
     ecs_id_t *id_out,
+    int32_t *column_out,
     ecs_entity_t *subject_out,
-    ecs_size_t *size_out,
-    void **ptr_out)
+    int32_t *match_index_out,
+    bool first,
+    ecs_flags32_t iter_flags)
 {
-    bool has_data = false;
+    (void)column_out;
+    
+    ecs_entity_t type_id = term->id;
+    ecs_oper_kind_t oper = term->oper;
 
-    ecs_size_t size = 0;
+    const EcsType *term_type = ecs_get(world, type_id, EcsType);
+    ecs_check(term_type != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    if (column != -1) {
-        /* If source is not This, find table of source */
-        if (source) {
-            table = ecs_get_table(world, source);
-            ecs_table_record_t *tr = flecs_get_table_record(world, table, id);
-            column = tr->column;
-        }
+    ecs_id_t *ids = ecs_vector_first(term_type->normalized->type, ecs_id_t);
+    int32_t i, count = ecs_vector_count(term_type->normalized->type);
+    ecs_term_t temp = *term;
+    temp.oper = EcsAnd;
 
-        const ecs_data_t *data = &table->storage;
-        ecs_id_t *ids = ecs_vector_first(table->type, ecs_id_t);
-
-        /* If there is no data, ensure that iterator won't try to get it */
-        if (table->column_count > column) {
-            ecs_column_t *c = &data->columns[column];
-            if (c->size) {
-                has_data = true;
-                size = c->size;
-            }
-        }
-
-        id = ids[column];
-
-        if (subject_out) {
-            *subject_out = source;
-        }
-
-        if (ptr_out) {
-            if (has_data) {
-                if (source) {
-                    *ptr_out = (void*)ecs_get_id(world, source, id);
-                } else {
-                    ecs_column_t *col = &data->columns[column];
-                    *ptr_out = ecs_vector_first_t(
-                        col->data, col->size, col->alignment);
-                    
-                    if (*ptr_out && offset) {
-                        *ptr_out = ECS_OFFSET(*ptr_out, col->size * offset);
-                    }
-                }
-            } else {
-                *ptr_out = NULL;
-            }
+    for (i = 0; i < count; i ++) {
+        temp.id = ids[i];
+        bool result = flecs_term_match_table(world, &temp, table, type, id_out, 
+            0, subject_out, match_index_out, first, iter_flags);
+        if (!result && oper == EcsAndFrom) {
+            return false;
+        } else
+        if (result && oper == EcsOrFrom) {
+            return true;
         }
     }
 
-    if (id_out) {
-        *id_out = id;
+    if (oper == EcsAndFrom) {
+        if (id_out) {
+            id_out[0] = type_id;
+        }
+        return true;
+    } else
+    if (oper == EcsOrFrom) {
+        return false;
     }
 
-    if (size_out) {
-        *size_out = size;
-    }
-
-    return has_data;
-}
-
-static
-void populate_from_table(
-    ecs_iter_t *it,
-    ecs_table_t *table)
-{
-    it->table = table;
-    it->type = table->type;
-    it->count = ecs_table_count(table);
-
-    const ecs_data_t *data = &table->storage;
-    it->entities = ecs_vector_first(data->entities, ecs_entity_t);
+error:
+    return false;
 }
 
 bool flecs_term_match_table(
@@ -1116,54 +1457,99 @@ bool flecs_term_match_table(
     const ecs_term_t *term,
     const ecs_table_t *table,
     ecs_type_t type,
-    int32_t offset,
     ecs_id_t *id_out,
     int32_t *column_out,
     ecs_entity_t *subject_out,
-    ecs_size_t *size_out,
-    void **ptr_out,
     int32_t *match_index_out,
-    bool first)
+    bool first,
+    ecs_flags32_t iter_flags)
 {
-    const ecs_term_id_t *subj = &term->args[0];
+    const ecs_term_id_t *subj = &term->subj;
     ecs_oper_kind_t oper = term->oper;
     const ecs_table_t *match_table = table;
     ecs_type_t match_type = type;
+    ecs_id_t id = term->id;
 
     ecs_entity_t subj_entity = subj->entity;
     if (!subj_entity) {
-        id_out[0] = term->id;
+        id_out[0] = id; /* no source corresponds with Nothing set mask */
         return true;
     }
 
+    if (oper == EcsAndFrom || oper == EcsOrFrom) {
+        return flecs_n_term_match_table(world, term, table, type, id_out, column_out, 
+            subject_out, match_index_out, first, iter_flags);
+    }
+
+    /* If source is not This, search in table of source */
     if (subj_entity != EcsThis) {
+        if (iter_flags & EcsIterEntityOptional) {
+            /* Treat entity terms as optional */
+            oper = EcsOptional;
+        }
+
         match_table = ecs_get_table(world, subj_entity);
         if (match_table) {
             match_type = match_table->type;
-        } else {
-            match_type = NULL;
+        } else if (oper != EcsOptional) {
+            return false;
         }
+    } else {
+        /* If filter contains This terms, a table must be provided */
+        ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
     }
 
-    ecs_entity_t source;
+    if (!match_type) {
+        return false;
+    }
 
+    ecs_entity_t source = 0;
+
+    /* If first = false, we're searching from an offset. This supports returning
+     * multiple results when using wildcard filters. */
     int32_t column = 0;
     if (!first && column_out && column_out[0] != 0) {
-        column = column_out[0] - 1;
+        column = column_out[0];
+        if (column < 0) {
+            /* In case column is not from This, flip sign */
+            column = -column;
+        }
+
+        /* Remove base 1 offset */
+        column --;
     }
 
-    column = ecs_type_match(world, match_table, match_type,
-        column, term->id, subj->set.relation, subj->set.min_depth, 
-        subj->set.max_depth, &source, match_index_out);
+    /* Find location, source and id of match in table type */
+    ecs_table_record_t *tr = 0;
+    bool is_any = is_any_pair(id);
+
+    column = ecs_search_relation(world, match_table,
+        column, actual_match_id(id), subj->set.relation, subj->set.min_depth, 
+        subj->set.max_depth, &source, id_out, 0, &tr);
+
+    if (tr && match_index_out) {
+        if (!is_any) {
+            match_index_out[0] = tr->count;
+        } else {
+            match_index_out[0] = 1;
+        }
+    }
 
     bool result = column != -1;
 
     if (oper == EcsNot) {
+        if (match_index_out) {
+            match_index_out[0] = 1;
+        }
         result = !result;
     }
 
     if (oper == EcsOptional) {
         result = true;
+    }
+
+    if (!result) {
+        return false;
     }
 
     if (subj_entity != EcsThis) {
@@ -1172,18 +1558,24 @@ bool flecs_term_match_table(
         }
     }
 
-    if (column_out && result) {
-        ecs_assert(id_out != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(subject_out != NULL, ECS_INTERNAL_ERROR, NULL);
+    if (id_out && column < 0) {
+        id_out[0] = id;
+    }
 
-        populate_from_column(world, table, offset, term->id, column, 
-            source, id_out, subject_out, size_out, ptr_out);
-
-        if (column != -1) {
-            column_out[0] = column + 1;
+    if (column_out) {
+        if (column >= 0) {
+            column ++;
+            if (source != 0) {
+                column *= -1; 
+            }
+            column_out[0] = column;
         } else {
             column_out[0] = 0;
         }
+    }
+
+    if (subject_out) {
+        subject_out[0] = source;
     }
 
     return result;
@@ -1193,30 +1585,32 @@ bool flecs_filter_match_table(
     ecs_world_t *world,
     const ecs_filter_t *filter,
     const ecs_table_t *table,
-    ecs_type_t type,
-    int32_t offset,
     ecs_id_t *ids,
     int32_t *columns,
     ecs_entity_t *subjects,
-    ecs_size_t *sizes,
-    void **ptrs,
     int32_t *match_indices,
     int32_t *matches_left,
     bool first,
-    int32_t skip_term)
+    int32_t skip_term,
+    ecs_flags32_t iter_flags)
 {
-    ecs_assert(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(filter != NULL, ECS_INVALID_PARAMETER, NULL);
-
     ecs_assert(!filter->term_cache_used || filter->terms == filter->term_cache,
         ECS_INTERNAL_ERROR, NULL);
+
+    ecs_type_t type = NULL;
+    if (table) {
+        type = table->type;
+    }
 
     ecs_term_t *terms = filter->terms;
     int32_t i, count = filter->term_count;
 
     bool is_or = false;
     bool or_result = false;
-    int32_t match_count = 0;
+    int32_t match_count = 1;
+    if (matches_left) {
+        match_count = *matches_left;
+    }
 
     for (i = 0; i < count; i ++) {
         if (i == skip_term) {
@@ -1224,7 +1618,7 @@ bool flecs_filter_match_table(
         }
 
         ecs_term_t *term = &terms[i];
-        ecs_term_id_t *subj = &term->args[0];
+        ecs_term_id_t *subj = &term->subj;
         ecs_oper_kind_t oper = term->oper;
         const ecs_table_t *match_table = table;
         ecs_type_t match_type = type;
@@ -1256,29 +1650,38 @@ bool flecs_filter_match_table(
             } else {
                 match_type = NULL;
             }
+        } else {
+            /* If filter contains This terms, table must be provided */
+            ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
         }
 
+        int32_t match_index = 0;
+
         bool result = flecs_term_match_table(world, term, match_table, 
-            match_type, offset,
+            match_type,
             ids ? &ids[t_i] : NULL, 
             columns ? &columns[t_i] : NULL, 
             subjects ? &subjects[t_i] : NULL, 
-            sizes ? &sizes[t_i] : NULL,
-            ptrs ? &ptrs[t_i] : NULL,
-            match_indices ? &match_indices[t_i] : NULL,
-            first);
+            &match_index,
+            first,
+            iter_flags);
 
         if (is_or) {
             or_result |= result;
+            if (result) {
+                /* If Or term matched, skip following Or terms */
+                for (; i < count && terms[i].oper == EcsOr; i ++) { }
+                i -- ;
+            }
         } else if (!result) {
             return false;
         }
 
-        /* Match indices is populated with the number of matches for this term.
-         * This is used to determine whether to keep iterating this table. */
-        if (first && match_indices && match_indices[t_i]) {
-            match_indices[t_i] --;
-            match_count += match_indices[t_i];
+        if (first && match_index) {
+            match_count *= match_index;
+        }
+        if (match_indices) {
+            match_indices[t_i] = match_index;
         }
     }
 
@@ -1299,28 +1702,56 @@ void term_iter_init_no_data(
 }
 
 static
+void term_iter_init_w_idr(
+    ecs_term_iter_t *iter, 
+    ecs_id_record_t *idr, 
+    bool empty_tables)
+{
+    if (idr) {
+        if (empty_tables) {
+            if ((empty_tables = flecs_table_cache_empty_iter(
+                &idr->cache, &iter->it))) 
+            {
+                iter->empty_tables = true;
+            }
+        }
+
+        if (!empty_tables) {
+            flecs_table_cache_iter(&idr->cache, &iter->it);
+        }
+    } else {
+        term_iter_init_no_data(iter);
+    }
+
+    iter->index = 0;
+}
+
+static
 void term_iter_init_wildcard(
     const ecs_world_t *world,
-    ecs_term_iter_t *iter)
+    ecs_term_iter_t *iter,
+    bool empty_tables)
 {
     iter->term = (ecs_term_t){ .index = -1 };
-    iter->self_index = flecs_get_id_record(world, EcsWildcard);
-    iter->cur = iter->self_index;
-    iter->index = 0;
+    iter->self_index = flecs_get_id_record(world, EcsAny);
+    ecs_id_record_t *idr = iter->cur = iter->self_index;
+    term_iter_init_w_idr(iter, idr, empty_tables);
 }
 
 static
 void term_iter_init(
     const ecs_world_t *world,
     ecs_term_t *term,
-    ecs_term_iter_t *iter)
+    ecs_term_iter_t *iter,
+    bool empty_tables)
 {    
-    const ecs_term_id_t *subj = &term->args[0];
+    const ecs_term_id_t *subj = &term->subj;
 
     iter->term = *term;
 
     if (subj->set.mask == EcsDefaultSet || subj->set.mask & EcsSelf) {
-        iter->self_index = flecs_get_id_record(world, term->id);
+        iter->self_index = flecs_get_id_record(world, 
+            actual_match_id(term->id));
     }
 
     if (subj->set.mask & EcsSuperSet) {
@@ -1328,67 +1759,147 @@ void term_iter_init(
             ecs_pair(subj->set.relation, EcsWildcard));
     }
 
-    iter->index = 0;
+    ecs_id_record_t *idr;
     if (iter->self_index) {
-        iter->cur = iter->self_index;
+        idr = iter->cur = iter->self_index;
     } else {
-        iter->cur = iter->set_index;
+        idr = iter->cur = iter->set_index;
     }
+
+    term_iter_init_w_idr(iter, idr, empty_tables);
 }
 
 ecs_iter_t ecs_term_iter(
     const ecs_world_t *stage,
     ecs_term_t *term)
 {
-    ecs_assert(stage != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(term != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(term->id != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(stage != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(term != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(term->id != 0, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_world_t *world = ecs_get_world(stage);
 
+    flecs_process_pending_tables(world);
+
     if (ecs_term_finalize(world, NULL, term)) {
-        /* Invalid term */
-        ecs_abort(ECS_INVALID_PARAMETER, NULL);
+        ecs_throw(ECS_INVALID_PARAMETER, NULL);
     }
 
     ecs_iter_t it = {
         .real_world = (ecs_world_t*)world,
         .world = (ecs_world_t*)stage,
-        .terms = term,
         .term_count = 1,
         .next = ecs_term_next
     };
 
-    term_iter_init(world, term, &it.iter.term);
+    /* Term iter populates the iterator with arrays from its own cache, ensure 
+     * they don't get overwritten by flecs_iter_validate.
+     *
+     * Note: the reason the term iterator doesn't use the iterator cache itself
+     * (which could easily accomodate a single term) is that the filter iterator
+     * is built on top of the term iterator. The private cache of the term
+     * iterator keeps the filter iterator code simple, as it doesn't need to
+     * worry about the term iter overwriting the iterator fields. */
+    flecs_iter_init(&it, 0);
+
+    term_iter_init(world, term, &it.priv.iter.term, false);
 
     return it;
+error:
+    return (ecs_iter_t){ 0 };
+}
+
+ecs_iter_t ecs_term_chain_iter(
+    const ecs_iter_t *chain_it,
+    ecs_term_t *term)
+{
+    ecs_check(chain_it != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(term != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_world_t *world = chain_it->real_world;
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (ecs_term_finalize(world, NULL, term)) {
+        ecs_throw(ECS_INVALID_PARAMETER, NULL);
+    }
+
+    ecs_iter_t it = {
+        .real_world = (ecs_world_t*)world,
+        .world = chain_it->world,
+        .terms = term,
+        .term_count = 1,
+        .chain_it = (ecs_iter_t*)chain_it,
+        .next = ecs_term_next
+    };
+
+    flecs_iter_init(&it, flecs_iter_cache_all);
+
+    term_iter_init(world, term, &it.priv.iter.term, false);
+
+    return it;
+error:
+    return (ecs_iter_t){ 0 };
 }
 
 static
 const ecs_table_record_t *next_table(
     ecs_term_iter_t *iter)
 {
-    const ecs_table_record_t *tables = flecs_id_record_tables(iter->cur);
-    int32_t count = flecs_id_record_count(iter->cur);
-    if (iter->index >= count) {
+    ecs_id_record_t *idr = iter->cur;
+    if (!idr) {
         return NULL;
     }
 
-    return &tables[iter->index ++];
+    const ecs_table_record_t *tr;
+    if (!(tr = flecs_table_cache_next(&iter->it, ecs_table_record_t))) {
+        if (iter->empty_tables) {
+            iter->empty_tables = false;
+            flecs_table_cache_iter(&idr->cache, &iter->it);
+            tr = flecs_table_cache_next(&iter->it, ecs_table_record_t);
+        }
+    }
+
+    return tr;
 }
 
 static
-ecs_table_record_t term_iter_next(
+bool iter_find_superset(
+    ecs_world_t *world, 
+    ecs_table_t *table, 
+    ecs_term_t *term, 
+    ecs_entity_t *source, 
+    ecs_id_t *id, 
+    int32_t *column)
+{
+    ecs_term_id_t *subj = &term->subj;
+
+    /* Test if following the relation finds the id */
+    int32_t index = ecs_search_relation(world, table, 0, 
+        term->id, subj->set.relation, subj->set.min_depth, 
+        subj->set.max_depth, source, id, 0, 0);
+
+    if (index == -1) {
+        *source = 0;
+        return false;
+    }
+
+    ecs_assert(*source != 0, ECS_INTERNAL_ERROR, NULL);
+
+    *column = (index + 1) * -1;
+
+    return true;
+}
+
+static
+bool term_iter_next(
     ecs_world_t *world,
     ecs_term_iter_t *iter,
-    ecs_entity_t *source_out,
     bool match_prefab,
     bool match_disabled)
 {
     ecs_table_t *table = iter->table;
     ecs_entity_t source = 0;
     const ecs_table_record_t *tr;
-    ecs_table_record_t result = { .table = NULL };
     ecs_term_t *term = &iter->term;
 
     do {
@@ -1397,10 +1908,13 @@ ecs_table_record_t term_iter_next(
             if (iter->cur_match >= iter->match_count) {
                 table = NULL;
             } else {
-                result.table = table;
-                result.count = iter->match_count;
-                result.column = iter->last_column = ecs_type_index_of(
-                    table->type, iter->last_column + 1, term->id);
+                iter->last_column = ecs_search_offset(
+                    world, table, iter->last_column + 1, term->id, 0);
+                iter->column = iter->last_column + 1;
+                if (iter->last_column >= 0) {
+                    iter->id = ecs_vector_get(
+                        table->type, ecs_id_t, iter->last_column)[0];
+                }
             }
         }
 
@@ -1408,17 +1922,17 @@ ecs_table_record_t term_iter_next(
             if (!(tr = next_table(iter))) {
                 if (iter->cur != iter->set_index && iter->set_index != NULL) {
                     iter->cur = iter->set_index;
+                    flecs_table_cache_iter(&iter->set_index->cache, &iter->it);
                     iter->index = 0;
                     tr = next_table(iter);
                 }
 
                 if (!tr) {
-                    result.table = NULL;
-                    return result;
+                    return false;
                 }
             }
 
-            table = tr->table;
+            table = tr->hdr.table;
 
             if (!match_prefab && (table->flags & EcsTableIsPrefab)) {
                 continue;
@@ -1428,21 +1942,18 @@ ecs_table_record_t term_iter_next(
                 continue;
             }
 
-            if (!ecs_table_count(table)) {
-                continue;
-            }
-
             iter->table = table;
             iter->match_count = tr->count;
+            if (is_any_pair(term->id)) {
+                iter->match_count = 1;
+            }
             iter->cur_match = 0;
             iter->last_column = tr->column;
-
-            result = *tr;
+            iter->column = tr->column + 1;
+            iter->id = ecs_vector_get(table->type, ecs_id_t, tr->column)[0];
         }
 
         if (iter->cur == iter->set_index) {
-            const ecs_term_id_t *subj = &term->args[0];
-
             if (iter->self_index) {
                 if (flecs_id_record_table(iter->self_index, table) != NULL) {
                     /* If the table has the id itself and this term matched Self
@@ -1451,76 +1962,125 @@ ecs_table_record_t term_iter_next(
                 }
             }
 
-            /* Test if following the relation finds the id */
-            int32_t index = ecs_type_match(world, table, table->type, 0, 
-                term->id, subj->set.relation, subj->set.min_depth, 
-                subj->set.max_depth, &source, NULL);
-            if (index == -1) {
+            if (!iter_find_superset(
+                world, table, term, &source, &iter->id, &iter->column)) 
+            {
                 continue;
             }
-
-            ecs_assert(source != 0, ECS_INTERNAL_ERROR, NULL);
         }
 
         break;
     } while (true);
 
-    if (source_out) {
-        *source_out = source;
+    iter->subject = source;
+
+    return true;
+}
+
+static
+bool term_iter_set_table(
+    ecs_world_t *world,
+    ecs_term_iter_t *iter,
+    ecs_table_t *table)
+{
+    const ecs_table_record_t *tr = NULL;
+    const ecs_id_record_t *idr = iter->self_index;
+    if (idr) {
+        tr = ecs_table_cache_get(&idr->cache, table);
+        if (tr) {
+            iter->match_count = tr->count;
+            iter->last_column = tr->column;
+            iter->column = tr->column + 1;
+            iter->id = ecs_vector_get(table->type, ecs_id_t, tr->column)[0];
+        }
     }
 
-    return result;
+    if (!tr) {
+        idr = iter->set_index;
+        if (idr) {
+            tr = ecs_table_cache_get(&idr->cache, table);
+            if (!iter_find_superset(world, table, &iter->term, &iter->subject, 
+                &iter->id, &iter->column)) 
+            {
+                return false;
+            }
+            iter->match_count = 1;
+        }
+    }
+
+    if (!tr) {
+        return false;
+    }
+
+    /* Populate fields as usual */
+    iter->table = table;
+    iter->cur_match = 0;
+
+    return true;
 }
 
 bool ecs_term_next(
     ecs_iter_t *it)
 {
-    ecs_assert(it != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(it->next == ecs_term_next, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it->next == ecs_term_next, ECS_INVALID_PARAMETER, NULL);
 
-    ecs_term_iter_t *iter = &it->iter.term;
+    flecs_iter_validate(it);
+
+    ecs_term_iter_t *iter = &it->priv.iter.term;
     ecs_term_t *term = &iter->term;
     ecs_world_t *world = it->real_world;
+    ecs_table_t *table;
 
-    ecs_entity_t source = 0;
-    ecs_table_record_t tr = term_iter_next(world, iter, &source, false, false);
-    ecs_table_t *table = tr.table;
-    if (!table) {
-        it->is_valid = false;
-        return false;
-    }
-
-    /* Source must either be 0 (EcsThis) or nonzero in case of substitution */
-    ecs_assert(source || iter->cur != iter->set_index, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    it->table = table;
-    it->type = table->type;
     it->ids = &iter->id;
-    it->columns = &iter->column;
     it->subjects = &iter->subject;
+    it->columns = &iter->column;
+    it->terms = &iter->term;
     it->sizes = &iter->size;
-    it->ptrs = &iter->ptr;
 
-    it->count = ecs_table_count(table);
-    it->entities = ecs_vector_first(table->storage.entities, ecs_entity_t);
-    it->is_valid = true;
-
-    bool has_data = populate_from_column(world, table, 0, term->id, tr.column, 
-        source, &iter->id, &iter->subject, &iter->size, 
-        &iter->ptr);
-
-    if (!source) {
-        if (has_data) {
-            iter->column = tr.column + 1;
-        } else {
-            iter->column = 0;
-        }
+    if (term->inout != EcsInOutFilter) {
+        it->ptrs = &iter->ptr;
     } else {
-        iter->column = -1; /* Point to ref */
+        it->ptrs = NULL;
     }
 
+    ecs_iter_t *chain_it = it->chain_it;
+    if (chain_it) {
+        ecs_iter_next_action_t next = chain_it->next;
+        bool match;
+
+        do {
+            if (!next(chain_it)) {
+                goto done;
+            }
+
+            table = chain_it->table;
+            match = flecs_term_match_table(world, term, table, table->type,
+                it->ids, it->columns, it->subjects, it->match_indices, true,
+                it->flags);
+        } while (!match);
+        goto yield;
+
+    } else {
+        if (!term_iter_next(world, iter, false, false)) {
+            goto done;
+        }
+
+        table = iter->table;
+
+        /* Source must either be 0 (EcsThis) or nonzero in case of substitution */
+        ecs_assert(iter->subject || iter->cur != iter->set_index, 
+            ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(iter->table != NULL, ECS_INTERNAL_ERROR, NULL);
+    }
+
+yield:
+    flecs_iter_populate_data(world, it, table, 0, 0, it->ptrs, it->sizes);
+    ECS_BIT_SET(it->flags, EcsIterIsValid);
     return true;
+done:
+error:
+    return false;
 }
 
 static
@@ -1529,7 +2089,7 @@ const ecs_filter_t* init_filter_iter(
     ecs_iter_t *it,
     const ecs_filter_t *filter)
 {
-    ecs_filter_iter_t *iter = &it->iter.filter;
+    ecs_filter_iter_t *iter = &it->priv.iter.filter;
 
     if (filter) {
         iter->filter = *filter;
@@ -1538,13 +2098,15 @@ const ecs_filter_t* init_filter_iter(
             iter->filter.terms = iter->filter.term_cache;
         }
 
-        ecs_filter_finalize(world, &iter->filter);
+        int filter_invalid = ecs_filter_finalize(world, &iter->filter);
+        ecs_assert(!filter_invalid, ECS_INTERNAL_ERROR, NULL);
+        (void)filter_invalid;
 
         ecs_assert(!filter->term_cache_used || 
             filter->terms == filter->term_cache, ECS_INTERNAL_ERROR, NULL);    
     } else {
         ecs_filter_init(world, &iter->filter, &(ecs_filter_desc_t) {
-            .terms = {{ .id = EcsWildcard }}
+            .terms = {{ .id = EcsAny }}
         });
 
         filter = &iter->filter;
@@ -1555,72 +2117,112 @@ const ecs_filter_t* init_filter_iter(
     return filter;
 }
 
+int32_t ecs_filter_pivot_term(
+    const ecs_world_t *world,
+    const ecs_filter_t *filter)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(filter != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_term_t *terms = filter->terms;
+    int32_t i, term_count = filter->term_count;
+    int32_t pivot_term = -1, min_count = -1, self_pivot_term = -1;
+
+    for (i = 0; i < term_count; i ++) {
+        ecs_term_t *term = &terms[i];
+        ecs_id_t id = term->id;
+
+        if (term->oper != EcsAnd) {
+            continue;
+        }
+
+        if (term->subj.entity != EcsThis) {
+            continue;
+        }
+
+        ecs_id_record_t *idr = flecs_get_id_record(world,   
+            actual_match_id(id));
+        if (!idr) {
+            /* If one of the terms does not match with any data, iterator 
+             * should not return anything */
+            return -2; /* -2 indicates filter doesn't match anything */
+        }
+
+        int32_t table_count = ecs_table_cache_count(&idr->cache);
+        if (min_count == -1 || table_count < min_count) {
+            min_count = table_count;
+            pivot_term = i;
+            if (term->subj.set.mask == EcsSelf) {
+                self_pivot_term = i;
+            }
+        }
+    }
+
+    if (self_pivot_term != -1) {
+        pivot_term = self_pivot_term;
+    }
+
+    return pivot_term;
+error:
+    return -2;
+}
+
 ecs_iter_t ecs_filter_iter(
     const ecs_world_t *stage,
     const ecs_filter_t *filter)
 {
-    ecs_assert(stage != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(stage != NULL, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_world_t *world = ecs_get_world(stage);
+    
+    flecs_process_pending_tables(world);
+
+    bool instanced = filter ? filter->instanced : false;
 
     ecs_iter_t it = {
         .real_world = (ecs_world_t*)world,
         .world = (ecs_world_t*)stage,
         .terms = filter ? filter->terms : NULL,
-        .next = ecs_filter_next
+        .next = ecs_filter_next,
+        .flags = instanced ? EcsIterIsInstanced : 0
     };
 
-    ecs_filter_iter_t *iter = &it.iter.filter;
+    ecs_filter_iter_t *iter = &it.priv.iter.filter;
 
     filter = init_filter_iter(world, &it, filter);
 
-    int32_t i, term_count = filter->term_count;
-    ecs_term_t *terms = filter->terms;
-    int32_t min_count = -1;
-    int32_t min_term_index = -1;
-
     /* Find term that represents smallest superset */
     if (filter->match_this) {
-        iter->kind = EcsFilterIterEvalIndex;
+        ecs_term_t *terms = filter->terms;
+        int32_t pivot_term = -1;
+        ecs_check(terms != NULL, ECS_INVALID_PARAMETER, NULL);
 
-        for (i = 0; i < term_count; i ++) {
-            ecs_term_t *term = &terms[i];
+        iter->kind = EcsIterEvalTables;
 
-            ecs_assert(term != NULL, ECS_INTERNAL_ERROR, NULL);
+        pivot_term = ecs_filter_pivot_term(world, filter);
+        iter->pivot_term = pivot_term;
 
-            if (term->oper != EcsAnd) {
-                continue;
-            }
-
-            if (term->args[0].entity != EcsThis) {
-                continue;
-            }
-
-            ecs_id_record_t *idr = flecs_get_id_record(world, term->id);
-            if (!idr) {
-                /* If one of the terms does not match with any data, iterator 
-                 * should not return anything */
-                term_iter_init_no_data(&iter->term_iter);
-                return it;
-            }
-
-            int32_t table_count = flecs_id_record_count(idr);
-            if (min_count == -1 || table_count < min_count) {
-                min_count = table_count;
-                min_term_index = i;
-            }
-        }
-
-        iter->min_term_index = min_term_index;
-
-        if (min_term_index == -1) {
-            term_iter_init_wildcard(world, &iter->term_iter);
+        if (pivot_term == -2) {
+            /* One or more terms have no matching results */
+            term_iter_init_no_data(&iter->term_iter);
+        } else if (pivot_term == -1) {
+            /* No terms meet the criteria to be a pivot term, evaluate filter
+             * against all tables */
+            term_iter_init_wildcard(world, &iter->term_iter, 
+                filter->match_empty_tables);
         } else {
-            term_iter_init(world, &terms[min_term_index], &iter->term_iter);
+            ecs_assert(pivot_term >= 0, ECS_INTERNAL_ERROR, NULL);
+            term_iter_init(world, &terms[pivot_term], &iter->term_iter,
+                filter->match_empty_tables);
         }
     } else {
-        /* If filter has no this terms, no tables need to be evaluated */
-        iter->kind = EcsFilterIterEvalNone;
+        if (!filter->match_anything) {
+            iter->kind = EcsIterEvalCondition;
+            term_iter_init_no_data(&iter->term_iter);
+        } else {
+            iter->kind = EcsIterEvalNone;
+        }
+        iter->pivot_term = -1;
     }
 
     if (filter->terms == filter->term_cache) {
@@ -1630,27 +2232,46 @@ ecs_iter_t ecs_filter_iter(
         iter->filter.terms = NULL;
     }
 
+    if (filter->filter) {
+        ECS_BIT_SET(it.flags, EcsIterIsFilter);
+    }
+
+    if (filter->match_this) {
+        /* Make space for one variable if the filter has terms for This var */ 
+        it.variable_count = 1;
+
+        /* Set variable name array */
+        it.variable_names = (char**)filter->variable_names;
+    }
+
+    flecs_iter_init(&it, flecs_iter_cache_all);
+
     return it;
+error:
+    return (ecs_iter_t){ 0 };
 }
 
 ecs_iter_t ecs_filter_chain_iter(
-    ecs_iter_t *chain_it,
+    const ecs_iter_t *chain_it,
     const ecs_filter_t *filter)
 {
     ecs_iter_t it = {
-        .chain_it = chain_it,
-        .next = ecs_filter_next,
+        .terms = filter->terms,
+        .term_count = filter->term_count,
         .world = chain_it->world,
-        .real_world = chain_it->real_world
+        .real_world = chain_it->real_world,
+        .chain_it = (ecs_iter_t*)chain_it,
+        .next = ecs_filter_next
     };
 
-    ecs_filter_iter_t *iter = &it.iter.filter;
+    flecs_iter_init(&it, flecs_iter_cache_all);
+    ecs_filter_iter_t *iter = &it.priv.iter.filter;
     init_filter_iter(it.world, &it, filter);
 
-    iter->kind = EcsFilterIterEvalChain;
+    iter->kind = EcsIterEvalChain;
 
     if (filter->terms == filter->term_cache) {
-        /* See ecs_filter_iter*/
+        /* See ecs_filter_iter */
         iter->filter.terms = NULL;
     }
 
@@ -1660,112 +2281,226 @@ ecs_iter_t ecs_filter_chain_iter(
 bool ecs_filter_next(
     ecs_iter_t *it)
 {
-    ecs_assert(it != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(it->next == ecs_filter_next, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(it->chain_it != it, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it->next == ecs_filter_next, ECS_INVALID_PARAMETER, NULL);
 
-    ecs_filter_iter_t *iter = &it->iter.filter;
+    if (flecs_iter_next_row(it)) {
+        return true;
+    }
+
+    return flecs_iter_next_instanced(it, ecs_filter_next_instanced(it));
+error:
+    return false;
+}
+
+bool ecs_filter_next_instanced(
+    ecs_iter_t *it)
+{
+    ecs_check(it != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it->next == ecs_filter_next, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(it->chain_it != it, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_filter_iter_t *iter = &it->priv.iter.filter;
     ecs_filter_t *filter = &iter->filter;
     ecs_world_t *world = it->real_world;
-    ecs_table_t *table;
+    ecs_table_t *table = NULL;
     bool match;
-    int i;
 
     if (!filter->terms) {
         filter->terms = filter->term_cache;
     }
 
-    flecs_iter_init(it);
+    flecs_iter_validate(it);
 
-    if (iter->kind == EcsFilterIterEvalIndex) {
-        ecs_term_iter_t *term_iter = &iter->term_iter;
-        ecs_term_t *term = &term_iter->term;
-        int32_t term_index = term->index;
+    ecs_iter_t *chain_it = it->chain_it;
+    ecs_iter_kind_t kind = iter->kind;
 
-        do {
-            ecs_assert(iter->matches_left >= 0, ECS_INTERNAL_ERROR, NULL);
-            bool first_match = iter->matches_left == 0;
-
-            if (first_match) {
-                /* Find new match, starting with the leading term */
-                ecs_entity_t source;
-                ecs_table_record_t tr = term_iter_next(world, term_iter, 
-                    &source, filter->match_prefab, filter->match_disabled);
-                table = tr.table;
-                if (!table) {
-                    goto done;
-                }
-
-                /* Populate term data as flecs_filter_match_table skips it */
-                populate_from_column(world, table, 0, term->id, tr.column, source, 
-                    &it->ids[term_index], 
-                    &it->subjects[term_index],
-                    &it->sizes[term_index], 
-                    &it->ptrs[term_index]);
-
-                it->columns[term_index] = tr.column + 1;
-            } else {
-                /* Progress iterator to next match for table, if any */
-                table = it->table;
-                first_match = false;
-
-                for (i = filter->term_count_actual - 1; i >= 0; i --) {
-                    if (it->match_indices[i] > 0) {
-                        it->match_indices[i] --;
-                        it->columns[i] ++;
-                        break;
-                    }
-                }
-            }
-
-            /* Match the remainder of the terms */
-            match = flecs_filter_match_table(world, filter, table, table->type,
-                0, it->ids, it->columns, it->subjects, it->sizes, 
-                it->ptrs, it->match_indices, &iter->matches_left, 
-                first_match, term->index);
-
-            /* Check if there are any terms which have more matching columns */
-            if (!first_match) {
-                iter->matches_left = 0;
-                for (i = 0; i < filter->term_count_actual; i ++) {
-                    if (it->match_indices[i] > 0) {
-                        iter->matches_left += it->match_indices[i];
-                    }
-                }
-            }
-        } while (!match);
-
-        populate_from_table(it, table);
-        goto yield;
-
-    } else if (iter->kind == EcsFilterIterEvalChain) {
-        ecs_iter_t *chain_it = it->chain_it;
+    if (chain_it) {
+        ecs_assert(kind == EcsIterEvalChain, ECS_INVALID_PARAMETER, NULL);
+        
         ecs_iter_next_action_t next = chain_it->next;
-
-        /* If this is a chain iterator, the input iterator must be set */
-        ecs_assert(chain_it != NULL, ECS_INVALID_PARAMETER, NULL);
-
         do {
             if (!next(chain_it)) {
                 goto done;
             }
 
             table = chain_it->table;
-
-            match = flecs_filter_match_table(world, filter, table, table->type,
-                0, it->ids, it->columns, it->subjects, it->sizes, 
-                it->ptrs, it->match_indices, NULL, true, -1);
+            match = flecs_filter_match_table(world, filter, table,
+                it->ids, it->columns, it->subjects, it->match_indices, NULL, 
+                true, -1, it->flags);
         } while (!match);
 
-        populate_from_table(it, table);
+        goto yield;
+    } else if (kind == EcsIterEvalTables || kind == EcsIterEvalCondition) {
+        ecs_term_iter_t *term_iter = &iter->term_iter;
+        ecs_term_t *term = &term_iter->term;
+        int32_t pivot_term = iter->pivot_term;
+        bool first;
+
+        /* Check if the This variable has been set on the iterator. If set,
+         * the filter should only be applied to the variable value */
+        ecs_var_t *this_var = NULL;
+        ecs_table_t *this_table = NULL;
+        if (it->variable_count) {
+            if (ecs_iter_var_is_constrained(it, 0)) {
+                this_var = it->variables;
+                this_table = this_var->range.table;
+
+                /* If variable is constrained, make sure it's a value that's
+                 * pointing to a table, as a filter can't iterate single
+                 * entities (yet) */
+                ecs_assert(this_table != NULL, ECS_INVALID_OPERATION, NULL);
+
+                /* Can't set variable for filter that does not iterate tables */
+                ecs_assert(kind == EcsIterEvalTables, 
+                    ECS_INVALID_OPERATION, NULL);
+            }
+        }
+
+        do {
+            /* If there are no matches left for the previous table, this is the
+             * first match of the next table. */
+            first = iter->matches_left == 0;
+
+            if (first) {
+                if (kind != EcsIterEvalCondition) {
+                    /* Check if this variable was constrained */
+                    if (this_table != NULL) {
+                        /* If this is the first match of a new result and the
+                         * previous result was equal to the value of a 
+                         * constrained var, there's nothing left to iterate */
+                        if (it->table == this_table) {
+                            goto done;
+                        }
+
+                        /* If table doesn't match term iterator, it doesn't
+                         * match filter. */
+                        if (!term_iter_set_table(world, term_iter, this_table)){
+                            goto done;
+                        }
+
+                        /* But if it does, forward it to filter matching */
+                        ecs_assert(term_iter->table == this_table,
+                            ECS_INTERNAL_ERROR, NULL);
+
+                    /* If This variable is not constrained, iterate as usual */
+                    } else {
+                        /* Find new match, starting with the leading term */
+                        if (!term_iter_next(world, term_iter, 
+                            filter->match_prefab, filter->match_disabled)) 
+                        {
+                            goto done;
+                        }
+                    }
+
+                    ecs_assert(term_iter->match_count != 0, 
+                        ECS_INTERNAL_ERROR, NULL);
+
+                    if (pivot_term == -1) {
+                        /* Without a pivot term, we're iterating all tables with
+                         * a wildcard, so the match count is meaningless. */
+                        term_iter->match_count = 1;
+                    }
+
+                    iter->matches_left = term_iter->match_count;
+
+                    /* Filter iterator takes control over iterating all the
+                     * permutations that match the wildcard. */
+                    term_iter->match_count = 1;
+
+                    table = term_iter->table;
+
+                    if (pivot_term != -1) {
+                        int32_t index = term->index;
+                        it->ids[index] = term_iter->id;
+                        it->subjects[index] = term_iter->subject;
+                        it->columns[index] = term_iter->column;
+                    }
+                } else {
+                    /* Progress iterator to next match for table, if any */
+                    table = it->table;
+                    if (term_iter->index == 0) {
+                        iter->matches_left = 1;
+                        term_iter->index = 1; /* prevents looping again */
+                    } else {
+                        goto done;
+                    }
+                }
+
+                /* Match the remainder of the terms */
+                match = flecs_filter_match_table(world, filter, table,
+                    it->ids, it->columns, it->subjects,
+                    it->match_indices, &iter->matches_left, first, 
+                    pivot_term, it->flags);
+                if (!match) {
+                    it->table = table;
+                    iter->matches_left = 0;
+                    continue;
+                }
+
+                /* Table got matched, set This variable */
+                if (table) {
+                    ecs_assert(it->variable_count == 1, ECS_INTERNAL_ERROR, NULL);
+                    ecs_assert(it->variables != NULL, ECS_INTERNAL_ERROR, NULL);
+                    it->variables[0].range.table = table;
+                }
+
+                ecs_assert(iter->matches_left != 0, ECS_INTERNAL_ERROR, NULL);
+            }
+
+            /* If this is not the first result for the table, and the table
+             * is matched more than once, iterate remaining matches */
+            if (!first && (iter->matches_left > 0)) {
+                table = it->table;
+                
+                /* Find first term that still has matches left */
+                int32_t i, j, count = it->term_count;
+                for (i = count - 1; i >= 0; i --) {
+                    int32_t mi = -- it->match_indices[i];
+                    if (mi) {
+                        break;
+                    }
+                }
+
+                /* Progress first term to next match (must be at least one) */
+                int32_t column = it->columns[i];
+                if (column < 0) {
+                    /* If this term was matched on a non-This entity, reconvert
+                     * the column back to a positive value */
+                    column = -column;
+                }
+
+                it->columns[i] = column + 1;
+                flecs_term_match_table(world, &filter->terms[i], table, 
+                    table->type, &it->ids[i], &it->columns[i], &it->subjects[i],
+                    &it->match_indices[i], false, it->flags);
+
+                /* Reset remaining terms (if any) to first match */
+                for (j = i + 1; j < count; j ++) {
+                    flecs_term_match_table(world, &filter->terms[j], table, 
+                        table->type, &it->ids[j], &it->columns[j], 
+                        &it->subjects[j], &it->match_indices[j], true, 
+                        it->flags);
+                }
+            }
+
+            match = iter->matches_left != 0;
+            iter->matches_left --;
+
+            ecs_assert(iter->matches_left >= 0, ECS_INTERNAL_ERROR, NULL);
+        } while (!match);
+
         goto yield;
     }
 
 done:
-    flecs_iter_fini(it);
+error:
+    ecs_iter_fini(it);
     return false;
 
 yield:
-    it->is_valid = true;
+    it->offset = 0;
+    flecs_iter_populate_data(world, it, table, 0, 0, it->ptrs, it->sizes);
+    ECS_BIT_SET(it->flags, EcsIterIsValid);
     return true;    
 }

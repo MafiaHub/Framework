@@ -1,7 +1,8 @@
 #include <api.h>
+#include <stdio.h>
 
 void Lookup_setup() {
-    ecs_tracing_enable(-3);
+    ecs_log_set_level(-3);
 }
 
 void Lookup_lookup() {
@@ -58,8 +59,10 @@ void Lookup_lookup_child() {
     ECS_ENTITY(world, Parent1, 0);
     ECS_ENTITY(world, Parent2, 0);
 
-    ecs_entity_t e1 = ecs_set_name(world, 0, "Child");
-    ecs_entity_t e2 = ecs_set_name(world, 0, "Child");
+    ecs_entity_t e1 = ecs_new_w_pair(world, EcsChildOf, Parent1);
+    ecs_set_name(world, e1, "Child");
+    ecs_entity_t e2 = ecs_new_w_pair(world, EcsChildOf, Parent2);
+    ecs_set_name(world, e2, "Child");
 
     ecs_add_pair(world, e1, EcsChildOf, Parent1);
     ecs_add_pair(world, e2, EcsChildOf, Parent2);
@@ -116,6 +119,30 @@ void Lookup_lookup_by_id() {
 
     ecs_entity_t e = ecs_lookup(world, "1000");
     test_int(e, 1000);
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_recycled_by_id() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t e = ecs_new_id(world);
+    test_assert(e != 0);
+
+    char buf[20];
+    sprintf(buf, "%u", (uint32_t)e);
+    
+    ecs_entity_t l = ecs_lookup(world, buf);
+    test_assert(l != 0);
+    test_assert(l == e);
+
+    ecs_delete(world, e);
+    ecs_entity_t r = ecs_new_id(world);
+    test_assert((uint32_t)r == e);
+    test_assert(r != e);
+
+    l = ecs_lookup(world, buf);
+    test_assert(l == r);
 
     ecs_fini(world);
 }
@@ -197,7 +224,7 @@ void Lookup_lookup_alias() {
     ecs_entity_t e = ecs_set_name(world, 0, "MyEntity");
     test_assert(e != 0);
 
-    ecs_use(world, e, "MyAlias");
+    ecs_set_alias(world, e, "MyAlias");
 
     ecs_entity_t a = ecs_lookup(world, "MyAlias");
     test_assert(a != 0);
@@ -215,7 +242,7 @@ void Lookup_lookup_scoped_alias() {
     test_assert(e != 0);
     ecs_add_pair(world, e, EcsChildOf, p);
 
-    ecs_use(world, e, "MyAlias");
+    ecs_set_alias(world, e, "MyAlias");
 
     ecs_entity_t a = ecs_lookup(world, "MyAlias");
     test_assert(a != 0);
@@ -236,8 +263,8 @@ void Lookup_define_duplicate_alias() {
     
     test_expect_abort(); /* Not allowed to create duplicate aliases */
 
-    ecs_use(world, e1, "MyAlias");
-    ecs_use(world, e2, "MyAlias");
+    ecs_set_alias(world, e1, "MyAlias");
+    ecs_set_alias(world, e2, "MyAlias");
 
 }
 
@@ -273,6 +300,16 @@ void Lookup_lookup_wildcard() {
     ecs_entity_t lookup = ecs_lookup(world, "*");
     test_assert(lookup != 0);
     test_assert(lookup == EcsWildcard);
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_any() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t lookup = ecs_lookup(world, "_");
+    test_assert(lookup != 0);
+    test_assert(lookup == EcsAny);
 
     ecs_fini(world);
 }
@@ -318,5 +355,211 @@ void Lookup_lookup_path_wildcard_from_scope() {
     test_assert(lookup != 0);
     test_assert(lookup == EcsThis);
 
+    ecs_fini(world);
+}
+
+void Lookup_resolve_builtin_symbols() {
+    ecs_world_t *world = ecs_init();
+
+    test_assert(ecs_lookup_symbol(world, "EcsComponent", false) == ecs_id(EcsComponent));
+    test_assert(ecs_lookup_symbol(world, "EcsComponentLifecycle", false) == ecs_id(EcsComponentLifecycle));
+    test_assert(ecs_lookup_symbol(world, "EcsType", false) == ecs_id(EcsType));
+    test_assert(ecs_lookup_symbol(world, "EcsIdentifier", false) == ecs_id(EcsIdentifier));
+
+    test_assert(ecs_lookup_symbol(world, "EcsName", false) == EcsName);
+    test_assert(ecs_lookup_symbol(world, "EcsSymbol", false) == EcsSymbol);
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_from_scope_staged() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t parent = ecs_set_name(world, 0, "Parent");
+    ecs_entity_t child = ecs_set_name(world, 0, "Child");
+    ecs_add_pair(world, child, EcsChildOf, parent);
+
+    ecs_staging_begin(world);
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+    test_assert(ecs_set_scope(stage, parent) == 0);
+
+    test_assert(ecs_lookup_path(stage, 0, "Child") == child);
+    test_assert(ecs_lookup_fullpath(stage, "Child") == child);
+
+    test_assert(ecs_lookup_path(stage, parent, "Child") == child);
+    test_assert(ecs_lookup_fullpath(stage, "Child") == child);
+
+    test_assert(ecs_set_scope(stage, 0) == parent);
+    ecs_staging_end(world);
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_core() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t c = ecs_lookup_fullpath(world, "Component");
+    test_assert(c != 0);
+    test_assert(c == ecs_id(EcsComponent));
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_core_from_stage() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t c = ecs_lookup_fullpath(world, "Component");
+    test_assert(c != 0);
+    test_assert(c == ecs_id(EcsComponent));
+
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+    ecs_staging_begin(world);
+    ecs_entity_t d = ecs_lookup_fullpath(stage, "Component");
+    test_assert(d != 0);
+    test_assert(d == ecs_id(EcsComponent));
+    ecs_staging_end(world);
+
+    ecs_entity_t e = ecs_lookup_fullpath(world, "Component");
+    test_assert(e != 0);
+    test_assert(e == ecs_id(EcsComponent));
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_custom_search_path() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t parent = ecs_set_name(world, 0, "Parent");
+    ecs_entity_t child = ecs_new_w_pair(world, EcsChildOf, parent);
+    ecs_set_name(world, child, "Child");
+    
+    test_assert(ecs_lookup_fullpath(world, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(world, "Child") == 0);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child") == child);
+
+    ecs_entity_t lookup_path[] = { parent, 0 };
+    ecs_entity_t *old_path = ecs_set_lookup_path(world, lookup_path);
+
+    test_assert(ecs_lookup_fullpath(world, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(world, "Child") == child);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child") == child);
+
+    ecs_set_lookup_path(world, old_path);
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_custom_search_path_from_stage() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t parent = ecs_set_name(world, 0, "Parent");
+    ecs_entity_t child = ecs_new_w_pair(world, EcsChildOf, parent);
+    ecs_set_name(world, child, "Child");
+    
+    test_assert(ecs_lookup_fullpath(world, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(world, "Child") == 0);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child") == child);
+
+    ecs_entity_t lookup_path[] = { parent, 0 };
+    ecs_entity_t *old_path = ecs_set_lookup_path(world, lookup_path);
+
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+    ecs_staging_begin(world);
+    test_assert(ecs_lookup_fullpath(stage, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(stage, "Child") == child);
+    test_assert(ecs_lookup_fullpath(stage, "Parent.Child") == child);
+    ecs_staging_end(world);
+
+    ecs_set_lookup_path(world, old_path);
+
+    ecs_fini(world);
+}
+
+void Lookup_lookup_custom_search_path_n_elems() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t parent = ecs_set_name(world, 0, "Parent");
+    ecs_entity_t child = ecs_new_w_pair(world, EcsChildOf, parent);
+    ecs_set_name(world, child, "Child");
+    ecs_entity_t grand_child = ecs_new_w_pair(world, EcsChildOf, child);
+    ecs_set_name(world, grand_child, "Child");
+    
+    test_assert(ecs_lookup_fullpath(world, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(world, "Child") == 0);
+    test_assert(ecs_lookup_fullpath(world, "Child.Child") == 0);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child") == child);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child.Child") == grand_child);
+
+    ecs_entity_t lookup_path[] = { child, parent, 0 };
+    ecs_entity_t *old_path = ecs_set_lookup_path(world, lookup_path);
+
+    test_assert(ecs_lookup_fullpath(world, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(world, "Child") == child);
+    test_assert(ecs_lookup_fullpath(world, "Child.Child") == grand_child);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child") == child);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child.Child") == grand_child);
+
+    lookup_path[0] = parent;
+    lookup_path[1] = child;
+
+    test_assert(ecs_lookup_fullpath(world, "Parent") == parent);
+    test_assert(ecs_lookup_fullpath(world, "Child") == grand_child);
+    test_assert(ecs_lookup_fullpath(world, "Child.Child") == grand_child);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child") == child);
+    test_assert(ecs_lookup_fullpath(world, "Parent.Child.Child") == grand_child);
+
+    ecs_set_lookup_path(world, old_path);
+
+    ecs_fini(world);
+}
+
+void Lookup_set_same_name() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t e = ecs_new_entity(world, "MyName");
+    test_assert(e != 0);
+    test_str("MyName", ecs_get_name(world, e));
+    test_uint(e, ecs_lookup(world, "MyName"));
+
+    ecs_set_name(world, e, "MyName");
+    test_str("MyName", ecs_get_name(world, e));
+    test_uint(e, ecs_lookup(world, "MyName"));
+    
+    ecs_fini(world);
+}
+
+void Lookup_defer_set_name() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t e = ecs_new_entity(world, "Foo");
+    test_assert(e != 0);
+    test_str("Foo", ecs_get_name(world, e));
+    test_uint(e, ecs_lookup(world, "Foo"));
+
+    ecs_defer_begin(world);
+    ecs_set_name(world, e, "Bar");
+    ecs_defer_end(world);
+
+    test_str("Bar", ecs_get_name(world, e));
+    test_uint(e, ecs_lookup(world, "Bar"));
+    
+    ecs_fini(world);
+}
+
+void Lookup_defer_set_same_name() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t e = ecs_new_entity(world, "MyName");
+    test_assert(e != 0);
+    test_str("MyName", ecs_get_name(world, e));
+    test_uint(e, ecs_lookup(world, "MyName"));
+
+    ecs_defer_begin(world);
+    ecs_set_name(world, e, "MyName");
+    ecs_defer_end(world);
+    
+    test_str("MyName", ecs_get_name(world, e));
+    test_uint(e, ecs_lookup(world, "MyName"));
+    
     ecs_fini(world);
 }

@@ -1,5 +1,5 @@
 
-namespace flecs 
+namespace flecs
 {
 
 /** Static helper functions to assign a component value */
@@ -10,7 +10,7 @@ inline void set(world_t *world, entity_t entity, T&& value, ecs_id_t id) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
 
     T& dst = *static_cast<T*>(ecs_get_mut_id(world, entity, id, NULL));
-    dst = std::move(value);
+    dst = FLECS_MOV(value);
 
     ecs_modified_id(world, entity, id);
 }
@@ -37,7 +37,7 @@ inline void set(world_t *world, entity_t entity, T&& value, ecs_id_t id) {
     /* If type is not constructible get_mut should assert on new values */
     ecs_assert(!is_new, ECS_INTERNAL_ERROR, NULL);
 
-    dst = std::move(value);
+    dst = FLECS_MOV(value);
 
     ecs_modified_id(world, entity, id);
 }
@@ -67,7 +67,7 @@ inline void emplace(world_t *world, id_t entity, Args&&... args) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
     T& dst = *static_cast<T*>(ecs_emplace_id(world, entity, id));
     
-    FLECS_PLACEMENT_NEW(&dst, T{std::forward<Args>(args)...});
+    FLECS_PLACEMENT_NEW(&dst, T{FLECS_FWD(args)...});
 
     ecs_modified_id(world, entity, id);    
 }
@@ -81,7 +81,7 @@ inline void emplace(world_t *world, id_t entity, Args&&... args);
 template <typename T, typename A>
 inline void set(world_t *world, entity_t entity, A&& value) {
     id_t id = _::cpp_type<T>::id(world);
-    flecs::set(world, entity, std::forward<A&&>(value), id);
+    flecs::set(world, entity, FLECS_FWD(value), id);
 }
 
 // set(const T&)
@@ -90,14 +90,14 @@ inline void set(world_t *world, entity_t entity, const A& value) {
     id_t id = _::cpp_type<T>::id(world);
     flecs::set(world, entity, value, id);
 }
-    
+
+struct scoped_world;
 
 /** The world.
  * The world is the container of all ECS data and systems. If the world is
  * deleted, all data in the world will be deleted as well.
  */
-class world final {
-public:
+struct world {
     /** Create world.
      */
     explicit world() 
@@ -161,37 +161,25 @@ public:
         return m_world;
     }
 
-    /** Enable tracing.
-     *
-     * @param level The tracing level.
-     */
-    static void enable_tracing(int level) {
-        ecs_tracing_enable(level);
-    }
-
-    /** Enable tracing with colors.
-     *
-     * @param enabled Whether to enable tracing with colors.
-     */
-    static void enable_tracing_color(bool enabled) {
-        ecs_tracing_color_enable(enabled);
-    }    
-
-    void set_pipeline(const flecs::pipeline& pip) const;
-
-    /** Progress world, run all systems.
-     *
-     * @param delta_time Custom delta_time. If 0 is provided, Flecs will automatically measure delta_time.
-     */
-    bool progress(FLECS_FLOAT delta_time = 0.0) const {
-        return ecs_progress(m_world, delta_time);
-    }
-
     /** Get last delta_time.
      */
     FLECS_FLOAT delta_time() const {
         const ecs_world_info_t *stats = ecs_get_world_info(m_world);
         return stats->delta_time;
+    }
+
+    /** Get current tick.
+     */
+    int32_t tick() const {
+        const ecs_world_info_t *stats = ecs_get_world_info(m_world);
+        return stats->frame_count_total;
+    }
+
+    /** Get current simulation time.
+     */
+    FLECS_FLOAT time() const {
+        const ecs_world_info_t *stats = ecs_get_world_info(m_world);
+        return stats->world_time_total;
     }
 
     /** Signal application should quit.
@@ -201,35 +189,17 @@ public:
         ecs_quit(m_world);
     }
 
+    /** Register action to be executed when world is destroyed.
+     */
+    void atfini(ecs_fini_action_t action, void *ctx) const {
+        ecs_atfini(m_world, action, ctx);
+    }
+
     /** Test if quit() has been called.
      */
     bool should_quit() {
         return ecs_should_quit(m_world);
     }
-
-    /** Get id from a type.
-     */
-    template <typename T>
-    flecs::id id() const;
-
-    /** Id factory.
-     */
-    template <typename ... Args>
-    flecs::id id(Args&&... args) const;
-
-    /** Get pair id from relation, object
-     */
-    template <typename R, typename O>
-    flecs::id pair() const;
-
-    /** Get pair id from relation, object
-     */
-    template <typename R>
-    flecs::id pair(entity_t o) const;
-
-    /** Get pair id from relation, object
-     */
-    flecs::id pair(entity_t r, entity_t o) const;
 
     /** Begin frame.
      * When an application does not use progress() to control the main loop, it
@@ -451,69 +421,6 @@ public:
         return ecs_stage_is_readonly(m_world);
     }
 
-    /** Set number of threads.
-     * This will distribute the load evenly across the configured number of 
-     * threads for each system.
-     *
-     * @param threads Number of threads.
-     */
-    void set_threads(int32_t threads) const {
-        ecs_set_threads(m_world, threads);
-    }
-
-    /** Get number of threads.
-     *
-     * @return Number of configured threads.
-     */
-    int32_t get_threads() const {
-        return ecs_get_threads(m_world);
-    }
-
-    /** Set target FPS
-     * This will ensure that the main loop (world::progress) does not run faster
-     * than the specified frames per second.
-     *
-     * @param target_fps Target frames per second.
-     */
-    void set_target_fps(FLECS_FLOAT target_fps) const {
-        ecs_set_target_fps(m_world, target_fps);
-    }
-
-    /** Get target FPS
-     *
-     * @return Configured frames per second.
-     */
-    FLECS_FLOAT get_target_fps() const {
-        const ecs_world_info_t *stats = ecs_get_world_info(m_world);
-        return stats->target_fps;
-    }
-
-    /** Get tick
-     *
-     * @return Monotonically increasing frame count.
-     */
-    int32_t get_tick() const {
-        const ecs_world_info_t *stats = ecs_get_world_info(m_world);
-        return stats->frame_count_total;
-    }
-
-    /** Set timescale
-     *
-     * @return Monotonically increasing frame count.
-     */
-    void set_time_scale(FLECS_FLOAT mul) const {
-        ecs_set_time_scale(m_world, mul);
-    }  
-
-    /** Get timescale
-     *
-     * @return Monotonically increasing frame count.
-     */
-    FLECS_FLOAT get_time_scale() const {
-        const ecs_world_info_t *stats = ecs_get_world_info(m_world);
-        return stats->time_scale;
-    }        
-
     /** Set world context.
      * Set a context value that can be accessed by anyone that has a reference
      * to the world.
@@ -563,34 +470,32 @@ public:
         ecs_enable_range_check(m_world, enabled);
     }
 
-    /** Disables inactive systems.
-     *
-     * This removes systems that are not matched with any entities from the main
-     * loop. Systems are only added to the main loop after they first match with
-     * entities, but are not removed automatically.
-     *
-     * This function allows an application to manually disable inactive systems
-     * which removes them from the main loop. Doing so will cause Flecs to
-     * rebuild the pipeline in the next iteration.
-     *
-     * @param level The tracing level.
-     */
-    void deactivate_systems() {
-        ecs_deactivate_systems(m_world);
-    }
-
     /** Set current scope.
      *
      * @param scope The scope to set.
      * @return The current scope;
+     * @see ecs_set_scope
      */
-    flecs::entity set_scope(const flecs::entity& scope) const;
+    flecs::entity set_scope(const flecs::entity_t scope) const;
 
     /** Get current scope.
      *
      * @return The current scope.
+     * * @see ecs_get_scope
      */
     flecs::entity get_scope() const;
+
+    /** Same as set_scope but with type.
+     * * @see ecs_set_scope
+     */
+    template <typename T>
+    flecs::entity set_scope() const;
+
+    /** Set search path.
+     */
+    flecs::entity_t* set_lookup_path(const flecs::entity_t *search_path) {
+        return ecs_set_lookup_path(m_world, search_path);
+    }
 
     /** Lookup entity by name.
      * 
@@ -600,21 +505,26 @@ public:
 
     /** Set singleton component.
      */
-    template <typename T>
+    template <typename T, if_t< !is_callable<T>::value > = 0>
     void set(const T& value) const {
         flecs::set<T>(m_world, _::cpp_type<T>::id(m_world), value);
     }
 
-    template <typename T>
+    template <typename T, if_t< !is_callable<T>::value > = 0>
     void set(T&& value) const {
         flecs::set<T>(m_world, _::cpp_type<T>::id(m_world), 
-            std::forward<T&&>(value));
-    } 
+            FLECS_FWD(value));
+    }
+    
+    /** Set singleton component inside a callback.
+     */
+    template <typename Func, if_t< is_callable<Func>::value > = 0 >
+    void set(const Func& func);
 
     template <typename T, typename ... Args>
     void emplace(Args&&... args) const {
         flecs::emplace<T>(m_world, _::cpp_type<T>::id(m_world), 
-            std::forward<Args>(args)...);
+            FLECS_FWD(args)...);
     }        
 
     /** Get mut singleton component.
@@ -631,6 +541,11 @@ public:
      */
     template <typename T>
     const T* get() const;
+    
+    /** Get singleton component inside a callback.
+     */
+    template <typename Func, if_t< is_callable<Func>::value > = 0 >
+    void get(const Func& func);
 
     /** Test if world has singleton component.
      */
@@ -647,13 +562,6 @@ public:
     template <typename T>
     void remove() const;
 
-    /** Get id for type.
-     */
-    template <typename T>
-    entity_t type_id() {
-        return _::cpp_type<T>::id(m_world);
-    }
-
     /** Get singleton entity for type.
      */
     template <typename T>
@@ -661,8 +569,9 @@ public:
 
     /** Create alias for component.
      *
-     * @tparam Component to create an alias for.
+     * @tparam T to create an alias for.
      * @param alias Alias for the component.
+     * @return Entity representing the component.
      */
     template <typename T>
     flecs::entity use(const char *alias = nullptr);
@@ -683,15 +592,51 @@ public:
 
     /** Count entities matching a component.
      *
-     * @tparam T The component to use for matching.
+     * @param component_id The component id.
+     */
+    int count(flecs::id_t component_id) const {
+        return ecs_count_id(m_world, component_id);
+    }
+
+    /** Count entities matching a pair.
+     *
+     * @param rel The relation id.
+     * @param obj The object id.
+     */
+    int count(flecs::entity_t rel, flecs::entity_t obj) const {
+        return ecs_count_id(m_world, ecs_pair(rel, obj));
+    }
+
+    /** Count entities matching a component.
+     *
+     * @tparam T The component type.
      */
     template <typename T>
     int count() const {
-        return ecs_count_id(m_world, _::cpp_type<T>::id(m_world));
+        return count(_::cpp_type<T>::id(m_world));
     }
 
-    flecs::filter_iterator begin() const;
-    flecs::filter_iterator end() const;
+    /** Count entities matching a pair.
+     *
+     * @tparam Rel The relation type.
+     * @param obj The object id.
+     */
+    template <typename Rel>
+    int count(flecs::entity_t obj) const {
+        return count(_::cpp_type<Rel>::id(m_world), obj);
+    }
+
+    /** Count entities matching a pair.
+     *
+     * @tparam Rel The relation type.
+     * @tparam Obj The object type.
+     */
+    template <typename Rel, typename Obj>
+    int count() const {
+        return count( 
+            _::cpp_type<Rel>::id(m_world),
+            _::cpp_type<Obj>::id(m_world));
+    }
 
     /** Enable locking.
      * 
@@ -759,6 +704,66 @@ public:
         func();
         ecs_set_scope(m_world, prev);
     }
+    
+    /** Same as scope(parent, func), but with T as parent.
+     */
+    template <typename T, typename Func>
+    void scope(const Func& func) const {
+        flecs::id_t parent = _::cpp_type<T>::id(m_world);
+        scope(parent, func);
+    }
+
+    /** Use provided scope for operations ran on returned world.
+     * Operations need to be ran in a single statement.
+     */
+    flecs::scoped_world scope(id_t parent);
+
+    template <typename T>
+    flecs::scoped_world scope();
+
+    /** Delete all entities with specified id. */
+    void delete_with(id_t the_id) const {
+        ecs_delete_with(m_world, the_id);
+    }
+
+    /** Delete all entities with specified relation. */
+    void delete_with(entity_t rel, entity_t obj) const {
+        delete_with(ecs_pair(rel, obj));
+    }
+
+    /** Delete all entities with specified component. */
+    template <typename T>
+    void delete_with() const {
+        delete_with(_::cpp_type<T>::id());
+    }
+
+    /** Delete all entities with specified relation. */
+    template <typename R, typename O>
+    void delete_with() const {
+        delete_with(_::cpp_type<R>::id(), _::cpp_type<O>::id());
+    }
+
+    /** Remove all instances of specified id. */
+    void remove_all(id_t the_id) const {
+        ecs_remove_all(m_world, the_id);
+    }
+
+    /** Remove all instances of specified relation. */
+    void remove_all(entity_t rel, entity_t obj) const {
+        remove_all(ecs_pair(rel, obj));
+    }
+
+    /** Remove all instances of specified component. */
+    template <typename T>
+    void remove_all() const {
+        remove_all(_::cpp_type<T>::id());
+    }
+
+    /** Remove all instances of specified relation. */
+    template <typename R, typename O>
+    void remove_all() const {
+        remove_all(_::cpp_type<R>::id(), _::cpp_type<O>::id());
+    }
 
     /** Defer all operations called in function. If the world is already in
      * deferred mode, do nothing.
@@ -770,140 +775,138 @@ public:
         ecs_defer_end(m_world);
     }
 
-    /** Iterate over all entities with provided component.
-     * The function parameter must match the following signature:
-     *   void(*)(T&) or
-     *   void(*)(flecs::entity, T&)
+    /** Check if entity id exists in the world.
+     * Ignores entity relation.
+     * 
+     * @see ecs_exists
      */
-    template <typename T, typename Func>
-    void each(Func&& func) const;
+    bool exists(flecs::entity_t e) const {
+        return ecs_exists(m_world, e);
+    }
 
-    /** Iterate over all entities with provided (component) id.
+    /** Check if entity id exists in the world.
+     * Ignores entity relation.
+     *
+     * @see ecs_is_alive
      */
-    template <typename Func>
-    void each(flecs::id_t term_id, Func&& func) const;
+    bool is_alive(flecs::entity_t e) const {
+        return ecs_is_alive(m_world, e);
+    }
 
-    /** Iterate over all entities with components in argument list of function.
-     * The function parameter must match the following signature:
-     *   void(*)(T&, U&, ...) or
-     *   void(*)(flecs::entity, T&, U&, ...)
+    /** Check if entity id is valid.
+     * Invalid entities cannot be used with API functions.
+     * 
+     * @see ecs_is_valid
      */
-    template <typename Func>
-    void each(Func&& func) const;
+    bool is_valid(flecs::entity_t e) const {
+        return ecs_is_valid(m_world, e);
+    }
 
-    /** Create a prefab.
+    /** Get alive entity for id.
+     * Returns the entity with the current generation.
+     * 
+     * @see ecs_get_alive
      */
-    template <typename... Args>
-    flecs::entity entity(Args &&... args) const;
+    flecs::entity get_alive(flecs::entity_t e) const;
 
-    /** Create an entity.
+/* Prevent clashing with Unreal define. Unreal applications will have to use
+ *  ecs_ensure. */
+#ifndef ensure
+    /** Ensures that entity with provided generation is alive.
+     * Ths operation will fail if an entity exists with the same id and a 
+     * different, non-zero generation.
+     * 
+     * @see ecs_ensure
      */
-    template <typename... Args>
-    flecs::entity prefab(Args &&... args) const;
+    flecs::entity ensure(flecs::entity_t e) const;
+#endif
 
-    /** Create a type.
-     */
-    template <typename... Args>
-    flecs::type type(Args &&... args) const;
+    /* Run callback after completing frame */
+    void run_post_frame(ecs_fini_action_t action, void *ctx) {
+        ecs_run_post_frame(m_world, action, ctx);
+    }
 
-    /** Create a pipeline.
-     */
-    template <typename... Args>
-    flecs::pipeline pipeline(Args &&... args) const;
+#   include "mixins/id/mixin.inl"
+#   include "mixins/component/mixin.inl"
+#   include "mixins/entity/mixin.inl"
+#   include "mixins/event/mixin.inl"
+#   include "mixins/term/mixin.inl"
+#   include "mixins/filter/mixin.inl"
+#   include "mixins/trigger/mixin.inl"
+#   include "mixins/observer/mixin.inl"
+#   include "mixins/query/mixin.inl"
+#   include "mixins/type/mixin.inl"
 
-    /** Create a module.
-     */
-    template <typename Module, typename... Args>
-    flecs::entity module(Args &&... args) const;
+#   ifdef FLECS_MODULE
+#   include "mixins/module/mixin.inl"
+#   endif
+#   ifdef FLECS_PIPELINE
+#   include "mixins/pipeline/mixin.inl"
+#   endif
+#   ifdef FLECS_SNAPSHOT
+#   include "mixins/snapshot/mixin.inl"
+#   endif
+#   ifdef FLECS_SYSTEM
+#   include "mixins/system/mixin.inl"
+#   endif
+#   ifdef FLECS_RULES
+#   include "mixins/rule/mixin.inl"
+#   endif
+#   ifdef FLECS_PLECS
+#   include "mixins/plecs/mixin.inl"
+#   endif
+#   ifdef FLECS_META
+#   include "mixins/meta/world.inl"
+#   endif
+#   ifdef FLECS_JSON
+#   include "mixins/json/world.inl"
+#   endif
+#   ifdef FLECS_APP
+#   include "mixins/app/mixin.inl"
+#   endif
 
-    /** Import a module.
-     */
-    template <typename Module>
-    flecs::entity import(); // Cannot be const because modules accept a non-const world
-
-    /** Create a system from an entity
-     */
-    flecs::system<> system(flecs::entity e) const;
-
-    /** Create a system.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::system_builder<Comps...> system(Args &&... args) const;
-
-    /** Create a trigger.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::trigger_builder<Comps...> trigger(Args &&... args) const;
-
-    /** Create an observer.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::observer_builder<Comps...> observer(Args &&... args) const;
-
-    /** Create a filter.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::filter<Comps...> filter(Args &&... args) const;
-
-    /** Create a filter builder.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::filter_builder<Comps...> filter_builder(Args &&... args) const;
-
-    /** Create a query.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::query<Comps...> query(Args &&... args) const;
-
-    /** Create a query builder.
-     */
-    template <typename... Comps, typename... Args>
-    flecs::query_builder<Comps...> query_builder(Args &&... args) const;
-
-    /** Create a term 
-     */
-    template<typename... Args>
-    flecs::term term(Args &&... args) const;
-
-    /** Create a term for a type
-     */
-    template<typename T, typename... Args>
-    flecs::term term(Args &&... args) const;  
-
-    /** Create a term for a pair
-     */
-    template<typename R, typename O, typename... Args>
-    flecs::term term(Args &&... args) const;        
-
-    /** Register a component.
-     */
-    template <typename T, typename... Args>
-    flecs::entity component(Args &&... args) const;
-
-    /** Create a snapshot.
-     */
-    template <typename... Args>
-    flecs::snapshot snapshot(Args &&... args) const;
-    
-private:
+public:
     void init_builtin_components();
 
     world_t *m_world;
     bool m_owned;
 };
 
-// Downcast utility to make world available to classes in inheritance hierarchy
-template<typename Base>
-class world_base {
-public:
-    template<typename IBuilder>
-    static flecs::world world(const IBuilder *self) {
-        return flecs::world(static_cast<const Base*>(self)->m_world);
+struct scoped_world : world {
+    scoped_world(
+        flecs::world_t *w, 
+        flecs::entity_t s) : world(nullptr)
+    {
+        m_prev_scope = ecs_set_scope(w, s);
+        m_world = w;
+        m_owned = false;
     }
 
-    flecs::world world() const {
-        return flecs::world(static_cast<const Base*>(this)->m_world);
+    ~scoped_world() {
+        ecs_set_scope(m_world, m_prev_scope);
     }
+
+    scoped_world(const scoped_world& obj) : world(nullptr) {
+        m_prev_scope = obj.m_prev_scope;
+        m_world = obj.m_world;
+        m_owned = obj.m_owned;
+    }
+
+    flecs::entity_t m_prev_scope;
 };
+
+/** Return id without generation.
+ * 
+ * @see ecs_strip_generation
+ */
+inline flecs::id_t strip_generation(flecs::entity_t e) {
+    return ecs_strip_generation(e);
+}
+
+/** Return entity generation.
+ */
+inline uint32_t get_generation(flecs::entity_t e) {
+    return ECS_GENERATION(e);
+}
 
 } // namespace flecs

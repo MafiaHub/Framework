@@ -1,4 +1,5 @@
 #include <prefab.h>
+#include <stdio.h>
 
 typedef struct { double value; } Attack;
 typedef struct { double value; } Defense;
@@ -44,7 +45,7 @@ int main(int argc, char *argv[]) {
             ecs_set(ecs, mammoth_freighter, Defense, {300});
 
         ecs_entity_t frigate = ecs_new_prefab(ecs, "Frigate");
-        ecs_add_pair(ecs, frigate, EcsIsA, frigate);
+        ecs_add_pair(ecs, frigate, EcsIsA, spaceship);
         ecs_set(ecs, frigate, Attack, {100});
         ecs_set(ecs, frigate, Defense, {75});
         ecs_set(ecs, frigate, ImpulseSpeed, {125});
@@ -71,7 +72,7 @@ int main(int argc, char *argv[]) {
     ecs_query_t *q = ecs_query_init(ecs, &(ecs_query_desc_t) {
         .filter.terms = {
             // To select components from a prefab, use SuperSet
-            { .id = ecs_id(ImpulseSpeed), .args[0].set.mask = EcsSuperSet }, 
+            { .id = ecs_id(ImpulseSpeed), .subj.set.mask = EcsSuperSet }, 
             { .id = ecs_id(Position) }
         }
     });

@@ -13,10 +13,8 @@
 #define FLECS_MODULE
 #endif
 
-#include "../addons/module.h"
-
-#ifndef FLECS_SYSTEMS_H
-#define FLECS_SYSTEMS_H
+#ifndef FLECS_SYSTEM_H
+#define FLECS_SYSTEM_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,9 +59,9 @@ typedef enum ecs_system_status_t {
  * example the system is disabled, and ecs_enable is invoked with enabled: true.
  *
  * @param world The world.
- * @param system The system for which to set the action.
- * @param action The action.
- * @param ctx Context that will be passed to the action when invoked.
+ * @param system The system for which the action has changed.
+ * @param status The status that triggered the callback.
+ * @param ctx Context passed to ecs_system_desc_t as status_ctx.
  */
 typedef void (*ecs_system_status_action_t)(
     ecs_world_t *world,
@@ -73,19 +71,37 @@ typedef void (*ecs_system_status_action_t)(
 
 /* Use with ecs_system_init */
 typedef struct ecs_system_desc_t {
+    int32_t _canary;
+
     /* System entity creation parameters */
     ecs_entity_desc_t entity;
 
     /* System query parameters */
     ecs_query_desc_t query;
 
-    /* System callback, invoked when system is ran */
+    /* Callback that is invoked when a system is ran. When left to NULL, the
+     * default system runner is used, which calls the "callback" action for each
+     * result returned from the system's query. 
+     * 
+     * It should not be assumed that the input iterator can always be iterated
+     * with ecs_query_next. When a system is multithreaded and/or paged, the
+     * iterator can be either a worker or paged iterator. Future use cases may
+     * introduce additional inputs for a system, such as rules and filters. The
+     * correct function to use for iteration is ecs_iter_next.
+     * 
+     * An implementation can test whether the iterator is a query iterator by
+     * testing whether the it->next value is equal to ecs_query_next. */
+    ecs_run_action_t run;
+
+    /* Callback that is ran for each result returned by the system's query. This
+     * means that this callback can be invoked multiple times per system per
+     * frame, typically once for each matching table. */
     ecs_iter_action_t callback;
 
     /* System status callback, invoked when system status changes */
     ecs_system_status_action_t status_callback;
 
-    /* Associate with entity */
+    /* Associate with entity. */
     ecs_entity_t self;    
 
     /* Context to be passed to callback (as ecs_iter_t::param) */
@@ -111,7 +127,14 @@ typedef struct ecs_system_desc_t {
     int32_t rate;
 
     /* External tick soutce that determines when system ticks */
-    ecs_entity_t tick_source;     
+    ecs_entity_t tick_source;
+
+    /* If true, system will be ran on multiple threads */
+    bool multi_threaded;
+
+    /* If true, system will have access to actuall world. Cannot be true at the
+     * same time as multi_threaded. */
+    bool no_staging;
 } ecs_system_desc_t;
 
 /* Create a system */
@@ -121,15 +144,21 @@ ecs_entity_t ecs_system_init(
     const ecs_system_desc_t *desc);
 
 #ifndef FLECS_LEGACY
+#define ECS_SYSTEM_DEFINE(world, id, kind, ...) \
+    { \
+        ecs_system_desc_t desc = {0}; \
+        desc.entity.name = #id; \
+        desc.entity.add[0] = kind; \
+        desc.query.filter.expr = #__VA_ARGS__; \
+        desc.callback = id; \
+        ecs_id(id) = ecs_system_init(world, &desc); \
+    } \
+    ecs_assert(ecs_id(id) != 0, ECS_INVALID_PARAMETER, NULL);
+
 #define ECS_SYSTEM(world, id, kind, ...) \
-    ecs_iter_action_t ecs_iter_action(id) = id;\
-    ecs_entity_t id = ecs_system_init(world, &(ecs_system_desc_t){\
-        .entity = { .name = #id, .add = {kind} },\
-        .query.filter.expr = #__VA_ARGS__,\
-        .callback = ecs_iter_action(id)\
-    });\
-    ecs_assert(id != 0, ECS_INVALID_PARAMETER, NULL);\
-    (void)ecs_iter_action(id);\
+    ecs_entity_t ecs_id(id); ECS_SYSTEM_DEFINE(world, id, kind, __VA_ARGS__);\
+    ecs_entity_t id = ecs_id(id);\
+    (void)ecs_id(id);\
     (void)id;
 #endif
 
@@ -156,7 +185,7 @@ ecs_entity_t ecs_system_init(
  *
  * @param world The world.
  * @param system The system to run.
- * @param delta_time: The time passed since the last system invocation.
+ * @param delta_time The time passed since the last system invocation.
  * @param param A user-defined parameter to pass to the system.
  * @return handle to last evaluated entity if system was interrupted.
  */
@@ -173,7 +202,7 @@ ecs_entity_t ecs_run(
  * @param system The system to run.
  * @param stage_current The id of the current stage.
  * @param stage_count The total number of stages.
- * @param delta_time: The time passed since the last system invocation.
+ * @param delta_time The time passed since the last system invocation.
  * @param param A user-defined parameter to pass to the system.
  * @return handle to last evaluated entity if system was interrupted.
  */
@@ -202,7 +231,7 @@ ecs_entity_t ecs_run_worker(
  * 
  * @param world The world.
  * @param system The system to invoke.
- * @param delta_time: The time passed since the last system invocation.
+ * @param delta_time The time passed since the last system invocation.
  * @param param A user-defined parameter to pass to the system.
  * @return handle to last evaluated entity if system was interrupted.
  */
@@ -261,16 +290,9 @@ void* ecs_get_system_binding_ctx(
 //// Module
 ////////////////////////////////////////////////////////////////////////////////
 
-/* Pipeline component is empty: components and tags in module are static */
-typedef struct FlecsSystem {
-    int32_t dummy; 
-} FlecsSystem;
-
 FLECS_API
 void FlecsSystemImport(
     ecs_world_t *world);
-
-#define FlecsSystemImportHandles(handles)
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 #include "flecs.h"
+#include "../system/system.h"
 
 #ifdef FLECS_PIPELINE
-
 #include "pipeline.h"
 
 /* Worker thread */
@@ -23,11 +23,11 @@ void* worker(void *arg) {
 
     while (!world->quit_workers) {
         ecs_entity_t old_scope = ecs_set_scope((ecs_world_t*)stage, 0);
-
-        ecs_pipeline_run(
+ 
+        ecs_run_pipeline(
             (ecs_world_t*)stage, 
             world->pipeline, 
-            world->stats.delta_time);
+            world->info.delta_time);
 
         ecs_set_scope((ecs_world_t*)stage, old_scope);
     }
@@ -57,7 +57,7 @@ void start_workers(
 
         ecs_vector_get(world->worker_stages, ecs_stage_t, i);
         stage->thread = ecs_os_thread_new(worker, stage);
-        ecs_assert(stage->thread != 0, ECS_THREAD_ERROR, NULL);
+        ecs_assert(stage->thread != 0, ECS_OPERATION_FAILED, NULL);
     }
 }
 
@@ -156,10 +156,12 @@ bool ecs_stop_threads(
     signal_workers(world);
 
     /* Join all threads with main */
-    ecs_vector_each(world->worker_stages, ecs_stage_t, stage, {
-        ecs_os_thread_join(stage->thread);
-        stage->thread = 0;
-    });
+    ecs_stage_t *stages = ecs_vector_first(world->worker_stages, ecs_stage_t);
+    int32_t i, count = ecs_vector_count(world->worker_stages);
+    for (i = 0; i < count; i ++) {
+        ecs_os_thread_join(stages[i].thread);
+        stages[i].thread = 0;
+    }
 
     world->quit_workers = false;
     ecs_assert(world->workers_running == 0, ECS_INTERNAL_ERROR, NULL);
@@ -180,24 +182,36 @@ void ecs_worker_begin(
     ecs_assert(stage_count != 0, ECS_INTERNAL_ERROR, NULL);
     
     if (stage_count == 1) {
-        ecs_staging_begin(world);
+        ecs_entity_t pipeline = world->pipeline;
+        const EcsPipelineQuery *pq = ecs_get(world, pipeline, EcsPipelineQuery);
+        ecs_assert(pq != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        ecs_pipeline_op_t *op = ecs_vector_first(pq->ops, ecs_pipeline_op_t);
+        if (!op || !op->no_staging) {
+            ecs_staging_begin(world);
+        }
     }
 }
 
-bool ecs_worker_sync(
-    ecs_world_t *world)
+int32_t ecs_worker_sync(
+    ecs_world_t *world,
+    const EcsPipelineQuery *pq,
+    ecs_iter_t *it,
+    int32_t i,
+    ecs_pipeline_op_t **op_out,
+    ecs_pipeline_op_t **last_op_out)
 {
-    flecs_stage_from_world(&world);
-
-    int32_t build_count = world->stats.pipeline_build_count_total;
     int32_t stage_count = ecs_get_stage_count(world);
     ecs_assert(stage_count != 0, ECS_INTERNAL_ERROR, NULL);
+    int32_t build_count = world->info.pipeline_build_count_total;
 
     /* If there are no threads, merge in place */
     if (stage_count == 1) {
-        ecs_staging_end(world);
+        if (!op_out[0]->no_staging) {
+            ecs_staging_end(world);
+        }
+
         ecs_pipeline_update(world, world->pipeline, false);
-        ecs_staging_begin(world);
 
     /* Synchronize all workers. The last worker to reach the sync point will
      * signal the main thread, which will perform the merge. */
@@ -205,7 +219,19 @@ bool ecs_worker_sync(
         sync_worker(world);
     }
 
-    return world->stats.pipeline_build_count_total != build_count;
+    if (build_count != world->info.pipeline_build_count_total) {
+        i = ecs_pipeline_reset_iter(world, pq, it, op_out, last_op_out);
+    } else {
+        op_out[0] ++;
+    }
+
+    if (stage_count == 1) {
+        if (!op_out[0]->no_staging) {
+            ecs_staging_begin(world);
+        }
+    }
+
+    return i;
 }
 
 void ecs_worker_end(
@@ -218,7 +244,9 @@ void ecs_worker_end(
 
     /* If there are no threads, merge in place */
     if (stage_count == 1) {
-        ecs_staging_end(world);
+        if (ecs_stage_is_readonly(world)) {
+            ecs_staging_end(world);
+        }
 
     /* Synchronize all workers. The last worker to reach the sync point will
      * signal the main thread, which will perform the merge. */
@@ -244,18 +272,24 @@ void ecs_workers_progress(
         ecs_pipeline_update(world, pipeline, true);
         ecs_entity_t old_scope = ecs_set_scope(world, 0);
         ecs_world_t *stage = ecs_get_stage(world, 0);
-
-        ecs_pipeline_run(stage, pipeline, delta_time);
+        ecs_run_pipeline(stage, pipeline, delta_time);
         ecs_set_scope(world, old_scope);
     } else {
-        int32_t i, sync_count = ecs_pipeline_update(world, pipeline, true);
+        ecs_pipeline_update(world, pipeline, true);
+
+        const EcsPipelineQuery *pq = ecs_get(world, pipeline, EcsPipelineQuery);
+        ecs_vector_t *ops = pq->ops;
+        ecs_pipeline_op_t *op = ecs_vector_first(ops, ecs_pipeline_op_t);
+        ecs_pipeline_op_t *op_last = ecs_vector_last(ops, ecs_pipeline_op_t);
 
         /* Make sure workers are running and ready */
         wait_for_workers(world);
 
         /* Synchronize n times for each op in the pipeline */
-        for (i = 0; i < sync_count; i ++) {
-            ecs_staging_begin(world);
+        for (; op <= op_last; op ++) {
+            if (!op->no_staging) {
+                ecs_staging_begin(world);
+            }
 
             /* Signal workers that they should start running systems */
             world->workers_waiting = 0;
@@ -265,22 +299,26 @@ void ecs_workers_progress(
             wait_for_sync(world);
 
             /* Merge */
-            ecs_staging_end(world);
+            if (!op->no_staging) {
+                ecs_staging_end(world);
+            }
 
-            int32_t update_count;
-            if ((update_count = ecs_pipeline_update(world, pipeline, false))) {
-                /* The number of operations in the pipeline could have changed
-                 * as result of the merge */
-                sync_count = update_count;
+            if (ecs_pipeline_update(world, pipeline, false)) {
+                /* Refetch, in case pipeline itself has moved */
+                pq = ecs_get(world, pipeline, EcsPipelineQuery);
+
+                /* Pipeline has changed, reset position in pipeline */
+                ecs_iter_t it;
+                ecs_pipeline_reset_iter(world, pq, &it, &op, &op_last);
+                op --;
             }
         }
     }
 
     if (world->measure_frame_time) {
-        world->stats.system_time_total += (FLECS_FLOAT)ecs_time_measure(&start);
+        world->info.system_time_total += (float)ecs_time_measure(&start);
     }    
 }
-
 
 /* -- Public functions -- */
 

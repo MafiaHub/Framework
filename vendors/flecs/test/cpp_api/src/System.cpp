@@ -1,10 +1,7 @@
 #include <cpp_api.h>
 
-void System_action() {
+void System_iter() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
 
     auto entity = world.entity()
         .set<Position>({10, 20})
@@ -29,11 +26,8 @@ void System_action() {
     test_int(v->y, 2);       
 }
 
-void System_action_const() {
+void System_iter_const() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
 
     auto entity = world.entity()
         .set<Position>({10, 20})
@@ -58,11 +52,8 @@ void System_action_const() {
     test_int(v->y, 2);
 }
 
-void System_action_shared() {
+void System_iter_shared() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
 
     auto base = world.entity()
         .set<Velocity>({1, 2});
@@ -75,11 +66,11 @@ void System_action_shared() {
         .set<Position>({10, 20})
         .set<Velocity>({3, 4});
 
-    world.system<Position>().signature("Velocity(self|super)")
+    world.system<Position>().expr("Velocity(self|super)")
         .iter([](flecs::iter&it, Position *p) {
             auto v = it.term<const Velocity>(2);
 
-            if (v.is_shared()) {
+            if (!it.is_owned(2)) {
                 for (auto i : it) {
                     p[i].x += v->x;
                     p[i].y += v->y;
@@ -103,11 +94,8 @@ void System_action_shared() {
     test_int(p->y, 24);   
 }
 
-void System_action_optional() {
+void System_iter_optional() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
     flecs::component<Mass>(world, "Mass");
 
     auto e1 = world.entity()
@@ -163,9 +151,6 @@ void System_action_optional() {
 void System_each() {
     flecs::world world;
 
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
-
     auto entity = world.entity()
         .set<Position>({10, 20})
         .set<Velocity>({1, 2});
@@ -186,9 +171,6 @@ void System_each() {
 void System_each_const() {
     flecs::world world;
 
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
-
     auto entity = world.entity()
         .set<Position>({10, 20})
         .set<Velocity>({1, 2});
@@ -208,9 +190,6 @@ void System_each_const() {
 
 void System_each_shared() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
 
     auto base = world.entity()
         .set<Velocity>({1, 2});
@@ -242,9 +221,6 @@ void System_each_shared() {
 
 void System_each_optional() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
     flecs::component<Mass>(world, "Mass");
 
     auto e1 = world.entity()
@@ -297,14 +273,11 @@ void System_each_optional() {
 void System_signature() {
     flecs::world world;
 
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
-
     auto entity = world.entity()
         .set<Position>({10, 20})
         .set<Velocity>({1, 2});
 
-    world.system<>().signature("Position, Velocity")
+    world.system<>().expr("Position, Velocity")
         .iter([](flecs::iter&it) {
             flecs::column<Position> p(it, 1);
             flecs::column<Velocity> v(it, 2);
@@ -329,14 +302,11 @@ void System_signature() {
 void System_signature_const() {
     flecs::world world;
 
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
-
     auto entity = world.entity()
         .set<Position>({10, 20})
         .set<Velocity>({1, 2});
 
-    world.system<>().signature("Position, [in] Velocity")
+    world.system<>().expr("Position, [in] Velocity")
         .iter([](flecs::iter&it) {
             flecs::column<Position> p(it, 1);
             flecs::column<const Velocity> v(it, 2);
@@ -361,9 +331,6 @@ void System_signature_const() {
 void System_signature_shared() {
     flecs::world world;
 
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
-
     auto base = world.entity()
         .set<Velocity>({1, 2});
 
@@ -375,12 +342,12 @@ void System_signature_shared() {
         .set<Position>({10, 20})
         .set<Velocity>({3, 4});
 
-    world.system<>().signature("Position, [in] Velocity(self|super)")
+    world.system<>().expr("Position, [in] Velocity(self|super)")
         .iter([](flecs::iter&it) {
             flecs::column<Position> p(it, 1);
             flecs::column<const Velocity> v(it, 2);
 
-            if (v.is_shared()) {
+            if (!it.is_owned(2)) {
                 for (auto i : it) {
                     p[i].x += v->x;
                     p[i].y += v->y;
@@ -406,9 +373,6 @@ void System_signature_shared() {
 
 void System_signature_optional() {
     flecs::world world;
-
-    world.component<Position>("Position");
-    world.component<Velocity>("Velocity");
     flecs::component<Mass>(world, "Mass");
 
     auto e1 = world.entity()
@@ -427,13 +391,13 @@ void System_signature_optional() {
     auto e4 = world.entity()
         .set<Position>({70, 80});
 
-    world.system<>().signature("Position, ?Velocity, ?Mass")
+    world.system<>().expr("Position, ?Velocity, ?Mass")
         .iter([](flecs::iter& it) {
             flecs::column<Position> p(it, 1);
             flecs::column<Velocity> v(it, 2);
             flecs::column<Mass> m(it, 3);
 
-            if (v.is_set() && m.is_set()) {
+            if (it.is_set(2) && it.is_set(3)) {
                 for (auto i : it) {
                     p[i].x += v[i].x * m[i].value;
                     p[i].y += v[i].y * m[i].value;
@@ -516,24 +480,6 @@ void System_empty_signature() {
 
 struct MyTag { };
 
-void System_action_tag() {
-    flecs::world world;
-
-    int invoked = 0;
-
-    world.system<MyTag>()
-        .iter([&](flecs::iter it, MyTag*) {
-            invoked ++;
-        });
-
-    world.entity()
-        .add<MyTag>();
-
-    world.progress();
-
-    test_int(invoked, 1);
-}
-
 void System_iter_tag() {
     flecs::world world;
 
@@ -558,7 +504,7 @@ void System_each_tag() {
     int invoked = 0;
 
     world.system<MyTag>()
-        .each([&](flecs::entity e, MyTag&) {
+        .each([&](flecs::entity e, MyTag) {
             invoked ++;
         });
 
@@ -574,8 +520,8 @@ void System_system_from_id() {
     flecs::world world;
 
     uint32_t invoked = 0;
+
     flecs::entity sys = world.system<>()
-        .kind(0)
         .iter([&](flecs::iter& it) {
             invoked ++;
         });
@@ -754,9 +700,6 @@ void System_get_query() {
 void System_add_from_each() {
     flecs::world world;
 
-    world.component<Position>();
-    world.component<Velocity>();
-
     auto e1 = world.entity().set<Position>({0, 0});
     auto e2 = world.entity().set<Position>({1, 0});
     auto e3 = world.entity().set<Position>({2, 0});
@@ -777,9 +720,6 @@ void System_add_from_each() {
 
 void System_delete_from_each() {
     flecs::world world;
-
-    world.component<Position>();
-    world.component<Velocity>();
 
     auto e1 = world.entity().set<Position>({0, 0});
     auto e2 = world.entity().set<Position>({1, 0});
@@ -850,9 +790,6 @@ void System_new_from_each() {
 void System_add_from_iter() {
     flecs::world world;
 
-    world.component<Position>();
-    world.component<Velocity>();
-
     auto e1 = world.entity().set<Position>({0, 0});
     auto e2 = world.entity().set<Position>({1, 0});
     auto e3 = world.entity().set<Position>({2, 0});
@@ -874,9 +811,6 @@ void System_add_from_iter() {
 
 void System_delete_from_iter() {
     flecs::world world;
-
-    world.component<Position>();
-    world.component<Velocity>();
 
     auto e1 = world.entity().set<Position>({0, 0});
     auto e2 = world.entity().set<Position>({1, 0});
@@ -1116,7 +1050,7 @@ void System_update_rate_filter() {
 void System_default_ctor() {
     flecs::world world;
 
-    flecs::system<Position> sys_var;
+    flecs::system sys_var;
 
     int count = 0;
     auto sys = world.system<Position>()
@@ -1205,7 +1139,7 @@ void System_custom_pipeline() {
     auto PreFrame = world.entity();
     auto OnFrame = world.entity();
     auto PostFrame = world.entity();
-
+    
     flecs::pipeline pip = world.pipeline("FooPipeline")
         .add(PreFrame)
         .add(OnFrame)
@@ -1237,6 +1171,7 @@ void System_custom_pipeline() {
     test_int(count, 0);
 
     world.set_pipeline(pip);
+
     world.progress();
 
     test_int(count, 3);
@@ -1260,4 +1195,598 @@ void System_system_w_self() {
     sys.run();
 
     test_bool(invoked, true);
+}
+
+void System_instanced_query_w_singleton_each() {
+    flecs::world ecs;
+
+    ecs.set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().set<Position>({40, 50}); e4.set<Self>({e4});
+    auto e5 = ecs.entity().set<Position>({50, 60}); e5.set<Self>({e5});
+
+    e4.add<Tag>();
+    e5.add<Tag>();
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .arg(3).singleton()
+        .instanced()
+        .each([&](flecs::entity e, Self& s, Position&p, const Velocity& v) {
+            test_assert(e == s.value);
+            p.x += v.x;
+            p.y += v.y;
+            count ++;
+        });
+
+    s.run();
+
+    test_int(count, 5);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+}
+
+void System_instanced_query_w_base_each() {
+    flecs::world ecs;
+
+    auto base = ecs.entity().set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().is_a(base).set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().is_a(base).set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().is_a(base).set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().is_a(base).set<Position>({40, 50}).add<Tag>(); e4.set<Self>({e4});
+    auto e5 = ecs.entity().is_a(base).set<Position>({50, 60}).add<Tag>(); e5.set<Self>({e5});
+    auto e6 = ecs.entity().set<Position>({60, 70}).set<Velocity>({2, 3}); e6.set<Self>({e6});
+    auto e7 = ecs.entity().set<Position>({70, 80}).set<Velocity>({4, 5}); e7.set<Self>({e7});
+
+    int32_t count = 0;
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .instanced()
+        .each([&](flecs::entity e, Self& s, Position&p, const Velocity& v) {
+            test_assert(e == s.value);
+            p.x += v.x;
+            p.y += v.y;
+            count ++;
+        });
+
+    s.run();
+
+    test_int(count, 7);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+
+    test_assert(e6.get([](const Position& p) {
+        test_int(p.x, 62);
+        test_int(p.y, 73);
+    }));
+
+    test_assert(e7.get([](const Position& p) {
+        test_int(p.x, 74);
+        test_int(p.y, 85);
+    }));
+}
+
+void System_un_instanced_query_w_singleton_each() {
+    flecs::world ecs;
+
+    ecs.set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().set<Position>({40, 50}); e4.set<Self>({e4});
+    auto e5 = ecs.entity().set<Position>({50, 60}); e5.set<Self>({e5});
+
+    e4.add<Tag>();
+    e5.add<Tag>();
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .arg(3).singleton()
+        .each([&](flecs::entity e, Self& s, Position&p, const Velocity& v) {
+            test_assert(e == s.value);
+            p.x += v.x;
+            p.y += v.y;
+            count ++;
+        });
+
+    s.run();
+
+    test_int(count, 5);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+}
+
+void System_un_instanced_query_w_base_each() {
+    flecs::world ecs;
+
+    auto base = ecs.entity().set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().is_a(base).set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().is_a(base).set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().is_a(base).set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().is_a(base).set<Position>({40, 50}).add<Tag>(); e4.set<Self>({e4});
+    auto e5 = ecs.entity().is_a(base).set<Position>({50, 60}).add<Tag>(); e5.set<Self>({e5});
+    auto e6 = ecs.entity().set<Position>({60, 70}).set<Velocity>({2, 3}); e6.set<Self>({e6});
+    auto e7 = ecs.entity().set<Position>({70, 80}).set<Velocity>({4, 5}); e7.set<Self>({e7});
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .each([&](flecs::entity e, Self& s, Position&p, const Velocity& v) {
+            test_assert(e == s.value);
+            p.x += v.x;
+            p.y += v.y;
+            count ++;
+        });
+
+    s.run();
+
+    test_int(count, 7);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+
+    test_assert(e6.get([](const Position& p) {
+        test_int(p.x, 62);
+        test_int(p.y, 73);
+    }));
+
+    test_assert(e7.get([](const Position& p) {
+        test_int(p.x, 74);
+        test_int(p.y, 85);
+    }));
+}
+
+void System_instanced_query_w_singleton_iter() {
+    flecs::world ecs;
+
+    ecs.set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().set<Position>({40, 50}); e4.set<Self>({e4});
+    auto e5 = ecs.entity().set<Position>({50, 60}); e5.set<Self>({e5});
+
+    e4.add<Tag>();
+    e5.add<Tag>();
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .arg(3).singleton()
+        .instanced()
+        .iter([&](flecs::iter it, Self* s, Position* p, const Velocity* v) {
+            test_assert(it.count() > 1);
+
+            for (auto i : it) {
+                p[i].x += v->x;
+                p[i].y += v->y;
+                test_assert(it.entity(i) == s[i].value);
+                count ++;
+            }
+        });
+    
+    s.run();
+
+    test_int(count, 5);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+}
+
+void System_instanced_query_w_base_iter() {
+    flecs::world ecs;
+
+    auto base = ecs.entity().set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().is_a(base).set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().is_a(base).set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().is_a(base).set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().is_a(base).set<Position>({40, 50}).add<Tag>(); e4.set<Self>({e4});
+    auto e5 = ecs.entity().is_a(base).set<Position>({50, 60}).add<Tag>(); e5.set<Self>({e5});
+    auto e6 = ecs.entity().set<Position>({60, 70}).set<Velocity>({2, 3}); e6.set<Self>({e6});
+    auto e7 = ecs.entity().set<Position>({70, 80}).set<Velocity>({4, 5}); e7.set<Self>({e7});
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .instanced()
+        .iter([&](flecs::iter it, Self* s, Position* p, const Velocity* v) {
+            test_assert(it.count() > 1);
+
+            for (auto i : it) {
+                if (it.is_owned(3)) {
+                    p[i].x += v[i].x;
+                    p[i].y += v[i].y;
+                } else {
+                    p[i].x += v->x;
+                    p[i].y += v->y;
+                }
+
+                test_assert(it.entity(i) == s[i].value);
+                count ++;
+            }
+        });
+
+    s.run();
+
+    test_int(count, 7);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+
+    test_assert(e6.get([](const Position& p) {
+        test_int(p.x, 62);
+        test_int(p.y, 73);
+    }));
+
+    test_assert(e7.get([](const Position& p) {
+        test_int(p.x, 74);
+        test_int(p.y, 85);
+    }));
+}
+
+void System_un_instanced_query_w_singleton_iter() {
+    flecs::world ecs;
+
+    ecs.set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().set<Position>({40, 50}); e4.set<Self>({e4});
+    auto e5 = ecs.entity().set<Position>({50, 60}); e5.set<Self>({e5});
+
+    e4.add<Tag>();
+    e5.add<Tag>();
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .arg(3).singleton()
+        .iter([&](flecs::iter it, Self* s, Position* p, const Velocity* v) {
+            test_assert(it.count() == 1);
+
+            for (auto i : it) {
+                p[i].x += v[i].x;
+                p[i].y += v[i].y;
+                test_assert(it.entity(i) == s[i].value);
+                count ++;
+            }
+        });
+
+    s.run();
+
+    test_int(count, 5);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+}
+
+void System_un_instanced_query_w_base_iter() {
+    flecs::world ecs;
+
+    auto base = ecs.entity().set<Velocity>({1, 2});
+
+    auto e1 = ecs.entity().is_a(base).set<Position>({10, 20}); e1.set<Self>({e1});
+    auto e2 = ecs.entity().is_a(base).set<Position>({20, 30}); e2.set<Self>({e2});
+    auto e3 = ecs.entity().is_a(base).set<Position>({30, 40}); e3.set<Self>({e3});
+    auto e4 = ecs.entity().is_a(base).set<Position>({40, 50}).add<Tag>(); e4.set<Self>({e4});
+    auto e5 = ecs.entity().is_a(base).set<Position>({50, 60}).add<Tag>(); e5.set<Self>({e5});
+    auto e6 = ecs.entity().set<Position>({60, 70}).set<Velocity>({2, 3}); e6.set<Self>({e6});
+    auto e7 = ecs.entity().set<Position>({70, 80}).set<Velocity>({4, 5}); e7.set<Self>({e7});
+
+    int32_t count = 0;
+
+    auto s = ecs.system<Self, Position, const Velocity>()
+        .iter([&](flecs::iter it, Self* s, Position* p, const Velocity* v) {
+            for (auto i : it) {
+                p[i].x += v[i].x;
+                p[i].y += v[i].y;
+                test_assert(it.entity(i) == s[i].value);
+                count ++;
+            }
+        });
+
+    s.run();
+
+    test_int(count, 7);
+
+    test_assert(e1.get([](const Position& p) {
+        test_int(p.x, 11);
+        test_int(p.y, 22);
+    }));
+
+    test_assert(e2.get([](const Position& p) {
+        test_int(p.x, 21);
+        test_int(p.y, 32);
+    }));
+
+    test_assert(e3.get([](const Position& p) {
+        test_int(p.x, 31);
+        test_int(p.y, 42);
+    }));
+
+    test_assert(e4.get([](const Position& p) {
+        test_int(p.x, 41);
+        test_int(p.y, 52);
+    }));
+
+    test_assert(e5.get([](const Position& p) {
+        test_int(p.x, 51);
+        test_int(p.y, 62);
+    }));
+
+    test_assert(e6.get([](const Position& p) {
+        test_int(p.x, 62);
+        test_int(p.y, 73);
+    }));
+
+    test_assert(e7.get([](const Position& p) {
+        test_int(p.x, 74);
+        test_int(p.y, 85);
+    }));
+}
+
+void System_create_w_no_template_args() {
+    flecs::world world;
+
+    auto entity = world.entity()
+        .set<Position>({10, 20});
+
+    int32_t count = 0;
+
+    auto s = world.system()
+        .term<Position>()
+        .each([&](flecs::entity e) {
+            test_assert(e == entity);
+            count ++;
+        });
+
+    s.run();
+
+    test_int(count, 1);
+}
+
+struct PipelineType {
+    struct PreUpdate { };
+    struct OnUpdate { };
+};
+
+void System_system_w_type_kind() {
+    flecs::world world;
+
+    auto pipeline = world.pipeline("MyPipeline")
+        .add<PipelineType::PreUpdate>()
+        .add<PipelineType::OnUpdate>();
+
+    world.set_pipeline(pipeline);
+
+    auto entity = world.entity().add<Tag>();
+
+    int32_t s1_count = 0;
+    int32_t s2_count = 0;
+
+    world.system<Tag>()
+        .kind<PipelineType::OnUpdate>()
+        .each([&](flecs::entity e, Tag) {
+            test_assert(e == entity);
+            test_int(s1_count, 0);
+            test_int(s2_count, 1);
+            s1_count ++;
+        });
+
+    world.system<Tag>()
+        .kind<PipelineType::PreUpdate>()
+        .each([&](flecs::entity e, Tag) {
+            test_assert(e == entity);
+            test_int(s1_count, 0);
+            s2_count ++;
+        });
+
+    world.progress();
+    
+    test_int(s1_count, 1);
+    test_int(s2_count, 1);
+}
+
+void System_system_w_type_kind_type_pipeline() {
+    flecs::world world;
+
+    world.pipeline<PipelineType>()
+        .add<PipelineType::PreUpdate>()
+        .add<PipelineType::OnUpdate>();
+
+    world.set_pipeline<PipelineType>();
+
+    auto entity = world.entity().add<Tag>();
+
+    int32_t s1_count = 0;
+    int32_t s2_count = 0;
+
+    world.system<Tag>()
+        .kind<PipelineType::OnUpdate>()
+        .each([&](flecs::entity e, Tag) {
+            test_assert(e == entity);
+            test_int(s1_count, 0);
+            test_int(s2_count, 1);
+            s1_count ++;
+        });
+
+    world.system<Tag>()
+        .kind<PipelineType::PreUpdate>()
+        .each([&](flecs::entity e, Tag) {
+            test_assert(e == entity);
+            test_int(s1_count, 0);
+            s2_count ++;
+        });
+
+    world.progress();
+    
+    test_int(s1_count, 1);
+    test_int(s2_count, 1);
 }

@@ -114,7 +114,8 @@ void WorldFactory_system_w_expr() {
     ecs.component<Position>();
     ecs.component<Velocity>();
 
-    auto s = ecs.system<>("MySystem", "Position, [in] Velocity")
+    auto s = ecs.system<>("MySystem")
+        .expr("Position, [in] Velocity")
         .iter([](flecs::iter it) {
             flecs::column<Position> p(it, 1);
             flecs::column<const Velocity> v(it, 2);
@@ -164,7 +165,7 @@ void WorldFactory_query_w_expr() {
     ecs.component<Position>();
     ecs.component<Velocity>();
 
-    auto q = ecs.query<>("Position, [in] Velocity");
+    auto q = ecs.query_builder<>().expr("Position, [in] Velocity").build();
 
     auto e = ecs.entity()
         .set<Position>({10, 20})

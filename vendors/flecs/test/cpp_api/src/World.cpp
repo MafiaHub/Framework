@@ -154,6 +154,44 @@ void World_multi_world_module() {
     test_int(ns::namespace_module::system_invoke_count, 2);
 }
 
+void World_multi_world_recycled_component() {
+    flecs::entity c;
+    {
+        flecs::world ecs;
+        for (int i = 0; i < ECS_HI_COMPONENT_ID; i ++) {
+            ecs_new_low_id(ecs);
+        }
+
+        ecs.entity().destruct();
+        c = ecs.component<Position>();
+    }
+    {
+        flecs::world ecs;
+        test_assert((c == ecs.component<Position>()));
+    }
+}
+
+void World_multi_world_recycled_component_different_generation() {
+    flecs::entity c;
+    {
+        flecs::world ecs;
+        for (int i = 0; i < ECS_HI_COMPONENT_ID; i ++) {
+            ecs_new_low_id(ecs);
+        }
+
+        ecs.entity().destruct();
+        c = ecs.component<Position>();
+    }
+    {
+        flecs::world ecs;
+        for (int i = 0; i < ECS_HI_COMPONENT_ID; i ++) {
+            ecs_new_low_id(ecs);
+        }
+
+        ecs.entity().destruct();
+        test_assert((c == ecs.component<Position>()));
+    }
+}
 
 void World_type_id() {
     flecs::world ecs;
@@ -164,9 +202,10 @@ void World_type_id() {
 }
 
 void World_different_comp_same_name() {
+    install_test_abort();
+
     flecs::world ecs;
 
-    install_test_abort();
     test_expect_abort();
 
     ecs.component<Position>("Position");
@@ -235,9 +274,10 @@ void World_reregister_namespace() {
 }
 
 void World_reregister_after_reset_different_name() {
+    install_test_abort();
+
     flecs::world ecs;
 
-    install_test_abort();
     test_expect_abort();    
 
     ecs.component<Position>("Position");
@@ -246,6 +286,23 @@ void World_reregister_after_reset_different_name() {
     flecs::_::cpp_type<Position>::reset();
 
     ecs.component<Position>("Velocity");
+}
+
+template <typename T>
+struct Tmp { int32_t v; };
+struct Test { };
+
+void World_register_short_template() {
+    flecs::world ecs;
+
+    auto c = ecs.component<Tmp<Test>>();
+    test_assert(c != 0);
+    test_str(c.name(), "Tmp<Test>");
+
+    const EcsComponent *ptr = c.get<flecs::Component>();
+    test_assert(ptr != NULL);
+    test_int(ptr->size, 4);
+    test_int(ptr->alignment, 4);
 }
 
 void World_reimport() {
@@ -365,6 +422,79 @@ void World_count() {
     ecs.entity().add<Position>().add<Velocity>();
 
     test_int(ecs.count<Position>(), 6);
+}
+
+void World_count_id() {
+    flecs::world ecs;
+
+    auto ent = ecs.entity();
+
+    test_int(ecs.count(ent), 0);
+
+    ecs.entity().add(ent);
+    ecs.entity().add(ent);
+    ecs.entity().add(ent);
+    ecs.entity().add(ent).add<Mass>();
+    ecs.entity().add(ent).add<Mass>();
+    ecs.entity().add(ent).add<Velocity>();
+
+    test_int(ecs.count(ent), 6);
+}
+
+void World_count_pair() {
+    flecs::world ecs;
+
+    auto parent = ecs.entity();
+
+    test_int(ecs.count(flecs::ChildOf, parent), 0);
+
+    ecs.entity().add(flecs::ChildOf, parent);
+    ecs.entity().add(flecs::ChildOf, parent);
+    ecs.entity().add(flecs::ChildOf, parent);
+    ecs.entity().add(flecs::ChildOf, parent).add<Mass>();
+    ecs.entity().add(flecs::ChildOf, parent).add<Mass>();
+    ecs.entity().add(flecs::ChildOf, parent).add<Velocity>();
+
+    test_int(ecs.count(flecs::ChildOf, parent), 6);
+}
+
+void World_count_pair_type_id() {
+    flecs::world ecs;
+
+    struct Rel { };
+
+    auto parent = ecs.entity();
+
+    test_int(ecs.count<Rel>(parent), 0);
+
+    ecs.entity().add<Rel>(parent);
+    ecs.entity().add<Rel>(parent);
+    ecs.entity().add<Rel>(parent);
+    ecs.entity().add<Rel>(parent).add<Mass>();
+    ecs.entity().add<Rel>(parent).add<Mass>();
+    ecs.entity().add<Rel>(parent).add<Velocity>();
+
+    test_int(ecs.count<Rel>(parent), 6);
+}
+
+void World_count_pair_id() {
+    flecs::world ecs;
+
+    struct Rel { };
+
+    auto rel = ecs.entity();
+    auto parent = ecs.entity();
+
+    test_int(ecs.count(rel, parent), 0);
+
+    ecs.entity().add(rel, parent);
+    ecs.entity().add(rel, parent);
+    ecs.entity().add(rel, parent);
+    ecs.entity().add(rel, parent).add<Mass>();
+    ecs.entity().add(rel, parent).add<Mass>();
+    ecs.entity().add(rel, parent).add<Velocity>();
+
+    test_int(ecs.count(rel, parent), 6);
 }
 
 void World_staged_count() {
@@ -629,6 +759,64 @@ void World_with_scope() {
     test_int(count, 3);
 }
 
+struct ParentScope { };
+
+void World_with_scope_type() {
+    flecs::world ecs;
+
+    ecs.scope<ParentScope>([&]{
+        ecs.entity("Child");
+    });
+
+    auto parent = ecs.lookup("ParentScope");
+    test_assert(parent != 0);
+
+    auto child = ecs.lookup("ParentScope::Child");
+    test_assert(child != 0);
+    test_assert(child == parent.lookup("Child"));
+}
+
+void World_with_scope_type_staged() {
+    flecs::world ecs;
+
+    flecs::entity e;
+    flecs::world stage = ecs.get_stage(0);
+    
+    ecs.staging_begin();
+    stage.scope<ParentScope>([&]{
+        e = stage.entity("Child");
+    });
+    ecs.staging_end();
+
+    test_assert( e.has(flecs::ChildOf, ecs.id<ParentScope>()) );
+
+    auto parent = ecs.lookup("ParentScope");
+    test_assert(parent != 0);
+
+    auto child = ecs.lookup("ParentScope::Child");
+    test_assert(child != 0);
+    test_assert(child == parent.lookup("Child"));
+}
+
+void World_with_scope_no_lambda() {
+    flecs::world ecs;
+
+    auto parent = ecs.entity("Parent");
+    auto child = ecs.scope(parent).entity("Child");
+
+    test_assert(child.has(flecs::ChildOf, parent));
+    test_assert(ecs.get_scope() == 0);
+}
+
+void World_with_scope_type_no_lambda() {
+    flecs::world ecs;
+
+    auto child = ecs.scope<ParentScope>().entity("Child");
+
+    test_assert(child.has(flecs::ChildOf, ecs.id<ParentScope>()));
+    test_assert(ecs.get_scope() == 0);
+}
+
 void World_with_tag_nested() {
     flecs::world ecs;
 
@@ -778,8 +966,7 @@ void World_template_component_w_same_namespace_name_and_namespaced_arg() {
 void World_entity_as_tag() {
     flecs::world ecs;
 
-    auto e = ecs.entity()
-        .component<Tag>();
+    auto e = ecs.entity<Tag>();
     test_assert(e.id() != 0);
 
     auto t = ecs.component<Tag>();
@@ -798,8 +985,7 @@ void World_entity_as_tag() {
 void World_entity_w_name_as_tag() {
     flecs::world ecs;
 
-    auto e = ecs.entity("Foo")
-        .component<Tag>();
+    auto e = ecs.entity<Tag>("Foo");
     test_assert(e.id() != 0);
 
     auto t = ecs.component<Tag>();
@@ -818,8 +1004,7 @@ void World_entity_w_name_as_tag() {
 void World_entity_as_component() {
     flecs::world ecs;
 
-    auto e = ecs.entity()
-        .component<Position>();
+    auto e = ecs.entity<Position>();
     test_assert(e.id() != 0);
 
     auto t = ecs.component<Position>();
@@ -838,8 +1023,7 @@ void World_entity_as_component() {
 void World_entity_w_name_as_component() {
     flecs::world ecs;
 
-    auto e = ecs.entity("Foo")
-        .component<Position>();
+    auto e = ecs.entity<Position>("Foo");
     test_assert(e.id() != 0);
 
     auto t = ecs.component<Position>();
@@ -857,13 +1041,11 @@ void World_entity_w_name_as_component() {
 
 void World_entity_as_component_2_worlds() {
     flecs::world ecs_1;
-    auto e_1 = ecs_1.entity()
-        .component<Position>();
+    auto e_1 = ecs_1.entity<Position>();
     test_assert(e_1.id() != 0);
 
     flecs::world ecs_2;
-    auto e_2 = ecs_2.entity()
-        .component<Position>();
+    auto e_2 = ecs_2.entity<Position>();
     test_assert(e_2.id() != 0);
 
     test_assert(e_1 == e_2);
@@ -877,21 +1059,17 @@ struct Parent {
 
 void World_entity_as_namespaced_component_2_worlds() {
     flecs::world ecs_1;
-    auto e_1 = ecs_1.entity()
-        .component<Parent>();
+    auto e_1 = ecs_1.entity<Parent>();
     test_assert(e_1.id() != 0);
 
-    auto e_1_1 = ecs_1.entity()
-        .component<Parent::Child>();
+    auto e_1_1 = ecs_1.entity<Parent::Child>();
     test_assert(e_1_1.id() != 0);
 
     flecs::world ecs_2;
-    auto e_2 = ecs_2.entity()
-        .component<Parent>();
+    auto e_2 = ecs_2.entity<Parent>();
     test_assert(e_2.id() != 0);
 
-    auto e_2_1 = ecs_2.entity()
-        .component<Parent::Child>();
+    auto e_2_1 = ecs_2.entity<Parent::Child>();
     test_assert(e_2_1.id() != 0);
 
     test_assert(e_1 == e_2);
@@ -905,15 +1083,13 @@ void World_entity_as_namespaced_component_2_worlds() {
 
 void World_entity_as_component_2_worlds_implicit_namespaced() {
     flecs::world ecs_1;
-    auto e_1 = ecs_1.entity()
-        .component<Parent>();
+    auto e_1 = ecs_1.entity<Parent>();
     test_assert(e_1.id() != 0);
 
     ecs_1.entity().add<Parent::Child>();
 
     flecs::world ecs_2;
-    auto e_2 = ecs_2.entity()
-        .component<Parent>();
+    auto e_2 = ecs_2.entity<Parent>();
     test_assert(e_2.id() != 0);
 
     ecs_2.entity().add<Parent::Child>();
@@ -931,36 +1107,10 @@ struct PositionDerived : Position {
     PositionDerived(float x, float y) : Position{x, y} { }
 };
 
-void World_component_as_component() {
-    flecs::world ecs;
-
-    auto e = ecs.component<Position>()
-        .component<PositionDerived>();
-    test_assert(e.id() != 0);
-
-    auto t = ecs.component<Position>();
-    test_assert(t.id() != 0);
-    test_assert(e == t);
-
-    auto e2 = ecs.entity()
-        .set<PositionDerived>({10, 20});
-
-    test_bool(e2.has<Position>(), true);
-    test_bool(e2.has<PositionDerived>(), true);
-
-    const Position *p = e2.get<Position>();
-    test_assert(p != NULL);
-    test_int(p->x, 10);
-    test_int(p->y, 20);
-
-    test_str(e.name(), "Position");
-}
-
 void World_type_as_component() {
     flecs::world ecs;
 
-    auto e = ecs.type()
-        .component<Position>();
+    auto e = ecs.type<Position>();
     test_assert(e.id() != 0);
 
     auto t = ecs.component<Position>();
@@ -978,8 +1128,7 @@ void World_type_as_component() {
 void World_type_w_name_as_component() {
     flecs::world ecs;
 
-    auto e = ecs.type("Foo")
-        .component<Position>();
+    auto e = ecs.type<Position>("Foo");
     test_assert(e.id() != 0);
 
     auto t = ecs.component<Position>();
@@ -992,4 +1141,392 @@ void World_type_w_name_as_component() {
     test_bool(e2.has<Position>(), true);
 
     test_str(t.name(), "Foo");
+}
+
+void World_delete_with_id() {
+    flecs::world ecs;
+
+    flecs::id tag = ecs.entity();
+    auto e_1 = ecs.entity().add(tag);
+    auto e_2 = ecs.entity().add(tag);
+    auto e_3 = ecs.entity().add(tag);
+
+    ecs.delete_with(tag);
+
+    test_assert(!e_1.is_alive());
+    test_assert(!e_2.is_alive());
+    test_assert(!e_3.is_alive());
+}
+
+void World_delete_with_type() {
+    flecs::world ecs;
+
+    auto e_1 = ecs.entity().add<Tag>();
+    auto e_2 = ecs.entity().add<Tag>();
+    auto e_3 = ecs.entity().add<Tag>();
+
+    ecs.delete_with<Tag>();
+
+    test_assert(!e_1.is_alive());
+    test_assert(!e_2.is_alive());
+    test_assert(!e_3.is_alive());
+}
+
+void World_delete_with_pair() {
+    flecs::world ecs;
+
+    flecs::id rel = ecs.entity();
+    flecs::id obj = ecs.entity();
+    auto e_1 = ecs.entity().add(rel, obj);
+    auto e_2 = ecs.entity().add(rel, obj);
+    auto e_3 = ecs.entity().add(rel, obj);
+
+    ecs.delete_with(rel, obj);
+
+    test_assert(!e_1.is_alive());
+    test_assert(!e_2.is_alive());
+    test_assert(!e_3.is_alive());
+}
+
+void World_delete_with_pair_type() {
+    flecs::world ecs;
+
+    struct Rel { };
+    struct Obj { };
+
+    auto e_1 = ecs.entity().add<Rel, Obj>();
+    auto e_2 = ecs.entity().add<Rel, Obj>();
+    auto e_3 = ecs.entity().add<Rel, Obj>();
+
+    ecs.delete_with<Rel, Obj>();
+
+    test_assert(!e_1.is_alive());
+    test_assert(!e_2.is_alive());
+    test_assert(!e_3.is_alive());
+}
+
+void World_remove_all_id() {
+    flecs::world ecs;
+
+    flecs::id tag_a = ecs.entity();
+    flecs::id tag_b = ecs.entity();
+    auto e_1 = ecs.entity().add(tag_a);
+    auto e_2 = ecs.entity().add(tag_a);
+    auto e_3 = ecs.entity().add(tag_a).add(tag_b);
+
+    ecs.remove_all(tag_a);
+
+    test_assert(e_1.is_alive());
+    test_assert(e_2.is_alive());
+    test_assert(e_3.is_alive());
+
+    test_assert(!e_1.has(tag_a));
+    test_assert(!e_2.has(tag_a));
+    test_assert(!e_3.has(tag_a));
+    
+    test_assert(e_3.has(tag_b));
+}
+
+void World_remove_all_type() {
+    flecs::world ecs;
+
+    auto e_1 = ecs.entity().add<Position>();
+    auto e_2 = ecs.entity().add<Position>();
+    auto e_3 = ecs.entity().add<Position>().add<Velocity>();
+
+    ecs.remove_all<Position>();
+
+    test_assert(e_1.is_alive());
+    test_assert(e_2.is_alive());
+    test_assert(e_3.is_alive());
+
+    test_assert(!e_1.has<Position>());
+    test_assert(!e_2.has<Position>());
+    test_assert(!e_3.has<Position>());
+    
+    test_assert(e_3.has<Velocity>());
+}
+
+void World_remove_all_pair() {
+    flecs::world ecs;
+
+    flecs::id rel = ecs.entity();
+    flecs::id obj_a = ecs.entity();
+    flecs::id obj_b = ecs.entity();
+    auto e_1 = ecs.entity().add(rel, obj_a);
+    auto e_2 = ecs.entity().add(rel, obj_a);
+    auto e_3 = ecs.entity().add(rel, obj_a).add(rel, obj_b);
+
+    ecs.remove_all(rel, obj_a);
+
+    test_assert(e_1.is_alive());
+    test_assert(e_2.is_alive());
+    test_assert(e_3.is_alive());
+
+    test_assert(!e_1.has(rel, obj_a));
+    test_assert(!e_2.has(rel, obj_a));
+    test_assert(!e_3.has(rel, obj_a));
+    
+    test_assert(e_3.has(rel, obj_b));
+}
+
+void World_remove_all_pair_type() {
+    flecs::world ecs;
+
+    struct Rel { };
+    struct ObjA { };
+    struct ObjB { };
+
+    auto e_1 = ecs.entity().add<Rel, ObjA>();
+    auto e_2 = ecs.entity().add<Rel, ObjA>();
+    auto e_3 = ecs.entity().add<Rel, ObjA>().add<Rel, ObjB>();
+
+    ecs.remove_all<Rel, ObjA>();
+
+    test_assert(e_1.is_alive());
+    test_assert(e_2.is_alive());
+    test_assert(e_3.is_alive());
+
+    test_assert((!e_1.has<Rel, ObjA>()));
+    test_assert((!e_2.has<Rel, ObjA>()));
+    test_assert((!e_3.has<Rel, ObjA>()));
+    
+    test_assert((!e_1.has<Rel, ObjB>()));
+    test_assert((!e_2.has<Rel, ObjB>()));
+    test_assert((e_3.has<Rel, ObjB>()));
+}
+
+void World_get_scope() {
+    flecs::world ecs;
+
+    auto e = ecs.entity("scope");
+
+    ecs.set_scope(e);
+
+    auto s = ecs.get_scope();
+    test_assert(s == e);
+    test_str(s.name(), "scope");
+}
+
+void World_get_scope_type() {
+    flecs::world ecs;
+
+    ecs.set_scope<ParentScope>();
+
+    auto s = ecs.get_scope();
+    test_assert(s == ecs.id<ParentScope>());
+    test_str(s.name(), "ParentScope");
+}
+
+struct Outer
+{
+    struct Inner { };
+};
+
+void World_register_namespace_after_component() {
+    flecs::world ecs;
+    auto inn = ecs.component<Outer::Inner>();
+    auto out = ecs.component<Outer>();
+
+    test_str(inn.path().c_str(), "::Outer::Inner");
+    test_str(out.path().c_str(), "::Outer");
+
+    const char *inn_sym = ecs_get_symbol(ecs, inn);
+    const char *out_sym = ecs_get_symbol(ecs, out);
+
+    test_str(inn_sym, "Outer.Inner");
+    test_str(out_sym, "Outer");
+}
+
+void World_is_alive() {
+    flecs::world ecs;
+
+    auto e = ecs.entity();
+
+    test_bool(ecs.is_alive(e), true);
+    test_bool(ecs.is_alive(1000), false);
+
+    e.destruct();
+
+    test_bool(ecs.is_alive(e), false);
+}
+
+void World_is_valid() {
+    flecs::world ecs;
+
+    auto e = ecs.entity();
+
+    test_bool(ecs.is_valid(e), true);
+    test_bool(ecs.is_valid(1000), true);
+    test_bool(ecs.is_valid(0), false);
+
+    e.destruct();
+
+    test_bool(ecs.is_valid(e), false);
+}
+
+void World_exists() {
+    flecs::world ecs;
+
+    auto e = ecs.entity();
+
+    test_bool(ecs.exists(e), true);
+    test_bool(ecs.exists(1000), false);
+}
+
+void World_get_alive() {
+    flecs::world ecs;
+
+    auto e_1 = ecs.entity();
+    auto e_no_gen = flecs::strip_generation(e_1);
+    test_assert(e_1 == e_no_gen);
+    e_1.destruct();
+
+    auto e_2 = ecs.entity();
+    test_assert(e_1 != e_2);
+    test_assert(e_no_gen == flecs::strip_generation(e_2));
+
+    test_assert(ecs.get_alive(e_no_gen) == e_2);
+}
+
+void World_ensure() {
+    flecs::world ecs;
+
+    auto e_1 = ecs.entity();
+    e_1.destruct();
+    test_assert(!e_1.is_alive());
+
+    auto e_2 = ecs.entity();
+    test_assert(e_1 != e_2);
+    test_assert(e_1 == flecs::strip_generation(e_2));
+    e_2.destruct();
+    test_assert(!e_2.is_alive());
+
+    auto e_3 = ecs.ensure(e_2);
+    test_assert(e_2 == e_3);
+    test_assert(e_3.is_alive());
+}
+
+void World_reset_all() {
+    flecs::entity pos, vel;
+
+    {
+        flecs::world ecs;
+        pos = ecs.component<Position>();
+        vel = ecs.component<Velocity>();
+    }
+
+    test_assert(flecs::type_id<Position>() == pos);
+    test_assert(flecs::type_id<Velocity>() == vel);
+
+    flecs::reset();
+
+    test_assert(flecs::type_id<Position>() == 0);
+
+    /* Register components in opposite order, should result in different ids */
+    {
+        flecs::world ecs;
+        test_assert(ecs.component<Position>() != 0);
+        test_assert(ecs.component<Velocity>() != 0);
+    }
+}
+
+void World_get_tick() {
+    flecs::world ecs;
+
+    test_int(ecs.tick(), 0);
+
+    ecs.progress();
+
+    test_int(ecs.tick(), 1);
+
+    ecs.progress();
+
+    test_int(ecs.tick(), 2);
+}
+
+struct Scope { };
+
+struct FromScope { };
+
+namespace Nested { 
+    struct FromScope { };
+}
+
+void World_register_from_scope() {
+    flecs::world ecs;
+
+    ecs.set_scope<Scope>();
+    auto c = ecs.component<FromScope>();
+    ecs.set_scope(0);
+
+    test_assert(c.has(flecs::ChildOf, ecs.id<Scope>()));
+}
+
+void World_register_nested_from_scope() {
+    flecs::world ecs;
+
+    ecs.set_scope<Scope>();
+    auto c = ecs.component<Nested::FromScope>();
+    ecs.set_scope(0);
+
+    test_assert(c.has(flecs::ChildOf, ecs.id<Scope>()));
+}
+
+void World_register_w_root_name() {
+    flecs::world ecs;
+
+    auto c = ecs.component<Scope>("::Root");
+
+    test_assert(!c.has(flecs::ChildOf, flecs::Wildcard));
+    test_str(c.path().c_str(), "::Root");
+}
+
+void World_register_nested_w_root_name() {
+    flecs::world ecs;
+
+    auto c = ecs.component<Nested::FromScope>("::Root");
+
+    test_assert(!c.has(flecs::ChildOf, flecs::Wildcard));
+    test_str(c.path().c_str(), "::Root");
+}
+
+void World_set_lookup_path() {
+    flecs::world ecs;
+
+    auto parent = ecs.entity("Parent");
+    auto child = ecs.scope(parent).entity("Child");
+
+    test_assert(ecs.lookup("Parent") == parent);
+    test_assert(ecs.lookup("Child") == 0);
+    test_assert(ecs.lookup("Parent::Child") == child);
+
+    flecs::entity_t lookup_path[] = { parent, 0 };
+    flecs::entity_t *old_path = ecs.set_lookup_path(lookup_path);
+
+    test_assert(ecs.lookup("Parent") == parent);
+    test_assert(ecs.lookup("Child") == child);
+    test_assert(ecs.lookup("Parent::Child") == child);
+
+    ecs.set_lookup_path(old_path);
+}
+
+void World_run_post_frame() {
+    flecs::world ecs;
+
+    int ctx = 10;
+
+    ecs.system()
+        .iter([&](flecs::iter& it) {
+            it.world().run_post_frame([](flecs::world_t *w, void *ctx) {
+                int *i = static_cast<int*>(ctx);
+                test_int(*i, 10);
+                i[0] ++;
+            }, &ctx);
+        });
+    test_int(ctx, 10);
+
+    ecs.progress();
+
+    test_int(ctx, 11);
 }

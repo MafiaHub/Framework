@@ -11,73 +11,94 @@
  * @{
  */
 
-#define ECS_ENTITY_DECLARE(id)\
-    ecs_entity_t id;\
-    ecs_entity_t ecs_id(id)
+/* Use for declaring entity, tag, prefab / any other entity identifier */
+#define ECS_DECLARE(id)\
+    ecs_entity_t id, ecs_id(id)
 
-#define ECS_ENTITY_DEFINE(world, id, ...)\
-    id = ecs_entity_init(world, &(ecs_entity_desc_t){\
-        .name = #id,\
-        .add_expr = #__VA_ARGS__\
-    });\
-    ecs_assert(id != 0, ECS_INVALID_PARAMETER, NULL);\
-    ecs_id(id) = id;\
-    (void)id;\
-    (void)ecs_id(id)
+#define ECS_ENTITY_DEFINE(world, id, ...) \
+    { \
+        ecs_entity_desc_t desc = {0}; \
+        desc.entity = id; \
+        desc.name = #id; \
+        desc.add_expr = #__VA_ARGS__; \
+        id = ecs_entity_init(world, &desc); \
+        ecs_id(id) = id; \
+    } \
+    (void)id; \
+    (void)ecs_id(id);
 
-#define ECS_ENTITY(world, id, ...)\
-    ecs_entity_t ecs_id(id);\
-    ecs_entity_t ECS_ENTITY_DEFINE(world, id, __VA_ARGS__);
+#define ECS_ENTITY(world, id, ...) \
+    ecs_entity_t ecs_id(id); \
+    ecs_entity_t id = 0; \
+    ECS_ENTITY_DEFINE(world, id, __VA_ARGS__);
 
-#define ECS_TAG_DECLARE(id)               ECS_ENTITY_DECLARE(id)
 #define ECS_TAG_DEFINE(world, id)         ECS_ENTITY_DEFINE(world, id, 0)
 #define ECS_TAG(world, id)                ECS_ENTITY(world, id, 0)
 
-#define ECS_PREFAB_DECLARE(id)            ECS_ENTITY_DECLARE(id)
 #define ECS_PREFAB_DEFINE(world, id, ...) ECS_ENTITY_DEFINE(world, id, Prefab, __VA_ARGS__)
 #define ECS_PREFAB(world, id, ...)        ECS_ENTITY(world, id, Prefab, __VA_ARGS__)
 
+/* Use for declaring component identifiers */
 #define ECS_COMPONENT_DECLARE(id)         ecs_entity_t ecs_id(id)
-#define ECS_COMPONENT_DEFINE(world, id)\
-    ecs_id(id) = ecs_component_init(world, &(ecs_component_desc_t){\
-        .entity = {\
-            .entity = ecs_id(id),\
-            .name = #id,\
-            .symbol = #id\
-        },\
-        .size = sizeof(id),\
-        .alignment = ECS_ALIGNOF(id)\
-    });\
-    ecs_assert(ecs_id(id) != 0, ECS_INVALID_PARAMETER, NULL)
+#define ECS_COMPONENT_DEFINE(world, id) \
+    {\
+        ecs_component_desc_t desc = {0}; \
+        desc.entity.entity = ecs_id(id); \
+        desc.entity.name = #id; \
+        desc.entity.symbol = #id; \
+        desc.size = sizeof(id); \
+        desc.alignment = ECS_ALIGNOF(id); \
+        ecs_id(id) = ecs_component_init(world, &desc);\
+        ecs_assert(ecs_id(id) != 0, ECS_INVALID_PARAMETER, NULL);\
+    }
 
 #define ECS_COMPONENT(world, id)\
     ecs_entity_t ecs_id(id) = 0;\
     ECS_COMPONENT_DEFINE(world, id);\
     (void)ecs_id(id)
 
-#define ECS_TRIGGER(world, trigger_name, kind, component) \
-    ecs_entity_t __F##trigger_name = ecs_trigger_init(world, &(ecs_trigger_desc_t){\
-        .entity.name = #trigger_name,\
-        .callback = trigger_name,\
-        .expr = #component,\
-        .events = {kind},\
-    });\
-    ecs_entity_t trigger_name = __F##trigger_name;\
-    ecs_assert(trigger_name != 0, ECS_INVALID_PARAMETER, NULL);\
-    (void)__F##trigger_name;\
-    (void)trigger_name;
+/* Use for declaring trigger, observer and system identifiers */
+#define ECS_SYSTEM_DECLARE(id)         ecs_entity_t ecs_id(id)
 
-#define ECS_OBSERVER(world, observer_name, kind, ...)\
-    ecs_entity_t __F##observer_name = ecs_observer_init(world, &(ecs_observer_desc_t){\
-        .entity.name = #observer_name,\
-        .callback = observer_name,\
-        .filter.expr = #__VA_ARGS__,\
-        .events = {kind},\
-    });\
-    ecs_entity_t observer_name = __F##observer_name;\
-    ecs_assert(observer_name != 0, ECS_INVALID_PARAMETER, NULL);\
-    (void)__F##observer_name;\
-    (void)observer_name;
+/* Triggers */
+#define ECS_TRIGGER_DEFINE(world, id, kind, component) \
+    {\
+        ecs_trigger_desc_t desc = {0}; \
+        desc.entity.entity = ecs_id(id); \
+        desc.entity.name = #id;\
+        desc.callback = id;\
+        desc.expr = #component;\
+        desc.events[0] = kind;\
+        ecs_id(id) = ecs_trigger_init(world, &desc);\
+        ecs_assert(ecs_id(id) != 0, ECS_INVALID_PARAMETER, NULL);\
+    }
+
+#define ECS_TRIGGER(world, id, kind, component) \
+    ecs_entity_t ecs_id(id) = 0; \
+    ECS_TRIGGER_DEFINE(world, id, kind, component);\
+    ecs_entity_t id = ecs_id(id);\
+    (void)ecs_id(id);\
+    (void)id;
+
+/* Observers */
+#define ECS_OBSERVER_DEFINE(world, id, kind, ...)\
+    {\
+        ecs_observer_desc_t desc = {0};\
+        desc.entity.entity = ecs_id(id); \
+        desc.entity.name = #id;\
+        desc.callback = id;\
+        desc.filter.expr = #__VA_ARGS__;\
+        desc.events[0] = kind;\
+        ecs_id(id) = ecs_observer_init(world, &desc);\
+        ecs_assert(ecs_id(id) != 0, ECS_INVALID_PARAMETER, NULL);\
+    }
+
+#define ECS_OBSERVER(world, id, kind, ...)\
+    ecs_entity_t ecs_id(id) = 0; \
+    ECS_OBSERVER_DEFINE(world, id, kind, __VA_ARGS__);\
+    ecs_entity_t id = ecs_id(id);\
+    (void)ecs_id(id);\
+    (void)id;
 
 /** @} */
 
@@ -132,6 +153,12 @@
     ecs_remove_id(world, subject, ecs_pair(relation, object))
 
 
+/* -- Bulk remove/delete -- */
+
+#define ecs_delete_children(world, parent)\
+    ecs_delete_with(world, ecs_pair(EcsChildOf, parent))
+
+
 /* -- Set -- */
 
 #define ecs_set_ptr(world, entity, component, ptr)\
@@ -163,7 +190,7 @@
 /* -- Get -- */
 
 #define ecs_get_ref(world, ref, entity, T)\
-    (ECS_CAST(const T*, ecs_get_ref_w_id(world, ref, entity, ecs_id(T))))
+    (ECS_CAST(const T*, ecs_get_ref_id(world, ref, entity, ecs_id(T))))
 
 #define ecs_get(world, entity, T)\
     (ECS_CAST(const T*, ecs_get_id(world, entity, ecs_id(T))))
@@ -199,6 +226,12 @@
 
 /* -- Singletons -- */
 
+#define ecs_singleton_add(world, comp)\
+    ecs_add(world, ecs_id(comp), comp)
+
+#define ecs_singleton_remove(world, comp)\
+    ecs_remove(world, ecs_id(comp), comp)
+
 #define ecs_singleton_get(world, comp)\
     ecs_get(world, ecs_id(comp), comp)
 
@@ -221,22 +254,23 @@
     ecs_has_id(world, entity, ecs_pair(relation, object))
 
 #define ecs_owns_id(world, entity, id)\
-    ecs_type_has_id(world, ecs_get_type(world, entity), id, true)
+    (ecs_search(world, ecs_get_table(world, entity), id, 0) != -1)
 
 #define ecs_owns_pair(world, entity, relation, object)\
-    ecs_type_has_id(world, ecs_get_type(world, entity), ecs_pair(relation, object), true)
+    ecs_owns_id(world, entity, ecs_pair(relation, object))
 
 #define ecs_owns(world, entity, T)\
-    ecs_type_has_id(world, ecs_get_type(world, entity), ecs_id(T), true)
+    ecs_owns_id(world, entity, ecs_id(T))
 
 #define ecs_shares_id(world, entity, id)\
-    ecs_type_has_id(world, ecs_get_type(world, entity), id, false)
+    (ecs_search_relation(world, ecs_get_table(world, entity), 0, ecs_id(id), \
+        EcsIsA, 1, 0, 0, 0, 0) != -1)
 
 #define ecs_shares_pair(world, entity, relation, object)\
-    ecs_type_has_id(world, ecs_get_type(world, entity), ecs_pair(relation, object), false)
+    (ecs_shares_id(world, entity, ecs_pair(relation, object)))
 
 #define ecs_shares(world, entity, T)\
-    ecs_type_has_id(world, ecs_get_type(world, entity), ecs_id(T), false)
+    (ecs_shares_id(world, entity, ecs_id(T)))
 
 
 /* -- Enable / Disable component -- */
@@ -268,6 +302,9 @@
 #define ecs_get_fullpath(world, child)\
     ecs_get_path_w_sep(world, 0, child, ".", NULL)
 
+#define ecs_get_fullpath_buf(world, child, buf)\
+    ecs_get_path_w_sep_buf(world, 0, child, ".", NULL, buf)
+
 #define ecs_new_from_path(world, parent, path)\
     ecs_new_from_path_w_sep(world, parent, path, ".", NULL)
 
@@ -283,11 +320,8 @@
 
 /* -- Queries -- */
 
-#define ecs_query_table_count(query)\
-    ecs_vector_count(query->cache.tables)
-
-#define ecs_query_empty_table_count(query)\
-    ecs_vector_count(query->cache.empty_tables)
+#define ecs_query_table_count(query) query->cache.tables.count
+#define ecs_query_empty_table_count(query) query->cache.empty_tables.count
 
 /* -- Iterators -- */
 
@@ -299,9 +333,6 @@
 
 #define ecs_term_size(it, index)\
     ((index) == 0 ? sizeof(ecs_entity_t) : ECS_CAST(size_t, (it)->sizes[(index) - 1]))
-
-#define ecs_term_is_set(it, index)\
-    ((it)->columns[(index) - 1] != 0)
 
 #define ecs_term_is_owned(it, index)\
     ((it)->subjects == NULL || (it)->subjects[(index) - 1] == 0)
@@ -371,10 +402,17 @@
 #define ecs_copy(type) type##_copy
 #define ecs_move(type) type##_move
 #define ecs_on_set(type) type##_on_set
+#define ecs_on_add(type) type##_on_add
+#define ecs_on_remove(type) type##_on_remove
 
 #define ecs_query_new(world, q_expr)\
     ecs_query_init(world, &(ecs_query_desc_t){\
         .filter.expr = q_expr\
+    })
+
+#define ecs_rule_new(world, q_expr)\
+    ecs_rule_init(world, &(ecs_filter_desc_t){\
+        .expr = q_expr\
     })
 
 #define ECS_TYPE(world, id, ...) \

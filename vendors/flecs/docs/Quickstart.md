@@ -68,7 +68,7 @@ An id is a 64 bit number that can encode anything that can be added to an entity
 The following sections describe components, tags and pairs in more detail.
 
 ## Component
-A component is a type of which instances can be added and removed to entities. Each component can added only once to an entity (though not really, see [Pair](#pair)). In C applications components must be registered before use. In C++ this happens automatically.
+A component is a type of which instances can be added and removed to entities. Each component can be added only once to an entity (though not really, see [Pair](#pair)). In C applications components must be registered before use. In C++ this happens automatically.
 
 ```c
 ECS_COMPONENT(world, Position);
@@ -235,18 +235,18 @@ ecs_id_t id = ecs_pair(Likes, Bob);
 flecs::id id = world.pair(Likes, Bob);
 ```
 
-The following examples show how to get back the relation and object pairs from a pair id:
+The following examples show how to get back the elements from a pair:
 
 ```c
 if (ecs_id_is_pair(id)) {
-    ecs_entity_t rel = ecs_pair_relation(world, id);
-    ecs_entity_t obj = ecs_pair_object(world, id);
+    ecs_entity_t relation = ecs_pair_first(world, id);
+    ecs_entity_t target = ecs_pair_second(world, id);
 }
 ```
 ```cpp
 if (id.is_pair()) {
-    auto rel = id.relation();
-    auto obj = id.object();
+    auto relation = id.first();
+    auto target = id.second();
 }
 ```
 
@@ -335,9 +335,9 @@ Queries (see below) can use hierarchies to order data breadth-first, which can c
 
 ```c
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t) {
-    .terms = {
+    .filter.terms = {
         { ecs_id(Position) },
-        { ecs_id(Position), .args[0].set = {
+        { ecs_id(Position), .subj.set = {
             .mask = EcsCascade,    // Force breadth-first order
             .relation = EcsChildOf // Use ChildOf relation for ordering
         }} 
@@ -581,7 +581,7 @@ The API for queries looks very similar to filters:
 ```c
 // Create a query with 2 terms
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t) {
-    .terms = {
+    .filter.terms = {
         { ecs_id(Position) },
         { ecs_pair(EcsChildOf, EcsWildcard) }
     }
@@ -613,7 +613,7 @@ ecs_run(world, Move, delta_time, NULL); // Run system
 
 // Option 2, use the ecs_system_init function
 ecs_entity_t move_sys = ecs_system_init(world, &(ecs_system_desc_t) {
-    .filter.terms = {
+    .query.filter.terms = {
         {ecs_id(Position)},
         {ecs_id(Velocity)},
     },
@@ -637,8 +637,10 @@ void Move(ecs_iter_t *it) {
 // Use each() function that iterates each individual entity
 auto move_sys = world.system<Position, Velocity>()
     .iter([](flecs::iter it, Position *p, Velocity *v) {
-        p[i].x += v[i].x * it.delta_time();
-        p[i].y += v[i].y * it.delta_time();
+        for (int i : it) {
+            p[i].x += v[i].x * it.delta_time();
+            p[i].y += v[i].y * it.delta_time();
+        }
     });
 
     // Just like with filters & queries, systems have both the iter() and
@@ -671,18 +673,17 @@ EcsOnUpdate
 EcsOnValidate
 EcsPostUpdate
 EcsPreStore
-EcsPostStore
+EcsOnStore
 ```
 ```cpp
 flecs::OnLoad
 flecs::PostLoad
 flecs::PreUpdate
 flecs::OnUpdate
-flecs::PostUpdate
 flecs::OnValidate
-flecs::PostValidate
+flecs::PostUpdate
 flecs::PreStore
-flecs::PostStore
+flecs::OnStore
 ```
 
 When a pipeline is executed, systems are ran in the order of the phases. This makes pipelines and phases the primary mechanism for defining ordering between systems. The following code shows how to assign systems to a pipeline, and how to run the pipeline with the `progress()` function:
@@ -712,7 +713,31 @@ move_sys.add(flecs::OnUpdate);
 move_sys.remove(flecs::PostUpdate);
 ```
 
-Inside a phase systems are guaranteed to be ran in their declaration order.
+Inside a phase, systems are guaranteed to be ran in their declaration order.
+
+### Custom Pipeline
+When building your own pipeline for the world to use, make sure to set both `PreFrame` and `PostFrame` as the first and last phase systems of your pipeline, respectively. These two builtin tags are used to run internal systems.
+
+```c
+    ecs_entity_t pipeline = ecs_type_init(world, &(ecs_type_desc_t){
+        .entity = {
+            .name = "CustomPipeline",
+            .add = {EcsPipeline}
+        },
+        .ids = {
+            EcsPreFrame,
+            // Add all your custom system phases
+            EcsPostFrame
+         }
+    });
+```
+
+```cpp
+	auto pipeline = world.pipeline("CustomPipeline");
+	pipeline.add(flecs::PreFrame)
+		// Add all your custom system phases
+		.add(flecs::PostFrame);
+```
 
 ## Trigger
 A trigger is a callback for an event for a single term. Triggers can be defined for `OnAdd`, `OnRemove`, `OnSet` and `UnSet` events. The API is similar to that of a system, but for a single term and an additional event.

@@ -1,8 +1,6 @@
 
 #include "../private_api.h"
 
-#ifdef FLECS_STATS
-
 #ifdef FLECS_SYSTEM
 #include "../addons/system/system.h"
 #endif
@@ -10,6 +8,10 @@
 #ifdef FLECS_PIPELINE
 #include "../addons/pipeline/pipeline.h"
 #endif
+
+#ifdef FLECS_STATS
+
+#include <stdio.h>
 
 static
 int32_t t_next(
@@ -62,7 +64,7 @@ void print_value(
     float value)
 {
     ecs_size_t len = ecs_os_strlen(name);
-    printf("%s: %*s %.2f\n", name, 32 - len, "", (double)value);
+    ecs_trace("%s: %*s %.2f", name, 32 - len, "", (double)value);
 }
 
 static
@@ -89,8 +91,8 @@ void ecs_gauge_reduce(
     ecs_gauge_t *src,
     int32_t t_src)
 {
-    ecs_assert(dst != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(src != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(dst != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(src != NULL, ECS_INVALID_PARAMETER, NULL);
 
     bool min_set = false;
     dst->min[t_dst] = 0;
@@ -109,29 +111,31 @@ void ecs_gauge_reduce(
             dst->max[t_dst] = src->max[t];
         }
     }
+error:
+    return;
 }
 
 void ecs_get_world_stats(
     const ecs_world_t *world,
     ecs_world_stats_t *s)
 {
-    ecs_assert(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(s != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(s != NULL, ECS_INVALID_PARAMETER, NULL);
 
     world = ecs_get_world(world);
 
     int32_t t = s->t = t_next(s->t);
 
-    float delta_world_time = record_counter(&s->world_time_total_raw, t, world->stats.world_time_total_raw);
-    record_counter(&s->world_time_total, t, world->stats.world_time_total);
-    record_counter(&s->frame_time_total, t, world->stats.frame_time_total);
-    record_counter(&s->system_time_total, t, world->stats.system_time_total);
-    record_counter(&s->merge_time_total, t, world->stats.merge_time_total);
+    float delta_world_time = record_counter(&s->world_time_total_raw, t, world->info.world_time_total_raw);
+    record_counter(&s->world_time_total, t, world->info.world_time_total);
+    record_counter(&s->frame_time_total, t, world->info.frame_time_total);
+    record_counter(&s->system_time_total, t, world->info.system_time_total);
+    record_counter(&s->merge_time_total, t, world->info.merge_time_total);
 
-    float delta_frame_count = record_counter(&s->frame_count_total, t, world->stats.frame_count_total);
-    record_counter(&s->merge_count_total, t, world->stats.merge_count_total);
-    record_counter(&s->pipeline_build_count_total, t, world->stats.pipeline_build_count_total);
-    record_counter(&s->systems_ran_frame, t, world->stats.systems_ran_frame);
+    float delta_frame_count = record_counter(&s->frame_count_total, t, world->info.frame_count_total);
+    record_counter(&s->merge_count_total, t, world->info.merge_count_total);
+    record_counter(&s->pipeline_build_count_total, t, world->info.pipeline_build_count_total);
+    record_counter(&s->systems_ran_frame, t, world->info.systems_ran_frame);
 
     if (delta_world_time != 0.0f && delta_frame_count != 0.0f) {
         record_gauge(
@@ -140,10 +144,26 @@ void ecs_get_world_stats(
         record_gauge(&s->fps, t, 0);
     }
 
-    record_gauge(&s->entity_count, t, flecs_sparse_count(world->store.entity_index));
-    record_gauge(&s->component_count, t, ecs_count_id(world, ecs_id(EcsComponent)));
+    record_gauge(&s->entity_count, t, flecs_sparse_count(ecs_eis(world)));
+    record_gauge(&s->entity_not_alive_count, t, 
+        flecs_sparse_not_alive_count(ecs_eis(world)));
+
+    record_gauge(&s->id_count, t, world->info.id_count);
+    record_gauge(&s->tag_id_count, t, world->info.tag_id_count);
+    record_gauge(&s->component_id_count, t, world->info.component_id_count);
+    record_gauge(&s->pair_id_count, t, world->info.pair_id_count);
+    record_gauge(&s->wildcard_id_count, t, world->info.wildcard_id_count);
+    record_gauge(&s->component_count, t, ecs_sparse_count(world->type_info));
+
     record_gauge(&s->query_count, t, flecs_sparse_count(world->queries));
-    record_gauge(&s->system_count, t, ecs_count_id(world, ecs_id(EcsSystem)));
+    record_gauge(&s->trigger_count, t, ecs_count(world, EcsTrigger));
+    record_gauge(&s->observer_count, t, ecs_count(world, EcsObserver));
+    record_gauge(&s->system_count, t, ecs_count(world, EcsSystem));
+
+    record_counter(&s->id_create_count, t, world->info.id_create_total);
+    record_counter(&s->id_delete_count, t, world->info.id_delete_total);
+    record_counter(&s->table_create_count, t, world->info.table_create_total);
+    record_counter(&s->table_delete_count, t, world->info.table_delete_total);
 
     record_counter(&s->new_count, t, world->new_count);
     record_counter(&s->bulk_new_count, t, world->bulk_new_count);
@@ -157,11 +177,11 @@ void ecs_get_world_stats(
     /* Compute table statistics */
     int32_t empty_table_count = 0;
     int32_t singleton_table_count = 0;
-    int32_t matched_table_count = 0, matched_entity_count = 0;
 
-    int32_t i, count = flecs_sparse_count(world->store.tables);
+    int32_t i, count = flecs_sparse_count(&world->store.tables);
     for (i = 0; i < count; i ++) {
-        ecs_table_t *table = flecs_sparse_get_dense(world->store.tables, ecs_table_t, i);
+        ecs_table_t *table = flecs_sparse_get_dense(&world->store.tables, 
+            ecs_table_t, i);
         int32_t entity_count = ecs_table_count(table);
 
         if (!entity_count) {
@@ -173,27 +193,36 @@ void ecs_get_world_stats(
         if (entity_count == 1) {
             ecs_entity_t *entities = ecs_vector_first(
                 table->storage.entities, ecs_entity_t);
-            if (ecs_type_has_id(world, table->type, entities[0], false)) {
+            if (ecs_search(world, table, entities[0], 0)) {
                 singleton_table_count ++;
             }
         }
-
-        /* If this table matches with queries and is not empty, increase the
-         * matched table & matched entity count. These statistics can be used to
-         * compute actual fragmentation ratio for queries. */
-        int32_t queries_matched = ecs_vector_count(table->queries);
-        if (queries_matched && entity_count) {
-            matched_table_count ++;
-            matched_entity_count += entity_count;
-        }
     }
 
-    record_gauge(&s->matched_table_count, t, matched_table_count);
-    record_gauge(&s->matched_entity_count, t, matched_entity_count);
-    
+    /* Correct for root table */
+    count --;
+    empty_table_count --;
+
+    if (count != world->info.table_count) {
+        ecs_warn("world::table_count (%d) is not equal to computed number (%d)",
+            world->info.table_count, count);
+    }
+    if (empty_table_count != world->info.empty_table_count) {
+        ecs_warn("world::empty_table_count (%d) is not equal to computed"
+            " number (%d)",
+                world->info.empty_table_count, empty_table_count);
+    }
+
     record_gauge(&s->table_count, t, count);
     record_gauge(&s->empty_table_count, t, empty_table_count);
     record_gauge(&s->singleton_table_count, t, singleton_table_count);
+    record_gauge(&s->tag_table_count, t, world->info.tag_table_count);
+    record_gauge(&s->trivial_table_count, t, world->info.trivial_table_count);
+    record_gauge(&s->table_storage_count, t, world->info.table_storage_count);
+    record_gauge(&s->table_record_count, t, world->info.table_record_count);
+
+error:
+    return;
 }
 
 void ecs_get_query_stats(
@@ -201,27 +230,20 @@ void ecs_get_query_stats(
     const ecs_query_t *query,
     ecs_query_stats_t *s)
 {
-    ecs_assert(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(query != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(s != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(query != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(s != NULL, ECS_INVALID_PARAMETER, NULL);
     (void)world;
 
     int32_t t = s->t = t_next(s->t);
 
-    int32_t i, entity_count = 0, count = ecs_query_table_count(query);
-    ecs_query_table_match_t *matched_tables = ecs_vector_first(
-        query->cache.tables, ecs_query_table_match_t);
-    for (i = 0; i < count; i ++) {
-        ecs_query_table_match_t *matched = &matched_tables[i];
-        if (matched->table) {
-            entity_count += ecs_table_count(matched->table);
-        }
-    }
-
-    record_gauge(&s->matched_table_count, t, count);
-    record_gauge(&s->matched_empty_table_count, t,
+    ecs_iter_t it = ecs_query_iter(world, (ecs_query_t*)query);
+    record_gauge(&s->matched_entity_count, t, ecs_iter_count(&it));
+    record_gauge(&s->matched_table_count, t, ecs_query_table_count(query));
+    record_gauge(&s->matched_empty_table_count, t, 
         ecs_query_empty_table_count(query));
-    record_gauge(&s->matched_entity_count, t, entity_count);
+error:
+    return;
 }
 
 #ifdef FLECS_SYSTEM
@@ -230,9 +252,9 @@ bool ecs_get_system_stats(
     ecs_entity_t system,
     ecs_system_stats_t *s)
 {
-    ecs_assert(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(s != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(system != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(s != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(system != 0, ECS_INVALID_PARAMETER, NULL);
 
     world = ecs_get_world(world);
 
@@ -250,29 +272,30 @@ bool ecs_get_system_stats(
     record_gauge(&s->enabled, t, !ecs_has_id(world, system, EcsDisabled));
 
     return true;
+error:
+    return false;
 }
 #endif
 
 
 #ifdef FLECS_PIPELINE
 
-static ecs_system_stats_t* get_system_stats(
+static 
+ecs_system_stats_t* get_system_stats(
     ecs_map_t *systems,
     ecs_entity_t system)
 {
-    ecs_assert(systems != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(system != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(systems != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(system != 0, ECS_INVALID_PARAMETER, NULL);
 
     ecs_system_stats_t *s = ecs_map_get(systems, ecs_system_stats_t, system);
     if (!s) {
-        ecs_system_stats_t stats;
-        memset(&stats, 0, sizeof(ecs_system_stats_t));
-        ecs_map_set(systems, system, &stats);
-        s = ecs_map_get(systems, ecs_system_stats_t, system);
-        ecs_assert(s != NULL, ECS_INTERNAL_ERROR, NULL);
+        s = ecs_map_ensure(systems, ecs_system_stats_t, system);
     }
 
     return s;
+error:
+    return NULL;
 }
 
 bool ecs_get_pipeline_stats(
@@ -280,9 +303,9 @@ bool ecs_get_pipeline_stats(
     ecs_entity_t pipeline,
     ecs_pipeline_stats_t *s)
 {
-    ecs_assert(stage != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(s != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(pipeline != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(stage != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(s != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(pipeline != 0, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_world_t *world = ecs_get_world(stage);
 
@@ -291,52 +314,93 @@ bool ecs_get_pipeline_stats(
         return false;
     }
 
-    /* First find out how many systems are matched by the pipeline */
+    int32_t sys_count = 0, active_sys_count = 0;
+
+    /* Count number of active systems */
     ecs_iter_t it = ecs_query_iter(stage, pq->query);
-    int32_t count = 0;
     while (ecs_query_next(&it)) {
-        count += it.count;
+        active_sys_count += it.count;
     }
 
-    if (!s->system_stats) {
-        s->system_stats = ecs_map_new(ecs_system_stats_t, count);
-    }    
+    /* Count total number of systems in pipeline */
+    it = ecs_query_iter(stage, pq->build_query);
+    while (ecs_query_next(&it)) {
+        sys_count += it.count;
+    }   
 
     /* Also count synchronization points */
     ecs_vector_t *ops = pq->ops;
     ecs_pipeline_op_t *op = ecs_vector_first(ops, ecs_pipeline_op_t);
     ecs_pipeline_op_t *op_last = ecs_vector_last(ops, ecs_pipeline_op_t);
-    count += ecs_vector_count(ops);
+    int32_t pip_count = active_sys_count + ecs_vector_count(ops);
+
+    if (!sys_count) {
+        return false;
+    }
+
+    if (s->system_stats && !sys_count) {
+        ecs_map_free(s->system_stats);
+    }
+    if (!s->system_stats && sys_count) {
+        s->system_stats = ecs_map_new(ecs_system_stats_t, sys_count);
+    }
+    if (!sys_count) {
+        s->system_stats = NULL;
+    }
 
     /* Make sure vector is large enough to store all systems & sync points */
-    ecs_vector_set_count(&s->systems, ecs_entity_t, count - 1);
-    ecs_entity_t *systems = ecs_vector_first(s->systems, ecs_entity_t);
+    ecs_entity_t *systems = NULL;
+    if (pip_count) {
+        ecs_vector_set_count(&s->systems, ecs_entity_t, pip_count);
+        systems = ecs_vector_first(s->systems, ecs_entity_t);
 
-    /* Populate systems vector, keep track of sync points */
-    it = ecs_query_iter(stage, pq->query);
-    
-    int32_t i_system = 0, ran_since_merge = 0;
-    while (ecs_query_next(&it)) {
-        int32_t i;
-        for (i = 0; i < it.count; i ++) {
-            systems[i_system ++] = it.entities[i];
-            ran_since_merge ++;
-            if (op != op_last && ran_since_merge == op->count) {
-                ran_since_merge = 0;
-                op++;
-                systems[i_system ++] = 0; /* 0 indicates a merge point */
+        /* Populate systems vector, keep track of sync points */
+        it = ecs_query_iter(stage, pq->query);
+        
+        int32_t i, i_system = 0, ran_since_merge = 0;
+        while (ecs_query_next(&it)) {
+            for (i = 0; i < it.count; i ++) {
+                systems[i_system ++] = it.entities[i];
+                ran_since_merge ++;
+                if (op != op_last && ran_since_merge == op->count) {
+                    ran_since_merge = 0;
+                    op++;
+                    systems[i_system ++] = 0; /* 0 indicates a merge point */
+                }
             }
+        }
 
+        systems[i_system ++] = 0; /* Last merge */
+        ecs_assert(pip_count == i_system, ECS_INTERNAL_ERROR, NULL);
+    } else {
+        ecs_vector_free(s->systems);
+        s->systems = NULL;
+    }
+
+    /* Separately populate system stats map from build query, which includes
+     * systems that aren't currently active */
+    it = ecs_query_iter(stage, pq->build_query);
+    while (ecs_query_next(&it)) {
+        int i;
+        for (i = 0; i < it.count; i ++) {
             ecs_system_stats_t *sys_stats = get_system_stats(
                 s->system_stats, it.entities[i]);
             ecs_get_system_stats(world, it.entities[i], sys_stats);
         }
     }
 
-    ecs_assert(i_system == (count - 1), ECS_INTERNAL_ERROR, NULL);
-
     return true;
+error:
+    return false;
 }
+
+void ecs_pipeline_stats_fini(
+    ecs_pipeline_stats_t *stats)
+{
+    ecs_map_free(stats->system_stats);
+    ecs_vector_free(stats->systems);
+}
+
 #endif
 
 void ecs_dump_world_stats(
@@ -345,33 +409,53 @@ void ecs_dump_world_stats(
 {
     int32_t t = s->t;
 
-    ecs_assert(world != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(s != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(s != NULL, ECS_INVALID_PARAMETER, NULL);
 
     world = ecs_get_world(world);    
     
     print_counter("Frame", t, &s->frame_count_total);
-    printf("-------------------------------------\n");
+    ecs_trace("-------------------------------------");
     print_counter("pipeline rebuilds", t, &s->pipeline_build_count_total);
-    print_counter("systems ran last frame", t, &s->systems_ran_frame);
-    printf("\n");
-    print_value("target FPS", world->stats.target_fps);
-    print_value("time scale", world->stats.time_scale);
-    printf("\n");
+    print_counter("systems invocations", t, &s->systems_ran_frame);
+    ecs_trace("");
+    print_value("target FPS", world->info.target_fps);
+    print_value("time scale", world->info.time_scale);
+    ecs_trace("");
     print_gauge("actual FPS", t, &s->fps);
     print_counter("frame time", t, &s->frame_time_total);
     print_counter("system time", t, &s->system_time_total);
     print_counter("merge time", t, &s->merge_time_total);
     print_counter("simulation time elapsed", t, &s->world_time_total);
-    printf("\n");
-    print_gauge("entity count", t, &s->entity_count);
+    ecs_trace("");
+    print_gauge("id count", t, &s->id_count);
+    print_gauge("tag id count", t, &s->tag_id_count);
+    print_gauge("component id count", t, &s->component_id_count);
+    print_gauge("pair id count", t, &s->pair_id_count);
+    print_gauge("wildcard id count", t, &s->wildcard_id_count);
     print_gauge("component count", t, &s->component_count);
+    ecs_trace("");
+    print_gauge("alive entity count", t, &s->entity_count);
+    print_gauge("not alive entity count", t, &s->entity_not_alive_count);
+    ecs_trace("");
     print_gauge("query count", t, &s->query_count);
+    print_gauge("trigger count", t, &s->trigger_count);
+    print_gauge("observer count", t, &s->observer_count);
     print_gauge("system count", t, &s->system_count);
+    ecs_trace("");
     print_gauge("table count", t, &s->table_count);
-    print_gauge("singleton table count", t, &s->singleton_table_count);
     print_gauge("empty table count", t, &s->empty_table_count);
-    printf("\n");
+    print_gauge("tag table count", t, &s->tag_table_count);
+    print_gauge("trivial table count", t, &s->trivial_table_count);
+    print_gauge("table storage count", t, &s->table_storage_count);
+    print_gauge("table cache record count", t, &s->table_record_count);
+    print_gauge("singleton table count", t, &s->singleton_table_count);
+    ecs_trace("");
+    print_counter("table create count", t, &s->table_create_count);
+    print_counter("table delete count", t, &s->table_delete_count);
+    print_counter("id create count", t, &s->id_create_count);
+    print_counter("id delete count", t, &s->id_delete_count);
+    ecs_trace("");
     print_counter("deferred new operations", t, &s->new_count);
     print_counter("deferred bulk_new operations", t, &s->bulk_new_count);
     print_counter("deferred delete operations", t, &s->delete_count);
@@ -380,7 +464,10 @@ void ecs_dump_world_stats(
     print_counter("deferred remove operations", t, &s->remove_count);
     print_counter("deferred set operations", t, &s->set_count);
     print_counter("discarded operations", t, &s->discard_count);
-    printf("\n");
+    ecs_trace("");
+    
+error:
+    return;
 }
 
 #endif

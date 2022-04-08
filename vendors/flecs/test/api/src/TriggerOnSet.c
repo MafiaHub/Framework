@@ -159,7 +159,7 @@ void TriggerOnSet_clone() {
     test_int(p->x, 11);
     test_int(p->y, 20);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
    ecs_clone(world, 0, e1, false);
 
@@ -197,7 +197,7 @@ void TriggerOnSet_clone_w_value() {
     test_int(p->x, 11);
     test_int(p->y, 20);
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_entity_t e2 = ecs_clone(world, 0, e1, true);
 
@@ -324,7 +324,7 @@ void TriggerOnSet_on_set_after_override() {
     ECS_PREFAB(world, Prefab, Position);
     ecs_set(world, Prefab, Position, {1, 3});
 
-    ECS_TRIGGER(world, OnSetShared, EcsOnSet, Position(self|super));
+    ECS_TRIGGER(world, OnSetShared, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -349,9 +349,10 @@ void TriggerOnSet_on_set_after_override() {
     test_int(p->x, 1);
     test_int(p->y, 3);
 
-    /* override component (doesn't call system) */
+    /* Override component. Should not call OnSet system because the value of the
+     * component has not changed. */
 
-    ctx = (Probe){0};
+    ecs_os_zeromem(&ctx);
 
     ecs_add(world, e, Position);
 
@@ -389,23 +390,26 @@ void TriggerOnSet_on_set_after_override() {
 }
 
 void TriggerOnSet_on_set_after_override_w_new() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ECS_PREFAB(world, Prefab, Position, OVERRIDE | Position);
     ecs_set(world, Prefab, Position, {1, 3});
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
-
     Probe ctx = {0};
-    ecs_set_context(world, &ctx);
+    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+        .term.id = ecs_id(Position),
+        .events = {EcsOnSet},
+        .callback = OnSet,
+        .ctx = &ctx
+    });
 
     ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, Prefab);
 
     test_int(ctx.count, 1);
     test_int(ctx.invoked, 1);
-    test_int(ctx.system, OnSet);
+    test_int(ctx.system, t1);
     test_int(ctx.term_count, 1);
     test_null(ctx.param);
 

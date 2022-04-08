@@ -1,4 +1,5 @@
 #include <collections.h>
+#include <stdlib.h>
 
 struct elem { int hash; char *value; } elems[] = {
     {1, "hello"},
@@ -184,10 +185,10 @@ void Map_iter() {
     fill_map(map);
 
     ecs_map_iter_t it = ecs_map_iter(map);
-    test_str(ecs_map_next_ptr(&it, char*, NULL), "hello");
     test_str(ecs_map_next_ptr(&it, char*, NULL), "world");
-    test_str(ecs_map_next_ptr(&it, char*, NULL), "foo");
     test_str(ecs_map_next_ptr(&it, char*, NULL), "bar");
+    test_str(ecs_map_next_ptr(&it, char*, NULL), "hello");
+    test_str(ecs_map_next_ptr(&it, char*, NULL), "foo");
     test_assert(ecs_map_next_ptr(&it, char*, NULL) == NULL);
 
     ecs_map_free(map);

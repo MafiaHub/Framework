@@ -1,7 +1,7 @@
 #include <api.h>
 
 void Delete_setup() {
-    ecs_tracing_enable(-3);
+    ecs_log_set_level(-3);
 }
 
 void Delete_delete_1() {
@@ -563,7 +563,7 @@ static ECS_DTOR(Position, ptr, {
     dtor_invoked ++;
     dtor_x = ptr->x;
     dtor_y = ptr->y;
-});
+})
 
 static ECS_MOVE(Position, dst, src, {
     move_dst_x = dst->x;
@@ -572,7 +572,7 @@ static ECS_MOVE(Position, dst, src, {
     move_src_y = src->y;         
     *dst = *src;
     move_invoked ++;   
-});
+})
 
 void Delete_move_w_dtor_move() {
     ecs_world_t *world = ecs_init();

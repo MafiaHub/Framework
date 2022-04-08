@@ -411,7 +411,7 @@ void DeferredActions_system_in_progress_w_defer() {
 static bool on_set_invoked = 0;
 
 static
-void OnSetVelocity(ecs_iter_t *it) {
+void OnSetTestInvoked(ecs_iter_t *it) {
     on_set_invoked = 1;
 }
 
@@ -421,7 +421,7 @@ void DeferredActions_defer_get_mut_no_modify() {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ECS_TRIGGER(world, OnSetVelocity, EcsOnSet, Velocity);
+    ECS_TRIGGER(world, OnSetTestInvoked, EcsOnSet, Velocity);
 
     ecs_entity_t e = ecs_new(world, Position);
 
@@ -451,7 +451,7 @@ void DeferredActions_defer_get_mut_w_modify() {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ECS_TRIGGER(world, OnSetVelocity, EcsOnSet, Velocity);
+    ECS_TRIGGER(world, OnSetTestInvoked, EcsOnSet, Velocity);
 
     ecs_entity_t e = ecs_new(world, Position);
 
@@ -483,7 +483,7 @@ void DeferredActions_defer_modify() {
 
     ECS_COMPONENT(world, Velocity);
 
-    ECS_TRIGGER(world, OnSetVelocity, EcsOnSet, Velocity);
+    ECS_TRIGGER(world, OnSetTestInvoked, EcsOnSet, Velocity);
 
     ecs_entity_t e = ecs_new(world, Velocity);
 
@@ -1075,7 +1075,7 @@ void DeferredActions_defer_add_to_deleted_object_childof() {
 }
 
 void DeferredActions_defer_delete_added_id() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -1093,7 +1093,7 @@ void DeferredActions_defer_delete_added_id() {
 
     ecs_defer_end(world);  
 
-    ecs_frame_end(world);    
+    ecs_frame_end(world);
 
     test_assert(!ecs_is_alive(world, id));
     test_assert(ecs_is_alive(world, child));
@@ -1788,6 +1788,92 @@ void DeferredActions_defer_disable() {
     ecs_defer_end(world);
 
     test_assert(!ecs_has_id(world, e, EcsDisabled));
+
+    ecs_fini(world);
+}
+
+void DeferredActions_defer_delete_with() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    ecs_entity_t e_1 = ecs_new(world, TagA);
+    ecs_entity_t e_2 = ecs_new(world, TagA);
+    ecs_entity_t e_3 = ecs_new(world, TagA);
+    ecs_add(world, e_1, TagB);
+
+    ecs_defer_begin(world);
+    ecs_delete_with(world, TagA);
+    test_assert(ecs_is_alive(world, e_1));
+    test_assert(ecs_is_alive(world, e_2));
+    test_assert(ecs_is_alive(world, e_3));
+    ecs_defer_end(world);
+
+    test_assert(!ecs_is_alive(world, e_1));
+    test_assert(!ecs_is_alive(world, e_2));
+    test_assert(!ecs_is_alive(world, e_3));
+
+    ecs_fini(world);
+}
+
+void DeferredActions_defer_remove_all() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    ecs_entity_t e_1 = ecs_new(world, TagA);
+    ecs_entity_t e_2 = ecs_new(world, TagA);
+    ecs_entity_t e_3 = ecs_new(world, TagA);
+    ecs_add(world, e_1, TagB);
+
+    ecs_defer_begin(world);
+    ecs_remove_all(world, TagA);
+    test_assert(ecs_is_alive(world, e_1));
+    test_assert(ecs_is_alive(world, e_2));
+    test_assert(ecs_is_alive(world, e_3));
+    ecs_defer_end(world);
+
+    test_assert(ecs_is_alive(world, e_1));
+    test_assert(ecs_is_alive(world, e_2));
+    test_assert(ecs_is_alive(world, e_3));
+
+    test_assert(!ecs_has_id(world, e_1, TagA));
+    test_assert(!ecs_has_id(world, e_2, TagA));
+    test_assert(!ecs_has_id(world, e_3, TagA));
+    test_assert(ecs_has_id(world, e_1, TagB));
+
+    ecs_fini(world);
+}
+
+void DeferredActions_deferred_modified_after_remove() {
+    ecs_world_t *world = ecs_init();
+    
+    ECS_COMPONENT(world, Position);
+
+    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
+        .term.id = ecs_id(Position),
+        .events = { EcsOnSet },
+        .callback = OnSetTestInvoked
+    });
+
+    ecs_entity_t e = ecs_new(world, Position);
+
+    ecs_modified(world, e, Position);
+
+    test_int(on_set_invoked, 1);
+    on_set_invoked = 0;
+
+    ecs_defer_begin(world);
+
+    ecs_remove(world, e, Position);
+    test_assert(ecs_has(world, e, Position));
+
+    ecs_modified(world, e, Position);
+    ecs_defer_end(world);
+
+    test_int(on_set_invoked, 0);
 
     ecs_fini(world);
 }

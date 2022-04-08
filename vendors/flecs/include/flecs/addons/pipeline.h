@@ -15,11 +15,17 @@
 
 #ifdef FLECS_PIPELINE
 
+#ifndef FLECS_MODULE
+#define FLECS_MODULE
+#endif
+
 #ifndef FLECS_SYSTEM
 #define FLECS_SYSTEM
 #endif
 
-#include "system.h"
+#if !defined(FLECS_OS_API_IMPL) && !defined(FLECS_NO_OS_API_IMPL)
+#define FLECS_OS_API_IMPL
+#endif
 
 #ifndef FLECS_PIPELINE_H
 #define FLECS_PIPELINE_H
@@ -29,14 +35,21 @@ extern "C" {
 #endif
 
 #ifndef FLECS_LEGACY
-#define ECS_PIPELINE(world, id, ...) \
-    ecs_entity_t id = ecs_type_init(world, &(ecs_type_desc_t){\
+#define ECS_PIPELINE_DEFINE(world, id, ...)\
+    id = ecs_type_init(world, &(ecs_type_desc_t){\
         .entity = {\
             .name = #id,\
             .add = {EcsPipeline}\
         },\
         .ids_expr = #__VA_ARGS__\
-    });
+    });\
+    ecs_id(id) = id;
+
+#define ECS_PIPELINE(world, id, ...) \
+    ecs_entity_t ecs_id(id), ECS_PIPELINE_DEFINE(world, id, __VA_ARGS__);\
+    (void)id;\
+    (void)ecs_id(id)
+    
 #endif
 
 /** Set a custom pipeline.
@@ -54,7 +67,7 @@ void ecs_set_pipeline(
  * This operation gets the current pipeline.
  *
  * @param world The world.
- * @param pipeline The pipeline to set.
+ * @return The current pipeline.
  */
 FLECS_API
 ecs_entity_t ecs_get_pipeline(
@@ -122,7 +135,7 @@ void ecs_reset_clock(
  * @param pipeline The pipeline to run.
  */
 FLECS_API 
-void ecs_pipeline_run(
+void ecs_run_pipeline(
     ecs_world_t *world,
     ecs_entity_t pipeline,
     FLECS_FLOAT delta_time);    
@@ -160,16 +173,9 @@ void ecs_set_threads(
 //// Module
 ////////////////////////////////////////////////////////////////////////////////
 
-/* Pipeline component is empty: components and tags in module are static */
-typedef struct FlecsPipeline {
-    int32_t dummy; 
-} FlecsPipeline;
-
 FLECS_API
 void FlecsPipelineImport(
     ecs_world_t *world);
-
-#define FlecsPipelineImportHandles(handles)
 
 #ifdef __cplusplus
 }

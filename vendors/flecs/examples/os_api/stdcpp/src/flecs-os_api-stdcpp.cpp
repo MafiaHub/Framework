@@ -3,6 +3,11 @@
 #include <mutex>
 #include <condition_variable>
 
+#ifdef _MSC_VER
+#include <WinSock2.h>
+#include "windows.h"
+#endif
+
 static
 ecs_os_thread_t stdcpp_thread_new(
     ecs_os_thread_callback_t callback, 
@@ -25,26 +30,22 @@ void* stdcpp_thread_join(
 
 static
 int32_t stdcpp_ainc(int32_t *count) {
-    int value;
 #ifdef __GNUC__
-    value = __sync_add_and_fetch (count, 1);
+    int value = __sync_add_and_fetch (count, 1);
     return value;
 #else
-    return InterlockedIncrement(reinterpret_cast<LONG*>(count));
+    return InterlockedIncrement((uint32_t*)count);
 #endif
-    return value;
 }
 
 static
 int32_t stdcpp_adec(int32_t *count) {
-    int value;
 #ifdef __GNUC__
-    value = __sync_sub_and_fetch (count, 1);
+    int value = __sync_sub_and_fetch (count, 1);
     return value;
 #else
-    return InterlockedDecrement(reinterpret_cast<LONG*>(count));
+    return InterlockedDecrement((uint32_t*)count);
 #endif
-    return value;
 }
 
 static

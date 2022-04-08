@@ -36,24 +36,22 @@
 extern "C" {
 #endif
 
-/* Public, so we can do compile-time header size calculation */
-struct ecs_vector_t {
-    int32_t count;
-    int32_t size;
-    
-#ifndef NDEBUG
-    int64_t elem_size;
+#ifdef FLECS_NDEBUG
+#define ECS_VECTOR_T_SIZE\
+    (ECS_SIZEOF(int32_t) + ECS_SIZEOF(int32_t))
+#else
+#define ECS_VECTOR_T_SIZE\
+    (ECS_SIZEOF(int32_t) + ECS_SIZEOF(int32_t) + ECS_SIZEOF(int64_t))
 #endif
-};
 
 /* Compute the header size of the vector from size & alignment */
-#define ECS_VECTOR_U(size, alignment) size, ECS_CAST(int16_t, ECS_MAX(ECS_SIZEOF(ecs_vector_t), alignment))
+#define ECS_VECTOR_U(size, alignment) size, ECS_CAST(int16_t, ECS_MAX(ECS_VECTOR_T_SIZE, alignment))
 
 /* Compute the header size of the vector from a provided compile-time type */
 #define ECS_VECTOR_T(T) ECS_VECTOR_U(ECS_SIZEOF(T), ECS_ALIGNOF(T))
 
 /* Utility macro's for creating vector on stack */
-#ifndef NDEBUG
+#ifndef FLECS_NDEBUG
 #define ECS_VECTOR_VALUE(T, elem_count)\
 {\
     .elem_size = (int32_t)(ECS_SIZEOF(T)),\
@@ -143,12 +141,6 @@ void ecs_vector_assert_size(
     ecs_vector_t* vector_inout,
     ecs_size_t elem_size);
 
-/** Assert when the provided alignment does not match the vector type. */
-FLECS_API
-void ecs_vector_assert_alignment(
-    ecs_vector_t* vector,
-    ecs_size_t elem_alignment);    
-
 /** Add element to vector. */
 FLECS_API
 void* _ecs_vector_add(
@@ -161,6 +153,20 @@ void* _ecs_vector_add(
 
 #define ecs_vector_add_t(vector, size, alignment) \
     _ecs_vector_add(vector, ECS_VECTOR_U(size, alignment))
+
+/** Insert element to vector. */
+FLECS_API
+void* _ecs_vector_insert_at(
+    ecs_vector_t **array_inout,
+    ecs_size_t elem_size,
+    int16_t offset,
+    int32_t index);
+
+#define ecs_vector_insert_at(vector, T, index) \
+    ((T*)_ecs_vector_insert_at(vector, ECS_VECTOR_T(T), index))
+
+#define ecs_vector_insert_at_t(vector, size, alignment, index) \
+    _ecs_vector_insert_at(vector, ECS_VECTOR_U(size, alignment), index)
 
 /** Add n elements to the vector. */
 FLECS_API
@@ -224,8 +230,11 @@ int32_t _ecs_vector_set_min_count(
     int16_t offset,
     int32_t elem_count);
 
-#define ecs_vector_set_min_count(vector, T, size) \
-    _ecs_vector_set_min_count(vector, ECS_VECTOR_T(T), size)
+#define ecs_vector_set_min_count(vector, T, elem_count) \
+    _ecs_vector_set_min_count(vector, ECS_VECTOR_T(T), elem_count)
+
+#define ecs_vector_set_min_count_t(vector, size, alignment, elem_count) \
+    _ecs_vector_set_min_count(vector, ECS_VECTOR_U(size, alignment), elem_count)
 
 /** Remove last element. This operation requires no swapping of values. */
 FLECS_API
@@ -281,6 +290,9 @@ void _ecs_vector_reclaim(
 
 #define ecs_vector_reclaim(vector, T)\
     _ecs_vector_reclaim(vector, ECS_VECTOR_T(T))
+
+#define ecs_vector_reclaim_t(vector, size, alignment)\
+    _ecs_vector_reclaim(vector, ECS_VECTOR_U(size, alignment))
 
 /** Grow size of vector with provided number of elements. */
 FLECS_API
@@ -404,8 +416,6 @@ ecs_vector_t* _ecs_vector_copy(
 #ifdef __cplusplus
 #ifndef FLECS_NO_CPP
 
-#include <initializer_list>
-
 namespace flecs {
 
 template <typename T>
@@ -451,17 +461,6 @@ public:
         }
     }
 
-    vector(std::initializer_list<T> elems) : m_vector( nullptr) {
-        init(elems.size());
-        *this = elems;
-    }
-
-    void operator=(std::initializer_list<T> elems) {
-        for (auto elem : elems) {
-            this->add(elem);
-        }
-    }
-
     T& operator[](size_t index) {
         return *static_cast<T*>(_ecs_vector_get(m_vector, ECS_VECTOR_T(T), index));
     }
@@ -496,7 +495,6 @@ public:
     }
 
     T& get(int32_t index) {
-        ecs_assert(index < ecs_vector_count(m_vector), ECS_OUT_OF_RANGE, NULL);
         return *static_cast<T*>(_ecs_vector_get(m_vector, ECS_VECTOR_T(T), index));
     }
 

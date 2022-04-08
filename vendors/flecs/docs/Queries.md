@@ -2,7 +2,7 @@ Queries are the mechanism that allow applications to get the entities that match
 
 **NOTE**: this manual describes queries as they are intended to work. The actual implementation may not have support for certain combinations of features. When an application attempts to use a feature that is not yet supported, an `UNSUPPORTED` error will be thrown.
 
-**NOTE**: the description of filters in this manual refers to the new rule parser which has not yet merged with master.
+**NOTE**: features that rely on query variables or automatic substitution of components or objects (like when relying on component inheritance or transitive queries) require the rule query engine, included in the FLECS_RULES addon.
 
 ## Query kinds
 Flecs has two different kinds of queriers: cached and uncached. The differences are described here. Note that when "query" is mentioned in the other parts of the manual it always refers to all query kinds, unless explicitly mentioned otherwise.
@@ -101,7 +101,8 @@ auto q = qb.build();
 The builder API has support for adding terms using the DSL:
 
 ```cpp
-auto q = world.query_builder<>("Position, [in] Velocity")
+auto q = world.query_builder()
+  .expr("Position, [in] Velocity")
   .term("NPC")
   .term("(Likes, Apples)")
   .build();
@@ -113,7 +114,8 @@ The query descriptor is a C API to construct queries that follows the struct ini
 This is an example of the query descriptor API:
 
 ```c
-ecs_filter_t *f = ecs_filter_init(world, &(ecs_filter_desc_t){
+ecs_filter_t f;
+ecs_filter_init(world, &f, &(ecs_filter_desc_t){
   .terms = {
     {ecs_id(Position)},
     {ecs_id(Velocity)},
@@ -126,7 +128,8 @@ ecs_filter_t *f = ecs_filter_init(world, &(ecs_filter_desc_t){
 The descriptor API has support for using the DSL:
 
 ```c
-ecs_filter_t *f = ecs_filter_init(world, &(ecs_filter_desc_t){
+ecs_filter_t f;
+ecs_filter_init(world, &f, &(ecs_filter_desc_t){
   .terms = {
     {ecs_id(Position)},
     {ecs_id(Velocity)}
@@ -220,11 +223,11 @@ auto q = world.query_builder<>()
 
 q.iter([](flecs::iter& it) {
   // Get the type id for the first term.
-  auto likes = it.term_id(1);
+  auto likes = it.id(1);
 
   // Extract the object from the pair
   std::cout << "Entities like " 
-    << likes.object().name() 
+    << likes.second().name() 
     << std::endl;
 });
 ```
@@ -234,7 +237,7 @@ Alternatively, the `iter` call can be written in such a way that it is fully gen
 ```cpp
 q.iter([](flecs::iter& it) {
   for (int t = 0; t < it.term_count(); t++) {
-    auto id = it.term_id(t);
+    auto id = it.id(t);
     auto data = it.term(t);
 
     // Use id & data, for example for reflection
@@ -283,8 +286,8 @@ ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t){
 ecs_iter_t it = ecs_query_iter(world, q);
 while (ecs_query_next(&it)) {
   ecs_id_t id = ecs_term_id(&it, 1);
-  printf("Entities like %s\n", 
-    ecs_get_name(world, ecs_get_object(world, id)));
+  ecs_entity_t obj = ecs_pair_second(it->world, id);
+  printf("Entities like %s\n", ecs_get_name(world, object));
 }
 ```
 
@@ -718,16 +721,18 @@ ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
 ```
 
 ### Singleton
-A singleton in Flecs is a component or tag that has been added to itself. In the query langauge this can be written down as a term with a predicate that references itself as the subject:
+Singletons are a feature that make it easy to work with components for which there is only a single instance in the world. A typical example is a `Game` component, which could contain information that is global to a game, like simulation speed.
+
+In the query language, a singleton can be queried for by providing the `$` symbol as subject:
+
+```
+Game($)
+```
+
+In Flecs singletons are implemented as components that are added to themselves. The above query is short for:
 
 ```
 Game(Game)
-```
-
-Since this is such a common pattern, the query DSL provides a shortcut for singletons with the singleton operator (`$`). This term is an example of how it is used, and is equivalent to `Game(Game)`:
-
-```
-$Game
 ```
 
 This example shows how to add a singleton with the query builder:
@@ -744,7 +749,7 @@ This example shows how to add a singleton with the query descriptor. Note that t
 // Game(Game)
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
-    {ecs_id(Game), .args[0].entity = ecs_id(Game)}
+    { ecs_id(Game), .subj.entity = ecs_id(Game) }
   }
 });
 ```
@@ -757,7 +762,7 @@ This example shows how to explicitly set identifiers with the builder API:
 ```cpp
 // Position(This), (Likes, Alice)
 auto qb = world.query_builder<>()
-  .term<Position>().subject(flecs::This)
+  .term<Position>().subj(flecs::This)
   .term(Likes).object(Alice);
 ```
 
@@ -767,8 +772,8 @@ This example shows how to explicitly set identifiers with the query descriptor:
 // Position(This), (Likes, Alice)
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
-    {.predicate.entity = ecs_id(Position), .args[0].entity = EcsThis},
-    {.predicate.entity = Likes, .args[1].entity = Alice}
+    {.pred.entity = ecs_id(Position), .subj.entity = EcsThis},
+    {.pred.entity = Likes, .obj.entity = Alice}
   }
 });
 ```
@@ -792,7 +797,7 @@ which is equivalent to
 // Position(This)
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
-    {.predicate = ecs_id(Position), .args[0].entity = EcsThis}
+    {.pred.entity = ecs_id(Position), .subj.entity = EcsThis}
   }
 });
 ```
@@ -815,9 +820,9 @@ which is equivalent to
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
     {
-      .predicate = Likes,
-      .args[0].entity = EcsThis,
-      .args[1].entity = Alice
+      .pred.entity = Likes,
+      .subj.entity = EcsThis,
+      .obj.entity = Alice
     }
   }
 });
@@ -891,15 +896,15 @@ Now suppose we want to know whether the object matched by the wildcard (`*`) is 
 But that does not work, as this query would return all Likes relationships * all Colleague relationships. To constrain the query to only return `Likes` relationships for objects that are also colleagues, we can use a variable:
 
 ```
-(Likes, X), (Colleague, X)
+(Likes, $X), (Colleague, $X)
 ```
 
-A variable is an identifier that is local to the query. It does not need to be defined in advance. By default identifiers that are all uppercase are automatically parsed as a variable by the DSL.
+A variable is an identifier that is local to the query and does not need to be defined in advance. In the query DSL identifiers that start with a `$` are interpreted as a variable.
 
 Variables can occur in multiple places. For example, this query returns all the relationships the `This` entity has with each object it likes as `R`:
 
 ```
-(Likes, X), (R, X)
+(Likes, $X), ($R, $X)
 ```
 
 A useful application for variables is ensuring that an entity has a component referenced by a relationship. Consider an application that has an `ExpiryTimer` relationship that removes a component after a certain time has expired. This logic only needs to be executed when the entity actually has the component to remove. 
@@ -907,13 +912,13 @@ A useful application for variables is ensuring that an entity has a component re
 With variables this can be ensured:
 
 ```
-(ExpiryTimer, C), C
+(ExpiryTimer, $C), $C
 ```
 
 Variables allow queries to arbitrarily traverse the entity relationship graph. For example, the following query tests whether there exist entities that like objects that like their enemies:
 
 ```
-(Likes, FRIEND), Likes(FRIEND, ENEMY), (Enemy, ENEMY)
+(Likes, $Friend), Likes($Friend, $Enemy), (Enemy, $Enemy)
 ```
 
 This example shows how to use variables in the C++ API:
@@ -921,8 +926,8 @@ This example shows how to use variables in the C++ API:
 ```cpp
 // (Likes, X), (Colleague, X)
 auto qb = world.query_builder<>()
-  .term(Likes).object("X")
-  .term(Colleague).object("X");
+  .term(Likes).obj().var("X")
+  .term(Colleague).obj().var("X");
 ```
 
 This example shows how to use wildcards in the query descriptor:
@@ -931,8 +936,8 @@ This example shows how to use wildcards in the query descriptor:
 // (Likes, X), (Colleague, X)
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
-    {.predicate.entity = Likes, .args[1].name = "X"}
-    {.predicate.entity = Colleague, .args[1].name = "X"}
+    {.pred.entity = Likes, .obj.name = "X", .var = EcsVarIsVariable }
+    {.pred.entity = Colleague, .obj.name = "X", .var = EcsVarIsVariable }
   }
 });
 ```
@@ -966,7 +971,20 @@ def find_object_w_component(This, Component):
   return 0 '// No match
 ```
 
-#### Inclusive Substitution
+### Parent components
+Queries may use the `parent` shortcut to select components from a parent entity which is short for `super(ChildOf)` /This query:
+
+```
+Position(parent)
+```
+
+is equivalent to
+
+```
+Position(super(ChildOf))
+```
+
+#### Self Substitution
 Substitution can do more than just searching supersets. It is for example possible to start the search on `This` itself, and when the component is not found on `This`, keep searching by following the `ChildOf` relation:
 
 ```c
@@ -1059,7 +1077,7 @@ This example shows how to use wildcards in the query descriptor:
 // Position(super(ChildOf))
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
-    {ecs_id(Position), .args[0].set = {
+    {ecs_id(Position), .subj.set = {
       .mask = EcsSuperSet,
       .relation = EcsChildOf
     }}
@@ -1069,7 +1087,7 @@ ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
 // Position(self|super(ChildOf, 3))
 ecs_query_t *q = ecs_query_init(world, &(ecs_query_decs_t){
   .filter.terms = {
-    {ecs_id(Position), .args[0].set = {
+    {ecs_id(Position), .subj.set = {
       .mask = EcsSelf | EcsSuperSet,
       .relation = EcsChildOf,
       .max_depth = 3

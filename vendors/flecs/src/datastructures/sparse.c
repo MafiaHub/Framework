@@ -18,19 +18,6 @@ typedef struct chunk_t {
                                  * indirection and provide stable pointers. */
 } chunk_t;
 
-struct ecs_sparse_t {
-    ecs_vector_t *dense;        /* Dense array with indices to sparse array. The
-                                 * dense array stores both alive and not alive
-                                 * sparse indices. The 'count' member keeps
-                                 * track of which indices are alive. */
-
-    ecs_vector_t *chunks;       /* Chunks with sparse arrays & data */
-    ecs_size_t size;            /* Element size */
-    int32_t count;              /* Number of alive entries */
-    uint64_t max_id_local;      /* Local max index (if no global is set) */
-    uint64_t *max_id;           /* Maximum issued sparse index */
-};
-
 static
 chunk_t* chunk_new(
     ecs_sparse_t *sparse,
@@ -83,6 +70,13 @@ chunk_t* get_chunk(
     const ecs_sparse_t *sparse,
     int32_t chunk_index)
 {
+    if (!sparse->chunks) {
+        return NULL;
+    }
+    if (chunk_index >= ecs_vector_count(sparse->chunks)) {
+        return NULL;
+    }
+
     /* If chunk_index is below zero, application used an invalid entity id */
     ecs_assert(chunk_index >= 0, ECS_INVALID_PARAMETER, NULL);
     chunk_t *result = ecs_vector_get(sparse->chunks, chunk_t, chunk_index);
@@ -307,10 +301,10 @@ void swap_dense(
     assign_index(chunk_b, dense_array, index_b, a);
 }
 
-ecs_sparse_t* _flecs_sparse_new(
+void _flecs_sparse_init(
+    ecs_sparse_t *result,
     ecs_size_t size)
 {
-    ecs_sparse_t *result = ecs_os_calloc(ECS_SIZEOF(ecs_sparse_t));
     ecs_assert(result != NULL, ECS_OUT_OF_MEMORY, NULL);
     result->size = size;
     result->max_id_local = UINT64_MAX;
@@ -322,6 +316,14 @@ ecs_sparse_t* _flecs_sparse_new(
     *first = 0;
 
     result->count = 1;
+}
+
+ecs_sparse_t* _flecs_sparse_new(
+    ecs_size_t size)
+{
+    ecs_sparse_t *result = ecs_os_calloc_t(ecs_sparse_t);
+
+    _flecs_sparse_init(result, size);
 
     return result;
 }
@@ -351,12 +353,19 @@ void flecs_sparse_clear(
     sparse->max_id_local = 0;
 }
 
+void _flecs_sparse_fini(
+    ecs_sparse_t *sparse)
+{
+    ecs_assert(sparse != NULL, ECS_INTERNAL_ERROR, NULL);
+    flecs_sparse_clear(sparse);
+    ecs_vector_free(sparse->dense);
+}
+
 void flecs_sparse_free(
     ecs_sparse_t *sparse)
 {
     if (sparse) {
-        flecs_sparse_clear(sparse);
-        ecs_vector_free(sparse->dense);
+        _flecs_sparse_fini(sparse);
         ecs_os_free(sparse);
     }
 }
@@ -466,7 +475,7 @@ void* _flecs_sparse_ensure(
 
         /* If index is larger than max id, update max id */
         if (index >= get_id(sparse)) {
-            set_id(sparse, index + 1);
+            set_id(sparse, index);
         }
 
         if (count < dense_count) {
@@ -522,6 +531,7 @@ void* _flecs_sparse_remove_get(
         dense_array[dense] = index | inc_gen(cur_gen);
         
         int32_t count = sparse->count;
+        
         if (dense == (count - 1)) {
             /* If dense is the last used element, simply decrease count */
             sparse->count --;
@@ -643,7 +653,7 @@ void* _flecs_sparse_get(
 }
 
 void* _flecs_sparse_get_any(
-    ecs_sparse_t *sparse,
+    const ecs_sparse_t *sparse,
     ecs_size_t size,
     uint64_t index)
 {
@@ -662,6 +672,16 @@ int32_t flecs_sparse_count(
     }
 
     return sparse->count - 1;
+}
+
+int32_t flecs_sparse_not_alive_count(
+    const ecs_sparse_t *sparse)
+{
+    if (!sparse) {
+        return 0;
+    }
+
+    return ecs_vector_count(sparse->dense) - sparse->count;
 }
 
 int32_t flecs_sparse_size(

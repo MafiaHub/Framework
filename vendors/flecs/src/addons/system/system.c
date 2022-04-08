@@ -46,9 +46,7 @@ void ecs_system_activate(
     }
 
     if (!activate) {
-        if (ecs_has_id(world, system, EcsDisabled) || 
-            ecs_has_id(world, system, EcsDisabledIntern)) 
-        {
+        if (ecs_has_id(world, system, EcsDisabled)) {
             if (!ecs_query_table_count(system_data->query)) {
                 /* If deactivating a disabled system that isn't matched with
                  * any active tables, there is nothing to deactivate. */
@@ -61,7 +59,7 @@ void ecs_system_activate(
     invoke_status_action(world, system, system_data, 
         activate ? EcsSystemActivated : EcsSystemDeactivated);
 
-    ecs_trace_2("system #[green]%s#[reset] %s", 
+    ecs_dbg_1("#[green]system#[reset] %s %s", 
         ecs_get_name(world, system), 
         activate ? "activated" : "deactivated");
 }
@@ -95,28 +93,6 @@ void ecs_enable_system(
 }
 
 /* -- Public API -- */
-
-void ecs_enable(
-    ecs_world_t *world,
-    ecs_entity_t entity,
-    bool enabled)
-{
-    ecs_poly_assert(world, ecs_world_t);
-
-    const EcsType *type_ptr = ecs_get( world, entity, EcsType);
-    if (type_ptr) {
-        /* If entity is a type, disable all entities in the type */
-        ecs_vector_each(type_ptr->normalized, ecs_entity_t, e, {
-            ecs_enable(world, *e, enabled);
-        });
-    } else {
-        if (enabled) {
-            ecs_remove_id(world, entity, EcsDisabled);
-        } else {
-            ecs_add_id(world, entity, EcsDisabled);
-        }
-    }
-}
 
 ecs_entity_t ecs_run_intern(
     ecs_world_t *world,
@@ -165,44 +141,65 @@ ecs_entity_t ecs_run_intern(
         ecs_os_get_time(&time_start);
     }
 
-    ecs_defer_begin(stage->thread_ctx);
-
-    /* Prepare the query iterator */
-    ecs_iter_t it = ecs_query_iter_page(
-        stage->thread_ctx, system_data->query, offset, limit);
-
-    it.system = system;
-    it.self = system_data->self;
-    it.delta_time = delta_time;
-    it.delta_system_time = time_elapsed;
-    it.world_time = world->stats.world_time_total;
-    it.frame_offset = offset;
-    it.param = param;
-    it.ctx = system_data->ctx;
-    it.binding_ctx = system_data->binding_ctx;
-
-    ecs_iter_action_t action = system_data->action;
-
-    /* If no filter is provided, just iterate tables & invoke action */
-    if (stage_count <= 1) {
-        while (ecs_query_next(&it)) {
-            action(&it);
-        }
-    } else {
-        while (ecs_query_next_worker(&it, stage_current, stage_count)) {
-            action(&it);               
-        }
+    ecs_world_t *thread_ctx = world;
+    if (stage) {
+        thread_ctx = stage->thread_ctx;
     }
 
-    ecs_defer_end(stage->thread_ctx);
+    ecs_defer_begin(thread_ctx);
+
+    /* Prepare the query iterator */
+    ecs_iter_t pit, wit, qit = ecs_query_iter(thread_ctx, system_data->query);
+    ecs_iter_t *it = &qit;
+
+    if (offset || limit) {
+        pit = ecs_page_iter(it, offset, limit);
+        it = &pit;
+    }
+
+    if (stage_count > 1 && system_data->multi_threaded) {
+        wit = ecs_worker_iter(it, stage_current, stage_count);
+        it = &wit;
+    }
+
+    qit.system = system;
+    qit.self = system_data->self;
+    qit.delta_time = delta_time;
+    qit.delta_system_time = time_elapsed;
+    qit.frame_offset = offset;
+    qit.param = param;
+    qit.ctx = system_data->ctx;
+    qit.binding_ctx = system_data->binding_ctx;
+
+    ecs_iter_action_t action = system_data->action;
+    it->callback = action;
+    
+    ecs_run_action_t run = system_data->run;
+    if (run) {
+        run(it);
+    } else if (system_data->query->filter.term_count) {
+        if (it == &qit) {
+            while (ecs_query_next(&qit)) {
+                action(&qit);
+            }
+        } else {
+            while (ecs_iter_next(it)) {
+                action(it);
+            }
+        }
+    } else {
+        action(&qit);
+    }
 
     if (measure_time) {
-        system_data->time_spent += (FLECS_FLOAT)ecs_time_measure(&time_start);
+        system_data->time_spent += (float)ecs_time_measure(&time_start);
     }
 
     system_data->invoke_count ++;
 
-    return it.interrupted_by;
+    ecs_defer_end(thread_ctx);
+
+    return it->interrupted_by;
 }
 
 /* -- Public API -- */
@@ -294,79 +291,48 @@ void* ecs_get_system_binding_ctx(
     }   
 }
 
-/* Generic constructor to initialize a component to 0 */
+/* System deinitialization */
 static
-void sys_ctor_init_zero(
-    ecs_world_t *world,
-    ecs_entity_t component,
-    const ecs_entity_t *entities,
-    void *ptr,
-    size_t size,
-    int32_t count,
-    void *ctx)
-{
-    (void)world;
-    (void)component;
-    (void)entities;
-    (void)ctx;
-    memset(ptr, 0, size * (size_t)count);
-}
+void ecs_on_remove(EcsSystem)(ecs_iter_t *it) {
+    ecs_world_t *world = it->world;
+    EcsSystem *ptr = ecs_term(it, EcsSystem, 1);
 
-/* System destructor */
-static
-void ecs_colsystem_dtor(
-    ecs_world_t *world,
-    ecs_entity_t component,
-    const ecs_entity_t *entities,
-    void *ptr,
-    size_t size,
-    int32_t count,
-    void *ctx)
-{
-    (void)component;
-    (void)ctx;
-    (void)size;
-
-    EcsSystem *system_data = ptr;
-
-    int i;
+    int32_t i, count = it->count;
     for (i = 0; i < count; i ++) {
-        EcsSystem *system = &system_data[i];
-        ecs_entity_t e = entities[i];
+        EcsSystem *sys = &ptr[i];
+        ecs_entity_t entity = it->entities[i];
 
-        if (!ecs_is_alive(world, e)) {
+        if (!ecs_is_alive(world, entity)) {
             /* This can happen when a set is deferred while a system is being
-             * cleaned up. The operation will be discarded, but the destructor
-             * still needs to be invoked for the value */
+            * cleaned up. The operation will be discarded, but the destructor
+            * still needs to be invoked for the value */
             continue;
         }
 
         /* Invoke Deactivated action for active systems */
-        if (system->query && ecs_query_table_count(system->query)) {
-            invoke_status_action(world, e, ptr, EcsSystemDeactivated);
+        if (sys->query && ecs_query_table_count(sys->query)) {
+            invoke_status_action(world, entity, sys, EcsSystemDeactivated);
         }
 
         /* Invoke Disabled action for enabled systems */
-        if (!ecs_has_id(world, e, EcsDisabled) && 
-            !ecs_has_id(world, e, EcsDisabledIntern)) 
-        {
-            invoke_status_action(world, e, ptr, EcsSystemDisabled);
+        if (!ecs_has_id(world, entity, EcsDisabled)) {
+            invoke_status_action(world, entity, sys, EcsSystemDisabled);
         }
 
-        if (system->ctx_free) {
-            system->ctx_free(system->ctx);
+        if (sys->ctx_free) {
+            sys->ctx_free(sys->ctx);
         }
 
-        if (system->status_ctx_free) {
-            system->status_ctx_free(system->status_ctx);
+        if (sys->status_ctx_free) {
+            sys->status_ctx_free(sys->status_ctx);
         }
 
-        if (system->binding_ctx_free) {
-            system->binding_ctx_free(system->binding_ctx);
+        if (sys->binding_ctx_free) {
+            sys->binding_ctx_free(sys->binding_ctx);
         }  
 
-        if (system->query) {
-            ecs_query_fini(system->query);
+        if (sys->query) {
+            ecs_query_fini(sys->query);
         }
     }
 }
@@ -375,6 +341,10 @@ static
 void EnableMonitor(
     ecs_iter_t *it)
 {
+    if (ecs_is_fini(it->world)) {
+        return;
+    }
+
     EcsSystem *sys = ecs_term(it, EcsSystem, 1);
 
     int32_t i;
@@ -392,9 +362,10 @@ ecs_entity_t ecs_system_init(
     const ecs_system_desc_t *desc)
 {
     ecs_poly_assert(world, ecs_world_t);
-    ecs_assert(!world->is_readonly, ECS_INVALID_WHILE_ITERATING, NULL);
+    ecs_check(desc != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(desc->_canary == 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(!world->is_readonly, ECS_INVALID_WHILE_ITERATING, NULL);
 
-    ecs_entity_t existing = desc->entity.entity;
     ecs_entity_t result = ecs_entity_init(world, &desc->entity);
     if (!result) {
         return 0;
@@ -403,7 +374,7 @@ ecs_entity_t ecs_system_init(
     bool added = false;
     EcsSystem *system = ecs_get_mut(world, result, EcsSystem, &added);
     if (added) {
-        ecs_assert(desc->callback != NULL, ECS_INVALID_PARAMETER, NULL);
+        ecs_check(desc->callback != NULL, ECS_INVALID_PARAMETER, NULL);
 
         memset(system, 0, sizeof(EcsSystem));
 
@@ -427,6 +398,7 @@ ecs_entity_t ecs_system_init(
         system->entity = result;
         system->query = query;
 
+        system->run = desc->run;
         system->action = desc->callback;
         system->status_action = desc->status_callback;
 
@@ -441,12 +413,15 @@ ecs_entity_t ecs_system_init(
 
         system->tick_source = desc->tick_source;
 
+        system->multi_threaded = desc->multi_threaded;
+        system->no_staging = desc->no_staging;
+
         /* If tables have been matched with this system it is active, and we
          * should activate the in terms, if any. This will ensure that any
          * OnDemand systems get enabled. */
         if (ecs_query_table_count(query)) {
             ecs_system_activate(world, result, true, system);
-        } else {
+        } else if (query->filter.term_count) {
             /* If system isn't matched with any tables, mark it as inactive. This
              * causes it to be ignored by the main loop. When the system matches
              * with a table it will be activated. */
@@ -484,41 +459,16 @@ ecs_entity_t ecs_system_init(
 
         ecs_modified(world, result, EcsSystem);
 
-        ecs_trace_1("system #[green]%s#[reset] created with #[red]%s", 
-            ecs_get_name(world, result), query->filter.expr);
+        if (desc->entity.name) {
+            ecs_trace("#[green]system#[reset] %s created", 
+                ecs_get_name(world, result));
+        }
 
         ecs_defer_end(world);            
     } else {
-        const char *expr_desc = desc->query.filter.expr;
-        const char *expr_sys = system->query->filter.expr;
-
-        /* Only check expression if it's set */
-        if (expr_desc) {
-            if (expr_sys && !strcmp(expr_sys, "0")) expr_sys = NULL;
-            if (expr_desc && !strcmp(expr_desc, "0")) expr_desc = NULL;
-
-            if (expr_sys && expr_desc) {
-                if (strcmp(expr_sys, expr_desc)) {
-                    ecs_abort(ECS_ALREADY_DEFINED, desc->entity.name);
-                }
-            } else {
-                if (expr_sys != expr_desc) {
-                    ecs_abort(ECS_ALREADY_DEFINED, desc->entity.name);
-                }
-            }
-
-        /* If expr_desc is not set, and this is an existing system, don't throw
-         * an error because we could be updating existing parameters of the
-         * system such as the context or system callback. However, if no
-         * entity handle was provided, we have to assume that the application is
-         * trying to redeclare the system. */
-        } else if (!existing) {
-            if (expr_sys) {
-                ecs_abort(ECS_ALREADY_DEFINED, desc->entity.name);
-            }
+        if (desc->run) {
+            system->run = desc->run;
         }
-
-        /* Override the existing callback or context */
         if (desc->callback) {
             system->action = desc->callback;
         }
@@ -528,9 +478,20 @@ ecs_entity_t ecs_system_init(
         if (desc->binding_ctx) {
             system->binding_ctx = desc->binding_ctx;
         }
+        if (desc->query.filter.instanced) {
+            system->query->filter.instanced = true;
+        }
+        if (desc->multi_threaded) {
+            system->multi_threaded = desc->multi_threaded;
+        }
+        if (desc->no_staging) {
+            system->no_staging = desc->no_staging;
+        }
     }
 
     return result;
+error:
+    return 0;
 }
 
 void FlecsSystemImport(
@@ -543,15 +504,9 @@ void FlecsSystemImport(
     flecs_bootstrap_component(world, EcsSystem);
     flecs_bootstrap_component(world, EcsTickSource);
 
-    flecs_bootstrap_tag(world, EcsOnAdd);
-    flecs_bootstrap_tag(world, EcsOnRemove);
-    flecs_bootstrap_tag(world, EcsOnSet);
-    flecs_bootstrap_tag(world, EcsUnSet);
-
     /* Put following tags in flecs.core so they can be looked up
      * without using the flecs.systems prefix. */
     ecs_entity_t old_scope = ecs_set_scope(world, EcsFlecsCore);
-    flecs_bootstrap_tag(world, EcsDisabledIntern);
     flecs_bootstrap_tag(world, EcsInactive);
     flecs_bootstrap_tag(world, EcsMonitor);
     ecs_set_scope(world, old_scope);
@@ -559,12 +514,19 @@ void FlecsSystemImport(
     /* Bootstrap ctor and dtor for EcsSystem */
     ecs_set_component_actions_w_id(world, ecs_id(EcsSystem), 
         &(EcsComponentLifecycle) {
-            .ctor = sys_ctor_init_zero,
-            .dtor = ecs_colsystem_dtor
+            .ctor = ecs_default_ctor,
+            .on_remove = ecs_on_remove(EcsSystem)
         });
 
-    ECS_OBSERVER(world, EnableMonitor, EcsMonitor,
-        System, !Disabled, !DisabledIntern);
+    ecs_observer_init(world, &(ecs_observer_desc_t) {
+        .entity.name = "EnableMonitor",
+        .filter.terms = {
+            { .id = ecs_id(EcsSystem) },
+            { .id = EcsDisabled, .oper = EcsNot },
+        },
+        .events = {EcsMonitor},
+        .callback = EnableMonitor
+    });
 }
 
 #endif

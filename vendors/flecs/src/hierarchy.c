@@ -1,5 +1,6 @@
-
 #include "private_api.h"
+#include <stdio.h>
+#include <ctype.h>
 
 #define ECS_NAME_BUFFER_LENGTH (64)
 
@@ -21,7 +22,7 @@ bool path_append(
     if (ecs_is_valid(world, child)) {
         cur = ecs_get_object(world, child, EcsChildOf, 0);
         if (cur) {
-            if (cur != parent && cur != EcsFlecsCore) {
+            if (cur != parent && (cur != EcsFlecsCore || prefix != NULL)) {
                 path_append(world, parent, cur, sep, prefix, buf);
                 ecs_strbuf_appendstr(buf, sep);
             }
@@ -42,80 +43,6 @@ bool path_append(
     ecs_strbuf_appendstr(buf, name);
 
     return cur != 0;
-}
-
-static
-ecs_string_t get_string_key(
-    const char *name,
-    ecs_size_t length,
-    uint64_t hash)
-{
-    ecs_assert(!length || length == ecs_os_strlen(name), 
-        ECS_INTERNAL_ERROR, NULL);
-
-    if (!length) {
-        length = ecs_os_strlen(name);
-    }
-
-    ecs_assert(!hash || hash == flecs_hash(name, length),
-        ECS_INTERNAL_ERROR, NULL);
-
-    if (!hash) {
-        hash = flecs_hash(name, length);
-    }
-
-    return  (ecs_string_t) {
-        .value = (char*)name,
-        .length = length,
-        .hash = hash
-    };
-}
-
-static
-ecs_entity_t find_by_name(
-    const ecs_hashmap_t *map,
-    const char *name,
-    ecs_size_t length,
-    uint64_t hash)
-{
-    ecs_string_t key = get_string_key(name, length, hash);
-
-    ecs_entity_t *e = flecs_hashmap_get(*map, &key, ecs_entity_t);
-
-    if (!e) {
-        return 0;
-    }
-
-    return *e;
-}
-
-static
-void register_by_name(
-    ecs_hashmap_t *map,
-    ecs_entity_t entity,
-    const char *name,
-    ecs_size_t length,
-    uint64_t hash)
-{
-    ecs_assert(entity != 0, ECS_INVALID_PARAMETER, NULL);
-    ecs_assert(name != NULL, ECS_INVALID_PARAMETER, NULL);
-
-    ecs_string_t key = get_string_key(name, length, hash);
-    
-    ecs_entity_t existing = find_by_name(map, name, key.length, key.hash);
-    if (existing) {
-        if (existing != entity) {
-            ecs_abort(ECS_ALREADY_DEFINED, 
-                "conflicting entity registered with name '%s'", name);
-        }
-    } else {
-        key.value = ecs_os_strdup(key.value);
-    }
-
-    flecs_hashmap_result_t hmr = flecs_hashmap_ensure(
-        *map, &key, ecs_entity_t);
-
-    *((ecs_entity_t*)hmr.value) = entity;
 }
 
 static
@@ -142,11 +69,17 @@ bool is_number(
 
 static 
 ecs_entity_t name_to_id(
+    const ecs_world_t *world,
     const char *name)
 {
     long int result = atol(name);
     ecs_assert(result >= 0, ECS_INTERNAL_ERROR, NULL);
-    return (ecs_entity_t)result;
+    ecs_entity_t alive = ecs_get_alive(world, (ecs_entity_t)result);
+    if (alive) {
+        return alive;
+    } else {
+        return (ecs_entity_t)result;
+    }
 }
 
 static
@@ -157,6 +90,8 @@ ecs_entity_t get_builtin(
         return EcsThis;
     } else if (name[0] == '*' && name[1] == '\0') {
         return EcsWildcard;
+    } else if (name[0] == '_' && name[1] == '\0') {
+        return EcsAny;
     }
 
     return 0;
@@ -195,7 +130,7 @@ const char* path_elem(
             template_nesting --;
         }
 
-        ecs_assert(template_nesting >= 0, ECS_INVALID_PARAMETER, path);
+        ecs_check(template_nesting >= 0, ECS_INVALID_PARAMETER, path);
 
         if (!template_nesting && is_sep(&ptr, sep)) {
             break;
@@ -213,6 +148,8 @@ const char* path_elem(
     } else {
         return NULL;
     }
+error:
+    return NULL;
 }
 
 static
@@ -226,8 +163,6 @@ ecs_entity_t get_parent_from_path(
     bool start_from_root = false;
     const char *path = *path_ptr;
    
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
-
     if (prefix) {
         ecs_size_t len = ecs_os_strlen(prefix);
         if (!ecs_os_strncmp(path, prefix, len)) {
@@ -254,52 +189,62 @@ void on_set_symbol(ecs_iter_t *it) {
     int i;
     for (i = 0; i < it->count; i ++) {
         ecs_entity_t e = it->entities[i];
-        register_by_name(
+        flecs_name_index_ensure(
             &world->symbols, e, n[i].value, n[i].length, n[i].hash);
     }
 }
 
-static
-uint64_t string_hash(
-    const void *ptr)
-{
-    const ecs_string_t *str = ptr;
-    ecs_assert(str->hash != 0, ECS_INVALID_PARAMETER, NULL);
-    return str->hash;
-}
-
-static
-int string_compare(
-    const void *ptr1, 
-    const void *ptr2)
-{
-    const ecs_string_t *str1 = ptr1;
-    const ecs_string_t *str2 = ptr2;
-    ecs_size_t len1 = str1->length;
-    ecs_size_t len2 = str2->length;
-    if (len1 != len2) {
-        return (len1 > len2) - (len1 < len2);
-    }
-
-    return ecs_os_memcmp(str1->value, str2->value, len1);
-}
-
-ecs_hashmap_t flecs_string_hashmap_new(void) {
-    return flecs_hashmap_new(ecs_string_t, ecs_entity_t, 
-        string_hash, 
-        string_compare);
-}
-
 void flecs_bootstrap_hierarchy(ecs_world_t *world) {
     ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .term = {.id = ecs_pair(ecs_id(EcsIdentifier), EcsSymbol)},
+        .term = {.id = ecs_pair(ecs_id(EcsIdentifier), EcsSymbol), .subj.set.mask = EcsSelf },
         .callback = on_set_symbol,
-        .events = {EcsOnSet}
+        .events = {EcsOnSet},
+        .yield_existing = true
     });
 }
 
 
 /* Public functions */
+
+void ecs_get_path_w_sep_buf(
+    const ecs_world_t *world,
+    ecs_entity_t parent,
+    ecs_entity_t child,
+    const char *sep,
+    const char *prefix,
+    ecs_strbuf_t *buf)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(buf != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    world = ecs_get_world(world);
+
+    if (child == EcsThis) {
+        ecs_strbuf_appendstr(buf, ".");
+        return;
+    }
+    if (child == EcsWildcard) {
+        ecs_strbuf_appendstr(buf, "*");
+        return;
+    }
+    if (child == EcsAny) {
+        ecs_strbuf_appendstr(buf, "_");
+        return;
+    }
+
+    if (!sep) {
+        sep = ".";
+    }
+
+    if (!child || parent != child) {
+        path_append(world, parent, child, sep, prefix, buf);
+    } else {
+        ecs_strbuf_appendstr(buf, "");
+    }
+
+error:
+    return;
+}
 
 char* ecs_get_path_w_sep(
     const ecs_world_t *world,
@@ -308,21 +253,8 @@ char* ecs_get_path_w_sep(
     const char *sep,
     const char *prefix)
 {
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
-    world = ecs_get_world(world);
-
-    if (!sep) {
-        sep = ".";
-    }
-
     ecs_strbuf_t buf = ECS_STRBUF_INIT;
-
-    if (!child || parent != child) {
-        path_append(world, parent, child, sep, prefix, &buf);
-    } else {
-        ecs_strbuf_appendstr(&buf, "");
-    }
-
+    ecs_get_path_w_sep_buf(world, parent, child, sep, prefix, &buf);
     return ecs_strbuf_get(&buf);
 }
 
@@ -331,39 +263,21 @@ ecs_entity_t ecs_lookup_child(
     ecs_entity_t parent,
     const char *name)
 {
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    world = ecs_get_world(world);
 
     if (is_number(name)) {
-        return name_to_id(name);
+        return name_to_id(world, name);
     }
 
-    ecs_filter_t f;
-    int ret = ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
-        .terms = {
-            { .id = ecs_pair( ecs_id(EcsIdentifier), EcsName) },
-            { .id = ecs_pair(EcsChildOf, parent) },
-            { .id = EcsDisabled, .oper = EcsOptional },
-            { .id = EcsPrefab, .oper = EcsOptional }
-        }
-    });
-    
-    ecs_assert(ret == 0, ECS_INTERNAL_ERROR, NULL);
-    (void)ret;
-
-    ecs_iter_t it = ecs_filter_iter(world, &f);
-    while (ecs_filter_next(&it)) {
-        EcsIdentifier *ids = ecs_term(&it, EcsIdentifier, 1);
-        int i;
-        for (i = 0; i < it.count; i ++) {
-            char *cur_name = ids[i].value;
-            if (cur_name && !ecs_os_strcmp(cur_name, name)) {
-                ecs_filter_fini(&f);
-                return it.entities[i];
-            }
-        }
+    ecs_id_t pair = ecs_childof(parent);
+    ecs_hashmap_t *index = flecs_get_id_name_index(world, pair);
+    if (index) {
+        return flecs_name_index_find(index, name, 0, 0);
+    } else {
+        return 0;
     }
-
-    ecs_filter_fini(&f);
+error:
     return 0;
 }
 
@@ -375,7 +289,7 @@ ecs_entity_t ecs_lookup(
         return 0;
     }
 
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
     world = ecs_get_world(world);
 
     ecs_entity_t e = get_builtin(name);
@@ -384,15 +298,17 @@ ecs_entity_t ecs_lookup(
     }
 
     if (is_number(name)) {
-        return name_to_id(name);
+        return name_to_id(world, name);
     }
 
-    e = find_by_name(&world->aliases, name, 0, 0);
+    e = flecs_name_index_find(&world->aliases, name, 0, 0);
     if (e) {
         return e;
     }    
     
     return ecs_lookup_child(world, 0, name);
+error:
+    return 0;
 }
 
 ecs_entity_t ecs_lookup_symbol(
@@ -404,10 +320,10 @@ ecs_entity_t ecs_lookup_symbol(
         return 0;
     }
 
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
     world = ecs_get_world(world);
 
-    ecs_entity_t e = find_by_name(&world->symbols, name, 0, 0);
+    ecs_entity_t e = flecs_name_index_find(&world->symbols, name, 0, 0);
     if (e) {
         return e;
     }
@@ -416,6 +332,7 @@ ecs_entity_t ecs_lookup_symbol(
         return ecs_lookup_fullpath(world, name);
     }
 
+error:
     return 0;
 }
 
@@ -435,7 +352,8 @@ ecs_entity_t ecs_lookup_path_w_sep(
         sep = ".";
     }
 
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    const ecs_world_t *stage = world;
     world = ecs_get_world(world);
 
     ecs_entity_t e = get_builtin(path);
@@ -443,23 +361,29 @@ ecs_entity_t ecs_lookup_path_w_sep(
         return e;
     }
 
-    e = find_by_name(&world->aliases, path, 0, 0);
+    e = flecs_name_index_find(&world->aliases, path, 0, 0);
     if (e) {
         return e;
-    }      
+    }
 
     char buff[ECS_NAME_BUFFER_LENGTH];
     const char *ptr, *ptr_start;
     char *elem = buff;
     int32_t len, size = ECS_NAME_BUFFER_LENGTH;
     ecs_entity_t cur;
-    bool core_searched = false;
+    bool lookup_path_search = false;
+
+    ecs_entity_t *lookup_path = ecs_get_lookup_path(stage);
+    ecs_entity_t *lookup_path_cur = lookup_path;
+    while (lookup_path_cur && *lookup_path_cur) {
+        lookup_path_cur ++;
+    }
 
     if (!sep) {
         sep = ".";
     }
 
-    parent = get_parent_from_path(world, parent, &path, prefix, true);
+    parent = get_parent_from_path(stage, parent, &path, prefix, true);
 
 retry:
     cur = parent;
@@ -489,14 +413,21 @@ retry:
 
 tail:
     if (!cur && recursive) {
-        if (!core_searched) {
+        if (!lookup_path_search) {
             if (parent) {
                 parent = ecs_get_object(world, parent, EcsChildOf, 0);
+                goto retry;
             } else {
-                parent = EcsFlecsCore;
-                core_searched = true;
+                lookup_path_search = true;
             }
-            goto retry;
+        }
+
+        if (lookup_path_search) {
+            if (lookup_path_cur != lookup_path) {
+                lookup_path_cur --;
+                parent = lookup_path_cur[0];
+                goto retry;
+            }
         }
     }
 
@@ -505,33 +436,58 @@ tail:
     }
 
     return cur;
+error:
+    return 0;
 }
 
 ecs_entity_t ecs_set_scope(
     ecs_world_t *world,
     ecs_entity_t scope)
 {
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_stage_t *stage = flecs_stage_from_world(&world);
 
     ecs_entity_t cur = stage->scope;
     stage->scope = scope;
 
-    if (scope) {
-        ecs_id_t id = ecs_pair(EcsChildOf, scope);
-        stage->scope_table = flecs_table_traverse_add(
-            world, &world->store.root, &id, NULL);
-    } else {
-        stage->scope_table = &world->store.root;
-    }
-
     return cur;
+error:
+    return 0;
 }
 
 ecs_entity_t ecs_get_scope(
     const ecs_world_t *world)
 {
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
     const ecs_stage_t *stage = flecs_stage_from_readonly_world(world);
     return stage->scope;
+error:
+    return 0;
+}
+
+ecs_entity_t* ecs_set_lookup_path(
+    ecs_world_t *world,
+    const ecs_entity_t *lookup_path)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_stage_t *stage = flecs_stage_from_world(&world);
+
+    ecs_entity_t *cur = stage->lookup_path;
+    stage->lookup_path = (ecs_entity_t*)lookup_path;
+
+    return cur;
+error:
+    return NULL;
+}
+
+ecs_entity_t* ecs_get_lookup_path(
+    const ecs_world_t *world)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    const ecs_stage_t *stage = flecs_stage_from_readonly_world(world);
+    return stage->lookup_path;
+error:
+    return NULL;
 }
 
 const char* ecs_set_name_prefix(
@@ -539,7 +495,6 @@ const char* ecs_set_name_prefix(
     const char *prefix)
 {
     ecs_poly_assert(world, ecs_world_t);
-
     const char *old_prefix = world->name_prefix;
     world->name_prefix = prefix;
     return old_prefix;
@@ -553,7 +508,7 @@ ecs_entity_t ecs_add_path_w_sep(
     const char *sep,
     const char *prefix)
 {
-    ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
 
     if (!sep) {
         sep = ".";
@@ -571,13 +526,13 @@ ecs_entity_t ecs_add_path_w_sep(
         return entity;
     }
 
+    parent = get_parent_from_path(world, parent, &path, prefix, entity == 0);
+
     char buff[ECS_NAME_BUFFER_LENGTH];
     const char *ptr = path;
     const char *ptr_start = path;
     char *elem = buff;
     int32_t len, size = ECS_NAME_BUFFER_LENGTH;
-
-    parent = get_parent_from_path(world, parent, &path, prefix, entity == 0);
 
     ecs_entity_t cur = parent;
 
@@ -624,24 +579,18 @@ ecs_entity_t ecs_add_path_w_sep(
                 }
             }
 
-            ecs_set_name(world, e, name);
-
             if (cur) {
                 ecs_add_pair(world, e, EcsChildOf, cur);
             }
+
+            ecs_set_name(world, e, name);
         }
 
         cur = e;
     }
 
     if (entity && (cur != entity)) {
-        if (name) {
-            ecs_os_free(name);
-        }
-
-        name = ecs_os_strdup(elem);
-
-        ecs_set_name(world, entity, name);
+        ecs_throw(ECS_ALREADY_DEFINED, name);
     }
 
     if (name) {
@@ -653,6 +602,8 @@ ecs_entity_t ecs_add_path_w_sep(
     }
 
     return cur;
+error:
+    return 0;
 }
 
 ecs_entity_t ecs_new_from_path_w_sep(
@@ -667,12 +618,4 @@ ecs_entity_t ecs_new_from_path_w_sep(
     }
 
     return ecs_add_path_w_sep(world, 0, parent, path, sep, prefix);
-}
-
-void ecs_use(
-    ecs_world_t *world,
-    ecs_entity_t entity,
-    const char *name)
-{
-    register_by_name(&world->aliases, entity, name, 0, 0);
 }

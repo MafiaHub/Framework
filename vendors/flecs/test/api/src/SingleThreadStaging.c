@@ -1,8 +1,7 @@
 #include <api.h>
-#include <flecs/type.h>
 
 void SingleThreadStaging_setup() {
-    ecs_tracing_enable(-3);
+    ecs_log_set_level(-3);
 }
 
 static
@@ -497,10 +496,11 @@ void SingleThreadStaging_clone_w_value() {
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
     ECS_COMPONENT(world, Rotation);
-    ECS_ENTITY(world, e1, Position);
-    ECS_ENTITY(world, e2, Position, Velocity);
-    ECS_ENTITY(world, e3, Position, Mass);
     ECS_SYSTEM(world, Clone_current_w_value, EcsOnUpdate, Position);
+
+    ecs_entity_t e1 = ecs_new_id(world);
+    ecs_entity_t e2 = ecs_new_id(world);
+    ecs_entity_t e3 = ecs_new_id(world);
 
     ecs_set(world, e1, Position, {10, 20});
 
@@ -2396,7 +2396,7 @@ ECS_MOVE(Position, dst, src, {
     move_position ++;
     dst->x = src->x;
     dst->y = src->y;
-});
+})
 
 void SingleThreadStaging_clear_stage_after_merge() {
     ecs_world_t *world = ecs_init();

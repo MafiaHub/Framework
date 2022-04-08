@@ -237,8 +237,8 @@ while (ecs_query_next(&it)) {
   ecs_id_t id = ecs_term_id(&it, 1); // Obtain pair id
 
   // Get relation & object
-  ecs_entity_t rel = ecs_pair_relation(world, id);
-  ecs_entity_t obj = ecs_pair_object(world, id);
+  ecs_entity_t rel = ecs_pair_first(world, id);
+  ecs_entity_t obj = ecs_pair_second(world, id);
 
   for (int i = 0; i < it.count; it++) {
     printf("entity %d has relation %s, %s\n", 
@@ -253,13 +253,13 @@ auto q = world.query_builder()
   .term(Likes, flecs::Wildcard)
   .build();
 
-q.iter([]flecs::iter& it) {
-  auto id = it.term_id(1);
+q.iter([](flecs::iter& it) {
+  auto id = it.pair(1);
 
   for (auto i : it) {
     cout << "entity " << it.entity(i) << " has relation "
-      << id.relation().name() << ", "
-      << id.object().name() << endl;
+      << id.first().name() << ", "
+      << id.second().name() << endl;
   }
 });
 ```
@@ -288,22 +288,23 @@ An application can use pair wildcard expressions to find all instances of a rela
 
 ```c
 // Bob eats apples and pears
-ecs_entity_t Eats = ecs_new_id(world);
-ecs_entity_t Apples = ecs_new_id(world);
-ecs_entity_t Pears = ecs_new_id(world);
+ecs_entity_t Eats = ecs_new_entity(world, "Eats");
+ecs_entity_t Apples = ecs_new_entity(world, "Apples");
+ecs_entity_t Pears = ecs_new_entity(world, "Pears");
 
 ecs_entity_t Bob = ecs_new_id(world);
 ecs_add_pair(world, Bob, Eats, Apples);
 ecs_add_pair(world, Bob, Eats, Pears);
 
 // Find all (Eats, *) relations in Bob's type
+ecs_table_t *bob_table = ecs_get_table(world, Bob);
 ecs_type_t bob_type = ecs_get_type(world, Bob);
 ecs_id_t wildcard = ecs_pair(Eats, EcsWildcard);
-ecs_id_t *ids = ecs_vector_first(bob_type);
+ecs_id_t *ids = ecs_vector_first(bob_type, ecs_id_t);
 int32_t cur = -1;
 
-while (-1 != (cur = ecs_type_index_of(type, cur + 1, wildcard))) {
-  ecs_entity_t obj = ecs_pair_object(ids[cur]);
+while (-1 != (cur = ecs_search_offset(world, bob_table, cur + 1, wildcard, 0))){
+  ecs_entity_t obj = ecs_pair_second(world, ids[cur]);
   printf("Bob eats %s\n", ecs_get_name(world, obj));
 }
 ```
@@ -319,7 +320,7 @@ Bob.add(Eats, Pears);
 
 // Find all (Eats, *) relations in Bob's type
 bob.match(world.pair(Eats, flecs::Wildcard), [](flecs::id id) {
-  cout << "Bob eats " << id.object().name() << endl;
+  cout << "Bob eats " << id.second().name() << endl;
 });
 
 // For object wildcard pairs, each() can be used:
@@ -364,7 +365,7 @@ auto GrannySmith = world.entity();
 GrannySmith.add(flecs::IsA, Apple);
 ```
 
-This specifies that `GrannySmith` is a subset of `Apple`. A key thing to note here is that because `Apple` is a subset of `Fruit`, `GrannySmith` is a subset of `Fruit` as well. This means that if an application were to query for `(IsA, Fruit)` it would both match `Apple` and `GrannySmith`. This property of the `IsA` relationhip is called "transitivity" and it is a feature that can be applied to any relation. See the [section on Transitivity](#transitive-relations) for more details.
+This specifies that `GrannySmith` is a subset of `Apple`. A key thing to note here is that because `Apple` is a subset of `Fruit`, `GrannySmith` is a subset of `Fruit` as well. This means that if an application were to query for `(IsA, Fruit)` it would both match `Apple` and `GrannySmith`. This property of the `IsA` relationhip is called "transitivity" and it is a feature that can be applied to any relation. See the [section on Transitivity](#transitive-property) for more details.
 
 #### Component sharing
 An entity with an `IsA` relation to another entity is equivalent to the other entity. So far the examples showed how querying for an `IsA` relation will find the subsets of the thing that was queried for. In order for entities to be treated as true equivalents though, everything the supserset contains (its components, tags, relations) must also be found on the subsets. Consider:
@@ -444,26 +445,6 @@ d->value == 75; // true
 ```
 
 This ability to inherit and override components is one of the key enabling features of Flecs prefabs, and is further explained in the [Inheritance section](Manual.md#Inheritance) of the manual.
-
-#### Final entities
-Entities can be annotated with the `Final` property, which prevents using them with the `IsA` relation. This is similar to the concept of a final class as something that cannot be extended. The following example shows how to add final to an entity:
-
-```c
-ecs_entity_t e = ecs_new_id(world);
-ecs_add_id(world, e, EcsFinal);
-
-ecs_entity_t i = ecs_new_id(world);
-ecs_add_pair(world, e, i, EcsIsA, e); // not allowed
-```
-```cpp
-auto e = ecs.entity()
-  .add(flecs::Final);
-
-auto i = ecs.entity()
-  .is_a(e); // not allowed
-```
-
-Queries may use the final property to optimize, as they do not have to explore subsets of a final entity. For more information on how queries interpret final, see the [Query manual](Queries.md). By default, all components are created final.
 
 ### The ChildOf relation
 The `ChildOf` relation is the builtin relation that allows for the creation of entity hierarchies. The following example shows how hierarchies can be created with `ChildOf`:
@@ -566,10 +547,10 @@ auto parent = world.entity().scope([&]{
 Scopes are the mechanism that ensure contents of a module are created as children of the module, without having to explicitly add the module as a parent.
 
 ## Relation properties
-Relations can be assigned properties that change the way they are treated by flecs. Properties are modelled as components, tags and relations that you can add to the relation entity.
+Relation properties are tags that can be added to relations to modify their behavior.
 
-### Relation cleanup properties
-When either the relation or object entity of a relation is deleted, by default all of the instances of the relation are removed from the store. Consider the following example:
+### Cleanup properties
+Cleanup properties determine what happens when a component, tag, relation or relation object is deleted. The default behavior is that all instances of the deleted id will be removed. Consider the following example:
 
 ```c
 ecs_entity_t Likes = ecs_new_id(world);
@@ -685,97 +666,9 @@ Likes.add(flecs::OnDelete, flecs::Delete);
 Likes.add(flecs::OnDelete, flecs::Throw);
 ```
 
-By default, components are created with the `(OnDelete, Throw)` policy.
+To prevent accidentally deleting a component, components are created by default with the `(OnDelete, Throw)` policy.
 
-### Transitive relations
-Relations can be marked as transitive. A formal-ish definition if transitivity in the context of relations is:
-
-```
-If Relation(EntityA, EntityB) And Relation(EntityB, EntityC) Then Relation(EntityA, EntityC)
-```
-
-What this means becomes more obvious when translated to a real-life example:
-
-```
-If Manhattan is located in New York, and New York is located in the USA, then Manhattan is located in the USA.
-```
-
-In this example, `LocatedIn` is the relation and `Manhattan`, `New York` and `USA` are entities `A`, `B` and `C`. Another common example of transitivity is found in OOP inheritance:
-
-```
-If a Square is a Rectangle and a Rectangle is a Shape, then a Square is a Shape.
-```
-
-In this example `IsA` is the relation and `Square`, `Rectangle` and `Shape` are the entities.
-
-When relations in Flecs are marked as transitive, queries can follow the transitive relation to see if an entity matches. Consider this example dataset:
-
-```c
-ecs_entity_t LocatedIn = ecs_new_id(world);
-ecs_entity_t Manhattan = ecs_new_id(world);
-ecs_entity_t NewYork = ecs_new_id(world);
-ecs_entity_t USA = ecs_new_id(world);
-
-ecs_add_pair(world, Manhattan, LocatedIn, NewYork);
-ecs_add_pair(world, NewYork, LocatedIn, USA);
-```
-```cpp
-auto LocatedIn = world.entity();
-auto Manhattan = world.entity();
-auto NewYork = world.entity();
-auto USA = world.entity();
-
-ManHattan.add(LocatedIn, NewYork);
-NewYork.add(LocatedIn, USA);
-```
-
-If we were now to query for `(LocatedIn, USA)` we would only match `NewYork`, because we never added `(LocatedIn, USA)` to `Manhattan`. To make sure queries `Manhattan` as well we have to make the `LocatedIn` relation transitive. We can simply do this by adding the transitive property to the relation entity:
-
-```c
-ecs_add_id(world, LocatedIn, Transitive);
-```
-```cpp
-LocatedIn.add(flecs::Transitive);
-```
-
-When now querying for `(LocatedIn, USA)`, the query will follow the `LocatedIn` relation and return both `NewYork` and `Manhattan`. For more details on how queries use transitivity, see the section in the query manual on transitivity: [Query transitivity](Queries.md#Transitivity).
-
-### Inclusive relations
-A relation can be marked inclusive which means that a query like `Relation(Entity, Entity)` should evaluate to true. Inclusivity only applies to relations that are also transitive. The utility of `Inclusive` becomes more obvious with an example:
-
-Given this dataset:
-```
-IsA(Oak, Tree)
-```
-
-we can ask whether an oak is a tree:
-```
-IsA(Oak, Tree)
-- Yes, an Oak is a tree (Oak has (IsA, Tree))
-```
-
-We can also ask whether a tree is a tree, which it obviously is:
-```
-IsA(Tree, Tree)
-- Yes, even though Tree does not have (IsA, Tree)
-```
-
-However, this does not apply to all relations. Consider a dataset with a 
-`LocatedIn` relation:
-
-```
-LocatedIn(SanFrancisco, UnitedStates)
-```
-
-we can now ask whether SanFrancisco is located in SanFrancisco, which it is not:
-```
-LocatedIn(SanFrancisco, SanFrancisco)
-- No
-```
-
-In these examples, `IsA` is an inclusive relation, whereas `LocatedIn` is not.
-
-### Tag relations
+### Tag property
 A relation can be marked as a tag in which case it will never contain data. By default the data associated with a pair is determined by whether either the relation or object are components. For some relations however, even if the object is a component, no data should be added to the relation. Consider the following example:
 
 ```c
@@ -851,6 +744,293 @@ const Position *p = e.get<Serializable, Position>();
 ```
 
 The `Tag` property is only interpreted when it is added to the relation part of a pair.
+
+### Final property
+Entities can be annotated with the `Final` property, which prevents using them with `IsA` relation. This is similar to the concept of a final class as something that cannot be extended. The following example shows how use `Final`:
+
+```c
+ecs_entity_t e = ecs_new_id(world);
+ecs_add_id(world, e, EcsFinal);
+
+ecs_entity_t i = ecs_new_id(world);
+ecs_add_pair(world, e, i, EcsIsA, e); // not allowed
+```
+```cpp
+auto e = ecs.entity()
+  .add(flecs::Final);
+
+auto i = ecs.entity()
+  .is_a(e); // not allowed
+```
+
+Queries may use the final property to optimize, as they do not have to explore subsets of a final entity. For more information on how queries interpret final, see the [Query manual](Queries.md). By default, all components are created as final.
+
+### DontInherit property
+The `DontInherit` property prevents inheriting a component from a base entity (`IsA` object). Consider the following example:
+
+```c
+ecs_entity_t TagA = ecs_new_id(world);
+ecs_entity_t TagB = ecs_new_id(world);
+ecs_add_id(world, TagB, EcsDontInherit);
+
+ecs_entity_t base = ecs_new_id(world);
+ecs_add_id(world, base, TagA);
+ecs_add_id(world, base, TagB);
+
+ecs_entity_t inst = ecs_new_id(world);
+ecs_has_id(world, inst, TagA); // true
+ecs_has_id(world, inst, TagB); // false
+```
+```cpp
+struct TagA = { };
+struct TagB = { };
+
+world.component<TagB>().add(flecs::DontInherit);
+
+auto base = world.entity()
+  .add<TagA>()
+  .add<TagB>();
+
+auto inst = world.entity().is_a(base);
+inst.has<TagA>(); // true
+inst.has<TagB>(); // false
+```
+
+The builtin `Prefab`, `Disabled`, `Identifier` and `ChildOf` tags/relations are marked as `DontInherit`.
+
+### Transitive property
+Relations can be marked as transitive. A formal-ish definition if transitivity in the context of relations is:
+
+```
+If Relation(EntityA, EntityB) And Relation(EntityB, EntityC) Then Relation(EntityA, EntityC)
+```
+
+What this means becomes more obvious when translated to a real-life example:
+
+```
+If Manhattan is located in New York, and New York is located in the USA, then Manhattan is located in the USA.
+```
+
+In this example, `LocatedIn` is the relation and `Manhattan`, `New York` and `USA` are entities `A`, `B` and `C`. Another common example of transitivity is found in OOP inheritance:
+
+```
+If a Square is a Rectangle and a Rectangle is a Shape, then a Square is a Shape.
+```
+
+In this example `IsA` is the relation and `Square`, `Rectangle` and `Shape` are the entities.
+
+When relations in Flecs are marked as transitive, queries can follow the transitive relation to see if an entity matches. Consider this example dataset:
+
+```c
+ecs_entity_t LocatedIn = ecs_new_id(world);
+ecs_entity_t Manhattan = ecs_new_id(world);
+ecs_entity_t NewYork = ecs_new_id(world);
+ecs_entity_t USA = ecs_new_id(world);
+
+ecs_add_pair(world, Manhattan, LocatedIn, NewYork);
+ecs_add_pair(world, NewYork, LocatedIn, USA);
+```
+```cpp
+auto LocatedIn = world.entity();
+auto Manhattan = world.entity();
+auto NewYork = world.entity();
+auto USA = world.entity();
+
+ManHattan.add(LocatedIn, NewYork);
+NewYork.add(LocatedIn, USA);
+```
+
+If we were now to query for `(LocatedIn, USA)` we would only match `NewYork`, because we never added `(LocatedIn, USA)` to `Manhattan`. To make sure queries `Manhattan` as well we have to make the `LocatedIn` relation transitive. We can simply do this by adding the transitive property to the relation entity:
+
+```c
+ecs_add_id(world, LocatedIn, Transitive);
+```
+```cpp
+LocatedIn.add(flecs::Transitive);
+```
+
+When now querying for `(LocatedIn, USA)`, the query will follow the `LocatedIn` relation and return both `NewYork` and `Manhattan`. For more details on how queries use transitivity, see the section in the query manual on transitivity: [Query transitivity](Queries.md#Transitivity).
+
+### Reflexive property
+A relation can be marked reflexive which means that a query like `Relation(Entity, Entity)` should evaluate to true. The utility of `Reflexive` becomes more obvious with an example:
+
+Given this dataset:
+```
+IsA(Oak, Tree)
+```
+
+we can ask whether an oak is a tree:
+```
+IsA(Oak, Tree)
+- Yes, an Oak is a tree (Oak has (IsA, Tree))
+```
+
+We can also ask whether a tree is a tree, which it obviously is:
+```
+IsA(Tree, Tree)
+- Yes, even though Tree does not have (IsA, Tree)
+```
+
+However, this does not apply to all relations. Consider a dataset with a 
+`LocatedIn` relation:
+
+```
+LocatedIn(SanFrancisco, UnitedStates)
+```
+
+we can now ask whether SanFrancisco is located in SanFrancisco, which it is not:
+```
+LocatedIn(SanFrancisco, SanFrancisco)
+- No
+```
+
+In these examples, `IsA` is a reflexive relation, whereas `LocatedIn` is not.
+
+### Acyclic property
+A relationship can be marked with the `Acyclic` property to indicate that it cannot contain cycles. Both the builtin `ChildOf` and `IsA` relationships are marked acyclic.
+
+Knowing whether a relationship is acyclic allows the storage to detect and throw errors when a cyclic relationship is introduced by accident. A number of features are only available for acyclic relationships, such as event propagation and query substitution. For example, the following query is only valid if `LocatedIn` is acyclic:
+
+```c
+// Find Position by traversing LocatedIn relationship upwards
+Position(superset(LocatedIn))
+```
+
+The same goes for observers/triggers that subscribe for events propagated through a relationship. A typical example of this is when a component value is changed on a prefab. The event of this change will be propagated by traversing the `IsA` relationship downwards, for all instances of the prefab. Event propagation does not happen for relationships that are not marked with `Acyclic`, as this could cause infinite loops.
+
+Note that because cycle detection requires expensive algorithms, adding `Acyclic` to a relationship does not guarantee that an error will be thrown when a cycle is accidentally introduced. While detection may improve over time, an application that runs without errors is no guarantee that it does not contain acyclic relationships with cycles.
+
+### Exclusive property
+The `Exclusive` property enforces that an entity can only have a single instance of a relationship. When a second instance is added, it replaces the first instance. An example of a relation with the `Exclusive` property is the builtin `ChildOf` relation:
+
+```c
+ecs_add_pair(world, child, EcsChildOf, parent_a);
+ecs_add_pair(world, child, EcsChildOf, parent_b); // replaces (ChildOf, parent_a)
+```
+```cpp
+e.child_of(parent_a);
+e.child_of(parent_b); // replaces (ChildOf, parent_a)
+```
+
+### Symmetric property
+The `Symmetric` property enforces that when a relation `(R, Y)` is added to entity `X`, the relation `(R, X)` will be added to entity `Y`. The reverse is also true, if relation `(R, Y)` is removed from `X`, relation `(R, X)` will be removed from `Y`.
+
+The symmetric property is useful for relations that do not make sense unless they are bidirectional. Examples of such relations are `AlliesWith`, `MarriedTo`, `TradingWith` and so on. An example:
+
+```c
+ecs_entity_t MarriedTo = ecs_new_w_id(world, EcsSymmetric);
+ecs_entity_t Bob = ecs_new_id(world);
+ecs_entity_t Alice = ecs_new_id(world);
+ecs_add_pair(world, Bob, MarriedTo, Alice); // Also adds (MarriedTo, Bob) to Alice
+```
+```cpp
+auto MarriedTo = world.entity().add(flecs::Symmetric);
+auto Bob = ecs.entity();
+auto Alice = ecs.entity();
+Bob.add(MarriedTo, Alice); // Also adds (MarriedTo, Bob) to Alice
+```
+
+### With property
+The `With` relation can be added to components to indicate that it must always come together with another component. The following example shows how `With` can be used with regular components/tags:
+
+```c
+ecs_entity_t Responsibility = ecs_new_id(world);
+ecs_entity_t Power = ecs_new_w_pair(world, EcsWith, Responsibility);
+
+// Create new entity that has both Power and Responsibility
+ecs_entity_t e = ecs_new_w_id(world, Power);
+```
+```cpp
+auto Responsibility = world.entity();
+auto Power = world.entity().add(flecs::With, Responsibility);
+
+// Create new entity that has both Power and Responsibility
+auto e = world.entity().add(Power);
+```
+
+When the `With` relation is added to a relation, the additional id added to the entity will be a relation pair as well, with the same object as the original relation:
+
+```c
+ecs_entity_t Likes = ecs_new_id(world);
+ecs_entity_t Loves = ecs_new_w_pair(world, EcsWith, Likes);
+ecs_entity_t Pears = ecs_new_id(world);
+
+// Create new entity with both (Loves, Pears) and (Likes, Pears)
+ecs_entity_t e = ecs_new_w_pair(world, Loves, Pears);
+```
+```cpp
+auto Likes = world.entity();
+auto Loves = world.entity().add(flecs::With, Likes);
+auto Pears = world.entity();
+
+// Create new entity with both (Loves, Pears) and (Likes, Pears)
+auto e = world.entity().add(Loves, Pears);
+```
+
+### OneOf property
+The `OneOf` property enforces that the target of the relationship is a child of a specified entity. `OneOf` can be used to either indicate that the target needs to be a child of the relation (common for enum relationships), or of another entity. 
+
+The following example shows how to constrain the relationship target to a child of the relation:
+
+```c
+ecs_entity_t Food = ecs_new_id(world);
+
+// Enforce that target of relationship is child of Food
+ecs_add_id(world, Food, EcsOneOf);
+
+ecs_entity_t Apples = ecs_new_w_pair(world, EcsChildOf, Food);
+ecs_entity_t Fork = ecs_new_id(world);
+
+// This is ok, Apples is a child of Food
+ecs_entity_t a = ecs_new_w_pair(world, Food, Apples);
+
+// This is not ok, Fork is not a child of Food
+ecs_entity_t b = ecs_new_w_pair(world, Food, Fork);
+```
+```cpp
+// Enforce that target of relationship is child of Food
+auto Food = world.entity().add(flecs::OneOf);
+auto Apples = world.entity().child_of(Food);
+auto Fork = world.entity();
+
+// This is ok, Apples is a child of Food
+auto a = world.entity().add(Food, Apples);
+
+// This is not ok, Fork is not a child of Food
+auto b = world.entity().add(Food, Fork);
+```
+
+The following example shows how `OneOf` can be used to enforce that the relationship target is the child of an entity other than the relation:
+
+```c
+ecs_entity_t Food = ecs_new_id(world);
+ecs_entity_t Eats = ecs_new_id(world);
+
+// Enforce that target of relationship is child of Food
+ecs_add_pair(world, Eats, EcsOneOf, Food);
+
+ecs_entity_t Apples = ecs_new_w_pair(world, EcsChildOf, Food);
+ecs_entity_t Fork = ecs_new_id(world);
+
+// This is ok, Apples is a child of Food
+ecs_entity_t a = ecs_new_w_pair(world, Eats, Apples);
+
+// This is not ok, Fork is not a child of Food
+ecs_entity_t b = ecs_new_w_pair(world, Eats, Fork);
+```
+```cpp
+// Enforce that target of relationship is child of Food
+auto Food = world.entity();
+auto Eats = world.entity().add(flecs::OneOf, Food);
+auto Apples = world.entity().child_of(Food);
+auto Fork = world.entity();
+
+// This is ok, Apples is a child of Food
+auto a = world.entity().add(Eats, Apples);
+
+// This is not ok, Fork is not a child of Food
+auto b = world.entity().add(Eats, Fork);
+```
 
 ## Relation performance
 A relation that does not have any data has the same performance as a regular tag. A relation that does have data has the same performance as a component.
