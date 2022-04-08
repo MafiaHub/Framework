@@ -6,7 +6,7 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 2
+#define UNIT_MAX_MODULES 3
 #include "logging/logger.h"
 #include "unit.h"
 
@@ -22,7 +22,7 @@ int main() {
 
     UNIT_MODULE(interpolator);
     UNIT_MODULE(scripting_engine);
-    //UNIT_MODULE(job_system);
+    UNIT_MODULE(job_system);
 
     return UNIT_RUN();
 }
