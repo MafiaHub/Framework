@@ -21,7 +21,7 @@ namespace Framework::World {
         }
 
         _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS,
-                             const Modules::Base::Transform &rhsTr, const Modules::Base::Streamable rhsS) -> bool {
+                             const Modules::Base::Transform &rhsTr, const Modules::Base::Streamable &rhsS) -> bool {
             if (!e.is_valid())
                 return false;
             if (!e.is_alive())

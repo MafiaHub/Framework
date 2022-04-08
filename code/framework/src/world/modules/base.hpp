@@ -9,7 +9,7 @@
 #pragma once
 
 #include <flecs/flecs.h>
-#include <functional>
+#include <function2.hpp>
 #include <glm/ext.hpp>
 #include <string>
 #include <unordered_map>
@@ -49,7 +49,7 @@ namespace Framework::World::Modules {
         };
 
         struct Streamable {
-            using IsVisibleProc = std::function<bool(flecs::entity lhs, flecs::entity rhs)>;
+            using IsVisibleProc = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
             enum class HeuristicMode { ADD, REPLACE, REPLACE_POSITION };
 
             int virtualWorld        = 0;
@@ -59,7 +59,7 @@ namespace Framework::World::Modules {
             flecs::entity_t owner   = 0;
 
             struct Events {
-                using Proc = std::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity)>;
+                using Proc = fu2::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity) const>;
                 Proc spawnProc;
                 Proc despawnProc;
                 Proc selfUpdateProc;

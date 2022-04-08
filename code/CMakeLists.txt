@@ -31,6 +31,7 @@ include_directories(PUBLIC
         "../vendors/libsig"
         "../vendors/sfd"
         "../vendors/cxxopts"
+        "../vendors/fu2"
         "../vendors/freetype/include"
         "../vendors/StackWalker/Main/StackWalker"
         "../vendors"
