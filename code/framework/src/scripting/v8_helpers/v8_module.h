@@ -19,7 +19,7 @@
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
-    using ModuleInitCallback = std::function<void(v8::Local<v8::Context>, v8::Local<v8::Object>)>;
+    using ModuleInitCallback = fu2::function<void(v8::Local<v8::Context>, v8::Local<v8::Object>) const>;
     class V8Module {
       private:
         std::string _name;

@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <functional>
+#include <function2.hpp>
 #include <include/cef_app.h>
 #include <string>
 #include <vector>

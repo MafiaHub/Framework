@@ -15,7 +15,7 @@
 
 #include <Windows.h>
 
-#include <functional>
+#include <function2.hpp>
 #include <string>
 #include <vector>
 
@@ -25,7 +25,7 @@ namespace Framework::Launcher {
     enum class ProjectArchitecture { CPU_X64, CPU_X86 };
 
     struct ProjectConfiguration {
-        using DialogPromptSelectorProc = std::function<std::wstring(std::wstring gameExePath)>;
+        using DialogPromptSelectorProc = fu2::function<std::wstring(std::wstring gameExePath) const>;
 
         std::wstring executableName;
         std::wstring destinationDllName;
@@ -73,9 +73,9 @@ namespace Framework::Launcher {
 
     class Project {
       public:
-        using FunctionResolverProc = std::function<LPVOID(HMODULE, const char *)>;
-        using LibraryLoaderProc    = std::function<HMODULE(const char *)>;
-        using PreLaunchProc        = std::function<void()>;
+        using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
+        using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;
+        using PreLaunchProc        = fu2::function<void() const>;
 
       private:
         ProjectConfiguration _config;

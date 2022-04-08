@@ -9,7 +9,7 @@
 #pragma once
 
 #include <chrono>
-#include <functional>
+#include <function2.hpp>
 #include <vector>
 
 namespace Framework::Utils {
@@ -18,19 +18,19 @@ namespace Framework::Utils {
      */
     class DelayScope {
       public:
-        DelayScope(uint32_t delay, std::function<void()> callback);
+        DelayScope(uint32_t delay, fu2::function<void()> callback);
 
         /// Call this in a loop to process all delayed scopes.
         static void Update();
 
-        static void Push(uint32_t delay, std::function<void()> callback);
+        static void Push(uint32_t delay, fu2::function<void()> callback);
 
       private:
         bool FireWhenReady();
 
         std::chrono::time_point<std::chrono::high_resolution_clock> _created;
 
-        std::function<void()> _callback = nullptr;
+        fu2::function<void()> _callback = nullptr;
 
         uint32_t _delay = 0;
 

@@ -11,7 +11,7 @@
 #include "errors.h"
 
 #include <discord.h>
-#include <functional>
+#include <function2.hpp>
 #include <string>
 
 namespace Framework::External::Discord {
@@ -22,7 +22,7 @@ namespace Framework::External::Discord {
         discord::Core *_instance;
 
       public:
-        using DiscordLoginProc = std::function<void(const std::string &token)>;
+        using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
         Wrapper()              = default;
         DiscordError Init(int64_t id);
         DiscordError Shutdown();

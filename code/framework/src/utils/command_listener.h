@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <functional>
+#include <function2.hpp>
 #include <mutex>
 #include <queue>
 #include <string>
@@ -16,7 +16,7 @@
 #include <memory>
 
 namespace Framework::Utils {
-    using CommandCallback = std::function<void(const std::string &)>;
+    using CommandCallback = fu2::function<void(const std::string &) const>;
     class CommandListener {
       private:
         std::shared_ptr<std::thread> _currentThread;

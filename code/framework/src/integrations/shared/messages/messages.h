@@ -12,7 +12,7 @@
 
 #include <BitStream.h>
 #include <MessageIdentifiers.h>
-#include <functional>
+#include <function2.hpp>
 
 namespace Framework::Integrations::Shared::Messages {
     enum GameSyncMessages : uint32_t {

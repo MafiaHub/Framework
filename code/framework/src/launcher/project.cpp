@@ -20,7 +20,7 @@
 #include <cppfs/fs.h>
 #include <fmt/core.h>
 #include <fstream>
-#include <functional>
+#include <function2.hpp>
 #include <ostream>
 #include <psapi.h>
 #include <sfd.h>

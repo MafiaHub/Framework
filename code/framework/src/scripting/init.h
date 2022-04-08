@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include <functional>
+#include <function2.hpp>
 
 namespace Framework::Scripting {
     class SDK;
-    using SDKRegisterCallback = std::function<void(SDK *)>;
+    using SDKRegisterCallback = fu2::function<void(SDK *) const>;
 } // namespace Framework::Scripting

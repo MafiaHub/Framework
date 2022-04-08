@@ -14,7 +14,7 @@
  */
 
 #include <cstdint>
-#include <functional>
+#include <function2.hpp>
 #include <vector>
 #include <windows.h>
 #include <winnt.h>
@@ -22,8 +22,8 @@
 namespace Framework::Launcher::Loaders {
     class ExecutableLoader {
       public:
-        using FunctionResolverProc = std::function<LPVOID(HMODULE, const char *)>;
-        using LibraryLoaderProc    = std::function<HMODULE(const char *)>;
+        using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
+        using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;
 
       private:
         const uint8_t *_origBinary;
@@ -35,7 +35,7 @@ namespace Framework::Launcher::Loaders {
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;
 
-        std::function<void(void **base, uint32_t *index)> _tlsInitializer;
+        fu2::function<void(void **base, uint32_t *index)> _tlsInitializer;
 
       private:
         void LoadSection(IMAGE_SECTION_HEADER *section);
@@ -76,7 +76,7 @@ namespace Framework::Launcher::Loaders {
             _functionResolver = functionResolver;
         }
 
-        inline void SetTLSInitializer(const std::function<void(void **base, uint32_t *index)> &callback) {
+        inline void SetTLSInitializer(const fu2::function<void(void **base, uint32_t *index)> &callback) {
             _tlsInitializer = callback;
         }
 

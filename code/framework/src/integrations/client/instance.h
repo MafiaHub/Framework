@@ -12,13 +12,13 @@
 
 #include <external/discord/wrapper.h>
 #include <external/imgui/wrapper.h>
-#include <functional>
+#include <function2.hpp>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
 
 #include "networking/engine.h"
 
-#include <functional>
+#include <function2.hpp>
 #include <memory>
 #include <world/client.h>
 
@@ -28,8 +28,8 @@
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Client {
-    using NetworkConnectionFinalizedCallback = std::function<void(flecs::entity, float)>;
-    using NetworkConnectionClosedCallback = std::function<void()>;
+    using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
+    using NetworkConnectionClosedCallback = fu2::function<void() const>;
 
     struct InstanceOptions {
         int64_t discordAppId = 0;

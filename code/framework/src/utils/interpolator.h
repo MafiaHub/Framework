@@ -9,7 +9,7 @@
 #pragma once
 
 #include <chrono>
-#include <functional>
+#include <function2.hpp>
 #include <glm/ext.hpp>
 
 namespace Framework::Utils {

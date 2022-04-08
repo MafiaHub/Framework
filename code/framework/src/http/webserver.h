@@ -10,16 +10,16 @@
 
 #include <atomic>
 #include <cstdint>
-#include <functional>
+#include <function2.hpp>
 #include <mongoose.h>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
 namespace Framework::HTTP {
-    using ResponseCallback = std::function<void(int32_t code, const std::string &message)>;
-    using RequestCallback  = std::function<void(struct mg_connection *c, void *ev_data, ResponseCallback)>;
-    using NotFoundCallback = std::function<void(std::string)>;
+    using ResponseCallback = fu2::function<void(int32_t code, const std::string &message) const>;
+    using RequestCallback  = fu2::function<void(struct mg_connection *c, void *ev_data, ResponseCallback) const>;
+    using NotFoundCallback = fu2::function<void(std::string) const>;
     using CallbacksMap     = std::unordered_map<const char *, RequestCallback>;
 
     class Webserver {

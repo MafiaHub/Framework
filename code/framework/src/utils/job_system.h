@@ -10,7 +10,7 @@
 
 #include <array>
 #include <atomic>
-#include <functional>
+#include <function2.hpp>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -19,7 +19,7 @@
 namespace Framework::Utils {
     class JobSystem final {
       public:
-        using JobProc = std::function<bool()>;
+        using JobProc = fu2::function<bool() const>;
 
         enum JobPriority : size_t { RealTime, High, Normal, Low, Idle, NumJobPriorities };
 

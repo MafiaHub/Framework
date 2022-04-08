@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include <functional>
+#include <function2.hpp>
 #include <queue>
 #include <mutex>
 
 namespace Framework::Utils {
-    template <typename ProcT = std::function<void()>> 
+    template <typename ProcT = fu2::function<void() const>>
     class Channel {
       public:
         using Proc = ProcT;

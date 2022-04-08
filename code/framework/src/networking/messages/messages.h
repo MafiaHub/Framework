@@ -11,12 +11,12 @@
 #include <BitStream.h>
 #include <MessageIdentifiers.h>
 #include <RakNetTypes.h>
-#include <functional>
+#include <function2.hpp>
 
 namespace Framework::Networking::Messages {
-    using MessageCallback          = std::function<void(SLNet::BitStream *)>;
-    using PacketCallback           = std::function<void(SLNet::Packet *)>;
-    using DisconnectPacketCallback = std::function<void(SLNet::Packet *, uint32_t reason)>;
+    using MessageCallback          = fu2::function<void(SLNet::BitStream *) const>;
+    using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
+    using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, uint32_t reason) const>;
 
     enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, WRONG_VERSION, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
 

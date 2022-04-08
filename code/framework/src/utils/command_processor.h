@@ -16,7 +16,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
-#include <functional>
+#include <function2.hpp>
 
 namespace Framework::Utils {
     enum CommandProcessorError {
@@ -29,7 +29,7 @@ namespace Framework::Utils {
         ERROR_INTERNAL
     };
 
-    using CommandProc = std::function<void(cxxopts::ParseResult &)>;
+    using CommandProc = fu2::function<void(cxxopts::ParseResult &) const>;
     class CommandProcessor {
       private:
         struct CommandInfo {

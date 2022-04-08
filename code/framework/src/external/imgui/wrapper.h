@@ -15,7 +15,7 @@
 
 #include <SDL.h>
 
-#include <functional>
+#include <function2.hpp>
 #include <queue>
 #include <mutex>
 #include <atomic>
@@ -39,7 +39,7 @@ namespace Framework::External::ImGUI {
 
     class Wrapper final {
       public:
-        using RenderProc = std::function<void()>;
+        using RenderProc = fu2::function<void() const>;
       private:
         Config _config;
         bool _initialized = false;

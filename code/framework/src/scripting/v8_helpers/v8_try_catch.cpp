@@ -12,7 +12,7 @@
 #include <scripting/resource.h>
 
 namespace Framework::Scripting::Helpers {
-    bool TryCatch(const std::function<bool()> &fn, v8::Isolate *isolate, v8::Local<v8::Context> context) {
+    bool TryCatch(const fu2::function<bool() const> &fn, v8::Isolate *isolate, v8::Local<v8::Context> context) {
         if (!isolate) {
             isolate = v8::Isolate::GetCurrent();
         }

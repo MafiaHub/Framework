@@ -65,7 +65,7 @@ namespace Framework::Integrations::Server {
         Framework::Scripting::SDKRegisterCallback sdkRegisterCallback;
     };
 
-    using OnPlayerConnectionCallback = std::function<void(flecs::entity, uint64_t)>;
+    using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
 
     class Instance {
       private:

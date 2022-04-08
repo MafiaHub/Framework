@@ -13,12 +13,12 @@
 
 #include <flecs/flecs.h>
 
-#include <functional>
+#include <function2.hpp>
 
 namespace Framework::World {
     class ClientEngine: public Engine {
       public:
-        using OnEntityDestroyCallback = std::function<bool(flecs::entity)>;
+        using OnEntityDestroyCallback = fu2::function<bool(flecs::entity) const>;
       protected:
         flecs::entity _streamEntities;
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;

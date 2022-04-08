@@ -10,7 +10,7 @@
 
 #include "external/firebase/wrapper.h"
 
-#include <functional>
+#include <function2.hpp>
 #include <string>
 
 namespace Framework::Services {
@@ -21,7 +21,7 @@ namespace Framework::Services {
         External::Firebase::Wrapper *_wrapper;
 
       public:
-        using OnUserValidatedProc = std::function<void(bool isValidated, const std::string &failureReason)>;
+        using OnUserValidatedProc = fu2::function<void(bool isValidated, const std::string &failureReason) const>;
         UserServices(External::Firebase::Wrapper *);
 
         void ValidateUserToken(const std::string &token, OnUserValidatedProc cb);

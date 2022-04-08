@@ -14,7 +14,7 @@
 #include "resource.h"
 #include "engine.h"
 
-#include <functional>
+#include <function2.hpp>
 #include <map>
 #include <string>
 #include <v8.h>

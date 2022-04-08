@@ -12,14 +12,14 @@
 
 #include <spdlog/spdlog.h>
 
-#include <functional>
+#include <function2.hpp>
 #include <memory>
 #include <vector>
 
 namespace Framework::External::ImGUI::Widgets {
     class Console {
       public:
-        using MenuBarProc = std::function<void()>;
+        using MenuBarProc = fu2::function<void() const>;
 
       protected:
         bool _shouldDisplayWidget     = true;

@@ -11,10 +11,10 @@
 
 #pragma once
 
-#include <functional>
+#include <function2.hpp>
 #include <string>
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
-    bool TryCatch(const std::function<bool()> &, v8::Isolate *isolate = nullptr, v8::Local<v8::Context> context = {});
+    bool TryCatch(const fu2::function<bool() const> &, v8::Isolate *isolate = nullptr, v8::Local<v8::Context> context = {});
 }

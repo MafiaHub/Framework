@@ -35,7 +35,7 @@ namespace Framework::Networking {
         void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
 
         template <typename T>
-        void RegisterMessage(uint8_t message, std::function<void(SLNet::RakNetGUID, T *)> callback) {
+        void RegisterMessage(uint8_t message, fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
             if (callback == nullptr) {
                 return;
             }
@@ -50,7 +50,7 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        void RegisterRPC(std::function<void(T *)> callback) {
+        void RegisterRPC(fu2::function<void(T *)> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {

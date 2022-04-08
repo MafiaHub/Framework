@@ -13,12 +13,12 @@
 
 #include "../errors.h"
 
-#include <functional>
+#include <function2.hpp>
 #include <string>
 #include <v8.h>
 
 namespace Framework::Scripting::Helpers {
-    using ClassInitCallback = std::function<void(v8::Local<v8::FunctionTemplate>)>;
+    using ClassInitCallback = fu2::function<void(v8::Local<v8::FunctionTemplate>) const>;
     class V8Class {
       public:
         std::string _name;

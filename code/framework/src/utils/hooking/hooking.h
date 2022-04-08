@@ -18,7 +18,7 @@
 #include "jitasm.h"
 #endif
 
-#include <functional>
+#include <function2.hpp>
 #include <memory>
 
 namespace hook {

@@ -9,7 +9,7 @@
 #include "delay_scope.h"
 
 namespace Framework::Utils {
-    DelayScope::DelayScope(uint32_t delay, std::function<void()> callback): _delay(delay), _callback(callback) {
+    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback): _delay(delay), _callback(callback) {
         _created = std::chrono::high_resolution_clock::now();
     }
 
@@ -42,7 +42,7 @@ namespace Framework::Utils {
         activeHandlers = pendingDelays;
     }
 
-    void DelayScope::Push(uint32_t delay, std::function<void()> callback) {
+    void DelayScope::Push(uint32_t delay, fu2::function<void()> callback) {
         activeHandlers.push_back(new DelayScope(delay, callback));
     }
 
