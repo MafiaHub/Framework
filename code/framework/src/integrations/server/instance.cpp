@@ -9,7 +9,6 @@
 #include "instance.h"
 
 #include "../shared/modules/mod.hpp"
-#include "../shared/types/environment.hpp"
 #include "../shared/types/player.hpp"
 #include "integrations/shared/messages/weather_update.h"
 #include "world/server.h"

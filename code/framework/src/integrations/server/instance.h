@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "../shared/types/environment.hpp"
 #include "../shared/types/player.hpp"
 #include "../shared/types/streaming.hpp"
 #include "errors.h"
@@ -91,7 +90,6 @@ namespace Framework::Integrations::Server {
         flecs::entity _weatherManager;
 
         // entity factories
-        std::shared_ptr<Shared::Archetypes::EnvironmentFactory> _envFactory;
         std::shared_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
         std::shared_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
 
