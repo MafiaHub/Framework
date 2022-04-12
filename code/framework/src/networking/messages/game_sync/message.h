@@ -16,7 +16,7 @@
 namespace Framework::Networking::Messages {
     class GameSyncMessage: public IMessage {
       protected:
-        flecs::entity_t _serverID;
+        flecs::entity_t _serverID = 0;
 
       public:
         flecs::entity_t GetServerID() {
