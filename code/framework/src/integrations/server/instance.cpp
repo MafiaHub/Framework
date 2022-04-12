@@ -10,7 +10,6 @@
 
 #include "../shared/modules/mod.hpp"
 #include "../shared/types/player.hpp"
-#include "integrations/shared/messages/weather_update.h"
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
