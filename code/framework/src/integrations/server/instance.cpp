@@ -220,8 +220,8 @@ namespace Framework::Integrations::Server {
             _streamingFactory->SetupServer(newPlayer, guid.g);
             _playerFactory->SetupServer(newPlayer, guid.g);
 
-            if (_onPlayerConnectedCallback)
-                _onPlayerConnectedCallback(newPlayer, guid.g);
+            if (_onPlayerConnectCallback)
+                _onPlayerConnectCallback(newPlayer, guid.g);
 
             // Send the connection finalized packet
             Framework::Networking::Messages::ClientConnectionFinalized answer;
@@ -236,8 +236,8 @@ namespace Framework::Integrations::Server {
             auto e = _worldEngine->GetEntityByGUID(guid.g);
 
             if (e.is_valid()) {
-                if (_onPlayerDisconnectedCallback)
-                    _onPlayerDisconnectedCallback(e, guid.g);
+                if (_onPlayerDisconnectCallback)
+                    _onPlayerDisconnectCallback(e, guid.g);
 
                 _worldEngine->RemoveEntity(e);
             }

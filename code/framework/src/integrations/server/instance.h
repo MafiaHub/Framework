@@ -96,8 +96,8 @@ namespace Framework::Integrations::Server {
         std::shared_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
 
         // callbacks
-        OnPlayerConnectionCallback _onPlayerConnectedCallback;
-        OnPlayerConnectionCallback _onPlayerDisconnectedCallback;
+        OnPlayerConnectionCallback _onPlayerConnectCallback;
+        OnPlayerConnectionCallback _onPlayerDisconnectCallback;
 
         void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
 
@@ -124,12 +124,12 @@ namespace Framework::Integrations::Server {
             return _alive;
         }
 
-        void SetOnPlayerConnectedCallback(OnPlayerConnectionCallback onPlayerConnectedCallback) {
-            _onPlayerConnectedCallback = onPlayerConnectedCallback;
+        void SetOnPlayerConnectCallback(OnPlayerConnectionCallback onPlayerConnectCallback) {
+            _onPlayerConnectCallback = onPlayerConnectCallback;
         }
 
-        void SetOnPlayerDisconnectedCallback(OnPlayerConnectionCallback onPlayerDisconnectedCallback) {
-            _onPlayerDisconnectedCallback = onPlayerDisconnectedCallback;
+        void SetOnPlayerDisconnectCallback(OnPlayerConnectionCallback onPlayerDisconnectCallback) {
+            _onPlayerDisconnectCallback = onPlayerDisconnectCallback;
         }
 
         InstanceOptions &GetOpts() {
