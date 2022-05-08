@@ -15,7 +15,7 @@
 namespace Framework::External::ImGUI {
     template <typename F>
     auto getCallback(F f) {
-        return [](Framework::Utils::function_traits<F>::arg_t<0> data) {
+        return [](typename Framework::Utils::function_traits<F>::template arg_t<0> data) {
             auto &f = *static_cast<F *>(data->UserData);
             return f(data);
         };
