@@ -160,14 +160,14 @@ namespace Framework::External::ImGUI::Widgets {
 
             auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize;
 
-            if (_consoleControl == false) {
+            if (!_consoleControl) {
                 // Block input if console is unfocused
                 flags = ImGuiInputTextFlags_ReadOnly;
             } else if (_updateInputText) {
                 flags = ImGuiInputTextFlags_CallbackAlways;
             }
 
-            bool wasInputProcessed = false;
+            bool wasInputProcessed;
             if (_isMultiline) {
                 wasInputProcessed = ImGui::InputTextMultiline("##console_text", consoleText, 512, {0, 50.0f}, flags, getCallback(inputEditCallback), &inputEditCallback);
             } else {
@@ -207,7 +207,7 @@ namespace Framework::External::ImGUI::Widgets {
             _autocompleteWord.clear();
             _updateInputText = false;
 
-            if (_consoleControl && isAutocompleteOpen && allCommands.size() > 0 && commandPreview.size() > 0) {
+            if (_consoleControl && isAutocompleteOpen && !allCommands.empty() && !commandPreview.empty()) {
                 ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
                 ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
                 if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_Tooltip)) {
@@ -314,7 +314,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         int logCount = 1;
         for (std::sregex_iterator i = brackets_begin; i != brackets_end; ++i) {
-            std::smatch match     = *i;
+            const std::smatch& match     = *i;
             std::string match_str = match.str();
 
             if (logCount == 1) {
@@ -326,17 +326,17 @@ namespace Framework::External::ImGUI::Widgets {
                 ImGui::SameLine();
             }
             if (logCount == 3) {
-                if (match_str.compare("[info]") == 0)
+                if (match_str == "[info]")
                     ImGui::TextColored(ImVec4(0, 1, 0, 1), "%s", match_str.c_str());
-                else if (match_str.compare("[debug]") == 0)
+                else if (match_str == "[debug]")
                     ImGui::TextColored(ImVec4(0, 0, 1, 1), "%s", match_str.c_str());
-                else if (match_str.compare("[error]") == 0)
+                else if (match_str == "[error]")
                     ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", match_str.c_str());
-                else if (match_str.compare("[warning]") == 0)
+                else if (match_str == "[warning]")
                     ImGui::TextColored(ImVec4(1, 1, 0, 1), "%s", match_str.c_str());
-                else if (match_str.compare("[trace]") == 0)
+                else if (match_str == "[trace]")
                     ImGui::TextColored(ImVec4(0.5f, 0, 1, 1), "%s", match_str.c_str());
-                else if (match_str.compare("[critical]") == 0)
+                else if (match_str == "[critical]")
                     ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "%s", match_str.c_str());
                 else
                     ImGui::TextColored(ImVec4(1, 0, 0.5f, 1), "%s", match_str.c_str());

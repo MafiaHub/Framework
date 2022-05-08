@@ -30,15 +30,15 @@ namespace Framework::External::ImGUI::Widgets {
         bool _isMultiline             = false;
         bool _consoleControl          = false;
         float _consoleUnfocusedAlpha  = 0.25f;
-        std::string _autocompleteWord = "";
+        std::string _autocompleteWord;
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
         std::vector<MenuBarProc> _menuBarDrawers;
         spdlog::logger *_logger;
-        void FormatLog(std::string log);
+        static void FormatLog(std::string log);
         void SendCommand(const std::string &command);
 
       public:
-        Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor);
+        explicit Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor);
         ~Console() = default;
 
         void Toggle();
@@ -49,7 +49,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         virtual void LockControls(bool lock) = 0;
 
-        void RegisterMenuBarDrawer(MenuBarProc proc) {
+        void RegisterMenuBarDrawer(const MenuBarProc& proc) {
             _menuBarDrawers.push_back(proc);
         }
 

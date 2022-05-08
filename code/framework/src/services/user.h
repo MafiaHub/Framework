@@ -22,7 +22,7 @@ namespace Framework::Services {
 
       public:
         using OnUserValidatedProc = fu2::function<void(bool isValidated, const std::string &failureReason) const>;
-        UserServices(External::Firebase::Wrapper *);
+        explicit UserServices(External::Firebase::Wrapper *);
 
         void ValidateUserToken(const std::string &token, OnUserValidatedProc cb);
     };

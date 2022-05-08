@@ -28,7 +28,7 @@ namespace Framework::HTTP {
 
         bool Shutdown();
 
-        void RegisterRequest(const char *, RequestCallback);
+        void RegisterRequest(const char *, const RequestCallback&);
 
         void SetNotFoundCallback(NotFoundCallback cb) {
             _notFoundCallback = cb;

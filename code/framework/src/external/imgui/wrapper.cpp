@@ -56,6 +56,7 @@ namespace Framework::External::ImGUI {
             const auto renderBackend = _config.renderer->GetD3D11Backend();
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
         } break;
+        case Graphics::RendererBackend::BACKEND_D3D_12: break;
         }
 
         switch (_config.windowBackend) {
@@ -83,6 +84,7 @@ namespace Framework::External::ImGUI {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_Shutdown();
         } break;
+        case Graphics::RendererBackend::BACKEND_D3D_12: break;
         }
 
         switch (_config.windowBackend) {
@@ -111,6 +113,7 @@ namespace Framework::External::ImGUI {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_NewFrame();
         } break;
+        case Graphics::RendererBackend::BACKEND_D3D_12: break;
         }
 
         switch (_config.windowBackend) {
@@ -159,7 +162,7 @@ namespace Framework::External::ImGUI {
         return Error::IMGUI_NONE;
     }
 
-    InputState Wrapper::ProcessEvent(const SDL_Event *event) {
+    InputState Wrapper::ProcessEvent(const SDL_Event *event) const {
         if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_SDL2) {
             return InputState::ERROR_MISMATCH;
         }
@@ -171,7 +174,7 @@ namespace Framework::External::ImGUI {
         }
     }
 
-    InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_WIN32) {
             return InputState::ERROR_MISMATCH;
         }

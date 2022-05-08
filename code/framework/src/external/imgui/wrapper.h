@@ -34,7 +34,7 @@ namespace Framework::External::ImGUI {
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
         SDL_Window *sdlWindow        = nullptr;
-        HWND windowHandle            = 0;
+        HWND windowHandle            = nullptr;
     };
 
     class Wrapper final {
@@ -52,14 +52,14 @@ namespace Framework::External::ImGUI {
         Error Init(Config &config);
         Error Shutdown();
 
-        InputState ProcessEvent(const SDL_Event *event);
-        InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-        void ShowCursor(bool show);
+        InputState ProcessEvent(const SDL_Event *event) const;
+        InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
+        static void ShowCursor(bool show);
 
         Error Update();
         Error Render();
 
-        inline void PushWidget(RenderProc proc) {
+        inline void PushWidget(const RenderProc& proc) {
             _renderQueue.push(proc);
         }
 

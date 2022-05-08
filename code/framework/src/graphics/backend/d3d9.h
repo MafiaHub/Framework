@@ -20,9 +20,8 @@
 namespace Framework::Graphics {
     class D3D9Backend: public Backend<IDirect3DDevice9 *, void *> {
       public:
-        virtual bool Init(IDirect3DDevice9 *, void *) override;
-        virtual bool Shutdown() override;
-
-        virtual void Update() override;
+        bool Init(IDirect3DDevice9 *, void *) override;
+        bool Shutdown() override;
+        void Update() override;
     };
 } // namespace Framework::Graphics

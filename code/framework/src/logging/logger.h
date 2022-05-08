@@ -31,7 +31,7 @@
 namespace Framework::Logging {
     class Logger final {
       private:
-        std::chrono::time_point<std::chrono::system_clock> _sessionStart;
+        [[maybe_unused]] std::chrono::time_point<std::chrono::system_clock> _sessionStart;
         std::unordered_map<const char *, std::shared_ptr<spdlog::logger>> _loggers;
         std::string _logName   = "framework";
         std::string _logFolder = "logs";

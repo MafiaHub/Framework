@@ -34,14 +34,14 @@ namespace Framework::Graphics {
 
     class Renderer {
       private:
-        RendererConfiguration _config;
-        RendererState _state;
-        RendererBackend _backend;
+        RendererConfiguration _config{};
+        RendererState _state = RendererState::STATE_NOT_INITIALIZED;
+        RendererBackend _backend = RendererBackend::BACKEND_D3D_11;
 
-        HWND _window;
+        HWND _window{};
 
-        D3D9Backend *_d3d9Backend;
-        D3D11Backend *_d3d11Backend;
+        D3D9Backend *_d3d9Backend{};
+        D3D11Backend *_d3d11Backend{};
 
         bool _initialized = false;
 
@@ -50,9 +50,6 @@ namespace Framework::Graphics {
         RendererError Shutdown();
 
         void Update();
-
-        void HandleDeviceLost();
-        void HandleDeviceReset();
 
         RendererState GetCurrentState() const {
             return _state;
