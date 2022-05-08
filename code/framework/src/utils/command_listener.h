@@ -24,6 +24,7 @@ namespace Framework::Utils {
         std::queue<std::string> _queue;
         std::mutex _mutex;
         CommandCallback _cb;
+        std::atomic_bool _running = false;
 
       public:
         CommandListener();
@@ -33,5 +34,7 @@ namespace Framework::Utils {
         }
 
         void Update();
+
+        void Shutdown();
     };
 } // namespace Framework::Utils

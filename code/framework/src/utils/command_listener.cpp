@@ -14,8 +14,9 @@
 
 namespace Framework::Utils {
     CommandListener::CommandListener() {
+        _running = true;
         _currentThread = std::make_shared<std::thread>([this]() {
-            while (true) {
+            while (_running) {
                 std::string commandString;
                 std::getline(std::cin, commandString);
 
@@ -40,5 +41,10 @@ namespace Framework::Utils {
             _cb(cmdLine);
             _queue.pop();
         }
+    }
+    void CommandListener::Shutdown() {
+        _running = false;
+        if (_currentThread->joinable())
+            _currentThread->join();
     }
 } // namespace Framework::Utils
