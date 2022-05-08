@@ -29,7 +29,7 @@ namespace Framework::Utils {
 
         bool Shutdown();
 
-        void EnqueueJob(JobProc job, JobPriority priority = JobPriority::Normal, bool repeatOnFail = false);
+        void EnqueueJob(const JobProc& job, JobPriority priority = JobPriority::Normal, bool repeatOnFail = false);
 
         bool IsQueueEmpty(JobPriority priority);
 
@@ -59,7 +59,7 @@ namespace Framework::Utils {
         /**
          * Don't touch or shit explodes
          */
-        constexpr uint8_t GetJobPriorityFromIndex(size_t index) const {
+        static constexpr uint8_t GetJobPriorityFromIndex(size_t index) {
             constexpr uint8_t priorities[] = {2, 3, 5, 7, 11};
             return priorities[index];
         }

@@ -14,8 +14,8 @@ namespace Framework::Utils::States {
     class Machine;
     class IState {
       public:
-        IState();
-        virtual ~IState();
+        IState() = default;
+        virtual ~IState() = default;
 
         virtual const char *GetName() const = 0;
         virtual int32_t GetId() const       = 0;

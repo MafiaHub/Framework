@@ -130,7 +130,7 @@ namespace Framework::World {
         Engine::Update();
     }
 
-    flecs::entity ServerEngine::CreateEntity(std::string name) {
+    flecs::entity ServerEngine::CreateEntity(const std::string& name) {
         if (name.empty()) {
             return _world->entity();
         }
@@ -139,7 +139,7 @@ namespace Framework::World {
         }
     }
 
-    bool ServerEngine::IsEntityOwner(flecs::entity e, uint64_t guid) const {
+    bool ServerEngine::IsEntityOwner(flecs::entity e, uint64_t guid) {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return false;

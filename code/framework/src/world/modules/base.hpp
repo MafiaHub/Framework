@@ -41,7 +41,7 @@ namespace Framework::World::Modules {
         };
 
         struct PendingRemoval {
-            uint8_t _unused;
+            [[maybe_unused]] uint8_t _unused;
         };
 
         struct ServerID {

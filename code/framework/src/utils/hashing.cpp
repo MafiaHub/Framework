@@ -272,7 +272,7 @@ namespace Framework::Utils::Hashing {
         ptrdiff_t remaining;
         uint32_t result = ~((uint32_t)0);
         char const *c   = (char const *)data;
-        for (remaining = len; remaining--; c++) result = (result >> 8) ^ (crc32_table[(result ^ *c) & 0xff]);
+        for (remaining = (ptrdiff_t )len; remaining--; c++) result = (result >> 8) ^ (crc32_table[(result ^ *c) & 0xff]);
         return ~result;
     }
 } // namespace Framework::Utils::Hashing

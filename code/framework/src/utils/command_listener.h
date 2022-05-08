@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <memory>
+#include <utility>
 
 namespace Framework::Utils {
     using CommandCallback = fu2::function<void(const std::string &) const>;
@@ -28,7 +29,7 @@ namespace Framework::Utils {
         CommandListener();
 
         void SetCommandHandler(CommandCallback cb) {
-            _cb = cb;
+            _cb = std::move(cb);
         }
 
         void Update();

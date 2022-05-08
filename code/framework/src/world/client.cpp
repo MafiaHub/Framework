@@ -45,7 +45,7 @@ namespace Framework::World {
         return ent;
     }
 
-    flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) const {
+    flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) {
         if (!entity.is_alive()) {
             return 0;
         }

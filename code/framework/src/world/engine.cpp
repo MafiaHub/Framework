@@ -10,8 +10,6 @@
 
 #include "modules/base.hpp"
 
-#include <slikenet/types.h>
-
 #include <optick.h>
 
 namespace Framework::World {

@@ -41,7 +41,7 @@ namespace Framework::Utils {
       public:
         CommandProcessor() = default;
 
-        inline const std::vector<std::string> GetCommandNames() const {
+        inline std::vector<std::string> GetCommandNames() const {
             std::vector<std::string> names;
             for (auto &cmd : _commands) {
                 names.push_back(cmd.first);

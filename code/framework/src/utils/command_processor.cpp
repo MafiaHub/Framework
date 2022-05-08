@@ -19,7 +19,7 @@ namespace Framework::Utils {
             args.push_back(item);
         }
 
-        if (args.size() == 0) {
+        if (args.empty()) {
             return CommandProcessorError::ERROR_EMPTY_INPUT;
         }
 
@@ -34,7 +34,7 @@ namespace Framework::Utils {
             }
 
             try {
-                cxxopts::ParseResult result = _commands[command].options->parse(vArgs.size(), vArgs.data());
+                cxxopts::ParseResult result = _commands[command].options->parse(static_cast<int>(vArgs.size()), vArgs.data());
 
                 if (result.count("help")) {
                     // auto help

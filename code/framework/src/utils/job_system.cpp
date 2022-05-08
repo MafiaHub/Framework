@@ -43,19 +43,19 @@ namespace Framework::Utils {
                         const std::lock_guard<std::recursive_mutex> lock(_mutex);
                         bool last_empty = false;
 
-                        for (auto [queue, end, i] = std::tuple {_jobs.begin(), _jobs.end(), 0}; queue != end; ++queue, ++i) {
+                        for (auto [queue, end, id] = std::tuple {_jobs.begin(), _jobs.end(), 0}; queue != end; ++queue, ++id) {
                             if (queue->empty()) {
                                 last_empty = ((queue + 1) == end);
                                 continue;
                             }
-                            else if (!last_empty && ((_counter++ % GetJobPriorityFromIndex(i)) != 0)) {
+                            else if (!last_empty && ((_counter++ % GetJobPriorityFromIndex(id)) != 0)) {
                                 continue;
                             }
 
                             last_empty = false;
                             jobInfo    = queue->front();
                             queue->pop();
-                            Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} is now being processed", i);
+                            Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} is now being processed", id);
 
                             break;
                         }
@@ -103,7 +103,7 @@ namespace Framework::Utils {
         return true;
     }
 
-    void JobSystem::EnqueueJob(JobProc job, JobPriority priority, bool repeatOnFail) {
+    void JobSystem::EnqueueJob(const JobProc& job, JobPriority priority, bool repeatOnFail) {
         const std::lock_guard<std::recursive_mutex> lock(_mutex);
         Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} was enqueued", priority);
         _jobs[priority].push(Job {job, priority, JobStatus::Pending, repeatOnFail});
