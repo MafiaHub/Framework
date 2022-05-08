@@ -1,0 +1,7 @@
+<component name="CopyrightManager">
+  <copyright>
+    <option name="keyword" value="Copyright (c)" />
+    <option name="notice" value="MafiaHub OSS license&#10;Copyright (c) &amp;#36;originalComment.match(&quot;Copyright \(c\) (\d+)&quot;, 1, &quot;-&quot;, &quot;&amp;#36;today.year&quot;)&amp;#36;today.year, MafiaHub. All rights reserved.&#10;&#10;This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.&#10;See LICENSE file in the source repository for information regarding licensing." />
+    <option name="myName" value="MafiaHub" />
+  </copyright>
+</component>
