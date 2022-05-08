@@ -207,12 +207,11 @@ namespace Framework::Launcher {
         if (_config.platform == ProjectPlatform::STEAM) {
             HMODULE steamDll {};
 
-            if (_config.arch == ProjectArchitecture::CPU_X64) {
-                steamDll = LoadLibraryW(L"fw_steam_api64.dll");
-            }
-            else {
+#ifdef _M_IX86
                 steamDll = LoadLibraryW(L"fw_steam_api.dll");
-            }
+#else
+                steamDll = LoadLibraryW(L"fw_steam_api64.dll");
+#endif
 
             if (!steamDll) {
                 MessageBox(nullptr, "Failed to inject the steam runtime DLL in the running process", _config.name.c_str(), MB_ICONERROR);
@@ -360,7 +359,11 @@ namespace Framework::Launcher {
                     _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
 
                 if (_config.preferSteam) {
-                    auto steamDllName = _config.arch == ProjectArchitecture::CPU_X64 ? "/steam_api64.dll" : "/steam_api.dll";
+#ifdef _M_IX86
+                    auto steamDllName = "/steam_api.dll";
+#else
+                    auto steamDllName = "/steam_api64.dll";
+#endif
                     auto steamDll     = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
 
                     if (steamDll.exists()) {

@@ -22,8 +22,6 @@
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
 
-    enum class ProjectArchitecture { CPU_X64, CPU_X86 };
-
     struct ProjectConfiguration {
         using DialogPromptSelectorProc = fu2::function<std::wstring(std::wstring gameExePath) const>;
 
@@ -32,7 +30,6 @@ namespace Framework::Launcher {
         std::wstring classicGamePath;
         std::string name;
         ProjectPlatform platform;
-        ProjectArchitecture arch;
         AppId_t steamAppId  = 430;
         uintptr_t loadLimit = SIZE_MAX;
 
