@@ -18,7 +18,7 @@
 
 #include <psapi.h>
 
-typedef void(__cdecl *CoreSetExceptionOverride)(LONG (*handler)(EXCEPTION_POINTERS *));
+using CoreSetExceptionOverride = LONG(*)(EXCEPTION_POINTERS*);
 
 namespace Framework::Utils {
     class StackWalkerSentry final: public StackWalker {
@@ -110,10 +110,10 @@ namespace Framework::Utils {
     }
 
     void MiniDump::InitExceptionOverride() {
-        const auto coreSetExceptionOverride = reinterpret_cast<CoreSetExceptionOverride>(GetProcAddress(GetModuleHandleA("FrameworkLoaderData.dll"), "CoreSetExceptionOverride"));
+        /*const auto coreSetExceptionOverride = reinterpret_cast<void(* __cdecl)(CoreSetExceptionOverride)>(GetProcAddress(GetModuleHandleA("FrameworkLoaderData.dll"), "CoreSetExceptionOverride"));
         if (coreSetExceptionOverride) {
             coreSetExceptionOverride(ExceptionFilter);
-        }
+        }*/
 
         SetUnhandledExceptionFilter(ExceptionFilter);
     }
