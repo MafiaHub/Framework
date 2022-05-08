@@ -2,10 +2,10 @@
 <project version="4">
   <component name="CMakeSharedSettings">
     <configurations>
-      <configuration PROFILE_NAME="x86 debug" ENABLED="true" GENERATION_DIR="builds/build-86" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-G &quot;Visual Studio 17 2022&quot; -A Win32" />
-      <configuration PROFILE_NAME="x86 release" ENABLED="true" GENERATION_DIR="builds/build-86-release" CONFIG_NAME="Release" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-G &quot;Visual Studio 17 2022&quot; -A Win32" />
-      <configuration PROFILE_NAME="x64 debug" ENABLED="true" GENERATION_DIR="builds/build-64" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-G &quot;Visual Studio 17 2022&quot; -A x64" />
-      <configuration PROFILE_NAME="x64 release" ENABLED="true" GENERATION_DIR="builds/build-64-release" CONFIG_NAME="Release" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-G &quot;Visual Studio 17 2022&quot; -A x64" />
+      <configuration PROFILE_NAME="x86 debug" ENABLED="true" GENERATION_DIR="builds/build-86" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-G Ninja" />
+      <configuration PROFILE_NAME="x86 release" ENABLED="true" GENERATION_DIR="builds/build-86-release" CONFIG_NAME="Release" TOOLCHAIN_NAME="Visual Studio" GENERATION_OPTIONS="-G Ninja" />
+      <configuration PROFILE_NAME="x64 debug" ENABLED="true" GENERATION_DIR="builds/build-64" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Visual Studio x64" GENERATION_OPTIONS="-G Ninja" />
+      <configuration PROFILE_NAME="x64 release" ENABLED="true" GENERATION_DIR="builds/build-64-release" CONFIG_NAME="Release" TOOLCHAIN_NAME="Visual Studio x64" GENERATION_OPTIONS="-G Ninja" />
     </configurations>
   </component>
 </project>
