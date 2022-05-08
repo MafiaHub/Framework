@@ -287,6 +287,9 @@ extern "C" void __declspec(dllexport) CoreSetExceptionOverride(LONG (*handler)(E
 void __declspec(dllexport) CoreRT_SetupSEHHandler(...) {
     // no-op for non-AMD64
 }
+extern "C" void __declspec(dllexport) CoreSetExceptionOverride(LONG (*handler)(EXCEPTION_POINTERS *)) {
+    // no-op for non-AMD64
+}
 #endif
 
 struct InitMHWrapper {
