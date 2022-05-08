@@ -12,7 +12,7 @@
 #include <glm/trigonometric.hpp>
 
 namespace math {
-    inline const float Unlerp(const float from, const float to, const float pos) {
+    inline float Unlerp(const float from, const float to, const float pos) {
         // Avoid dividing by 0 (results in INF values)
         if (from == to)
             return 1.0f;
@@ -20,7 +20,7 @@ namespace math {
         return static_cast<float>((pos - from) / (to - from));
     }
 
-    inline const float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to,
+    inline float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to,
         const std::chrono::high_resolution_clock::time_point &pos) {
         float r = std::chrono::duration<float, std::milli>(to - from).count();
 
@@ -31,7 +31,7 @@ namespace math {
         return std::chrono::duration<float, std::milli>(pos - from).count() / r;
     }
 
-    inline const float UnlerpClamped(const float from, const float to, const float pos) {
+    inline float UnlerpClamped(const float from, const float to, const float pos) {
         return std::clamp(Unlerp(from, to, pos), 0.0f, 1.0f);
     }
 } // namespace math
