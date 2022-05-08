@@ -110,8 +110,8 @@ namespace Framework::Launcher {
         static void InitialiseClientDLL();
 
       private:
-        bool EnsureFilesExist(const std::vector<std::string> &);
-        bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
+        static bool EnsureFilesExist(const std::vector<std::string> &);
+        static bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
         bool EnsureGameExecutableIsCompatible();
 
         bool RunInnerSteamChecks();
@@ -120,9 +120,9 @@ namespace Framework::Launcher {
         bool LoadJSONConfig();
         void SaveJSONConfig();
 
-        void InvokeEntryPoint(void (*entryPoint)());
+        static void InvokeEntryPoint(void (*entryPoint)());
 
-        void AllocateDeveloperConsole();
+        void AllocateDeveloperConsole() const;
 
         bool Run();
     };

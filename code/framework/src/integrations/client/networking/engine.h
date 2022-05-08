@@ -13,7 +13,7 @@
 namespace Framework::Integrations::Client::Networking {
     class Engine {
       private:
-        Framework::Networking::NetworkClient *_networkClient = nullptr;
+        std::unique_ptr<Framework::Networking::NetworkClient> _networkClient{};
 
       public:
         Engine();
@@ -26,7 +26,7 @@ namespace Framework::Integrations::Client::Networking {
         void Update();
 
         Framework::Networking::NetworkClient *GetNetworkClient() const {
-            return _networkClient;
+            return _networkClient.get();
         }
     };
 } // namespace Framework::Integrations::Client::Networking

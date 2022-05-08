@@ -34,7 +34,7 @@ namespace Framework::Networking::Messages {
 
     class IMessage {
       private:
-        SLNet::Packet *packet;
+        SLNet::Packet *packet{};
 
       public:
         virtual uint8_t GetMessageID() const = 0;

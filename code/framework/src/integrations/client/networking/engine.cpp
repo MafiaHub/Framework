@@ -12,7 +12,7 @@
 
 namespace Framework::Integrations::Client::Networking {
     Engine::Engine() {
-        _networkClient = new Framework::Networking::NetworkClient;
+        _networkClient = std::make_unique<Framework::Networking::NetworkClient>();
     }
 
     bool Engine::Init() {

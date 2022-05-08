@@ -8,8 +8,6 @@
 
 #include "instance.h"
 
-#include "../shared/modules/mod.hpp"
-#include "../shared/types/player.hpp"
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
@@ -134,7 +132,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitEndpoints() {
-        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, Framework::HTTP::ResponseCallback cb) {
+        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback& cb) {
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;

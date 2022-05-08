@@ -17,8 +17,8 @@
 namespace Framework::Networking::RPC {
     class IRPC {
       private:
-        SLNet::Packet *packet;
-        uint32_t _hashName;
+        SLNet::Packet *packet{};
+        uint32_t _hashName = 0;
 
       public:
         IRPC(const std::string &name): _hashName(Utils::Hashing::CalculateCRC32(name.c_str(), name.length())) {};

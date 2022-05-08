@@ -24,6 +24,7 @@
 #include <memory>
 #include <sig.h>
 #include <string>
+#include <utility>
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
@@ -123,11 +124,11 @@ namespace Framework::Integrations::Server {
         }
 
         void SetOnPlayerConnectCallback(OnPlayerConnectionCallback onPlayerConnectCallback) {
-            _onPlayerConnectCallback = onPlayerConnectCallback;
+            _onPlayerConnectCallback = std::move(onPlayerConnectCallback);
         }
 
         void SetOnPlayerDisconnectCallback(OnPlayerConnectionCallback onPlayerDisconnectCallback) {
-            _onPlayerDisconnectCallback = onPlayerDisconnectCallback;
+            _onPlayerDisconnectCallback = std::move(onPlayerDisconnectCallback);
         }
 
         InstanceOptions &GetOpts() {

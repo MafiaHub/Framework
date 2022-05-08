@@ -166,7 +166,7 @@ namespace Framework::Launcher {
         // Load the destination DLL
         if (!_config.loadClientManually && !LoadLibraryW(_config.destinationDllName.c_str())) {
             MessageBox(nullptr, "Failed to load core runtime", _config.name.c_str(), MB_ICONERROR);
-            return 0;
+            return false;
         }
 
         if (!_config.disablePersistentConfig) {
@@ -279,7 +279,7 @@ namespace Framework::Launcher {
                 CloseHandle(handle);
             }
 
-            return 0;
+            return false;
         }
 
         // Make sure we have our required files
@@ -323,7 +323,7 @@ namespace Framework::Launcher {
         cppfs::FileHandle handle = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath));
         if (!handle.isDirectory() && !_config.promptForGameExe) {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
-            return 0;
+            return false;
         }
 
         if (!handle.isDirectory()) {
@@ -346,7 +346,7 @@ namespace Framework::Launcher {
                 if (!handle.isFile()) {
                     MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(),
                         _config.name.c_str(), MB_ICONERROR);
-                    return 0;
+                    return false;
                 }
 
                 _config.classicGamePath = Utils::StringUtils::NormalToWide(path);
@@ -389,7 +389,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) {
             MessageBox(nullptr, "Failed to find executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
@@ -399,21 +399,21 @@ namespace Framework::Launcher {
         gDllName   = _config.destinationDllName.c_str();
 
         // determine file length
-        DWORD dwFileLength = SetFilePointer(hFile, 0, NULL, FILE_END);
+        DWORD dwFileLength = SetFilePointer(hFile, 0, nullptr, FILE_END);
         if (dwFileLength == INVALID_SET_FILE_POINTER) {
             CloseHandle(hFile);
             MessageBox(nullptr, "Could not inquire executable image size", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
-        HANDLE hMapping = CreateFileMappingW(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+        HANDLE hMapping = CreateFileMappingW(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
         if (hMapping == INVALID_HANDLE_VALUE) {
             CloseHandle(hFile);
             MessageBox(nullptr, "Could not map executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
-        uint8_t *data = (uint8_t *)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
+        auto *data = (uint8_t *)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
         if (!data) {
             CloseHandle(hMapping);
             CloseHandle(hFile);
@@ -509,7 +509,7 @@ namespace Framework::Launcher {
         }
     }
 
-    void Project::AllocateDeveloperConsole() {
+    void Project::AllocateDeveloperConsole() const {
         AllocConsole();
         AttachConsole(GetCurrentProcessId());
         SetConsoleTitleW(_config.developerConsoleTitle.c_str());

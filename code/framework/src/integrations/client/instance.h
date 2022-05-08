@@ -20,6 +20,7 @@
 
 #include <function2.hpp>
 #include <memory>
+#include <utility>
 #include <world/client.h>
 
 #include "../shared/types/player.hpp"
@@ -35,7 +36,7 @@ namespace Framework::Integrations::Client {
         int64_t discordAppId = 0;
         bool usePresence     = true;
         bool useRenderer     = true;
-        bool useNetworking   = true;
+        [[maybe_unused]] bool useNetworking   = true;
         bool useImGUI        = false;
 
         Graphics::RendererConfiguration rendererOptions = {};
@@ -95,15 +96,15 @@ namespace Framework::Integrations::Client {
         }
 
         void SetCurrentState(CurrentState state) {
-            _currentState = state;
+            _currentState = std::move(state);
         }
 
         void SetOnConnectionFinalizedCallback(NetworkConnectionFinalizedCallback cb) {
-            _onConnectionFinalized = cb;
+            _onConnectionFinalized = std::move(cb);
         }
 
         void SetOnConnectionClosedCallback(NetworkConnectionClosedCallback cb) {
-            _onConnectionClosed = cb;
+            _onConnectionClosed = std::move(cb);
         }
 
         Networking::Engine* GetNetworkingEngine() const {

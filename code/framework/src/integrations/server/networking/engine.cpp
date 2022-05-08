@@ -12,7 +12,7 @@
 
 namespace Framework::Integrations::Server::Networking {
     Engine::Engine() {
-        _networkServer = new Framework::Networking::NetworkServer;
+        _networkServer = std::make_unique<Framework::Networking::NetworkServer>();
     }
 
     bool Engine::Init(int32_t port, std::string &host, int32_t maxPlayers, std::string &password) {

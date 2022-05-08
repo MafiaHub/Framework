@@ -8,8 +8,6 @@
 
 #include "instance.h"
 
-#include "../shared/modules/mod.hpp"
-
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_connection_finalized.h>
 #include <networking/messages/client_kick.h>
@@ -173,7 +171,7 @@ namespace Framework::Integrations::Client {
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
-        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID __guid, ClientConnectionFinalized *msg) {
+        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
             _worldEngine->OnConnect(net, msg->GetServerTickRate());
             const auto guid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
@@ -187,7 +185,7 @@ namespace Framework::Integrations::Client {
                 _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
             }
         });
-        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [this, net](SLNet::RakNetGUID guid, ClientKick *msg) {
+        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](SLNet::RakNetGUID guid, ClientKick *msg) {
             std::string reason = "Unknown.";
 
             switch (msg->GetDisconnectionReason()) {

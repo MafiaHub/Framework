@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <function2.hpp>
 #include <vector>
-#include <windows.h>
+#include <Windows.h>
 #include <winnt.h>
 
 namespace Framework::Launcher::Loaders {
@@ -27,10 +27,10 @@ namespace Framework::Launcher::Loaders {
 
       private:
         const uint8_t *_origBinary;
-        HMODULE _module;
+        HMODULE _module{};
         uintptr_t _loadLimit;
 
-        void *_entryPoint;
+        void *_entryPoint{};
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;

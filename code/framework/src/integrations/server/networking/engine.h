@@ -13,7 +13,7 @@
 namespace Framework::Integrations::Server::Networking {
     class Engine {
       private:
-        Framework::Networking::NetworkServer *_networkServer = nullptr;
+        std::unique_ptr<Framework::Networking::NetworkServer> _networkServer{};
 
       public:
         Engine();
@@ -24,7 +24,7 @@ namespace Framework::Integrations::Server::Networking {
         void Update();
 
         Framework::Networking::NetworkServer *GetNetworkServer() const {
-            return _networkServer;
+            return _networkServer.get();
         }
     };
 } // namespace Framework::Integrations::Server::Networking

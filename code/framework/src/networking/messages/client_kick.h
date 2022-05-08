@@ -17,7 +17,7 @@
 namespace Framework::Networking::Messages {
     class ClientKick final: public IMessage {
       private:
-        DisconnectionReason _reason;
+        DisconnectionReason _reason = DisconnectionReason::UNKNOWN;
 
       public:
         uint8_t GetMessageID() const override {
