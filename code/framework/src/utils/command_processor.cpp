@@ -11,7 +11,7 @@
 
 namespace Framework::Utils {
     Result<std::string, CommandProcessorError> CommandProcessor::ProcessCommand(const std::string &input) {
-        std::string command = "";
+        std::string command;
         std::vector<std::string> args;
         std::stringstream parts(input);
         std::string item;
