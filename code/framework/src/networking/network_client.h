@@ -34,7 +34,7 @@ namespace Framework::Networking {
         ClientError Init();
         ClientError Shutdown();
 
-        void Update();
+        void Update() override;
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
 
         ClientError Connect(const std::string &host, int32_t port, const std::string &password = "");

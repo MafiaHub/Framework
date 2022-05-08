@@ -80,7 +80,7 @@ namespace Framework::Networking {
             return true;
         }
 
-        void Update();
+        virtual void Update();
         virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
 
         void SetUnknownPacketHandler(Messages::PacketCallback callback) {
