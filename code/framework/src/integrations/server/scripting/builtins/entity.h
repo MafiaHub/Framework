@@ -487,7 +487,7 @@ namespace Framework::Scripting::Builtins {
         Helpers::Serialization::Serialize(ctx, info[0], customData->data);
     }
 
-    static void EntityRegister(std::shared_ptr<World::ServerEngine> engine, Scripting::Helpers::V8Module *rootModule) {
+    static void EntityRegister(const std::shared_ptr<World::ServerEngine>& engine, Scripting::Helpers::V8Module *rootModule) {
         if (!rootModule) {
             return;
         }
