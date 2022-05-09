@@ -54,7 +54,7 @@ namespace Framework::Scripting {
 
         std::unordered_multimap<std::string, Helpers::EventCallback> _remoteHandlers;
 
-        SDK *_sdk;
+        SDK *_sdk{};
 
         SDKRegisterCallback _regCb;
 
@@ -62,13 +62,13 @@ namespace Framework::Scripting {
         int32_t _fileWatchUpdatePeriod = 1000;
 
       public:
-        Resource(Engine *, std::string &, SDKRegisterCallback);
+        Resource(Engine *, std::string &, const SDKRegisterCallback&);
 
         ~Resource();
 
         void Update(bool force = false);
 
-        bool Init(SDKRegisterCallback = nullptr);
+        bool Init(const SDKRegisterCallback& = nullptr);
         bool Shutdown();
 
         bool IsLoaded() const {

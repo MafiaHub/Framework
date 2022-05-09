@@ -35,7 +35,7 @@ namespace Framework::Scripting {
 
         ~Engine() = default;
 
-        EngineError Init(SDKRegisterCallback = nullptr);
+        EngineError Init(const SDKRegisterCallback& = nullptr);
 
         EngineError Shutdown();
 

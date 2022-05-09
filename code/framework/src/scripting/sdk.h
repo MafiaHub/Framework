@@ -23,7 +23,7 @@ namespace Framework::Scripting {
         void RegisterBuiltins();
 
       public:
-        SDK(SDKRegisterCallback = nullptr);
+        explicit SDK(SDKRegisterCallback = nullptr);
         ~SDK() = default;
 
         bool RegisterModules(v8::Local<v8::Context>);

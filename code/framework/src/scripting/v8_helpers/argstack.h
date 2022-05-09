@@ -18,7 +18,7 @@ namespace Framework::Scripting::Helpers {
         v8::Isolate *_isolate;
 
       public:
-        ArgumentStack(const v8::FunctionCallbackInfo<v8::Value> &info);
+        explicit ArgumentStack(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         v8::Local<v8::Value> Pop();
 

@@ -25,7 +25,7 @@ namespace Framework::External::CEF {
 
         // Prepare the window itself
         CefWindowInfo window;
-        window.SetAsWindowless(NULL);
+        window.SetAsWindowless(nullptr);
 
         // Prepare the rendering settings
         // Most of them are security settings enhancements

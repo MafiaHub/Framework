@@ -36,7 +36,7 @@ namespace Framework::World {
         static bool IsEntityOwner(flecs::entity e, uint64_t guid) ;
         static void SetOwner(flecs::entity e, uint64_t guid);
         flecs::entity GetOwner(flecs::entity e) const;
-        std::vector<flecs::entity> FindVisibleStreamers(flecs::entity e) const;
+        [[maybe_unused]] std::vector<flecs::entity> FindVisibleStreamers(flecs::entity e) const;
 
         static void RemoveEntity(flecs::entity e);
     };

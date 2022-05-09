@@ -18,7 +18,7 @@ require("vm").runInThisContext(process.argv[1]);
 )";
 
 namespace Framework::Scripting {
-    Resource::Resource(Engine *engine, std::string &path, SDKRegisterCallback cb): _loaded(false), _isShuttingDown(false), _path(path), _engine(engine), _regCb(cb) {
+    Resource::Resource(Engine *engine, std::string &path, const SDKRegisterCallback& cb): _loaded(false), _isShuttingDown(false), _path(path), _engine(engine), _regCb(cb) {
         if (LoadPackageFile()) {
             if (Init(cb)) {
                 _loaded = true;
@@ -93,7 +93,7 @@ namespace Framework::Scripting {
         return true;
     }
 
-    bool Resource::Init(SDKRegisterCallback cb) {
+    bool Resource::Init(const SDKRegisterCallback& cb) {
         if (_loaded) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' is already loaded", _name);
             return false;
@@ -147,7 +147,7 @@ namespace Framework::Scripting {
         v8::Context::Scope contextScope(context);
         v8::TryCatch tryCatch(isolate);
 
-        node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
+        auto flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
         _environment                        = node::CreateEnvironment(_isolateData, context, {_entryPoint, entryPointFile.path()}, {}, flags);
         if (!_environment) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Environment init failed");
@@ -315,7 +315,7 @@ namespace Framework::Scripting {
             auto context = _context.Get(isolate);
             v8::Context::Scope contextScope(context);
 
-            v8::MaybeLocal<v8::Value> returnValue = _script.Get(isolate)->Run(context);
+            _script.Get(isolate)->Run(context);
             return true;
         });
         return true;

@@ -198,10 +198,10 @@ namespace Framework::Scripting::Builtins {
         QuatExtract(ctx, _this, w, x, y, z);
 
         v8::Local<v8::Array> arr = v8::Array::New(isolate, 4);
-        arr->Set(ctx, 0, v8::Number::New(isolate, w));
-        arr->Set(ctx, 1, v8::Number::New(isolate, x));
-        arr->Set(ctx, 2, v8::Number::New(isolate, y));
-        arr->Set(ctx, 3, v8::Number::New(isolate, z));
+        (void)arr->Set(ctx, 0, v8::Number::New(isolate, w));
+        (void)arr->Set(ctx, 1, v8::Number::New(isolate, x));
+        (void)arr->Set(ctx, 2, v8::Number::New(isolate, y));
+        (void)arr->Set(ctx, 3, v8::Number::New(isolate, z));
         V8_RETURN(arr);
     }
 

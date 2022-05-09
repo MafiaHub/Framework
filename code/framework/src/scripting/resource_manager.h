@@ -27,7 +27,7 @@ namespace Framework::Scripting {
         std::map<std::string, Resource *> _resources;
 
       public:
-        ResourceManager(Engine *);
+        explicit ResourceManager(Engine *);
 
         ~ResourceManager();
 
@@ -56,7 +56,7 @@ namespace Framework::Scripting {
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
 
-            for (auto resPair : _resources) {
+            for (const auto& resPair : _resources) {
                 const auto res = resPair.second;
 
                 auto ctx = res->GetContext();

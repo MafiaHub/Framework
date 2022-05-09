@@ -35,8 +35,8 @@ namespace Framework::External::CEF {
         bool _visible;
 
       public:
-        Client(const ClientInformation &info);
-        ~Client();
+        explicit Client(const ClientInformation &info);
+        ~Client() override;
 
         bool Initialize(const std::string &);
 
@@ -57,35 +57,35 @@ namespace Framework::External::CEF {
         }
 
       protected:
-        virtual CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override {
+        CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefDisplayHandler> GetDisplayHandler() override {
+        CefRefPtr<CefDisplayHandler> GetDisplayHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
+        CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefLoadHandler> GetLoadHandler() override {
+        CefRefPtr<CefLoadHandler> GetLoadHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefRenderHandler> GetRenderHandler() override {
+        CefRefPtr<CefRenderHandler> GetRenderHandler() override {
             return _renderHandler;
         };
-        virtual CefRefPtr<CefRequestHandler> GetRequestHandler() override {
+        CefRefPtr<CefRequestHandler> GetRequestHandler() override {
             return this;
         };
-        virtual CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+        CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
             CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, bool, bool, const CefString &, bool &) override {
             return this;
         }
 
-        virtual void OnLoadStart(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, TransitionType) override;
-        virtual void OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int) override;
-        virtual void OnAfterCreated(CefRefPtr<CefBrowser>) override;
-        virtual void OnBeforeClose(CefRefPtr<CefBrowser>) override;
-        virtual cef_return_value_t OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefRequestCallback>) override;
-        virtual void OnRenderProcessTerminated(CefRefPtr<CefBrowser>, TerminationStatus) override;
+        void OnLoadStart(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, TransitionType) override;
+        void OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int) override;
+        void OnAfterCreated(CefRefPtr<CefBrowser>) override;
+        void OnBeforeClose(CefRefPtr<CefBrowser>) override;
+        cef_return_value_t OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefRequestCallback>) override;
+        void OnRenderProcessTerminated(CefRefPtr<CefBrowser>, TerminationStatus) override;
 
         void OnMouseMove(const glm::ivec2 &);
         void OnMouseClick(bool, bool, int32_t);

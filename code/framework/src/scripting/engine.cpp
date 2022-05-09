@@ -7,14 +7,13 @@
  */
 
 #include "engine.h"
-#include "resource.h"
 #include "resource_manager.h"
 
 #include <logging/logger.h>
 #include <optick.h>
 
 namespace Framework::Scripting {
-    EngineError Engine::Init(SDKRegisterCallback cb) {
+    EngineError Engine::Init(const SDKRegisterCallback& cb) {
         // Define the arguments to be passed to the node instance
         std::vector<std::string> argv = {"main.exe"};
         std::vector<std::string> eav  = {};

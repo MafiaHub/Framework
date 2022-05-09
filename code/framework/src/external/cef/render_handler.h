@@ -21,18 +21,18 @@ namespace Framework::External::CEF {
         CefRect _popupRect;
 
       public:
-        RenderHandler(Client *);
+        explicit RenderHandler(Client *);
 
-        virtual ~RenderHandler();
+        ~RenderHandler() override;
 
         void UpdatePopup();
 
       protected:
-        virtual void GetViewRect(CefRefPtr<CefBrowser>, CefRect &) override;
-        virtual void OnPaint(CefRefPtr<CefBrowser>, PaintElementType, const RectList &, const void *, int, int) override;
-        virtual void OnPopupShow(CefRefPtr<CefBrowser>, bool) override;
-        virtual void OnPopupSize(CefRefPtr<CefBrowser>, const CefRect &) override;
-        virtual void OnImeCompositionRangeChanged(CefRefPtr<CefBrowser>, const CefRange &, const RectList &) override;
+        void GetViewRect(CefRefPtr<CefBrowser>, CefRect &) override;
+        void OnPaint(CefRefPtr<CefBrowser>, PaintElementType, const RectList &, const void *, int, int) override;
+        void OnPopupShow(CefRefPtr<CefBrowser>, bool) override;
+        void OnPopupSize(CefRefPtr<CefBrowser>, const CefRect &) override;
+        void OnImeCompositionRangeChanged(CefRefPtr<CefBrowser>, const CefRange &, const RectList &) override;
 
         IMPLEMENT_REFCOUNTING(RenderHandler);
     };

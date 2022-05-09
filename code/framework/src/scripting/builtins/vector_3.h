@@ -194,9 +194,9 @@ namespace Framework::Scripting::Builtins {
         Vector3Extract(ctx, _this, x, y, z);
 
         v8::Local<v8::Array> arr = v8::Array::New(isolate, 3);
-        arr->Set(ctx, 0, v8::Number::New(isolate, x));
-        arr->Set(ctx, 1, v8::Number::New(isolate, y));
-        arr->Set(ctx, 2, v8::Number::New(isolate, z));
+        (void)arr->Set(ctx, 0, v8::Number::New(isolate, x));
+        (void)arr->Set(ctx, 1, v8::Number::New(isolate, y));
+        (void)arr->Set(ctx, 2, v8::Number::New(isolate, z));
         V8_RETURN(arr);
     }
 

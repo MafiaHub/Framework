@@ -11,7 +11,7 @@
 namespace Framework::External::CEF {
     RenderHandler::RenderHandler(Client *client): _owner(client), _isPaintingPopup(false) {}
 
-    RenderHandler::~RenderHandler() {}
+    RenderHandler::~RenderHandler() = default;
 
     void RenderHandler::UpdatePopup() {
         if (_isPaintingPopup) {

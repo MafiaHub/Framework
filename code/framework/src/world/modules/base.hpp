@@ -18,25 +18,17 @@ namespace Framework::Networking {
     class NetworkPeer;
 };
 
-namespace Framework::Integrations::Server {
-    class Instance;
-}
-
-namespace Framework::Integrations::Client {
-    class Instance;
-}
-
 namespace Framework::World::Modules {
     struct Base {
         struct Transform {
-            glm::vec3 pos;
-            glm::vec3 vel;
+            glm::vec3 pos{};
+            glm::vec3 vel{};
             glm::quat rot = glm::identity<glm::quat>();
         };
 
         struct Frame {
             flecs::string modelName;
-            uint64_t modelHash;
+            uint64_t modelHash{};
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
         };
 
@@ -79,11 +71,11 @@ namespace Framework::World::Modules {
             Events events;
 
             public:
-            const Events GetBaseEvents() const {
+            Events GetBaseEvents() const {
                 return events;
             }
 
-            const Events GetModEvents() const {
+            [[maybe_unused]] Events GetModEvents() const {
                 return modEvents;
             }
         };
@@ -98,7 +90,7 @@ namespace Framework::World::Modules {
             uint64_t guid = (uint64_t)-1;
         };
 
-        Base(flecs::world &world) {
+        explicit Base(flecs::world &world) {
             world.module<Base>();
 
             world.component<Transform>();

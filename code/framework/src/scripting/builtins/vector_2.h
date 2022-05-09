@@ -193,8 +193,8 @@ namespace Framework::Scripting::Builtins {
         Vector2Extract(ctx, _this, x, y);
 
         v8::Local<v8::Array> arr = v8::Array::New(isolate, 2);
-        arr->Set(ctx, 0, v8::Number::New(isolate, x));
-        arr->Set(ctx, 1, v8::Number::New(isolate, y));
+        (void)arr->Set(ctx, 0, v8::Number::New(isolate, x));
+        (void)arr->Set(ctx, 1, v8::Number::New(isolate, y));
         V8_RETURN(arr);
     }
 

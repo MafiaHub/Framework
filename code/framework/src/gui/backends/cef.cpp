@@ -20,7 +20,7 @@ namespace Framework::GUI {
 #ifndef WIN32
         CefMainArgs args(0, nullptr);
 #else
-        CefMainArgs args(0);
+        CefMainArgs args(nullptr);
 #endif
 
         // Prepare the settings

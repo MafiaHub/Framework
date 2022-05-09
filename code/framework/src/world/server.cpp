@@ -163,7 +163,7 @@ namespace Framework::World {
         return GetEntityByGUID(es->owner);
     }
 
-    std::vector<flecs::entity> ServerEngine::FindVisibleStreamers(flecs::entity e) const {
+    [[maybe_unused]] std::vector<flecs::entity> ServerEngine::FindVisibleStreamers(flecs::entity e) const {
         std::vector<flecs::entity> streamers;
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
