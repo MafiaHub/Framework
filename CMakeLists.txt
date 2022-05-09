@@ -32,6 +32,5 @@ if (UNIX OR APPLE)
     set(DISABLED_WARNS "-Wno-pedantic -Wno-unused-parameter -Wno-unused-result"
         "-Wno-deprecated-declarations" "-Wno-invalid-offsetof")
     add_compile_options(${DISABLED_WARNS})
+    set(CMAKE_CXX_FLAGS "-std=c++20 ${CMAKE_CXX_FLAGS}")
 endif ()
-
-set(CMAKE_CXX_FLAGS "-std=c++20 ${CMAKE_CXX_FLAGS}")
