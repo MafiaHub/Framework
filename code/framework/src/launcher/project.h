@@ -17,6 +17,7 @@
 
 #include <function2.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Framework::Launcher {
@@ -86,21 +87,21 @@ namespace Framework::Launcher {
         PreLaunchProc _preLaunchFunctor;
 
       public:
-        Project(ProjectConfiguration &);
+        explicit Project(ProjectConfiguration &);
         ~Project() = default;
 
         bool Launch();
 
         inline void SetLibraryLoader(LibraryLoaderProc loader) {
-            _libraryLoader = loader;
+            _libraryLoader = std::move(loader);
         }
 
         inline void SetFunctionResolver(FunctionResolverProc functionResolver) {
-            _functionResolver = functionResolver;
+            _functionResolver = std::move(functionResolver);
         }
 
         inline void SetPreLaunchFunctor(PreLaunchProc preLaunchFunctor) {
-            _preLaunchFunctor = preLaunchFunctor;
+            _preLaunchFunctor = std::move(preLaunchFunctor);
         }
 
         ProjectConfiguration &GetConfig() {

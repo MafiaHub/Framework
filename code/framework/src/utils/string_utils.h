@@ -8,6 +8,9 @@
 
 #pragma once
 
+//todo: Replace codecvt with platform-specific equivalent since the standard library deprecated this one and offers no replacement.
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+
 #include <algorithm>
 #include <codecvt>
 #include <locale>

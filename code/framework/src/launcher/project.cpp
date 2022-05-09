@@ -10,21 +10,19 @@
 
 #include "loaders/exe_ldr.h"
 #include "logging/logger.h"
+#include "sfd.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 
+#include <Psapi.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
 #include <cppfs/FilePath.h>
 #include <cppfs/fs.h>
-#include <fmt/core.h>
 #include <fstream>
 #include <function2.hpp>
 #include <ostream>
-#include <psapi.h>
-#include <sfd.h>
-
 #include <utils/hooking/hooking.h>
 #include <utils/minidump.h>
 
@@ -421,7 +419,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loaded game ({:.02f} MB)", (dwFileLength / 1024.0f / 1024.0f));
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loaded game ({:.02f} MB)", (float(dwFileLength) / 1024.0f / 1024.0f));
 
         auto base = GetModuleHandle(nullptr);
 
@@ -452,25 +450,25 @@ namespace Framework::Launcher {
             const auto exportName = std::string(exportFn);
 
             if (!_config.loadClientManually && exportName == "GetStartupInfoW") {
-                return static_cast<LPVOID>(GetStartupInfoW_Stub);
+                return reinterpret_cast<LPVOID>(GetStartupInfoW_Stub);
             }
             if (!_config.loadClientManually && exportName == "GetStartupInfoA") {
-                return static_cast<LPVOID>(GetStartupInfoA_Stub);
+                return reinterpret_cast<LPVOID>(GetStartupInfoA_Stub);
             }
             if (!_config.loadClientManually && exportName == "GetCommandLineA") {
-                return static_cast<LPVOID>(GetCommandLineA_Stub);
+                return reinterpret_cast<LPVOID>(GetCommandLineA_Stub);
             }
             if (exportName == "GetModuleFileNameA") {
-                return static_cast<LPVOID>(GetModuleFileNameA_Hook);
+                return reinterpret_cast<LPVOID>(GetModuleFileNameA_Hook);
             }
             if (exportName == "GetModuleFileNameExA") {
-                return static_cast<LPVOID>(GetModuleFileNameExA_Hook);
+                return reinterpret_cast<LPVOID>(GetModuleFileNameExA_Hook);
             }
             if (exportName == "GetModuleFileNameW") {
-                return static_cast<LPVOID>(GetModuleFileNameW_Hook);
+                return reinterpret_cast<LPVOID>(GetModuleFileNameW_Hook);
             }
             if (exportName == "GetModuleFileNameExW") {
-                return static_cast<LPVOID>(GetModuleFileNameExW_Hook);
+                return reinterpret_cast<LPVOID>(GetModuleFileNameExW_Hook);
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
@@ -623,9 +621,9 @@ namespace Framework::Launcher {
             auto mod = LoadLibraryW(gDllName);
 
             if (mod) {
-                auto init = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
-                if (init) {
-                    init(gProjectDllPath);
+                auto initFunc = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
+                if (initFunc) {
+                    initFunc(gProjectDllPath);
                 }
                 else {
                     MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
