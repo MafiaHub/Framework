@@ -26,7 +26,8 @@ namespace Framework::World::Modules {
             Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             if (tr)
-                entitySpawn.FromParameters(e.id(), *tr);
+                entitySpawn.FromParameters(*tr);
+            entitySpawn.SetServerID(e.id());
             peer->Send(entitySpawn, guid);
             CALL_CUSTOM_PROC(spawnProc);
             return true;
@@ -35,14 +36,14 @@ namespace Framework::World::Modules {
         streamable->events.despawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             CALL_CUSTOM_PROC(despawnProc);
             Framework::Networking::Messages::GameSyncEntityDespawn entityDespawn;
-            entityDespawn.FromParameters(e.id());
+            entityDespawn.SetServerID(e.id());
             peer->Send(entityDespawn, guid);
             return true;
         };
 
         streamable->events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntitySelfUpdate entitySelfUpdate;
-            entitySelfUpdate.FromParameters(e.id());
+            entitySelfUpdate.SetServerID(e.id());
             peer->Send(entitySelfUpdate, guid);
             CALL_CUSTOM_PROC(selfUpdateProc);
             return true;
@@ -53,7 +54,8 @@ namespace Framework::World::Modules {
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
             if (tr && es)
-                entityUpdate.FromParameters(e.id(), *tr, es->owner);
+                entityUpdate.FromParameters(*tr, es->owner);
+            entityUpdate.SetServerID(e.id());
             peer->Send(entityUpdate, guid);
             CALL_CUSTOM_PROC(updateProc);
             return true;
@@ -64,8 +66,10 @@ namespace Framework::World::Modules {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto sid = e.get<Framework::World::Modules::Base::ServerID>();
-            if (tr && sid)
-                entityUpdate.FromParameters(sid->id, *tr, 0);
+            if (tr && sid) {
+                entityUpdate.FromParameters(*tr, 0);
+                entityUpdate.SetServerID(sid->id);
+            }
             peer->Send(entityUpdate, guid);
             CALL_CUSTOM_PROC(updateProc);
             return true;

@@ -32,7 +32,7 @@ namespace Framework::Networking::Messages {
             bs->Serialize(write, _reason);
         }
 
-        bool Valid() override {
+        bool Valid() const override {
             return true;
         }
 

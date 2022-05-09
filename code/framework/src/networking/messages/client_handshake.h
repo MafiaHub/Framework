@@ -39,7 +39,7 @@ namespace Framework::Networking::Messages {
             bs->Serialize(write, _clientVersion);
         }
 
-        bool Valid() override {
+        bool Valid() const override {
             return _playerName.GetLength() > 0 && (_playerSteamId.GetLength() > 0 || _playerDiscordId.GetLength() > 0) && _clientVersion.GetLength() > 0;
         }
 

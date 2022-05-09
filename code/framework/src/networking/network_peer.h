@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <utility>
 #include <utils/hashing.h>
+#include <logging/logger.h>
 
 namespace Framework::Networking {
     class NetworkPeer {
@@ -41,12 +42,17 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredMessageCallbacks[message] = [callback](SLNet::Packet *p) {
+            _registeredMessageCallbacks[message] = [callback, message](SLNet::Packet *p) {
                 SLNet::BitStream bs(p->data + 1, p->length, false);
                 T msg = {};
                 msg.SetPacket(p);
                 msg.Serialize(&bs, false);
-                callback(p->guid, &msg);
+                msg.Serialize2(&bs, false);
+                if (msg.Valid2()) {
+                    callback(p->guid, &msg);
+                } else {
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid2() check, skipping!", message);
+                }
             };
         }
 

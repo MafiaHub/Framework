@@ -35,7 +35,7 @@ namespace Framework::Networking::Messages {
             bs->Serialize(write, _entityID);
         }
 
-        bool Valid() override {
+        bool Valid() const override {
             return _serverTickRate > 0.0f && _entityID > 0;
         }
 

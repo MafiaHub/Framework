@@ -41,7 +41,22 @@ namespace Framework::Networking::Messages {
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
 
-        virtual bool Valid() = 0;
+        /**
+         * Extra serialization for middleware data
+         * @param bs
+         * @param write
+         */
+        virtual void Serialize2(SLNet::BitStream *bs, bool write) {};
+
+        virtual bool Valid() const = 0;
+
+        /**
+         * Extra validation for middleware data
+         * @return
+         */
+        virtual bool Valid2() const {
+            return true;
+        }
 
         void SetPacket(SLNet::Packet *p) {
             packet = p;

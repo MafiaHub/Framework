@@ -21,16 +21,12 @@ namespace Framework::Networking::Messages {
             return GAME_SYNC_ENTITY_DESPAWN;
         }
 
-        void FromParameters(flecs::entity_t serverID) {
-            _serverID = serverID;
-        }
-
         void Serialize(SLNet::BitStream *bs, bool write) override {
-            bs->Serialize(write, _serverID);
+            // noop
         }
 
-        bool Valid() override {
-            return ValidServerID();
+        bool Valid() const override {
+            return true;
         }
     };
 } // namespace Framework::Networking::Messages

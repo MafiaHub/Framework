@@ -17,29 +17,26 @@
 namespace Framework::Networking::Messages {
     class GameSyncEntitySpawn final: public GameSyncMessage {
       private:
-        World::Modules::Base::Transform _transform;
+        World::Modules::Base::Transform _transform{};
 
       public:
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_SPAWN;
         }
 
-        void FromParameters(flecs::entity_t serverID, World::Modules::Base::Transform tr) {
+        void FromParameters(World::Modules::Base::Transform tr) {
             _transform = tr;
-            _serverID  = serverID;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _transform);
-            bs->Serialize(write, _serverID);
         }
 
-        bool Valid() override {
-            // TODO is there anything to validate for transform data?
-            return ValidServerID();
+        bool Valid() const override {
+            return true;
         }
 
-        World::Modules::Base::Transform GetTransform() {
+        World::Modules::Base::Transform GetTransform() const {
             return _transform;
         }
     };

@@ -19,12 +19,28 @@ namespace Framework::Networking::Messages {
         flecs::entity_t _serverID = 0;
 
       public:
-        flecs::entity_t GetServerID() {
+        void SetServerID(flecs::entity_t serverID) {
+            _serverID = serverID;
+        }
+
+        flecs::entity_t GetServerID() const {
             return _serverID;
         }
 
+        void Serialize2(SLNet::BitStream *bs, bool write) override {
+            bs->Serialize(write, _serverID);
+        };
+
         inline bool ValidServerID() const {
             return _serverID > 0;
+        }
+
+        /**
+         * Validates if the server id was set.
+         * @return
+         */
+        bool Valid2() const override {
+            return ValidServerID();
         }
     };
 } // namespace Framework::Networking::Messages

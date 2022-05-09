@@ -36,6 +36,7 @@ namespace Framework::Networking {
         SLNet::BitStream bsOut;
         bsOut.Write(msg.GetMessageID());
         msg.Serialize(&bsOut, true);
+        msg.Serialize2(&bsOut, true);
 
         if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
             return false;
