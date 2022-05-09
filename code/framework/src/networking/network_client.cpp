@@ -18,7 +18,7 @@ namespace Framework::Networking {
     }
 
     ClientError NetworkClient::Init() {
-        SLNet::SocketDescriptor sd;
+        SLNet::SocketDescriptor sd{};
         SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));

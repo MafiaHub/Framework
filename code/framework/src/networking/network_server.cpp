@@ -30,10 +30,6 @@ namespace Framework::Networking {
         return SERVER_NONE;
     }
 
-    void NetworkServer::Update() {
-        NetworkPeer::Update();
-    }
-
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
         switch (packetID) {
         case ID_NEW_INCOMING_CONNECTION: {
@@ -58,6 +54,8 @@ namespace Framework::Networking {
             }
             return true;
         } break;
+        default:
+            break;
         }
         return false;
     }

@@ -32,8 +32,6 @@ namespace Framework::Networking {
         ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
         ServerError Shutdown();
 
-        void Update() override;
-
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
 
         int GetPing(SLNet::RakNetGUID guid);
