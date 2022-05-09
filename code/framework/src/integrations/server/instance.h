@@ -117,7 +117,7 @@ namespace Framework::Integrations::Server {
 
         void Run();
 
-        void OnSignal(const sig_signal_t);
+        void OnSignal(sig_signal_t);
 
         bool IsAlive() const {
             return _alive;

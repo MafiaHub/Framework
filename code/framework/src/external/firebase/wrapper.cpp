@@ -53,7 +53,7 @@ namespace Framework::External::Firebase {
         return FirebaseError::FIREBASE_NONE;
     }
 
-    FirebaseError Wrapper::SignInWithCustomToken(const std::string &token) {
+    FirebaseError Wrapper::SignInWithCustomToken(const std::string &token) const {
         auto auth                                       = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInWithCustomToken(token.c_str());
         while (result.status() != firebase::kFutureStatusComplete) {};
@@ -65,7 +65,7 @@ namespace Framework::External::Firebase {
         }
     }
 
-    FirebaseError Wrapper::SignInWithEmailPassword(const std::string &email, const std::string &password) {
+    FirebaseError Wrapper::SignInWithEmailPassword(const std::string &email, const std::string &password) const {
         auto auth                                       = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());
         while (result.status() != firebase::kFutureStatusComplete) {};
@@ -77,7 +77,7 @@ namespace Framework::External::Firebase {
         }
     }
 
-    FirebaseError Wrapper::SignUpWithEmailPassword(const std::string &email, const std::string &password) {
+    FirebaseError Wrapper::SignUpWithEmailPassword(const std::string &email, const std::string &password) const {
         auto auth                                       = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->CreateUserWithEmailAndPassword(email.c_str(), password.c_str());
         while (result.status() != firebase::kFutureStatusComplete) {};
@@ -89,7 +89,7 @@ namespace Framework::External::Firebase {
         }
     }
 
-    FirebaseError Wrapper::SignInAnonymously() {
+    FirebaseError Wrapper::SignInAnonymously() const {
         auto auth                                       = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInAnonymously();
         while (result.status() != firebase::kFutureStatusComplete) {};
@@ -101,7 +101,7 @@ namespace Framework::External::Firebase {
         }
     }
 
-    FirebaseError Wrapper::SignOut() {
+    FirebaseError Wrapper::SignOut() const {
         auto auth = GetAuth();
         auth->SignOut();
         return FirebaseError::FIREBASE_NONE;
@@ -111,15 +111,15 @@ namespace Framework::External::Firebase {
         firebase::analytics::SetUserProperty(name.c_str(), property.c_str());
     }
 
-    void LogEvent(const std::string &name, const std::string &paramName, const std::string &paramValue) {
+    void Wrapper::LogEvent(const std::string &name, const std::string &paramName, const std::string &paramValue) {
         firebase::analytics::LogEvent(name.c_str(), paramName.c_str(), paramValue.c_str());
     }
 
-    void LogEvent(const std::string &name, const std::string &paramName, const double paramValue) {
+    void Wrapper::LogEvent(const std::string &name, const std::string &paramName, const double paramValue) {
         firebase::analytics::LogEvent(name.c_str(), paramName.c_str(), paramValue);
     }
 
-    void LogEvent(const std::string &name) {
+    void Wrapper::LogEvent(const std::string &name) {
         firebase::analytics::LogEvent(name.c_str());
     }
 

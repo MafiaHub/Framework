@@ -74,7 +74,7 @@ namespace Framework::External::Discord {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
-    void Wrapper::SignInWithDiscord(DiscordLoginProc proc) {
+    void Wrapper::SignInWithDiscord(const DiscordLoginProc& proc) {
         _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
             if (result == discord::Result::Ok) {
                 proc(tokenData.GetAccessToken());

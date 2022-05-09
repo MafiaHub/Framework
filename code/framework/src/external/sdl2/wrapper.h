@@ -23,7 +23,7 @@ namespace Framework::External::SDL2 {
         Error Init(HWND windowHandle);
         Error Shutdown();
 
-        const SDL_Event PollEvent();
+        static SDL_Event PollEvent();
 
         inline SDL_Window *GetWindow() {
             return _window;

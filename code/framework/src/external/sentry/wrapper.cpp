@@ -45,7 +45,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::Shutdown() {
+    SentryError Wrapper::Shutdown() const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
@@ -53,7 +53,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::SetGameInformation(const GameInformation &infos) {
+    SentryError Wrapper::SetGameInformation(const GameInformation &infos) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
@@ -64,7 +64,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::SetScreenInformation(const ScreenInformation &infos) {
+    SentryError Wrapper::SetScreenInformation(const ScreenInformation &infos) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
@@ -76,7 +76,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::SetSystemInformation(const SystemInformation &infos) {
+    SentryError Wrapper::SetSystemInformation(const SystemInformation &infos) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
@@ -96,7 +96,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::SetUserInformation(const UserInformation &infos) {
+    SentryError Wrapper::SetUserInformation(const UserInformation &infos) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
@@ -114,7 +114,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::CaptureEventException(const std::string &type, const std::string &message) {
+    SentryError Wrapper::CaptureEventException(const std::string &type, const std::string &message) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
@@ -127,7 +127,7 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) {
+    SentryError Wrapper::CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }

@@ -19,14 +19,14 @@ namespace Framework::External::Sentry {
         uint8_t _cpuProcessorsCount = 0;
 
         std::string _osVersion;
-        uint32_t _osMajorVersion = -1;
-        uint32_t _osMinorVersion = -1;
-        uint32_t _osBuildNumber  = -1;
+        int _osMajorVersion = -1;
+        int _osMinorVersion = -1;
+        int _osBuildNumber  = -1;
     };
 
     struct ScreenInformation {
-        uint32_t _width  = 0;
-        uint32_t _height = 0;
+        int _width  = 0;
+        int _height = 0;
         bool _fullscreen = false;
     };
 
@@ -47,15 +47,15 @@ namespace Framework::External::Sentry {
 
       public:
         SentryError Init(const std::string &, const std::string &);
-        SentryError Shutdown();
+        SentryError Shutdown() const;
 
-        SentryError CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload);
-        SentryError CaptureEventException(const std::string &type, const std::string &message);
+        SentryError CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
+        SentryError CaptureEventException(const std::string &type, const std::string &message) const;
 
-        SentryError SetSystemInformation(const SystemInformation &);
-        SentryError SetScreenInformation(const ScreenInformation &);
-        SentryError SetUserInformation(const UserInformation &);
-        SentryError SetGameInformation(const GameInformation &);
+        SentryError SetSystemInformation(const SystemInformation &) const;
+        SentryError SetScreenInformation(const ScreenInformation &) const;
+        SentryError SetUserInformation(const UserInformation &) const;
+        SentryError SetGameInformation(const GameInformation &) const;
 
         bool IsValid() const {
             return _valid;

@@ -33,16 +33,16 @@ namespace Framework::External::Firebase {
       public:
         FirebaseError Init(const std::string &projectId, const std::string &appId, const std::string &apiKey);
 
-        FirebaseError SignInWithCustomToken(const std::string &);
-        FirebaseError SignInWithEmailPassword(const std::string &, const std::string &);
-        FirebaseError SignUpWithEmailPassword(const std::string &, const std::string &);
-        FirebaseError SignInAnonymously();
-        FirebaseError SignOut();
+        FirebaseError SignInWithCustomToken(const std::string &) const;
+        FirebaseError SignInWithEmailPassword(const std::string &, const std::string &) const;
+        FirebaseError SignUpWithEmailPassword(const std::string &, const std::string &) const;
+        FirebaseError SignInAnonymously() const;
+        FirebaseError SignOut() const;
 
-        void LogEvent(const std::string &, const std::string &, const std::string &);
-        void LogEvent(const std::string &, const std::string &, const double);
-        void LogEvent(const std::string &);
-        void SetUserProperty(const std::string &, const std::string &);
+        static void LogEvent(const std::string &name, const std::string &paramName, const std::string &paramValue);
+        static void LogEvent(const std::string &name, const std::string &paramName, double paramValue);
+        static void LogEvent(const std::string &name);
+        static void SetUserProperty(const std::string &, const std::string &);
 
         bool IsValid() const {
             return _valid;

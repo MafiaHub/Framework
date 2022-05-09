@@ -37,7 +37,7 @@ namespace Framework::External::SDL2 {
         return Error::ERROR_NONE;
     }
 
-    const SDL_Event Wrapper::PollEvent() {
+    SDL_Event Wrapper::PollEvent() {
         OPTICK_EVENT();
         SDL_Event event;
         SDL_PollEvent(&event);
