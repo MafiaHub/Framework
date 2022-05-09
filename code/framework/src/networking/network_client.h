@@ -17,6 +17,7 @@
 #include <RakPeerInterface.h>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace Framework::Networking {
     class NetworkClient: public NetworkPeer {
@@ -48,11 +49,11 @@ namespace Framework::Networking {
         }
 
         void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
-            _onPlayerConnectedCallback = callback;
+            _onPlayerConnectedCallback = std::move(callback);
         }
 
         void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
-            _onPlayerDisconnectedCallback = callback;
+            _onPlayerDisconnectedCallback = std::move(callback);
         }
     };
 }; // namespace Framework::Networking

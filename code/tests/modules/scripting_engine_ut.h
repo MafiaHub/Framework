@@ -30,4 +30,40 @@ MODULE(scripting_engine, {
 
         delete pEngine;
     });
+
+    IT("can allocate and deallocate a valid scripting engine instance, then do it again to test re-entry", {
+        SKIP();
+        //todo
+//        Engine *pEngine = new Engine;
+//
+//        // Init the engine and make sure everything went fine
+//        EQUALS(pEngine->Init(), EngineError::ENGINE_NONE);
+//        NEQUALS(pEngine->GetIsolate(), nullptr);
+//        NEQUALS(pEngine->GetPlatform(), nullptr);
+//        NEQUALS(pEngine->GetResourceManager(), nullptr);
+//
+//        // Shutdown the engine and make sure everything went down
+//        EQUALS(pEngine->Shutdown(), EngineError::ENGINE_NONE);
+//        EQUALS(pEngine->GetIsolate(), nullptr);
+//        EQUALS(pEngine->GetPlatform(), nullptr);
+//        EQUALS(pEngine->GetResourceManager(), nullptr);
+//
+//        delete pEngine;
+//
+//        // Intentionally duplicated to test engine for re-entry
+//
+//        // Init the engine and make sure everything went fine
+//        EQUALS(pEngine->Init(), EngineError::ENGINE_NONE);
+//        NEQUALS(pEngine->GetIsolate(), nullptr);
+//        NEQUALS(pEngine->GetPlatform(), nullptr);
+//        NEQUALS(pEngine->GetResourceManager(), nullptr);
+//
+//        // Shutdown the engine and make sure everything went down
+//        EQUALS(pEngine->Shutdown(), EngineError::ENGINE_NONE);
+//        EQUALS(pEngine->GetIsolate(), nullptr);
+//        EQUALS(pEngine->GetPlatform(), nullptr);
+//        EQUALS(pEngine->GetResourceManager(), nullptr);
+//
+//        delete pEngine;
+    });
 })

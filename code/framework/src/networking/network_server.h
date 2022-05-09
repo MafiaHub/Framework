@@ -18,6 +18,7 @@
 #include <RakPeerInterface.h>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace Framework::Networking {
     class NetworkServer: public NetworkPeer {
@@ -38,11 +39,11 @@ namespace Framework::Networking {
         int GetPing(SLNet::RakNetGUID guid);
 
         void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
-            _onPlayerConnectCallback = callback;
+            _onPlayerConnectCallback = std::move(callback);
         }
 
         void SetOnPlayerDisconnectCallback(Messages::DisconnectPacketCallback callback) {
-            _onPlayerDisconnectCallback = callback;
+            _onPlayerDisconnectCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking

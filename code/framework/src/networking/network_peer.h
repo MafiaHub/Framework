@@ -13,6 +13,7 @@
 #include <PacketPriority.h>
 #include <RakPeerInterface.h>
 #include <unordered_map>
+#include <utility>
 #include <utils/hashing.h>
 
 namespace Framework::Networking {
@@ -84,7 +85,7 @@ namespace Framework::Networking {
         virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
 
         void SetUnknownPacketHandler(Messages::PacketCallback callback) {
-            _onUnknownPacketCallback = callback;
+            _onUnknownPacketCallback = std::move(callback);
         }
 
         SLNet::Packet *GetPacket() const {
