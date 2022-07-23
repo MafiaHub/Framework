@@ -34,7 +34,7 @@ endif()
 
 add_subdirectory("${CMAKE_BINARY_DIR}/cef_src" "${CMAKE_BINARY_DIR}/cef_build")
 
-set(CEF_COPY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Release")
+set(CEF_COPY_DIR "${CMAKE_BINARY_DIR}/cef_src/Release")
 
 #
 
