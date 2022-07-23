@@ -6,13 +6,12 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 3
+#define UNIT_MAX_MODULES 2
 #include "logging/logger.h"
 #include "unit.h"
 
 /* TEST CATEGORIES */
 #include "modules/interpolator_ut.h"
-#include "modules/job_system_ut.h"
 #include "modules/scripting_engine_ut.h"
 
 int main() {
@@ -22,7 +21,6 @@ int main() {
 
     UNIT_MODULE(interpolator);
     UNIT_MODULE(scripting_engine);
-    UNIT_MODULE(job_system);
 
     return UNIT_RUN();
 }
