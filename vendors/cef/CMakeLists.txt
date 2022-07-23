@@ -1,4 +1,3 @@
-cmake_minimum_required(VERSION 3.21)
 project(cef)
 
 # pick your version from https://cef-builds.spotifycdn.com
