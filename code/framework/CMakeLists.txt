@@ -58,14 +58,8 @@ set(FRAMEWORK_SERVER_SRC
     )
 
 set(FRAMEWORK_CLIENT_SRC
-    src/external/cef/application.cpp
-    src/external/cef/client.cpp
-    src/external/cef/render_handler.cpp
-    src/external/cef/worker.hpp
-
     src/graphics/renderer.cpp
     src/graphics/renderio.cpp
-    src/gui/backends/cef.cpp
 
     src/networking/network_client.cpp
 
@@ -169,11 +163,7 @@ if (WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
 
-    add_dependencies(FrameworkClient libcef_dll_wrapper CEFTarget)
-
-    target_link_libraries(FrameworkClient DiscordSDK CEFTarget libcef libcef_dll_wrapper DearImGUI SDL)
-
-    target_link_options(FrameworkClient PUBLIC "/DELAYLOAD:libcef.dll")
+    target_link_libraries(FrameworkClient DiscordSDK DearImGUI SDL)
 
     set(CLIENT_SHARED_LIBS minhook GalaxySDK SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} RmlCore ${FREETYPE_LIBRARY})

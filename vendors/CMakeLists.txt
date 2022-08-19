@@ -130,7 +130,6 @@ if (WIN32)
     endif ()
 
     # Build other win32 deps
-    add_subdirectory(cef)
     add_subdirectory(minhook)
     add_subdirectory(steamworks)
     add_subdirectory(galaxy)
@@ -148,9 +147,6 @@ if (WIN32)
 
     set(StackWalker_DISABLE_TESTS CACHE BOOL "" ON)
     add_subdirectory(StackWalker)
-
-    target_compile_options(libcef_dll_wrapper PRIVATE "/MT")
-    target_link_libraries(libcef_dll_wrapper PRIVATE ${CEF_LIBRARY})
 endif ()
 
 # Build v8pp

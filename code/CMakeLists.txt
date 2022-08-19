@@ -22,7 +22,6 @@ include_directories(PUBLIC
         "../vendors/lua-5.2.1/src"
         "../vendors/lua-5.3.6/src"
         "../vendors/lua-5.4.4/src"
-        "../vendors/cef"
         "../vendors/discord/src"
         "../vendors/sentry/include"
         "../vendors/curl/include"

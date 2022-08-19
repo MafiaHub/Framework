@@ -17,7 +17,7 @@
                     "type": "BOOL"
                 },
                 {
-                    "name": "BUILD_EXAMPLES",
+                    "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
                 }
@@ -40,7 +40,7 @@
                     "type": "BOOL"
                 },
                 {
-                    "name": "BUILD_EXAMPLES",
+                    "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
                 }
@@ -63,7 +63,7 @@
                     "type": "BOOL"
                 },
                 {
-                    "name": "BUILD_EXAMPLES",
+                    "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
                 }
@@ -86,7 +86,7 @@
                     "type": "BOOL"
                 },
                 {
-                    "name": "BUILD_EXAMPLES",
+                    "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
                 }
@@ -109,7 +109,7 @@
                     "type": "BOOL"
                 },
                 {
-                    "name": "BUILD_EXAMPLES",
+                    "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
                 }
@@ -132,7 +132,7 @@
                     "type": "BOOL"
                 },
                 {
-                    "name": "BUILD_EXAMPLES",
+                    "name": "OPTION_BUILD_EXAMPLES",
                     "value": "false",
                     "type": "BOOL"
                 }
