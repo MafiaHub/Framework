@@ -1,4 +1,4 @@
-// Copyright 2021 Google Inc. All Rights Reserved.
+// Copyright 2022 Google Inc. All Rights Reserved.
 
 #ifndef FIREBASE_ANALYTICS_CLIENT_CPP_INCLUDE_FIREBASE_ANALYTICS_USER_PROPERTY_NAMES_H_
 #define FIREBASE_ANALYTICS_CLIENT_CPP_INCLUDE_FIREBASE_ANALYTICS_USER_PROPERTY_NAMES_H_
@@ -26,11 +26,6 @@ namespace analytics {
 /// @{
 
 
-/// The method used to sign in. For example, "google", "facebook" or
-/// "twitter".
-static const char*const kUserPropertySignUpMethod
-     = "sign_up_method";
-
 /// Indicates whether events logged by Google Analytics can be used to
 /// personalize ads for the user. Set to "YES" to enable, or "NO" to
 /// disable. Default is enabled. See the
@@ -38,11 +33,15 @@ static const char*const kUserPropertySignUpMethod
 /// more details and information about related settings.
 ///
 /// @code
-///  [FIRAnalytics setUserPropertyString:"NO"
-///                              forName:kUserPropertyAllowAdPersonalizationSignals];
+///  Analytics.setUserProperty("NO", forName: AnalyticsUserPropertyAllowAdPersonalizationSignals)
 /// @endcode
 static const char*const kUserPropertyAllowAdPersonalizationSignals
      = "allow_personalized_ads";
+
+/// The method used to sign in. For example, "google", "facebook" or
+/// "twitter".
+static const char*const kUserPropertySignUpMethod
+     = "sign_up_method";
 /// @}
 
 }  // namespace analytics
