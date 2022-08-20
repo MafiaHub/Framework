@@ -30,7 +30,6 @@ namespace Framework::Integrations::Server {
         OPTICK_START_CAPTURE();
         _networkingEngine = std::make_shared<Networking::Engine>();
         _webServer        = std::make_shared<HTTP::Webserver>();
-        _masterlistSync   = std::make_unique<Masterlist>(this);
         _fileConfig       = std::make_unique<Utils::Config>();
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
@@ -301,10 +300,6 @@ namespace Framework::Integrations::Server {
 
             if (_worldEngine) {
                 _worldEngine->Update();
-            }
-
-            if (_firebaseWrapper && _opts.firebaseEnabled && _opts.bindPublicServer) {
-                _masterlistSync->Update(_firebaseWrapper.get());
             }
 
             PostUpdate();

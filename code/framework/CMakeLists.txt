@@ -44,15 +44,11 @@ set(FRAMEWORK_SERVER_SRC
 
     src/http/webserver.cpp
 
-    src/services/masterlist.cpp
-    src/services/user.cpp
-
     src/networking/network_server.cpp
 
     src/world/server.cpp
 
     src/integrations/server/instance.cpp
-    src/integrations/server/masterlist.cpp
     src/integrations/server/networking/engine.cpp
     src/integrations/server/scripting/server.cpp
     )

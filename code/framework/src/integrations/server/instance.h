@@ -14,7 +14,6 @@
 #include "external/firebase/wrapper.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
-#include "masterlist.h"
 #include "networking/engine.h"
 #include "scripting/server.h"
 #include "utils/config.h"
@@ -78,7 +77,6 @@ namespace Framework::Integrations::Server {
         std::shared_ptr<Networking::Engine> _networkingEngine;
         std::shared_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
-        std::unique_ptr<Masterlist> _masterlistSync;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::shared_ptr<World::ServerEngine> _worldEngine;
 
