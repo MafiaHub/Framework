@@ -75,4 +75,12 @@ namespace Framework::World::Modules {
             return true;
         };
     }
+
+    bool Base::IsEntityOwnedBy(flecs::entity e, uint64_t guid) {
+        const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();
+        if (streamable != nullptr) {
+            return streamable->owner == guid;
+        }
+        return false;
+    }
 } // namespace Framework::World::Modules
