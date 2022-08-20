@@ -69,6 +69,32 @@ namespace Framework::World {
                 e.destruct();
             });
 
+        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership")
+            .kind(flecs::PostUpdate)
+            .interval(tickInterval * 4.0f)
+            .each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
+                if (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable)) {
+                    /* no op */
+                } else {
+                    uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
+                    float closestDist = std::numeric_limits<float>::max();
+                    _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                        const auto rhsTr = rhsE.get<Modules::Base::Transform>();
+                        const auto rhsRs = rhsE.get<Modules::Base::Streamable>();
+                        const auto canBeOwner = _isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
+                        if (canBeOwner) {
+                            const auto dist = glm::distance(tr.pos, rhsTr->pos);
+                            if (dist < closestDist) {
+                                closestDist = dist;
+                                closestOwnerGUID = rhsS.guid;
+                            }
+                        }
+                    });
+
+                    streamable.owner = closestOwnerGUID;
+                }
+            });
+
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
             .kind(flecs::PostUpdate)
             .interval(tickInterval)

@@ -42,12 +42,15 @@ namespace Framework::World::Modules {
 
         struct Streamable {
             using IsVisibleProc = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
+            using AssignOwnerProc = fu2::function<bool(flecs::entity e, Streamable &streamable)>;
             enum class HeuristicMode { ADD, REPLACE, REPLACE_POSITION };
 
             int virtualWorld        = 0;
             bool isVisible          = true;
             bool alwaysVisible      = false;
             double updateInterval = (1000.0/60.0); // 16.1667~ ms interval
+
+            AssignOwnerProc assignOwnerProc;
             flecs::entity_t owner   = 0;
 
             struct Events {
