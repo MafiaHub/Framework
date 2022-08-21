@@ -62,24 +62,21 @@ namespace Framework::World {
         return e;
     }
 
-    void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval)  {
+    void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
         _networkPeer = peer;
 
-        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities")
-                              .kind(flecs::PostUpdate)
-                              .interval(tickInterval)
-                              .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
-                                  OPTICK_EVENT();
-                                  const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
+        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
+            OPTICK_EVENT();
+            const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
-                                  for (size_t i = 0; i < it.count(); i++) {
-                                      const auto &es = &rs[i];
+            for (size_t i = 0; i < it.count(); i++) {
+                const auto &es = &rs[i];
 
-                                      if (es->GetBaseEvents().updateProc && Framework::World::Modules::Base::IsEntityOwnedBy(it.entity(i), myGUID.g)) {
-                                          es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
-                                      }
-                                  }
-                              });
+                if (es->GetBaseEvents().updateProc && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
+                    es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                }
+            }
+        });
     }
 
     void ClientEngine::OnDisconnect() {

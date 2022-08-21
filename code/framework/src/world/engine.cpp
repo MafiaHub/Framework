@@ -36,6 +36,14 @@ namespace Framework::World {
         _world->progress();
     }
 
+    bool Engine::IsEntityOwner(flecs::entity e, uint64_t guid) {
+        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        if (!es) {
+            return false;
+        }
+        return (es->owner == guid);
+    }
+
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {

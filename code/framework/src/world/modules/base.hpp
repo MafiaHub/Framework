@@ -107,7 +107,5 @@ namespace Framework::World::Modules {
 
         static void SetupDefaultEvents(Streamable *streamable);
         static void SetupDefaultClientEvents(Streamable *streamable);
-
-        static bool IsEntityOwnedBy(flecs::entity e, uint64_t guid);
     };
 } // namespace Framework::World::Modules
