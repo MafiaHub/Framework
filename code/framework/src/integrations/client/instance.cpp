@@ -216,7 +216,7 @@ namespace Framework::Integrations::Client {
                 return;
             }
             const auto e = _worldEngine->CreateEntity(msg->GetServerID());
-            _streamingFactory->SetupClient(e, msg->GetServerID());
+            _streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
 
             auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr     = msg->GetTransform();
@@ -248,6 +248,19 @@ namespace Framework::Integrations::Client {
             auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr     = msg->GetTransform();
 
+            auto es = e.get_mut<World::Modules::Base::Streamable>();
+            es->owner = msg->GetOwner();
+        });
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+
+            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+            if (!e.is_alive()) {
+                return;
+            }
             auto es = e.get_mut<World::Modules::Base::Streamable>();
             es->owner = msg->GetOwner();
         });

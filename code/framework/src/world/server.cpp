@@ -129,6 +129,13 @@ namespace Framework::World {
                                         otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
                                     data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                 }
+                            } else {
+                                auto &data = map_it->second;
+                                if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
+                                    if (otherS.GetBaseEvents().ownerUpdateProc)
+                                        otherS.GetBaseEvents().ownerUpdateProc(_networkPeer, s[i].guid, e);
+                                    data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
+                                }
                             }
                         }
 

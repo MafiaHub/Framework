@@ -33,6 +33,7 @@ namespace Framework::Networking::Messages {
         GAME_SYNC_ENTITY_SPAWN,
         GAME_SYNC_ENTITY_UPDATE,
         GAME_SYNC_ENTITY_SELF_UPDATE, // server sends data to streamer
+        GAME_SYNC_ENTITY_OWNER_UPDATE, // server sends data about owned entity
         GAME_SYNC_ENTITY_DESPAWN,
 
         // Messages used by the mod

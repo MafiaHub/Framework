@@ -34,6 +34,11 @@ namespace Framework::Integrations::Shared::Archetypes {
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
+
+            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
+            streamable->assignOwnerProc = [](flecs::entity, World::Modules::Base::Streamable &) {
+                return true; /* always keep current owner */
+            };
         }
     };
 } // namespace Framework::Integrations::Shared::Archetypes

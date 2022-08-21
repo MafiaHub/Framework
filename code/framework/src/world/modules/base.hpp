@@ -51,7 +51,7 @@ namespace Framework::World::Modules {
             double updateInterval = (1000.0/60.0); // 16.1667~ ms interval
 
             AssignOwnerProc assignOwnerProc;
-            flecs::entity_t owner   = 0;
+            uint64_t owner   = 0;
 
             struct Events {
                 using Proc = fu2::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity) const>;
@@ -59,6 +59,7 @@ namespace Framework::World::Modules {
                 Proc despawnProc;
                 Proc selfUpdateProc;
                 Proc updateProc;
+                Proc ownerUpdateProc;
             };
 
             // Extra set of events so mod can supply custom data.
