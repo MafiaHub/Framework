@@ -13,6 +13,8 @@
 #include <RakNetTypes.h>
 #include <function2.hpp>
 
+#include "utils/optional.h"
+
 namespace Framework::Networking::Messages {
     using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
     using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, uint32_t reason) const>;
@@ -76,6 +78,29 @@ namespace Framework::Networking::Messages {
 
         SLNet::Packet *GetPacket() const {
             return packet;
+        }
+
+        template<typename T>
+        void SerializeOptional(SLNet::BitStream *bs, bool write, Utils::Optional<T> &opt) {
+            if (write) {
+                if (opt.HasValue()) {
+                    bool hasValue = true;
+                    bs->Serialize(true, hasValue);
+                    bs->Serialize(true, opt.Value());
+                } else {
+                    bool hasValue = false;
+                    bs->Serialize(true, hasValue);
+                }
+            } else {
+                bool hasValue = false;
+                bs->Serialize(false, hasValue);
+
+                if (hasValue) {
+                    T val {};
+                    bs->Serialize(false, val);
+                    opt = Utils::Optional<T>(val);
+                }
+            }
         }
     };
 } // namespace Framework::Networking::Messages
