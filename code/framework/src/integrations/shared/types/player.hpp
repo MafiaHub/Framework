@@ -19,6 +19,8 @@
 
 #include <flecs/flecs.h>
 
+#include <string>
+
 namespace Framework::Integrations::Shared::Archetypes {
     class PlayerFactory {
       private:
@@ -32,13 +34,16 @@ namespace Framework::Integrations::Shared::Archetypes {
             SetupDefaults(e, guid);
         }
 
-        inline void SetupServer(flecs::entity e, uint64_t guid) {
+        inline void SetupServer(flecs::entity e, uint64_t guid, std::string nickname) {
             SetupDefaults(e, guid);
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             streamable->assignOwnerProc = [](flecs::entity, World::Modules::Base::Streamable &) {
                 return true; /* always keep current owner */
             };
+
+            auto streamer = e.get_mut<World::Modules::Base::Streamer>();
+            streamer->nickname = nickname;
         }
     };
 } // namespace Framework::Integrations::Shared::Archetypes

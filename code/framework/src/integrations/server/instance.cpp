@@ -213,7 +213,13 @@ namespace Framework::Integrations::Server {
             // Create player entity and add on world
             const auto newPlayer = _worldEngine->CreateEntity();
             _streamingFactory->SetupServer(newPlayer, guid.g);
-            _playerFactory->SetupServer(newPlayer, guid.g);
+
+            auto nickname = msg->GetPlayerName();
+            if (nickname.size() > 64){
+                nickname = nickname.substr(0, 64);
+            }
+            
+            _playerFactory->SetupServer(newPlayer, guid.g, nickname);
 
             if (_onPlayerConnectCallback)
                 _onPlayerConnectCallback(newPlayer, guid.g);

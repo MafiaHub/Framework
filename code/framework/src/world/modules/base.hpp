@@ -92,6 +92,7 @@ namespace Framework::World::Modules {
             float range = 100.0f;
 
             uint64_t guid = (uint64_t)-1;
+            std::string nickname;
         };
 
         explicit Base(flecs::world &world) {
