@@ -57,7 +57,7 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        void RegisterRPC(fu2::function<void(T *)> callback) {
+        void RegisterRPC(fu2::function<void(T *) const> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {
