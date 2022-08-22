@@ -142,6 +142,8 @@ namespace Framework::Integrations::Server {
             root["max_players"]       = _opts.maxPlayers;
             cb(200, root.dump(4));
         });
+
+        Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("All core endpoints have been registered!");
     }
 
     void Instance::InitModules() {
@@ -150,6 +152,8 @@ namespace Framework::Integrations::Server {
 
             world->import<Integrations::Shared::Modules::Mod>();
         }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Core ecs modules have been imported!");
     }
 
     bool Instance::LoadConfigFromJSON() {
@@ -220,6 +224,8 @@ namespace Framework::Integrations::Server {
             }
             
             _playerFactory->SetupServer(newPlayer, guid.g, nickname);
+
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
 
             if (_onPlayerConnectCallback)
                 _onPlayerConnectCallback(newPlayer, guid.g);
@@ -340,5 +346,7 @@ namespace Framework::Integrations::Server {
         if (_opts.sdkRegisterCallback) {
             _opts.sdkRegisterCallback(sdk);
         }
+        
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
     }
 } // namespace Framework::Integrations::Server
