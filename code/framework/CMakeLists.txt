@@ -32,7 +32,6 @@ set(FRAMEWORK_SERVER_SRC
     src/scripting/engines/node/engine.cpp
     src/scripting/engines/node/resource.cpp
     src/scripting/events.cpp
-    src/scripting/resource.cpp
 
         src/scripting/builtins/factory.cpp
 
