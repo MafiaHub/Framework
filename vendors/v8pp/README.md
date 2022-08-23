@@ -4,7 +4,7 @@
 
 # v8pp
 
-Header-only library to expose C++ classes and functions into [V8](https://developers.google.com/v8/) to use them in JavaScript code. v8pp requires a compiler with C++17 support. The library has been tested on:
+Header-only library to expose C++ classes and functions into [V8](https://developers.google.com/v8/) to use them in JavaScript code. v8pp requires a compiler with C++14 support. The library has been tested on:
 
   * Microsoft Visual C++ 2019 (Windows 10)
   * GCC 5.4.0 (Ubuntu 16.04)
@@ -50,6 +50,9 @@ Some of them could be:
 > // v8pp plugin filename suffix
 > V8PP_PLUGIN_SUFFIX:STRING=.dylib
 >
+> // Use std::string_view
+> V8PP_USE_STD_STRING_VIEW:BOOL=0
+>
 > // Use new V8 ABI with V8_COMPRESS_POINTERS and V8_31BIT_SMIS_ON_64BIT_ARCH
 > V8_COMPRESS_POINTERS:BOOL=ON
 
@@ -82,13 +85,13 @@ struct X
 v8pp::module mylib(isolate);
 mylib
     // set read-only attribute
-    .const_("PI", 3.1415)
+    .set_const("PI", 3.1415)
     // set variable available in JavaScript with name `var`
-    .var("var", var)
+    .set("var", var)
     // set function get_var as `fun`
-    .function("fun", &get_var)
+    .set("fun", &get_var)
     // set property `prop` with getter get_var() and setter set_var()
-    .property("prop", get_var, set_var);
+    .set("prop", property(get_var, set_var));
 
 // bind class
 v8pp::class_<X> X_class(isolate);
@@ -96,14 +99,14 @@ X_class
     // specify X constructor signature
     .ctor<int, bool>()
     // bind variable
-    .var("var", &X::var)
+    .set("var", &X::var)
     // bind function
-    .function("fun", &X::set)
+    .set("fun", &X::set)
     // bind read-only property
-    .property("prop",&X::get);
+    .set("prop", property(&X::get));
 
 // set class into the module template
-mylib.class_("X", X_class);
+mylib.set("X", X_class);
 
 // set bindings in global object as `mylib`
 isolate->GetCurrentContext()->Global()->Set(
@@ -129,8 +132,8 @@ void RegisterModule(v8::Local<v8::Object> exports)
 
     // set bindings... 
     addon
-        .function("fun", &function)
-        .class_("cls", my_class)
+        .set("fun", &function)
+        .set("cls", my_class)
         ;
 
     // set bindings as exports object prototype
@@ -168,7 +171,7 @@ void log(v8::FunctionCallbackInfo<v8::Value> const& args)
 v8::Local<v8::Value> init(v8::Isolate* isolate)
 {
     v8pp::module m(isolate);
-    m.function("log", &log);
+    m.set("log", &log);
     return m.new_instance();
 }
 
@@ -284,10 +287,10 @@ v8::Local<v8::Value> init(v8::Isolate* isolate)
     // file_base binding, no .ctor() specified, object creation disallowed in JavaScript
     v8pp::class_<file_base> file_base_class(isolate);
     file_base_class
-        .function("close", &file_base::close)
-        .function("good", &file_base::good)
-        .function("is_open", &file_base::is_open)
-        .function("eof", &file_base::eof)
+        .set("close", &file_base::close)
+        .set("good", &file_base::good)
+        .set("is_open", &file_base::is_open)
+        .set("eof", &file_base::eof)
         ;
 
     // .ctor<> template arguments declares types of file_writer constructor
@@ -296,9 +299,9 @@ v8::Local<v8::Value> init(v8::Isolate* isolate)
     file_writer_class
         .ctor<v8::FunctionCallbackInfo<v8::Value> const&>()
         .inherit<file_base>()
-        .function("open", &file_writer::open)
-        .function("print", &file_writer::print)
-        .function("println", &file_writer::println)
+        .set("open", &file_writer::open)
+        .set("print", &file_writer::print)
+        .set("println", &file_writer::println)
         ;
 
     // .ctor<> template arguments declares types of file_reader constructor.
@@ -307,16 +310,16 @@ v8::Local<v8::Value> init(v8::Isolate* isolate)
     file_reader_class
         .ctor<char const*>()
         .inherit<file_base>()
-        .function("open", &file_reader::open)
-        .function("getln", &file_reader::getline)
+        .set("open", &file_reader::open)
+        .set("getln", &file_reader::getline)
         ;
 
     // Create a module to add classes and functions to and return a
     // new instance of the module to be embedded into the v8 context
     v8pp::module m(isolate);
-    m.function("rename", &rename)
-     .class_("writer", file_writer_class)
-     .class_("reader", file_reader_class)
+    m.set("rename", &rename)
+     .set("writer", file_writer_class)
+     .set("reader", file_reader_class)
         ;
 
     return scope.Escape(m.new_instance());

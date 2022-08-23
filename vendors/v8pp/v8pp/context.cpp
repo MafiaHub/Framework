@@ -9,9 +9,7 @@
 #include <fstream>
 #include <utility>
 
-#if defined(WIN32)
-#define VC_EXTRALEAN
-#define WIN32_LEAN_AND_MEAN
+#if defined(_WIN32)
 #include <windows.h>
 static char const path_sep = '\\';
 #else
@@ -42,9 +40,9 @@ void context::load_module(v8::FunctionCallbackInfo<v8::Value> const& args)
 		}
 
 		context* ctx = detail::external_data::get<context*>(args.Data());
+		context::dynamic_modules::iterator it = ctx->modules_.find(name);
 
 		// check if module is already loaded
-		const auto it = ctx->modules_.find(name);
 		if (it != ctx->modules_.end())
 		{
 			result = v8::Local<v8::Value>::New(isolate, it->second.exports);
@@ -262,16 +260,16 @@ void context::destroy()
 	isolate_ = nullptr;
 }
 
-context& context::value(std::string_view name, v8::Local<v8::Value> value)
+context& context::set(string_view name, v8::Local<v8::Value> value)
 {
 	v8::HandleScope scope(isolate_);
-	global()->Set(isolate_->GetCurrentContext(), to_v8(isolate_, name), value).FromJust();
+	to_local(isolate_, impl_)->Global()->Set(isolate_->GetCurrentContext(), to_v8(isolate_, name), value).FromJust();
 	return *this;
 }
 
-context& context::module(std::string_view name, v8pp::module& m)
+context& context::set(string_view name, v8pp::module& m)
 {
-	return value(name, m.new_instance());
+	return set(name, m.new_instance());
 }
 
 v8::Local<v8::Value> context::run_file(std::string const& filename)
@@ -286,7 +284,7 @@ v8::Local<v8::Value> context::run_file(std::string const& filename)
 	return run_script(std::string(begin, end), filename);
 }
 
-v8::Local<v8::Value> context::run_script(std::string_view source, std::string_view filename)
+v8::Local<v8::Value> context::run_script(string_view source, string_view filename)
 {
 	v8::EscapableHandleScope scope(isolate_);
 	v8::Local<v8::Context> context = isolate_->GetCurrentContext();

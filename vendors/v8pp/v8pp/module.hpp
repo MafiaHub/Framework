@@ -43,76 +43,81 @@ public:
 
 	/// Set a V8 value in the module with specified name
 	template<typename Data>
-	module& value(std::string_view name, v8::Local<Data> value)
+	module& set(string_view name, v8::Local<Data> value)
 	{
 		obj_->Set(v8pp::to_v8(isolate_, name), value);
 		return *this;
 	}
 
 	/// Set submodule in the module with specified name
-	module& submodule(std::string_view name, v8pp::module& m)
+	module& set(string_view name, v8pp::module& m)
 	{
-		return value(name, m.obj_);
+		return set(name, m.obj_);
 	}
 
 	/// Set wrapped C++ class in the module with specified name
 	template<typename T, typename Traits>
-	module& class_(std::string_view name, v8pp::class_<T, Traits>& cl)
+	module& set(string_view name, v8pp::class_<T, Traits>& cl)
 	{
 		v8::HandleScope scope(isolate_);
 
 		cl.class_function_template()->SetClassName(v8pp::to_v8(isolate_, name));
-		return value(name, cl.js_function_template());
+		return set(name, cl.js_function_template());
 	}
 
 	/// Set a C++ function in the module with specified name
-	template<typename Function, typename Traits = raw_ptr_traits>
-	module& function(std::string_view name, Function&& func)
+	template<typename Function, typename Fun = typename std::decay<Function>::type>
+	typename std::enable_if<detail::is_callable<Fun>::value, module&>::type
+	set(string_view name, Function&& func)
 	{
-		using Fun = typename std::decay<Function>::type;
-		static_assert(detail::is_callable<Fun>::value, "Function must be callable");
-		return value(name, wrap_function_template<Function, Traits>(isolate_, std::forward<Function>(func)));
+		return set(name, wrap_function_template(isolate_, std::forward<Fun>(func)));
 	}
 
 	/// Set a C++ variable in the module with specified name
 	template<typename Variable>
-	module& var(char const* name, Variable& var)
+	typename std::enable_if<!detail::is_callable<Variable>::value, module&>::type
+	set(string_view name, Variable& var, bool readonly = false)
 	{
-		static_assert(!detail::is_callable<Variable>::value, "Variable must not be callable");
 		v8::HandleScope scope(isolate_);
 
-		obj_->SetAccessor(v8pp::to_v8(isolate_, name),
-			&var_get<Variable>, &var_set<Variable>,
+		v8::AccessorGetterCallback getter = &var_get<Variable>;
+		v8::AccessorSetterCallback setter = &var_set<Variable>;
+		if (readonly)
+		{
+			setter = nullptr;
+		}
+
+		obj_->SetAccessor(v8pp::to_v8(isolate_, name), getter, setter,
 			detail::external_data::set(isolate_, &var),
-			v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
+			v8::DEFAULT,
+			v8::PropertyAttribute(v8::DontDelete | (setter ? 0 : v8::ReadOnly)));
 		return *this;
 	}
 
-	/// Set property in the module with specified name and get/set functions
-	template<typename GetFunction, typename SetFunction = detail::none>
-	module& property(char const* name, GetFunction&& get, SetFunction&& set = {})
+	/// Set v8pp::property in the module with specified name
+	template<typename GetFunction, typename SetFunction>
+	module& set(string_view name, property_<GetFunction, SetFunction>&& property)
 	{
-		using Getter = typename std::decay<GetFunction>::type;
-		using Setter = typename std::decay<SetFunction>::type;
-		static_assert(detail::is_callable<Getter>::value, "GetFunction must be callable");
-		static_assert(detail::is_callable<Setter>::value
-			|| std::is_same<Setter, detail::none>::value, "SetFunction must be callable");
-
-		using property_type = v8pp::property<Getter, Setter, detail::none, detail::none>;
+		using property_type = property_<GetFunction, SetFunction>;
 
 		v8::HandleScope scope(isolate_);
 
-		using Traits = detail::none;
-		v8::AccessorGetterCallback getter = property_type::template get<Traits>;
-		v8::AccessorSetterCallback setter = property_type::is_readonly ? nullptr : property_type::template set<Traits>;
-		v8::Local<v8::String> v8_name = v8pp::to_v8(isolate_, name);
-		v8::Local<v8::Value> data = detail::external_data::set(isolate_, property_type(std::move(get), std::move(set)));
-		obj_->SetAccessor(v8_name, getter, setter, data, v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
+		v8::AccessorGetterCallback getter = property_type::get;
+		v8::AccessorSetterCallback setter = property_type::set;
+		if (property_type::is_readonly)
+		{
+			setter = nullptr;
+		}
+
+		obj_->SetAccessor(v8pp::to_v8(isolate_, name), getter, setter,
+			detail::external_data::set(isolate_, std::forward<property_type>(property)),
+			v8::DEFAULT,
+			v8::PropertyAttribute(v8::DontDelete | (setter ? 0 : v8::ReadOnly)));
 		return *this;
 	}
 
 	/// Set another module as a read-only property
-	module& const_(std::string_view name, module& m)
+	module& set_const(string_view name, module& m)
 	{
 		v8::HandleScope scope(isolate_);
 
@@ -123,7 +128,7 @@ public:
 
 	/// Set a value convertible to JavaScript as a read-only property
 	template<typename Value>
-	module& const_(std::string_view name, Value const& value)
+	module& set_const(string_view name, Value const& value)
 	{
 		v8::HandleScope scope(isolate_);
 

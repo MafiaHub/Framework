@@ -8,6 +8,7 @@ add_executable(v8pp_test
 	test_class.cpp
 	test_context.cpp
 	test_convert.cpp
+	test_factory.cpp
 	test_function.cpp
 	test_json.cpp
 	test_module.cpp
