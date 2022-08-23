@@ -8,385 +8,222 @@
 
 namespace v8pp {
 
-template<typename Get, typename Set>
-struct property_;
+template<typename Get, typename Set, typename GetClass, typename SetClass>
+struct property;
 
 namespace detail {
 
-struct getter_tag {};
-struct direct_getter_tag {};
-struct isolate_getter_tag {};
+template<typename F, typename T, typename U = typename call_from_v8_traits<F>::template arg_type<0>>
+inline constexpr bool function_with_object = std::is_member_function_pointer_v<F> ||
+	(std::is_lvalue_reference_v<U> && std::is_base_of_v<T, std::remove_cv_t<std::remove_reference_t<U>>>);
 
-struct setter_tag {};
-struct direct_setter_tag {};
-struct isolate_setter_tag {};
+template<typename F, size_t Offset, typename CallTraits = call_from_v8_traits<F>>
+inline constexpr bool is_getter = CallTraits::arg_count == 0 + Offset && !is_void_return<F>;
 
-template<typename F>
-using is_getter = std::integral_constant<bool,
-	call_from_v8_traits<F>::arg_count == 0 && !is_void_return<F>::value>;
+template<typename F, size_t Offset, typename CallTraits = call_from_v8_traits<F>>
+inline constexpr bool is_direct_getter = CallTraits::arg_count == 2 + Offset
+	&& std::is_same_v<typename CallTraits::template arg_type<0 + Offset>, v8::Local<v8::String>>
+	&& std::is_same_v<typename CallTraits::template arg_type<1 + Offset>, v8::PropertyCallbackInfo<v8::Value> const&>
+	&& is_void_return<F>;
 
-template<typename F>
-using is_direct_getter = std::integral_constant<bool,
-	call_from_v8_traits<F>::arg_count == 2 &&
-	std::is_same<typename call_from_v8_traits<F>::template arg_type<0>,
-		v8::Local<v8::String>>::value &&
-	std::is_same<typename call_from_v8_traits<F>::template arg_type<1>,
-		v8::PropertyCallbackInfo<v8::Value> const&>::value &&
-	is_void_return<F>::value>;
+template<typename F, size_t Offset, typename CallTraits = call_from_v8_traits<F>>
+inline constexpr bool is_isolate_getter = CallTraits::arg_count == 1 + Offset
+	&& is_first_arg_isolate<F, Offset>
+	&& !is_void_return<F>;
 
-template<typename F>
-using is_isolate_getter = std::integral_constant<bool,
-	call_from_v8_traits<F>::arg_count == 1 &&
-	is_first_arg_isolate<F>::value &&
-	!is_void_return<F>::value>;
+template<typename F, size_t Offset, typename CallTraits = call_from_v8_traits<F>>
+inline constexpr bool is_setter = CallTraits::arg_count == 1 + Offset;
 
-template<typename F>
-using is_setter = std::integral_constant<bool,
-	call_from_v8_traits<F>::arg_count == 1 && is_void_return<F>::value>;
+template<typename F, size_t Offset, typename CallTraits = call_from_v8_traits<F>>
+inline constexpr bool is_direct_setter = CallTraits::arg_count == 3 + Offset
+	&& std::is_same_v<typename CallTraits::template arg_type<0 + Offset>, v8::Local<v8::String>>
+	&& std::is_same_v<typename CallTraits::template arg_type<1 + Offset>, v8::Local<v8::Value>>
+	&& std::is_same_v<typename CallTraits::template arg_type<2 + Offset>, v8::PropertyCallbackInfo<void> const&>
+	&& is_void_return<F>;
 
-template<typename F>
-using is_direct_setter = std::integral_constant<bool,
-	call_from_v8_traits<F>::arg_count == 3 &&
-	std::is_same<typename call_from_v8_traits<F>::template arg_type<0>,
-		v8::Local<v8::String>>::value &&
-	std::is_same<typename call_from_v8_traits<F>::template arg_type<1>,
-		v8::Local<v8::Value>>::value &&
-	std::is_same<typename call_from_v8_traits<F>::template arg_type<2>,
-		v8::PropertyCallbackInfo<void> const&>::value &&
-	is_void_return<F>::value>;
+template<typename F, size_t Offset, typename CallTraits = call_from_v8_traits<F>>
+inline constexpr bool is_isolate_setter = CallTraits::arg_count == 2 + Offset
+	&& is_first_arg_isolate<F, Offset>;
 
-template<typename F>
-using is_isolate_setter = std::integral_constant<bool,
-	call_from_v8_traits<F>::arg_count == 2 &&
-	is_first_arg_isolate<F>::value &&
-	is_void_return<F>::value>;
-
-template<typename F>
-using select_getter_tag = typename std::conditional<is_direct_getter<F>::value,
-	direct_getter_tag,
-	typename std::conditional<is_isolate_getter<F>::value,
-		isolate_getter_tag, getter_tag>::type>::type;
-
-template<typename F>
-using select_setter_tag = typename std::conditional<is_direct_setter<F>::value,
-	direct_setter_tag,
-	typename std::conditional<is_isolate_setter<F>::value,
-		isolate_setter_tag, setter_tag>::type>::type;
-
-template<typename Get, typename Set, bool get_is_mem_fun>
-struct r_property_impl;
-
-template<typename Get, typename Set, bool set_is_mem_fun>
-struct rw_property_impl;
-
-template<typename Get, typename Set>
-struct r_property_impl<Get, Set, true>
+template<typename Get, typename... ObjArg>
+void property_get(Get& getter, v8::Local<v8::String> name,
+	v8::PropertyCallbackInfo<v8::Value> const& info, ObjArg&... obj)
 {
-	using property_type = property_<Get, Set>;
+	constexpr size_t offset = sizeof...(ObjArg) == 0 || std::is_member_function_pointer_v<Get> ? 0 : 1;
 
-	using class_type = typename std::decay<typename std::tuple_element<0,
-		typename function_traits<Get>::arguments>::type>::type;
+	v8::Isolate* isolate = info.GetIsolate();
 
-	static_assert(is_getter<Get>::value
-		|| is_direct_getter<Get>::value
-		|| is_isolate_getter<Get>::value,
-		"property get function must be either `T ()` or \
-		`void (v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info)` or \
-		`T (v8::Isolate*)`");
-
-	static void get_impl(class_type& obj, Get get, v8::Local<v8::String>,
-		v8::PropertyCallbackInfo<v8::Value> const& info, getter_tag)
+	if constexpr (is_direct_getter<Get, offset>)
 	{
-		info.GetReturnValue().Set(to_v8(info.GetIsolate(), (obj.*get)()));
+		(void)isolate;
+		std::invoke(getter, obj..., name, info);
 	}
-
-	static void get_impl(class_type& obj, Get get,
-		v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info,
-		direct_getter_tag)
+	else if constexpr (is_isolate_getter<Get, offset>)
 	{
-		(obj.*get)(name, info);
+		(void)name;
+		info.GetReturnValue().Set(to_v8(isolate, std::invoke(getter, obj..., isolate)));
 	}
-
-	static void get_impl(class_type& obj, Get get, v8::Local<v8::String>,
-		v8::PropertyCallbackInfo<v8::Value> const& info, isolate_getter_tag)
+	else if constexpr (is_getter<Get, offset>)
 	{
-		v8::Isolate* isolate = info.GetIsolate();
-
-		info.GetReturnValue().Set(to_v8(isolate, (obj.*get)(isolate)));
+		(void)name;
+		info.GetReturnValue().Set(to_v8(isolate, std::invoke(getter, obj...)));
 	}
-
-	template<typename Traits>
-	static void get(v8::Local<v8::String> name,
-		v8::PropertyCallbackInfo<v8::Value> const& info)
-	try
+	else
 	{
-		auto obj = v8pp::class_<class_type, Traits>::unwrap_object(info.GetIsolate(), info.This());
-		assert(obj);
-
-		property_type const& prop = detail::external_data::get<property_type>(info.Data());
-		assert(prop.getter);
-
-		if (obj && prop.getter)
-		{
-			get_impl(*obj, prop.getter, name, info, select_getter_tag<Get>());
-		}
+		(void)getter;
+		(void)name;
+		(void)info;
+		(void)isolate;
+		//static_assert(false, "Unsupported getter type");
 	}
-	catch (std::exception const& ex)
+}
+
+template<typename Set, typename... ObjArg>
+void property_set(Set& setter, v8::Local<v8::String> name, v8::Local<v8::Value> value,
+	v8::PropertyCallbackInfo<void> const& info, ObjArg&... obj)
+{
+	constexpr size_t offset = sizeof...(ObjArg) == 0 || std::is_member_function_pointer_v<Set> ? 0 : 1;
+
+	v8::Isolate* isolate = info.GetIsolate();
+
+	if constexpr (is_direct_setter<Set, offset>)
+	{
+		(void)isolate;
+		std::invoke(setter, obj..., name, value, info);
+	}
+	else if constexpr (is_isolate_setter<Set, offset>)
+	{
+		(void)name;
+		using value_type = typename call_from_v8_traits<Set>::template arg_type<1 + offset>;
+		std::invoke(setter, obj..., isolate, v8pp::from_v8<value_type>(isolate, value));
+	}
+	else if constexpr (is_setter<Set, offset>)
+	{
+		(void)name;
+		using value_type = typename call_from_v8_traits<Set>::template arg_type<0 + offset>;
+		std::invoke(setter, obj..., v8pp::from_v8<value_type>(isolate, value));
+	}
+	else
+	{
+		(void)setter;
+		(void)name;
+		(void)value;
+		(void)info;
+		(void)isolate;
+		//static_assert(false, "Unsupported setter type");
+	}
+}
+
+template<typename Property, typename Traits, typename GetClass>
+void property_get(v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info)
+try
+{
+	auto&& property = detail::external_data::get<Property>(info.Data());
+
+	if constexpr (std::is_same_v<GetClass, none>)
+	{
+		property_get(property.getter, name, info);
+	}
+	else
+	{
+		auto obj = v8pp::class_<GetClass, Traits>::unwrap_object(info.GetIsolate(), info.This());
+		property_get(property.getter, name, info, *obj);
+	}
+}
+catch (std::exception const& ex)
+{
+	if (info.ShouldThrowOnError())
 	{
 		info.GetReturnValue().Set(throw_ex(info.GetIsolate(), ex.what()));
 	}
+}
 
-	template<typename Traits>
-	static void set(v8::Local<v8::String> name, v8::Local<v8::Value>,
-		v8::PropertyCallbackInfo<void> const& info)
-	{
-		assert(false && "read-only property");
-		info.GetReturnValue().Set(throw_ex(info.GetIsolate(),
-			"read-only property " + from_v8<std::string>(info.GetIsolate(), name)));
-	}
-};
-
-template<typename Get, typename Set>
-struct r_property_impl<Get, Set, false>
+template<typename Property, typename Traits, typename Set, typename SetClass>
+void property_set(v8::Local<v8::String> name, v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info)
+try
 {
-	using property_type = property_<Get, Set>;
+	auto&& property = detail::external_data::get<Property>(info.Data());
 
-	static void get_impl(Get get, v8::Local<v8::String>,
-		v8::PropertyCallbackInfo<v8::Value> const& info, getter_tag)
+	if constexpr (std::is_same_v<SetClass, none>)
 	{
-		info.GetReturnValue().Set(to_v8(info.GetIsolate(), get()));
+		property_set(property.setter, name, value, info);
 	}
-
-	static void get_impl(Get get, v8::Local<v8::String> name,
-		v8::PropertyCallbackInfo<v8::Value> const& info, direct_getter_tag)
+	else
 	{
-		get(name, info);
+		auto obj = v8pp::class_<SetClass, Traits>::unwrap_object(info.GetIsolate(), info.This());
+		property_set(property.setter, name, value, info, *obj);
 	}
-
-	static void get_impl(Get get, v8::Local<v8::String>,
-		v8::PropertyCallbackInfo<v8::Value> const& info, isolate_getter_tag)
-	{
-		v8::Isolate* isolate = info.GetIsolate();
-
-		info.GetReturnValue().Set(to_v8(isolate, (get)(isolate)));
-	}
-
-	static void get(v8::Local<v8::String> name,
-		v8::PropertyCallbackInfo<v8::Value> const& info)
-	try
-	{
-		property_type const& prop = detail::external_data::get<property_type>(info.Data());
-		assert(prop.getter);
-
-		if (prop.getter)
-		{
-			get_impl(prop.getter, name, info, select_getter_tag<Get>());
-		}
-	}
-	catch (std::exception const& ex)
+}
+catch (std::exception const& ex)
+{
+	if (info.ShouldThrowOnError())
 	{
 		info.GetReturnValue().Set(throw_ex(info.GetIsolate(), ex.what()));
 	}
-
-	static void set(v8::Local<v8::String> name, v8::Local<v8::Value>,
-		v8::PropertyCallbackInfo<void> const& info)
-	{
-		assert(false && "read-only property");
-		info.GetReturnValue().Set(throw_ex(info.GetIsolate(),
-			"read-only property " + from_v8<std::string>(info.GetIsolate(), name)));
-	}
-};
-
-template<typename Get, typename Set>
-struct rw_property_impl<Get, Set, true>
-	: r_property_impl<Get, Set, std::is_member_function_pointer<Get>::value>
-{
-	using property_type = property_<Get, Set>;
-
-	using class_type = typename std::decay<typename std::tuple_element<0,
-		typename function_traits<Set>::arguments>::type>::type;
-
-	static void set_impl(class_type& obj, Set set, v8::Local<v8::String>,
-		v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info,
-		setter_tag)
-	{
-		using value_type = typename call_from_v8_traits<Set>::template arg_type<0>;
-
-		(obj.*set)(v8pp::from_v8<value_type>(info.GetIsolate(), value));
-	}
-
-	static void set_impl(class_type& obj, Set set, v8::Local<v8::String> name,
-		v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info,
-		direct_setter_tag)
-	{
-		(obj.*set)(name, value, info);
-	}
-
-	static void set_impl(class_type& obj, Set set, v8::Local<v8::String>,
-		v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info,
-		isolate_setter_tag)
-	{
-		using value_type = typename call_from_v8_traits<Set>::template arg_type<1>;
-
-		v8::Isolate* isolate = info.GetIsolate();
-
-		(obj.*set)(isolate, v8pp::from_v8<value_type>(isolate, value));
-	}
-
-	template<typename Traits>
-	static void set(v8::Local<v8::String> name, v8::Local<v8::Value> value,
-		v8::PropertyCallbackInfo<void> const& info)
-	try
-	{
-		auto obj = v8pp::class_<class_type, Traits>::unwrap_object(info.GetIsolate(), info.This());
-		assert(obj);
-
-		property_type const& prop = detail::external_data::get<property_type>(info.Data());
-		assert(prop.setter);
-
-		if (obj && prop.setter)
-		{
-			set_impl(*obj, prop.setter, name, value, info, select_setter_tag<Set>());
-		}
-	}
-	catch (std::exception const& ex)
-	{
-		info.GetReturnValue().Set(throw_ex(info.GetIsolate(), ex.what()));
-	}
-};
-
-template<typename Get, typename Set>
-struct rw_property_impl<Get, Set, false>
-	: r_property_impl<Get, Set, std::is_member_function_pointer<Get>::value>
-{
-	using property_type = property_<Get, Set>;
-
-	static void set_impl(Set set, v8::Local<v8::String>,
-		v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info,
-		setter_tag)
-	{
-		using value_type = typename call_from_v8_traits<Set>::template arg_type<0>;
-
-		set(v8pp::from_v8<value_type>(info.GetIsolate(), value));
-	}
-
-	static void set_impl(Set set, v8::Local<v8::String> name,
-		v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info,
-		direct_setter_tag)
-	{
-		set(name, value, info);
-	}
-
-	static void set_impl(Set set, v8::Local<v8::String>,
-		v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info,
-		isolate_setter_tag)
-	{
-		using value_type = typename call_from_v8_traits<Set>::template arg_type<1>;
-
-		v8::Isolate* isolate = info.GetIsolate();
-
-		set(isolate, v8pp::from_v8<value_type>(info.GetIsolate(), value));
-	}
-
-	static void set(v8::Local<v8::String> name, v8::Local<v8::Value> value,
-		v8::PropertyCallbackInfo<void> const& info)
-	try
-	{
-		property_type const& prop = detail::external_data::get<property_type>(info.Data());
-		assert(prop.setter);
-
-		if (prop.setter)
-		{
-			set_impl(prop.setter, name, value, info, select_setter_tag<Set>());
-		}
-	}
-	catch (std::exception const& ex)
-	{
-		info.GetReturnValue().Set(throw_ex(info.GetIsolate(), ex.what()));
-	}
-};
+}
 
 } // namespace detail
 
 /// Property with get and set functions
-template<typename Get, typename Set>
-struct property_
-	: detail::rw_property_impl<Get, Set, std::is_member_function_pointer<Set>::value>
+template<typename Get, typename Set, typename GetClass, typename SetClass>
+struct property final
 {
-	static_assert(detail::is_getter<Get>::value
-		|| detail::is_direct_getter<Get>::value
-		|| detail::is_isolate_getter<Get>::value,
-		"property get function must be either `T ()` or "
-		"`void (v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info)` or "
-		"`T (v8::Isolate*)`");
-
-	static_assert(detail::is_setter<Set>::value
-		|| detail::is_direct_setter<Set>::value
-		|| detail::is_isolate_setter<Set>::value,
-		"property set function must be either `void (T)` or \
-		`void (v8::Local<v8::String> name, v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info)` or \
-		`void (v8::Isolate*, T)`");
-
 	Get getter;
 	Set setter;
 
-	enum { is_readonly = false };
+	static constexpr bool is_readonly = false;
 
-	property_(Get getter, Set setter)
-		: getter(getter)
-		, setter(setter)
+	property() = default;
+	property(Get&& getter, Set&& setter)
+		: getter(std::move(getter))
+		, setter(std::move(setter))
 	{
 	}
 
-	template<typename OtherGet, typename OtherSet>
-	property_(property_<OtherGet, OtherSet> const& other)
-		: getter(other.getter)
-		, setter(other.setter)
+	template<typename Traits>
+	static void get(v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info)
 	{
+		detail::property_get<property, Traits, GetClass>(name, info);
+	}
+
+	template<typename Traits>
+	static void set(v8::Local<v8::String> name, v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info)
+	{
+		detail::property_set<property, Traits, Set, SetClass>(name, value, info);
 	}
 };
 
 /// Read-only property class specialization for get only method
-template<typename Get>
-struct property_<Get, Get>
-	: detail::r_property_impl<Get, Get, std::is_member_function_pointer<Get>::value>
+template<typename Get, typename GetClass>
+struct property<Get, detail::none, GetClass, detail::none> final
 {
-	static_assert(detail::is_getter<Get>::value
-		|| detail::is_direct_getter<Get>::value
-		|| detail::is_isolate_getter<Get>::value,
-		"property get function must be either `T ()` or "
-		"void (v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info)` or "
-		"`T (v8::Isolate*)`");
-
 	Get getter;
 
-	enum { is_readonly = true };
+	static constexpr bool is_readonly = true;
 
-	explicit property_(Get getter)
-		: getter(getter)
+	property() = default;
+	property(Get&& getter, detail::none)
+		: getter(std::move(getter))
 	{
 	}
 
-	template<typename OtherGet>
-	explicit property_(property_<OtherGet, OtherGet> const& other)
-		: getter(other.getter)
+	template<typename Traits>
+	static void get(v8::Local<v8::String> name, v8::PropertyCallbackInfo<v8::Value> const& info)
 	{
+		detail::property_get<property, Traits, GetClass>(name, info);
+	}
+
+	template<typename Traits>
+	static void set(v8::Local<v8::String> name, v8::Local<v8::Value>, v8::PropertyCallbackInfo<void> const& info)
+	{
+		//assert(false && "read-only property");
+		if (info.ShouldThrowOnError())
+		{
+			info.GetReturnValue().Set(throw_ex(info.GetIsolate(),
+				"read-only property " + from_v8<std::string>(info.GetIsolate(), name)));
+		}
 	}
 };
-
-/// Create read/write property from get and set member functions
-template<typename Get, typename Set>
-property_<Get, Set> property(Get get, Set set)
-{
-	return property_<Get, Set>(get, set);
-}
-
-/// Create read-only property from a get function
-template<typename Get>
-property_<Get, Get> property(Get get)
-{
-	return property_<Get, Get>(get);
-}
 
 } // namespace v8pp
 

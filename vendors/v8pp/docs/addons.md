@@ -23,7 +23,7 @@ To use `v8pp` in a native Node.js addon append it as a dependency in the addon
 }
 ```
 
-This library uses C++11 with RTTI and exceptions which should be enabled by overriding
+This library uses C++11 with exceptions which should be enabled by overriding
 C++ compiler flags in `bindings.gyp` file:
 ```
 {

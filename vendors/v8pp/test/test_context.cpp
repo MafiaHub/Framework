@@ -99,28 +99,25 @@ void test_context()
 		const auto init_global = [](v8::Isolate* isolate)
 		{
 			v8pp::module m(isolate);
-			m.set_const("value", 40);
-			m.set("func", []() { return 2; });
+			m.const_("value", 40);
+			m.function("func", []() { return 2; });
 			return m.impl();
 		};
 
 		// Isolate and HandleScope shall exist before init_global
 		v8::Isolate* isolate = v8pp::context::create_isolate();
-		{
-			v8::Isolate::Scope isolate_scope(isolate);
-			v8::HandleScope scope(isolate);
+		v8::Isolate::Scope isolate_scope(isolate);
+		v8::HandleScope scope(isolate);
 
-			v8pp::context::options opt;
-			opt.isolate = isolate; // use existing one
-			opt.add_default_global_methods = false;
-			opt.global = init_global(isolate);
+		v8pp::context::options opt;
+		opt.isolate = isolate; // use existing one
+		opt.add_default_global_methods = false;
+		opt.global = init_global(isolate);
 
-			v8pp::context context(opt);
+		v8pp::context context(opt);
 
-			int const r = context.run_script("value + func()")->Int32Value(context.isolate()->GetCurrentContext()).FromJust();
+		int const r = context.run_script("value + func()")->Int32Value(context.isolate()->GetCurrentContext()).FromJust();
 
-			check_eq("run_script with customized global", r, 42);
-		}
-		isolate->Dispose();
+		check_eq("run_script with customized global", r, 42);
 	}
 }

@@ -15,10 +15,10 @@ void MyObject::Init(Local<Object> exports) {
   MyObject_class.ctor<const FunctionCallbackInfo<Value>&>();
 
   // Prototype
-  MyObject_class.set("plusOne", &MyObject::PlusOne);
+  MyObject_class.function("plusOne", &MyObject::PlusOne);
 
   v8pp::module addon(isolate);
-  addon.set("MyObject", MyObject_class);
+  addon.class_("MyObject", MyObject_class);
 
   exports->SetPrototype(isolate->GetCurrentContext(), addon.new_instance());
   node::AtExit([](void* param)

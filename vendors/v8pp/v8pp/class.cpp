@@ -5,8 +5,11 @@
 
 namespace v8pp { namespace detail {
 
-template class object_registry<raw_ptr_traits>;
-template class object_registry<shared_ptr_traits>;
+template
+class object_registry<raw_ptr_traits>;
+
+template
+class object_registry<shared_ptr_traits>;
 
 template
 object_registry<raw_ptr_traits>& classes::add<raw_ptr_traits>(v8::Isolate* isolate,

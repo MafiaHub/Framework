@@ -1,7 +1,8 @@
 #ifndef V8PP_FUNCTION_HPP_INCLUDED
 #define V8PP_FUNCTION_HPP_INCLUDED
 
-#include <tuple>
+#include <cstring> // for memcpy
+
 #include <type_traits>
 
 #include "v8pp/call_from_v8.hpp"
@@ -9,62 +10,50 @@
 #include "v8pp/throw_ex.hpp"
 #include "v8pp/utility.hpp"
 
-namespace v8pp {
-
-namespace detail {
+namespace v8pp { namespace detail {
 
 class external_data
 {
-	template<typename T>
-	using is_pointer_cast_allowed = std::integral_constant<bool, sizeof(T) <= sizeof(void*)
-		&& std::is_trivial<T>::value>;
-
-	template<typename T>
-	union pointer_cast
-	{
-	private:
-		void* ptr;
-		T value;
-
-	public:
-		static_assert(is_pointer_cast_allowed<T>::value, "pointer_cast is not allowed");
-
-		explicit pointer_cast(void* ptr) : ptr(ptr) {}
-		explicit pointer_cast(T value) : value(value) {}
-
-		operator void*() const { return ptr; }
-		operator T() const { return value; }
-	};
-
 public:
+	//TODO: allow non-capturing lambdas
 	template<typename T>
-	static typename std::enable_if<is_pointer_cast_allowed<T>::value, v8::Local<v8::Value>>::type
-	set(v8::Isolate* isolate, T value)
+	static constexpr bool is_bitcast_allowed = sizeof(T) <= sizeof(void*) &&
+		std::is_default_constructible_v<T> &&
+		std::is_trivially_copyable_v<T>;
+
+	template<typename T>
+	static v8::Local<v8::Value> set(v8::Isolate* isolate, T&& value)
 	{
-		return v8::External::New(isolate, pointer_cast<T>(value));
+		if constexpr (is_bitcast_allowed<T>)
+		{
+			void* ptr;
+			memcpy(&ptr, &value, sizeof value);
+			return v8::External::New(isolate, ptr);
+		}
+		else
+		{
+			using ExtValue = value_holder<T>;
+			ExtValue* ext_value = new ExtValue(isolate, std::forward<T>(value));
+			return v8::Local<v8::External>::New(isolate, ext_value->pext);
+		}
 	}
 
 	template<typename T>
-	static typename std::enable_if<!is_pointer_cast_allowed<T>::value, v8::Local<v8::Value>>::type
-	set(v8::Isolate* isolate, T&& data)
+	static decltype(auto) get(v8::Local<v8::Value> value)
 	{
-		value_holder<T>* value = new value_holder<T>(isolate, std::forward<T>(data));
-		return v8::Local<v8::External>::New(isolate, value->pext);
-	}
-
-	template<typename T>
-	static typename std::enable_if<is_pointer_cast_allowed<T>::value, T>::type
-	get(v8::Local<v8::Value> value)
-	{
-		return pointer_cast<T>(value.As<v8::External>()->Value());
-	}
-
-	template<typename T>
-	static typename std::enable_if<!is_pointer_cast_allowed<T>::value, T&>::type
-	get(v8::Local<v8::Value> ext)
-	{
-		value_holder<T>* value = static_cast<value_holder<T>*>(ext.As<v8::External>()->Value());
-		return value->data();
+		if constexpr (is_bitcast_allowed<T>)
+		{
+			void* ptr = value.As<v8::External>()->Value();
+			T data;
+			memcpy(&data, &ptr, sizeof data);
+			return data;
+		}
+		else
+		{
+			using ExtValue = value_holder<T>;
+			ExtValue* ext_value = static_cast<ExtValue*>(value.As<v8::External>()->Value());
+			return (ext_value->data()); // as reference
+		}
 	}
 
 	static void destroy_all(v8::Isolate* isolate)
@@ -84,7 +73,7 @@ private:
 	template<typename T>
 	struct value_holder final : value_holder_base
 	{
-		typename std::aligned_storage<sizeof(T)>::type storage;
+		std::aligned_storage_t<sizeof(T), alignof(T)> storage;
 		v8::Global<v8::External> pext;
 
 		T& data() { return *static_cast<T*>(static_cast<void*>(&storage)); }
@@ -135,59 +124,47 @@ private:
 	};
 };
 
-template<typename Traits, typename F>
-typename function_traits<F>::return_type
-invoke(v8::FunctionCallbackInfo<v8::Value> const& args, std::false_type /*is_member_function_pointer*/)
+template<typename Traits, typename F, typename FTraits>
+decltype(auto) invoke(v8::FunctionCallbackInfo<v8::Value> const& args)
 {
-	return call_from_v8<Traits, F>(std::forward<F>(external_data::get<F>(args.Data())), args);
-}
-
-template<typename Traits, typename F>
-typename function_traits<F>::return_type
-invoke(v8::FunctionCallbackInfo<v8::Value> const& args, std::true_type /*is_member_function_pointer*/)
-{
-	using arguments = typename function_traits<F>::arguments;
-	static_assert(std::tuple_size<arguments>::value > 0, "");
-	using class_type = typename std::decay<
-		typename std::tuple_element<0, arguments>::type>::type;
-
-	v8::Isolate* isolate = args.GetIsolate();
-	v8::Local<v8::Object> obj = args.This();
-	auto ptr = class_<class_type, Traits>::unwrap_object(isolate, obj);
-	if (!ptr)
+	if constexpr (std::is_member_function_pointer<F>())
 	{
-		throw std::runtime_error("method called on null instance");
+		using class_type = std::decay_t<typename FTraits::class_type>;
+		auto obj = class_<class_type, Traits>::unwrap_object(args.GetIsolate(), args.This());
+		if (!obj)
+		{
+			throw std::runtime_error("method called on null instance");
+		}
+		return (call_from_v8<Traits>(std::forward<F>(external_data::get<F>(args.Data())), args, *obj));
 	}
-	return call_from_v8<Traits, class_type, F>(*ptr, std::forward<F>(external_data::get<F>(args.Data())), args);
-}
-
-template<typename Traits, typename F>
-void forward_ret(v8::FunctionCallbackInfo<v8::Value> const& args, std::true_type /*is_void_return*/)
-{
-	invoke<Traits, F>(args, std::is_member_function_pointer<F>());
-}
-
-template<typename Traits, typename F>
-void forward_ret(v8::FunctionCallbackInfo<v8::Value> const& args, std::false_type /*is_void_return*/)
-{
-	using return_type = typename function_traits<F>::return_type;
-	using converter = typename call_from_v8_traits<F>::template arg_converter<return_type, Traits>;
-	args.GetReturnValue().Set(converter::to_v8(args.GetIsolate(),
-		invoke<Traits, F>(args, std::is_member_function_pointer<F>())));
+	else
+	{
+		return (call_from_v8<Traits>(std::forward<F>(external_data::get<F>(args.Data())), args));
+	}
 }
 
 template<typename Traits, typename F>
 void forward_function(v8::FunctionCallbackInfo<v8::Value> const& args)
 {
+	using FTraits = function_traits<F>;
+
 	static_assert(is_callable<F>::value || std::is_member_function_pointer<F>::value,
 		"required callable F");
 
 	v8::Isolate* isolate = args.GetIsolate();
 	v8::HandleScope scope(isolate);
-
 	try
 	{
-		forward_ret<Traits, F>(args, is_void_return<F>());
+		if constexpr (std::is_same_v<typename FTraits::return_type, void>)
+		{
+			invoke<Traits, F, FTraits>(args);
+		}
+		else
+		{
+			using return_type = typename FTraits::return_type;
+			using converter = typename call_from_v8_traits<F>::template arg_converter<return_type, Traits>;
+			args.GetReturnValue().Set(converter::to_v8(isolate, invoke<Traits, F, FTraits>(args)));
+		}
 	}
 	catch (std::exception const& ex)
 	{
@@ -211,7 +188,7 @@ v8::Local<v8::FunctionTemplate> wrap_function_template(v8::Isolate* isolate, F&&
 /// Set nullptr or empty string for name
 /// to make the function anonymous
 template<typename F, typename Traits = raw_ptr_traits>
-v8::Local<v8::Function> wrap_function(v8::Isolate* isolate, string_view name, F&& func)
+v8::Local<v8::Function> wrap_function(v8::Isolate* isolate, std::string_view name, F&& func)
 {
 	using F_type = typename std::decay<F>::type;
 	v8::Local<v8::Function> fn = v8::Function::New(isolate->GetCurrentContext(),

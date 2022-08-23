@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "v8pp/config.hpp"
-#include "v8pp/factory.hpp"
 #include "v8pp/function.hpp"
 #include "v8pp/property.hpp"
 #include "v8pp/ptr_traits.hpp"
@@ -69,13 +68,12 @@ public:
 	void set_ctor(ctor_function&& ctor) { ctor_ = std::move(ctor); }
 
 	void add_base(object_registry& info, cast_function cast);
-
-	bool cast(pointer_type& ptr, type_info const& type) const;
+	bool cast(pointer_type& ptr, type_info const& actual_type) const;
 
 	void remove_object(object_id const& obj);
 	void remove_objects();
 
-	pointer_type find_object(object_id id, type_info const& type) const;
+	pointer_type find_object(object_id id, type_info const& actual_type) const;
 	v8::Local<v8::Object> find_v8_object(pointer_type const& ptr) const;
 
 	v8::Local<v8::Object> wrap_object(pointer_type const& object, bool call_dtor);
@@ -160,18 +158,38 @@ public:
 	using object_pointer_type = typename Traits::template object_pointer_type<T>;
 	using object_const_pointer_type = typename Traits::template object_const_pointer_type<T>;
 
+	using ctor_function = std::function<object_pointer_type(v8::FunctionCallbackInfo<v8::Value> const& args)>;
+	using dtor_function = std::function<void(v8::Isolate* isolate, object_pointer_type const& obj)>;
+
+private:
 	template<typename... Args>
-	struct factory_create
+	static object_pointer_type object_create(v8::Isolate* isolate, Args&&... args)
+	{
+		object_pointer_type object = Traits::template create<T>(std::forward<Args>(args)...);
+		isolate->AdjustAmountOfExternalAllocatedMemory(
+			static_cast<int64_t>(Traits::object_size(object)));
+		return object;
+	}
+
+	template<typename... Args>
+	struct object_create_from_v8
 	{
 		static object_pointer_type call(v8::FunctionCallbackInfo<v8::Value> const& args)
 		{
-			using ctor_function = object_pointer_type (*)(v8::Isolate* isolate, Args...);
-			return detail::call_from_v8<Traits, ctor_function>(&factory<T, Traits>::create, args);
+			object_pointer_type object = detail::call_from_v8<Traits>(Traits::template create<T, Args...>, args);
+			args.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(
+				static_cast<int64_t>(Traits::object_size(object)));
+			return object;
 		}
 	};
 
-	using ctor_function = std::function<object_pointer_type (v8::FunctionCallbackInfo<v8::Value> const& args)>;
-	using dtor_function = std::function<void (v8::Isolate* isolate, object_pointer_type const& obj)>;
+	static void object_destroy(v8::Isolate* isolate, pointer_type const& ptr)
+	{
+		object_pointer_type object = Traits::template static_pointer_cast<T>(ptr);
+		Traits::destroy(object);
+		isolate->AdjustAmountOfExternalAllocatedMemory(
+			-static_cast<int64_t>(Traits::object_size(object)));
+	}
 
 	explicit class_(v8::Isolate* isolate, detail::type_info const& existing)
 		: class_info_(detail::classes::find<Traits>(isolate, existing))
@@ -179,7 +197,7 @@ public:
 	}
 
 public:
-	explicit class_(v8::Isolate* isolate, dtor_function destroy = &factory<T, Traits>::destroy)
+	explicit class_(v8::Isolate* isolate, dtor_function destroy = &object_destroy)
 		: class_info_(detail::classes::add<Traits>(isolate, detail::type_id<T>(),
 			[destroy = std::move(destroy)](v8::Isolate* isolate, pointer_type const& obj)
 			{
@@ -201,7 +219,7 @@ public:
 	}
 
 	/// Set class constructor signature
-	template<typename... Args, typename Create = factory_create<Args...>>
+	template<typename... Args, typename Create = object_create_from_v8<Args...>>
 	class_& ctor(ctor_function create = &Create::call)
 	{
 		class_info_.set_ctor([create = std::move(create)](v8::FunctionCallbackInfo<v8::Value> const& args)
@@ -236,91 +254,96 @@ public:
 		return *this;
 	}
 
-	/// Set C++ class member function
-	template<typename Method>
-	typename std::enable_if<
-		std::is_member_function_pointer<Method>::value, class_&>::type
-	set(string_view name, Method mem_func, v8::PropertyAttribute attr = v8::None)
+	/// Set class member function, or static function, or lambda
+	template<typename Function>
+	class_& function(std::string_view name, Function&& func, v8::PropertyAttribute attr = v8::None)
 	{
-		using mem_func_type =
-			typename detail::function_traits<Method>::template pointer_type<T>;
-		mem_func_type mf(mem_func);
-		class_info_.class_function_template()->PrototypeTemplate()->Set(
-			v8pp::to_v8(isolate(), name), v8::FunctionTemplate::New(isolate(),
-				&detail::forward_function<Traits, mem_func_type>,
-				detail::external_data::set(isolate(), std::forward<mem_func_type>(mf))), attr);
+		constexpr bool is_mem_fun = std::is_member_function_pointer_v<Function>;
+
+		static_assert(is_mem_fun || detail::is_callable<Function>::value,
+			"Function must be pointer to member function or callable object");
+
+		v8::HandleScope scope(isolate());
+
+		v8::Local<v8::Name> v8_name = v8pp::to_v8(isolate(), name);
+		v8::Local<v8::Data> wrapped_fun;
+
+		if constexpr (is_mem_fun)
+		{
+			using mem_func_type = typename detail::function_traits<Function>::template pointer_type<T>;
+			wrapped_fun = wrap_function_template<mem_func_type, Traits>(isolate(), mem_func_type(std::forward<Function>(func)));
+		}
+		else
+		{
+			wrapped_fun = wrap_function_template<Function, Traits>(isolate(), std::forward<Function>(func));
+			class_info_.js_function_template()->Set(v8_name, wrapped_fun, attr);
+		}
+
+		class_info_.class_function_template()->PrototypeTemplate()->Set(v8_name, wrapped_fun, attr);
 		return *this;
 	}
 
-	/// Set static class function
-	template<typename Function,
-		typename Func = typename std::decay<Function>::type>
-	typename std::enable_if<detail::is_callable<Func>::value, class_&>::type
-	set(string_view name, Function&& func, v8::PropertyAttribute attr = v8::None)
-	{
-		v8::Local<v8::Data> wrapped_fun =
-			wrap_function_template(isolate(), std::forward<Func>(func));
-		class_info_.class_function_template()
-			->PrototypeTemplate()->Set(v8pp::to_v8(isolate(), name), wrapped_fun, attr);
-		class_info_.js_function_template()->Set(v8pp::to_v8(isolate(), name), wrapped_fun, attr);
-		return *this;
-	}
-
-	/// Set class member data
+	/// Set class member variable
 	template<typename Attribute>
-	typename std::enable_if<
-		std::is_member_object_pointer<Attribute>::value, class_&>::type
-	set(string_view name, Attribute attribute, bool readonly = false)
+	class_& var(std::string_view name, Attribute attribute)
 	{
+		static_assert(std::is_member_object_pointer<Attribute>::value,
+			"Attribute must be pointer to member data");
+
 		v8::HandleScope scope(isolate());
 
 		using attribute_type = typename detail::function_traits<Attribute>::template pointer_type<T>;
-		attribute_type attr(attribute);
-		v8::AccessorGetterCallback getter = &member_get<attribute_type>;
-		v8::AccessorSetterCallback setter = &member_set<attribute_type>;
-		if (readonly)
-		{
-			setter = nullptr;
-		}
+		attribute_type attr = attribute;
 
+		v8::Local<v8::Name> v8_name = v8pp::to_v8(isolate(), name);
+		v8::Local<v8::Value> data = detail::external_data::set(isolate(), std::forward<attribute_type>(attr));
 		class_info_.class_function_template()->PrototypeTemplate()
-			->SetAccessor(v8pp::to_v8(isolate(), name), getter, setter,
-				detail::external_data::set(isolate(), std::forward<attribute_type>(attr)),
-				v8::DEFAULT,
-				v8::PropertyAttribute(v8::DontDelete | (setter ? 0 : v8::ReadOnly)));
+			->SetAccessor(v8_name,
+				&member_get<attribute_type>, &member_set<attribute_type>,
+				data,
+				v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
 		return *this;
 	}
 
 	/// Set read/write class property with getter and setter
-	template<typename GetMethod, typename SetMethod>
-	typename std::enable_if<std::is_member_function_pointer<GetMethod>::value
-		&& std::is_member_function_pointer<SetMethod>::value, class_&>::type
-	set(string_view name, property_<GetMethod, SetMethod>&& property)
+	template<typename GetFunction, typename SetFunction = detail::none>
+	class_& property(std::string_view name, GetFunction&& get, SetFunction&& set = {})
 	{
+		using Getter = typename std::conditional<
+			std::is_member_function_pointer<GetFunction>::value,
+			typename detail::function_traits<GetFunction>::template pointer_type<T>,
+			typename std::decay<GetFunction>::type>::type;
+
+		using Setter = typename std::conditional<
+			std::is_member_function_pointer<SetFunction>::value,
+			typename detail::function_traits<SetFunction>::template pointer_type<T>,
+			typename std::decay<SetFunction>::type>::type;
+
+		static_assert(std::is_member_function_pointer<GetFunction>::value
+			|| detail::is_callable<Getter>::value, "GetFunction must be callable");
+		static_assert(std::is_member_function_pointer<SetFunction>::value
+			|| detail::is_callable<Setter>::value
+			|| std::is_same<Setter, detail::none>::value, "SetFunction must be callable");
+
+		using GetClass = std::conditional_t<detail::function_with_object<Getter, T>, T, detail::none>;
+		using SetClass = std::conditional_t<detail::function_with_object<Setter, T>, T, detail::none>;
+
+		using property_type = v8pp::property<Getter, Setter, GetClass, SetClass>;
+
 		v8::HandleScope scope(isolate());
 
-		using property_type = property_<
-			typename detail::function_traits<GetMethod>::template pointer_type<T>,
-			typename detail::function_traits<SetMethod>::template pointer_type<T>>;
-		property_type prop(property);
 		v8::AccessorGetterCallback getter = property_type::template get<Traits>;
-		v8::AccessorSetterCallback setter = property_type::template set<Traits>;
-		if (prop.is_readonly)
-		{
-			setter = nullptr;
-		}
-
+		v8::AccessorSetterCallback setter = property_type::is_readonly ? nullptr : property_type::template set<Traits>;
+		v8::Local<v8::String> v8_name = v8pp::to_v8(isolate(), name);
+		v8::Local<v8::Value> data = detail::external_data::set(isolate(), property_type(std::move(get), std::move(set)));
 		class_info_.class_function_template()->PrototypeTemplate()
-			->SetAccessor(v8pp::to_v8(isolate(), name), getter, setter,
-				detail::external_data::set(isolate(), std::forward<property_type>(prop)),
-				v8::DEFAULT,
-				v8::PropertyAttribute(v8::DontDelete | (setter ? 0 : v8::ReadOnly)));
+			->SetAccessor(v8_name, getter, setter, data, v8::DEFAULT, v8::PropertyAttribute(v8::DontDelete));
 		return *this;
 	}
 
-	/// Set value as a read-only property
+	/// Set value as a read-only constant
 	template<typename Value>
-	class_& set_const(string_view name, Value const& value)
+	class_& const_(std::string_view name, Value const& value)
 	{
 		v8::HandleScope scope(isolate());
 
@@ -330,9 +353,9 @@ public:
 		return *this;
 	}
 
-	/// Set a static value
+	/// Set value as a class static property
 	template<typename Value>
-	class_& set_static(string_view name, Value const& value, bool readonly = false)
+	class_& static_(std::string_view const& name, Value const& value, bool readonly = false)
 	{
 		v8::HandleScope scope(isolate());
 
@@ -373,7 +396,7 @@ public:
 	}
 
 	/// As reference_external but delete memory for C++ object
-	/// when JavaScript object is deleted. You must use `factory<T>::create()`
+	/// when JavaScript object is deleted. You must use `Traits::create<T>()`
 	/// to allocate `ext`
 	static v8::Local<v8::Object> import_external(v8::Isolate* isolate, object_pointer_type const& ext)
 	{
@@ -393,8 +416,7 @@ public:
 	template<typename... Args>
 	static v8::Local<v8::Object> create_object(v8::Isolate* isolate, Args&&... args)
 	{
-		return import_external(isolate,
-			factory<T, Traits>::create(isolate, std::forward<Args>(args)...));
+		return import_external(isolate, object_create(isolate, std::forward<Args>(args)...));
 	}
 
 	/// Find V8 object handle for a wrapped C++ object, may return empty handle on fail.
@@ -447,7 +469,7 @@ public:
 
 private:
 	template<typename Attribute>
-	static void member_get(v8::Local<v8::String>,
+	static void member_get(v8::Local<v8::Name>,
 		v8::PropertyCallbackInfo<v8::Value> const& info)
 	{
 		v8::Isolate* isolate = info.GetIsolate();
@@ -465,7 +487,7 @@ private:
 	}
 
 	template<typename Attribute>
-	static void member_set(v8::Local<v8::String>, v8::Local<v8::Value> value,
+	static void member_set(v8::Local<v8::Name>, v8::Local<v8::Value> value,
 		v8::PropertyCallbackInfo<void> const& info)
 	{
 		v8::Isolate* isolate = info.GetIsolate();

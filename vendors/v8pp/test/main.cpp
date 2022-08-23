@@ -21,7 +21,6 @@ void run_tests()
 	void test_call_from_v8();
 	void test_function();
 	void test_ptr_traits();
-	void test_factory();
 	void test_module();
 	void test_class();
 	void test_property();
@@ -30,20 +29,19 @@ void run_tests()
 
 	std::pair<char const*, void (*)()> tests[] =
 	{
-		{ "test_utility", test_utility },
-		{ "test_context", test_context },
-		{ "test_convert", test_convert },
-		{ "test_throw_ex", test_throw_ex },
-		{ "test_function", test_function },
-		{ "test_ptr_traits", test_ptr_traits },
-		{ "test_call_v8", test_call_v8 },
-		{ "test_call_from_v8", test_call_from_v8 },
-		{ "test_factory", test_factory },
-		{ "test_module", test_module },
-		{ "test_class", test_class },
-		{ "test_property", test_property },
-		{ "test_object", test_object },
-		{ "test_json", test_json },
+		{"test_utility", test_utility},
+		{"test_context", test_context},
+		{"test_convert", test_convert},
+		{"test_throw_ex", test_throw_ex},
+		{"test_function", test_function},
+		{"test_ptr_traits", test_ptr_traits},
+		{"test_call_v8", test_call_v8},
+		{"test_call_from_v8", test_call_from_v8},
+		{"test_module", test_module},
+		{"test_class", test_class},
+		{"test_property", test_property},
+		{"test_object", test_object},
+		{"test_json", test_json},
 	};
 
 	for (auto const& test : tests)
@@ -56,7 +54,7 @@ void run_tests()
 		}
 		catch (std::exception const& ex)
 		{
-			std::cerr << " error: " << ex.what();
+			std::cerr << " error: " << ex.what() << '\n';
 			exit(EXIT_FAILURE);
 		}
 		std::cout << std::endl;

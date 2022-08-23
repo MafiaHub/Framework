@@ -36,6 +36,12 @@ std::ostream& operator<<(std::ostream& os, std::basic_string<Char, Traits, Alloc
 	return print_sequence(os, string, "''");
 }
 
+template<typename Char, typename Traits, typename = typename std::enable_if_t<!std::is_same_v<Char, char>>>
+std::ostream& operator<<(std::ostream& os, std::basic_string_view<Char, Traits> const& string_view)
+{
+	return print_sequence(os, string_view, "''");
+}
+
 template<typename T, typename Alloc>
 std::ostream& operator<<(std::ostream& os, std::vector<T, Alloc> const& vector)
 {
@@ -120,20 +126,16 @@ std::ostream& operator<<(std::ostream& os, Enum value)
 	return os << static_cast<typename std::underlying_type<Enum>::type>(value);
 }
 
-template<typename Char, typename Traits, typename Tuple, size_t... Is>
-void print_tuple(std::basic_ostream<Char, Traits>& os, Tuple const& tuple,
-	std::index_sequence<Is...>)
+template<typename... Ts>
+std::ostream& operator<<(std::ostream& os, std::tuple<Ts...> const& tuple)
 {
-	(void)std::initializer_list<bool>{ ((os << (Is == 0 ? "" : ", ") << std::get<Is>(tuple)), true)... };
-}
-
-template<typename Char, typename Traits, typename... Ts>
-std::basic_ostream<Char, Traits>& operator<<(std::basic_ostream<Char, Traits>& os,
-	std::tuple<Ts...> const& tuple)
-{
-	os << '(';
-	print_tuple(os, tuple, std::index_sequence_for<Ts...>{});
-	os << ')';
+	std::apply([&os](auto&&... elems) mutable
+	{
+		bool first = true;
+		os << '(';
+		((os << (first ? (first = false, "") : ", ") << elems), ...);
+		os << ')';
+	}, tuple);
 	return os;
 }
 
@@ -152,7 +154,7 @@ std::ostream& print_sequence(std::ostream& os, Sequence const& sequence, char co
 	return os;
 }
 
-inline void check(v8pp::string_view msg, bool condition)
+inline void check(std::string_view msg, bool condition)
 {
 	if (!condition)
 	{
@@ -163,7 +165,7 @@ inline void check(v8pp::string_view msg, bool condition)
 }
 
 template<typename T, typename U>
-void check_eq(v8pp::string_view msg, T actual, U expected)
+void check_eq(std::string_view msg, T actual, U expected)
 {
 	if (actual != expected)
 	{
@@ -173,20 +175,8 @@ void check_eq(v8pp::string_view msg, T actual, U expected)
 	}
 }
 
-template<typename T>
-void check_eq(v8pp::string_view msg, T actual, v8pp::u16string_view expected)
-{
-	check(msg, actual == expected);
-}
-
-template<typename T>
-void check_eq(v8pp::string_view msg, T actual, v8pp::wstring_view expected)
-{
-	check(msg, actual == expected);
-}
-
 template<typename Ex, typename F>
-void check_ex(v8pp::string_view msg, F&& f)
+void check_ex(std::string_view msg, F&& f)
 {
 	try
 	{
@@ -201,7 +191,7 @@ void check_ex(v8pp::string_view msg, F&& f)
 }
 
 template<typename T>
-T run_script(v8pp::context& context, v8pp::string_view source)
+T run_script(v8pp::context& context, std::string_view source)
 {
 	v8::Isolate* isolate = context.isolate();
 

@@ -65,6 +65,36 @@ static X_ptr create_X(v8::FunctionCallbackInfo<v8::Value> const& args)
 	return x;
 }
 
+int external_get1(X const volatile& x)
+{
+	return x.var;
+}
+
+int external_get2(X const& x, v8::Isolate*)
+{
+	return x.var;
+}
+
+void external_get3(X const& x, v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+	info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), x.var));
+}
+
+void external_set1(X volatile& x, int value)
+{
+	x.var = value;
+}
+
+void external_set2(X& x, v8::Isolate*, int value)
+{
+	x.var = value;
+}
+
+void external_set3(X& x, v8::Local<v8::String>, v8::Local<v8::Value> value, v8::PropertyCallbackInfo<void> const& info)
+{
+	x.var = v8pp::from_v8<int>(info.GetIsolate(), value);
+}
+
 struct Y : X
 {
 	static int instance_count;
@@ -84,24 +114,6 @@ struct Z
 {
 };
 
-namespace v8pp {
-template<>
-struct factory<Y, v8pp::raw_ptr_traits>
-{
-	static Y* create(v8::Isolate*, int x) { return new Y(x); }
-	static void destroy(v8::Isolate*, Y* object) { delete object; }
-};
-template<>
-struct factory<Y, v8pp::shared_ptr_traits>
-{
-	static std::shared_ptr<Y> create(v8::Isolate*, int x)
-	{
-		return std::make_shared<Y>(x);
-	}
-	static void destroy(v8::Isolate*, std::shared_ptr<Y> const&) {}
-};
-} // namespace v8pp
-
 template<typename Traits>
 static int extern_fun(v8::FunctionCallbackInfo<v8::Value> const& args)
 {
@@ -109,6 +121,13 @@ static int extern_fun(v8::FunctionCallbackInfo<v8::Value> const& args)
 	auto self = v8pp::class_<X, Traits>::unwrap_object(args.GetIsolate(), args.This());
 	if (self) x += self->var;
 	return x;
+}
+
+template<typename Traits>
+void get_rprop_direct(v8::Local<v8::String>, v8::PropertyCallbackInfo<v8::Value> const& info)
+{
+	auto self = v8pp::class_<X, Traits>::unwrap_object(info.GetIsolate(), info.This());
+	info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), self->var));
 }
 
 template<typename Traits>
@@ -129,6 +148,7 @@ void test_class_()
 		(void)extra_ctor_context;
 		return create_X<Traits>(args);
 	};
+
 	Z extra_dtor_context;
 	auto const X_dtor = [extra_dtor_context](v8::Isolate*, typename Traits::template object_pointer_type<X> const& obj)
 	{
@@ -140,23 +160,33 @@ void test_class_()
 	X_class
 		.ctor(&create_X<Traits>)
 		.template ctor<v8::FunctionCallbackInfo<v8::Value> const&>(X_ctor)
-		.set_const("konst", 99)
-		.set("var", &X::var)
-		.set("rprop", v8pp::property(&X::get))
-		.set("wprop", v8pp::property(&X::get, &X::set))
-		.set("wprop2", v8pp::property(
-			static_cast<x_prop_get>(&X::prop),
-			static_cast<x_prop_set>(&X::prop)))
-		.set("fun1", &X::fun1)
-		.set("fun2", &X::fun2)
-		.set("fun3", &X::fun3)
-		.set("fun4", &X::fun4)
-		.set("static_fun", &X::static_fun)
-		.set("static_lambda", [](int x) { return x + 3; })
-		.set("extern_fun", extern_fun<Traits>)
-		.set("toJSON", &X::to_json)
-		.set_static("my_static_const_var", 42, true)
-		.set_static("my_static_var", 1)
+		.const_("konst", 99)
+		.var("var", &X::var)
+		//TODO: static property definition works only at the end of class_ declaration!
+		//.static_("my_static_var", 1)
+		//.static_("my_static_const_var", 42, true)
+		.property("rprop", &X::get)
+		.property("wprop", &X::get, &X::set)
+		.property("wprop2", static_cast<x_prop_get>(&X::prop), static_cast<x_prop_set>(&X::prop))
+		.property("prop", [](X const& x) mutable { return x.var; }, [](X& x, int n) { x.var = n; })
+		.property("prop2", [](X const& x) { return x.var; }, [](X& x, int n) mutable { x.var = n; })
+		.property("rprop_direct", &get_rprop_direct<Traits>)
+		.property("rprop_external1", &external_get1)
+		.property("rprop_external2", &external_get2)
+		.property("rprop_external3", &external_get3)
+		.property("wprop_external1", &external_get1, &external_set1)
+		.property("wprop_external2", &external_get2, &external_set2)
+		.property("wprop_external3", &external_get3, &external_set3)
+		.function("fun1", &X::fun1)
+		.function("fun2", &X::fun2)
+		.function("fun3", &X::fun3)
+		.function("fun4", &X::fun4)
+		.function("static_fun", &X::static_fun)
+		.function("static_lambda", [](int x) { return x + 3; })
+		.function("extern_fun", &extern_fun<Traits>)
+		.function("toJSON", &X::to_json)
+		.static_("my_static_var", 1)
+		.static_("my_static_const_var", 42, true)
 		;
 
 	static_assert(std::is_move_constructible<decltype(X_class)>::value, "");
@@ -168,12 +198,11 @@ void test_class_()
 	Y_class
 		.template inherit<X>()
 		.template ctor<int>()
-		.set("useX", &Y::useX)
-		.set("useX_ptr", &Y::useX_ptr<Traits>)
-		;
+		.function("useX", &Y::useX)
+		.function("useX_ptr", &Y::useX_ptr<Traits>);
 
 	auto Y_class_find = v8pp::class_<Y, Traits>::extend(isolate);
-	Y_class_find.set("toJSON", [](const v8::FunctionCallbackInfo<v8::Value>& args)
+	Y_class_find.function("toJSON", [](const v8::FunctionCallbackInfo<v8::Value>& args)
 	{
 		bool const with_functions = true;
 		args.GetReturnValue().Set(v8pp::json_object(args.GetIsolate(), args.This(), with_functions));
@@ -193,27 +222,38 @@ void test_class_()
 	});
 
 	context
-		.set("X", X_class)
-		.set("Y", Y_class)
+		.class_("X", X_class)
+		.class_("Y", Y_class)
 		;
 
 	check_eq("C++ exception from X ctor",
 		run_script<std::string>(context, "ret = ''; try { new X(1, 2); } catch(err) { ret = err; } ret"),
 		"C++ exception");
+	check("Unhandled C++ exception from X ctor", context.run_script("x = new X(1, 2); x").IsEmpty());
 	check_eq("V8 exception from X ctor",
 		run_script<std::string>(context, "ret = ''; try { new X(1, 2, 3); } catch(err) { ret = err; } ret"),
 		"JS exception");
+	check("Unhandled V8 exception from X ctor", context.run_script("x = new X(1, 2, 3); x").IsEmpty());
 
 	check_eq("X object", run_script<int>(context, "x = new X(); x.var += x.konst"), 100);
 	check_eq("X::rprop", run_script<int>(context, "x = new X(); x.rprop"), 1);
 	check_eq("X::wprop", run_script<int>(context, "x = new X(); ++x.wprop"), 2);
 	check_eq("X::wprop2", run_script<int>(context, "x = new X(); ++x.wprop2"), 2);
+	check_eq("X::prop", run_script<int>(context, "x = new X(); x.prop += 2"), 3);
+	check_eq("X::prop2", run_script<int>(context, "x = new X(); x.prop2 += 3"), 4);
+	check_eq("X::rprop_direct", run_script<int>(context, "x = new X(); x.rprop_direct"), 1);
+	check_eq("X::rprop_external1", run_script<int>(context, "x = new X(); x.rprop_external1"), 1);
+	check_eq("X::rprop_external2", run_script<int>(context, "x = new X(); x.rprop_external2"), 1);
+	check_eq("X::rprop_external3", run_script<int>(context, "x = new X(); x.rprop_external3"), 1);
+	check_eq("X::wprop_external1", run_script<int>(context, "x = new X(); ++x.wprop_external1; x.wprop_external1"), 2);
+	check_eq("X::wprop_external2", run_script<int>(context, "x = new X(); ++x.wprop_external2; x.wprop_external2"), 2);
+	check_eq("X::wprop_external3", run_script<int>(context, "x = new X(); ++x.wprop_external3; x.wprop_external3"), 2);
 	check_eq("X::fun1(1)", run_script<int>(context, "x = new X(); x.fun1(1)"), 2);
 	check_eq("X::fun2(2)", run_script<float>(context, "x = new X(); x.fun2(2)"), 3);
 	check_eq("X::fun3(str)", run_script<std::string>(context, "x = new X(); x.fun3('str')"), "str1");
 	check_eq("X::fun4([foo, bar])",
 		run_script<std::vector<std::string>>(context, "x = new X(); x.fun4(['foo', 'bar'])"),
-		std::vector<std::string>{ "foo", "bar", "1" });
+		std::vector<std::string>{{ "foo", "bar", "1" }});
 	check_eq("X::static_fun(1)", run_script<int>(context, "X.static_fun(1)"), 1);
 	check_eq("X::static_lambda(1)", run_script<int>(context, "X.static_lambda(1)"), 4);
 	check_eq("X::extern_fun(5)", run_script<int>(context, "x = new X(); x.extern_fun(5)"), 6);
@@ -235,26 +275,23 @@ void test_class_()
 
 	check_eq("JSON.stringify(Y)",
 		run_script<std::string>(context, "JSON.stringify({'obj': new Y(10), 'arr': [new Y(11), new Y(12)] })"),
-		R"({"obj":{"useX":"function useX() { [native code] }","useX_ptr":"function useX_ptr() { [native code] }","toJSON":"function toJSON() { [native code] }","wprop2":10,"wprop":10,"rprop":10,"var":10,"konst":99,"fun1":"function fun1() { [native code] }","fun2":"function fun2() { [native code] }","fun3":"function fun3() { [native code] }","fun4":"function fun4() { [native code] }","static_fun":"function static_fun() { [native code] }","static_lambda":"function static_lambda() { [native code] }","extern_fun":"function extern_fun() { [native code] }"},"arr":[{"useX":"function useX() { [native code] }","useX_ptr":"function useX_ptr() { [native code] }","toJSON":"function toJSON() { [native code] }","wprop2":11,"wprop":11,"rprop":11,"var":11,"konst":99,"fun1":"function fun1() { [native code] }","fun2":"function fun2() { [native code] }","fun3":"function fun3() { [native code] }","fun4":"function fun4() { [native code] }","static_fun":"function static_fun() { [native code] }","static_lambda":"function static_lambda() { [native code] }","extern_fun":"function extern_fun() { [native code] }"},{"useX":"function useX() { [native code] }","useX_ptr":"function useX_ptr() { [native code] }","toJSON":"function toJSON() { [native code] }","wprop2":12,"wprop":12,"rprop":12,"var":12,"konst":99,"fun1":"function fun1() { [native code] }","fun2":"function fun2() { [native code] }","fun3":"function fun3() { [native code] }","fun4":"function fun4() { [native code] }","static_fun":"function static_fun() { [native code] }","static_lambda":"function static_lambda() { [native code] }","extern_fun":"function extern_fun() { [native code] }"}]})"
+		R"({"obj":{"useX":"function useX() { [native code] }","useX_ptr":"function useX_ptr() { [native code] }","toJSON":"function toJSON() { [native code] }","wprop_external3":10,"wprop_external2":10,"wprop_external1":10,"rprop_external3":10,"rprop_external2":10,"rprop_external1":10,"rprop_direct":10,"prop2":10,"prop":10,"wprop2":10,"wprop":10,"rprop":10,"var":10,"konst":99,"fun1":"function fun1() { [native code] }","fun2":"function fun2() { [native code] }","fun3":"function fun3() { [native code] }","fun4":"function fun4() { [native code] }","static_fun":"function static_fun() { [native code] }","static_lambda":"function static_lambda() { [native code] }","extern_fun":"function extern_fun() { [native code] }"},"arr":[{"useX":"function useX() { [native code] }","useX_ptr":"function useX_ptr() { [native code] }","toJSON":"function toJSON() { [native code] }","wprop_external3":11,"wprop_external2":11,"wprop_external1":11,"rprop_external3":11,"rprop_external2":11,"rprop_external1":11,"rprop_direct":11,"prop2":11,"prop":11,"wprop2":11,"wprop":11,"rprop":11,"var":11,"konst":99,"fun1":"function fun1() { [native code] }","fun2":"function fun2() { [native code] }","fun3":"function fun3() { [native code] }","fun4":"function fun4() { [native code] }","static_fun":"function static_fun() { [native code] }","static_lambda":"function static_lambda() { [native code] }","extern_fun":"function extern_fun() { [native code] }"},{"useX":"function useX() { [native code] }","useX_ptr":"function useX_ptr() { [native code] }","toJSON":"function toJSON() { [native code] }","wprop_external3":12,"wprop_external2":12,"wprop_external1":12,"rprop_external3":12,"rprop_external2":12,"rprop_external1":12,"rprop_direct":12,"prop2":12,"prop":12,"wprop2":12,"wprop":12,"rprop":12,"var":12,"konst":99,"fun1":"function fun1() { [native code] }","fun2":"function fun2() { [native code] }","fun3":"function fun3() { [native code] }","fun4":"function fun4() { [native code] }","static_fun":"function static_fun() { [native code] }","static_lambda":"function static_lambda() { [native code] }","extern_fun":"function extern_fun() { [native code] }"}]})"
 	);
 
 	check_eq("Y object", run_script<int>(context, "y = new Y(-100); y.konst + y.var"), -1);
 
-	auto y1 = v8pp::factory<Y, Traits>::create(isolate, -1);
+	auto y1 = Traits::template create<Y>(-1);
 
-	v8::Local<v8::Object> y1_obj =
-		v8pp::class_<Y, Traits>::reference_external(context.isolate(), y1);
+	v8::Local<v8::Object> y1_obj = v8pp::class_<Y, Traits>::reference_external(context.isolate(), y1);
 	check("y1", v8pp::from_v8<decltype(y1)>(isolate, y1_obj) == y1);
 	check("y1_obj", v8pp::to_v8(isolate, y1) == y1_obj);
 
-	auto y2 = v8pp::factory<Y, Traits>::create(isolate, -2);
-	v8::Local<v8::Object> y2_obj =
-		v8pp::class_<Y, Traits>::import_external(context.isolate(), y2);
+	auto y2 = Traits::template create<Y>(-2);
+	v8::Local<v8::Object> y2_obj = v8pp::class_<Y, Traits>::import_external(context.isolate(), y2);
 	check("y2", v8pp::from_v8<decltype(y2)>(isolate, y2_obj) == y2);
 	check("y2_obj", v8pp::to_v8(isolate, y2) == y2_obj);
 
-	v8::Local<v8::Object> y3_obj =
-		v8pp::class_<Y, Traits>::create_object(context.isolate(), -3);
+	v8::Local<v8::Object> y3_obj = v8pp::class_<Y, Traits>::create_object(context.isolate(), -3);
 	auto y3 = v8pp::class_<Y, Traits>::unwrap_object(isolate, y3_obj);
 	check("y3", v8pp::from_v8<decltype(y3)>(isolate, y3_obj) == y3);
 	check("y3_obj", v8pp::to_v8(isolate, y3) == y3_obj);
@@ -341,34 +378,33 @@ void test_multiple_inheritance()
 
 	v8pp::class_<B, Traits> B_class(isolate);
 	B_class
-		.set("xB", &B::x)
-		.set("zB", &B::z)
-		.set("g", &B::g)
-		;
+		.var("xB", &B::x)
+		.function("zB", &B::z)
+		.function("g", &B::g);
 
 	v8pp::class_<C, Traits> C_class(isolate);
 	C_class
 		.template inherit<B>()
 		.template ctor<>()
-		.set("xA", &A::x)
-		.set("xC", &C::x)
+		.var("xA", &A::x)
+		.var("xC", &C::x)
 
-		.set("zA", &A::z)
-		.set("zC", &C::z)
+		.function("zA", &A::z)
+		.function("zC", &C::z)
 
-		.set("f", &A::f)
-		.set("h", &C::h)
+		.function("f", &A::f)
+		.function("h", &C::h)
 
-		.set("rF", v8pp::property(&C::f))
-		.set("rG", v8pp::property(&C::g))
-		.set("rH", v8pp::property(&C::h))
+		.property("rF", &C::f)
+		.property("rG", &C::g)
+		.property("rH", &C::h)
 
-		.set("F", v8pp::property(&C::f, &C::set_f))
-		.set("G", v8pp::property(&C::g, &C::set_g))
-		.set("H", v8pp::property(&C::h, &C::set_h))
+		.property("F", &C::f, &C::set_f)
+		.property("G", &C::g, &C::set_g)
+		.property("H", &C::h, &C::set_h)
 		;
 
-	context.set("C", C_class);
+	context.class_("C", C_class);
 	check_eq("get attributes", run_script<int>(context, "c = new C(); c.xA + c.xB + c.xC"), 1 + 2 + 3);
 	check_eq("set attributes", run_script<int>(context,
 		"c = new C(); c.xA = 10; c.xB = 20; c.xC = 30; c.xA + c.xB + c.xC"), 10 + 20 + 30);
@@ -390,7 +426,7 @@ void test_const_instance_in_module()
 		int f(int x) { return x; }
 		static typename Traits::template object_pointer_type<X> xconst()
 		{
-			static auto const xconst_ = v8pp::factory<X, Traits>::create(v8::Isolate::GetCurrent());
+			static auto const xconst_ = Traits::template create<X>();
 			return xconst_;
 		}
 	};
@@ -400,15 +436,15 @@ void test_const_instance_in_module()
 	v8::HandleScope scope(isolate);
 
 	v8pp::class_<X, Traits> X_class(isolate);
-	X_class.set("f", &X::f);
+	X_class.function("f", &X::f);
 
 	v8pp::module api(isolate);
-	api.set("X", X_class);
-	api.set("xconst", v8pp::property(X::xconst));
+	api.class_("X", X_class);
+	api.property("xconst", &X::xconst);
 
 	X_class.reference_external(isolate, X::xconst());
 
-	context.set("api", api);
+	context.module("api", api);
 	check_eq("xconst.f()", run_script<int>(context, "api.xconst.f(1)"), 1);
 }
 
@@ -430,13 +466,13 @@ void test_auto_wrap_objects()
 	X_class
 		.template ctor<int>()
 		.auto_wrap_objects(true)
-		.set("x", v8pp::property(&X::get_x))
+		.property("x", &X::get_x)
 		;
 
-	auto f0 = [](int x) { return X(x); };
-	auto f = v8pp::wrap_function<decltype(f0), Traits>(isolate, "f", std::move(f0));
-	context.set("X", X_class);
-	context.set("f", f);
+	auto f = [](int x) { return X(x); };
+
+	context.class_("X", X_class);
+	context.function<decltype(f), Traits>("f", std::move(f));
 	check_eq("return X object", run_script<int>(context, "obj = f(123); obj.x"), 123);
 }
 

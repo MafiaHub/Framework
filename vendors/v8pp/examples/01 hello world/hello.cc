@@ -9,7 +9,7 @@ char const* Method() {
 
 void init(Local<Object> exports) {
   v8pp::module addon(Isolate::GetCurrent());
-  addon.set("hello", &Method);
+  addon.function("hello", &Method);
   exports->SetPrototype(Isolate::GetCurrent()->GetCurrentContext(), addon.new_instance());
 }
 

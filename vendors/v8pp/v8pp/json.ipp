@@ -18,7 +18,7 @@ V8PP_IMPL std::string json_str(v8::Isolate* isolate, v8::Local<v8::Value> value)
 	return std::string(*str, str.length());
 }
 
-V8PP_IMPL v8::Local<v8::Value> json_parse(v8::Isolate* isolate, string_view str)
+V8PP_IMPL v8::Local<v8::Value> json_parse(v8::Isolate* isolate, std::string_view str)
 {
 	if (str.empty())
 	{
@@ -64,8 +64,7 @@ V8PP_IMPL v8::Local<v8::Object> json_object(v8::Isolate* isolate, v8::Local<v8::
 			{
 				value = v8::JSON::Stringify(context, value).FromMaybe(v8::String::Empty(isolate));
 			}
-			const bool r = result->Set(context, name, value).ToChecked();
-			(void)r;
+			result->Set(context, name, value).FromJust();
 		}
 	}
 	return scope.Escape(result);

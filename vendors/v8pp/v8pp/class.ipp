@@ -67,7 +67,7 @@ V8PP_IMPL object_registry<Traits>::object_registry(v8::Isolate* isolate, type_in
 	func_.Reset(isolate, func);
 	js_func_.Reset(isolate, js_func);
 
-	// each JavaScript instance has 3 internal fields:
+	// each JavaScript instance has 2 internal fields:
 	//  0 - pointer to a wrapped C++ object
 	//  1 - pointer to this object_registry
 	func->InstanceTemplate()->SetInternalFieldCount(2);
@@ -96,9 +96,9 @@ V8PP_IMPL void object_registry<Traits>::add_base(object_registry& info, cast_fun
 }
 
 template<typename Traits>
-V8PP_IMPL bool object_registry<Traits>::cast(pointer_type& ptr, type_info const& type) const
+V8PP_IMPL bool object_registry<Traits>::cast(pointer_type& ptr, type_info const& actual_type) const
 {
-	if (this->type == type || !ptr)
+	if (this->type == actual_type || !ptr)
 	{
 		return true;
 	}
@@ -106,7 +106,7 @@ V8PP_IMPL bool object_registry<Traits>::cast(pointer_type& ptr, type_info const&
 	// fast way - search a direct parent
 	for (base_class_info const& base : bases_)
 	{
-		if (base.info.type == type)
+		if (base.info.type == actual_type)
 		{
 			ptr = base.cast(ptr);
 			return true;
@@ -117,7 +117,7 @@ V8PP_IMPL bool object_registry<Traits>::cast(pointer_type& ptr, type_info const&
 	for (base_class_info const& base : bases_)
 	{
 		pointer_type p = base.cast(ptr);
-		if (base.info.cast(p, type))
+		if (base.info.cast(p, actual_type))
 		{
 			ptr = p;
 			return true;
@@ -152,13 +152,13 @@ V8PP_IMPL void object_registry<Traits>::remove_objects()
 
 template<typename Traits>
 V8PP_IMPL typename object_registry<Traits>::pointer_type
-object_registry<Traits>::find_object(object_id id, type_info const& type) const
+object_registry<Traits>::find_object(object_id id, type_info const& actual_type) const
 {
 	auto it = objects_.find(Traits::key(id));
 	if (it != objects_.end())
 	{
 		pointer_type ptr = it->first;
-		if (cast(ptr, type))
+		if (cast(ptr, actual_type))
 		{
 			return ptr;
 		}
@@ -198,20 +198,23 @@ V8PP_IMPL v8::Local<v8::Object> object_registry<Traits>::wrap_object(pointer_typ
 	v8::EscapableHandleScope scope(isolate_);
 
 	v8::Local<v8::Context> context = isolate_->GetCurrentContext();
-	v8::Local<v8::Object> obj = class_function_template()
-		->GetFunction(context).ToLocalChecked()->NewInstance(context).ToLocalChecked();
+	v8::Local<v8::Function> func;
+	v8::Local<v8::Object> obj;
+	if (class_function_template()->GetFunction(context).ToLocal(&func)
+		&& func->NewInstance(context).ToLocal(&obj))
+	{
+		obj->SetAlignedPointerInInternalField(0, Traits::pointer_id(object));
+		obj->SetAlignedPointerInInternalField(1, this);
 
-	obj->SetAlignedPointerInInternalField(0, Traits::pointer_id(object));
-	obj->SetAlignedPointerInInternalField(1, this);
-
-	v8::Global<v8::Object> pobj(isolate_, obj);
-	pobj.SetWeak(this, [](v8::WeakCallbackInfo<object_registry> const& data)
-		{
-			object_id object = data.GetInternalField(0);
-			object_registry* this_ = static_cast<object_registry*>(data.GetInternalField(1));
-			this_->remove_object(object);
-		}, v8::WeakCallbackType::kInternalFields);
-	objects_.emplace(object, wrapped_object{ std::move(pobj), call_dtor });
+		v8::Global<v8::Object> pobj(isolate_, obj);
+		pobj.SetWeak(this, [](v8::WeakCallbackInfo<object_registry> const& data)
+			{
+				object_id object = data.GetInternalField(0);
+				object_registry* this_ = static_cast<object_registry*>(data.GetInternalField(1));
+				this_->remove_object(object);
+			}, v8::WeakCallbackType::kInternalFields);
+		objects_.emplace(object, wrapped_object{ std::move(pobj), call_dtor });
+	}
 
 	return scope.Escape(obj);
 }
@@ -375,8 +378,6 @@ V8PP_IMPL classes* classes::instance(operation op, v8::Isolate* isolate)
 			delete info;
 			isolate->SetData(V8PP_ISOLATE_DATA_SLOT, nullptr);
 		}
-		// fallthrough
-	default:
 		return nullptr;
 	}
 #else
@@ -392,10 +393,10 @@ V8PP_IMPL classes* classes::instance(operation op, v8::Isolate* isolate)
 		return &instances[isolate];
 	case operation::remove:
 		instances.erase(isolate);
-	default:
 		return nullptr;
 	}
 #endif
+	return nullptr; // should never reach this line
 }
 
 } // namespace detail
