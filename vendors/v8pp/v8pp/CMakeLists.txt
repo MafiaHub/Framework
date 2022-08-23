@@ -60,7 +60,7 @@ if(MSVC)
 	# set warning level 3 for system headers
 	list(APPEND V8PP_COMPILE_OPTIONS /experimental:external /external:anglebrackets /external:W3)
 else()
-	set(V8PP_COMPILE_OPTIONS -fno-rtti -fexceptions -Wall -Wextra -Wpedantic)
+	set(V8PP_COMPILE_OPTIONS -fexceptions -Wall -Wextra -Wpedantic)
 endif()
 
 if(V8PP_HEADER_ONLY)
