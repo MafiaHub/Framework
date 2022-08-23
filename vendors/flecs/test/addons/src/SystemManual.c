@@ -6,16 +6,16 @@ void SystemManual_setup() {
 
 static
 void Iter(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     Velocity *v = NULL;
     Mass *m = NULL;
         
-    if (it->term_count >= 2) {
-        v = ecs_term(it, Velocity, 2);
+    if (it->field_count >= 2) {
+        v = ecs_field(it, Velocity, 2);
     }
 
-    if (it->term_count >= 3) {
-        m = ecs_term(it, Mass, 3);
+    if (it->field_count >= 3) {
+        m = ecs_field(it, Mass, 3);
     }
 
     probe_iter(it);
@@ -89,76 +89,9 @@ void NormalSystem(ecs_iter_t *it) {
     normal_count ++;
 }
 
-static bool system_status_action_invoked = false;
-static ecs_system_status_t enable_status = EcsSystemStatusNone;
-static ecs_system_status_t active_status = EcsSystemStatusNone;
-
-static
-void status_action(
-    ecs_world_t *world,
-    ecs_entity_t system,
-    ecs_system_status_t status,
-    void *ctx)
-{
-    system_status_action_invoked = true;
-
-    if (status == EcsSystemEnabled || status == EcsSystemDisabled) {
-        enable_status = status;
-    } else if (status == EcsSystemActivated || status == EcsSystemDeactivated) {
-        active_status = status;
-    }
-}
-
-static
-void reset_status() {
-    system_status_action_invoked = false;
-    enable_status = EcsSystemStatusNone;
-    active_status = EcsSystemStatusNone;
-}
-
-void SystemManual_activate_status() {
-    ecs_world_t *world = ecs_init();
-
-    ECS_COMPONENT(world, Position);
-
-    ecs_entity_t normal_system = ecs_system_init(world, &(ecs_system_desc_t){
-        .entity = {
-            .name = "NormalSystem"
-        },
-        .query.filter.terms = {{ecs_id(Position)}},
-        .callback = NormalSystem,
-        .status_callback = status_action
-    });
-
-    test_bool(system_status_action_invoked, true);
-    test_assert(enable_status == EcsSystemEnabled);
-    test_assert(active_status == EcsSystemStatusNone);
-
-    ecs_run(world, normal_system, 0, NULL);
-    test_int(normal_count, 0);
-
-    reset_status();
-    ecs_new(world, Position);
-    ecs_force_aperiodic(world);
-
-    test_bool(system_status_action_invoked, true);
-    test_assert(enable_status == EcsSystemStatusNone);
-    test_assert(active_status == EcsSystemActivated);
-
-    ecs_run(world, normal_system, 0, NULL);
-    test_int(normal_count, 1);
-
-    reset_status();
-    ecs_fini(world);
-
-    test_bool(system_status_action_invoked, true);
-    test_assert(enable_status == EcsSystemDisabled);
-    test_assert(active_status == EcsSystemDeactivated);
-}
-
 static
 void AddVelocity(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -178,14 +111,14 @@ void SystemManual_no_automerge() {
 
     ecs_set_automerge(world, false);
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
     ecs_world_t *stage = ecs_get_stage(world, 0);
 
     ecs_run(stage, AddVelocity, 1, NULL);
 
     test_assert(!ecs_has(stage, e1, Velocity));
 
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
 
     test_assert(!ecs_has(world, e1, Velocity));
 
@@ -199,7 +132,7 @@ void SystemManual_no_automerge() {
 static int dummy_ran = 0;
 
 void DummySystem(ecs_iter_t *it) {
-    ecs_entity_t Tag = ecs_term_id(it, 1);
+    ecs_entity_t Tag = ecs_field_id(it, 1);
     ecs_add_id(it->world, Tag, Tag);
     dummy_ran ++;
 }

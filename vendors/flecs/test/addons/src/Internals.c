@@ -6,9 +6,9 @@ void Internals_setup() {
 
 static
 void Iter(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
-    Mass *m = ecs_term(it, Mass, 3);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
+    Mass *m = ecs_field(it, Mass, 3);
 
     probe_iter(it);
 
@@ -140,7 +140,7 @@ static int invoked = 0;
 
 static
 void CreateNewTable(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
@@ -216,7 +216,7 @@ void Internals_create_65k_tables() {
         ecs_entity_t e = ecs_new_id(world);
         ecs_add_id(world, e, e);
         test_assert(ecs_has_id(world, e, e));
-        test_int(ecs_vector_count(ecs_get_type(world, e)), 1);
+        test_int(ecs_get_type(world, e)->count, 1);
     }
     
     ecs_fini(world);
@@ -237,7 +237,7 @@ void Internals_no_duplicate_root_table_id() {
         test_assert(ecs_has_id(world, e, i + 1000));
     }
 
-    ecs_entity_t f = ecs_entity_init(world, &(ecs_entity_desc_t) {
+    ecs_entity_t f = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "Foo"
     });
     

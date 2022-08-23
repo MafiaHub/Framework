@@ -1,5 +1,4 @@
 #include "private_api.h"
-#include <stdio.h>
 #include <ctype.h>
 
 #define ECS_NAME_BUFFER_LENGTH (64)
@@ -20,8 +19,9 @@ bool path_append(
     const char *name;
 
     if (ecs_is_valid(world, child)) {
-        cur = ecs_get_object(world, child, EcsChildOf, 0);
+        cur = ecs_get_target(world, child, EcsChildOf, 0);
         if (cur) {
+            ecs_assert(cur != child, ECS_CYCLE_DETECTED, NULL);
             if (cur != parent && (cur != EcsFlecsCore || prefix != NULL)) {
                 path_append(world, parent, cur, sep, prefix, buf);
                 ecs_strbuf_appendstr(buf, sep);
@@ -183,7 +183,7 @@ ecs_entity_t get_parent_from_path(
 
 static
 void on_set_symbol(ecs_iter_t *it) {
-    EcsIdentifier *n = ecs_term(it, EcsIdentifier, 1);
+    EcsIdentifier *n = ecs_field(it, EcsIdentifier, 1);
     ecs_world_t *world = it->world;
 
     int i;
@@ -195,8 +195,9 @@ void on_set_symbol(ecs_iter_t *it) {
 }
 
 void flecs_bootstrap_hierarchy(ecs_world_t *world) {
-    ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .term = {.id = ecs_pair(ecs_id(EcsIdentifier), EcsSymbol), .subj.set.mask = EcsSelf },
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .entity = ecs_entity(world, {.add = {ecs_childof(EcsFlecsInternals)}}),
+        .filter.terms[0] = {.id = ecs_pair(ecs_id(EcsIdentifier), EcsSymbol), .src.flags = EcsSelf },
         .callback = on_set_symbol,
         .events = {EcsOnSet},
         .yield_existing = true
@@ -219,10 +220,6 @@ void ecs_get_path_w_sep_buf(
 
     world = ecs_get_world(world);
 
-    if (child == EcsThis) {
-        ecs_strbuf_appendstr(buf, ".");
-        return;
-    }
     if (child == EcsWildcard) {
         ecs_strbuf_appendstr(buf, "*");
         return;
@@ -271,7 +268,7 @@ ecs_entity_t ecs_lookup_child(
     }
 
     ecs_id_t pair = ecs_childof(parent);
-    ecs_hashmap_t *index = flecs_get_id_name_index(world, pair);
+    ecs_hashmap_t *index = flecs_id_name_index_get(world, pair);
     if (index) {
         return flecs_name_index_find(index, name, 0, 0);
     } else {
@@ -415,7 +412,7 @@ tail:
     if (!cur && recursive) {
         if (!lookup_path_search) {
             if (parent) {
-                parent = ecs_get_object(world, parent, EcsChildOf, 0);
+                parent = ecs_get_target(world, parent, EcsChildOf, 0);
                 goto retry;
             } else {
                 lookup_path_search = true;

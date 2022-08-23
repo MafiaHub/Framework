@@ -12,8 +12,8 @@ int main(int argc, char *argv[]) {
     ECS_COMPONENT(ecs, Position);
 
     // Add reflection data to component
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Position), // Make sure to use existing id
+    ecs_struct(ecs, {
+        .entity = ecs_id(Position), // Make sure to use existing id
         .members = {
             { .name = "x", .type = ecs_id(ecs_f32_t) }, // builtin float type
             { .name = "y", .type = ecs_id(ecs_f32_t) }

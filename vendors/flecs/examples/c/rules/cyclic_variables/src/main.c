@@ -7,7 +7,7 @@
 int main(int argc, char *argv[]) {
     ecs_world_t *ecs = ecs_init_w_args(argc, argv);
 
-    ECS_TAG(ecs, Likes); // Likes relation
+    ECS_TAG(ecs, Likes); // Likes relationship
 
     ecs_entity_t bob = ecs_new_entity(ecs, "Bob");
     ecs_entity_t alice = ecs_new_entity(ecs, "Alice");
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
     // The equivalent query in the DSL is:
     //   Likes($X, $Y), Likes($Y, $X)
     //
-    // This is also an example of a query where all subjects are variables. By
+    // This is also an example of a query where all sources are variables. By
     // default queries use the builtin "This" variable as subject, which is what
     // populates the entities array in the query result (accessed by the
     // iter::entity function).
@@ -34,17 +34,17 @@ int main(int argc, char *argv[]) {
     // Because this query does not use This at all, the entities array will not
     // be populated, and it.count() will always be 0.
     // Create a rule to find all ranged units
-    ecs_rule_t *r = ecs_rule_init(ecs, &(ecs_filter_desc_t) {
+    ecs_rule_t *r = ecs_rule(ecs, {
         .terms = {
             { 
-                .pred.entity = Likes, 
-                .subj = { .name = (char*)"X", .var = EcsVarIsVariable },
-                .obj = { .name = (char*)"Y", .var = EcsVarIsVariable }
+                .first.id = Likes, 
+                .src = { .name = (char*)"X", .flags = EcsIsVariable },
+                .second = { .name = (char*)"Y", .flags = EcsIsVariable }
             },
             { 
-                .pred.entity = Likes, 
-                .subj = { .name = (char*)"Y", .var = EcsVarIsVariable },
-                .obj = { .name = (char*)"X", .var = EcsVarIsVariable }
+                .first.id = Likes, 
+                .src = { .name = (char*)"Y", .flags = EcsIsVariable },
+                .second = { .name = (char*)"X", .flags = EcsIsVariable }
             }
         }
     });

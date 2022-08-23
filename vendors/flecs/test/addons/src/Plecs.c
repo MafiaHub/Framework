@@ -75,7 +75,7 @@ void Plecs_multiple_trailing_newlines() {
     ecs_entity_t foo = ecs_lookup(world, "Foo");
     test_assert(foo != 0);
     test_str(ecs_get_name(world, foo), "Foo");
-    test_int(ecs_vector_count(ecs_get_type(world, foo)), 1);
+    test_int(ecs_get_type(world, foo)->count, 1);
 
     ecs_fini(world);
 }
@@ -102,7 +102,7 @@ void Plecs_entity() {
     ecs_entity_t foo = ecs_lookup(world, "Foo");
     test_assert(foo != 0);
     test_str(ecs_get_name(world, foo), "Foo");
-    test_int(ecs_vector_count(ecs_get_type(world, foo)), 1);
+    test_int(ecs_get_type(world, foo)->count, 1);
 
     ecs_fini(world);
 }
@@ -1704,7 +1704,7 @@ void Plecs_assign_component_value() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -1733,7 +1733,7 @@ void Plecs_assign_2_component_values() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -1741,7 +1741,7 @@ void Plecs_assign_2_component_values() {
     });
 
     ecs_entity_t ecs_id(Velocity) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Velocity",
+        .entity = ecs_entity(world, {.name = "Velocity"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -1781,7 +1781,7 @@ void Plecs_assign_component_value_in_assign_scope() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -1813,7 +1813,7 @@ void Plecs_assign_2_component_values_in_assign_scope() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -1821,7 +1821,7 @@ void Plecs_assign_2_component_values_in_assign_scope() {
     });
 
     ecs_entity_t ecs_id(Velocity) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Velocity",
+        .entity = ecs_entity(world, {.name = "Velocity"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -2696,7 +2696,7 @@ void Plecs_scope_after_assign() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -2733,7 +2733,7 @@ void Plecs_assign_after_inherit() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -2770,7 +2770,7 @@ void Plecs_multiple_assignments_single_line() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -2778,7 +2778,7 @@ void Plecs_multiple_assignments_single_line() {
     });
 
     ecs_entity_t ecs_id(Velocity) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Velocity",
+        .entity = ecs_entity(world, {.name = "Velocity"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -2998,7 +2998,7 @@ void Plecs_assign_component_to_parent() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -3123,7 +3123,7 @@ void Plecs_default_child_component_w_assign() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -3276,155 +3276,11 @@ void Plecs_enum_type_w_default_child_component() {
     ecs_fini(world);
 }
 
-void Plecs_comment_as_brief_doc() {
-    ecs_world_t *world = ecs_init();
-
-    const char *expr =
-    HEAD "/// Foo entity"
-    LINE "Foo";
-
-    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
-
-    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
-    test_assert(foo != 0);
-
-    test_assert( ecs_has_pair(world, foo, ecs_id(EcsDocDescription), EcsDocBrief));
-
-    const char *brief = ecs_doc_get_brief(world, foo);
-    test_assert(brief != NULL);
-    test_str(brief, "Foo entity");
-
-    ecs_fini(world);
-}
-
-void Plecs_comment_as_brief_doc_after_using() {
-    ecs_world_t *world = ecs_init();
-
-    const char *expr =
-    HEAD "using flecs.meta"
-    LINE
-    LINE "/// Foo entity"
-    LINE "Foo";
-
-    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
-
-    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
-    test_assert(foo != 0);
-
-    test_assert( ecs_has_pair(world, foo, ecs_id(EcsDocDescription), EcsDocBrief));
-
-    const char *brief = ecs_doc_get_brief(world, foo);
-    test_assert(brief != NULL);
-    test_str(brief, "Foo entity");
-
-    ecs_fini(world);
-}
-
-void Plecs_comment_as_brief_doc_2_stmts() {
-    ecs_world_t *world = ecs_init();
-
-    const char *expr =
-    HEAD "/// Foo entity"
-    LINE "Foo"
-    LINE "/// Bar entity"
-    LINE "Bar";
-
-    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
-
-    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
-    ecs_entity_t bar = ecs_lookup_fullpath(world, "Bar");
-    test_assert(foo != 0);
-    test_assert(bar != 0);
-
-    test_assert( ecs_has_pair(world, foo, ecs_id(EcsDocDescription), EcsDocBrief));
-    test_assert( ecs_has_pair(world, bar, ecs_id(EcsDocDescription), EcsDocBrief));
-
-    const char *brief = ecs_doc_get_brief(world, foo);
-    test_assert(brief != NULL);
-    test_str(brief, "Foo entity");
-
-    brief = ecs_doc_get_brief(world, bar);
-    test_assert(brief != NULL);
-    test_str(brief, "Bar entity");
-
-    ecs_fini(world);
-}
-
-void Plecs_empty_doc_comment() {
-    ecs_world_t *world = ecs_init();
-
-    const char *expr =
-    HEAD "///"
-    LINE "Foo";
-
-    ecs_log_set_level(-4);
-    test_assert(ecs_plecs_from_str(world, NULL, expr) != 0);
-
-    ecs_fini(world);
-}
-
-void Plecs_comment_type() {
-    ecs_world_t *world = ecs_init();
-
-    const char *expr =
-    HEAD "using flecs.meta"
-    LINE
-    LINE "/// Position component"
-    LINE "Struct(Position) {"
-    LINE "  /// x member"
-    LINE "  x = {f32}"
-    LINE
-    LINE "  /// y member"
-    LINE "  y = {f32}"
-    LINE "}";
-
-    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
-
-    ecs_entity_t pos = ecs_lookup_fullpath(world, "Position");
-    ecs_entity_t x = ecs_lookup_fullpath(world, "Position.x");
-    ecs_entity_t y = ecs_lookup_fullpath(world, "Position.y");
-    test_assert(pos != 0);
-    test_assert(x != 0);
-    test_assert(y != 0);
-
-    test_assert( ecs_has_pair(world, pos, ecs_id(EcsDocDescription), EcsDocBrief));
-    test_assert( ecs_has_pair(world, x, ecs_id(EcsDocDescription), EcsDocBrief));
-    test_assert( ecs_has_pair(world, y, ecs_id(EcsDocDescription), EcsDocBrief));
-
-    const char *brief = ecs_doc_get_brief(world, pos);
-    test_assert(brief != NULL);
-    test_str(brief, "Position component");
-
-    brief = ecs_doc_get_brief(world, x);
-    test_assert(brief != NULL);
-    test_str(brief, "x member");
-
-    brief = ecs_doc_get_brief(world, y);
-    test_assert(brief != NULL);
-    test_str(brief, "y member");
-
-    ecs_fini(world);
-}
-
-void Plecs_newline_after_doc_comment() {
-    ecs_world_t *world = ecs_init();
-
-    const char *expr =
-    HEAD "/// Foo entity"
-    LINE
-    LINE "Foo";
-
-    ecs_log_set_level(-4);
-    test_assert(ecs_plecs_from_str(world, NULL, expr) != 0);
-
-    ecs_fini(world);
-}
-
 void Plecs_default_type_from_with() {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t ecs_id(Position) = ecs_struct_init(world, &(ecs_struct_desc_t){
-        .entity.name = "Position",
+        .entity = ecs_entity(world, {.name = "Position"}),
         .members = {
             {"x", ecs_id(ecs_f32_t)},
             {"y", ecs_id(ecs_f32_t)}
@@ -3594,28 +3450,28 @@ void Plecs_set_entity_names() {
     HEAD "foo(self)"
     LINE "foo(parent)"
     LINE "foo(cascade)"
-    LINE "foo(sub)"
-    LINE "foo(super)";
+    LINE "foo(down)"
+    LINE "foo(up)";
 
     test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
 
     ecs_entity_t foo = ecs_lookup_fullpath(world, "foo");
     ecs_entity_t self = ecs_lookup_fullpath(world, "self");
-    ecs_entity_t sub = ecs_lookup_fullpath(world, "sub");
-    ecs_entity_t super = ecs_lookup_fullpath(world, "super");
+    ecs_entity_t down = ecs_lookup_fullpath(world, "down");
+    ecs_entity_t up = ecs_lookup_fullpath(world, "up");
     ecs_entity_t parent = ecs_lookup_fullpath(world, "parent");
     ecs_entity_t cascade = ecs_lookup_fullpath(world, "cascade");
 
     test_assert(foo != 0);
     test_assert(self != 0);
-    test_assert(sub != 0);
-    test_assert(super != 0);
+    test_assert(down != 0);
+    test_assert(up != 0);
     test_assert(parent != 0);
     test_assert(cascade != 0);
 
     test_assert( ecs_has_id(world, self, foo));
-    test_assert( ecs_has_id(world, sub, foo));
-    test_assert( ecs_has_id(world, super, foo));
+    test_assert( ecs_has_id(world, down, foo));
+    test_assert( ecs_has_id(world, up, foo));
     test_assert( ecs_has_id(world, parent, foo));
     test_assert( ecs_has_id(world, cascade, foo));
 
@@ -3675,6 +3531,171 @@ void Plecs_invalid_oneof() {
     test_assert(e != 0);
 
     test_assert( !ecs_has_pair(world, e, color, EcsWildcard));
+
+    ecs_fini(world);
+}
+
+void Plecs_brief_annotation() {
+    ecs_world_t *world = ecs_init();
+
+    const char *expr =
+    HEAD "@brief A description"
+    LINE "Foo"
+    LINE "Bar"
+    LINE ""
+    LINE "@brief Another description"
+    LINE "Baz";
+
+    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
+    ecs_entity_t bar = ecs_lookup_fullpath(world, "Bar");
+    ecs_entity_t baz = ecs_lookup_fullpath(world, "Baz");
+
+    test_assert(foo != 0);
+    test_assert(bar != 0);
+    test_assert(baz != 0);
+
+    test_str(ecs_doc_get_brief(world, foo), "A description");
+    test_str(ecs_doc_get_brief(world, bar), NULL);
+    test_str(ecs_doc_get_brief(world, baz), "Another description");
+
+    ecs_fini(world);
+}
+
+void Plecs_name_annotation() {
+    ecs_world_t *world = ecs_init();
+
+    const char *expr =
+    HEAD "@name A name"
+    LINE "Foo"
+    LINE "Bar"
+    LINE ""
+    LINE "@name Another name"
+    LINE "Baz";
+
+    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
+    ecs_entity_t bar = ecs_lookup_fullpath(world, "Bar");
+    ecs_entity_t baz = ecs_lookup_fullpath(world, "Baz");
+
+    test_assert(foo != 0);
+    test_assert(bar != 0);
+    test_assert(baz != 0);
+
+    test_str(ecs_doc_get_name(world, foo), "A name");
+    test_str(ecs_doc_get_name(world, bar), "Bar");
+    test_str(ecs_doc_get_name(world, baz), "Another name");
+
+    ecs_fini(world);
+}
+
+void Plecs_link_annotation() {
+    ecs_world_t *world = ecs_init();
+
+    const char *expr =
+    HEAD "@link A link"
+    LINE "Foo"
+    LINE "Bar"
+    LINE ""
+    LINE "@link Another link"
+    LINE "Baz";
+
+    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
+    ecs_entity_t bar = ecs_lookup_fullpath(world, "Bar");
+    ecs_entity_t baz = ecs_lookup_fullpath(world, "Baz");
+
+    test_assert(foo != 0);
+    test_assert(bar != 0);
+    test_assert(baz != 0);
+
+    test_str(ecs_doc_get_link(world, foo), "A link");
+    test_str(ecs_doc_get_link(world, bar), NULL);
+    test_str(ecs_doc_get_link(world, baz), "Another link");
+
+    ecs_fini(world);
+}
+
+void Plecs_color_annotation() {
+    ecs_world_t *world = ecs_init();
+
+    const char *expr =
+    HEAD "@color #554433"
+    LINE "Foo"
+    LINE "Bar"
+    LINE ""
+    LINE "@color rgb(10, 20, 30, 1.0)"
+    LINE "Baz";
+
+    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
+    ecs_entity_t bar = ecs_lookup_fullpath(world, "Bar");
+    ecs_entity_t baz = ecs_lookup_fullpath(world, "Baz");
+
+    test_assert(foo != 0);
+    test_assert(bar != 0);
+    test_assert(baz != 0);
+
+    test_str(ecs_doc_get_color(world, foo), "#554433");
+    test_str(ecs_doc_get_color(world, bar), NULL);
+    test_str(ecs_doc_get_color(world, baz), "rgb(10, 20, 30, 1.0)");
+
+    ecs_fini(world);
+}
+
+void Plecs_multiple_annotations() {
+    ecs_world_t *world = ecs_init();
+
+    const char *expr =
+    HEAD "@brief A description"
+    LINE "@name A name"
+    LINE "@link A link"
+    LINE "@color #554433"
+    LINE "Foo"
+    LINE "Bar"
+    LINE ""
+    LINE "@brief Another description"
+    LINE "@name Another name"
+    LINE "Baz";
+
+    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
+    ecs_entity_t bar = ecs_lookup_fullpath(world, "Bar");
+    ecs_entity_t baz = ecs_lookup_fullpath(world, "Baz");
+
+    test_assert(foo != 0);
+    test_assert(bar != 0);
+    test_assert(baz != 0);
+
+    test_str(ecs_doc_get_brief(world, foo), "A description");
+    test_str(ecs_doc_get_name(world, foo), "A name");
+    test_str(ecs_doc_get_link(world, foo), "A link");
+    test_str(ecs_doc_get_color(world, foo), "#554433");
+    test_str(ecs_doc_get_brief(world, bar), NULL);
+    test_str(ecs_doc_get_brief(world, baz), "Another description");
+    test_str(ecs_doc_get_name(world, baz), "Another name");
+
+    ecs_fini(world);
+}
+
+void Plecs_annotation_w_trailing_space() {
+    ecs_world_t *world = ecs_init();
+
+    const char *expr =
+    HEAD "@brief   A description  "
+    LINE "Foo";
+
+    test_assert(ecs_plecs_from_str(world, NULL, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup_fullpath(world, "Foo");
+    test_assert(foo != 0);
+
+    test_str(ecs_doc_get_brief(world, foo), "A description");
 
     ecs_fini(world);
 }

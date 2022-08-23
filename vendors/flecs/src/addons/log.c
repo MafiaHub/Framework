@@ -2,48 +2,7 @@
 
 #ifdef FLECS_LOG
 
-#include <stdio.h>
 #include <ctype.h>
-
-char* ecs_vasprintf(
-    const char *fmt,
-    va_list args)
-{
-    ecs_size_t size = 0;
-    char *result  = NULL;
-    va_list tmpa;
-
-    va_copy(tmpa, args);
-
-    size = vsnprintf(result, 0, fmt, tmpa);
-
-    va_end(tmpa);
-
-    if ((int32_t)size < 0) { 
-        return NULL; 
-    }
-
-    result = (char *) ecs_os_malloc(size + 1);
-
-    if (!result) { 
-        return NULL; 
-    }
-
-    ecs_os_vsprintf(result, fmt, args);
-
-    return result;
-}
-
-char* ecs_asprintf(
-    const char *fmt,
-    ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    char *result = ecs_vasprintf(fmt, args);
-    va_end(args);
-    return result;
-}
 
 static
 void ecs_colorize_buf(
@@ -188,7 +147,8 @@ void _ecs_logv(
     /* Apply color. Even if we don't want color, we still need to call the
      * colorize function to get rid of the color tags (e.g. #[green]) */
     char *msg_nocolor = ecs_vasprintf(fmt, args);
-    ecs_colorize_buf(msg_nocolor, ecs_os_api.log_with_color_, &msg_buf);
+    ecs_colorize_buf(msg_nocolor, 
+        ecs_os_api.flags_ & EcsOsApiLogWithColors, &msg_buf);
     ecs_os_free(msg_nocolor);
     
     char *msg = ecs_strbuf_get(&msg_buf);
@@ -395,19 +355,19 @@ const char* ecs_strerror(
     ECS_ERR_STR(ECS_MODULE_UNDEFINED);
     ECS_ERR_STR(ECS_MISSING_SYMBOL);
     ECS_ERR_STR(ECS_ALREADY_IN_USE);
+    ECS_ERR_STR(ECS_CYCLE_DETECTED);
     ECS_ERR_STR(ECS_COLUMN_INDEX_OUT_OF_RANGE);
     ECS_ERR_STR(ECS_COLUMN_IS_NOT_SHARED);
     ECS_ERR_STR(ECS_COLUMN_IS_SHARED);
     ECS_ERR_STR(ECS_COLUMN_TYPE_MISMATCH);
-    ECS_ERR_STR(ECS_INVALID_WHILE_ITERATING);
+    ECS_ERR_STR(ECS_INVALID_WHILE_READONLY);
     ECS_ERR_STR(ECS_INVALID_FROM_WORKER);
     ECS_ERR_STR(ECS_OUT_OF_RANGE);
     ECS_ERR_STR(ECS_MISSING_OS_API);
     ECS_ERR_STR(ECS_UNSUPPORTED);
-    ECS_ERR_STR(ECS_COLUMN_ACCESS_VIOLATION);
+    ECS_ERR_STR(ECS_ACCESS_VIOLATION);
     ECS_ERR_STR(ECS_COMPONENT_NOT_REGISTERED);
     ECS_ERR_STR(ECS_INCONSISTENT_COMPONENT_ID);
-    ECS_ERR_STR(ECS_TYPE_INVALID_CASE);
     ECS_ERR_STR(ECS_INCONSISTENT_NAME);
     ECS_ERR_STR(ECS_INCONSISTENT_COMPONENT_ACTION);
     ECS_ERR_STR(ECS_INVALID_OPERATION);
@@ -507,8 +467,24 @@ int ecs_log_set_level(
 bool ecs_log_enable_colors(
     bool enabled)
 {
-    bool prev = ecs_os_api.log_with_color_;
-    ecs_os_api.log_with_color_ = enabled;
+    bool prev = ecs_os_api.flags_ & EcsOsApiLogWithColors;
+    ECS_BIT_COND(ecs_os_api.flags_, EcsOsApiLogWithColors, enabled);
+    return prev;
+}
+
+bool ecs_log_enable_timestamp(
+    bool enabled)
+{
+    bool prev = ecs_os_api.flags_ & EcsOsApiLogWithTimeStamp;
+    ECS_BIT_COND(ecs_os_api.flags_, EcsOsApiLogWithTimeStamp, enabled);
+    return prev;
+}
+
+bool ecs_log_enable_timedelta(
+    bool enabled)
+{
+    bool prev = ecs_os_api.flags_ & EcsOsApiLogWithTimeDelta;
+    ECS_BIT_COND(ecs_os_api.flags_, EcsOsApiLogWithTimeDelta, enabled);
     return prev;
 }
 

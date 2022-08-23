@@ -21,6 +21,10 @@
 extern "C" {
 #endif
 
+/** Convenience macro for rule creation */
+#define ecs_rule(world, ...)\
+    ecs_rule_init(world, &(ecs_filter_desc_t) __VA_ARGS__ )
+
 /** Create a rule.
  * A rule accepts the same descriptor as a filter, but has the additional
  * ability to use query variables.
@@ -55,7 +59,7 @@ extern "C" {
  * 
  * In the query expression syntax, variables are prefixed with a $. When using
  * the descriptor, specify the variable kind:
- *   desc.terms[0].obj = { .name = "X", .var = EcsVarIsVariable }
+ *   desc.terms[0].second = { .name = "X", .var = EcsVarIsVariable }
  * 
  * Different terms with the same variable name are automatically correlated by
  * the query engine.

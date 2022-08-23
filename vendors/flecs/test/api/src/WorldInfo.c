@@ -52,15 +52,15 @@ void WorldInfo_empty_table_count() {
     ecs_entity_t e = ecs_new_id(world);
 
     ecs_add_id(world, e, c);
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
     test_delta(&prev, cur, empty_table_count, 0);
 
     ecs_delete(world, e);
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
     test_delta(&prev, cur, empty_table_count, 1);
 
     ecs_delete(world, c);
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
     test_delta(&prev, cur, empty_table_count, -1);
 
     ecs_fini(world);
@@ -94,7 +94,7 @@ void WorldInfo_trivial_table_count() {
     ecs_remove_pair(world, ecs_id(Position), EcsOnDelete, EcsWildcard);
     ecs_remove_pair(world, ecs_id(Velocity), EcsOnDelete, EcsWildcard);
 
-    ecs_set_component_actions(world, Velocity, {
+    ecs_set_hooks(world, Velocity, {
         .ctor = ecs_default_ctor
     });
 
@@ -294,8 +294,8 @@ void WorldInfo_id_tag_component_count() {
     test_delta(&prev_2, cur, component_id_count, 0);
 
     ecs_add(world, e, Position);
-    test_delta(&prev_1, cur, tag_id_count, -1);
-    test_delta(&prev_2, cur, component_id_count, 1);
+    test_delta(&prev_1, cur, tag_id_count, 0);
+    test_delta(&prev_2, cur, component_id_count, 0);
 
     ecs_delete(world, c_1);
     test_delta(&prev_1, cur, tag_id_count, -1);
@@ -373,7 +373,10 @@ void WorldInfo_id_wildcard_count() {
     test_delta(&prev, cur, wildcard_id_count, -1);
 
     ecs_delete(world, c_3);
-    test_delta(&prev, cur, wildcard_id_count, -2);
+    test_delta(&prev, cur, wildcard_id_count, -1);
+
+    ecs_delete(world, c_2);
+    test_delta(&prev, cur, wildcard_id_count, -1);
 
     ecs_fini(world);
 }

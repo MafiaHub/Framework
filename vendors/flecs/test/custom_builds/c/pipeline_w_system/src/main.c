@@ -5,8 +5,8 @@ typedef struct {
 } Position, Velocity;
 
 void Move(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
     for (int i = 0; i < it->count; i ++) {
         p[i].x += v[i].x;
@@ -20,10 +20,10 @@ int main(int argc, char *argv[]) {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ecs_entity_t s = ecs_system_init(world, &(ecs_system_desc_t) {
+    ecs_entity_t s = ecs_system_init(world, &(ecs_system_desc_t){
+        .entity = ecs_entity(world, { .add = {ecs_dependson(EcsOnUpdate)} }),
         .query.filter.terms = {{ .id = ecs_id(Position) }, { .id = ecs_id(Velocity) }},
-        .callback = Move,
-        .entity.add = { EcsOnUpdate }
+        .callback = Move
     });
     assert(s != 0);
 

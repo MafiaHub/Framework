@@ -6,7 +6,7 @@
 //   Position, Velocity
 //
 // When written out in full, this query looks like:
-//   Position(This), Velocity(This)
+//   Position($This), Velocity($This)
 //
 // "This" is a (builtin) query variable that is unknown before we evaluate the 
 // query. Therefore this query does not test a fact, we can't know which values
@@ -47,8 +47,8 @@ int main(int, char *[]) {
     // entities directly, but then we would have to create a rule for each
     // fact, vs reusing a single rule for multiple facts.
     auto friends = ecs.rule_builder()
-        .term<Likes>().subj().var("X").obj().var("Y")
-        .term<Likes>().subj().var("Y").obj().var("X")
+        .term<Likes>().src().var("X").second().var("Y")
+        .term<Likes>().src().var("Y").second().var("X")
         .build();
 
     int x_var = friends.find_var("X");

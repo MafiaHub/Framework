@@ -4,7 +4,7 @@
 int main(int argc, char *argv[]) {
     ecs_world_t *ecs = ecs_init_w_args(argc, argv);
 
-    // Use convenience macro's to create simple hierarchy of unit types.
+    // Use convenience macros to create simple hierarchy of unit types.
     // This macro call:
     //   ECS_ENTITY(ecs, CombatUnit, (IsA, Unit))
     //
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     ecs_add(ecs, builder_2, Builder);
 
     // Create a rule to find all ranged units
-    ecs_rule_t *r = ecs_rule_init(ecs, &(ecs_filter_desc_t) {
+    ecs_rule_t *r = ecs_rule(ecs, {
         .terms = {{ .id = RangedUnit }}
     });
 

@@ -5,14 +5,14 @@ void Reference_setup() {
 }
 
 void Reference_get_ref() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -21,22 +21,22 @@ void Reference_get_ref() {
 }
 
 void Reference_get_ref_after_add() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     ecs_add(world, e, Velocity);
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -45,7 +45,7 @@ void Reference_get_ref_after_add() {
 }
 
 void Reference_get_ref_after_remove() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -53,15 +53,15 @@ void Reference_get_ref_after_remove() {
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     ecs_add(world, e, Velocity);
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     ecs_remove(world, e, Velocity);
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -70,22 +70,22 @@ void Reference_get_ref_after_remove() {
 }
 
 void Reference_get_ref_after_delete() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t dummy = ecs_new(world, Position);
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     ecs_delete(world, dummy);
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -94,14 +94,14 @@ void Reference_get_ref_after_delete() {
 }
 
 void Reference_get_ref_after_realloc() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -112,7 +112,7 @@ void Reference_get_ref_after_realloc() {
         ecs_new(world, Position);
     }
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -121,14 +121,14 @@ void Reference_get_ref_after_realloc() {
 }
 
 void Reference_get_ref_staged() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -137,14 +137,14 @@ void Reference_get_ref_staged() {
 
     ecs_set(world, e, Position, {30, 40});
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     ecs_defer_end(world);
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 30);
     test_int(p->y, 40);
@@ -153,14 +153,14 @@ void Reference_get_ref_staged() {
 }
 
 void Reference_get_ref_after_new_in_stage() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -171,14 +171,14 @@ void Reference_get_ref_after_new_in_stage() {
 
     ecs_set(world, e, Position, {30, 40});
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     ecs_defer_end(world);
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 30);
     test_int(p->y, 40);
@@ -187,7 +187,7 @@ void Reference_get_ref_after_new_in_stage() {
 }
 
 void Reference_get_ref_monitored() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -195,8 +195,8 @@ void Reference_get_ref_monitored() {
     ecs_entity_t e = ecs_set(world, 0, Position, {10, 20});
     ecs_new_w_pair(world, EcsChildOf, e);
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -205,15 +205,15 @@ void Reference_get_ref_monitored() {
 }
 
 void Reference_get_nonexisting() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
     ecs_entity_t e = ecs_new(world, Position);
     
-    ecs_ref_t ref = {0};
-    const Velocity *p = ecs_get_ref(world, &ref, e, Velocity);
+    ecs_ref_t ref = ecs_ref_init(world, e, Velocity);
+    const Velocity *p = ecs_ref_get(world, &ref, Velocity);
     test_assert(p == NULL);
 
     ecs_fini(world);
@@ -224,11 +224,11 @@ static ECS_MOVE(Position, dst, src, {
 })
 
 void Reference_get_ref_after_realloc_w_lifecycle() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ecs_set(world, ecs_id(Position), EcsComponentLifecycle, {
+    ecs_set_hooks(world, Position, {
         .move = ecs_move(Position)
     });
 
@@ -236,8 +236,8 @@ void Reference_get_ref_after_realloc_w_lifecycle() {
     ECS_ENTITY(world, e2, Position);
     ecs_set(world, e, Position, {10, 20});
     
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -246,10 +246,67 @@ void Reference_get_ref_after_realloc_w_lifecycle() {
         ECS_ENTITY(world, e, Position);
     }
 
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
+
+    ecs_fini(world);
+}
+
+void Reference_get_ref_w_low_id_tag() {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t tag = ecs_component_init(world, &(ecs_component_desc_t){
+        .type.size = 0,
+        .type.alignment = 0
+    });
+
+    ecs_entity_t comp = ecs_component_init(world, &(ecs_component_desc_t){
+        .type.size = 4,
+        .type.alignment = 4
+    });
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add_id(world, e, tag);
+    ecs_add_id(world, e, comp);
+
+    test_assert(ecs_get_id(world, e, comp) != NULL);
+
+    ecs_ref_t ref = ecs_ref_init_id(world, e, comp);
+    test_assert(ecs_ref_get_id(world, &ref, comp) == 
+        ecs_get_id(world, e, comp));
+
+    ecs_fini(world);
+}
+
+void Reference_get_ref_w_low_id_tag_after_add() {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t tag = ecs_component_init(world, &(ecs_component_desc_t){
+        .type.size = 0,
+        .type.alignment = 0
+    });
+
+    ecs_entity_t id = ecs_new_low_id(world);
+
+    ecs_entity_t comp = ecs_component_init(world, &(ecs_component_desc_t){
+        .type.size = 4,
+        .type.alignment = 4
+    });
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add_id(world, e, tag);
+    ecs_add_id(world, e, comp);
+
+    test_assert(ecs_get_id(world, e, comp) != NULL);
+
+    ecs_ref_t ref = ecs_ref_init_id(world, e, comp);
+
+    ecs_add_id(world, e, id);
+
+    test_assert(ecs_ref_get_id(world, &ref, comp) == 
+        ecs_get_id(world, e, comp));
 
     ecs_fini(world);
 }

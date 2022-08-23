@@ -2,174 +2,6 @@
 
 #ifdef FLECS_RULES
 
-#include <stdio.h>
-
-/** Implementation of the rule query engine.
- * 
- * A rule (terminology borrowed from prolog) is a list of constraints that 
- * specify which conditions must be met for an entity to match the rule. While
- * this description matches any kind of ECS query, the rule engine has features
- * that go beyond regular (flecs) ECS queries:
- * 
- * - query for all components of an entity (vs. all entities for a component)
- * - query for all relationship pairs of an entity
- * - support for query variables that are resolved at evaluation time
- * - automatic traversal of transitive relationships
- * 
- * Query terms can have the following forms:
- * 
- * - Component(Subject)
- * - Relation(Subject, Object)
- * 
- * Additionally the query parser supports the following shorthand notations:
- * 
- * - Component             // short for Component(This)
- * - (Relation, Object)    // short for Relation(This, Object)
- * 
- * The subject, or first arugment of a term represents the entity on which the
- * component or relation is matched. By default the subject is set to a builtin
- * This variable, which causes the behavior to match a regular ECS query:
- * 
- * - Position, Velocity
- * 
- * Is equivalent to
- *
- * - Position(This), Velocity(This)
- * 
- * The function of the variable is to ensure that all components are matched on
- * the same entity. Conceptually the query first populates the This variable
- * with all entities that have Position. When the query evaluates the Velocity
- * term, the variable is populated and the entity it contains will be checked
- * for whether it has Velocity.
- * 
- * The actual implementation is more efficient and does not check per-entity.
- * 
- * Custom variables can be used to join parts of different terms. For example, 
- * the following query can be used to find entities with a parent that has a
- * Position component (note that variable names start with a _):
- * 
- * - ChildOf(This, _Parent), Component(_Parent)
- * 
- * The rule engine uses a backtracking algorithm to find the set of entities
- * and variables that match all terms. As soon as the engine finds a term that
- * does not match with the currently evaluated entity, the entity is discarded.
- * When an entity is found for which all terms match, the entity is yielded to
- * the iterator.
- * 
- * While a rule is being evaluated, a variable can either contain a single 
- * entity or a table. The engine will attempt to work with tables as much as
- * possible so entities can be eliminated/yielded in bulk. A rule may store
- * both the table and entity version of a variable and only switch from table to
- * entity when necessary.
- * 
- * The rule engine has an algorithm for computing which variables should be 
- * resolved first. This algorithm works by finding a "root" variable, which is
- * the subject variable that occurs in the term with the least dependencies. The
- * remaining variables are then resolved based on their "distance" from the root
- * with the closest variables being resolved first.
- * 
- * This generally results in an ordering that resolves the variables with the 
- * least dependencies first and the most dependencies last, which is beneficial
- * for two reasons:
- * 
- * - it improves the average performance of all queries
- * - it makes performance less dependent on how an application orders the terms
- * 
- * A possible improvement would be for the query engine to also consider
- * the number of tables that need to be evaluated for each term, as starting
- * with the smallest term reduces the amount of work. Other than static variable
- * analysis however, this can only be determined when the query is executed.
- * 
- * Rules are "compiled" into a set of instructions that encode the operations
- * the query needs to perform in order to find the right set of entities.
- * Operations can either yield data, which progresses the program, or signal
- * that there is no (more) matching data, which discards the current variables.
- * 
- * An operation can yield multiple times, if there are multiple matches for its
- * inputs. Operations are called with a redo flag, which can be either true or
- * false. When redo is true the operation will yield the next result. When redo
- * is false, the operation will reset its state and start from the first result.
- * 
- * Operations can have an input, output and a filter. Most commonly an operation
- * either matches the filter against an input and yields if it matches, or uses
- * the filter to find all matching results and store the result in the output.
- *
- * Variables are resolved by matching a filter against the output of an 
- * operation. When a term contains variables, they are encoded as register ids
- * in the filter. When the filter is evaluated, the most recent values of the
- * register are used to match/lookup the output.
- * 
- * For example, a filter could be (ChildOf, _Parent). When the program starts,
- * the _Parent register is initialized with *, so that when this filter is first
- * evaluated, the operation will find all tables with (ChildOf, *). The _Parent
- * register is then populated by taking the actual value of the table. If the
- * table has type [(ChildOf, Sun)], _Parent will be initialized with Sun.
- * 
- * It is possible that a filter matches multiple times. Consider the filter
- * (Likes, _Food), and a table [(Likes, Apples), (Likes, Pears)]. In this case
- * an operation will yield the table twice, once with _Food=Apples, and once
- * with _Food=Pears.
- * 
- * If a rule contains a term with a transitive relation, it will automatically
- * substitute the parts of the term to find a fact that matches. The following
- * examples illustrate how transitivity is resolved:
- * 
- * Query:
- *   LocatedIn(Bob, SanFrancisco)
- *   
- * Expands to:
- *   LocatedIn(Bob, SanFrancisco:self|subset)
- * 
- * Explanation:
- *   "Is Bob located in San Francisco" - This term is true if Bob is either 
- *   located in San Francisco, or is located in anything that is itself located 
- *   in (a subset of) San Francisco.
- * 
- * 
- * Query:
- *   LocatedIn(Bob, X)
- * 
- * Expands to:
- *   LocatedIn(Bob, X:self|superset)
- * 
- * Explanation:
- *   "Where is Bob located?" - This term recursively returns all places that
- *   Bob is located in, which includes his location and the supersets of his
- *   location. When Bob is located in San Francisco, he is also located in
- *   the United States, North America etc.
- * 
- * 
- * Query:
- *   LocatedIn(X, NorthAmerica)
- * 
- * Expands to:
- *   LocatedIn(X, NorthAmerica:self|subset)
- * 
- * Explanation:
- *   "What is located in North America?" - This term returns everything located
- *   in North America and its subsets, as something located in San Francisco is
- *   located in UnitedStates, which is located in NorthAmerica. 
- * 
- * 
- * Query:
- *   LocatedIn(X, Y)
- * 
- * Expands to:
- *   LocatedIn(X, Y)
- * 
- * Explanation:
- *   "Where is everything located" - This term returns everything that is
- *   located somewhere. No substitution is performed as this would explode the
- *   results while not yielding new information.
- * 
- * 
- * In the above terms, the variable indicates the part of the term that is
- * unknown at evaluation time. In an actual rule the picked strategy depends on
- * whether the variable is known when the term is evaluated. For example, if
- * variable X has been resolved by the time Located(X, Y) is evaluated, the
- * strategy from the LocatedIn(Bob, X) example will be used.
- */
-
 #define ECS_RULE_MAX_VAR_COUNT (32)
 
 #define RULE_PAIR_PREDICATE (1)
@@ -179,19 +11,19 @@
 typedef struct ecs_rule_pair_t {
     union {
         int32_t reg;
-        ecs_entity_t ent;
-    } pred;
+        ecs_entity_t id;
+    } first;
     union {
         int32_t reg;
-        ecs_entity_t ent;
-    } obj;
+        ecs_entity_t id;
+    } second;
     int32_t reg_mask; /* bit 1 = predicate, bit 2 = object */
 
     bool transitive; /* Is predicate transitive */
     bool final;      /* Is predicate final */
     bool reflexive;  /* Is predicate reflexive */
     bool acyclic;    /* Is predicate acyclic */
-    bool obj_0;
+    bool second_0;
 } ecs_rule_pair_t;
 
 /* Filter for evaluating & reifing types and variables. Filters are created ad-
@@ -201,9 +33,9 @@ typedef struct ecs_rule_filter_t {
     ecs_id_t mask;  /* Mask with wildcard in place of variables */
 
     bool wildcard; /* Does the filter contain wildcards */
-    bool pred_wildcard; /* Is predicate a wildcard */
-    bool obj_wildcard; /* Is object a wildcard */
-    bool same_var; /* True if pred & obj are both the same variable */
+    bool first_wildcard; /* Is predicate a wildcard */
+    bool second_wildcard; /* Is object a wildcard */
+    bool same_var; /* True if first & second are both the same variable */
 
     int32_t hi_var; /* If hi part should be stored in var, this is the var id */
     int32_t lo_var; /* If lo part should be stored in var, this is the var id */
@@ -321,9 +153,9 @@ typedef struct ecs_rule_var_t {
 
 /* Variable ids per term */
 typedef struct ecs_rule_term_vars_t {
-    int32_t pred;
-    int32_t subj;
-    int32_t obj;
+    int32_t first;
+    int32_t src;
+    int32_t second;
 } ecs_rule_term_vars_t;
 
 /* Top-level rule datastructure */
@@ -381,14 +213,14 @@ static
 bool subj_is_set(
     ecs_term_t *term)
 {
-    return ecs_term_id_is_set(&term->subj);
+    return ecs_term_id_is_set(&term->src);
 }
 
 static
 bool obj_is_set(
     ecs_term_t *term)
 {
-    return ecs_term_id_is_set(&term->obj) || term->role == ECS_PAIR;
+    return ecs_term_id_is_set(&term->second) || ECS_HAS_ID_FLAG(term->id_flags, PAIR);
 }
 
 static
@@ -521,16 +353,16 @@ static
 const char *term_id_var_name(
     ecs_term_id_t *term_id)
 {
-    if (term_id->var == EcsVarIsVariable) {
+    if (term_id->flags & EcsIsVariable) {
         if (term_id->name) {
             return term_id->name;
-        } else if (term_id->entity == EcsThis) {
+        } else if (term_id->id == EcsThis) {
             return ".";
-        } else if (term_id->entity == EcsWildcard) {
+        } else if (term_id->id == EcsWildcard) {
             return "*";
-        } else if (term_id->entity == EcsAny) {
+        } else if (term_id->id == EcsAny) {
             return "_";
-        } else if (term_id->entity == EcsVariable) {
+        } else if (term_id->id == EcsVariable) {
             return "$";
         } else {
             ecs_check(term_id->name != NULL, ECS_INVALID_PARAMETER, NULL);
@@ -547,8 +379,8 @@ int ensure_term_id_variable(
     ecs_term_t *term,
     ecs_term_id_t *term_id)
 {
-    if (term_id->var == EcsVarIsVariable) {
-        if (term_id->entity == EcsAny) {
+    if (term_id->flags & EcsIsVariable) {
+        if (term_id->id == EcsAny) {
             /* Any variables aren't translated to rule variables since their
              * result isn't stored. */
             return 0;
@@ -579,7 +411,7 @@ static
 bool term_id_is_variable(
     ecs_term_id_t *term_id)
 {
-    return term_id->var == EcsVarIsVariable;
+    return term_id->flags & EcsIsVariable;
 }
 
 /* Get variable from a term identifier */
@@ -588,7 +420,7 @@ ecs_rule_var_t* term_id_to_var(
     ecs_rule_t *rule,
     ecs_term_id_t *id)
 {
-    if (id->var == EcsVarIsVariable) {;
+    if (id->flags & EcsIsVariable) {
         return find_variable(rule, EcsRuleVarKindUnknown, term_id_var_name(id));
     }
     return NULL;
@@ -600,7 +432,7 @@ ecs_rule_var_t* term_pred(
     ecs_rule_t *rule,
     ecs_term_t *term)
 {
-    return term_id_to_var(rule, &term->pred);
+    return term_id_to_var(rule, &term->first);
 }
 
 /* Get variable from a term subject */
@@ -609,7 +441,7 @@ ecs_rule_var_t* term_subj(
     ecs_rule_t *rule,
     ecs_term_t *term)
 {
-    return term_id_to_var(rule, &term->subj);
+    return term_id_to_var(rule, &term->src);
 }
 
 /* Get variable from a term object */
@@ -619,7 +451,7 @@ ecs_rule_var_t* term_obj(
     ecs_term_t *term)
 {
     if (obj_is_set(term)) {
-        return term_id_to_var(rule, &term->obj);
+        return term_id_to_var(rule, &term->second);
     } else {
         return NULL;
     }
@@ -632,7 +464,7 @@ ecs_rule_var_t* pair_pred(
     const ecs_rule_pair_t *pair)
 {
     if (pair->reg_mask & RULE_PAIR_PREDICATE) {
-        return &rule->vars[pair->pred.reg];
+        return &rule->vars[pair->first.reg];
     } else {
         return NULL;
     }
@@ -645,7 +477,7 @@ ecs_rule_var_t* pair_obj(
     const ecs_rule_pair_t *pair)
 {
     if (pair->reg_mask & RULE_PAIR_OBJECT) {
-        return &rule->vars[pair->obj.reg];
+        return &rule->vars[pair->second.reg];
     } else {
         return NULL;
     }
@@ -796,11 +628,11 @@ ecs_entity_t reg_get_entity(
         int32_t offset = regs[r].range.offset;
 
         ecs_assert(regs[r].range.count == 1, ECS_INTERNAL_ERROR, NULL);
-        ecs_data_t *data = &table_reg_get(rule, regs, r).table->storage;
+        ecs_data_t *data = &table_reg_get(rule, regs, r).table->data;
         ecs_assert(data != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_entity_t *entities = ecs_vector_first(data->entities, ecs_entity_t);
+        ecs_entity_t *entities = ecs_storage_first(&data->entities);
         ecs_assert(entities != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_assert(offset < ecs_vector_count(data->entities), 
+        ecs_assert(offset < ecs_storage_count(&data->entities), 
             ECS_INTERNAL_ERROR, NULL);
         ecs_check(ecs_is_valid(rule->world, entities[offset]), 
             ECS_INVALID_PARAMETER, NULL);            
@@ -828,7 +660,7 @@ ecs_table_range_t table_from_entity(
     entity = ecs_get_alive(world, entity);
     
     ecs_table_range_t slice = {0};
-    ecs_record_t *record = ecs_eis_get(world, entity);
+    ecs_record_t *record = flecs_entities_get(world, entity);
     if (record) {
         slice.table = record->table;
         slice.offset = ECS_RECORD_TO_ROW(record->row);
@@ -889,7 +721,7 @@ void reg_set_range(
     if (rule->vars[r].kind == EcsRuleVarKindEntity) {
         ecs_check(range->count == 1, ECS_INTERNAL_ERROR, NULL);
         regs[r].range = *range;
-        regs[r].entity = ecs_vector_get(range->table->storage.entities,
+        regs[r].entity = ecs_storage_get_t(&range->table->data.entities,
             ecs_entity_t, range->offset)[0];
     } else {
         regs[r].range = *range;
@@ -914,29 +746,29 @@ ecs_rule_pair_t term_to_pair(
 
     /* If the predicate id is a variable, find the variable and encode its id
      * in the pair so the operation can find it later. */
-    if (term->pred.var == EcsVarIsVariable) {
-        if (term->pred.entity != EcsAny) {
+    if (term->first.flags & EcsIsVariable) {
+        if (term->first.id != EcsAny) {
             /* Always lookup var as an entity, as pairs never refer to tables */
             const ecs_rule_var_t *var = find_variable(
-                rule, EcsRuleVarKindEntity, term_id_var_name(&term->pred));
+                rule, EcsRuleVarKindEntity, term_id_var_name(&term->first));
 
             /* Variables should have been declared */
             ecs_assert(var != NULL, ECS_INTERNAL_ERROR, NULL);
             ecs_assert(var->kind == EcsRuleVarKindEntity, 
                 ECS_INTERNAL_ERROR, NULL);
-            result.pred.reg = var->id;
+            result.first.reg = var->id;
 
             /* Set flag so the operation can see the predicate is a variable */
             result.reg_mask |= RULE_PAIR_PREDICATE;
             result.final = true;
         } else {
-            result.pred.ent = EcsWildcard;
+            result.first.id = EcsWildcard;
             result.final = true;
         }
     } else {
         /* If the predicate is not a variable, simply store its id. */
-        ecs_entity_t pred_id = term->pred.entity;
-        result.pred.ent = pred_id;
+        ecs_entity_t pred_id = term->first.id;
+        result.first.id = pred_id;
 
         /* Test if predicate is transitive. When evaluating the predicate, this
          * will also take into account transitive relationships */
@@ -960,7 +792,7 @@ ecs_rule_pair_t term_to_pair(
         }
     }
 
-    /* The pair doesn't do anything with the subject (subjects are the things that
+    /* The pair doesn't do anything with the subject (sources are the things that
      * are matched against pairs) so if the column does not have a object, 
      * there is nothing left to do. */
     if (!obj_is_set(term)) {
@@ -971,27 +803,27 @@ ecs_rule_pair_t term_to_pair(
     ecs_assert(obj_is_set(term), ECS_INTERNAL_ERROR, NULL);
 
     /* Same as above, if the object is a variable, store it and flag it */
-    if (term->obj.var == EcsVarIsVariable) {
-        if (term->obj.entity != EcsAny) {
+    if (term->second.flags & EcsIsVariable) {
+        if (term->second.id != EcsAny) {
             const ecs_rule_var_t *var = find_variable(
-                rule, EcsRuleVarKindEntity, term_id_var_name(&term->obj));
+                rule, EcsRuleVarKindEntity, term_id_var_name(&term->second));
 
             /* Variables should have been declared */
             ecs_assert(var != NULL, ECS_INTERNAL_ERROR, 
-                term_id_var_name(&term->obj));
+                term_id_var_name(&term->second));
             ecs_assert(var->kind == EcsRuleVarKindEntity, ECS_INTERNAL_ERROR, 
-                term_id_var_name(&term->obj));
+                term_id_var_name(&term->second));
 
-            result.obj.reg = var->id;
+            result.second.reg = var->id;
             result.reg_mask |= RULE_PAIR_OBJECT;
         } else {
-            result.obj.ent = EcsWildcard;
+            result.second.id = EcsWildcard;
         }
     } else {
         /* If the object is not a variable, simply store its id */
-        result.obj.ent = term->obj.entity;
-        if (!result.obj.ent) {
-            result.obj_0 = true;
+        result.second.id = term->second.id;
+        if (!result.second.id) {
+            result.second_0 = true;
         }
     }
 
@@ -1009,8 +841,8 @@ ecs_rule_filter_t pair_to_filter(
     ecs_rule_op_t *op,
     ecs_rule_pair_t pair)
 {
-    ecs_entity_t pred = pair.pred.ent;
-    ecs_entity_t obj = pair.obj.ent;
+    ecs_entity_t first = pair.first.id;
+    ecs_entity_t second = pair.second.id;
     ecs_rule_filter_t result = {
         .lo_var = -1,
         .hi_var = -1
@@ -1022,40 +854,40 @@ ecs_rule_filter_t pair_to_filter(
     ecs_var_t *regs = get_register_frame(it, op->frame - 1);
 
     if (pair.reg_mask & RULE_PAIR_OBJECT) {
-        obj = entity_reg_get(it->rule, regs, pair.obj.reg);
-        obj = ecs_entity_t_lo(obj); /* Filters don't have generations */
+        second = entity_reg_get(it->rule, regs, pair.second.reg);
+        second = ecs_entity_t_lo(second); /* Filters don't have generations */
 
-        if (obj == EcsWildcard) {
+        if (second == EcsWildcard) {
             result.wildcard = true;
-            result.obj_wildcard = true;
-            result.lo_var = pair.obj.reg;
+            result.second_wildcard = true;
+            result.lo_var = pair.second.reg;
         }
     }
 
     if (pair.reg_mask & RULE_PAIR_PREDICATE) {
-        pred = entity_reg_get(it->rule, regs, pair.pred.reg);
-        pred = ecs_entity_t_lo(pred); /* Filters don't have generations */
+        first = entity_reg_get(it->rule, regs, pair.first.reg);
+        first = ecs_entity_t_lo(first); /* Filters don't have generations */
 
-        if (pred == EcsWildcard) {
+        if (first == EcsWildcard) {
             if (result.wildcard) {
-                result.same_var = pair.pred.reg == pair.obj.reg;
+                result.same_var = pair.first.reg == pair.second.reg;
             }
 
             result.wildcard = true;
-            result.pred_wildcard = true;
+            result.first_wildcard = true;
 
-            if (obj) {
-                result.hi_var = pair.pred.reg;
+            if (second) {
+                result.hi_var = pair.first.reg;
             } else {
-                result.lo_var = pair.pred.reg;
+                result.lo_var = pair.first.reg;
             }
         }
     }
 
-    if (!obj && !pair.obj_0) {
-        result.mask = pred;
+    if (!second && !pair.second_0) {
+        result.mask = first;
     } else {
-        result.mask = ecs_pair(pred, obj);
+        result.mask = ecs_pair(first, second);
     }
 
     return result;
@@ -1080,8 +912,8 @@ void reify_variables(
     (void)vars;
 
     ecs_var_t *regs = get_registers(it, op);
-    ecs_entity_t *elem = ecs_vector_get(type, ecs_entity_t, column);
-    ecs_assert(elem != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(column < type.count, ECS_INTERNAL_ERROR, NULL);
+    ecs_entity_t *elem = &type.array[column];
 
     int32_t obj_var = filter->lo_var;
     int32_t pred_var = filter->hi_var;
@@ -1125,7 +957,7 @@ bool is_subject(
 
 static
 bool skip_term(ecs_term_t *term) {
-    if (term->subj.set.mask & EcsNothing) {
+    if (ecs_term_match_0(term)) {
         return true;
     }
     return false;
@@ -1153,27 +985,27 @@ int32_t crawl_variable(
         if (skip_term(term)) {
             continue;
         }
-        
+
         ecs_rule_var_t 
-        *pred = term_pred(rule, term),
-        *subj = term_subj(rule, term),
-        *obj = term_obj(rule, term);
+        *first = term_pred(rule, term),
+        *src = term_subj(rule, term),
+        *second = term_obj(rule, term);
 
         /* Variable must at least appear once in term */
-        if (var != pred && var != subj && var != obj) {
+        if (var != first && var != src && var != second) {
             continue;
         }
 
-        if (pred && pred != var && !pred->marked) {
-            get_variable_depth(rule, pred, root, recur + 1);
+        if (first && first != var && !first->marked) {
+            get_variable_depth(rule, first, root, recur + 1);
         }
 
-        if (subj && subj != var && !subj->marked) {
-            get_variable_depth(rule, subj, root, recur + 1);
+        if (src && src != var && !src->marked) {
+            get_variable_depth(rule, src, root, recur + 1);
         }
 
-        if (obj && obj != var && !obj->marked) {
-            get_variable_depth(rule, obj, root, recur + 1);
+        if (second && second != var && !second->marked) {
+            get_variable_depth(rule, second, root, recur + 1);
         }
     }
 
@@ -1211,8 +1043,8 @@ static
 int32_t get_depth_from_term(
     ecs_rule_t *rule,
     ecs_rule_var_t *cur,
-    ecs_rule_var_t *pred,
-    ecs_rule_var_t *obj,
+    ecs_rule_var_t *first,
+    ecs_rule_var_t *second,
     ecs_rule_var_t *root,
     int recur)
 {
@@ -1220,13 +1052,13 @@ int32_t get_depth_from_term(
 
     /* If neither of the other parts of the terms are variables, this
      * variable is guaranteed to have no dependencies. */
-    if (!pred && !obj) {
+    if (!first && !second) {
         result = 0;
     } else {
         /* If this is a variable that is not the same as the current, 
          * we can use it to determine dependency depth. */
-        if (pred && cur != pred) {
-            int32_t depth = get_depth_from_var(rule, pred, root, recur);
+        if (first && cur != first) {
+            int32_t depth = get_depth_from_var(rule, first, root, recur);
             if (depth == UINT8_MAX) {
                 return UINT8_MAX;
             }
@@ -1237,9 +1069,9 @@ int32_t get_depth_from_term(
             }
         }
 
-        /* Same for obj */
-        if (obj && cur != obj) {
-            int32_t depth = get_depth_from_var(rule, obj, root, recur);
+        /* Same for second */
+        if (second && cur != second) {
+            int32_t depth = get_depth_from_var(rule, second, root, recur);
             if (depth == UINT8_MAX) {
                 return UINT8_MAX;
             }
@@ -1278,23 +1110,23 @@ int32_t get_variable_depth(
         }
 
         ecs_rule_var_t 
-        *pred = term_pred(rule, term),
-        *subj = term_subj(rule, term),
-        *obj = term_obj(rule, term);
+        *first = term_pred(rule, term),
+        *src = term_subj(rule, term),
+        *second = term_obj(rule, term);
 
-        if (subj != var) {
+        if (src != var) {
             continue;
         }
 
-        if (!is_subject(rule, pred)) {
-            pred = NULL;
+        if (!is_subject(rule, first)) {
+            first = NULL;
         }
 
-        if (!is_subject(rule, obj)) {
-            obj = NULL;
+        if (!is_subject(rule, second)) {
+            second = NULL;
         }
 
-        int32_t depth = get_depth_from_term(rule, var, pred, obj, root, recur);
+        int32_t depth = get_depth_from_term(rule, var, first, second, root, recur);
         if (depth < result) {
             result = depth;
         }
@@ -1306,8 +1138,8 @@ int32_t get_variable_depth(
 
     var->depth = result;    
 
-    /* Dependencies are calculated from subject to (pred, obj). If there were
-     * subjects that are only related by object (like (X, Y), (Z, Y)) it is
+    /* Dependencies are calculated from subject to (first, second). If there were
+     * sources that are only related by object (like (X, Y), (Z, Y)) it is
      * possible that those have not yet been found yet. To make sure those 
      * variables are found, loop again & follow predicate & object links */
     for (i = 0; i < count; i ++) {
@@ -1317,25 +1149,25 @@ int32_t get_variable_depth(
         }
 
         ecs_rule_var_t 
-        *subj = term_subj(rule, term),
-        *pred = term_pred(rule, term),
-        *obj = term_obj(rule, term);
+        *src = term_subj(rule, term),
+        *first = term_pred(rule, term),
+        *second = term_obj(rule, term);
 
-        /* Only evaluate pred & obj for current subject. This ensures that we
+        /* Only evaluate first & second for current subject. This ensures that we
          * won't evaluate variables that are unreachable from the root. This
          * must be detected as unconstrained variables are not allowed. */
-        if (subj != var) {
+        if (src != var) {
             continue;
         }
 
-        crawl_variable(rule, subj, root, recur);
+        crawl_variable(rule, src, root, recur);
 
-        if (pred && pred != var) {
-            crawl_variable(rule, pred, root, recur);
+        if (first && first != var) {
+            crawl_variable(rule, first, root, recur);
         }
 
-        if (obj && obj != var) {
-            crawl_variable(rule, obj, root, recur);
+        if (second && second != var) {
+            crawl_variable(rule, second, root, recur);
         }        
     }
 
@@ -1396,8 +1228,8 @@ int ensure_all_variables(
         }
 
         /* If predicate is a variable, make sure it has been registered */
-        if (term->pred.var == EcsVarIsVariable) {
-            if (ensure_term_id_variable(rule, term, &term->pred) != 0) {
+        if (term->first.flags & EcsIsVariable) {
+            if (ensure_term_id_variable(rule, term, &term->first) != 0) {
                 return -1;
             }
         }
@@ -1405,17 +1237,15 @@ int ensure_all_variables(
         /* If subject is a variable and it is not This, make sure it is 
          * registered as an entity variable. This ensures that the program will
          * correctly return all permutations */
-        if (term->subj.var == EcsVarIsVariable) {
-            if (term->subj.entity != EcsThis) {
-                if (ensure_term_id_variable(rule, term, &term->subj) != 0) {
-                    return -1;
-                }
+        if (!ecs_term_match_this(term)) {
+            if (ensure_term_id_variable(rule, term, &term->src) != 0) {
+                return -1;
             }
         }
 
         /* If object is a variable, make sure it has been registered */
-        if (obj_is_set(term) && (term->obj.var == EcsVarIsVariable)) {
-            if (ensure_term_id_variable(rule, term, &term->obj) != 0) {
+        if (obj_is_set(term) && (term->second.flags & EcsIsVariable)) {
+            if (ensure_term_id_variable(rule, term, &term->second) != 0) {
                 return -1;
             }
         }
@@ -1449,13 +1279,13 @@ int scan_variables(
 
         /* Evaluate the subject. The predicate and object are not evaluated, 
          * since they never can be elected as root. */
-        if (term_id_is_variable(&term->subj)) {
-            const char *subj_name = term_id_var_name(&term->subj);
+        if (term_id_is_variable(&term->src)) {
+            const char *subj_name = term_id_var_name(&term->src);
             
-            ecs_rule_var_t *subj = find_variable(
+            ecs_rule_var_t *src = find_variable(
                 rule, EcsRuleVarKindTable, subj_name);
-            if (!subj) {
-                subj = create_variable(rule, EcsRuleVarKindTable, subj_name);
+            if (!src) {
+                src = create_variable(rule, EcsRuleVarKindTable, subj_name);
                 if (subject_count >= ECS_RULE_MAX_VAR_COUNT) {
                     rule_error(rule, "too many variables in rule");
                     goto error;
@@ -1463,12 +1293,15 @@ int scan_variables(
 
                 /* Make sure that variable name in term array matches with the
                  * rule name. */
-                ecs_os_strset(&term->subj.name, subj->name);
+                if (term->src.id != EcsThis && term->src.id != EcsAny) {
+                    ecs_os_strset(&term->src.name, src->name);
+                    term->src.id = 0;
+                }
             }
 
-            if (++ subj->occurs > max_occur) {
-                max_occur = subj->occurs;
-                max_occur_var = subj->id;
+            if (++ src->occurs > max_occur) {
+                max_occur = src->occurs;
+                max_occur_var = src->id;
             }
         }
     }
@@ -1483,16 +1316,16 @@ int scan_variables(
     for (i = 0; i < term_count; i ++) {
         ecs_term_t *term = &terms[i];
 
-        if (term->subj.var == EcsVarIsEntity) {
+        if (!(term->src.flags & EcsIsVariable)) {
             ecs_rule_var_t 
-            *pred = term_pred(rule, term),
-            *obj = term_obj(rule, term);
+            *first = term_pred(rule, term),
+            *second = term_obj(rule, term);
 
-            if (pred) {
-                pred->depth = 0;
+            if (first) {
+                first->depth = 0;
             }
-            if (obj) {
-                obj->depth = 0;
+            if (second) {
+                second->depth = 0;
             }
         }
     }
@@ -1531,17 +1364,21 @@ int scan_variables(
         }
 
         ecs_rule_var_t 
-        *pred = term_pred(rule, term),
-        *obj = term_obj(rule, term);
+        *first = term_pred(rule, term),
+        *second = term_obj(rule, term);
 
-        if (!pred && term_id_is_variable(&term->pred)) {
+        if (!first && term_id_is_variable(&term->first) && 
+            term->first.id != EcsAny)
+        {
             rule_error(rule, "missing predicate variable '%s'", 
-                term_id_var_name(&term->pred));
+                term_id_var_name(&term->first));
             goto error;
         }
-        if (!obj && term_id_is_variable(&term->obj)) {
+        if (!second && term_id_is_variable(&term->second) && 
+            term->second.id != EcsAny)
+        {
             rule_error(rule, "missing object variable '%s'", 
-                term_id_var_name(&term->obj));
+                term_id_var_name(&term->second));
             goto error;
         }
     }
@@ -1683,7 +1520,7 @@ ecs_rule_var_t* ensure_entity_written(
         return NULL;
     }
 
-    /* Ensure we're working with the most specific version of subj we can get */
+    /* Ensure we're working with the most specific version of src we can get */
     ecs_rule_var_t *evar = ensure_most_specific_var(rule, var, written);
 
     /* The post condition of this function is that there is an entity variable,
@@ -1721,15 +1558,15 @@ ecs_rule_op_t* insert_operation(
          * but an operation should never overwrite an entity variable if the 
          * corresponding table variable has already been resolved. */
         if (pair.reg_mask & RULE_PAIR_PREDICATE) {
-            ecs_rule_var_t *pred = &rule->vars[pair.pred.reg];
-            pred = get_most_specific_var(rule, pred, written);
-            pair.pred.reg = pred->id;
+            ecs_rule_var_t *first = &rule->vars[pair.first.reg];
+            first = get_most_specific_var(rule, first, written);
+            pair.first.reg = first->id;
         }
 
         if (pair.reg_mask & RULE_PAIR_OBJECT) {
-            ecs_rule_var_t *obj = &rule->vars[pair.obj.reg];
-            obj = get_most_specific_var(rule, obj, written);
-            pair.obj.reg = obj->id;
+            ecs_rule_var_t *second = &rule->vars[pair.second.reg];
+            second = get_most_specific_var(rule, second, written);
+            pair.second.reg = second->id;
         }
     } else {
         /* Not all operations have a filter (like Each) */
@@ -1813,8 +1650,8 @@ void insert_reflexive_set(
 {
     ecs_assert(out != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_rule_var_t *pred = pair_pred(rule, &pair);
-    ecs_rule_var_t *obj = pair_obj(rule, &pair);
+    ecs_rule_var_t *first = pair_pred(rule, &pair);
+    ecs_rule_var_t *second = pair_obj(rule, &pair);
 
     int32_t setjmp_lbl = rule->operation_count;
     int32_t store_lbl = setjmp_lbl + 1;
@@ -1867,21 +1704,21 @@ void insert_reflexive_set(
         store->r_out = out->id;
         store->term = c;
 
-        if (!pred) {
-            store->filter.pred = pair.pred;
+        if (!first) {
+            store->filter.first = pair.first;
         } else {
-            store->filter.pred.reg = pred->id;
+            store->filter.first.reg = first->id;
             store->filter.reg_mask |= RULE_PAIR_PREDICATE;
         }
 
         /* If the object of the filter is not a variable, store literal */
-        if (!obj) {
+        if (!second) {
             store->r_in = UINT8_MAX;
-            store->subject = ecs_get_alive(rule->world, pair.obj.ent);
-            store->filter.obj = pair.obj;
+            store->subject = ecs_get_alive(rule->world, pair.second.id);
+            store->filter.second = pair.second;
         } else {
-            store->r_in = obj->id;
-            store->filter.obj.reg = obj->id;
+            store->r_in = second->id;
+            store->filter.second.reg = second->id;
             store->filter.reg_mask |= RULE_PAIR_OBJECT;
         }
     }
@@ -1895,17 +1732,17 @@ void insert_reflexive_set(
     set->term = c;
 
     /* Predicate can be a variable if it's non-final */
-    if (!pred) {
-        set->filter.pred = pair.pred;
+    if (!first) {
+        set->filter.first = pair.first;
     } else {
-        set->filter.pred.reg = pred->id;
+        set->filter.first.reg = first->id;
         set->filter.reg_mask |= RULE_PAIR_PREDICATE;
     }
 
-    if (!obj) {
-        set->filter.obj = pair.obj;
+    if (!second) {
+        set->filter.second = pair.second;
     } else {
-        set->filter.obj.reg = obj->id;
+        set->filter.second.reg = second->id;
         set->filter.reg_mask |= RULE_PAIR_OBJECT;
     }
 
@@ -1936,17 +1773,13 @@ ecs_rule_var_t* store_reflexive_set(
     bool reflexive,
     bool as_entity)
 {
-    /* Ensure we're using the most specific version of obj */
-    ecs_rule_var_t *obj = pair_obj(rule, pair);
-    if (obj) {
-        pair->obj.reg = obj->id;
+    /* Ensure we're using the most specific version of second */
+    ecs_rule_var_t *second = pair_obj(rule, pair);
+    if (second) {
+        pair->second.reg = second->id;
     }
 
-    /* The subset operation returns tables */
     ecs_rule_var_kind_t var_kind = EcsRuleVarKindTable;
-    if (op_kind == EcsSuperSet) {
-        var_kind = EcsRuleVarKindEntity;
-    }
 
     /* Create anonymous variable for storing the set */
     ecs_rule_var_t *av = create_anonymous_variable(rule, var_kind);
@@ -1990,12 +1823,12 @@ bool is_pair_known(
     bool *written)
 {
     ecs_rule_var_t *pred_var = pair_pred(rule, pair);
-    if (!is_known(pred_var, written) || pair->pred.ent == EcsWildcard) {
+    if (!is_known(pred_var, written) || pair->first.id == EcsWildcard) {
         return false;
     }
 
     ecs_rule_var_t *obj_var = pair_obj(rule, pair);
-    if (!is_known(obj_var, written) || pair->obj.ent == EcsWildcard) {
+    if (!is_known(obj_var, written) || pair->second.id == EcsWildcard) {
         return false;
     }
 
@@ -2014,7 +1847,7 @@ void set_input_to_subj(
     op->has_in = true;
     if (!var) {
         op->r_in = UINT8_MAX;
-        op->subject = term->subj.entity;
+        op->subject = term->src.id;
 
         /* Invalid entities should have been caught during parsing */
         ecs_assert(ecs_is_valid(rule->world, op->subject), 
@@ -2036,7 +1869,7 @@ void set_output_to_subj(
     op->has_out = true;
     if (!var) {
         op->r_out = UINT8_MAX;
-        op->subject = term->subj.entity;
+        op->subject = term->src.id;
 
         /* Invalid entities should have been caught during parsing */
         ecs_assert(ecs_is_valid(rule->world, op->subject), 
@@ -2051,7 +1884,7 @@ void insert_select_or_with(
     ecs_rule_t *rule,
     int32_t c,
     ecs_term_t *term,
-    ecs_rule_var_t *subj,
+    ecs_rule_var_t *src,
     ecs_rule_pair_t *pair,
     bool *written)
 {
@@ -2059,9 +1892,9 @@ void insert_select_or_with(
     bool eval_subject_supersets = false;
 
     /* Find any entity and/or table variables for subject */
-    ecs_rule_var_t *tvar = NULL, *evar = to_entity(rule, subj), *var = evar;
-    if (subj && subj->kind == EcsRuleVarKindTable) {
-        tvar = subj;
+    ecs_rule_var_t *tvar = NULL, *evar = to_entity(rule, src), *var = evar;
+    if (src && src->kind == EcsRuleVarKindTable) {
+        tvar = src;
         if (!evar) {
             var = tvar;
         }
@@ -2076,50 +1909,53 @@ void insert_select_or_with(
     }
 
     /* Only insert implicit IsA if filter isn't already an IsA */
-    if (!filter.transitive || filter.pred.ent != EcsIsA) {
+    if ((!filter.transitive || filter.first.id != EcsIsA) && term->oper != EcsNot) {
         if (!var) {
             ecs_rule_pair_t isa_pair = {
-                .pred.ent = EcsIsA,
-                .obj.ent = term->subj.entity
+                .first.id = EcsIsA,
+                .second.id = term->src.id
             };
 
-            evar = subj = store_reflexive_set(rule, EcsRuleSuperSet, &isa_pair, 
+            evar = src = store_reflexive_set(rule, EcsRuleSuperSet, &isa_pair, 
                 written, true, true);
             tvar = NULL;
             eval_subject_supersets = true;
 
-        } else if (ecs_id_is_wildcard(term->id)) {
-            ecs_assert(subj != NULL, ECS_INTERNAL_ERROR, NULL);
+        } else if (ecs_id_is_wildcard(term->id) && 
+            ECS_PAIR_FIRST(term->id) != EcsThis &&
+            ECS_PAIR_SECOND(term->id) != EcsThis)
+        {
+            ecs_assert(src != NULL, ECS_INTERNAL_ERROR, NULL);
 
             op = insert_operation(rule, -1, written);
 
-            if (!is_known(subj, written)) {
+            if (!is_known(src, written)) {
                 op->kind = EcsRuleSelect;
-                set_output_to_subj(rule, op, term, subj);
-                written[subj->id] = true;
+                set_output_to_subj(rule, op, term, src);
+                written[src->id] = true;
             } else {
                 op->kind = EcsRuleWith;
-                set_input_to_subj(rule, op, term, subj);
+                set_input_to_subj(rule, op, term, src);
             }
 
             ecs_rule_pair_t isa_pair = {
-                .pred.ent = EcsIsA,
-                .obj.reg = subj->id,
+                .first.id = EcsIsA,
+                .second.reg = src->id,
                 .reg_mask = RULE_PAIR_OBJECT
             };
 
             op->filter = filter;
             if (op->filter.reg_mask & RULE_PAIR_PREDICATE) {
-                op->filter.pred.ent = EcsWildcard;
+                op->filter.first.id = EcsWildcard;
             }
             if (op->filter.reg_mask & RULE_PAIR_OBJECT) {
-                op->filter.obj.ent = EcsWildcard;
+                op->filter.second.id = EcsWildcard;
             }
             op->filter.reg_mask = 0;
 
             push_frame(rule);
 
-            tvar = subj = store_reflexive_set(rule, EcsRuleSuperSet, &isa_pair, 
+            tvar = src = store_reflexive_set(rule, EcsRuleSuperSet, &isa_pair, 
                 written, true, false);
 
             evar = NULL;
@@ -2147,25 +1983,25 @@ void insert_select_or_with(
     if (evar && is_known(evar, written)) {
         op->kind = EcsRuleWith;
         op->r_in = evar->id;
-        set_input_to_subj(rule, op, term, subj);
+        set_input_to_subj(rule, op, term, src);
 
     /* If table variable is known and resolved, create with for it */
     } else if (tvar && is_known(tvar, written)) {
         op->kind = EcsRuleWith;
         op->r_in = tvar->id;
-        set_input_to_subj(rule, op, term, subj);
+        set_input_to_subj(rule, op, term, src);
 
     /* If subject is neither table nor entitiy, with operates on literal */        
     } else if (!tvar && !evar) {
         op->kind = EcsRuleWith;
-        set_input_to_subj(rule, op, term, subj);
+        set_input_to_subj(rule, op, term, src);
 
     /* If subject is table or entity but not known, use select */
     } else {
-        ecs_assert(subj != NULL, ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(src != NULL, ECS_INTERNAL_ERROR, NULL);
         op->kind = EcsRuleSelect;
-        set_output_to_subj(rule, op, term, subj);
-        written[subj->id] = true;
+        set_output_to_subj(rule, op, term, src);
+        written[src->id] = true;
     }
 
     /* If supersets of subject are being evaluated, and we're looking for a
@@ -2181,11 +2017,11 @@ void insert_select_or_with(
     }
 
     if (op->filter.reg_mask & RULE_PAIR_PREDICATE) {
-        written[op->filter.pred.reg] = true;
+        written[op->filter.first.reg] = true;
     }
 
     if (op->filter.reg_mask & RULE_PAIR_OBJECT) {
-        written[op->filter.obj.reg] = true;
+        written[op->filter.second.reg] = true;
     }
 }
 
@@ -2201,18 +2037,18 @@ void prepare_predicate(
      * that the predicate can be used in an IsA query */
     if (!pair->final) {
         ecs_rule_pair_t isa_pair = {
-            .pred.ent = EcsIsA,
-            .obj.ent = pair->pred.ent
+            .first.id = EcsIsA,
+            .second.id = pair->first.id
         };
 
-        ecs_rule_var_t *pred = store_reflexive_set(rule, EcsRuleSubSet, 
+        ecs_rule_var_t *first = store_reflexive_set(rule, EcsRuleSubSet, 
             &isa_pair, written, true, true);
 
-        pair->pred.reg = pred->id;
+        pair->first.reg = first->id;
         pair->reg_mask |= RULE_PAIR_PREDICATE;
 
         if (term != -1) {
-            rule->term_vars[term].pred = pred->id;
+            rule->term_vars[term].first = first->id;
         }
     }
 }
@@ -2226,66 +2062,66 @@ void insert_term_2(
     bool *written)
 {
     int32_t subj_id = -1, obj_id = -1;
-    ecs_rule_var_t *subj = term_subj(rule, term);
-    if ((subj = get_most_specific_var(rule, subj, written))) {
-        subj_id = subj->id;
+    ecs_rule_var_t *src = term_subj(rule, term);
+    if ((src = get_most_specific_var(rule, src, written))) {
+        subj_id = src->id;
     }
 
-    ecs_rule_var_t *obj = term_obj(rule, term);
-    if ((obj = get_most_specific_var(rule, obj, written))) {
-        obj_id = obj->id;
+    ecs_rule_var_t *second = term_obj(rule, term);
+    if ((second = get_most_specific_var(rule, second, written))) {
+        obj_id = second->id;
     }
 
-    bool subj_known = is_known(subj, written);
+    bool subj_known = is_known(src, written);
     bool same_obj_subj = false;
-    if (subj && obj) {
-        same_obj_subj = !ecs_os_strcmp(subj->name, obj->name);
+    if (src && second) {
+        same_obj_subj = !ecs_os_strcmp(src->name, second->name);
     }
 
     if (!filter->transitive) {
-        insert_select_or_with(rule, c, term, subj, filter, written);
-        if (subj) subj = &rule->vars[subj_id];
-        if (obj) obj = &rule->vars[obj_id];
+        insert_select_or_with(rule, c, term, src, filter, written);
+        if (src) src = &rule->vars[subj_id];
+        if (second) second = &rule->vars[obj_id];
 
     } else if (filter->transitive) {
         if (subj_known) {
-            if (is_known(obj, written)) {
-                if (filter->obj.ent != EcsWildcard) {
+            if (is_known(second, written)) {
+                if (filter->second.id != EcsWildcard) {
                     ecs_rule_var_t *obj_subsets = store_reflexive_set(
                         rule, EcsRuleSubSet, filter, written, true, true);
 
-                    if (subj) {
-                        subj = &rule->vars[subj_id];
+                    if (src) {
+                        src = &rule->vars[subj_id];
                     }
 
-                    rule->term_vars[c].obj = obj_subsets->id;
+                    rule->term_vars[c].second = obj_subsets->id;
 
                     ecs_rule_pair_t pair = *filter;
-                    pair.obj.reg = obj_subsets->id;
+                    pair.second.reg = obj_subsets->id;
                     pair.reg_mask |= RULE_PAIR_OBJECT;
 
-                    insert_select_or_with(rule, c, term, subj, &pair, written);
+                    insert_select_or_with(rule, c, term, src, &pair, written);
                 } else {
-                    insert_select_or_with(rule, c, term, subj, filter, written);
+                    insert_select_or_with(rule, c, term, src, filter, written);
                 }
             } else {
-                ecs_assert(obj != NULL, ECS_INTERNAL_ERROR, NULL);
+                ecs_assert(second != NULL, ECS_INTERNAL_ERROR, NULL);
 
                 /* If subject is literal, find supersets for subject */
-                if (subj == NULL || subj->kind == EcsRuleVarKindEntity) {
-                    obj = to_entity(rule, obj);
+                if (src == NULL || src->kind == EcsRuleVarKindEntity) {
+                    second = to_entity(rule, second);
 
                     ecs_rule_pair_t set_pair = *filter;
                     set_pair.reg_mask &= RULE_PAIR_PREDICATE;
 
-                    if (subj) {
-                        set_pair.obj.reg = subj->id;
+                    if (src) {
+                        set_pair.second.reg = src->id;
                         set_pair.reg_mask |= RULE_PAIR_OBJECT;
                     } else {
-                        set_pair.obj.ent = term->subj.entity;
+                        set_pair.second.id = term->src.id;
                     }
 
-                    insert_reflexive_set(rule, EcsRuleSuperSet, obj, set_pair, 
+                    insert_reflexive_set(rule, EcsRuleSuperSet, second, set_pair, 
                         c, written, filter->reflexive);
 
                 /* If subject is variable, first find matching pair for the 
@@ -2294,105 +2130,105 @@ void insert_term_2(
                     ecs_rule_var_t *av = create_anonymous_variable(
                         rule, EcsRuleVarKindEntity);
 
-                    subj = &rule->vars[subj_id];
-                    obj = &rule->vars[obj_id];
-                    obj = to_entity(rule, obj);
+                    src = &rule->vars[subj_id];
+                    second = &rule->vars[obj_id];
+                    second = to_entity(rule, second);
 
                     ecs_rule_pair_t set_pair = *filter;
-                    set_pair.obj.reg = av->id;
+                    set_pair.second.reg = av->id;
                     set_pair.reg_mask |= RULE_PAIR_OBJECT;
 
-                    /* Insert with to find initial object for relation */
+                    /* Insert with to find initial object for relationship */
                     insert_select_or_with(
-                        rule, c, term, subj, &set_pair, written);
+                        rule, c, term, src, &set_pair, written);
 
                     push_frame(rule);
 
                     /* Find supersets for returned initial object. Make sure
                      * this is always reflexive since it needs to return the
                      * object from the pair that the entity has itself. */
-                    insert_reflexive_set(rule, EcsRuleSuperSet, obj, set_pair, 
+                    insert_reflexive_set(rule, EcsRuleSuperSet, second, set_pair, 
                         c, written, true);
                 }
             }
 
-        /* subj is not known */
+        /* src is not known */
         } else {
-            ecs_assert(subj != NULL, ECS_INTERNAL_ERROR, NULL);
+            ecs_assert(src != NULL, ECS_INTERNAL_ERROR, NULL);
 
-            if (is_known(obj, written)) {
+            if (is_known(second, written)) {
                 ecs_rule_pair_t set_pair = *filter;
                 set_pair.reg_mask &= RULE_PAIR_PREDICATE; /* clear object mask */
 
-                if (obj) {
-                    set_pair.obj.reg = obj->id;
+                if (second) {
+                    set_pair.second.reg = second->id;
                     set_pair.reg_mask |= RULE_PAIR_OBJECT;
                 } else {
-                    set_pair.obj.ent = term->obj.entity;
+                    set_pair.second.id = term->second.id;
                 }
 
-                if (obj) {
-                    rule->term_vars[c].obj = obj->id;
+                if (second) {
+                    rule->term_vars[c].second = second->id;
                 } else {
                     ecs_rule_var_t *av = create_anonymous_variable(rule,
                         EcsRuleVarKindEntity);
-                    rule->term_vars[c].obj = av->id;
+                    rule->term_vars[c].second = av->id;
                     written[av->id] = true;
                 }
 
-                insert_reflexive_set(rule, EcsRuleSubSet, subj, set_pair, c, 
+                insert_reflexive_set(rule, EcsRuleSubSet, src, set_pair, c, 
                     written, filter->reflexive);
-            } else if (subj == obj) {
-                insert_select_or_with(rule, c, term, subj, filter, written);
+            } else if (src == second) {
+                insert_select_or_with(rule, c, term, src, filter, written);
             } else {
-                ecs_assert(obj != NULL, ECS_INTERNAL_ERROR, NULL);
+                ecs_assert(second != NULL, ECS_INTERNAL_ERROR, NULL);
 
                 ecs_rule_var_t *av = NULL;
                 if (!filter->reflexive) {
                     av = create_anonymous_variable(rule, EcsRuleVarKindEntity);
                 }
 
-                subj = &rule->vars[subj_id];
-                obj = &rule->vars[obj_id];
-                obj = to_entity(rule, obj);
+                src = &rule->vars[subj_id];
+                second = &rule->vars[obj_id];
+                second = to_entity(rule, second);
 
-                /* Insert instruction to find all subjects and objects */
+                /* Insert instruction to find all sources and objects */
                 ecs_rule_op_t *op = insert_operation(rule, -1, written);
                 op->kind = EcsRuleSelect;
-                set_output_to_subj(rule, op, term, subj);
-                op->filter.pred = filter->pred;
+                set_output_to_subj(rule, op, term, src);
+                op->filter.first = filter->first;
 
                 if (filter->reflexive) {
-                    op->filter.obj.ent = EcsWildcard;
+                    op->filter.second.id = EcsWildcard;
                     op->filter.reg_mask = filter->reg_mask & RULE_PAIR_PREDICATE;
                 } else {
-                    op->filter.obj.reg = av->id;
+                    op->filter.second.reg = av->id;
                     op->filter.reg_mask = filter->reg_mask | RULE_PAIR_OBJECT;
                     written[av->id] = true;
                 }
 
-                written[subj->id] = true;
+                written[src->id] = true;
 
                 /* Create new frame for operations that create reflexive set */
                 push_frame(rule);
 
                 /* Insert superset instruction to find all supersets */
                 if (filter->reflexive) {
-                    subj = ensure_most_specific_var(rule, subj, written);
-                    ecs_assert(subj->kind == EcsRuleVarKindEntity, 
+                    src = ensure_most_specific_var(rule, src, written);
+                    ecs_assert(src->kind == EcsRuleVarKindEntity, 
                         ECS_INTERNAL_ERROR, NULL);
-                    ecs_assert(written[subj->id] == true,
+                    ecs_assert(written[src->id] == true,
                         ECS_INTERNAL_ERROR, NULL);
 
                     ecs_rule_pair_t super_filter = {0};
-                    super_filter.pred = filter->pred;
-                    super_filter.obj.reg = subj->id;
+                    super_filter.first = filter->first;
+                    super_filter.second.reg = src->id;
                     super_filter.reg_mask = filter->reg_mask | RULE_PAIR_OBJECT;
 
-                    insert_reflexive_set(rule, EcsRuleSuperSet, obj, 
+                    insert_reflexive_set(rule, EcsRuleSuperSet, second, 
                         super_filter, c, written, true);
                 } else {
-                    insert_reflexive_set(rule, EcsRuleSuperSet, obj, 
+                    insert_reflexive_set(rule, EcsRuleSuperSet, second, 
                         op->filter, c, written, true);
                 }
             }
@@ -2400,12 +2236,12 @@ void insert_term_2(
     }
 
     if (same_obj_subj) {
-        /* Can't have relation with same variables that is acyclic and not
+        /* Can't have relationship with same variables that is acyclic and not
          * reflexive, this should've been caught earlier. */
         ecs_assert(!filter->acyclic || filter->reflexive, 
             ECS_INTERNAL_ERROR, NULL);
 
-        /* If relation is reflexive and entity has an instance of R, no checks
+        /* If relationship is reflexive and entity has an instance of R, no checks
          * are needed because R(X, X) is always true. */
         if (!filter->reflexive) {
             push_frame(rule);
@@ -2413,17 +2249,17 @@ void insert_term_2(
             /* Insert check if the (R, X) pair that was found matches with one
              * of the entities in the table with the pair. */
             ecs_rule_op_t *op = insert_operation(rule, -1, written);
-            obj = get_most_specific_var(rule, obj, written);
-            ecs_assert(obj->kind == EcsRuleVarKindEntity, 
+            second = get_most_specific_var(rule, second, written);
+            ecs_assert(second->kind == EcsRuleVarKindEntity, 
                 ECS_INTERNAL_ERROR, NULL);
-            ecs_assert(written[subj->id] == true, ECS_INTERNAL_ERROR, NULL);
-            ecs_assert(written[obj->id] == true, ECS_INTERNAL_ERROR, NULL);
+            ecs_assert(written[src->id] == true, ECS_INTERNAL_ERROR, NULL);
+            ecs_assert(written[second->id] == true, ECS_INTERNAL_ERROR, NULL);
             
-            set_input_to_subj(rule, op, term, subj);
-            op->filter.obj.reg = obj->id;
+            set_input_to_subj(rule, op, term, src);
+            op->filter.second.reg = second->id;
             op->filter.reg_mask = RULE_PAIR_OBJECT;
 
-            if (subj->kind == EcsRuleVarKindTable) {
+            if (src->kind == EcsRuleVarKindTable) {
                 op->kind = EcsRuleInTable;
             } else {
                 op->kind = EcsRuleEq;
@@ -2440,9 +2276,9 @@ void insert_term_1(
     int32_t c,
     bool *written)
 {
-    ecs_rule_var_t *subj = term_subj(rule, term);
-    subj = get_most_specific_var(rule, subj, written);
-    insert_select_or_with(rule, c, term, subj, filter, written);
+    ecs_rule_var_t *src = term_subj(rule, term);
+    src = get_most_specific_var(rule, src, written);
+    insert_select_or_with(rule, c, term, src, filter, written);
 }
 
 static
@@ -2550,8 +2386,8 @@ void compile_program(
             continue;
         }
 
-        ecs_rule_var_t* subj = term_subj(rule, term);
-        if (subj) {
+        ecs_rule_var_t* src = term_subj(rule, term);
+        if (src) {
             continue;
         }
 
@@ -2576,8 +2412,8 @@ void compile_program(
             }
 
             /* Only process columns for which variable is subject */
-            ecs_rule_var_t* subj = term_subj(rule, term);
-            if (subj != var) {
+            ecs_rule_var_t* src = term_subj(rule, term);
+            if (src != var) {
                 continue;
             }
 
@@ -2609,7 +2445,7 @@ void compile_program(
         insert_term(rule, term, c, written);
     }
 
-    /* Verify all subject variables have been written. Subject variables are of
+    /* Verify all subject variables have been written. Source variables are of
      * the table type, and a select/subset should have been inserted for each */
     for (v = 0; v < rule->subj_var_count; v ++) {
         if (!written[v]) {
@@ -2746,7 +2582,7 @@ int32_t find_term_var_id(
             /* If this is Any look for table variable. Since Any is only
              * required to return a single result, there is no need to 
              * insert an each instruction for a matching table. */
-            if (term_id->entity == EcsAny) {
+            if (term_id->id == EcsAny) {
                 var = find_variable(
                     rule, EcsRuleVarKindTable, var_name);
                 if (var) {
@@ -2761,13 +2597,15 @@ int32_t find_term_var_id(
 
 ecs_rule_t* ecs_rule_init(
     ecs_world_t *world,
-    const ecs_filter_desc_t *desc)
+    const ecs_filter_desc_t *const_desc)
 {
     ecs_rule_t *result = ecs_poly_new(ecs_rule_t);
 
-    /* Parse the signature expression. This initializes the columns array which
-     * contains the information about which components/pairs are requested. */
-    if (ecs_filter_init(world, &result->filter, desc)) {
+    /* Initialize the query */
+    ecs_filter_desc_t desc = *const_desc;
+    desc.storage = &result->filter; /* Use storage of rule */
+    result->filter = ECS_FILTER_INIT;
+    if (ecs_filter_init(world, &desc) == NULL) {
         goto error;
     }
 
@@ -2794,6 +2632,23 @@ ecs_rule_t* ecs_rule_init(
         goto error;
     }
 
+    /* Translate terms with a Not operator and Wildcard to Any, as we don't need
+     * implicit variables for those */
+    for (i = 0; i < term_count; i ++) {
+        ecs_term_t *term = &terms[i];
+        if (term->oper == EcsNot) {
+            if (term->first.id == EcsWildcard) {
+                term->first.id = EcsAny;
+            }
+            if (term->src.id == EcsWildcard) {
+                term->src.id = EcsAny;
+            }
+            if (term->second.id == EcsWildcard) {
+                term->second.id = EcsAny;
+            }
+        }
+    }
+
     /* Find all variables & resolve dependencies */
     if (scan_variables(result) != 0) {
         goto error;
@@ -2803,9 +2658,9 @@ ecs_rule_t* ecs_rule_init(
     for (i = 0; i < term_count; i ++) {
         ecs_term_t *term = &terms[i];
         ecs_rule_term_vars_t *vars = &result->term_vars[i];
-        vars->pred = find_term_var_id(result, &term->pred);
-        vars->subj = find_term_var_id(result, &term->subj);
-        vars->obj = find_term_var_id(result, &term->obj);
+        vars->first = find_term_var_id(result, &term->first);
+        vars->src = find_term_var_id(result, &term->src);
+        vars->second = find_term_var_id(result, &term->second);
     }
 
     /* Generate the opcode array */
@@ -2875,28 +2730,28 @@ char* ecs_rule_str(
     for (i = 1; i < count; i ++) {
         ecs_rule_op_t *op = &rule->operations[i];
         ecs_rule_pair_t pair = op->filter;
-        ecs_entity_t pred = pair.pred.ent;
-        ecs_entity_t obj = pair.obj.ent;
+        ecs_entity_t first = pair.first.id;
+        ecs_entity_t second = pair.second.id;
         const char *pred_name = NULL, *obj_name = NULL;
         char *pred_name_alloc = NULL, *obj_name_alloc = NULL;
 
         if (pair.reg_mask & RULE_PAIR_PREDICATE) {
             ecs_assert(rule->vars != NULL, ECS_INTERNAL_ERROR, NULL);
-            ecs_rule_var_t *type_var = &rule->vars[pair.pred.reg];
+            ecs_rule_var_t *type_var = &rule->vars[pair.first.reg];
             pred_name = type_var->name;
-        } else if (pred) {
-            pred_name_alloc = ecs_get_fullpath(world, ecs_get_alive(world, pred));
+        } else if (first) {
+            pred_name_alloc = ecs_get_fullpath(world, ecs_get_alive(world, first));
             pred_name = pred_name_alloc;
         }
 
         if (pair.reg_mask & RULE_PAIR_OBJECT) {
             ecs_assert(rule->vars != NULL, ECS_INTERNAL_ERROR, NULL);
-            ecs_rule_var_t *obj_var = &rule->vars[pair.obj.reg];
+            ecs_rule_var_t *obj_var = &rule->vars[pair.second.reg];
             obj_name = obj_var->name;
-        } else if (obj) {
-            obj_name_alloc = ecs_get_fullpath(world, ecs_get_alive(world, obj));
+        } else if (second) {
+            obj_name_alloc = ecs_get_fullpath(world, ecs_get_alive(world, second));
             obj_name = obj_name_alloc;
-        } else if (pair.obj_0) {
+        } else if (pair.second_0) {
             obj_name = "0";
         }
 
@@ -2983,7 +2838,7 @@ char* ecs_rule_str(
             if (!pred_name) {
                 pred_name = "-";
             }
-            if (!obj_name && !pair.obj_0) {
+            if (!obj_name && !pair.second_0) {
                 ecs_os_sprintf(filter_expr, "(%s)", pred_name);
             } else {
                 ecs_os_sprintf(filter_expr, "(%s, %s)", pred_name, obj_name);
@@ -3103,16 +2958,17 @@ ecs_iter_t ecs_rule_iter(
 
     result.variable_names = (char**)rule->var_names;
     result.variable_count = rule->var_count;
-    result.term_count = rule->filter.term_count;
+    result.field_count = rule->filter.term_count;
     result.terms = rule->filter.terms;
     result.next = ecs_rule_next;
     result.fini = ecs_rule_iter_free;
-    result.flags |= EcsIterIsFilter * (rule->filter.filter == true);
+    ECS_BIT_COND(result.flags, EcsIterIsFilter, 
+        ECS_BIT_IS_SET(rule->filter.flags, EcsFilterIsFilter));
 
     flecs_iter_init(&result, 
         flecs_iter_cache_ids |
         /* flecs_iter_cache_columns | provided by rule iterator */
-        flecs_iter_cache_subjects |
+        flecs_iter_cache_sources |
         flecs_iter_cache_sizes |
         flecs_iter_cache_ptrs |
         /* flecs_iter_cache_match_indices | not necessary for iteration */
@@ -3141,12 +2997,12 @@ int32_t find_next_same_var(
         ECS_INTERNAL_ERROR, NULL);
     (void)pattern;
     
-    /* Keep scanning for an id where rel and obj are the same */
-    ecs_id_t *ids = ecs_vector_first(type, ecs_id_t);
-    int32_t i, count = ecs_vector_count(type);
+    /* Keep scanning for an id where rel and second are the same */
+    ecs_id_t *ids = type.array;
+    int32_t i, count = type.count;
     for (i = column + 1; i < count; i ++) {
         ecs_id_t id = ids[i];
-        if (!ECS_HAS_ROLE(id, PAIR)) {
+        if (!ECS_HAS_ID_FLAG(id, PAIR)) {
             /* If id is not a pair, this will definitely not match, and we
              * will find no further matches. */
             return -1;
@@ -3158,7 +3014,7 @@ int32_t find_next_same_var(
         }
     }
 
-    /* No pairs found with same rel/obj */
+    /* No pairs found with same rel/second */
     return -1;
 }
 
@@ -3175,7 +3031,7 @@ int32_t find_next_column(
     ecs_type_t type = table->type;
 
     if (column == -1) {
-        ecs_table_record_t *tr = flecs_get_table_record(world, table, pattern);
+        ecs_table_record_t *tr = flecs_table_record_get(world, table, pattern);
         if (!tr) {
             return -1;
         }
@@ -3232,8 +3088,8 @@ ecs_id_record_t* find_tables(
     ecs_world_t *world,
     ecs_id_t id)
 {
-    ecs_id_record_t *idr = flecs_get_id_record(world, id);
-    if (!idr || !ecs_table_cache_count(&idr->cache)) {
+    ecs_id_record_t *idr = flecs_id_record_get(world, id);
+    if (!idr || !flecs_table_cache_count(&idr->cache)) {
         /* Skip ids that don't have (non-empty) tables */
         return NULL;
     }
@@ -3245,8 +3101,8 @@ ecs_id_t rule_get_column(
     ecs_type_t type,
     int32_t column)
 {
-    ecs_id_t *comp = ecs_vector_get(type, ecs_id_t, column);
-    ecs_assert(comp != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(column < type.count, ECS_INTERNAL_ERROR, NULL);
+    ecs_id_t *comp = &type.array[column];
     return *comp;
 }
 
@@ -3266,9 +3122,9 @@ void set_source(
 
     const ecs_rule_t *rule = it->priv.iter.rule.rule;
     if ((r != UINT8_MAX) && rule->vars[r].kind == EcsRuleVarKindEntity) {
-        it->subjects[op->term] = reg_get_entity(rule, op, regs, r);
+        it->sources[op->term] = reg_get_entity(rule, op, regs, r);
     } else {
-        it->subjects[op->term] = 0;
+        it->sources[op->term] = 0;
     }
 }
 
@@ -3282,14 +3138,14 @@ void set_term_vars(
     if (term != -1) {
         ecs_world_t *world = rule->world;
         const ecs_rule_term_vars_t *vars = &rule->term_vars[term];
-        if (vars->pred != -1) {
-            regs[vars->pred].entity = ecs_pair_first(world, id);
-            ecs_assert(ecs_is_valid(world, regs[vars->pred].entity), 
+        if (vars->first != -1) {
+            regs[vars->first].entity = ecs_pair_first(world, id);
+            ecs_assert(ecs_is_valid(world, regs[vars->first].entity), 
                 ECS_INTERNAL_ERROR, NULL);
         }
-        if (vars->obj != -1) {
-            regs[vars->obj].entity = ecs_pair_second(world, id);
-            ecs_assert(ecs_is_valid(world, regs[vars->obj].entity), 
+        if (vars->second != -1) {
+            regs[vars->second].entity = ecs_pair_second(world, id);
+            ecs_assert(ecs_is_valid(world, regs[vars->second].entity), 
                 ECS_INTERNAL_ERROR, NULL);
         }
     }
@@ -3365,13 +3221,13 @@ bool eval_superset(
         frame = &op_ctx->stack[sp];
 
         /* Get table of object for which to get supersets */
-        ecs_entity_t obj = ECS_PAIR_SECOND(filter.mask);
-        if (obj == EcsWildcard) {
+        ecs_entity_t second = ECS_PAIR_SECOND(filter.mask);
+        if (second == EcsWildcard) {
             ecs_assert(pair.reg_mask & RULE_PAIR_OBJECT, 
                 ECS_INTERNAL_ERROR, NULL);
-            table = regs[pair.obj.reg].range.table;
+            table = regs[pair.second.reg].range.table;
         } else {
-            table = table_from_entity(world, obj).table;
+            table = table_from_entity(world, second).table;
         }
 
         int32_t column;
@@ -3379,12 +3235,12 @@ bool eval_superset(
         /* If output variable is already set, check if it matches */
         if (output_is_input) {
             ecs_id_t id = ecs_pair(rel, result);
-            ecs_entity_t subj = 0;
+            ecs_entity_t src = 0;
             column = ecs_search_relation(world, table, 0, id, rel, 
-                0, 0, &subj, 0, 0, 0);
+                0, &src, 0, 0);
             if (column != -1) {
-                if (subj != 0) {
-                    table = ecs_get_table(world, subj);
+                if (src != 0) {
+                    table = ecs_get_table(world, src);
                 }
             }
         } else {
@@ -3399,7 +3255,7 @@ bool eval_superset(
         ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
         ecs_id_t col_id = rule_get_column(table->type, column);
-        ecs_assert(ECS_HAS_ROLE(col_id, PAIR), ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(ECS_HAS_ID_FLAG(col_id, PAIR), ECS_INTERNAL_ERROR, NULL);
         ecs_entity_t col_obj = ecs_pair_second(world, col_id);
 
         reg_set_entity(rule, regs, r, col_obj);
@@ -3537,8 +3393,7 @@ bool eval_subset(
         /* Table must have at least row elements */
         ecs_assert(row_count > row, ECS_INTERNAL_ERROR, NULL);
 
-        ecs_entity_t *entities = ecs_vector_first(
-            table->storage.entities, ecs_entity_t);
+        ecs_entity_t *entities = ecs_storage_first(&table->data.entities);
         ecs_assert(entities != NULL, ECS_INTERNAL_ERROR, NULL);
 
         /* The entity used to find the next table set */
@@ -3547,7 +3402,7 @@ bool eval_subset(
 
             /* Create look_for expression with the resolved entity as object */
             pair.reg_mask &= ~RULE_PAIR_OBJECT; /* turn of bit because it's not a reg */
-            pair.obj.ent = e;
+            pair.second.id = e;
             filter = pair_to_filter(iter, op, pair);
 
             /* Find table set for expression */
@@ -3582,8 +3437,7 @@ bool eval_subset(
     table_reg_set(rule, regs, r, table);
 
 yield:
-    set_term_vars(rule, regs, op->term, ecs_vector_get(frame->table->type,
-        ecs_id_t, frame->column)[0]);
+    set_term_vars(rule, regs, op->term, frame->table->type.array[frame->column]);
 
     return true;
 }
@@ -3793,29 +3647,29 @@ bool eval_with(
          * code more readable).
          */
         if (pair.transitive && pair.reflexive) {
-            ecs_entity_t subj = 0, obj = 0;
+            ecs_entity_t src = 0, second = 0;
             
             if (r == UINT8_MAX) {
-                subj = op->subject;
+                src = op->subject;
             } else {
                 const ecs_rule_var_t *v_subj = &rule->vars[r];
 
                 if (v_subj->kind == EcsRuleVarKindEntity) {
-                    subj = entity_reg_get(rule, regs, r);
+                    src = entity_reg_get(rule, regs, r);
 
                     /* This is the input for the op, so should always be set */
-                    ecs_assert(subj != 0, ECS_INTERNAL_ERROR, NULL);
+                    ecs_assert(src != 0, ECS_INTERNAL_ERROR, NULL);
                 }
             }
 
-            /* If subj is set, it means that it is an entity. Try to also 
+            /* If src is set, it means that it is an entity. Try to also 
              * resolve the object. */
-            if (subj) {
+            if (src) {
                 /* If the object is not a wildcard, it has been reified. Get the
                  * value from either the register or as a literal */
-                if (!filter.obj_wildcard) {
-                    obj = ECS_PAIR_SECOND(filter.mask);
-                    if (ecs_strip_generation(subj) == obj) {
+                if (!filter.second_wildcard) {
+                    second = ECS_PAIR_SECOND(filter.mask);
+                    if (ecs_strip_generation(src) == second) {
                         return true;
                     }
                 }
@@ -3924,8 +3778,7 @@ bool eval_each(
             count += offset;
         }
 
-        ecs_entity_t *entities = ecs_vector_first(
-            table->storage.entities, ecs_entity_t);
+        ecs_entity_t *entities = ecs_storage_first(&table->data.entities);
         ecs_assert(entities != NULL, ECS_INTERNAL_ERROR, NULL);
 
         /* If this is is not a redo, start from row 0, otherwise go to the
@@ -4123,12 +3976,12 @@ bool eval_intable(
 
     ecs_rule_pair_t pair = op->filter;
     ecs_rule_filter_t filter = pair_to_filter(iter, op, pair);
-    ecs_entity_t obj = ECS_PAIR_SECOND(filter.mask);
-    ecs_assert(obj != 0 && obj != EcsWildcard, ECS_INTERNAL_ERROR, NULL);
-    obj = ecs_get_alive(world, obj);
-    ecs_assert(obj != 0, ECS_INTERNAL_ERROR, NULL);
+    ecs_entity_t second = ECS_PAIR_SECOND(filter.mask);
+    ecs_assert(second != 0 && second != EcsWildcard, ECS_INTERNAL_ERROR, NULL);
+    second = ecs_get_alive(world, second);
+    ecs_assert(second != 0, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_table_t *obj_table = ecs_get_table(world, obj);
+    ecs_table_t *obj_table = ecs_get_table(world, second);
     return obj_table == table;
 }
 
@@ -4268,7 +4121,7 @@ void populate_iterator(
 
             ecs_entity_t e = reg->entity;
             ecs_assert(ecs_is_valid(world, e), ECS_INTERNAL_ERROR, NULL);
-            ecs_record_t *record = ecs_eis_get(world, e);
+            ecs_record_t *record = flecs_entities_get(world, e);
             offset = ECS_RECORD_TO_ROW(record->row);
 
             /* If an entity is not stored in a table, it could not have
@@ -4287,12 +4140,12 @@ void populate_iterator(
     }
 
     for (i = 0; i < term_count; i ++) {
-        int32_t v = rule->term_vars[i].subj;
+        int32_t v = rule->term_vars[i].src;
         if (v != -1) {
             const ecs_rule_var_t *var = &rule->vars[v];
             if (var->name[0] != '.') {
                 if (var->kind == EcsRuleVarKindEntity) {
-                    iter->subjects[i] = regs[var->id].entity;
+                    iter->sources[i] = regs[var->id].entity;
                 } else {
                     /* This can happen for Any variables, where the actual
                      * content of the variable is not of interest to the query.
@@ -4300,11 +4153,11 @@ void populate_iterator(
                      * column can be correctly resolved */
                     ecs_table_t *t = regs[var->id].range.table;
                     if (t) {
-                        iter->subjects[i] = ecs_vector_first(
-                            t->storage.entities, ecs_entity_t)[0];
+                        iter->sources[i] = ecs_storage_first_t(
+                            &t->data.entities, ecs_entity_t)[0];
                     } else {
                         /* Can happen if term is optional */
-                        iter->subjects[i] = 0;
+                        iter->sources[i] = 0;
                     }
                 }
             }
@@ -4314,12 +4167,12 @@ void populate_iterator(
     /* Iterator expects column indices to start at 1 */
     iter->columns = rule_get_columns_frame(it, op->frame);
     for (i = 0; i < term_count; i ++) {
-        ecs_assert(iter->subjects != NULL, ECS_INTERNAL_ERROR, NULL);
-        ecs_entity_t subj = iter->subjects[i];
+        ecs_assert(iter->sources != NULL, ECS_INTERNAL_ERROR, NULL);
+        ecs_entity_t src = iter->sources[i];
         int32_t c = ++ iter->columns[i];
-        if (!subj) {
-            subj = iter->terms[i].subj.entity;
-            if (subj != EcsThis && subj != EcsAny) {
+        if (!src) {
+            src = iter->terms[i].src.id;
+            if (src != EcsThis && src != EcsAny) {
                 iter->columns[i] = 0;
             }
         } else if (c) {
@@ -4339,29 +4192,29 @@ void populate_iterator(
         }
 
         ecs_id_t id = term->id;
-        ecs_entity_t pred = 0;
-        ecs_entity_t obj = 0;
-        bool is_pair = ECS_HAS_ROLE(id, PAIR);
+        ecs_entity_t first = 0;
+        ecs_entity_t second = 0;
+        bool is_pair = ECS_HAS_ID_FLAG(id, PAIR);
 
         if (!is_pair) {
-            pred = id;
+            first = id;
         } else {
-            pred = ECS_PAIR_FIRST(id);
-            obj = ECS_PAIR_SECOND(id);
+            first = ECS_PAIR_FIRST(id);
+            second = ECS_PAIR_SECOND(id);
         }
 
-        if (vars->pred != -1) {
-            pred = regs[vars->pred].entity;
+        if (vars->first != -1) {
+            first = regs[vars->first].entity;
         }
-        if (vars->obj != -1) {
+        if (vars->second != -1) {
             ecs_assert(is_pair, ECS_INTERNAL_ERROR, NULL);
-            obj = regs[vars->obj].entity;
+            second = regs[vars->second].entity;
         }
 
         if (!is_pair) {
-            id = pred;
+            id = first;
         } else {
-            id = ecs_pair(pred, obj);
+            id = ecs_pair(first, second);
         }
 
         iter->ids[i] = id;
@@ -4392,18 +4245,18 @@ void rule_iter_set_initial_state(
 {
     int32_t i;
 
-    /* Make sure that if there are any terms with literal subjects, they're
-     * initialized in the subjects array */
+    /* Make sure that if there are any terms with literal sources, they're
+     * initialized in the sources array */
     const ecs_filter_t *filter = &rule->filter;
     int32_t term_count = filter->term_count;
     for (i = 0; i < term_count; i ++) {
         ecs_term_t *t = &filter->terms[i];
-        ecs_term_id_t *subj = &t->subj;
-        ecs_assert(subj->var == EcsVarIsVariable || subj->entity != EcsThis,
+        ecs_term_id_t *src = &t->src;
+        ecs_assert(src->flags & EcsIsVariable || src->id != EcsThis,
             ECS_INTERNAL_ERROR, NULL);
 
-        if (subj->var == EcsVarIsEntity) {
-            it->subjects[i] = subj->entity;
+        if (!(src->flags & EcsIsVariable)) {
+            it->sources[i] = src->id;
         }
     }
 

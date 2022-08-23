@@ -22,19 +22,10 @@ typedef struct TestInteropModule {
 
 static
 void TestInteropModuleImport(ecs_world_t *world) {
-    ecs_component_desc_t module_desc = {};
-    module_desc.entity.name = "TestInteropModule";
-    module_desc.size = sizeof(TestInteropModule);
-    module_desc.alignment = alignof(TestInteropModule);
-    ecs_entity_t m = ecs_module_init(world, &module_desc);
-    ecs_set_scope(world, m);
+    ECS_MODULE(world, TestInteropModule);
 
-    ecs_component_desc_t desc = {};
-    desc.entity.name = "Position";
-    desc.entity.symbol = "Position";
-    desc.size = sizeof(Position);
-    desc.alignment = alignof(Position);
-    ecs_component_init(world, &desc);
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
 }
 
 namespace test {
@@ -42,12 +33,14 @@ namespace interop {
 
 class module : TestInteropModule {
 public:
+    struct Velocity : ::Velocity { };
+
     module(flecs::world& ecs) {
-        TestInteropModuleImport(ecs.c_ptr());
+        TestInteropModuleImport(ecs);
 
         ecs.module<test::interop::module>();
-
         ecs.component<Position>("::test::interop::module::Position");
+        ecs.component<Velocity>("::test::interop::module::Velocity");
     }
 };
 
@@ -87,15 +80,14 @@ void World_builtin_components() {
 
     test_assert(ecs.component<flecs::Component>() == ecs_id(EcsComponent));
     test_assert(ecs.component<flecs::Identifier>() == ecs_id(EcsIdentifier));
-    test_assert(ecs.component<flecs::Type>() == ecs_id(EcsType));
-    test_assert(ecs.component<flecs::Trigger>() == ecs_id(EcsTrigger));
-    test_assert(ecs.component<flecs::Observer>() == ecs_id(EcsObserver));
-    test_assert(ecs.component<flecs::Query>() == ecs_id(EcsQuery));
+    test_assert(ecs.component<flecs::Poly>() == ecs_id(EcsPoly));
     test_assert(ecs.component<flecs::RateFilter>() == ecs_id(EcsRateFilter));
     test_assert(ecs.component<flecs::TickSource>() == ecs_id(EcsTickSource));
     test_assert(flecs::Name == EcsName);
     test_assert(flecs::Symbol == EcsSymbol);
-    test_assert(flecs::System == ecs_id(EcsSystem));
+    test_assert(flecs::System == EcsSystem);
+    test_assert(flecs::Observer == EcsObserver);
+    test_assert(flecs::Query == EcsQuery);
 }
 
 void World_multi_world_component() {
@@ -409,6 +401,58 @@ void World_implicit_register_w_new_world() {
     }    
 }
 
+void World_implicit_register_after_reset_register_w_custom_name() {
+    flecs::world ecs;
+
+    flecs::entity c = ecs.component<Position>("MyPosition");
+    test_str(c.name(), "MyPosition");
+
+    flecs::reset(); // Simulate working across boundary
+
+    auto e = ecs.entity().add<Position>();
+    test_assert(e.has<Position>());
+    test_assert(e.has(c));
+}
+
+void World_register_after_reset_register_w_custom_name() {
+    flecs::world ecs;
+
+    flecs::entity c1 = ecs.component<Position>("MyPosition");
+    test_str(c1.name(), "MyPosition");
+
+    flecs::reset(); // Simulate working across boundary
+
+    flecs::entity c2 = ecs.component<Position>();
+    test_str(c2.name(), "MyPosition");
+}
+
+void World_register_builtin_after_reset() {
+    flecs::world ecs;
+
+    auto c1 = ecs.component<flecs::Component>();
+    test_assert(c1 == ecs_id(EcsComponent));
+
+    flecs::reset(); // Simulate working across boundary
+
+    auto c2 = ecs.component<flecs::Component>();
+    test_assert(c2 == ecs_id(EcsComponent));
+    test_assert(c1 == c2);
+}
+
+void World_register_meta_after_reset() {
+    flecs::world ecs;
+
+    auto c1 = ecs.component<Position>();
+
+    flecs::reset(); // Simulate working across boundary
+
+    auto c2 = ecs.component<Position>()
+        .member<float>("x")
+        .member<float>("y");
+
+    test_assert(c1 == c2);
+}
+
 void World_count() {
     flecs::world ecs;
 
@@ -502,13 +546,13 @@ void World_staged_count() {
 
     flecs::world stage = ecs.get_stage(0);
 
-    ecs.staging_begin();
+    ecs.readonly_begin();
 
     test_int(stage.count<Position>(), 0);
 
-    ecs.staging_end();
+    ecs.readonly_end();
 
-    ecs.staging_begin();
+    ecs.readonly_begin();
 
     stage.entity().add<Position>();
     stage.entity().add<Position>();
@@ -519,7 +563,7 @@ void World_staged_count() {
 
     test_int(stage.count<Position>(), 0);
 
-    ecs.staging_end();
+    ecs.readonly_end();
 
     test_int(stage.count<Position>(), 6);
 }
@@ -782,11 +826,11 @@ void World_with_scope_type_staged() {
     flecs::entity e;
     flecs::world stage = ecs.get_stage(0);
     
-    ecs.staging_begin();
+    ecs.readonly_begin();
     stage.scope<ParentScope>([&]{
         e = stage.entity("Child");
     });
-    ecs.staging_end();
+    ecs.readonly_end();
 
     test_assert( e.has(flecs::ChildOf, ecs.id<ParentScope>()) );
 
@@ -1107,42 +1151,6 @@ struct PositionDerived : Position {
     PositionDerived(float x, float y) : Position{x, y} { }
 };
 
-void World_type_as_component() {
-    flecs::world ecs;
-
-    auto e = ecs.type<Position>();
-    test_assert(e.id() != 0);
-
-    auto t = ecs.component<Position>();
-    test_assert(t.id() != 0);
-    test_assert(e.id() == t);
-
-    auto e2 = ecs.entity()
-        .set<Position>({10, 20});
-
-    test_bool(e2.has<Position>(), true);
-
-    test_str(t.name(), "Position");
-}
-
-void World_type_w_name_as_component() {
-    flecs::world ecs;
-
-    auto e = ecs.type<Position>("Foo");
-    test_assert(e.id() != 0);
-
-    auto t = ecs.component<Position>();
-    test_assert(t.id() != 0);
-    test_assert(e.id() == t);
-
-    auto e2 = ecs.entity()
-        .set<Position>({10, 20});
-
-    test_bool(e2.has<Position>(), true);
-
-    test_str(t.name(), "Foo");
-}
-
 void World_delete_with_id() {
     flecs::world ecs;
 
@@ -1203,6 +1211,25 @@ void World_delete_with_pair_type() {
     test_assert(!e_1.is_alive());
     test_assert(!e_2.is_alive());
     test_assert(!e_3.is_alive());
+}
+
+void World_delete_with_implicit() {
+    flecs::world ecs;
+
+    ecs.delete_with<Tag>();
+
+    test_assert(true);
+}
+
+void World_delete_with_pair_implicit() {
+    flecs::world ecs;
+
+    struct Rel { };
+    struct Obj { };
+
+    ecs.delete_with<Rel, Obj>();
+
+    test_assert(true);
 }
 
 void World_remove_all_id() {
@@ -1294,6 +1321,25 @@ void World_remove_all_pair_type() {
     test_assert((!e_1.has<Rel, ObjB>()));
     test_assert((!e_2.has<Rel, ObjB>()));
     test_assert((e_3.has<Rel, ObjB>()));
+}
+
+void World_remove_all_implicit() {
+    flecs::world ecs;
+
+    ecs.remove_all<Tag>();
+
+    test_assert(true);
+}
+
+void World_remove_all_pair_implicit() {
+    flecs::world ecs;
+
+    struct Rel { };
+    struct Obj { };
+
+    ecs.remove_all<Rel, Obj>();
+
+    test_assert(true);
 }
 
 void World_get_scope() {
@@ -1529,4 +1575,12 @@ void World_run_post_frame() {
     ecs.progress();
 
     test_int(ctx, 11);
+}
+
+void World_component_w_low_id() {
+    flecs::world ecs;
+
+    flecs::entity p = ecs.component<Position>();
+
+    test_assert(p.id() < ECS_HI_COMPONENT_ID);
 }

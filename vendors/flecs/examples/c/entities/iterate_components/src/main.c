@@ -7,7 +7,7 @@ typedef struct {
 
 void iterate_components(ecs_world_t *ecs, ecs_entity_t e) {
     // First get the entity's type, which is a vector of (component) ids.
-    ecs_type_t type = ecs_get_type(ecs, e);
+    const ecs_type_t *type = ecs_get_type(ecs, e);
 
     // 1. The easiest way to print the components is to use ecs_type_str
     char *type_str = ecs_type_str(ecs, type);
@@ -15,8 +15,8 @@ void iterate_components(ecs_world_t *ecs, ecs_entity_t e) {
     ecs_os_free(type_str);
 
     // 2. To print individual ids, iterate the type array with ecs_id_str
-    ecs_id_t *type_ids = ecs_vector_first(type, ecs_id_t);
-    int32_t i, count = ecs_vector_count(type);
+    ecs_id_t *type_ids = type->array;
+    int32_t i, count = type->count;
 
     for (i = 0; i < count; i ++) {
         ecs_id_t id = type_ids[i];
@@ -34,17 +34,12 @@ void iterate_components(ecs_world_t *ecs, ecs_entity_t e) {
         ecs_id_t id = type_ids[i];
 
         printf("%d: ", i);
-        
-        ecs_id_t role = id & ECS_ROLE_MASK;
-        if (role) {
-            printf("role: %s, ", ecs_role_str(role));
-        }
 
-        if (ECS_HAS_ROLE(id, PAIR)) { // See relations
+        if (ECS_HAS_ID_FLAG(id, PAIR)) { // See relationships
             ecs_entity_t rel = ecs_pair_first(ecs, id);
-            ecs_entity_t obj = ecs_pair_second(ecs, id);
-            printf("rel: %s, obj: %s",
-                ecs_get_name(ecs, rel), ecs_get_name(ecs, obj));
+            ecs_entity_t tgt = ecs_pair_second(ecs, id);
+            printf("rel: %s, tgt: %s",
+                ecs_get_name(ecs, rel), ecs_get_name(ecs, tgt));
         } else {
             ecs_entity_t comp = id & ECS_COMPONENT_MASK;
             printf("entity: %s", ecs_get_name(ecs, comp));
@@ -102,18 +97,18 @@ int main(int argc, char *argv[]) {
 // 0: entity: Position
 // 1: entity: Velocity
 // 2: entity: Human
-// 3: role: PAIR, rel: Eats, obj: Eats
+// 3: rel: Eats, tgt: Eats
 
 
 // Position's components:
-// ecs_type_str: EcsComponent,(Identifier,Name),(Identifier,Symbol),(OnDelete,Throw)
+// ecs_type_str: EcsComponent,(Identifier,Name),(Identifier,Symbol),(OnDelete,Panic)
 
 // 0: Component
 // 1: (Identifier,Name)
 // 2: (Identifier,Symbol)
-// 3: (OnDelete,Throw)
+// 3: (OnDelete,Panic)
 
 // 0: entity: Component
-// 1: role: PAIR, rel: Identifier, obj: Identifier
-// 2: role: PAIR, rel: Identifier, obj: Identifier
-// 3: role: PAIR, rel: OnDelete, obj: OnDelete
+// 1: rel: Identifier, tgt: Identifier
+// 2: rel: Identifier, tgt: Identifier
+// 3: rel: OnDelete, tgt: OnDelete

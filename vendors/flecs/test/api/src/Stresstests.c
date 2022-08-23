@@ -59,7 +59,7 @@ void Add_random(ecs_iter_t *it) {
 
 static
 void Set_velocity_callback(ecs_iter_t *it) {
-    Velocity *v = ecs_term(it, Velocity, 1);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -97,18 +97,18 @@ void create_delete_entity_random_components_staged(
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Rotation);
-    ECS_TYPE(world, Type, Position, Velocity);
+    ECS_PREFAB(world, Type, Position, Velocity);
 
     ECS_SYSTEM(world, Add_random, EcsOnUpdate, Position);
     ECS_SYSTEM(world, Delete_above_1000, EcsPostUpdate, Position);
 
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Add_random,
+        .entity = Add_random,
         .multi_threaded = true
     });
 
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Delete_above_1000,
+        .entity = Delete_above_1000,
         .multi_threaded = true
     });
 
@@ -141,19 +141,19 @@ void set_entity_random_components(
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Rotation);
-    ECS_TYPE(world, Type, Position, Velocity);
+    ECS_PREFAB(world, Type, Position, Velocity);
 
     ECS_SYSTEM(world, Set_random, EcsOnUpdate, Position);
     ECS_SYSTEM(world, Set_velocity_callback, EcsOnSet, Velocity);
     ECS_SYSTEM(world, Delete_above_1000, EcsPostUpdate, Position);
 
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Set_random,
+        .entity = Set_random,
         .multi_threaded = true
     });
 
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Delete_above_1000,
+        .entity = Delete_above_1000,
         .multi_threaded = true
     });
 
@@ -300,9 +300,9 @@ void Stresstests_add_1k_tags() {
         test_assert(ecs_has_id(world, e, i + 1000));
     }
 
-    ecs_type_t type = ecs_get_type(world, e);
+    const ecs_type_t *type = ecs_get_type(world, e);
     test_assert(type != NULL);
-    test_int(ecs_vector_count(type), 1000);
+    test_int(type->count, 1000);
 
     ecs_fini(world);
 }

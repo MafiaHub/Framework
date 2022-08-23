@@ -38,7 +38,7 @@
  * used as a regular component:
  * 
  * // Create Position type
- * ecs_entity_t pos = ecs_struct_init(world, &(ecs_struct_desc_t) {
+ * ecs_entity_t pos = ecs_struct_init(world, &(ecs_struct_desc_t){
  *  .entity.name = "Position",
  *  .members = {
  *       {"x", ecs_id(ecs_f32_t)},
@@ -371,11 +371,11 @@ FLECS_API
 int ecs_meta_next(
     ecs_meta_cursor_t *cursor);
 
-/** Move cursor to a field */
+/** Move cursor to a element */
 FLECS_API
-int ecs_meta_move(
+int ecs_meta_elem(
     ecs_meta_cursor_t *cursor,
-    int32_t pos);
+    int32_t elem);
 
 /** Move cursor to member */
 FLECS_API
@@ -517,7 +517,8 @@ ecs_entity_t ecs_meta_get_entity(
 
 /** Used with ecs_primitive_init. */
 typedef struct ecs_primitive_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with primitive (optional) */
+    ecs_entity_t entity;
     ecs_primitive_kind_t kind;
 } ecs_primitive_desc_t;
 
@@ -529,7 +530,8 @@ ecs_entity_t ecs_primitive_init(
 
 /** Used with ecs_enum_init. */
 typedef struct ecs_enum_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with enum (optional) */
+    ecs_entity_t entity;
     ecs_enum_constant_t constants[ECS_MEMBER_DESC_CACHE_SIZE];
 } ecs_enum_desc_t;
 
@@ -542,7 +544,8 @@ ecs_entity_t ecs_enum_init(
 
 /** Used with ecs_bitmask_init. */
 typedef struct ecs_bitmask_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with bitmask (optional) */
+    ecs_entity_t entity;
     ecs_bitmask_constant_t constants[ECS_MEMBER_DESC_CACHE_SIZE];
 } ecs_bitmask_desc_t;
 
@@ -555,7 +558,8 @@ ecs_entity_t ecs_bitmask_init(
 
 /** Used with ecs_array_init. */
 typedef struct ecs_array_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with array (optional) */
+    ecs_entity_t entity;
     ecs_entity_t type;
     int32_t count;
 } ecs_array_desc_t;
@@ -569,7 +573,8 @@ ecs_entity_t ecs_array_init(
 
 /** Used with ecs_vector_init. */
 typedef struct ecs_vector_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with vector (optional) */
+    ecs_entity_t entity;
     ecs_entity_t type;
 } ecs_vector_desc_t;
 
@@ -582,7 +587,8 @@ ecs_entity_t ecs_vector_init(
 
 /** Used with ecs_struct_init. */
 typedef struct ecs_struct_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with struct (optional) */
+    ecs_entity_t entity;
     ecs_member_t members[ECS_MEMBER_DESC_CACHE_SIZE];
 } ecs_struct_desc_t;
 
@@ -594,7 +600,8 @@ ecs_entity_t ecs_struct_init(
 
 /** Used with ecs_unit_init. */
 typedef struct ecs_unit_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with unit (optional) */
+    ecs_entity_t entity;
     
     /* Unit symbol, e.g. "m", "%", "g". (optional) */
     const char *symbol;
@@ -628,7 +635,8 @@ ecs_entity_t ecs_unit_init(
 
 /** Used with ecs_unit_prefix_init. */
 typedef struct ecs_unit_prefix_desc_t {
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with unit prefix (optional) */
+    ecs_entity_t entity;
     
     /* Unit symbol, e.g. "m", "%", "g". (optional) */
     const char *symbol;
@@ -648,6 +656,35 @@ FLECS_API
 ecs_entity_t ecs_quantity_init(
     ecs_world_t *world,
     const ecs_entity_desc_t *desc);
+
+/* Convenience macros */
+
+#define ecs_primitive(world, ...)\
+    ecs_primitive_init(world, &(ecs_primitive_desc_t) __VA_ARGS__ )
+
+#define ecs_enum(world, ...)\
+    ecs_enum_init(world, &(ecs_enum_desc_t) __VA_ARGS__ )
+
+#define ecs_bitmask(world, ...)\
+    ecs_bitmask_init(world, &(ecs_bitmask_desc_t) __VA_ARGS__ )
+
+#define ecs_array(world, ...)\
+    ecs_array_init(world, &(ecs_array_desc_t) __VA_ARGS__ )
+
+#define ecs_vector(world, ...)\
+    ecs_vector_init(world, &(ecs_vector_desc_t) __VA_ARGS__ )
+
+#define ecs_struct(world, ...)\
+    ecs_struct_init(world, &(ecs_struct_desc_t) __VA_ARGS__ )
+
+#define ecs_unit(world, ...)\
+    ecs_unit_init(world, &(ecs_unit_desc_t) __VA_ARGS__ )
+
+#define ecs_unit_prefix(world, ...)\
+    ecs_unit_prefix_init(world, &(ecs_unit_prefix_desc_t) __VA_ARGS__ )
+
+#define ecs_quantity(world, ...)\
+    ecs_quantity_init(world, &(ecs_entity_desc_t) __VA_ARGS__ )
 
 /* Module import */
 FLECS_API

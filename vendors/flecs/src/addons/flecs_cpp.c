@@ -232,10 +232,10 @@ void ecs_cpp_component_validate(
      * with a different world. This ensures that the component is registered
      * with the same id for the current world. 
      * If the component was registered already, nothing will change. */
-    ecs_entity_t ent = ecs_component_init(world, &(ecs_component_desc_t) {
-        .entity.entity = id,
-        .size = size,
-        .alignment = alignment
+    ecs_entity_t ent = ecs_component_init(world, &(ecs_component_desc_t){
+        .entity = id,
+        .type.size = flecs_uto(int32_t, size),
+        .type.alignment = flecs_uto(int32_t, alignment)
     });
     (void)ent;
     ecs_assert(ent == id, ECS_INTERNAL_ERROR, NULL);
@@ -247,7 +247,8 @@ ecs_entity_t ecs_cpp_component_register(
     const char *name,
     const char *symbol,
     ecs_size_t size,
-    ecs_size_t alignment)
+    ecs_size_t alignment,
+    bool implicit_name)
 {
     (void)size;
     (void)alignment;
@@ -255,61 +256,67 @@ ecs_entity_t ecs_cpp_component_register(
     /* If the component is not yet registered, ensure no other component
      * or entity has been registered with this name. Ensure component is 
      * looked up from root. */
+    bool existing = false;
     ecs_entity_t prev_scope = ecs_set_scope(world, 0);
     ecs_entity_t ent;
     if (id) {
         ent = id;
     } else {
         ent = ecs_lookup_path_w_sep(world, 0, name, "::", "::", false);
+        existing = ent != 0;
     }
     ecs_set_scope(world, prev_scope);
 
     /* If entity exists, compare symbol name to ensure that the component
      * we are trying to register under this name is the same */
     if (ent) {
-        if (!id && ecs_has(world, ent, EcsComponent)) {
+        const EcsComponent *component = ecs_get(world, ent, EcsComponent);
+        if (component != NULL) {
             const char *sym = ecs_get_symbol(world, ent);
-            ecs_assert(sym != NULL, ECS_MISSING_SYMBOL, 
+            ecs_assert(!existing || (sym != NULL), ECS_MISSING_SYMBOL, 
                 ecs_get_name(world, ent));
-            (void)sym;
+            (void)existing;
 
-#           ifndef FLECS_NDEBUG
-            if (ecs_os_strcmp(sym, symbol)) {
-                ecs_err(
-                    "component with name '%s' is already registered for"\
-                    " type '%s' (trying to register for type '%s')",
-                        name, sym, symbol);
-                ecs_abort(ECS_NAME_IN_USE, NULL);
-            }
-#           endif
-
-        /* If an existing id was provided, it's possible that this id was
-         * registered with another type. Make sure that in this case at
-         * least the component size/alignment matches.
-         * This allows applications to alias two different types to the same
-         * id, which enables things like redefining a C type in C++ by
-         * inheriting from it & adding utility functions etc. */
-        } else {
-            const EcsComponent *comp = ecs_get(world, ent, EcsComponent);
-            if (comp) {
-                ecs_assert(comp->size == size,
-                    ECS_INVALID_COMPONENT_SIZE, NULL);
-                ecs_assert(comp->alignment == alignment,
-                    ECS_INVALID_COMPONENT_ALIGNMENT, NULL);
-            } else {
-                /* If the existing id is not a component, no checking is
-                 * needed. */
+            if (sym && ecs_os_strcmp(sym, symbol)) {
+                /* Application is trying to register a type with an entity that
+                 * was already associated with another type. In most cases this
+                 * is an error, with the exception of a scenario where the
+                 * application is wrapping a C type with a C++ type.
+                 * 
+                 * In this case the C++ type typically inherits from the C type,
+                 * and adds convenience methods to the derived class without
+                 * changing anything that would change the size or layout.
+                 * 
+                 * To meet this condition, the new type must have the same size
+                 * and alignment as the existing type, and the name of the type
+                 * type must be equal to the registered name (not symbol).
+                 * 
+                 * The latter ensures that it was the intent of the application
+                 * to alias the type, vs. accidentally registering an unrelated
+                 * type with the same size/alignment. */
+                char *type_path = ecs_get_fullpath(world, ent);
+                if (ecs_os_strcmp(type_path, symbol) || 
+                    component->size != size || 
+                    component->alignment != alignment) 
+                {
+                    ecs_err(
+                        "component with name '%s' is already registered for"\
+                        " type '%s' (trying to register for type '%s')",
+                            name, sym, symbol);
+                    ecs_abort(ECS_NAME_IN_USE, NULL);
+                }
+                ecs_os_free(type_path);
             }
         }
 
     /* If no entity is found, lookup symbol to check if the component was
      * registered under a different name. */
-    } else {
+    } else if (!implicit_name) {
         ent = ecs_lookup_symbol(world, symbol, false);
-        ecs_assert(ent == 0, ECS_INCONSISTENT_COMPONENT_ID, symbol);
+        ecs_assert(ent == 0 || (ent == id), ECS_INCONSISTENT_COMPONENT_ID, symbol);
     }
 
-    return id;
+    return ent;
 }
 
 ecs_entity_t ecs_cpp_component_register_explicit(
@@ -323,14 +330,23 @@ ecs_entity_t ecs_cpp_component_register_explicit(
     size_t alignment,
     bool is_component)
 {
+    char *existing_name = NULL;
+
     // If an explicit id is provided, it is possible that the symbol and
     // name differ from the actual type, as the application may alias
     // one type to another.
     if (!id) {
         if (!name) {
-            // If no name was provided, retrieve the name implicitly from
-            // the name_helper class.
-            name = ecs_cpp_trim_module(world, type_name);
+            // If no name was provided first check if a type with the provided
+            // symbol was already registered.
+            id = ecs_lookup_symbol(world, symbol, false);
+            if (id) {
+                existing_name = ecs_get_path_w_sep(world, 0, id, "::", "::");
+                name = existing_name;
+            } else {
+                // If type is not yet known, derive from type name
+                name = ecs_cpp_trim_module(world, type_name);
+            }            
         }
     } else {
         // If an explicit id is provided but it has no name, inherit
@@ -342,27 +358,36 @@ ecs_entity_t ecs_cpp_component_register_explicit(
 
     ecs_entity_t entity;
     if (is_component || size != 0) {
-        entity = ecs_component_init(world, &(ecs_component_desc_t){
-            .entity.entity = s_id,
-            .entity.name = name,
-            .entity.sep = "::",
-            .entity.root_sep = "::",
-            .entity.symbol = symbol,
-            .size = size,
-            .alignment = alignment
-        });
-    } else {
-        entity = ecs_entity_init(world, &(ecs_entity_desc_t){
-            .entity = s_id,
+        entity = ecs_entity(world, {
+            .id = s_id,
             .name = name,
             .sep = "::",
             .root_sep = "::",
-            .symbol = symbol
+            .symbol = symbol,
+            .use_low_id = true
+        });
+        ecs_assert(entity != 0, ECS_INVALID_OPERATION, NULL);
+
+        entity = ecs_component_init(world, &(ecs_component_desc_t){
+            .entity = entity,
+            .type.size = flecs_uto(int32_t, size),
+            .type.alignment = flecs_uto(int32_t, alignment)
+        });
+        ecs_assert(entity != 0, ECS_INVALID_OPERATION, NULL);
+    } else {
+        entity = ecs_entity_init(world, &(ecs_entity_desc_t){
+            .id = s_id,
+            .name = name,
+            .sep = "::",
+            .root_sep = "::",
+            .symbol = symbol,
+            .use_low_id = true
         });
     }
 
     ecs_assert(entity != 0, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(!s_id || s_id == entity, ECS_INTERNAL_ERROR, NULL);
+    ecs_os_free(existing_name);
 
     return entity;
 }
@@ -387,8 +412,8 @@ ecs_entity_t ecs_cpp_enum_constant_register(
     }
 
     ecs_entity_t prev = ecs_set_scope(world, parent);
-    id = ecs_entity_init(world, &(ecs_entity_desc_t) {
-        .entity = id,
+    id = ecs_entity_init(world, &(ecs_entity_desc_t){
+        .id = id,
         .name = name
     });
     ecs_assert(id != 0, ECS_INVALID_OPERATION, name);

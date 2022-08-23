@@ -88,7 +88,7 @@ struct query_base {
         return flecs::term(m_world, f->terms[index]);
     }
 
-    int32_t term_count() {
+    int32_t field_count() {
         const ecs_filter_t *f = ecs_query_get_filter(m_query);
         return f->term_count;   
     }
@@ -98,7 +98,7 @@ struct query_base {
         char *result = ecs_filter_str(m_world, f);
         return flecs::string(result);
     }
-
+    
     operator query<>() const;
 
 protected:
@@ -108,6 +108,11 @@ protected:
 
 template<typename ... Components>
 struct query final : query_base, iterable<Components...> {
+public:
+    flecs::world world() const {
+        return flecs::world(m_world);
+    }
+    
 private:
     using Terms = typename _::term_ptrs<Components...>::array;
 
@@ -141,7 +146,7 @@ inline flecs::query_builder<Comps...> world::query_builder(Args &&... args) cons
 
 // Builder implementation
 template <typename Base, typename ... Components>
-inline Base& query_builder_i<Base, Components ...>::parent(const query_base& parent) {
+inline Base& query_builder_i<Base, Components ...>::observable(const query_base& parent) {
     m_desc->parent = parent;
     return *static_cast<Base*>(this);
 }

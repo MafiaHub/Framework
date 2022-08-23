@@ -1,5 +1,4 @@
 #pragma once
-#include <stdio.h>
 #include <ctype.h>
 
 namespace flecs {
@@ -83,21 +82,19 @@ void register_lifecycle_actions(
     ecs_world_t *world,
     ecs_entity_t component)
 {
-    if (!ecs_component_has_actions(world, component)) {
-        EcsComponentLifecycle cl{};
-        cl.ctor = ctor<T>();
-        cl.dtor = dtor<T>();
+    ecs_type_hooks_t cl{};
+    cl.ctor = ctor<T>();
+    cl.dtor = dtor<T>();
 
-        cl.copy = copy<T>();
-        cl.copy_ctor = copy_ctor<T>();
-        cl.move = move<T>();
-        cl.move_ctor = move_ctor<T>();
+    cl.copy = copy<T>();
+    cl.copy_ctor = copy_ctor<T>();
+    cl.move = move<T>();
+    cl.move_ctor = move_ctor<T>();
 
-        cl.ctor_move_dtor = ctor_move_dtor<T>();
-        cl.move_dtor = move_dtor<T>();
+    cl.ctor_move_dtor = ctor_move_dtor<T>();
+    cl.move_dtor = move_dtor<T>();
 
-        ecs_set_component_actions_w_id( world, component, &cl);
-    }
+    ecs_set_hooks_id( world, component, &cl);
 }
 
 // Class that manages component ids across worlds & binaries.
@@ -168,16 +165,20 @@ struct cpp_type_impl {
         // across more than one binary), or if the id does not exists in the 
         // world (indicating a multi-world application), register it. */
         if (!s_id || (world && !ecs_exists(world, s_id))) {
-            if (!s_id) {
-                s_id = id;
-            }
+            init(world, s_id ? s_id : id, allow_tag);
 
             ecs_assert(!id || s_id == id, ECS_INTERNAL_ERROR, NULL);
 
-            init(world, s_id, allow_tag);
+            const char *symbol = nullptr;
+            if (id) {
+                symbol = ecs_get_symbol(world, id);
+            }
+            if (!symbol) {
+                symbol = symbol_name<T>();
+            }
 
             entity_t entity = ecs_cpp_component_register_explicit(
-                    world, s_id, id, name, type_name<T>(), symbol_name<T>(), 
+                    world, s_id, id, name, type_name<T>(), symbol, 
                         s_size, s_alignment, is_component);
 
             s_id = entity;
@@ -203,7 +204,7 @@ struct cpp_type_impl {
         bool allow_tag = true)
     {
         // If no id has been registered yet, do it now.
-        if (!registered() || (world && !ecs_exists(world, s_id))) {
+        if (!registered(world)) {
             ecs_entity_t prev_scope = 0;
             ecs_id_t prev_with = 0;
 
@@ -264,11 +265,17 @@ struct cpp_type_impl {
     }
 
     // Was the component already registered.
-    static bool registered() {
+    static bool registered(flecs::world_t *world) {
         if (s_reset_count != ecs_cpp_reset_count_get()) {
             reset();
         }
-        return s_id != 0;
+        if (s_id == 0) {
+            return false;
+        }
+        if (world && !ecs_exists(world, s_id)) {
+            return false;
+        }
+        return true;
     }
 
     // This function is only used to test cross-translation unit features. No
@@ -312,8 +319,8 @@ struct cpp_type<T, if_t< is_pair<T>::value >>
     // Override id method to return id of pair
     static id_t id(world_t *world = nullptr) {
         return ecs_pair(
-            cpp_type< pair_relation_t<T> >::id(world),
-            cpp_type< pair_object_t<T> >::id(world));
+            cpp_type< pair_first_t<T> >::id(world),
+            cpp_type< pair_second_t<T> >::id(world));
     }
 };
 
@@ -358,7 +365,7 @@ struct component : untyped_component {
             implicit_name = true;
         }
 
-        if (_::cpp_type<T>::registered()) {
+        if (_::cpp_type<T>::registered(world)) {
             /* Obtain component id. Because the component is already registered,
              * this operation does nothing besides returning the existing id */
             id = _::cpp_type<T>::id_explicit(world, name, allow_tag, id);
@@ -374,25 +381,98 @@ struct component : untyped_component {
                 const char *last_elem = strrchr(n, ':');
                 if (last_elem) {
                     name = last_elem + 1;
-                    implicit_name = false;
                 }
             }
 
             /* Find or register component */
             id = ecs_cpp_component_register(world, id, n, _::symbol_name<T>(),
-                ECS_SIZEOF(T), ECS_ALIGNOF(T));
+                ECS_SIZEOF(T), ECS_ALIGNOF(T), implicit_name);
 
             /* Initialize static component data */
             id = _::cpp_type<T>::id_explicit(world, name, allow_tag, id);
-        }
 
-        /* Initialize lifecycle actions (ctor, dtor, copy, move) */
-        if (_::cpp_type<T>::size()) {
-            _::register_lifecycle_actions<T>(world, id);
+            /* Initialize lifecycle actions (ctor, dtor, copy, move) */
+            if (_::cpp_type<T>::size()) {
+                _::register_lifecycle_actions<T>(world, id);
+            }
         }
 
         m_world = world;
         m_id = id;
+    }
+
+    /** Register on_add hook. */
+    template <typename Func>
+    component<T>& on_add(Func&& func) {
+        using Invoker = typename _::each_invoker<
+            typename std::decay<Func>::type, T>;
+        flecs::type_hooks_t h = get_hooks();
+        ecs_assert(h.on_add == nullptr, ECS_INVALID_OPERATION, 
+            "on_add hook is already set");
+        BindingCtx *ctx = get_binding_ctx(h);
+        h.on_add = Invoker::run_add;
+        ctx->on_add = FLECS_NEW(Invoker)(FLECS_FWD(func));
+        ctx->free_on_add = reinterpret_cast<ecs_ctx_free_t>(
+            _::free_obj<Invoker>);
+        ecs_set_hooks_id(m_world, m_id, &h);
+        return *this;
+    }
+
+    /** Register on_remove hook. */
+    template <typename Func>
+    component<T>& on_remove(Func&& func) {
+        using Invoker = typename _::each_invoker<
+            typename std::decay<Func>::type, T>;
+        flecs::type_hooks_t h = get_hooks();
+        ecs_assert(h.on_remove == nullptr, ECS_INVALID_OPERATION, 
+            "on_remove hook is already set");
+        BindingCtx *ctx = get_binding_ctx(h);
+        h.on_remove = Invoker::run_remove;
+        ctx->on_remove = FLECS_NEW(Invoker)(FLECS_FWD(func));
+        ctx->free_on_remove = reinterpret_cast<ecs_ctx_free_t>(
+            _::free_obj<Invoker>);
+        ecs_set_hooks_id(m_world, m_id, &h);
+        return *this;
+    }
+
+    /** Register on_set hook. */
+    template <typename Func>
+    component<T>& on_set(Func&& func) {
+        using Invoker = typename _::each_invoker<
+            typename std::decay<Func>::type, T>;
+        flecs::type_hooks_t h = get_hooks();
+        ecs_assert(h.on_set == nullptr, ECS_INVALID_OPERATION, 
+            "on_set hook is already set");
+        BindingCtx *ctx = get_binding_ctx(h);
+        h.on_set = Invoker::run_set;
+        ctx->on_set = FLECS_NEW(Invoker)(FLECS_FWD(func));
+        ctx->free_on_set = reinterpret_cast<ecs_ctx_free_t>(
+            _::free_obj<Invoker>);
+        ecs_set_hooks_id(m_world, m_id, &h);
+        return *this;
+    }
+
+private:
+    using BindingCtx = _::component_binding_ctx;
+
+    BindingCtx* get_binding_ctx(flecs::type_hooks_t& h){        
+        BindingCtx *result = static_cast<BindingCtx*>(h.binding_ctx);
+        if (!result) {
+            result = FLECS_NEW(BindingCtx);
+            h.binding_ctx = result;
+            h.binding_ctx_free = reinterpret_cast<ecs_ctx_free_t>(
+                _::free_obj<BindingCtx>);
+        }
+        return result;
+    }
+
+    flecs::type_hooks_t get_hooks() {
+        const flecs::type_hooks_t* h = ecs_get_hooks_id(m_world, m_id);
+        if (h) {
+            return *h;
+        } else {
+            return {};
+        }
     }
 };
 

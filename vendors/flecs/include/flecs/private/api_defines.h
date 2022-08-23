@@ -2,13 +2,15 @@
  * @file api_defines.h
  * @brief Supporting defines for the public API.
  *
- * This file contains constants / macro's that are typically not used by an
+ * This file contains constants / macros that are typically not used by an
  * application but support the public API, and therefore must be exposed. This
  * header should not be included by itself.
  */
 
 #ifndef FLECS_API_DEFINES_H
 #define FLECS_API_DEFINES_H
+
+#include "api_flags.h"
 
 #if defined(_WIN32) || defined(_MSC_VER) || defined(__MING32__)
 #define ECS_TARGET_WINDOWS
@@ -49,7 +51,7 @@
 /* Non-standard but required. If not provided by platform, add manually. */
 #include <stdint.h>
 
-/* Contains macro's for importing / exporting symbols */
+/* Contains macros for importing / exporting symbols */
 #include "../bake_config.h"
 
 #ifdef __cplusplus
@@ -113,12 +115,6 @@ typedef int32_t ecs_size_t;
 #define ECS_ALIGNOF(T) ((int64_t)&((struct { char c; T d; } *)0)->d)
 #endif
 
-#if defined(ECS_TARGET_GNU)
-#define ECS_UNUSED __attribute__((unused))
-#else
-#define ECS_UNUSED
-#endif
-
 #ifndef FLECS_NO_DEPRECATED_WARNINGS
 #if defined(ECS_TARGET_GNU)
 #define ECS_DEPRECATED(msg) __attribute__((deprecated(msg)))
@@ -145,33 +141,46 @@ typedef int32_t ecs_size_t;
 #define ECS_CAST(T, V) (static_cast<T>(V))
 #endif
 
+#define ECS_CONCAT(a, b) a ## b
+
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Entity id macro's
+//// Magic numbers for sanity checking
+////////////////////////////////////////////////////////////////////////////////
+
+/* Magic number to identify the type of the object */
+#define ecs_world_t_magic     (0x65637377)
+#define ecs_stage_t_magic     (0x65637373)
+#define ecs_query_t_magic     (0x65637371)
+#define ecs_rule_t_magic      (0x65637375)
+#define ecs_table_t_magic     (0x65637374)
+#define ecs_filter_t_magic    (0x65637366)
+#define ecs_trigger_t_magic   (0x65637372)
+#define ecs_observer_t_magic  (0x65637362)
+
+////////////////////////////////////////////////////////////////////////////////
+//// Entity id macros
 ////////////////////////////////////////////////////////////////////////////////
 
 #define ECS_ROW_MASK                  (0x0FFFFFFFu)
 #define ECS_ROW_FLAGS_MASK            (~ECS_ROW_MASK)
-#define ECS_FLAG_OBSERVED             (1u << 31)
-#define ECS_FLAG_OBSERVED_ID          (1u << 30)
-#define ECS_FLAG_OBSERVED_OBJECT      (1u << 29)
-#define ECS_FLAG_OBSERVED_ACYCLIC     (1u << 28)
 #define ECS_RECORD_TO_ROW(v)          (ECS_CAST(int32_t, (ECS_CAST(uint32_t, v) & ECS_ROW_MASK)))
 #define ECS_RECORD_TO_ROW_FLAGS(v)    (ECS_CAST(uint32_t, v) & ECS_ROW_FLAGS_MASK)
 #define ECS_ROW_TO_RECORD(row, flags) (ECS_CAST(uint32_t, (ECS_CAST(uint32_t, row) | (flags))))
 
-#define ECS_ROLE_MASK                 (0xFFull << 56)
+#define ECS_ID_FLAGS_MASK             (0xFFull << 56)
 #define ECS_ENTITY_MASK               (0xFFFFFFFFull)
 #define ECS_GENERATION_MASK           (0xFFFFull << 32)
 #define ECS_GENERATION(e)             ((e & ECS_GENERATION_MASK) >> 32)
 #define ECS_GENERATION_INC(e)         ((e & ~ECS_GENERATION_MASK) | ((0xFFFF & (ECS_GENERATION(e) + 1)) << 32))
-#define ECS_COMPONENT_MASK            (~ECS_ROLE_MASK)
-#define ECS_HAS_ROLE(e, role)         ((e & ECS_ROLE_MASK) == ECS_##role)
+#define ECS_COMPONENT_MASK            (~ECS_ID_FLAGS_MASK)
+#define ECS_HAS_ID_FLAG(e, role)      ((e) & ECS_##role)
+#define ECS_IS_PAIR(id)               (((id) & ECS_ID_FLAGS_MASK) == ECS_PAIR)
 #define ECS_PAIR_FIRST(e)             (ecs_entity_t_hi(e & ECS_COMPONENT_MASK))
 #define ECS_PAIR_SECOND(e)            (ecs_entity_t_lo(e))
 #define ECS_PAIR_RELATION             ECS_PAIR_FIRST
 #define ECS_PAIR_OBJECT               ECS_PAIR_SECOND
-#define ECS_HAS_RELATION(e, rel)      (ECS_HAS_ROLE(e, PAIR) && (ECS_PAIR_FIRST(e) == rel))
+#define ECS_HAS_RELATION(e, rel)      (ECS_HAS_ID_FLAG(e, PAIR) && (ECS_PAIR_FIRST(e) == rel))
 
 #define ECS_HAS_PAIR_OBJECT(e, rel, obj)\
     (ECS_HAS_RELATION(e, rel) && ECS_PAIR_SECOND(e) == obj)
@@ -179,36 +188,6 @@ typedef int32_t ecs_size_t;
 #define ECS_HAS(id, has_id)(\
     (id == has_id) ||\
     (ECS_HAS_PAIR_OBJECT(id, ECS_PAIR_FIRST(has_id), ECS_PAIR_SECOND(has_id))))
-
-
-////////////////////////////////////////////////////////////////////////////////
-//// Flags for quickly querying properties of component/relation id
-////////////////////////////////////////////////////////////////////////////////
-
-#define ECS_ID_ON_DELETE_REMOVE          (1u << 0)
-#define ECS_ID_ON_DELETE_DELETE          (1u << 1)
-#define ECS_ID_ON_DELETE_THROW           (1u << 2)
-#define ECS_ID_ON_DELETE_MASK\
-    (ECS_ID_ON_DELETE_THROW|ECS_ID_ON_DELETE_REMOVE|ECS_ID_ON_DELETE_DELETE)
-
-#define ECS_ID_ON_DELETE_OBJECT_REMOVE   (1u << 3)
-#define ECS_ID_ON_DELETE_OBJECT_DELETE   (1u << 4)
-#define ECS_ID_ON_DELETE_OBJECT_THROW    (1u << 5)
-#define ECS_ID_ON_DELETE_OBJECT_MASK\
-    (ECS_ID_ON_DELETE_OBJECT_THROW|ECS_ID_ON_DELETE_OBJECT_REMOVE|\
-        ECS_ID_ON_DELETE_OBJECT_DELETE)
-
-#define ECS_ID_EXCLUSIVE                 (1u << 6)
-#define ECS_ID_DONT_INHERIT              (1u << 7)
-#define ECS_TYPE_INFO_INITIALIZED        (1u << 8)
-
-/* Utilities for converting from flags to delete policies and vice versa */
-#define ECS_ID_ON_DELETE(flags) \
-    ((ecs_entity_t[]){0, EcsRemove, EcsDelete, 0, EcsThrow}\
-        [((flags) & ECS_ID_ON_DELETE_MASK)])
-#define ECS_ID_ON_DELETE_OBJECT(flags) ECS_ID_ON_DELETE(flags >> 3)
-#define ECS_ID_ON_DELETE_FLAG(id) (1u << ((id) - EcsRemove))
-#define ECS_ID_ON_DELETE_OBJECT_FLAG(id) (1u << (3 + ((id) - EcsRemove)))
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -231,7 +210,6 @@ typedef int32_t ecs_size_t;
 #define ecs_entity_t_comb(lo, hi) ((ECS_CAST(uint64_t, hi) << 32) + ECS_CAST(uint32_t, lo))
 
 #define ecs_pair(pred, obj) (ECS_PAIR | ecs_entity_t_comb(obj, pred))
-#define ecs_case(pred, obj) (ECS_CASE | ecs_entity_t_comb(obj, pred))
 
 /* Get object from pair with the correct (current) generation count */
 #define ecs_pair_first(world, pair) ecs_get_alive(world, ECS_PAIR_FIRST(pair))
@@ -239,8 +217,10 @@ typedef int32_t ecs_size_t;
 #define ecs_pair_relation ecs_pair_first
 #define ecs_pair_object ecs_pair_second
 
+#define ecs_poly_id(tag) ecs_pair(ecs_id(EcsPoly), tag)
+
 ////////////////////////////////////////////////////////////////////////////////
-//// Debug macro's
+//// Debug macros
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifndef FLECS_NDEBUG
@@ -253,7 +233,7 @@ typedef int32_t ecs_size_t;
 
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Convenience macro's for ctor, dtor, move and copy
+//// Convenience macros for ctor, dtor, move and copy
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifndef FLECS_LEGACY
@@ -317,9 +297,8 @@ typedef int32_t ecs_size_t;
         }\
     }
 
-
-#define ECS_ON_SET_IMPL(type, var, ...)\
-    void type##_##on_set(ecs_iter_t *_it)\
+#define ECS_HOOK_IMPL(type, func, var, ...)\
+    void func(ecs_iter_t *_it)\
     {\
         for (int32_t i = 0; i < _it->count; i ++) {\
             ecs_entity_t entity = _it->entities[i];\
@@ -331,18 +310,6 @@ typedef int32_t ecs_size_t;
     }
 
 #endif
-
-
-////////////////////////////////////////////////////////////////////////////////
-//// Deprecated constants
-////////////////////////////////////////////////////////////////////////////////
-
-/* These constants should no longer be used, but are required by the core to
- * guarantee backwards compatibility */
-#define ECS_AND (ECS_ROLE | (0x79ull << 56))
-#define ECS_OR (ECS_ROLE | (0x78ull << 56))
-#define ECS_XOR (ECS_ROLE | (0x77ull << 56))
-#define ECS_NOT (ECS_ROLE | (0x76ull << 56))
 
 #ifdef __cplusplus
 }

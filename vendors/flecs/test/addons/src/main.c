@@ -18,10 +18,14 @@ void Parser_component_implicit_subject(void);
 void Parser_component_explicit_subject(void);
 void Parser_component_explicit_subject_this(void);
 void Parser_component_explicit_subject_this_by_name(void);
+void Parser_component_explicit_subject_this_by_var_name(void);
 void Parser_component_explicit_subject_wildcard(void);
 void Parser_component_explicit_subject_any(void);
+void Parser_component_explicit_subject_0(void);
 void Parser_this_as_predicate(void);
+void Parser_this_var_as_predicate(void);
 void Parser_this_as_object(void);
+void Parser_this_var_as_object(void);
 void Parser_pair_implicit_subject(void);
 void Parser_pair_implicit_subject_wildcard_pred(void);
 void Parser_pair_implicit_subject_wildcard_obj(void);
@@ -32,11 +36,13 @@ void Parser_pair_implicit_subject_this_obj(void);
 void Parser_pair_explicit_subject(void);
 void Parser_pair_explicit_subject_this(void);
 void Parser_pair_explicit_subject_this_by_name(void);
+void Parser_pair_explicit_subject_this_by_var_name(void);
 void Parser_pair_explicit_subject_wildcard_pred(void);
 void Parser_pair_explicit_subject_wildcard_subj(void);
 void Parser_pair_explicit_subject_wildcard_obj(void);
 void Parser_pair_implicit_subject_0_object(void);
 void Parser_pair_explicit_subject_0_object(void);
+void Parser_pair_explicit_subject_0(void);
 void Parser_in_component_implicit_subject(void);
 void Parser_in_component_explicit_subject(void);
 void Parser_in_pair_implicit_subject(void);
@@ -116,12 +122,6 @@ void Parser_pred_implicit_subject_implicit_superset_cascade(void);
 void Parser_pred_implicit_subject_implicit_superset_inclusive_cascade(void);
 void Parser_pred_implicit_subject_implicit_superset_cascade_w_rel(void);
 void Parser_pred_implicit_subject_implicit_superset_inclusive_cascade_w_rel(void);
-void Parser_pred_implicit_subject_superset_depth_1_digit(void);
-void Parser_pred_implicit_subject_subset_depth_1_digit(void);
-void Parser_pred_implicit_subject_superset_depth_2_digits(void);
-void Parser_pred_implicit_subject_subset_depth_2_digits(void);
-void Parser_pred_implicit_superset_min_max_depth(void);
-void Parser_pred_implicit_superset_childof_min_max_depth(void);
 void Parser_pred_implicit_subject_superset_childof(void);
 void Parser_pred_implicit_subject_cascade_superset_childof(void);
 void Parser_pred_implicit_subject_superset_cascade_childof(void);
@@ -159,10 +159,6 @@ void Parser_trailing_space(void);
 void Parser_2_trailing_spaces(void);
 void Parser_template_type(void);
 void Parser_predicate_w_parens(void);
-void Parser_switch_id(void);
-void Parser_case_pair(void);
-void Parser_pair_w_invalid_role(void);
-void Parser_case_w_missing_obj(void);
 void Parser_not_alive_pred(void);
 void Parser_not_alive_subj(void);
 void Parser_not_alive_obj(void);
@@ -304,12 +300,6 @@ void Plecs_default_child_component_w_assign(void);
 void Plecs_struct_type_w_default_child_component(void);
 void Plecs_struct_type_w_default_child_component_nested_member(void);
 void Plecs_enum_type_w_default_child_component(void);
-void Plecs_comment_as_brief_doc(void);
-void Plecs_comment_as_brief_doc_after_using(void);
-void Plecs_comment_as_brief_doc_2_stmts(void);
-void Plecs_comment_type(void);
-void Plecs_empty_doc_comment(void);
-void Plecs_newline_after_doc_comment(void);
 void Plecs_default_type_from_with(void);
 void Plecs_scope_w_1_subj_and_2_pairs(void);
 void Plecs_inherit_from_multiple(void);
@@ -318,6 +308,12 @@ void Plecs_assign_pair_component_in_scope(void);
 void Plecs_set_entity_names(void);
 void Plecs_oneof(void);
 void Plecs_invalid_oneof(void);
+void Plecs_brief_annotation(void);
+void Plecs_name_annotation(void);
+void Plecs_link_annotation(void);
+void Plecs_color_annotation(void);
+void Plecs_multiple_annotations(void);
+void Plecs_annotation_w_trailing_space(void);
 
 // Testsuite 'Doc'
 void Doc_get_set_name(void);
@@ -364,6 +360,10 @@ void Pipeline_no_staging_system_create_query(void);
 void Pipeline_single_threaded_pipeline_change(void);
 void Pipeline_multi_threaded_pipeline_change(void);
 void Pipeline_activate_after_add(void);
+void Pipeline_match_all_after_pipeline_rebuild(void);
+void Pipeline_empty_pipeline(void);
+void Pipeline_custom_pipeline_w_system_macro(void);
+void Pipeline_pipeline_w_short_notation(void);
 
 // Testsuite 'SystemMisc'
 void SystemMisc_invalid_not_without_id(void);
@@ -388,12 +388,6 @@ void SystemMisc_system_w_or_prefab(void);
 void SystemMisc_system_w_or_disabled(void);
 void SystemMisc_system_w_or_disabled_and_prefab(void);
 void SystemMisc_table_columns_access(void);
-void SystemMisc_status_enable_after_new(void);
-void SystemMisc_status_enable_after_disable(void);
-void SystemMisc_status_disable_after_new(void);
-void SystemMisc_status_disable_after_disable(void);
-void SystemMisc_status_activate_after_new(void);
-void SystemMisc_status_deactivate_after_delete(void);
 void SystemMisc_dont_enable_after_rematch(void);
 void SystemMisc_ensure_single_merge(void);
 void SystemMisc_table_count(void);
@@ -426,7 +420,6 @@ void SystemMisc_get_query(void);
 void SystemMisc_set_get_context(void);
 void SystemMisc_set_get_binding_context(void);
 void SystemMisc_deactivate_after_disable(void);
-void SystemMisc_system_w_self(void);
 void SystemMisc_delete_system(void);
 void SystemMisc_delete_pipeline_system(void);
 void SystemMisc_delete_system_w_ctx(void);
@@ -435,6 +428,7 @@ void SystemMisc_run_w_offset_limit_custom_run_action(void);
 void SystemMisc_pipeline_custom_run_action(void);
 void SystemMisc_change_custom_run_action(void);
 void SystemMisc_custom_run_action_call_next(void);
+void SystemMisc_system_w_short_notation(void);
 
 // Testsuite 'Rules'
 void Rules_empty_rule(void);
@@ -543,6 +537,10 @@ void Rules_invalid_rule_w_only_not_term(void);
 void Rules_invalid_rule_w_not_term_unknown_var(void);
 void Rules_invalid_rule_w_not_term_unknown_pair_var(void);
 void Rules_invalid_rule_w_not_term_unknown_pair_var_subj_var(void);
+void Rules_not_wildcard(void);
+void Rules_not_any(void);
+void Rules_not_wildcard_w_expr(void);
+void Rules_not_any_w_expr(void);
 void Rules_rules_w_desc_id(void);
 void Rules_rules_w_desc_pair(void);
 void Rules_rules_w_desc_pair_empty_rel_obj(void);
@@ -599,6 +597,8 @@ void Rules_rule_w_inout_filter(void);
 void Rules_variable_order(void);
 void Rules_table_subj_as_obj_in_not(void);
 void Rules_invalid_variable_only(void);
+void Rules_page_iter(void);
+void Rules_rule_w_short_notation(void);
 
 // Testsuite 'TransitiveRules'
 void TransitiveRules_trans_X_X(void);
@@ -699,7 +699,6 @@ void SystemCascade_cascade_depth_2(void);
 void SystemCascade_cascade_depth_2_new_syntax(void);
 void SystemCascade_add_after_match(void);
 void SystemCascade_adopt_after_match(void);
-void SystemCascade_query_w_only_cascade(void);
 void SystemCascade_custom_relation_cascade_depth_1(void);
 void SystemCascade_custom_relation_cascade_depth_2(void);
 void SystemCascade_custom_relation_add_after_match(void);
@@ -708,7 +707,6 @@ void SystemCascade_custom_relation_adopt_after_match(void);
 // Testsuite 'SystemManual'
 void SystemManual_setup(void);
 void SystemManual_1_type_1_component(void);
-void SystemManual_activate_status(void);
 void SystemManual_no_automerge(void);
 void SystemManual_dont_run_w_unmatching_entity_query(void);
 
@@ -833,6 +831,7 @@ void MultiThread_schedule_w_tasks(void);
 void MultiThread_reactive_system(void);
 void MultiThread_fini_after_set_threads(void);
 void MultiThread_2_threads_single_threaded_system(void);
+void MultiThread_no_staging_w_multithread(void);
 
 // Testsuite 'MultiThreadStaging'
 void MultiThreadStaging_setup(void);
@@ -846,6 +845,10 @@ void MultiThreadStaging_new_w_count(void);
 void MultiThreadStaging_custom_thread_auto_merge(void);
 void MultiThreadStaging_custom_thread_manual_merge(void);
 void MultiThreadStaging_custom_thread_partial_manual_merge(void);
+void MultiThreadStaging_set_pair_w_new_target_readonly(void);
+void MultiThreadStaging_set_pair_w_new_target_tgt_component_readonly(void);
+void MultiThreadStaging_set_pair_w_new_target_defer(void);
+void MultiThreadStaging_set_pair_w_new_target_tgt_component_defer(void);
 
 // Testsuite 'Snapshot'
 void Snapshot_simple_snapshot(void);
@@ -954,6 +957,10 @@ bake_test_case Parser_testcases[] = {
         Parser_component_explicit_subject_this_by_name
     },
     {
+        "component_explicit_subject_this_by_var_name",
+        Parser_component_explicit_subject_this_by_var_name
+    },
+    {
         "component_explicit_subject_wildcard",
         Parser_component_explicit_subject_wildcard
     },
@@ -962,12 +969,24 @@ bake_test_case Parser_testcases[] = {
         Parser_component_explicit_subject_any
     },
     {
+        "component_explicit_subject_0",
+        Parser_component_explicit_subject_0
+    },
+    {
         "this_as_predicate",
         Parser_this_as_predicate
     },
     {
+        "this_var_as_predicate",
+        Parser_this_var_as_predicate
+    },
+    {
         "this_as_object",
         Parser_this_as_object
+    },
+    {
+        "this_var_as_object",
+        Parser_this_var_as_object
     },
     {
         "pair_implicit_subject",
@@ -1010,6 +1029,10 @@ bake_test_case Parser_testcases[] = {
         Parser_pair_explicit_subject_this_by_name
     },
     {
+        "pair_explicit_subject_this_by_var_name",
+        Parser_pair_explicit_subject_this_by_var_name
+    },
+    {
         "pair_explicit_subject_wildcard_pred",
         Parser_pair_explicit_subject_wildcard_pred
     },
@@ -1028,6 +1051,10 @@ bake_test_case Parser_testcases[] = {
     {
         "pair_explicit_subject_0_object",
         Parser_pair_explicit_subject_0_object
+    },
+    {
+        "pair_explicit_subject_0",
+        Parser_pair_explicit_subject_0
     },
     {
         "in_component_implicit_subject",
@@ -1346,30 +1373,6 @@ bake_test_case Parser_testcases[] = {
         Parser_pred_implicit_subject_implicit_superset_inclusive_cascade_w_rel
     },
     {
-        "pred_implicit_subject_superset_depth_1_digit",
-        Parser_pred_implicit_subject_superset_depth_1_digit
-    },
-    {
-        "pred_implicit_subject_subset_depth_1_digit",
-        Parser_pred_implicit_subject_subset_depth_1_digit
-    },
-    {
-        "pred_implicit_subject_superset_depth_2_digits",
-        Parser_pred_implicit_subject_superset_depth_2_digits
-    },
-    {
-        "pred_implicit_subject_subset_depth_2_digits",
-        Parser_pred_implicit_subject_subset_depth_2_digits
-    },
-    {
-        "pred_implicit_superset_min_max_depth",
-        Parser_pred_implicit_superset_min_max_depth
-    },
-    {
-        "pred_implicit_superset_childof_min_max_depth",
-        Parser_pred_implicit_superset_childof_min_max_depth
-    },
-    {
         "pred_implicit_subject_superset_childof",
         Parser_pred_implicit_subject_superset_childof
     },
@@ -1516,22 +1519,6 @@ bake_test_case Parser_testcases[] = {
     {
         "predicate_w_parens",
         Parser_predicate_w_parens
-    },
-    {
-        "switch_id",
-        Parser_switch_id
-    },
-    {
-        "case_pair",
-        Parser_case_pair
-    },
-    {
-        "pair_w_invalid_role",
-        Parser_pair_w_invalid_role
-    },
-    {
-        "case_w_missing_obj",
-        Parser_case_w_missing_obj
     },
     {
         "not_alive_pred",
@@ -2093,30 +2080,6 @@ bake_test_case Plecs_testcases[] = {
         Plecs_enum_type_w_default_child_component
     },
     {
-        "comment_as_brief_doc",
-        Plecs_comment_as_brief_doc
-    },
-    {
-        "comment_as_brief_doc_after_using",
-        Plecs_comment_as_brief_doc_after_using
-    },
-    {
-        "comment_as_brief_doc_2_stmts",
-        Plecs_comment_as_brief_doc_2_stmts
-    },
-    {
-        "comment_type",
-        Plecs_comment_type
-    },
-    {
-        "empty_doc_comment",
-        Plecs_empty_doc_comment
-    },
-    {
-        "newline_after_doc_comment",
-        Plecs_newline_after_doc_comment
-    },
-    {
         "default_type_from_with",
         Plecs_default_type_from_with
     },
@@ -2147,6 +2110,30 @@ bake_test_case Plecs_testcases[] = {
     {
         "invalid_oneof",
         Plecs_invalid_oneof
+    },
+    {
+        "brief_annotation",
+        Plecs_brief_annotation
+    },
+    {
+        "name_annotation",
+        Plecs_name_annotation
+    },
+    {
+        "link_annotation",
+        Plecs_link_annotation
+    },
+    {
+        "color_annotation",
+        Plecs_color_annotation
+    },
+    {
+        "multiple_annotations",
+        Plecs_multiple_annotations
+    },
+    {
+        "annotation_w_trailing_space",
+        Plecs_annotation_w_trailing_space
     }
 };
 
@@ -2317,6 +2304,22 @@ bake_test_case Pipeline_testcases[] = {
     {
         "activate_after_add",
         Pipeline_activate_after_add
+    },
+    {
+        "match_all_after_pipeline_rebuild",
+        Pipeline_match_all_after_pipeline_rebuild
+    },
+    {
+        "empty_pipeline",
+        Pipeline_empty_pipeline
+    },
+    {
+        "custom_pipeline_w_system_macro",
+        Pipeline_custom_pipeline_w_system_macro
+    },
+    {
+        "pipeline_w_short_notation",
+        Pipeline_pipeline_w_short_notation
     }
 };
 
@@ -2408,30 +2411,6 @@ bake_test_case SystemMisc_testcases[] = {
     {
         "table_columns_access",
         SystemMisc_table_columns_access
-    },
-    {
-        "status_enable_after_new",
-        SystemMisc_status_enable_after_new
-    },
-    {
-        "status_enable_after_disable",
-        SystemMisc_status_enable_after_disable
-    },
-    {
-        "status_disable_after_new",
-        SystemMisc_status_disable_after_new
-    },
-    {
-        "status_disable_after_disable",
-        SystemMisc_status_disable_after_disable
-    },
-    {
-        "status_activate_after_new",
-        SystemMisc_status_activate_after_new
-    },
-    {
-        "status_deactivate_after_delete",
-        SystemMisc_status_deactivate_after_delete
     },
     {
         "dont_enable_after_rematch",
@@ -2562,10 +2541,6 @@ bake_test_case SystemMisc_testcases[] = {
         SystemMisc_deactivate_after_disable
     },
     {
-        "system_w_self",
-        SystemMisc_system_w_self
-    },
-    {
         "delete_system",
         SystemMisc_delete_system
     },
@@ -2596,6 +2571,10 @@ bake_test_case SystemMisc_testcases[] = {
     {
         "custom_run_action_call_next",
         SystemMisc_custom_run_action_call_next
+    },
+    {
+        "system_w_short_notation",
+        SystemMisc_system_w_short_notation
     }
 };
 
@@ -3025,6 +3004,22 @@ bake_test_case Rules_testcases[] = {
         Rules_invalid_rule_w_not_term_unknown_pair_var_subj_var
     },
     {
+        "not_wildcard",
+        Rules_not_wildcard
+    },
+    {
+        "not_any",
+        Rules_not_any
+    },
+    {
+        "not_wildcard_w_expr",
+        Rules_not_wildcard_w_expr
+    },
+    {
+        "not_any_w_expr",
+        Rules_not_any_w_expr
+    },
+    {
         "rules_w_desc_id",
         Rules_rules_w_desc_id
     },
@@ -3247,6 +3242,14 @@ bake_test_case Rules_testcases[] = {
     {
         "invalid_variable_only",
         Rules_invalid_variable_only
+    },
+    {
+        "page_iter",
+        Rules_page_iter
+    },
+    {
+        "rule_w_short_notation",
+        Rules_rule_w_short_notation
     }
 };
 
@@ -3629,10 +3632,6 @@ bake_test_case SystemCascade_testcases[] = {
         SystemCascade_adopt_after_match
     },
     {
-        "query_w_only_cascade",
-        SystemCascade_query_w_only_cascade
-    },
-    {
         "custom_relation_cascade_depth_1",
         SystemCascade_custom_relation_cascade_depth_1
     },
@@ -3654,10 +3653,6 @@ bake_test_case SystemManual_testcases[] = {
     {
         "1_type_1_component",
         SystemManual_1_type_1_component
-    },
-    {
-        "activate_status",
-        SystemManual_activate_status
     },
     {
         "no_automerge",
@@ -4102,6 +4097,10 @@ bake_test_case MultiThread_testcases[] = {
     {
         "2_threads_single_threaded_system",
         MultiThread_2_threads_single_threaded_system
+    },
+    {
+        "no_staging_w_multithread",
+        MultiThread_no_staging_w_multithread
     }
 };
 
@@ -4145,6 +4144,22 @@ bake_test_case MultiThreadStaging_testcases[] = {
     {
         "custom_thread_partial_manual_merge",
         MultiThreadStaging_custom_thread_partial_manual_merge
+    },
+    {
+        "set_pair_w_new_target_readonly",
+        MultiThreadStaging_set_pair_w_new_target_readonly
+    },
+    {
+        "set_pair_w_new_target_tgt_component_readonly",
+        MultiThreadStaging_set_pair_w_new_target_tgt_component_readonly
+    },
+    {
+        "set_pair_w_new_target_defer",
+        MultiThreadStaging_set_pair_w_new_target_defer
+    },
+    {
+        "set_pair_w_new_target_tgt_component_defer",
+        MultiThreadStaging_set_pair_w_new_target_tgt_component_defer
     }
 };
 
@@ -4400,7 +4415,7 @@ static bake_test_suite suites[] = {
         "Parser",
         NULL,
         NULL,
-        174,
+        170,
         Parser_testcases
     },
     {
@@ -4421,21 +4436,21 @@ static bake_test_suite suites[] = {
         "Pipeline",
         Pipeline_setup,
         NULL,
-        36,
+        40,
         Pipeline_testcases
     },
     {
         "SystemMisc",
         NULL,
         NULL,
-        69,
+        63,
         SystemMisc_testcases
     },
     {
         "Rules",
         NULL,
         NULL,
-        162,
+        168,
         Rules_testcases
     },
     {
@@ -4463,14 +4478,14 @@ static bake_test_suite suites[] = {
         "SystemCascade",
         NULL,
         NULL,
-        10,
+        9,
         SystemCascade_testcases
     },
     {
         "SystemManual",
         SystemManual_setup,
         NULL,
-        4,
+        3,
         SystemManual_testcases
     },
     {
@@ -4526,14 +4541,14 @@ static bake_test_suite suites[] = {
         "MultiThread",
         MultiThread_setup,
         NULL,
-        40,
+        41,
         MultiThread_testcases
     },
     {
         "MultiThreadStaging",
         MultiThreadStaging_setup,
         NULL,
-        10,
+        14,
         MultiThreadStaging_testcases
     },
     {

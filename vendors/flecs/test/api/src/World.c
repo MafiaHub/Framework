@@ -7,8 +7,8 @@ void World_setup() {
 
 static
 void Move(ecs_iter_t *it) {
-    Position *pos = ecs_term(it, Position, 1);
-    Velocity *vel = ecs_term(it, Velocity, 2);
+    Position *pos = ecs_field(it, Position, 1);
+    Velocity *vel = ecs_field(it, Velocity, 2);
     probe_iter(it);
 
     int row;
@@ -199,10 +199,10 @@ void World_entity_range_add_existing_staged() {
 
     ecs_set_entity_range(world, 1000, 1500);
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
     ecs_world_t *stage = ecs_get_stage(world, 0);
     ecs_add(stage, e, Velocity);
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
 
     ecs_fini(world);
 }
@@ -218,16 +218,16 @@ void World_entity_range_add_in_range_staged() {
     ecs_entity_t e = ecs_new(world, Position);
     test_assert(e == 500);
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
     ecs_world_t *stage = ecs_get_stage(world, 0);
     ecs_add(stage, e, Velocity);
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
 
     ecs_fini(world);
 }
 
 void AddOutOfRange(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -251,10 +251,10 @@ void World_entity_range_add_out_of_range_staged() {
     ecs_entity_t e = ecs_new(world, Position);
     test_assert(e == 500);
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
     ecs_world_t *stage = ecs_get_stage(world, 0);
     ecs_add(stage, e, Velocity);
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
 
     ecs_fini(world);
 }
@@ -331,7 +331,7 @@ void World_dim() {
 
 static
 void TOnLoad(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 0);
@@ -341,7 +341,7 @@ void TOnLoad(ecs_iter_t *it) {
 
 static
 void TPostLoad(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 1);
@@ -351,7 +351,7 @@ void TPostLoad(ecs_iter_t *it) {
 
 static
 void TPreUpdate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 2);
@@ -361,7 +361,7 @@ void TPreUpdate(ecs_iter_t *it) {
 
 static
 void TOnUpdate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 3);
@@ -371,7 +371,7 @@ void TOnUpdate(ecs_iter_t *it) {
 
 static
 void TOnValidate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 4);
@@ -381,7 +381,7 @@ void TOnValidate(ecs_iter_t *it) {
 
 static
 void TPostUpdate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 5);
@@ -391,7 +391,7 @@ void TPostUpdate(ecs_iter_t *it) {
 
 static
 void TPreStore(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 6);
@@ -401,7 +401,7 @@ void TPreStore(ecs_iter_t *it) {
 
 static
 void TOnStore(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 7);
@@ -411,7 +411,7 @@ void TOnStore(ecs_iter_t *it) {
 
 static
 void TManual(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     int i;
     for (i = 0; i < it->count; i ++) {
         test_int(p[i].x, 8);
@@ -485,8 +485,8 @@ void World_phases_match_in_create() {
 
 static
 void TMergeOnLoad(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -497,8 +497,8 @@ void TMergeOnLoad(ecs_iter_t *it) {
 
 static
 void TMergePostLoad(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -509,8 +509,8 @@ void TMergePostLoad(ecs_iter_t *it) {
 
 static
 void TMergePreUpdate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -521,8 +521,8 @@ void TMergePreUpdate(ecs_iter_t *it) {
 
 static
 void TMergeOnUpdate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -533,8 +533,8 @@ void TMergeOnUpdate(ecs_iter_t *it) {
 
 static
 void TMergeOnValidate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -545,8 +545,8 @@ void TMergeOnValidate(ecs_iter_t *it) {
 
 static
 void TMergePostUpdate(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -557,8 +557,8 @@ void TMergePostUpdate(ecs_iter_t *it) {
 
 static
 void TMergePreStore(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -569,8 +569,8 @@ void TMergePreStore(ecs_iter_t *it) {
 
 static
 void TMergeOnStore(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -581,8 +581,8 @@ void TMergeOnStore(ecs_iter_t *it) {
 
 static
 void TMergeManual(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -899,6 +899,8 @@ void World_quit() {
         count ++;
     }
 
+    test_int(count, 1);
+
     ecs_fini(world);
 }
 
@@ -1030,10 +1032,14 @@ void World_ensure_empty_root() {
     ecs_iter_t it = ecs_query_iter(world, q);
 
     /* Make sure that the only entity in the root is the flecs module */
-
     test_assert(ecs_query_next(&it));
     test_int(it.count, 1);
     test_assert(it.entities[0] == EcsFlecs);
+
+    /* Entity for the query */
+    test_assert(ecs_query_next(&it));
+    test_int(it.count, 1);
+    test_assert(ecs_has_id(world, it.entities[0], EcsQuery));
 
     test_assert(!ecs_query_next(&it));
 
@@ -1071,27 +1077,19 @@ void World_register_alias_twice_different_entity() {
 void World_redefine_component() {
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t c = ecs_component_init(world, &(ecs_component_desc_t) {
-        .entity.name = "flecs.core.Component",
-        .entity.symbol = "EcsComponent",
-        .size = ECS_SIZEOF(EcsComponent),
-        .alignment = ECS_ALIGNOF(EcsComponent)
+    ecs_entity_t c = ecs_component_init(world, &(ecs_component_desc_t){
+        .entity = ecs_entity(world, {
+            .name = "flecs.core.Component",
+            .symbol = "EcsComponent"
+        }),
+        .type.size = ECS_SIZEOF(EcsComponent),
+        .type.alignment = ECS_ALIGNOF(EcsComponent)
     });
 
     test_assert(c == ecs_id(EcsComponent));
 
     ecs_fini(world);
 }
-
-FLECS_API
-int32_t ecs_delete_empty_tables(
-    ecs_world_t *world,
-    ecs_id_t id,
-    uint16_t clear_generation,
-    uint16_t delete_generation,
-    int32_t min_id_count,
-    double time_budget_seconds);
-
 
 void World_delete_empty_tables_after_mini() {
     ecs_world_t *world = ecs_mini();
@@ -1131,7 +1129,7 @@ void World_delete_1000_empty_tables() {
     ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
 
     const ecs_world_info_t *info = ecs_get_world_info(world);
     int32_t old_empty_table_count = info->empty_table_count;
@@ -1141,7 +1139,7 @@ void World_delete_1000_empty_tables() {
         ecs_add_id(world, e, ecs_new_id(world));
     }
 
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
     test_int(info->empty_table_count, old_empty_table_count + 1000);
 
     int32_t deleted;
@@ -1162,7 +1160,7 @@ void World_delete_empty_tables_for_id() {
 
     ECS_TAG(world, TagA);
     ECS_TAG(world, TagB);
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
 
     const ecs_world_info_t *info = ecs_get_world_info(world);
     int32_t old_empty_table_count = info->empty_table_count;
@@ -1177,7 +1175,7 @@ void World_delete_empty_tables_for_id() {
         ecs_add_id(world, e2, ecs_new_id(world));
     }
 
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
     test_int(info->empty_table_count, old_empty_table_count + 1000);
 
     int32_t deleted;
@@ -1322,10 +1320,10 @@ void World_use_after_clear_empty_w_component_w_lifecycle() {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ecs_set_component_actions(world, Position, { 
+    ecs_set_hooks(world, Position, { 
         .ctor = ecs_default_ctor 
     });
-    ecs_set_component_actions(world, Velocity, { 
+    ecs_set_hooks(world, Velocity, { 
         .ctor = ecs_default_ctor 
     });
 
@@ -1365,7 +1363,6 @@ void World_use_after_clear_unused() {
 
     ECS_TAG(world, TagA);
     ECS_TAG(world, TagB);
-    ECS_TYPE(world, Type, TagA, TagB);
 
     int32_t deleted;
     deleted = ecs_delete_empty_tables(world, 0, 1, 0, 0, 0);
@@ -1379,6 +1376,86 @@ void World_use_after_clear_unused() {
 
     test_assert(ecs_has(world, e, TagA));
     test_assert(ecs_has(world, e, TagB));
+
+    ecs_fini(world);
+}
+
+static ECS_COMPONENT_DECLARE(Test);
+
+typedef struct Test {
+    uint32_t value;
+} Test;
+
+static int at_fini_test_invoked = 0;
+
+static 
+void at_fini_test(
+    ecs_world_t* world,
+    void* context) 
+{
+    test_assert(ecs_singleton_get_mut(world, Test) != NULL);
+    at_fini_test_invoked = 1;
+}
+
+void World_get_mut_in_at_fini() {
+    ecs_world_t* world = ecs_mini();
+
+    ECS_COMPONENT_DEFINE(world, Test);
+    ecs_singleton_set(world, Test, { 42 });
+
+    ecs_atfini(world, at_fini_test, NULL);
+
+    ecs_fini(world);
+
+    test_int(at_fini_test_invoked, 1);
+}
+
+void World_get_type_info() {
+    ecs_world_t* world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    const ecs_type_info_t *ti = ecs_get_type_info(world, ecs_id(Position));
+    test_assert(ti != NULL);
+    test_int(ti->size, ECS_SIZEOF(Position));
+    test_int(ti->alignment, ECS_ALIGNOF(Position));
+    test_uint(ti->component, ecs_id(Position));
+
+    ecs_fini(world);
+}
+
+void World_get_type_info_after_delete_with() {
+    ecs_world_t* world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_delete_with(world, ecs_id(Position));
+
+    const ecs_type_info_t *ti = ecs_get_type_info(world, ecs_id(Position));
+    test_assert(ti != NULL);
+    test_int(ti->size, ECS_SIZEOF(Position));
+    test_int(ti->alignment, ECS_ALIGNOF(Position));
+    test_uint(ti->component, ecs_id(Position));
+
+    ecs_fini(world);
+}
+
+void World_get_type_info_after_reuse() {
+    ecs_world_t* world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_delete_with(world, ecs_id(Position));
+
+    ecs_entity_t e = ecs_new(world, Position);
+    test_assert(e != 0);
+    test_assert( ecs_has(world, e, Position));
+
+    const ecs_type_info_t *ti = ecs_get_type_info(world, ecs_id(Position));
+    test_assert(ti != NULL);
+    test_int(ti->size, ECS_SIZEOF(Position));
+    test_int(ti->alignment, ECS_ALIGNOF(Position));
+    test_uint(ti->component, ecs_id(Position));
 
     ecs_fini(world);
 }

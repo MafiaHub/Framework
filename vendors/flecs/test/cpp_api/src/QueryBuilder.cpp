@@ -334,28 +334,7 @@ void QueryBuilder_string_term() {
     ecs.component<Position>();
 
     auto q = ecs.query_builder<>()
-        .term("Position")
-        .build();
-
-    auto e1 = ecs.entity().add<Position>();
-    ecs.entity().add<Velocity>();
-
-    int32_t count = 0;
-    q.each([&](flecs::entity e) {
-        count ++;
-        test_assert(e == e1);
-    });
-    
-    test_int(count, 1);
-}
-
-void QueryBuilder_string_term_w_expr() {
-    flecs::world ecs;
-
-    ecs.component<Position>();
-
-    auto q = ecs.query_builder<>()
-        .term().expr("Position")
+        .expr("Position")
         .build();
 
     auto e1 = ecs.entity().add<Position>();
@@ -387,8 +366,8 @@ void QueryBuilder_singleton_term() {
     int32_t count = 0;
 
     q.iter([&](flecs::iter& it, Self *s) {
-        auto o = it.term<const Other>(2);
-        test_assert(!it.is_owned(2));
+        auto o = it.field<const Other>(2);
+        test_assert(!it.is_self(2));
         test_int(o->value, 10);
         
         const Other& o_ref = *o;
@@ -407,7 +386,7 @@ void QueryBuilder_isa_superset_term() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self>()
-        .term<Other>().subj().set(flecs::SuperSet)
+        .term<Other>().src().up()
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -420,8 +399,8 @@ void QueryBuilder_isa_superset_term() {
     int32_t count = 0;
 
     q.iter([&](flecs::iter& it, Self *s) {
-        auto o = it.term<const Other>(2);
-        test_assert(!it.is_owned(2));
+        auto o = it.field<const Other>(2);
+        test_assert(!it.is_self(2));
         test_int(o->value, 10);
 
         for (auto i : it) {
@@ -437,7 +416,7 @@ void QueryBuilder_isa_self_superset_term() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self>()
-        .term<Other>().subj().set(flecs::Self | flecs::SuperSet)
+        .term<Other>().src().self().up()
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -453,9 +432,9 @@ void QueryBuilder_isa_self_superset_term() {
     int32_t owned_count = 0;
 
     q.iter([&](flecs::iter& it, Self *s) {
-        auto o = it.term<const Other>(2);
+        auto o = it.field<const Other>(2);
 
-        if (!it.is_owned(2)) {
+        if (!it.is_self(2)) {
             test_int(o->value, 10);
         } else {
             for (auto i : it) {
@@ -478,7 +457,7 @@ void QueryBuilder_childof_superset_term() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self>()
-        .term<Other>().subj().set(flecs::SuperSet, flecs::ChildOf)
+        .term<Other>().src().up(flecs::ChildOf)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -491,8 +470,8 @@ void QueryBuilder_childof_superset_term() {
     int32_t count = 0;
 
     q.iter([&](flecs::iter& it, Self *s) {
-        auto o = it.term<const Other>(2);
-        test_assert(!it.is_owned(2));
+        auto o = it.field<const Other>(2);
+        test_assert(!it.is_self(2));
         test_int(o->value, 10);
 
         for (auto i : it) {
@@ -508,7 +487,7 @@ void QueryBuilder_childof_self_superset_term() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self>()
-        .term<Other>().subj().set(flecs::Self | flecs::SuperSet, flecs::ChildOf)
+        .term<Other>().src().self().up(flecs::ChildOf)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -524,9 +503,9 @@ void QueryBuilder_childof_self_superset_term() {
     int32_t owned_count = 0;
 
     q.iter([&](flecs::iter& it, Self *s) {
-        auto o = it.term<const Other>(2);
+        auto o = it.field<const Other>(2);
 
-        if (!it.is_owned(2)) {
+        if (!it.is_self(2)) {
             test_int(o->value, 10);
         } else {
             for (auto i : it) {
@@ -549,7 +528,7 @@ void QueryBuilder_isa_superset_term_w_each() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).subj().set(flecs::SuperSet)
+        .arg(2).src().up()
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -574,7 +553,7 @@ void QueryBuilder_isa_self_superset_term_w_each() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).subj().set(flecs::Self | flecs::SuperSet)
+        .arg(2).src().self().up()
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -601,7 +580,7 @@ void QueryBuilder_childof_superset_term_w_each() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).subj().set(flecs::SuperSet, flecs::ChildOf)
+        .arg(2).src().up(flecs::ChildOf)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -626,7 +605,7 @@ void QueryBuilder_childof_self_superset_term_w_each() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).subj().set(flecs::Self | flecs::SuperSet, flecs::ChildOf)
+        .arg(2).src().self().up(flecs::ChildOf)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -653,7 +632,7 @@ void QueryBuilder_isa_superset_shortcut() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super()
+        .arg(2).up()
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -678,7 +657,7 @@ void QueryBuilder_isa_superset_shortcut_w_self() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super(flecs::IsA, flecs::Self)
+        .arg(2).self().up(flecs::IsA)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -705,7 +684,7 @@ void QueryBuilder_childof_superset_shortcut() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super(flecs::ChildOf)
+        .arg(2).up(flecs::ChildOf)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -730,7 +709,7 @@ void QueryBuilder_childof_superset_shortcut_w_self() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super(flecs::ChildOf, flecs::Self)
+        .arg(2).self().up(flecs::ChildOf)
         .build();
 
     auto base = ecs.entity().set<Other>({10});
@@ -751,183 +730,6 @@ void QueryBuilder_childof_superset_shortcut_w_self() {
     });
     
     test_int(count, 5);
-}
-
-void QueryBuilder_isa_superset_max_depth_1() {
-    flecs::world ecs;
-
-    auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super().max_depth(1)
-        .build();
-
-    auto base_1 = ecs.entity().set<Other>({10});
-    auto base_2 = ecs.entity().is_a(base_1);
-    auto base_3 = ecs.entity().is_a(base_2);
-    auto base_4 = ecs.entity().is_a(base_3);
-
-    auto 
-    e = ecs.entity().is_a(base_1); e.set<Self>({e});
-    e = ecs.entity().is_a(base_1); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_2); e.set<Self>({0});
-    e = ecs.entity().is_a(base_2); e.set<Self>({0});
-
-    e = ecs.entity().is_a(base_3); e.set<Self>({0});
-    e = ecs.entity().is_a(base_3); e.set<Self>({0});
-
-    e = ecs.entity().is_a(base_4); e.set<Self>({0});
-    e = ecs.entity().is_a(base_4); e.set<Self>({0});
-
-    int32_t count = 0;
-
-    q.each([&](flecs::entity e, Self& s, Other& o) {
-        test_assert(e == s.value);
-        test_int(o.value, 10);
-        count ++;
-    });
-    
-    test_int(count, 2);
-}
-
-void QueryBuilder_isa_superset_max_depth_2() {
-    flecs::world ecs;
-
-    auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super().max_depth(2)
-        .build();
-
-    auto base_1 = ecs.entity().set<Other>({10});
-    auto base_2 = ecs.entity().is_a(base_1);
-    auto base_3 = ecs.entity().is_a(base_2);
-    auto base_4 = ecs.entity().is_a(base_3);
-
-    auto 
-    e = ecs.entity().is_a(base_1); e.set<Self>({e});
-    e = ecs.entity().is_a(base_1); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_2); e.set<Self>({e});
-    e = ecs.entity().is_a(base_2); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_3); e.set<Self>({0});
-    e = ecs.entity().is_a(base_3); e.set<Self>({0});
-
-    e = ecs.entity().is_a(base_4); e.set<Self>({0});
-    e = ecs.entity().is_a(base_4); e.set<Self>({0});
-
-    int32_t count = 0;
-
-    q.each([&](flecs::entity e, Self& s, Other& o) {
-        test_assert(e == s.value);
-        test_int(o.value, 10);
-        count ++;
-    });
-    
-    test_int(count, 4);
-}
-
-void QueryBuilder_isa_superset_min_depth_2() {
-    flecs::world ecs;
-
-    auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super().min_depth(2)
-        .build();
-
-    auto base_1 = ecs.entity().set<Other>({10});
-    auto base_2 = ecs.entity().is_a(base_1);
-    auto base_3 = ecs.entity().is_a(base_2);
-    auto base_4 = ecs.entity().is_a(base_3);
-
-    auto 
-    e = ecs.entity().is_a(base_1); e.set<Self>({0});
-    e = ecs.entity().is_a(base_1); e.set<Self>({0});
-
-    e = ecs.entity().is_a(base_2); e.set<Self>({e});
-    e = ecs.entity().is_a(base_2); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_3); e.set<Self>({e});
-    e = ecs.entity().is_a(base_3); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_4); e.set<Self>({e});
-    e = ecs.entity().is_a(base_4); e.set<Self>({e});
-
-    int32_t count = 0;
-
-    q.each([&](flecs::entity e, Self& s, Other& o) {
-        test_assert(e == s.value);
-        test_int(o.value, 10);
-        count ++;
-    });
-    
-    test_int(count, 6);
-}
-
-void QueryBuilder_isa_superset_min_depth_2_max_depth_3() {
-    flecs::world ecs;
-
-    auto q = ecs.query_builder<Self, Other>()
-        .arg(2).super().min_depth(2).max_depth(3)
-        .build();
-
-    auto base_1 = ecs.entity().set<Other>({10});
-    auto base_2 = ecs.entity().is_a(base_1);
-    auto base_3 = ecs.entity().is_a(base_2);
-    auto base_4 = ecs.entity().is_a(base_3);
-
-    auto 
-    e = ecs.entity().is_a(base_1); e.set<Self>({0});
-    e = ecs.entity().is_a(base_1); e.set<Self>({0});
-
-    e = ecs.entity().is_a(base_2); e.set<Self>({e});
-    e = ecs.entity().is_a(base_2); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_3); e.set<Self>({e});
-    e = ecs.entity().is_a(base_3); e.set<Self>({e});
-
-    e = ecs.entity().is_a(base_4); e.set<Self>({0});
-    e = ecs.entity().is_a(base_4); e.set<Self>({0});
-
-    int32_t count = 0;
-
-    q.each([&](flecs::entity e, Self& s, Other& o) {
-        test_assert(e == s.value);
-        test_int(o.value, 10);
-        count ++;
-    });
-    
-    test_int(count, 4);
-}
-
-void QueryBuilder_role() {
-    flecs::world ecs;
-
-    struct Movement { };
-    struct Walking { };
-    struct Running { };
-
-    ecs.type<Movement>()
-        .add<Walking>()
-        .add<Running>();
-
-    auto q = ecs.query_builder<Self>()
-        .term<Movement>().role(flecs::Switch)
-        .term<Movement, Running>().role(flecs::Case)
-        .build();
-
-    auto 
-    e = ecs.entity().add_switch<Movement>().add_case<Running>(); e.set<Self>({e});
-    e = ecs.entity().add_switch<Movement>().add_case<Running>(); e.set<Self>({e});
-
-    e = ecs.entity().add_switch<Movement>().add_case<Walking>(); e.set<Self>({0});
-    e = ecs.entity().add_switch<Movement>().add_case<Walking>(); e.set<Self>({0});
-
-    int32_t count = 0;
-
-    q.each([&](flecs::entity e, Self& s) {
-        test_assert(e == s.value);
-        count ++;
-    });
-    
-    test_int(count, 2);
 }
 
 void QueryBuilder_relation() {
@@ -1071,7 +873,7 @@ void QueryBuilder_explicit_subject_w_id() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<Position>()
-        .term<Position>().entity(flecs::This)
+        .term<Position>().id(flecs::This)
         .build();
 
     auto e1 = ecs.entity().add<Position>().add<Velocity>();
@@ -1092,7 +894,7 @@ void QueryBuilder_explicit_subject_w_type() {
     ecs.set<Position>({10, 20});
 
     auto q = ecs.query_builder<Position>()
-        .term<Position>().subj<Position>()
+        .term<Position>().src<Position>()
         .build();
 
     int32_t count = 0;
@@ -1114,7 +916,7 @@ void QueryBuilder_explicit_object_w_id() {
     auto Bob = ecs.entity();
 
     auto q = ecs.query_builder<>()
-        .term(Likes).obj(Alice)
+        .term(Likes).second(Alice)
         .build();
 
     auto e1 = ecs.entity().add(Likes, Alice);
@@ -1137,7 +939,7 @@ void QueryBuilder_explicit_object_w_type() {
     auto Bob = ecs.entity();
 
     auto q = ecs.query_builder<>()
-        .term(Likes).obj<Alice>()
+        .term(Likes).second<Alice>()
         .build();
 
     auto e1 = ecs.entity().add(Likes, ecs.id<Alice>());
@@ -1156,7 +958,7 @@ void QueryBuilder_explicit_term() {
     flecs::world ecs;
 
     auto q = ecs.query_builder<>()
-        .term(ecs.term().id<Position>())
+        .term(ecs.term(ecs.id<Position>()))
         .build();
 
     auto e1 = ecs.entity().add<Position>();
@@ -1271,7 +1073,7 @@ void QueryBuilder_1_term_to_empty() {
 
     auto q = qb.build();
 
-    test_int(q.term_count(), 2);
+    test_int(q.field_count(), 2);
     test_int(q.term(0).id(), ecs.id<Position>());
     test_int(q.term(1).id(), ecs.pair(Likes, Apples));
 }
@@ -1284,7 +1086,7 @@ void QueryBuilder_2_subsequent_args() {
     int32_t count = 0;
 
     auto s = ecs.system<Rel, const Velocity>()
-        .arg(1).obj(flecs::Wildcard)
+        .arg(1).second(flecs::Wildcard)
         .arg(2).singleton()
         .iter([&](flecs::iter it){
             count += it.count();
@@ -1348,7 +1150,7 @@ void QueryBuilder_10_terms() {
         .term<TagJ>()
         .build();
 
-    test_int(f.term_count(), 10);
+    test_int(f.field_count(), 10);
 
     auto e = ecs.entity()
         .add<TagA>()
@@ -1366,7 +1168,7 @@ void QueryBuilder_10_terms() {
     f.iter([&](flecs::iter& it) {
         test_int(it.count(), 1);
         test_assert(it.entity(0) == e);
-        test_int(it.term_count(), 10);
+        test_int(it.field_count(), 10);
         count ++;
     });
 
@@ -1399,7 +1201,7 @@ void QueryBuilder_20_terms() {
         .term<TagT>()
         .build();
 
-    test_int(f.term_count(), 20);
+    test_int(f.field_count(), 20);
 
     auto e = ecs.entity()
         .add<TagA>()
@@ -1427,7 +1229,7 @@ void QueryBuilder_20_terms() {
     f.iter([&](flecs::iter& it) {
         test_int(it.count(), 1);
         test_assert(it.entity(0) == e);
-        test_int(it.term_count(), 20);
+        test_int(it.field_count(), 20);
         count ++;
     });
 
@@ -1440,14 +1242,8 @@ uint64_t group_by_first_id(
     flecs::entity_t id,
     void *ctx)
 {
-    flecs::type_t type = ecs_table_get_type(m_table);
-    flecs::vector<flecs::id_t> vec(const_cast<ecs_vector_t*>(type));
-
-    for(auto ColId : vec)
-    {
-        return ColId;
-    }
-    return 0;
+    const flecs::type_t *type = ecs_table_get_type(m_table);
+    return type->array[0];
 }
 
 uint64_t group_by_first_id_negated(
@@ -1581,6 +1377,164 @@ void QueryBuilder_group_by_template() {
     test_int(count, 3);
 }
 
+static
+uint64_t group_by_rel(flecs::world_t *world, flecs::table_t *table, flecs::entity_t id, void *ctx) {
+    ecs_id_t match;
+    if (ecs_search(world, table, ecs_pair(id, EcsWildcard), &match) != -1) {
+        return ECS_PAIR_SECOND(match);
+    }
+    return 0;
+}
+
+void QueryBuilder_group_by_iter_one() {
+    flecs::world ecs;
+
+    auto Rel = ecs.entity();
+    auto TgtA = ecs.entity();
+    auto TgtB = ecs.entity();
+    auto TgtC = ecs.entity();
+    auto Tag = ecs.entity();
+
+    ecs.entity().add(Rel, TgtA);
+    auto e2 = ecs.entity().add(Rel, TgtB);
+    ecs.entity().add(Rel, TgtC);
+
+    ecs.entity().add(Rel, TgtA).add(Tag);
+    auto e5 = ecs.entity().add(Rel, TgtB).add(Tag);
+    ecs.entity().add(Rel, TgtC).add(Tag);
+
+    auto q = ecs.query_builder()
+        .term(Rel, flecs::Wildcard)
+        .group_by(Rel, group_by_rel)
+        .build();
+
+    bool e2_found = false;
+    bool e5_found = false;
+    int32_t count = 0;
+
+    q.iter().set_group(TgtB).each([&](flecs::iter& it, size_t i) {
+        flecs::entity e = it.entity(i);
+        test_assert(it.group_id() == TgtB);
+
+        if (e == e2) e2_found = true;
+        if (e == e5) e5_found = true;
+        count ++;
+    });
+
+    test_int(2, count);
+    test_bool(true, e2_found);
+    test_bool(true, e5_found);
+}
+
+void QueryBuilder_group_by_iter_one_template() {
+    flecs::world ecs;
+
+    struct Rel { };
+    struct TgtA { };
+    struct TgtB { };
+    struct TgtC { };
+    struct Tag { };
+
+    ecs.entity().add<Rel, TgtA>();
+    auto e2 = ecs.entity().add<Rel, TgtB>();
+    ecs.entity().add<Rel, TgtC>();
+
+    ecs.entity().add<Rel, TgtA>().add<Tag>();
+    auto e5 = ecs.entity().add<Rel, TgtB>().add<Tag>();
+    ecs.entity().add<Rel, TgtC>().add<Tag>();
+
+    auto q = ecs.query_builder()
+        .term<Rel>(flecs::Wildcard)
+        .group_by<Rel>(group_by_rel)
+        .build();
+
+    bool e2_found = false;
+    bool e5_found = false;
+    int32_t count = 0;
+
+    q.iter().set_group<TgtB>().each([&](flecs::iter& it, size_t i) {
+        flecs::entity e = it.entity(i);
+        test_assert(it.group_id() == ecs.id<TgtB>());
+
+        if (e == e2) e2_found = true;
+        if (e == e5) e5_found = true;
+        count ++;
+    });
+
+    test_int(2, count);
+    test_bool(true, e2_found);
+    test_bool(true, e5_found);
+}
+
+void QueryBuilder_group_by_iter_one_all_groups() {
+    flecs::world ecs;
+
+    auto Rel = ecs.entity();
+    auto TgtA = ecs.entity();
+    auto TgtB = ecs.entity();
+    auto TgtC = ecs.entity();
+    auto Tag = ecs.entity();
+
+    auto e1 = ecs.entity().add(Rel, TgtA);
+    auto e2 = ecs.entity().add(Rel, TgtB);
+    auto e3 = ecs.entity().add(Rel, TgtC);
+
+    auto e4 = ecs.entity().add(Rel, TgtA).add(Tag);
+    auto e5 = ecs.entity().add(Rel, TgtB).add(Tag);
+    auto e6 = ecs.entity().add(Rel, TgtC).add(Tag);
+
+    auto q = ecs.query_builder()
+        .term(Rel, flecs::Wildcard)
+        .group_by(Rel, group_by_rel)
+        .build();
+
+    int e1_found = 0;
+    int e2_found = 0;
+    int e3_found = 0;
+    int e4_found = 0;
+    int e5_found = 0;
+    int e6_found = 0;
+    int32_t count = 0;
+    uint64_t group_id = 0;
+
+    const auto func = [&](flecs::iter& it, size_t i) {
+        flecs::entity e = it.entity(i);
+        test_assert(it.group_id() == group_id);
+        if (e == e1) e1_found ++;
+        if (e == e2) e2_found ++;
+        if (e == e3) e3_found ++;
+        if (e == e4) e4_found ++;
+        if (e == e5) e5_found ++;
+        if (e == e6) e6_found ++;
+        count ++;
+    };
+
+    group_id = TgtB;
+    q.iter().set_group(TgtB).each(func);
+    test_int(2, count);
+    test_int(1, e2_found);
+    test_int(1, e5_found);
+
+    group_id = TgtA;
+    q.iter().set_group(TgtA).each(func);
+    test_int(4, count);
+    test_int(1, e1_found);
+    test_int(1, e4_found);
+
+    group_id = TgtC;
+    q.iter().set_group(TgtC).each(func);
+    test_int(6, count);
+    test_int(1, e3_found);
+    test_int(1, e6_found);
+
+    test_int(1, e1_found);
+    test_int(1, e2_found);
+    test_int(1, e3_found);
+    test_int(1, e4_found);
+    test_int(1, e5_found);
+    test_int(1, e6_found);
+}
+
 void QueryBuilder_create_w_no_template_args() {
     flecs::world ecs;
 
@@ -1595,4 +1549,225 @@ void QueryBuilder_create_w_no_template_args() {
     });
     
     test_int(count, 1);
+}
+
+void QueryBuilder_any_wildcard() {
+    flecs::world ecs;
+
+    auto Likes = ecs.entity();
+    auto Apple = ecs.entity();
+    auto Mango = ecs.entity();
+
+    auto e1 = ecs.entity()
+        .add(Likes, Apple)
+        .add(Likes, Mango);
+
+    auto q = ecs.query_builder()
+        .term(Likes, flecs::Any)
+        .build();
+
+    int32_t count = 0;
+    q.each([&](flecs::entity e) {
+        count ++;
+        test_assert(e == e1);
+    });
+    
+    test_int(count, 1);
+}
+
+void QueryBuilder_cascade() {
+    flecs::world ecs;
+
+    auto Tag = ecs.entity();
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+
+    auto e0 = ecs.entity().add(Tag);
+    auto e1 = ecs.entity().is_a(e0);
+    auto e2 = ecs.entity().is_a(e1);
+    auto e3 = ecs.entity().is_a(e2);
+
+    auto q = ecs.query_builder()
+        .term(Tag).cascade()
+        .build();
+
+    e1.add(Bar);
+    e2.add(Foo);
+
+    bool e1_found = false;
+    bool e2_found = false;
+    bool e3_found = false;
+
+    int32_t count = 0;
+    q.each([&](flecs::entity e) {
+        count ++;
+
+        if (e == e1) {
+            test_bool(e1_found, false);
+            test_bool(e2_found, false);
+            test_bool(e3_found, false);
+            e1_found = true;
+        }
+        if (e == e2) {
+            test_bool(e1_found, true);
+            test_bool(e2_found, false);
+            test_bool(e3_found, false);
+            e2_found = true;
+        }
+        if (e == e3) {
+            test_bool(e1_found, true);
+            test_bool(e2_found, true);
+            test_bool(e3_found, false);
+            e3_found = true;
+        }
+    });
+
+    test_bool(e1_found, true);
+    test_bool(e2_found, true);
+    test_bool(e3_found, true);
+    test_int(count, 3);
+}
+
+void QueryBuilder_cascade_w_relationship() {
+    flecs::world ecs;
+
+    auto Tag = ecs.entity();
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+
+    auto e0 = ecs.entity().add(Tag);
+    auto e1 = ecs.entity().child_of(e0);
+    auto e2 = ecs.entity().child_of(e1);
+    auto e3 = ecs.entity().child_of(e2);
+
+    auto q = ecs.query_builder()
+        .term(Tag).cascade(flecs::ChildOf)
+        .build();
+
+    e1.add(Bar);
+    e2.add(Foo);
+
+    bool e1_found = false;
+    bool e2_found = false;
+    bool e3_found = false;
+
+    int32_t count = 0;
+    q.each([&](flecs::entity e) {
+        count ++;
+
+        if (e == e1) {
+            test_bool(e1_found, false);
+            test_bool(e2_found, false);
+            test_bool(e3_found, false);
+            e1_found = true;
+        }
+        if (e == e2) {
+            test_bool(e1_found, true);
+            test_bool(e2_found, false);
+            test_bool(e3_found, false);
+            e2_found = true;
+        }
+        if (e == e3) {
+            test_bool(e1_found, true);
+            test_bool(e2_found, true);
+            test_bool(e3_found, false);
+            e3_found = true;
+        }
+    });
+
+    test_bool(e1_found, true);
+    test_bool(e2_found, true);
+    test_bool(e3_found, true);
+    test_int(count, 3);
+}
+
+void QueryBuilder_up_w_type() {
+    flecs::world ecs;
+
+    struct Rel { };
+
+    ecs.component<Rel>().add(flecs::Acyclic);
+
+    auto q = ecs.query_builder<Self>()
+        .term<Other>().src().up<Rel>()
+        .build();
+
+    auto base = ecs.entity().set<Other>({10});
+
+    auto 
+    e = ecs.entity().add<Rel>(base); e.set<Self>({e});
+    e = ecs.entity().add<Rel>(base); e.set<Self>({e});
+    e = ecs.entity().add<Rel>(base); e.set<Self>({e});
+
+    int32_t count = 0;
+
+    q.iter([&](flecs::iter& it, Self *s) {
+        auto o = it.field<const Other>(2);
+        test_assert(!it.is_self(2));
+        test_int(o->value, 10);
+
+        for (auto i : it) {
+            test_assert(it.entity(i) == s[i].value);
+            count ++;
+        }
+    });
+    
+    test_int(count, 3);
+}
+
+void QueryBuilder_cascade_w_type() {
+    flecs::world ecs;
+
+    struct Rel { };
+
+    ecs.component<Rel>().add(flecs::Acyclic);
+
+    auto Tag = ecs.entity();
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+
+    auto e0 = ecs.entity().add(Tag);
+    auto e1 = ecs.entity().add<Rel>(e0);
+    auto e2 = ecs.entity().add<Rel>(e1);
+    auto e3 = ecs.entity().add<Rel>(e2);
+
+    auto q = ecs.query_builder()
+        .term(Tag).cascade<Rel>()
+        .build();
+
+    e1.add(Bar);
+    e2.add(Foo);
+
+    bool e1_found = false;
+    bool e2_found = false;
+    bool e3_found = false;
+
+    int32_t count = 0;
+    q.each([&](flecs::entity e) {
+        count ++;
+
+        if (e == e1) {
+            test_bool(e1_found, false);
+            test_bool(e2_found, false);
+            test_bool(e3_found, false);
+            e1_found = true;
+        }
+        if (e == e2) {
+            test_bool(e1_found, true);
+            test_bool(e2_found, false);
+            test_bool(e3_found, false);
+            e2_found = true;
+        }
+        if (e == e3) {
+            test_bool(e1_found, true);
+            test_bool(e2_found, true);
+            test_bool(e3_found, false);
+            e3_found = true;
+        }
+    });
+
+    test_bool(e1_found, true);
+    test_bool(e2_found, true);
+    test_bool(e3_found, true);
+    test_int(count, 3);
 }

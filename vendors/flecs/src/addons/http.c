@@ -97,11 +97,11 @@ struct ecs_http_server_t {
     uint16_t port;
     const char *ipaddr;
 
-    FLECS_FLOAT dequeue_timeout; /* used to not lock request queue too often */
-    FLECS_FLOAT stats_timeout; /* used for periodic reporting of statistics */
+    ecs_ftime_t dequeue_timeout; /* used to not lock request queue too often */
+    ecs_ftime_t stats_timeout; /* used for periodic reporting of statistics */
 
-    FLECS_FLOAT request_time; /* time spent on requests in last stats interval */
-    FLECS_FLOAT request_time_total; /* total time spent on requests */
+    ecs_ftime_t request_time; /* time spent on requests in last stats interval */
+    ecs_ftime_t request_time_total; /* total time spent on requests */
     int32_t requests_processed; /* requests processed in last stats interval */
     int32_t requests_processed_total; /* total requests processed */
     int32_t dequeue_count; /* number of dequeues in last stats interval */
@@ -153,7 +153,7 @@ typedef struct {
     /* Connection is purged after both timeout expires and connection has
      * exceeded retry count. This ensures that a connection does not immediately
      * timeout when a frame takes longer than usual */
-    FLECS_FLOAT dequeue_timeout;
+    ecs_ftime_t dequeue_timeout;
     int32_t dequeue_retries;    
 } ecs_http_connection_impl_t;
 
@@ -231,15 +231,35 @@ int http_bind(
 }
 
 static
-void http_close(
+bool http_socket_is_valid(
     ecs_http_socket_t sock)
 {
 #if defined(ECS_TARGET_WINDOWS)
-    closesocket(sock);
+    return sock != INVALID_SOCKET;
 #else
-    shutdown(sock, SHUT_RDWR);
-    close(sock);
+    return sock >= 0;
 #endif
+}
+
+#if defined(ECS_TARGET_WINDOWS)
+#define HTTP_SOCKET_INVALID INVALID_SOCKET
+#else
+#define HTTP_SOCKET_INVALID (-1)
+#endif
+
+static
+void http_close(
+    ecs_http_socket_t *sock)
+{
+    ecs_assert(sock != NULL, ECS_INTERNAL_ERROR, NULL);
+#if defined(ECS_TARGET_WINDOWS)
+    closesocket(*sock);
+#else
+    ecs_dbg_2("http: closing socket %u", *sock);
+    shutdown(*sock, SHUT_RDWR);
+    close(*sock);
+#endif
+    *sock = HTTP_SOCKET_INVALID;
 }
 
 static
@@ -277,8 +297,8 @@ void connection_free(ecs_http_connection_impl_t *conn) {
     ecs_assert(conn->pub.id != 0, ECS_INTERNAL_ERROR, NULL);
     uint64_t conn_id = conn->pub.id;
 
-    if (conn->sock) {
-        http_close(conn->sock);
+    if (http_socket_is_valid(conn->sock)) {
+        http_close(&conn->sock);
     }
 
     flecs_sparse_remove(conn->pub.server->connections, conn_id);
@@ -374,7 +394,6 @@ void enqueue_request(
                 srv->requests, ecs_http_request_impl_t);
             req->pub.id = flecs_sparse_last_id(srv->requests);
             req->conn_id = conn->pub.id;
-            ecs_os_mutex_unlock(srv->lock);
 
             req->pub.conn = (ecs_http_connection_t*)conn;
             req->pub.method = frag->method;
@@ -397,6 +416,7 @@ void enqueue_request(
             req->pub.header_count = frag->header_count;
             req->pub.param_count = frag->param_count;
             req->res = res;
+            ecs_os_mutex_unlock(srv->lock);
         }
     }
 }
@@ -726,13 +746,16 @@ void accept_connections(
             return;
         }
     } else {
-        http_close(testsocket);
+        http_close(&testsocket);
     }
 #endif
 
     /* Resolve name + port (used for logging) */
     char addr_host[256];
     char addr_port[20];
+
+    ecs_http_socket_t sock = HTTP_SOCKET_INVALID;
+    ecs_assert(srv->sock == HTTP_SOCKET_INVALID, ECS_INTERNAL_ERROR, NULL);
 
     if (http_getnameinfo(
         addr, addr_len, addr_host, ECS_SIZEOF(addr_host), addr_port, 
@@ -745,9 +768,9 @@ void accept_connections(
     ecs_os_mutex_lock(srv->lock);
     if (srv->should_run) {
         ecs_dbg_2("http: initializing connection socket");
-        
-        srv->sock = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
-        if (srv->sock < 0) {
+
+        sock = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
+        if (!http_socket_is_valid(sock)) {
             ecs_err("unable to create new connection socket: %s", 
                 ecs_os_strerror(errno));
             ecs_os_mutex_unlock(srv->lock);
@@ -755,7 +778,7 @@ void accept_connections(
         }
 
         int reuse = 1;
-        int result = setsockopt(srv->sock, SOL_SOCKET, SO_REUSEADDR, 
+        int result = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, 
             (char*)&reuse, ECS_SIZEOF(reuse)); 
         if (result) {
             ecs_warn("failed to setsockopt: %s", ecs_os_strerror(errno));
@@ -763,20 +786,22 @@ void accept_connections(
 
         if (addr->sa_family == AF_INET6) {
             int ipv6only = 0;
-            if (setsockopt(srv->sock, IPPROTO_IPV6, IPV6_V6ONLY, 
+            if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, 
                 (char*)&ipv6only, ECS_SIZEOF(ipv6only)))
             {
                 ecs_warn("failed to setsockopt: %s", ecs_os_strerror(errno));
             }
         }
-        
-        result = http_bind(srv->sock, addr, addr_len);
+
+        result = http_bind(sock, addr, addr_len);
         if (result) {
             ecs_err("http: failed to bind to '%s:%s': %s", 
                 addr_host, addr_port, ecs_os_strerror(errno));
             ecs_os_mutex_unlock(srv->lock);
             goto done;
         }
+
+        srv->sock = sock;
 
         result = listen(srv->sock, SOMAXCONN);
         if (result) {
@@ -786,6 +811,8 @@ void accept_connections(
 
         ecs_trace("http: listening for incoming connections on '%s:%s'",
             addr_host, addr_port);
+    } else {
+        ecs_dbg_2("http: server shut down while initializing");
     }
     ecs_os_mutex_unlock(srv->lock);
 
@@ -810,10 +837,12 @@ void accept_connections(
     }
 
 done:
-    if (srv->sock && errno != EBADF) {
-        http_close(srv->sock);
-        srv->sock = 0;
+    ecs_os_mutex_lock(srv->lock);
+    if (http_socket_is_valid(srv->sock) && errno != EBADF) {
+        http_close(&sock);
+        srv->sock = sock;
     }
+    ecs_os_mutex_unlock(srv->lock);
 
     ecs_trace("http: no longer accepting connections on '%s:%s'",
         addr_host, addr_port);
@@ -846,7 +875,7 @@ void handle_request(
     ecs_http_connection_impl_t *conn = 
         (ecs_http_connection_impl_t*)req->pub.conn;
 
-    if (srv->callback((ecs_http_request_t*)req, &reply, srv->ctx) == 0) {
+    if (srv->callback((ecs_http_request_t*)req, &reply, srv->ctx) == false) {
         reply.code = 404;
         reply.status = "Resource not found";
     }
@@ -882,7 +911,7 @@ int32_t dequeue_requests(
         conn->dequeue_retries ++;
         
         if ((conn->dequeue_timeout > 
-            (FLECS_FLOAT)ECS_HTTP_CONNECTION_PURGE_TIMEOUT) &&
+            (ecs_ftime_t)ECS_HTTP_CONNECTION_PURGE_TIMEOUT) &&
              (conn->dequeue_retries > ECS_HTTP_CONNECTION_PURGE_RETRY_COUNT)) 
         {
             ecs_dbg("http: purging connection '%s:%s' (sock = %d)", 
@@ -893,7 +922,7 @@ int32_t dequeue_requests(
 
     ecs_os_mutex_unlock(srv->lock);
 
-    return request_count;
+    return request_count - 1;
 }
 
 const char* ecs_http_get_header(
@@ -928,6 +957,7 @@ ecs_http_server_t* ecs_http_server_init(
 
     ecs_http_server_t* srv = ecs_os_calloc_t(ecs_http_server_t);
     srv->lock = ecs_os_mutex_new();
+    srv->sock = HTTP_SOCKET_INVALID;
 
     srv->should_run = false;
     srv->initialized = true;
@@ -1001,13 +1031,12 @@ void ecs_http_server_stop(
 
     ecs_os_mutex_lock(srv->lock);
     srv->should_run = false;
-    if (srv->sock >= 0) {
-        http_close(srv->sock);
+    if (http_socket_is_valid(srv->sock)) {
+        http_close(&srv->sock);
     }
     ecs_os_mutex_unlock(srv->lock);
 
     ecs_os_thread_join(srv->thread);
-
     ecs_trace("http: server thread shut down");
 
     /* Cleanup all outstanding requests */
@@ -1046,7 +1075,7 @@ void ecs_http_server_dequeue(
     srv->stats_timeout += delta_time;
 
     if ((1000 * srv->dequeue_timeout) > 
-        (FLECS_FLOAT)ECS_HTTP_MIN_DEQUEUE_INTERVAL) 
+        (ecs_ftime_t)ECS_HTTP_MIN_DEQUEUE_INTERVAL) 
     {
         srv->dequeue_timeout = 0;
 
@@ -1055,19 +1084,19 @@ void ecs_http_server_dequeue(
         int32_t request_count = dequeue_requests(srv, srv->dequeue_timeout);
         srv->requests_processed += request_count;
         srv->requests_processed_total += request_count;
-        FLECS_FLOAT time_spent = (FLECS_FLOAT)ecs_time_measure(&t);
+        ecs_ftime_t time_spent = (ecs_ftime_t)ecs_time_measure(&t);
         srv->request_time += time_spent;
         srv->request_time_total += time_spent;
         srv->dequeue_count ++;
     }
 
     if ((1000 * srv->stats_timeout) > 
-        (FLECS_FLOAT)ECS_HTTP_MIN_STATS_INTERVAL) 
+        (ecs_ftime_t)ECS_HTTP_MIN_STATS_INTERVAL) 
     {
         srv->stats_timeout = 0;
         ecs_dbg("http: processed %d requests in %.3fs (avg %.3fs / dequeue)",
             srv->requests_processed, (double)srv->request_time, 
-            (double)(srv->request_time / (FLECS_FLOAT)srv->dequeue_count));
+            (double)(srv->request_time / (ecs_ftime_t)srv->dequeue_count));
         srv->requests_processed = 0;
         srv->request_time = 0;
         srv->dequeue_count = 0;

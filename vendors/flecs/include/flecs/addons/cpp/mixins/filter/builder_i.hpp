@@ -60,8 +60,8 @@ struct filter_builder_i : term_builder_i<Base> {
     error:
         return *this;
     }
-    
-    Base& arg(int32_t term_index) {
+
+    Base& term_at(int32_t term_index) {
         ecs_assert(term_index > 0, ECS_INVALID_PARAMETER, NULL);
         int32_t prev_index = m_term_index;
         m_term_index = term_index - 1;
@@ -70,13 +70,18 @@ struct filter_builder_i : term_builder_i<Base> {
         ecs_assert(ecs_term_is_initialized(this->m_term), 
             ECS_INVALID_PARAMETER, NULL);
         return *this;
-    }    
+    }
+
+    Base& arg(int32_t term_index) {
+        return this->term_at(term_index);
+    }
 
     template<typename T>
     Base& term() {
         this->term();
-        *this->m_term = flecs::term(this->world_v()).id<T>().move();
-        this->m_term->inout = static_cast<ecs_inout_kind_t>(_::type_to_inout<T>());
+        *this->m_term = flecs::term(_::cpp_type<T>::id(this->world_v())).move();
+        this->m_term->inout = static_cast<ecs_inout_kind_t>(
+            _::type_to_inout<T>());
         return *this;
     }
 
@@ -86,50 +91,27 @@ struct filter_builder_i : term_builder_i<Base> {
         return *this;
     }
 
+    Base& term(entity_t r, entity_t o) {
+        this->term();
+        *this->m_term = flecs::term(r, o).move();
+        return *this;
+    }
+
+    template<typename First>
+    Base& term(id_t o) {
+        return this->term(_::cpp_type<First>::id(this->world_v()), o);
+    }
+
+    template<typename First, typename Second>
+    Base& term() {
+        return this->term<First>(_::cpp_type<Second>::id(this->world_v()));
+    }
+
     template <typename E, if_t< is_enum<E>::value > = 0>
     Base& term(E value) {
         flecs::entity_t r = _::cpp_type<E>::id(this->world_v());
         auto o = enum_type<E>(this->world_v()).entity(value);
-        return term(r, o);
-    }
-
-    template<typename R, typename O>
-    Base& term() {
-        this->term();
-        *this->m_term = flecs::term(this->world_v()).id<R, O>().move();
-        return *this;
-    }
-
-    template<typename R>
-    Base& term(id_t o) {
-        this->term();
-        *this->m_term = flecs::term(this->world_v()).id<R>(o).move();
-        return *this;
-    }     
-
-    Base& term(id_t r, id_t o) {
-        this->term();
-        *this->m_term = flecs::term(this->world_v()).id(r, o).move();
-        return *this;
-    }
-
-    Base& term(const flecs::type& type) {
-        this->term();
-        *this->m_term = flecs::term(this->world_v()).id(type).move();
-        return *this;
-    }
-
-    Base& term(const flecs::type& type, flecs::id_t o) {
-        this->term();
-        *this->m_term = flecs::term(this->world_v()).id(type, o).move();
-        return *this;
-    }
-
-    Base& term(const char *expr) {
-        this->term();
-        *this->m_term = flecs::term(this->world_v(), expr).move();
-        this->m_term->move = true;
-        return *this;
+        return this->term(r, o);
     }
 
     Base& term(flecs::term& term) {

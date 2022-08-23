@@ -10,12 +10,13 @@ int main(int argc, char *argv[]) {
     ecs_world_t *world = ecs_init_w_args(argc, argv);
 
     ECS_IMPORT(world, FlecsUnits);
+    ECS_IMPORT(world, FlecsMonitor); // Collect statistics periodically
 
     // Mass component
     ECS_COMPONENT(world, Mass);
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Mass),
+    ecs_struct(world, {
+        .entity = ecs_id(Mass),
         .members = {
             { .name = "value", .type = ecs_id(ecs_f64_t), .unit = EcsKiloGrams}
         }
@@ -40,7 +41,7 @@ int main(int argc, char *argv[]) {
     // navigate to https://flecs.dev/explorer to inspect it!
     //
     // See docs/RestApi.md#explorer for more information.
-    return ecs_app_run(world, &(ecs_app_desc_t) {
+    return ecs_app_run(world, &(ecs_app_desc_t){
         .enable_rest = true
     });
 }

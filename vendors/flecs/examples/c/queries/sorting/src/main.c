@@ -18,7 +18,7 @@ int compare_position(
 }
 
 void print_position(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     for (int i = 0; i < it->count; i ++) {
         printf("{%.1f, %.1f}\n", p[i].x, p[i].y);
     }
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     ecs_set(ecs, 0, Position, {4, 0});
 
     // Create a sorted system
-    ecs_entity_t sys = ecs_system_init(ecs, &(ecs_system_desc_t) {
+    ecs_entity_t sys = ecs_system(ecs, {
         .query = {
             .filter.terms = {{ .id = ecs_id(Position) }},
             .order_by = (ecs_order_by_action_t)compare_position,
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     });
 
     // Create sorted query
-    ecs_query_t *q = ecs_query_init(ecs, &(ecs_query_desc_t) {
+    ecs_query_t *q = ecs_query(ecs, {
         .filter.terms = {{ .id = ecs_id(Position) }},
         .order_by = (ecs_order_by_action_t)compare_position,
         .order_by_component = ecs_id(Position)

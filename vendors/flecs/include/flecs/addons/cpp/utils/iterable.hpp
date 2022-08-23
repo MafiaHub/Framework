@@ -67,6 +67,21 @@ struct iterable {
      */
     worker_iterable<Components...> worker(int32_t index, int32_t count);
 
+    /** Return number of entities matched by iteratble. */
+    int32_t count() const {
+        return this->iter().count();
+    }
+
+    /** Return number of entities matched by iteratble. */
+    bool is_true() const {
+        return this->iter().is_true();
+    }
+
+    /** Return number of entities matched by iteratble. */
+    flecs::entity first() const {
+        return this->iter().first();
+    }
+
     virtual ~iterable() { }
 protected:
     friend iter_iterable<Components...>;
@@ -123,6 +138,29 @@ struct iter_iterable final : iterable<Components...> {
             ecs_iter_fini(&m_it);
         }
         return result;
+    }
+
+    // Return first matching entity.
+    flecs::entity first() {
+        flecs::entity result;
+        if (m_next_each(&m_it) && m_it.count) {
+            result = flecs::entity(m_it.world, m_it.entities[0]);
+            ecs_iter_fini(&m_it);
+        }
+        return result;
+    }
+
+    // Limit results to tables with specified group id (grouped queries only)
+    iter_iterable<Components...>& set_group(uint64_t group_id) {
+        ecs_query_set_group(&m_it, group_id);
+        return *this;
+    }
+
+    // Limit results to tables with specified group id (grouped queries only)
+    template <typename Group>
+    iter_iterable<Components...>& set_group() {
+        ecs_query_set_group(&m_it, _::cpp_type<Group>().id(m_it.real_world));
+        return *this;
     }
 
 protected:

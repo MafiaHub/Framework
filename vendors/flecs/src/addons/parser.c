@@ -14,7 +14,6 @@
 #define TOK_NOT '!'
 #define TOK_OPTIONAL '?'
 #define TOK_BITWISE_OR '|'
-#define TOK_NAME_SEP '.'
 #define TOK_BRACKET_OPEN '['
 #define TOK_BRACKET_CLOSE ']'
 #define TOK_WILDCARD '*'
@@ -23,27 +22,22 @@
 #define TOK_PAREN_CLOSE ')'
 
 #define TOK_SELF "self"
-#define TOK_SUPERSET "super"
-#define TOK_SUBSET "sub"
+#define TOK_UP "up"
+#define TOK_DOWN "down"
 #define TOK_CASCADE "cascade"
 #define TOK_PARENT "parent"
-#define TOK_ALL "all"
 
 #define TOK_OVERRIDE "OVERRIDE"
 
-#define TOK_ROLE_PAIR "PAIR"
 #define TOK_ROLE_AND "AND"
 #define TOK_ROLE_OR "OR"
-#define TOK_ROLE_XOR "XOR"
 #define TOK_ROLE_NOT "NOT"
-#define TOK_ROLE_SWITCH "SWITCH"
-#define TOK_ROLE_CASE "CASE"
-#define TOK_ROLE_DISABLED "DISABLED"
+#define TOK_ROLE_TOGGLE "TOGGLE"
 
 #define TOK_IN "in"
 #define TOK_OUT "out"
 #define TOK_INOUT "inout"
-#define TOK_INOUT_FILTER "filter"
+#define TOK_INOUT_NONE "none"
 
 #define ECS_MAX_TOKEN_SIZE (256)
 
@@ -150,7 +144,7 @@ static
 bool valid_identifier_start_char(
     char ch)
 {
-    if (ch && (isalpha(ch) || (ch == '.') || (ch == '_') || (ch == '*') ||
+    if (ch && (isalpha(ch) || (ch == '_') || (ch == '*') ||
         (ch == '0') || (ch == TOK_VARIABLE) || isdigit(ch))) 
     {
         return true;
@@ -194,16 +188,6 @@ bool valid_operator_char(
     }
 
     return false;
-}
-
-static
-const char* parse_digit(
-    const char *ptr,
-    char *token_out)
-{
-    ptr = ecs_parse_whitespace(ptr);
-    ptr = ecs_parse_digit(ptr, token_out);
-    return ecs_parse_whitespace(ptr);
 }
 
 const char* ecs_parse_token(
@@ -303,7 +287,7 @@ int parse_identifier(
 {
     const char *tptr = token;
     if (tptr[0] == TOK_VARIABLE && tptr[1]) {
-        out->var = EcsVarIsVariable;
+        out->flags |= EcsIsVariable;
         tptr ++;
     }
 
@@ -319,25 +303,16 @@ ecs_entity_t parse_role(
     int64_t column,
     const char *token)
 {
-    if        (!ecs_os_strcmp(token, TOK_ROLE_PAIR)) 
-    {
-        return ECS_PAIR;            
-    } else if (!ecs_os_strcmp(token, TOK_ROLE_AND)) {
+    if (!ecs_os_strcmp(token, TOK_ROLE_AND)) {
         return ECS_AND;
     } else if (!ecs_os_strcmp(token, TOK_ROLE_OR)) {
         return ECS_OR;
-    } else if (!ecs_os_strcmp(token, TOK_ROLE_XOR)) {
-        return ECS_XOR;
     } else if (!ecs_os_strcmp(token, TOK_ROLE_NOT)) {
         return ECS_NOT;
-    } else if (!ecs_os_strcmp(token, TOK_ROLE_SWITCH)) {
-        return ECS_SWITCH;
-    } else if (!ecs_os_strcmp(token, TOK_ROLE_CASE)) {
-        return ECS_CASE;
     } else if (!ecs_os_strcmp(token, TOK_OVERRIDE)) {
         return ECS_OVERRIDE;
-    } else if (!ecs_os_strcmp(token, TOK_ROLE_DISABLED)) {
-        return ECS_DISABLED;        
+    } else if (!ecs_os_strcmp(token, TOK_ROLE_TOGGLE)) {
+        return ECS_TOGGLE;        
     } else {
         ecs_parser_error(name, sig, column, "invalid role '%s'", token);
         return 0;
@@ -380,8 +355,8 @@ const char* parse_annotation(
     } else
     if (!ecs_os_strcmp(token, TOK_INOUT)) {
         *inout_kind_out = EcsInOut;
-    } else if (!ecs_os_strcmp(token, TOK_INOUT_FILTER)) {
-        *inout_kind_out = EcsInOutFilter;
+    } else if (!ecs_os_strcmp(token, TOK_INOUT_NONE)) {
+        *inout_kind_out = EcsInOutNone;
     }
 
     ptr = ecs_parse_whitespace(ptr);
@@ -400,14 +375,12 @@ uint8_t parse_set_token(
 {
     if (!ecs_os_strcmp(token, TOK_SELF)) {
         return EcsSelf;
-    } else if (!ecs_os_strcmp(token, TOK_SUPERSET)) {
-        return EcsSuperSet;
-    } else if (!ecs_os_strcmp(token, TOK_SUBSET)) {
-        return EcsSubSet;
+    } else if (!ecs_os_strcmp(token, TOK_UP)) {
+        return EcsUp;
+    } else if (!ecs_os_strcmp(token, TOK_DOWN)) {
+        return EcsDown;
     } else if (!ecs_os_strcmp(token, TOK_CASCADE)) {
         return EcsCascade;
-    } else if (!ecs_os_strcmp(token, TOK_ALL)) {
-        return EcsAll;
     } else if (!ecs_os_strcmp(token, TOK_PARENT)) {
         return EcsParent;
     } else {
@@ -416,7 +389,7 @@ uint8_t parse_set_token(
 }
 
 static
-const char* parse_set_expr(
+const char* parse_term_flags(
     const ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -443,21 +416,13 @@ const char* parse_set_expr(
             return NULL;
         }
 
-        if (id->set.mask & tok) {
+        if (id->flags & tok) {
             ecs_parser_error(name, expr, column, 
                 "duplicate set token '%s'", token);
             return NULL;            
         }
-
-        if ((tok == EcsSubSet && id->set.mask & EcsSuperSet) ||
-            (tok == EcsSuperSet && id->set.mask & EcsSubSet))
-        {
-            ecs_parser_error(name, expr, column, 
-                "cannot mix super and sub", token);
-            return NULL;            
-        }
         
-        id->set.mask |= tok;
+        id->flags |= tok;
 
         if (ptr[0] == TOK_PAREN_OPEN) {
             ptr ++;
@@ -469,8 +434,8 @@ const char* parse_set_expr(
                     return NULL;
                 }         
 
-                id->set.relation = ecs_lookup_fullpath(world, token);
-                if (!id->set.relation) {
+                id->trav = ecs_lookup_fullpath(world, token);
+                if (!id->trav) {
                     ecs_parser_error(name, expr, column, 
                         "unresolved identifier '%s'", token);
                     return NULL;
@@ -482,41 +447,6 @@ const char* parse_set_expr(
                     ecs_parser_error(name, expr, column, 
                         "expected ',' or ')'");
                     return NULL;
-                }
-            }
-
-            /* Max depth of search */
-            if (isdigit(ptr[0])) {
-                ptr = parse_digit(ptr, token);
-                if (!ptr) {
-                    return NULL;
-                }
-
-                id->set.max_depth = atoi(token);
-                if (id->set.max_depth < 0) {
-                    ecs_parser_error(name, expr, column, 
-                        "invalid negative depth");
-                    return NULL;  
-                }
-
-                if (ptr[0] == ',') {
-                    ptr = ecs_parse_whitespace(ptr + 1);
-                }
-            }
-
-            /* If another digit is found, previous depth was min depth */
-            if (isdigit(ptr[0])) {
-                ptr = parse_digit(ptr, token);
-                if (!ptr) {
-                    return NULL;
-                }
-
-                id->set.min_depth = id->set.max_depth;
-                id->set.max_depth = atoi(token);
-                if (id->set.max_depth < 0) {
-                    ecs_parser_error(name, expr, column, 
-                        "invalid negative depth");
-                    return NULL;  
                 }
             }
 
@@ -549,12 +479,6 @@ const char* parse_set_expr(
             break;
         }
     } while (true);
-
-    if (id->set.mask & EcsSelf && id->set.min_depth != 0) {
-        ecs_parser_error(name, expr, column, 
-            "min_depth must be zero for set expression with 'self'");
-        return NULL;        
-    }
 
     return ptr;
 }
@@ -589,9 +513,9 @@ const char* parse_arguments(
             ecs_term_id_t *term_id = NULL;
 
             if (arg == 0) {
-                term_id = &term->subj;
+                term_id = &term->src;
             } else if (arg == 1) {
-                term_id = &term->obj;
+                term_id = &term->second;
             }
 
             /* If token is a colon, the token is an identifier followed by a
@@ -604,22 +528,20 @@ const char* parse_arguments(
                 }
 
                 ptr = ecs_parse_whitespace(ptr + 1);
-                ptr = parse_set_expr(world, name, expr, (ptr - expr), ptr,
+                ptr = parse_term_flags(world, name, expr, (ptr - expr), ptr,
                     NULL, term_id, TOK_PAREN_CLOSE);
                 if (!ptr) {
                     return NULL;
                 }
 
-            /* If token is a self, super or sub token, this is a set
-             * expression */
-            } else if (!ecs_os_strcmp(token, TOK_ALL) ||
-                !ecs_os_strcmp(token, TOK_CASCADE) ||
+            /* Check for term flags */
+            } else if (!ecs_os_strcmp(token, TOK_CASCADE) ||
                 !ecs_os_strcmp(token, TOK_SELF) || 
-                !ecs_os_strcmp(token, TOK_SUPERSET) || 
-                !ecs_os_strcmp(token, TOK_SUBSET) ||
+                !ecs_os_strcmp(token, TOK_UP) || 
+                !ecs_os_strcmp(token, TOK_DOWN) || 
                 !(ecs_os_strcmp(token, TOK_PARENT)))
             {
-                ptr = parse_set_expr(world, name, expr, (ptr - expr), ptr, 
+                ptr = parse_term_flags(world, name, expr, (ptr - expr), ptr, 
                     token, term_id, TOK_PAREN_CLOSE);
                 if (!ptr) {
                     return NULL;
@@ -635,7 +557,7 @@ const char* parse_arguments(
             if (ptr[0] == TOK_AND) {
                 ptr = ecs_parse_whitespace(ptr + 1);
 
-                term->role = ECS_PAIR;
+                term->id_flags = ECS_PAIR;
 
             } else if (ptr[0] == TOK_PAREN_CLOSE) {
                 ptr = ecs_parse_whitespace(ptr + 1);
@@ -736,8 +658,8 @@ const char* parse_term(
     }
 
 parse_role:
-    term.role = parse_role(name, expr, (ptr - expr), token);
-    if (!term.role) {
+    term.id_flags = parse_role(name, expr, (ptr - expr), token);
+    if (!term.id_flags) {
         goto error;
     }
 
@@ -762,7 +684,7 @@ parse_role:
     }
 
 parse_predicate:
-    if (parse_identifier(token, &term.pred)) {
+    if (parse_identifier(token, &term.first)) {
         ecs_parser_error(name, expr, (ptr - expr), 
             "invalid identifier '%s'", token); 
         goto error;
@@ -771,8 +693,8 @@ parse_predicate:
     /* Set expression */
     if (ptr[0] == TOK_COLON) {
         ptr = ecs_parse_whitespace(ptr + 1);
-        ptr = parse_set_expr(world, name, expr, (ptr - expr), ptr, NULL, 
-            &term.pred, TOK_COLON);
+        ptr = parse_term_flags(world, name, expr, (ptr - expr), ptr, NULL, 
+            &term.first, TOK_COLON);
         if (!ptr) {
             goto error;
         }
@@ -793,11 +715,12 @@ parse_predicate:
     } else {
         ptr = ecs_parse_whitespace(ptr);
     }
-    
+
     if (ptr[0] == TOK_PAREN_OPEN) {
         ptr ++;
         if (ptr[0] == TOK_PAREN_CLOSE) {
-            term.subj.set.mask = EcsNothing;
+            term.src.flags = EcsIsEntity;
+            term.src.id = 0;
             ptr ++;
             ptr = ecs_parse_whitespace(ptr);
         } else {
@@ -818,10 +741,12 @@ parse_pair:
 
     if (ptr[0] == TOK_AND) {
         ptr ++;
-        term.subj.entity = EcsThis;
+        term.src.id = EcsThis;
+        term.src.flags |= EcsIsVariable;
         goto parse_pair_predicate;
     } else if (ptr[0] == TOK_PAREN_CLOSE) {
-        term.subj.entity = EcsThis;
+        term.src.id = EcsThis;
+        term.src.flags |= EcsIsVariable;
         goto parse_pair_predicate;
     } else {
         parser_unexpected_char(name, expr, ptr, ptr[0]);
@@ -829,7 +754,7 @@ parse_pair:
     }
 
 parse_pair_predicate:
-    if (parse_identifier(token, &term.pred)) {
+    if (parse_identifier(token, &term.first)) {
         ecs_parser_error(name, expr, (ptr - expr), 
             "invalid identifier '%s'", token); 
         goto error;
@@ -860,21 +785,21 @@ parse_pair_predicate:
     }
 
 parse_pair_object:
-    if (parse_identifier(token, &term.obj)) {
+    if (parse_identifier(token, &term.second)) {
         ecs_parser_error(name, expr, (ptr - expr), 
             "invalid identifier '%s'", token); 
         goto error;
     }
 
-    if (term.role != 0) {
-        if (term.role != ECS_PAIR && term.role != ECS_CASE) {
+    if (term.id_flags != 0) {
+        if (!ECS_HAS_ID_FLAG(term.id_flags, PAIR)) {
             ecs_parser_error(name, expr, (ptr - expr), 
                 "invalid combination of role '%s' with pair", 
-                    ecs_role_str(term.role));
+                    ecs_id_flag_str(term.id_flags));
             goto error;
         }
     } else {
-        term.role = ECS_PAIR;
+        term.id_flags = ECS_PAIR;
     }
 
     ptr = ecs_parse_whitespace(ptr);
@@ -920,7 +845,7 @@ char* ecs_parse_term(
     ecs_check(ptr != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_check(term != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    ecs_term_id_t *subj = &term->subj;
+    ecs_term_id_t *src = &term->src;
 
     bool prev_or = false;
     if (ptr != expr) {
@@ -947,8 +872,6 @@ char* ecs_parse_term(
         return (char*)&ptr[1];
     }
 
-    int32_t prev_set = subj->set.mask;
-
     /* Parse next element */
     ptr = parse_term(world, name, ptr, term);
     if (!ptr) {
@@ -956,22 +879,22 @@ char* ecs_parse_term(
     }
 
     /* Check for $() notation */
-    if (!ecs_os_strcmp(term->pred.name, "$")) {
-        if (term->subj.name) {
-            ecs_os_free(term->pred.name);
+    if (!ecs_os_strcmp(term->first.name, "$")) {
+        if (term->src.name) {
+            ecs_os_free(term->first.name);
             
-            term->pred = term->subj;
+            term->first = term->src;
 
-            if (term->obj.name) {
-                term->subj = term->obj;       
+            if (term->second.name) {
+                term->src = term->second;       
             } else {
-                term->subj.entity = EcsThis;
-                term->subj.name = NULL;
-                term->subj.var = EcsVarIsVariable;
+                term->src.id = EcsThis;
+                term->src.name = NULL;
+                term->src.flags |= EcsIsVariable;
             }
 
-            term->obj.name = ecs_os_strdup(term->pred.name);
-            term->obj.var = EcsVarIsVariable;
+            term->second.name = ecs_os_strdup(term->first.name);
+            term->second.flags |= EcsIsVariable;
         }
     }
 
@@ -998,29 +921,27 @@ char* ecs_parse_term(
 
     /* If the term just contained a 0, the expression has nothing. Ensure
      * that after the 0 nothing else follows */
-    if (!ecs_os_strcmp(term->pred.name, "0")) {
+    if (!ecs_os_strcmp(term->first.name, "0")) {
         if (ptr[0]) {
             ecs_parser_error(name, expr, (ptr - expr), 
                 "unexpected term after 0"); 
             goto error;
         }
 
-        if (subj->set.mask != EcsDefaultSet || 
-           (subj->entity && subj->entity != EcsThis) ||
-           (subj->name && ecs_os_strcmp(subj->name, "This")))
-        {
+        if (src->flags != 0) {
             ecs_parser_error(name, expr, (ptr - expr), 
                 "invalid combination of 0 with non-default subject");
             goto error;
         }
 
-        subj->set.mask = EcsNothing;
-        ecs_os_free(term->pred.name);
-        term->pred.name = NULL;
+        src->flags = EcsIsEntity;
+        src->id = 0;
+        ecs_os_free(term->first.name);
+        term->first.name = NULL;
     }
 
     /* Cannot combine EcsNothing with operators other than AND */
-    if (term->oper != EcsAnd && subj->set.mask == EcsNothing) {
+    if (term->oper != EcsAnd && ecs_term_match_0(term)) {
         ecs_parser_error(name, expr, (ptr - expr), 
             "invalid operator for empty source"); 
         goto error;
@@ -1028,41 +949,35 @@ char* ecs_parse_term(
 
     /* Verify consistency of OR expression */
     if (prev_or && term->oper == EcsOr) {
-        /* Set expressions must be the same for all OR terms */
-        if (subj->set.mask != prev_set) {
-            ecs_parser_error(name, expr, (ptr - expr), 
-                "cannot combine different sources in OR expression");
-            goto error;
-        }
-
         term->oper = EcsOr;
     }
 
     /* Automatically assign This if entity is not assigned and the set is
      * nothing */
-    if (subj->set.mask != EcsNothing) {
-        if (!subj->name) {
-            if (!subj->entity) {
-                subj->entity = EcsThis;
+    if (!(src->flags & EcsIsEntity)) {
+        if (!src->name) {
+            if (!src->id) {
+                src->id = EcsThis;
+                src->flags |= EcsIsVariable;
             }
         }
     }
 
-    if (subj->name && !ecs_os_strcmp(subj->name, "0")) {
-        subj->entity = 0;
-        subj->set.mask = EcsNothing;
+    if (src->name && !ecs_os_strcmp(src->name, "0")) {
+        src->id = 0;
+        src->flags = EcsIsEntity;
     }
 
     /* Process role */
-    if (term->role == ECS_AND) {
+    if (term->id_flags == ECS_AND) {
         term->oper = EcsAndFrom;
-        term->role = 0;
-    } else if (term->role == ECS_OR) {
+        term->id_flags = 0;
+    } else if (term->id_flags == ECS_OR) {
         term->oper = EcsOrFrom;
-        term->role = 0;
-    } else if (term->role == ECS_NOT) {
+        term->id_flags = 0;
+    } else if (term->id_flags == ECS_NOT) {
         term->oper = EcsNotFrom;
-        term->role = 0;
+        term->id_flags = 0;
     }
 
     ptr = ecs_parse_whitespace(ptr);

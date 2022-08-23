@@ -24,7 +24,7 @@ void ecs_doc_set_name(
     const char *name)
 {
     ecs_set_pair(world, entity, EcsDocDescription, EcsName, {
-        .value = name
+        .value = (char*)name
     });
 }
 
@@ -34,7 +34,7 @@ void ecs_doc_set_brief(
     const char *description)
 {
     ecs_set_pair(world, entity, EcsDocDescription, EcsDocBrief, {
-        .value = description
+        .value = (char*)description
     });
 }
 
@@ -44,7 +44,7 @@ void ecs_doc_set_detail(
     const char *description)
 {
     ecs_set_pair(world, entity, EcsDocDescription, EcsDocDetail, {
-        .value = description
+        .value = (char*)description
     });
 }
 
@@ -54,7 +54,17 @@ void ecs_doc_set_link(
     const char *link)
 {
     ecs_set_pair(world, entity, EcsDocDescription, EcsDocLink, {
-        .value = link
+        .value = (char*)link
+    });
+}
+
+void ecs_doc_set_color(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    const char *color)
+{
+    ecs_set_pair(world, entity, EcsDocDescription, EcsDocColor, {
+        .value = (char*)color
     });
 }
 
@@ -62,7 +72,7 @@ const char* ecs_doc_get_name(
     const ecs_world_t *world,
     ecs_entity_t entity)
 {
-    EcsDocDescription *ptr = ecs_get_pair(
+    const EcsDocDescription *ptr = ecs_get_pair(
         world, entity, EcsDocDescription, EcsName);
     if (ptr) {
         return ptr->value;
@@ -75,7 +85,7 @@ const char* ecs_doc_get_brief(
     const ecs_world_t *world,
     ecs_entity_t entity)
 {
-    EcsDocDescription *ptr = ecs_get_pair(
+    const EcsDocDescription *ptr = ecs_get_pair(
         world, entity, EcsDocDescription, EcsDocBrief);
     if (ptr) {
         return ptr->value;
@@ -88,7 +98,7 @@ const char* ecs_doc_get_detail(
     const ecs_world_t *world,
     ecs_entity_t entity)
 {
-    EcsDocDescription *ptr = ecs_get_pair(
+    const EcsDocDescription *ptr = ecs_get_pair(
         world, entity, EcsDocDescription, EcsDocDetail);
     if (ptr) {
         return ptr->value;
@@ -101,8 +111,21 @@ const char* ecs_doc_get_link(
     const ecs_world_t *world,
     ecs_entity_t entity)
 {
-    EcsDocDescription *ptr = ecs_get_pair(
+    const EcsDocDescription *ptr = ecs_get_pair(
         world, entity, EcsDocDescription, EcsDocLink);
+    if (ptr) {
+        return ptr->value;
+    } else {
+        return NULL;
+    }
+}
+
+const char* ecs_doc_get_color(
+    const ecs_world_t *world,
+    ecs_entity_t entity)
+{
+    const EcsDocDescription *ptr = ecs_get_pair(
+        world, entity, EcsDocDescription, EcsDocColor);
     if (ptr) {
         return ptr->value;
     } else {
@@ -121,8 +144,9 @@ void FlecsDocImport(
     flecs_bootstrap_tag(world, EcsDocBrief);
     flecs_bootstrap_tag(world, EcsDocDetail);
     flecs_bootstrap_tag(world, EcsDocLink);
+    flecs_bootstrap_tag(world, EcsDocColor);
 
-    ecs_set_component_actions(world, EcsDocDescription, { 
+    ecs_set_hooks(world, EcsDocDescription, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsDocDescription),
         .copy = ecs_copy(EcsDocDescription),

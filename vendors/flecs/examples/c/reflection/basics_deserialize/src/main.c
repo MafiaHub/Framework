@@ -12,8 +12,8 @@ int main(int argc, char *argv[]) {
     ECS_COMPONENT(ecs, Position);
 
     // Add reflection data to component
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Position), // Make sure to use existing id
+    ecs_struct(ecs, {
+        .entity = ecs_id(Position), // Make sure to use existing id
         .members = {
             { .name = "x", .type = ecs_id(ecs_f32_t) }, // builtin float type
             { .name = "y", .type = ecs_id(ecs_f32_t) }
@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
 
     // Create entity, set value of position using reflection API
     ecs_entity_t ent = ecs_new_entity(ecs, "ent");
-    Position *ptr = ecs_get_mut(ecs, ent, Position, 0);
+    Position *ptr = ecs_get_mut(ecs, ent, Position);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(ecs, ecs_id(Position), ptr);
     ecs_meta_push(&cur);          // {

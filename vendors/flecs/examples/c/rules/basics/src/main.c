@@ -27,11 +27,11 @@ int main(int argc, char *argv[]) {
     ecs_add_pair(ecs, alice, Eats, Apples);
 
     // Here we're creating a rule that in the query DSL would look like this:
-    //   Eats(This, $Food), Healthy($Food)
+    //   Eats($This, $Food), Healthy($Food)
     //
     // Rules are similar to queries, but support more advanced features. This
     // example shows how the basics of how to use rules & variables.
-    ecs_rule_t *r = ecs_rule_init(ecs, &(ecs_filter_desc_t) {
+    ecs_rule_t *r = ecs_rule(ecs, {
         .terms = {
             // Query variables are like wildcards, but enforce that the entity
             // substituted by the wildcard is the same across terms.
@@ -42,11 +42,11 @@ int main(int argc, char *argv[]) {
             //
             // By replacing * with _Food, both terms are constrained to use the
             // same entity.
-            { .pred.entity = Eats, .obj = { 
-                .name = (char*)"Food", .var = EcsVarIsVariable },
+            { .first.id = Eats, .second = { 
+                .name = (char*)"Food", .flags = EcsIsVariable },
             },
-            { .pred.entity = Healthy, .subj = {
-                .name = (char*)"Food", .var = EcsVarIsVariable }
+            { .first.id = Healthy, .src = {
+                .name = (char*)"Food", .flags = EcsIsVariable }
             }
         }
     });

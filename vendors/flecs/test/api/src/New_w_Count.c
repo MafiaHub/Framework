@@ -1,7 +1,7 @@
 #include <api.h>
 
 void New_w_Count_empty() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     const ecs_entity_t *ids = ecs_bulk_new(world, 0, 1000);
     test_assert(ids != NULL);
@@ -15,7 +15,7 @@ void New_w_Count_empty() {
 }
 
 void New_w_Count_component() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -35,7 +35,7 @@ void New_w_Count_component() {
 }
 
 void New_w_Count_tag() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_ENTITY(world, Tag, 0);
 
@@ -54,9 +54,9 @@ void New_w_Count_tag() {
 }
 
 void New_w_Count_bulk_init_empty() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3
     });
 
@@ -79,11 +79,11 @@ void New_w_Count_bulk_init_empty() {
 }
 
 void New_w_Count_bulk_init_empty_w_entities() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ecs_entity_t ents[] = {1000, 1001, 1002};
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .entities = ents,
         .count = 3
     });
@@ -106,11 +106,11 @@ void New_w_Count_bulk_init_empty_w_entities() {
 }
 
 void New_w_Count_bulk_init_1_tag() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {Tag}
     });
@@ -138,13 +138,13 @@ void New_w_Count_bulk_init_1_tag() {
 }
 
 void New_w_Count_bulk_init_1_tag_w_entities() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
     
     ecs_entity_t ents[] = {1000, 1001, 1002};
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .entities = ents,
         .count = 3,
         .ids = {Tag}
@@ -172,12 +172,12 @@ void New_w_Count_bulk_init_1_tag_w_entities() {
 }
 
 void New_w_Count_bulk_init_2_tags() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, TagA);
     ECS_TAG(world, TagB);
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {TagA, TagB}
     });
@@ -209,11 +209,11 @@ void New_w_Count_bulk_init_2_tags() {
 }
 
 void New_w_Count_bulk_init_1_component() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {ecs_id(Position)}
     });
@@ -245,12 +245,12 @@ void New_w_Count_bulk_init_1_component() {
 }
 
 void New_w_Count_bulk_init_2_components() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {ecs_id(Position), ecs_id(Velocity)}
     });
@@ -290,7 +290,7 @@ void New_w_Count_bulk_init_2_components() {
 }
 
 void New_w_Count_bulk_init_1_component_w_value() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -302,7 +302,7 @@ void New_w_Count_bulk_init_1_component_w_value() {
 
     void *data[] = {p};
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {ecs_id(Position)},
         .data = data
@@ -348,7 +348,7 @@ void New_w_Count_bulk_init_1_component_w_value() {
 }
 
 void New_w_Count_bulk_init_2_components_w_value() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -367,7 +367,7 @@ void New_w_Count_bulk_init_2_components_w_value() {
 
     void *data[] = {p, v};
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {ecs_id(Position), ecs_id(Velocity)},
         .data = data
@@ -436,7 +436,7 @@ void New_w_Count_bulk_init_2_components_w_value() {
 }
 
 void New_w_Count_bulk_init_2_components_tag_w_value() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
 
@@ -457,7 +457,7 @@ void New_w_Count_bulk_init_2_components_tag_w_value() {
 
     void *data[] = {p, NULL, v};
 
-    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+    const ecs_entity_t *entities = ecs_bulk_init(world, &(ecs_bulk_desc_t){
         .count = 3,
         .ids = {ecs_id(Position), Tag, ecs_id(Velocity)},
         .data = data
@@ -530,7 +530,7 @@ void New_w_Count_bulk_init_2_components_tag_w_value() {
 }
 
 void New_w_Count_add_after_bulk() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_ENTITY(world, Tag, 0);
 
@@ -553,7 +553,7 @@ void New_w_Count_add_after_bulk() {
 }
 
 void New_w_Count_add_after_bulk_w_component() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -576,11 +576,11 @@ void New_w_Count_add_after_bulk_w_component() {
 }
 
 void New_w_Count_add_after_bulk_w_ctor() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ecs_set_component_actions(world, Position, {
+    ecs_set_hooks(world, Position, {
         .ctor = ecs_default_ctor
     });
 

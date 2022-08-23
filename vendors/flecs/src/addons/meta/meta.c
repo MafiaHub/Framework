@@ -230,16 +230,15 @@ int init_type(
     ecs_assert(world != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(type != 0, ECS_INTERNAL_ERROR, NULL);
 
-    bool is_added = false;
-    EcsMetaType *meta_type = ecs_get_mut(world, type, EcsMetaType, &is_added);
-    if (is_added) {
+    EcsMetaType *meta_type = ecs_get_mut(world, type, EcsMetaType);
+    if (meta_type->kind == 0) {
         meta_type->existing = ecs_has(world, type, EcsComponent);
 
         /* Ensure that component has a default constructor, to prevent crashing
          * serializers on uninitialized values. */
-        ecs_type_info_t *ti = flecs_ensure_type_info(world, type);
-        if (!ti->lifecycle.ctor) {
-            ti->lifecycle.ctor = ecs_default_ctor;
+        ecs_type_info_t *ti = flecs_type_info_ensure(world, type);
+        if (!ti->hooks.ctor) {
+            ti->hooks.ctor = ecs_default_ctor;
         }
     } else {
         if (meta_type->kind != kind) {
@@ -250,7 +249,7 @@ int init_type(
     }
 
     if (!meta_type->existing) {
-        EcsComponent *comp = ecs_get_mut(world, type, EcsComponent, NULL);
+        EcsComponent *comp = ecs_get_mut(world, type, EcsComponent);
         comp->size = size;
         comp->alignment = alignment;
         ecs_modified(world, type, EcsComponent);
@@ -366,7 +365,7 @@ int add_member_to_struct(
         }
     }
 
-    EcsStruct *s = ecs_get_mut(world, type, EcsStruct, NULL);
+    EcsStruct *s = ecs_get_mut(world, type, EcsStruct);
     ecs_assert(s != NULL, ECS_INTERNAL_ERROR, NULL);
 
     /* First check if member is already added to struct */
@@ -472,7 +471,7 @@ int add_member_to_struct(
 
     /* If current struct is also a member, assign to itself */
     if (ecs_has(world, type, EcsMember)) {
-        EcsMember *type_mbr = ecs_get_mut(world, type, EcsMember, NULL);
+        EcsMember *type_mbr = ecs_get_mut(world, type, EcsMember);
         ecs_assert(type_mbr != NULL, ECS_INTERNAL_ERROR, NULL);
 
         type_mbr->type = type;
@@ -491,12 +490,13 @@ int add_constant_to_enum(
     ecs_entity_t e,
     ecs_id_t constant_id)
 {
-    EcsEnum *ptr = ecs_get_mut(world, type, EcsEnum, NULL);
+    EcsEnum *ptr = ecs_get_mut(world, type, EcsEnum);
     
     /* Remove constant from map if it was already added */
     ecs_map_iter_t it = ecs_map_iter(ptr->constants);
     ecs_enum_constant_t *c;
     ecs_map_key_t key;
+
     while ((c = ecs_map_next(&it, ecs_enum_constant_t, &key))) {
         if (c->constant == e) {
             ecs_os_free((char*)c->name);
@@ -550,7 +550,7 @@ int add_constant_to_enum(
     c->constant = e;
 
     ecs_i32_t *cptr = ecs_get_mut_pair_object(
-        world, e, EcsConstant, ecs_i32_t, NULL);
+        world, e, EcsConstant, ecs_i32_t);
     ecs_assert(cptr != NULL, ECS_INTERNAL_ERROR, NULL);
     cptr[0] = value;
 
@@ -564,7 +564,7 @@ int add_constant_to_bitmask(
     ecs_entity_t e,
     ecs_id_t constant_id)
 {
-    EcsBitmask *ptr = ecs_get_mut(world, type, EcsBitmask, NULL);
+    EcsBitmask *ptr = ecs_get_mut(world, type, EcsBitmask);
     
     /* Remove constant from map if it was already added */
     ecs_map_iter_t it = ecs_map_iter(ptr->constants);
@@ -617,7 +617,7 @@ int add_constant_to_bitmask(
     c->constant = e;
 
     ecs_u32_t *cptr = ecs_get_mut_pair_object(
-        world, e, EcsConstant, ecs_u32_t, NULL);
+        world, e, EcsConstant, ecs_u32_t);
     ecs_assert(cptr != NULL, ECS_INTERNAL_ERROR, NULL);
     cptr[0] = value;
 
@@ -627,7 +627,7 @@ int add_constant_to_bitmask(
 static
 void set_primitive(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsPrimitive *type = ecs_term(it, EcsPrimitive, 1);
+    EcsPrimitive *type = ecs_field(it, EcsPrimitive, 1);
 
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
@@ -691,12 +691,12 @@ void set_primitive(ecs_iter_t *it) {
 static
 void set_member(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsMember *member = ecs_term(it, EcsMember, 1);
+    EcsMember *member = ecs_field(it, EcsMember, 1);
 
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
         ecs_entity_t e = it->entities[i];
-        ecs_entity_t parent = ecs_get_object(world, e, EcsChildOf, 0);
+        ecs_entity_t parent = ecs_get_target(world, e, EcsChildOf, 0);
         if (!parent) {
             ecs_err("missing parent for member '%s'", ecs_get_name(world, e));
             continue;
@@ -745,7 +745,7 @@ void add_constant(ecs_iter_t *it) {
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
         ecs_entity_t e = it->entities[i];
-        ecs_entity_t parent = ecs_get_object(world, e, EcsChildOf, 0);
+        ecs_entity_t parent = ecs_get_target(world, e, EcsChildOf, 0);
         if (!parent) {
             ecs_err("missing parent for constant '%s'", ecs_get_name(world, e));
             continue;
@@ -762,7 +762,7 @@ void add_constant(ecs_iter_t *it) {
 static
 void set_array(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsArray *array = ecs_term(it, EcsArray, 1);
+    EcsArray *array = ecs_field(it, EcsArray, 1);
 
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
@@ -792,7 +792,7 @@ void set_array(ecs_iter_t *it) {
 static
 void set_vector(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsVector *array = ecs_term(it, EcsVector, 1);
+    EcsVector *array = ecs_field(it, EcsVector, 1);
 
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
@@ -934,7 +934,7 @@ error:
 
 static
 void set_unit(ecs_iter_t *it) {
-    EcsUnit *u = ecs_term(it, EcsUnit, 1);
+    EcsUnit *u = ecs_field(it, EcsUnit, 1);
 
     ecs_world_t *world = it->world;
 
@@ -966,7 +966,7 @@ void unit_quantity_monitor(ecs_iter_t *it) {
 static
 void ecs_meta_type_init_default_ctor(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
-    EcsMetaType *type = ecs_term(it, EcsMetaType, 1);
+    EcsMetaType *type = ecs_field(it, EcsMetaType, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -975,8 +975,8 @@ void ecs_meta_type_init_default_ctor(ecs_iter_t *it) {
          * contain uninitialized memory, which could cause serializers to crash
          * when for example inspecting string fields. */
         if (!type->existing) {
-            ecs_set_component_actions_w_id(world, it->entities[i], 
-                &(EcsComponentLifecycle){ 
+            ecs_set_hooks_id(world, it->entities[i], 
+                &(ecs_type_hooks_t){ 
                     .ctor = ecs_default_ctor
                 });
         }
@@ -1013,49 +1013,49 @@ void FlecsMetaImport(
     flecs_bootstrap_tag(world, EcsConstant);
     flecs_bootstrap_tag(world, EcsQuantity);
 
-    ecs_set_component_actions(world, EcsMetaType, { .ctor = ecs_default_ctor });
+    ecs_set_hooks(world, EcsMetaType, { .ctor = ecs_default_ctor });
 
-    ecs_set_component_actions(world, EcsMetaTypeSerialized, { 
+    ecs_set_hooks(world, EcsMetaTypeSerialized, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsMetaTypeSerialized),
         .copy = ecs_copy(EcsMetaTypeSerialized),
         .dtor = ecs_dtor(EcsMetaTypeSerialized)
     });
 
-    ecs_set_component_actions(world, EcsStruct, { 
+    ecs_set_hooks(world, EcsStruct, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsStruct),
         .copy = ecs_copy(EcsStruct),
         .dtor = ecs_dtor(EcsStruct)
     });
 
-    ecs_set_component_actions(world, EcsMember, { 
+    ecs_set_hooks(world, EcsMember, { 
         .ctor = ecs_default_ctor,
         .on_set = member_on_set
     });
 
-    ecs_set_component_actions(world, EcsEnum, { 
+    ecs_set_hooks(world, EcsEnum, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsEnum),
         .copy = ecs_copy(EcsEnum),
         .dtor = ecs_dtor(EcsEnum)
     });
 
-    ecs_set_component_actions(world, EcsBitmask, { 
+    ecs_set_hooks(world, EcsBitmask, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsBitmask),
         .copy = ecs_copy(EcsBitmask),
         .dtor = ecs_dtor(EcsBitmask)
     });
 
-    ecs_set_component_actions(world, EcsUnit, { 
+    ecs_set_hooks(world, EcsUnit, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsUnit),
         .copy = ecs_copy(EcsUnit),
         .dtor = ecs_dtor(EcsUnit)
     });
 
-    ecs_set_component_actions(world, EcsUnitPrefix, { 
+    ecs_set_hooks(world, EcsUnitPrefix, { 
         .ctor = ecs_default_ctor,
         .move = ecs_move(EcsUnitPrefix),
         .copy = ecs_copy(EcsUnitPrefix),
@@ -1063,84 +1063,75 @@ void FlecsMetaImport(
     });
 
     /* Register triggers to finalize type information from component data */
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsPrimitive),
-        .term.subj.set.mask = EcsSelf,
+    ecs_entity_t old_scope = ecs_set_scope( /* Keep meta scope clean */
+        world, EcsFlecsInternals);
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsPrimitive), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = set_primitive
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsMember),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsMember), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = set_member
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsEnum),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsEnum), .src.flags = EcsSelf },
         .events = {EcsOnAdd},
         .callback = add_enum
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsBitmask),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsBitmask), .src.flags = EcsSelf },
         .events = {EcsOnAdd},
         .callback = add_bitmask
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = EcsConstant,
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = EcsConstant, .src.flags = EcsSelf },
         .events = {EcsOnAdd},
         .callback = add_constant
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_pair(EcsConstant, EcsWildcard),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_pair(EcsConstant, EcsWildcard), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = add_constant
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsArray),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsArray), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = set_array
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsVector),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsVector), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = set_vector
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsUnit),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsUnit), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = set_unit
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsMetaType),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsMetaType), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = ecs_meta_type_serialized_init
     });
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(EcsMetaType),
-        .term.subj.set.mask = EcsSelf,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0] = { .id = ecs_id(EcsMetaType), .src.flags = EcsSelf },
         .events = {EcsOnSet},
         .callback = ecs_meta_type_init_default_ctor
     });
 
-    ecs_observer_init(world, &(ecs_observer_desc_t) {
+    ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {
             { .id = ecs_id(EcsUnit) },
             { .id = EcsQuantity }
@@ -1148,11 +1139,12 @@ void FlecsMetaImport(
         .events = { EcsMonitor },
         .callback = unit_quantity_monitor
     });
+    ecs_set_scope(world, old_scope);
 
     /* Initialize primitive types */
     #define ECS_PRIMITIVE(world, type, primitive_kind)\
-        ecs_entity_init(world, &(ecs_entity_desc_t) {\
-            .entity = ecs_id(ecs_##type##_t),\
+        ecs_entity_init(world, &(ecs_entity_desc_t){\
+            .id = ecs_id(ecs_##type##_t),\
             .name = #type,\
             .symbol = #type });\
         ecs_set(world, ecs_id(ecs_##type##_t), EcsPrimitive, {\
@@ -1197,8 +1189,8 @@ void FlecsMetaImport(
     ecs_add_id(world, EcsQuantity, EcsTag);
 
     /* Initialize reflection data for meta components */
-    ecs_entity_t type_kind = ecs_enum_init(world, &(ecs_enum_desc_t) {
-        .entity.name = "TypeKind",
+    ecs_entity_t type_kind = ecs_enum_init(world, &(ecs_enum_desc_t){
+        .entity = ecs_entity(world, { .name = "TypeKind" }),
         .constants = {
             {.name = "PrimitiveType"},
             {.name = "BitmaskType"},
@@ -1209,15 +1201,15 @@ void FlecsMetaImport(
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsMetaType),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsMetaType),
         .members = {
             {.name = (char*)"kind", .type = type_kind}
         }
     });
 
-    ecs_entity_t primitive_kind = ecs_enum_init(world, &(ecs_enum_desc_t) {
-        .entity.name = "PrimitiveKind",
+    ecs_entity_t primitive_kind = ecs_enum_init(world, &(ecs_enum_desc_t){
+        .entity = ecs_entity(world, { .name = "PrimitiveKind" }),
         .constants = {
             {.name = "Bool", 1}, 
             {.name = "Char"}, 
@@ -1239,15 +1231,15 @@ void FlecsMetaImport(
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsPrimitive),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsPrimitive),
         .members = {
             {.name = (char*)"kind", .type = primitive_kind}
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsMember),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsMember),
         .members = {
             {.name = (char*)"type", .type = ecs_id(ecs_entity_t)},
             {.name = (char*)"count", .type = ecs_id(ecs_i32_t)},
@@ -1256,31 +1248,31 @@ void FlecsMetaImport(
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsArray),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsArray),
         .members = {
             {.name = (char*)"type", .type = ecs_id(ecs_entity_t)},
             {.name = (char*)"count", .type = ecs_id(ecs_i32_t)},
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsVector),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsVector),
         .members = {
             {.name = (char*)"type", .type = ecs_id(ecs_entity_t)}
         }
     });
 
-    ecs_entity_t ut = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "unit_translation",
+    ecs_entity_t ut = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, { .name = "unit_translation" }),
         .members = {
             {.name = (char*)"factor", .type = ecs_id(ecs_i32_t)},
             {.name = (char*)"power", .type = ecs_id(ecs_i32_t)}
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsUnit),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsUnit),
         .members = {
             {.name = (char*)"symbol", .type = ecs_id(ecs_string_t)},
             {.name = (char*)"prefix", .type = ecs_id(ecs_entity_t)},
@@ -1290,8 +1282,8 @@ void FlecsMetaImport(
         }
     });
 
-    ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(EcsUnitPrefix),
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsUnitPrefix),
         .members = {
             {.name = (char*)"symbol", .type = ecs_id(ecs_string_t)},
             {.name = (char*)"translation", .type = ut}

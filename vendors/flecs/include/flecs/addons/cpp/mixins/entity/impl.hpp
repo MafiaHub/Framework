@@ -4,17 +4,7 @@ namespace flecs {
 
 template <typename T>
 flecs::entity ref<T>::entity() const {
-    return flecs::entity(m_world, m_entity);
-}
-
-template <typename Self>
-inline Self& entity_builder<Self>::add_switch(const flecs::type& sw) {
-    return add_switch(sw.id());
-}
-
-template <typename Self>
-inline Self& entity_builder<Self>::remove_switch(const flecs::type& sw) {
-    return remove_switch(sw.id());
+    return flecs::entity(m_world, m_ref.entity);
 }
 
 template <typename Self>
@@ -25,27 +15,10 @@ inline Self& entity_builder<Self>::set(const Func& func) {
     return to_base();
 }
 
-inline bool entity_view::has_switch(const flecs::type& type) const {
-    return ecs_has_id(m_world, m_id, flecs::Switch | type.id());
-}
-
-inline flecs::entity entity_view::get_case(const flecs::type& sw) const {
-    return flecs::entity(m_world, ecs_get_case(m_world, m_id, sw.id()));
-}
-
-inline flecs::entity entity_view::get_case(flecs::id_t sw) const {
-    return flecs::entity(m_world, ecs_get_case(m_world, m_id, sw));
-}
-
-template <typename T>
-inline flecs::entity entity_view::get_case() const {
-    return get_case(_::cpp_type<T>::id(m_world));
-}
-
 template <typename T, if_t< is_enum<T>::value > >
 const T* entity_view::get() const {
     entity_t r = _::cpp_type<T>::id(m_world);
-    entity_t c = ecs_get_object(m_world, m_id, r, 0);
+    entity_t c = ecs_get_target(m_world, m_id, r, 0);
 
     if (c) {
         // Get constant value from constant entity
@@ -59,37 +32,37 @@ const T* entity_view::get() const {
     }
 }
 
-template<typename R>
-inline flecs::entity entity_view::get_object(int32_t index) const 
+template<typename First>
+inline flecs::entity entity_view::target(int32_t index) const 
 {
     return flecs::entity(m_world, 
-        ecs_get_object(m_world, m_id, _::cpp_type<R>::id(m_world), index));
+        ecs_get_target(m_world, m_id, _::cpp_type<First>::id(m_world), index));
 }
 
-inline flecs::entity entity_view::get_object(
-    flecs::entity_t relation, 
+inline flecs::entity entity_view::target(
+    flecs::entity_t relationship, 
     int32_t index) const 
 {
     return flecs::entity(m_world, 
-        ecs_get_object(m_world, m_id, relation, index));
+        ecs_get_target(m_world, m_id, relationship, index));
 }
 
-inline flecs::entity entity_view::get_object_for(
-    flecs::entity_t relation, 
+inline flecs::entity entity_view::target_for(
+    flecs::entity_t relationship, 
     flecs::id_t id) const 
 {
     return flecs::entity(m_world, 
-        ecs_get_object_for_id(m_world, m_id, relation, id));
+        ecs_get_target_for_id(m_world, m_id, relationship, id));
 }
 
 template <typename T>
-inline flecs::entity entity_view::get_object_for(flecs::entity_t relation) const {
-    return get_object_for(relation, _::cpp_type<T>::id(m_world));
+inline flecs::entity entity_view::target_for(flecs::entity_t relationship) const {
+    return target_for(relationship, _::cpp_type<T>::id(m_world));
 }
 
-template <typename R, typename O>
-inline flecs::entity entity_view::get_object_for(flecs::entity_t relation) const {
-    return get_object_for(relation, _::cpp_type<R, O>::id(m_world));
+template <typename First, typename Second>
+inline flecs::entity entity_view::target_for(flecs::entity_t relationship) const {
+    return target_for(relationship, _::cpp_type<First, Second>::id(m_world));
 }
 
 inline flecs::entity entity_view::mut(const flecs::world& stage) const {
@@ -115,30 +88,32 @@ inline flecs::entity entity_view::set_stage(world_t *stage) {
 }   
 
 inline flecs::type entity_view::type() const {
-    return flecs::type(m_world, ecs_get_table(m_world, m_id));
+    return flecs::type(m_world, ecs_get_type(m_world, m_id));
+}
+
+inline flecs::table entity_view::table() const {
+    return flecs::table(m_world, ecs_get_table(m_world, m_id));
 }
 
 template <typename Func>
 inline void entity_view::each(const Func& func) const {
-    const ecs_vector_t *type = ecs_get_type(m_world, m_id);
+    const ecs_type_t *type = ecs_get_type(m_world, m_id);
     if (!type) {
         return;
     }
 
-    const ecs_id_t *ids = static_cast<ecs_id_t*>(
-        _ecs_vector_first(type, ECS_VECTOR_T(ecs_id_t)));
-    int32_t count = ecs_vector_count(type);
+    const ecs_id_t *ids = type->array;
+    int32_t count = type->count;
 
     for (int i = 0; i < count; i ++) {
         ecs_id_t id = ids[i];
         flecs::id ent(m_world, id);
         func(ent); 
 
-        // Case is not stored in type, so handle separately
-        if ((id & ECS_ROLE_MASK) == flecs::Switch) {
-            ent = flecs::id(
-                m_world, flecs::Case | ecs_get_case(
-                        m_world, m_id, ent.second().id()));
+        // Union object is not stored in type, so handle separately
+        if (ECS_PAIR_FIRST(id) == EcsUnion) {
+            ent = flecs::id(m_world, ECS_PAIR_SECOND(id),
+                ecs_get_target(m_world, m_id, ECS_PAIR_SECOND(id), 0));
             func(ent);
         }
     }
@@ -154,7 +129,7 @@ inline void entity_view::each(flecs::id_t pred, flecs::id_t obj, const Func& fun
         return;
     }
 
-    const ecs_vector_t *type = ecs_table_get_type(table);
+    const ecs_type_t *type = ecs_table_get_type(table);
     if (!type) {
         return;
     }
@@ -165,8 +140,7 @@ inline void entity_view::each(flecs::id_t pred, flecs::id_t obj, const Func& fun
     }
 
     int32_t cur = 0;
-    id_t *ids = static_cast<ecs_id_t*>(
-        _ecs_vector_first(type, ECS_VECTOR_T(ecs_id_t)));
+    id_t *ids = type->array;
     
     while (-1 != (cur = ecs_search_offset(real_world, table, cur, pattern, 0)))
     {
@@ -190,6 +164,7 @@ inline bool entity_view::get(const Func& func) const {
 } 
 
 inline flecs::entity entity_view::lookup(const char *path) const {
+    ecs_assert(m_id != 0, ECS_INVALID_PARAMETER, "invalid lookup from null handle");
     auto id = ecs_lookup_path_w_sep(m_world, m_id, path, "::", "::", false);
     return flecs::entity(m_world, id);
 }

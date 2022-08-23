@@ -16,14 +16,11 @@ void flecs_observable_fini(
         ecs_event_record_t *et = 
             ecs_sparse_get_dense(triggers, ecs_event_record_t, i);
         ecs_assert(et != NULL, ECS_INTERNAL_ERROR, NULL);
+        (void)et;
 
-        ecs_map_iter_t it = ecs_map_iter(&et->event_ids);
-        ecs_event_id_record_t *idt;
-        while ((idt = ecs_map_next(&it, ecs_event_id_record_t, NULL))) {
-            ecs_map_fini(&idt->triggers);
-            ecs_map_fini(&idt->set_triggers);
-        }
-        ecs_map_fini(&et->event_ids);
+        /* All triggers should've unregistered by now */
+        ecs_assert(!ecs_map_is_initialized(&et->event_ids), 
+            ECS_INTERNAL_ERROR, NULL);
     }
 
     flecs_sparse_free(observable->events);
@@ -36,51 +33,52 @@ void notify_subset(
     ecs_observable_t *observable,
     ecs_entity_t entity,
     ecs_entity_t event,
-    ecs_ids_t *ids)
+    const ecs_type_t *ids)
 {
     ecs_id_t pair = ecs_pair(EcsWildcard, entity);
-    ecs_table_cache_iter_t idt;
-    ecs_id_record_t *idr = flecs_table_iter(world, pair, &idt);
+    ecs_id_record_t *idr = flecs_id_record_get(world, pair);
     if (!idr) {
         return;
     }
 
-    const ecs_table_record_t *tr;
-    while ((tr = flecs_table_cache_next(&idt, ecs_table_record_t))) {
-        ecs_table_t *table = tr->hdr.table;
-        ecs_id_t id = ecs_vector_get(table->type, ecs_id_t, tr->column)[0];
-        ecs_entity_t rel = ECS_PAIR_FIRST(id);
+    /* Iterate acyclic relationships */
+    ecs_id_record_t *cur = idr;
+    while ((cur = cur->acyclic.next)) {
+        flecs_process_pending_tables(world);
 
-        if (ecs_is_valid(world, rel) && !ecs_has_id(world, rel, EcsAcyclic)) {
-            /* Only notify for acyclic relations */
-            continue;
+        ecs_table_cache_iter_t idt;
+        if (!flecs_table_cache_iter(&cur->cache, &idt)) {
+            return;
         }
 
-        int32_t e, entity_count = ecs_table_count(table);
-        it->table = table;
-        it->type = table->type;
-        it->other_table = NULL;
-        it->offset = 0;
-        it->count = entity_count;
+        ecs_entity_t rel = ECS_PAIR_FIRST(cur->id);
+        const ecs_table_record_t *tr;
+        while ((tr = flecs_table_cache_next(&idt, ecs_table_record_t))) {
+            ecs_table_t *table = tr->hdr.table;
 
-        /* Treat as new event as this could trigger observers again for
-         * different tables. */
-        world->event_id ++;
+            int32_t e, entity_count = ecs_table_count(table);
+            it->table = table;
+            it->other_table = NULL;
+            it->offset = 0;
+            it->count = entity_count;
 
-        flecs_set_triggers_notify(it, observable, ids, event,
-            ecs_pair(rel, EcsWildcard));
+            /* Treat as new event as this could invoke observers again for
+            * different tables. */
+            world->event_id ++;
 
-        ecs_entity_t *entities = ecs_vector_first(
-            table->storage.entities, ecs_entity_t);
-        ecs_record_t **records = ecs_vector_first(
-            table->storage.record_ptrs, ecs_record_t*);
+            flecs_set_observers_notify(it, observable, ids, event,
+                ecs_pair(rel, EcsWildcard));
 
-        for (e = 0; e < entity_count; e ++) {
-            uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(records[e]->row);
-            if (flags & ECS_FLAG_OBSERVED_ACYCLIC) {
-                /* Only notify for entities that are used in pairs with
-                 * acyclic relations */
-                notify_subset(world, it, observable, entities[e], event, ids);
+            ecs_entity_t *entities = ecs_storage_first(&table->data.entities);
+            ecs_record_t **records = ecs_storage_first(&table->data.records);
+
+            for (e = 0; e < entity_count; e ++) {
+                uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(records[e]->row);
+                if (flags & EcsEntityObservedAcyclic) {
+                    /* Only notify for entities that are used in pairs with
+                    * acyclic relationships */
+                    notify_subset(world, it, observable, entities[e], event, ids);
+                }
             }
         }
     }
@@ -100,12 +98,12 @@ void flecs_emit(
     ecs_check(desc->table != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_check(desc->observable != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    ecs_ids_t *ids = desc->ids;
+    const ecs_type_t *ids = desc->ids;
     ecs_entity_t event = desc->event;
     ecs_table_t *table = desc->table;
     int32_t row = desc->offset;
     int32_t i, count = desc->count;
-    ecs_entity_t relation = desc->relation;
+    ecs_entity_t relationship = desc->relationship;
 
     if (!count) {
         count = ecs_table_count(table) - row;
@@ -115,8 +113,7 @@ void flecs_emit(
         .world = stage,
         .real_world = world,
         .table = table,
-        .type = table->type,
-        .term_count = 1,
+        .field_count = 1,
         .other_table = desc->other_table,
         .offset = row,
         .count = count,
@@ -129,16 +126,16 @@ void flecs_emit(
     ecs_observable_t *observable = ecs_get_observable(desc->observable);
     ecs_check(observable != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    if (!desc->relation) {
-        flecs_triggers_notify(&it, observable, ids, event);
+    if (!desc->relationship) {
+        flecs_observers_notify(&it, observable, ids, event);
     } else {
-        flecs_set_triggers_notify(&it, observable, ids, event, 
-            ecs_pair(relation, EcsWildcard));
+        flecs_set_observers_notify(&it, observable, ids, event, 
+            ecs_pair(relationship, EcsWildcard));
     }
 
     if (count && !desc->table_event) {
-        ecs_record_t **recs = ecs_vector_get(
-            table->storage.record_ptrs, ecs_record_t*, row);
+        ecs_record_t **recs = ecs_storage_get_t(
+            &table->data.records, ecs_record_t*, row);
 
         for (i = 0; i < count; i ++) {
             ecs_record_t *r = recs[i];
@@ -149,10 +146,9 @@ void flecs_emit(
             }
 
             uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(recs[i]->row);
-            if (flags & ECS_FLAG_OBSERVED_ACYCLIC) {
-                notify_subset(world, &it, observable, ecs_vector_first(
-                    table->storage.entities, ecs_entity_t)[row + i], 
-                        event, ids);
+            if (flags & EcsEntityObservedAcyclic) {
+                notify_subset(world, &it, observable, ecs_storage_first_t(
+                    &table->data.entities, ecs_entity_t)[row + i], event, ids);
             }
         }
     }

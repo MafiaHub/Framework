@@ -3,12 +3,12 @@ namespace flecs {
 
 inline flecs::entity id::entity() const {
     ecs_assert(!is_pair(), ECS_INVALID_OPERATION, NULL);
-    ecs_assert(!role(), ECS_INVALID_OPERATION, NULL);
+    ecs_assert(!flags(), ECS_INVALID_OPERATION, NULL);
     return flecs::entity(m_world, m_id);
 }
 
-inline flecs::entity id::role() const {
-    return flecs::entity(m_world, m_id & ECS_ROLE_MASK);
+inline flecs::entity id::flags() const {
+    return flecs::entity(m_world, m_id & ECS_ID_FLAGS_MASK);
 }
 
 inline flecs::entity id::first() const {
@@ -31,25 +31,17 @@ inline flecs::entity id::second() const {
     }
 }
 
-inline flecs::entity id::relation() const {
-    return first();
+inline flecs::entity id::add_flags(flecs::id_t flags) const {
+    return flecs::entity(m_world, m_id | flags);
 }
 
-inline flecs::entity id::object() const {
-    return second();
-}
-
-inline flecs::entity id::add_role(flecs::id_t role) const {
-    return flecs::entity(m_world, m_id | role);
-}
-
-inline flecs::entity id::remove_role(flecs::id_t role) const {
-    (void)role;
-    ecs_assert((m_id & ECS_ROLE_MASK) == role, ECS_INVALID_PARAMETER, NULL);
+inline flecs::entity id::remove_flags(flecs::id_t flags) const {
+    (void)flags;
+    ecs_assert((m_id & ECS_ID_FLAGS_MASK) == flags, ECS_INVALID_PARAMETER, NULL);
     return flecs::entity(m_world, m_id & ECS_COMPONENT_MASK);
 }
 
-inline flecs::entity id::remove_role() const {
+inline flecs::entity id::remove_flags() const {
     return flecs::entity(m_world, m_id & ECS_COMPONENT_MASK);
 }
 
@@ -59,6 +51,10 @@ inline flecs::entity id::remove_generation() const {
 
 inline flecs::world id::world() const {
     return flecs::world(m_world);
+}
+
+inline flecs::entity id::type_id() const {
+    return flecs::entity(m_world, ecs_get_typeid(m_world, m_id));
 }
 
 
@@ -74,21 +70,21 @@ inline flecs::id world::id(Args&&... args) const {
     return flecs::id(m_world, FLECS_FWD(args)...);
 }
 
-template <typename R, typename O>
+template <typename First, typename Second>
 inline flecs::id world::pair() const {
     return flecs::id(
         m_world, 
         ecs_pair(
-            _::cpp_type<R>::id(m_world), 
-            _::cpp_type<O>::id(m_world)));
+            _::cpp_type<First>::id(m_world), 
+            _::cpp_type<Second>::id(m_world)));
 }
 
-template <typename R>
+template <typename First>
 inline flecs::id world::pair(entity_t o) const {
     return flecs::id(
         m_world,
         ecs_pair(
-            _::cpp_type<R>::id(m_world), 
+            _::cpp_type<First>::id(m_world), 
             o));
 }
 

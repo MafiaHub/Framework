@@ -63,7 +63,7 @@ void ecs_table_cache_init(
     ecs_table_cache_t *cache)
 {
     ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_map_init(&cache->index, ecs_table_cache_hdr_t*, 0);
+    ecs_map_init(&cache->index, ecs_table_cache_hdr_t*, 4);
 }
 
 void ecs_table_cache_fini(
@@ -110,6 +110,46 @@ void ecs_table_cache_insert(
         ECS_INTERNAL_ERROR, NULL);
     ecs_assert(!empty || cache->empty_tables.first != NULL, 
         ECS_INTERNAL_ERROR, NULL);
+}
+
+void ecs_table_cache_replace(
+    ecs_table_cache_t *cache,
+    const ecs_table_t *table,
+    ecs_table_cache_hdr_t *elem)
+{
+    ecs_table_cache_hdr_t **oldptr = ecs_map_get(&cache->index, 
+        ecs_table_cache_hdr_t*, table->id);
+    ecs_assert(oldptr != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_table_cache_hdr_t *old = *oldptr;
+    ecs_assert(old != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_table_cache_hdr_t *prev = old->prev, *next = old->next;
+    if (prev) {
+        ecs_assert(prev->next == old, ECS_INTERNAL_ERROR, NULL);
+        prev->next = elem;
+    }
+    if (next) {
+        ecs_assert(next->prev == old, ECS_INTERNAL_ERROR, NULL);
+        next->prev = elem;
+    }
+
+    if (cache->empty_tables.first == old) {
+        cache->empty_tables.first = elem;
+    }
+    if (cache->empty_tables.last == old) {
+        cache->empty_tables.last = elem;
+    }
+    if (cache->tables.first == old) {
+        cache->tables.first = elem;
+    }
+    if (cache->tables.last == old) {
+        cache->tables.last = elem;
+    }
+
+    *oldptr = elem;
+    elem->prev = prev;
+    elem->next = next;
 }
 
 void* ecs_table_cache_get(
@@ -182,38 +222,6 @@ bool ecs_table_cache_set_empty(
     return true;
 }
 
-void ecs_table_cache_fini_delete_all(
-    ecs_world_t *world,
-    ecs_table_cache_t *cache)
-{
-    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    if (!ecs_map_is_initialized(&cache->index)) {
-        return;
-    }
-
-    /* Temporarily set index to NULL, so that when the table tries to remove
-     * itself from the cache it won't be able to. This keeps the arrays we're
-     * iterating over consistent */
-    ecs_map_t index = cache->index;
-    ecs_os_zeromem(&cache->index);
-
-    ecs_table_cache_hdr_t *cur, *next = cache->tables.first;
-    while ((cur = next)) {
-        flecs_delete_table(world, cur->table);
-        next = cur->next;
-    }
-
-    next = cache->empty_tables.first;
-    while ((cur = next)) {
-        flecs_delete_table(world, cur->table);
-        next = cur->next;
-    }
-
-    cache->index = index;
-
-    ecs_table_cache_fini(cache);
-}
-
 bool flecs_table_cache_iter(
     ecs_table_cache_t *cache,
     ecs_table_cache_iter_t *out)
@@ -221,6 +229,7 @@ bool flecs_table_cache_iter(
     ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(out != NULL, ECS_INTERNAL_ERROR, NULL);
     out->next = cache->tables.first;
+    out->next_list = NULL;
     out->cur = NULL;
     return out->next != NULL;
 }
@@ -232,8 +241,21 @@ bool flecs_table_cache_empty_iter(
     ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(out != NULL, ECS_INTERNAL_ERROR, NULL);
     out->next = cache->empty_tables.first;
+    out->next_list = NULL;
     out->cur = NULL;
     return out->next != NULL;
+}
+
+bool flecs_table_cache_all_iter(
+    ecs_table_cache_t *cache,
+    ecs_table_cache_iter_t *out)
+{
+    ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(out != NULL, ECS_INTERNAL_ERROR, NULL);
+    out->next = cache->empty_tables.first;
+    out->next_list = cache->tables.first;
+    out->cur = NULL;
+    return out->next != NULL || out->next_list != NULL;
 }
 
 ecs_table_cache_hdr_t* _flecs_table_cache_next(
@@ -241,7 +263,11 @@ ecs_table_cache_hdr_t* _flecs_table_cache_next(
 {
     ecs_table_cache_hdr_t *next = it->next;
     if (!next) {
-        return false;
+        next = it->next_list;
+        it->next_list = NULL;
+        if (!next) {
+            return false;
+        }
     }
 
     it->cur = next;

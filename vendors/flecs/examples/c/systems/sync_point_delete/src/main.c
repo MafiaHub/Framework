@@ -6,8 +6,8 @@ typedef struct {
 } Position, Velocity;
 
 void Move(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    const Velocity *v = ecs_term(it, const Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    const Velocity *v = ecs_field(it, const Velocity, 2);
 
     for (int i = 0; i < it->count; i ++) {
         p[i].x += v[i].x;
@@ -16,7 +16,7 @@ void Move(ecs_iter_t *it) {
 }
 
 void DeleteEntity(ecs_iter_t *it) {
-    const Position *p = ecs_term(it, Position, 1);
+    const Position *p = ecs_field(it, Position, 1);
 
     for (int i = 0; i < it->count; i ++) {
         if (p[i].x >= 3) {
@@ -28,7 +28,7 @@ void DeleteEntity(ecs_iter_t *it) {
 }
 
 void PrintPosition(ecs_iter_t *it) {
-    const Position *p = ecs_term(it, const Position, 1);
+    const Position *p = ecs_field(it, const Position, 1);
 
     for (int i = 0; i < it->count; i ++) {
         printf("%s: {%f, %f}\n", ecs_get_name(it->world, it->entities[i]), 
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     // overhead.
     //
     // To create the same system with ecs_system_init, do:
-    //  ecs_system_init(ecs, &(ecs_system_desc_t) {
+    //  ecs_system_init(ecs, &(ecs_system_desc_t){
     //      .query.filter.terms = {
     //          { 
     //              .id = ecs_id(Position), 
@@ -122,12 +122,12 @@ int main(int argc, char *argv[]) {
     //          { 
     //              .id = EcsWildcard, 
     //              .inout = EcsOut, 
-    //              .subj.set.mask = EcsNothing 
+    //              .src.flags = EcsNothing 
     //          }
     //      },
     //      .entity = {
     //          .name = "DeleteEntity",
-    //          .add = {EcsOnUpdate}
+    //          .add = {ecs_dependson(EcsOnUpdate)}
     //      },
     //      .callback = DeleteEntity
     //  });

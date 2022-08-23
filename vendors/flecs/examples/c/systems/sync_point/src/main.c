@@ -16,8 +16,8 @@ void SetVelocity(ecs_iter_t *it) {
 }
 
 void Move(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    const Velocity *v = ecs_term(it, const Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    const Velocity *v = ecs_field(it, const Velocity, 2);
 
     for (int i = 0; i < it->count; i ++) {
         p[i].x += v[i].x;
@@ -26,7 +26,7 @@ void Move(ecs_iter_t *it) {
 }
 
 void PrintPosition(ecs_iter_t *it) {
-    const Position *p = ecs_term(it, const Position, 1);
+    const Position *p = ecs_field(it, const Position, 1);
 
     for (int i = 0; i < it->count; i ++) {
         printf("%s: {%f, %f}\n", ecs_get_name(it->world, it->entities[i]), 
@@ -55,10 +55,10 @@ int main(int argc, char *argv[]) {
     // components provided by their signature, as these writes directly happen
     // in the ECS storage and are never deferred.
     //
-    // The [filter] annotation for Position tells the scheduler that while we 
+    // The [none] annotation for Position tells the scheduler that while we 
     // want to match entities with Position, we're not interested in reading or 
     // writing the component value.
-    ECS_SYSTEM(ecs, SetVelocity, EcsOnUpdate, [filter] Position, [out] Velocity());
+    ECS_SYSTEM(ecs, SetVelocity, EcsOnUpdate, [none] Position, [out] Velocity());
 
     // This system reads Velocity, which causes the insertion of a sync point.
     ECS_SYSTEM(ecs, Move, EcsOnUpdate, Position, [in] Velocity);
@@ -98,21 +98,21 @@ int main(int argc, char *argv[]) {
     // the first sync point from the schedule.
     //
     // To create the same system with ecs_system_init, do:
-    //  ecs_system_init(ecs, &(ecs_system_desc_t) {
+    //  ecs_system_init(ecs, &(ecs_system_desc_t){
     //      .query.filter.terms = {
     //          { 
     //              .id = ecs_id(Position), 
-    //              .inout = EcsInOutFilter 
+    //              .inout = EcsInOutNone 
     //          },
     //          { 
     //              .id = ecs_id(Velocity), 
     //              .inout = EcsOut, 
-    //              .subj.set.mask = EcsNothing 
+    //              .src.flags = EcsNothing 
     //          }
     //      },
     //      .entity = {
     //          .name = "SetVelocity",
-    //          .add = {EcsOnUpdate}
+    //          .add = {ecs_dependson(EcsOnUpdate)}
     //      },
     //      .callback = SetVelocity
     //  });

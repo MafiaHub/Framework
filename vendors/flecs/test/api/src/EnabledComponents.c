@@ -2,25 +2,25 @@
 #include <stdlib.h>
 
 void EnabledComponents_is_component_enabled() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new(world, Position);
 
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_empty_entity_disabled() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new(world, 0);
 
-    test_bool(ecs_is_component_enabled(world, e, Position), false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_fini(world);
 }
@@ -28,20 +28,20 @@ void EnabledComponents_is_empty_entity_disabled() {
 void EnabledComponents_is_0_entity_disabled() {
     install_test_abort();
 
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
     test_expect_abort();
 
-    test_bool(ecs_is_component_enabled(world, 0, Position), false);
+    test_bool(ecs_is_enabled_component(world, 0, Position), false);
 }
 
 void EnabledComponents_is_0_component_disabled() {
     install_test_abort();
     
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -49,50 +49,50 @@ void EnabledComponents_is_0_component_disabled() {
 
     test_expect_abort();
 
-    test_bool(ecs_is_component_enabled_w_id(world, e, 0), false);
+    test_bool(ecs_is_enabled_id(world, e, 0), false);
 }
 
 void EnabledComponents_is_nonexist_component_disabled() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
     ecs_entity_t e = ecs_new(world, Velocity);
 
-    test_bool(ecs_is_component_enabled(world, e, Position), false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_component_enabled() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new_id(world);
 
     ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_disabled_component_enabled() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new_id(world);
 
-    ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    ecs_enable_component(world, e, Position, false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_has_enabled_component() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -100,87 +100,87 @@ void EnabledComponents_has_enabled_component() {
 
     ecs_enable_component(world, e, Position, true);
     
-    test_bool(ecs_has_id(world, e, ECS_DISABLED | ecs_id(Position)), true);
+    test_bool(ecs_has_id(world, e, ECS_TOGGLE | ecs_id(Position)), true);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_after_add() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new_id(world);
 
     ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_add(world, e, Position);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_has_id(world, e, ECS_DISABLED | ecs_id(Position)), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_has_id(world, e, ECS_TOGGLE | ecs_id(Position)), true);
     test_bool(ecs_has(world, e, Position), true);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_after_remove() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new(world, Position);
 
     ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_remove(world, e, Position);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_has_id(world, e, ECS_DISABLED | ecs_id(Position)), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_has_id(world, e, ECS_TOGGLE | ecs_id(Position)), true);
     test_bool(ecs_has(world, e, Position), false);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_after_disable() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new_id(world);
 
     ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_enable_component(world, e, Position, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_disabled_after_enable() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new_id(world);
 
     ecs_enable_component(world, e, Position, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_enable_component(world, e, Position, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_randomized() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -196,14 +196,14 @@ void EnabledComponents_is_enabled_randomized() {
 
     for (i = 0; i < 100000; i ++) {
         test_bool(
-            ecs_is_component_enabled(world, entities[i], Position), enabled[i]);
+            ecs_is_enabled_component(world, entities[i], Position), enabled[i]);
     }
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_after_add_randomized() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -223,14 +223,14 @@ void EnabledComponents_is_enabled_after_add_randomized() {
 
     for (i = 0; i < 100000; i ++) {
         test_bool(
-            ecs_is_component_enabled(world, entities[i], Position), enabled[i]);
+            ecs_is_enabled_component(world, entities[i], Position), enabled[i]);
     }
 
     ecs_fini(world);
 }
 
 void EnabledComponents_is_enabled_after_randomized_add_randomized() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -252,14 +252,337 @@ void EnabledComponents_is_enabled_after_randomized_add_randomized() {
 
     for (i = 0; i < 100000; i ++) {
         test_bool(
-            ecs_is_component_enabled(world, entities[i], Position), enabled[i]);
+            ecs_is_enabled_component(world, entities[i], Position), enabled[i]);
     }
 
     ecs_fini(world);
 }
 
+void EnabledComponents_is_enabled_2() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_entity_t e = ecs_new(world, 0);
+
+    ecs_enable_component(world, e, Position, true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+
+    ecs_enable_component(world, e, Velocity, false);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_enabled_3() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+    ECS_COMPONENT(world, Mass);
+
+    ecs_entity_t e = ecs_new(world, 0);
+
+    ecs_enable_component(world, e, Position, true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+
+    ecs_enable_component(world, e, Velocity, false);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+
+    ecs_enable_component(world, e, Mass, true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+    test_bool(ecs_is_enabled_component(world, e, Mass), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_enabled_2_after_add() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_entity_t e = ecs_new(world, 0);
+
+    ecs_enable_component(world, e, Position, true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+
+    ecs_enable_component(world, e, Velocity, false);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+
+    ecs_add(world, e, Position);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);    
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_enabled_3_after_add() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+    ECS_COMPONENT(world, Mass);
+
+    ecs_entity_t e = ecs_new(world, 0);
+
+    ecs_enable_component(world, e, Position, true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+
+    ecs_enable_component(world, e, Velocity, false);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+
+    ecs_enable_component(world, e, Mass, true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+    test_bool(ecs_is_enabled_component(world, e, Mass), true);
+
+    ecs_add(world, e, Position);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Velocity), false);
+    test_bool(ecs_is_enabled_component(world, e, Mass), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t obj = ecs_new_id(world);
+    ecs_entity_t e = ecs_new_w_pair(world, ecs_id(Position), obj);
+
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_enabled_pair_enabled() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_disabled_pair_enabled() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), false);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_has_enabled_pair() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_has_id(world, e, ECS_TOGGLE | ecs_pair(ecs_id(Position), obj)), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_after_add() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_add_pair(world, e, ecs_id(Position), obj);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_has_id(world, e, ECS_TOGGLE |  ecs_pair(ecs_id(Position), obj)), true);
+    test_bool(ecs_has_pair(world, e, ecs_id(Position), obj), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_after_remove() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new(world, Position);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_remove_pair(world, e, ecs_id(Position), obj);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_has_id(world, e, ECS_TOGGLE | ecs_pair(ecs_id(Position), obj)), true);
+    test_bool(ecs_has_pair(world, e, ecs_id(Position), obj), false);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_after_disable() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_enable_pair(world, e, Position, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), false);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_disabled_after_enable() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), false);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_enable_pair(world, e, Position, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), false);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_2() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_entity_t e = ecs_new(world, 0);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_enable_pair(world, e, Velocity, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_3() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+    ECS_COMPONENT(world, Mass);
+
+    ecs_entity_t e = ecs_new(world, 0);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_enable_pair(world, e, Velocity, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+
+    ecs_enable_pair(world, e, Mass, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+    test_bool(ecs_is_enabled_pair(world, e, Mass, obj), true);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_2_after_add() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+
+    ecs_entity_t e = ecs_new(world, 0);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_enable_pair(world, e, Velocity, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+
+    ecs_add_pair(world, e, ecs_id(Position), obj);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);    
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_is_pair_enabled_3_after_add() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+    ECS_COMPONENT(world, Mass);
+
+    ecs_entity_t e = ecs_new(world, 0);
+    ecs_entity_t obj = ecs_new_id(world);
+
+    ecs_enable_pair(world, e, Position, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+
+    ecs_enable_pair(world, e, Velocity, obj, false);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+
+    ecs_enable_pair(world, e, Mass, obj, true);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+    test_bool(ecs_is_enabled_pair(world, e, Mass, obj), true);
+
+    ecs_add_pair(world, e, ecs_id(Position), obj);
+    test_bool(ecs_is_enabled_pair(world, e, Position, obj), true);
+    test_bool(ecs_is_enabled_pair(world, e, Velocity, obj), false);
+    test_bool(ecs_is_enabled_pair(world, e, Mass, obj), true);
+
+    ecs_fini(world);
+}
+
 void EnabledComponents_query_disabled() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -280,7 +603,42 @@ void EnabledComponents_query_disabled() {
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] != e2);
             test_assert(it.entities[i] == e1 || it.entities[i] == e3);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+        }
+        count += it.count;
+        table_count ++;
+    }
+
+    test_int(count, 2);
+    test_int(table_count, 2);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_query_disabled_pair() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_TAG(world, Tgt);
+
+    ecs_entity_t e1 = ecs_new_w_pair(world, ecs_id(Position), Tgt);
+    ecs_entity_t e2 = ecs_new_w_pair(world, ecs_id(Position), Tgt);
+    ecs_entity_t e3 = ecs_new_w_pair(world, ecs_id(Position), Tgt);
+
+    ecs_enable_pair(world, e1, Position, Tgt, true);
+    ecs_enable_pair(world, e2, Position, Tgt, false);
+
+    ecs_query_t *q = ecs_query_new(world, "(Position, Tgt)");
+    ecs_iter_t it = ecs_query_iter(world, q);
+
+    int32_t table_count = 0, count = 0;
+
+    while (ecs_query_next(&it)) {
+        int32_t i;
+        for (i = 0; i < it.count; i ++) {
+            test_assert(it.entities[i] != e2);
+            test_assert(it.entities[i] == e1 || it.entities[i] == e3);
+            test_assert(ecs_is_enabled_pair(world, it.entities[i], Position, Tgt));
         }
         count += it.count;
         table_count ++;
@@ -293,7 +651,7 @@ void EnabledComponents_query_disabled() {
 }
 
 void EnabledComponents_query_disabled_skip_initial() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -314,7 +672,40 @@ void EnabledComponents_query_disabled_skip_initial() {
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] != e1);
             test_assert(it.entities[i] == e2 || it.entities[i] == e3);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+        }
+        count += it.count;
+    }
+
+    test_int(count, 2);
+
+    ecs_fini(world);
+}
+
+void EnabledComponents_query_disabled_pair_skip_initial() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_TAG(world, Tgt);
+
+    ecs_entity_t e1 = ecs_new_w_pair(world, ecs_id(Position), Tgt);
+    ecs_entity_t e2 = ecs_new_w_pair(world, ecs_id(Position), Tgt);
+    ecs_entity_t e3 = ecs_new_w_pair(world, ecs_id(Position), Tgt);
+
+    ecs_enable_pair(world, e1, Position, Tgt, false);
+    ecs_enable_pair(world, e2, Position, Tgt, true);
+
+    ecs_query_t *q = ecs_query_new(world, "(Position, Tgt)");
+    ecs_iter_t it = ecs_query_iter(world, q);
+
+    int32_t count = 0;
+
+    while (ecs_query_next(&it)) {
+        int32_t i;
+        for (i = 0; i < it.count; i ++) {
+            test_assert(it.entities[i] != e1);
+            test_assert(it.entities[i] == e2 || it.entities[i] == e3);
+            test_assert(ecs_is_enabled_pair(world, it.entities[i], Position, Tgt));
         }
         count += it.count;
     }
@@ -325,7 +716,7 @@ void EnabledComponents_query_disabled_skip_initial() {
 }
 
 void EnabledComponents_query_mod_2() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -351,7 +742,7 @@ void EnabledComponents_query_mod_2() {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] % 2);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
         }
         count += it.count;
     }
@@ -362,7 +753,7 @@ void EnabledComponents_query_mod_2() {
 }
 
 void EnabledComponents_query_mod_8() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -388,7 +779,7 @@ void EnabledComponents_query_mod_8() {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] % 8);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
         }
         count += it.count;
     }
@@ -399,7 +790,7 @@ void EnabledComponents_query_mod_8() {
 }
 
 void EnabledComponents_query_mod_64() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -425,7 +816,7 @@ void EnabledComponents_query_mod_64() {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] % 64);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
         }
         count += it.count;
     }
@@ -436,7 +827,7 @@ void EnabledComponents_query_mod_64() {
 }
 
 void EnabledComponents_query_mod_256() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -462,7 +853,7 @@ void EnabledComponents_query_mod_256() {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] % 256);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
         }
         count += it.count;
     }
@@ -473,7 +864,7 @@ void EnabledComponents_query_mod_256() {
 }
 
 void EnabledComponents_query_mod_1024() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -499,7 +890,7 @@ void EnabledComponents_query_mod_1024() {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
             test_assert(it.entities[i] % 1024);
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
         }
         count += it.count;
     }
@@ -510,7 +901,7 @@ void EnabledComponents_query_mod_1024() {
 }
 
 void EnabledComponents_query_enable_mod_10() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -536,7 +927,7 @@ void EnabledComponents_query_enable_mod_10() {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
             test_assert(!(it.entities[i] % 10));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
         }
         count += it.count;
     }
@@ -546,101 +937,8 @@ void EnabledComponents_query_enable_mod_10() {
     ecs_fini(world);
 }
 
-void EnabledComponents_is_enabled_2() {
-    ecs_world_t *world = ecs_init();
-
-    ECS_COMPONENT(world, Position);
-    ECS_COMPONENT(world, Velocity);
-
-    ecs_entity_t e = ecs_new(world, 0);
-
-    ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-
-    ecs_enable_component(world, e, Velocity, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-
-    ecs_fini(world);
-}
-
-void EnabledComponents_is_enabled_3() {
-    ecs_world_t *world = ecs_init();
-
-    ECS_COMPONENT(world, Position);
-    ECS_COMPONENT(world, Velocity);
-    ECS_COMPONENT(world, Mass);
-
-    ecs_entity_t e = ecs_new(world, 0);
-
-    ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-
-    ecs_enable_component(world, e, Velocity, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-
-    ecs_enable_component(world, e, Mass, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-    test_bool(ecs_is_component_enabled(world, e, Mass), true);
-
-    ecs_fini(world);
-}
-
-void EnabledComponents_is_enabled_2_after_add() {
-    ecs_world_t *world = ecs_init();
-
-    ECS_COMPONENT(world, Position);
-    ECS_COMPONENT(world, Velocity);
-
-    ecs_entity_t e = ecs_new(world, 0);
-
-    ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-
-    ecs_enable_component(world, e, Velocity, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-
-    ecs_add(world, e, Position);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);    
-
-    ecs_fini(world);
-}
-
-void EnabledComponents_is_enabled_3_after_add() {
-    ecs_world_t *world = ecs_init();
-
-    ECS_COMPONENT(world, Position);
-    ECS_COMPONENT(world, Velocity);
-    ECS_COMPONENT(world, Mass);
-
-    ecs_entity_t e = ecs_new(world, 0);
-
-    ecs_enable_component(world, e, Position, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-
-    ecs_enable_component(world, e, Velocity, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-
-    ecs_enable_component(world, e, Mass, true);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-    test_bool(ecs_is_component_enabled(world, e, Mass), true);
-
-    ecs_add(world, e, Position);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
-    test_bool(ecs_is_component_enabled(world, e, Velocity), false);
-    test_bool(ecs_is_component_enabled(world, e, Mass), true);
-
-    ecs_fini(world);
-}
-
 void EnabledComponents_query_mod_2_2_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -676,8 +974,8 @@ void EnabledComponents_query_mod_2_2_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
             test_assert(!(it.entities[i] % 2) && !(it.entities[i] % 3));
         }
         count += it.count;
@@ -689,7 +987,7 @@ void EnabledComponents_query_mod_2_2_bitsets() {
 }
 
 void EnabledComponents_query_mod_8_2_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -725,8 +1023,8 @@ void EnabledComponents_query_mod_8_2_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
             test_assert(!(it.entities[i] % 8) && !(it.entities[i] % 4));
         }
         count += it.count;
@@ -738,7 +1036,7 @@ void EnabledComponents_query_mod_8_2_bitsets() {
 }
 
 void EnabledComponents_query_mod_64_2_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -774,8 +1072,8 @@ void EnabledComponents_query_mod_64_2_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
             test_assert(!(it.entities[i] % 64) && !(it.entities[i] % 16));
         }
         count += it.count;
@@ -787,7 +1085,7 @@ void EnabledComponents_query_mod_64_2_bitsets() {
 }
 
 void EnabledComponents_query_mod_256_2_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -823,8 +1121,8 @@ void EnabledComponents_query_mod_256_2_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
             test_assert(!(it.entities[i] % 256) && !(it.entities[i] % 64));
         }
         count += it.count;
@@ -836,7 +1134,7 @@ void EnabledComponents_query_mod_256_2_bitsets() {
 }
 
 void EnabledComponents_query_mod_1024_2_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -872,8 +1170,8 @@ void EnabledComponents_query_mod_1024_2_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
             test_assert(!(it.entities[i] % 1024) && !(it.entities[i] % 128));
         }
         count += it.count;
@@ -885,7 +1183,7 @@ void EnabledComponents_query_mod_1024_2_bitsets() {
 }
 
 void EnabledComponents_query_randomized_2_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -915,8 +1213,8 @@ void EnabledComponents_query_randomized_2_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
         }
         count += it.count;
     }
@@ -927,7 +1225,7 @@ void EnabledComponents_query_randomized_2_bitsets() {
 }
 
 void EnabledComponents_query_randomized_3_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -961,9 +1259,9 @@ void EnabledComponents_query_randomized_3_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Mass));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Mass));
         }
         count += it.count;
     }
@@ -974,7 +1272,7 @@ void EnabledComponents_query_randomized_3_bitsets() {
 }
 
 void EnabledComponents_query_randomized_4_bitsets() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -1012,10 +1310,10 @@ void EnabledComponents_query_randomized_4_bitsets() {
     while (ecs_query_next(&it)) {
         int32_t i;
         for (i = 0; i < it.count; i ++) {
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Position));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Velocity));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Mass));
-            test_assert(ecs_is_component_enabled(world, it.entities[i], Rotation));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Position));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Velocity));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Mass));
+            test_assert(ecs_is_enabled_component(world, it.entities[i], Rotation));
         }
         count += it.count;
     }
@@ -1026,19 +1324,19 @@ void EnabledComponents_query_randomized_4_bitsets() {
 }
 
 void EnabledComponents_defer_enable() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ecs_entity_t e = ecs_new(world, Position);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
 
     ecs_defer_begin(world);
     ecs_enable_component(world, e, Position, false);
-    test_bool(ecs_is_component_enabled(world, e, Position), true);
+    test_bool(ecs_is_enabled_component(world, e, Position), true);
     ecs_defer_end(world);
 
-    test_bool(ecs_is_component_enabled(world, e, Position), false);
+    test_bool(ecs_is_enabled_component(world, e, Position), false);
 
     ecs_fini(world);
 }
@@ -1051,7 +1349,7 @@ int compare_position(ecs_entity_t e1, const void *ptr1, ecs_entity_t e2, const v
 }
 
 void EnabledComponents_sort() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -1065,10 +1363,10 @@ void EnabledComponents_sort() {
     ecs_enable_component(world, e3, Position, false);
     ecs_enable_component(world, e4, Position, false);
 
-    test_bool(ecs_is_component_enabled(world, e1, Position), true);
-    test_bool(ecs_is_component_enabled(world, e2, Position), true);
-    test_bool(ecs_is_component_enabled(world, e3, Position), false);
-    test_bool(ecs_is_component_enabled(world, e4, Position), false);
+    test_bool(ecs_is_enabled_component(world, e1, Position), true);
+    test_bool(ecs_is_enabled_component(world, e2, Position), true);
+    test_bool(ecs_is_enabled_component(world, e3, Position), false);
+    test_bool(ecs_is_enabled_component(world, e4, Position), false);
     
     ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t){
         .filter.expr = "Position",
@@ -1083,10 +1381,10 @@ void EnabledComponents_sort() {
     test_assert(it.entities[1] == e1);
 
     /* Entities will have shuffled around, ensure bits got shuffled too */
-    test_bool(ecs_is_component_enabled(world, e1, Position), true);
-    test_bool(ecs_is_component_enabled(world, e2, Position), true);
-    test_bool(ecs_is_component_enabled(world, e3, Position), false);
-    test_bool(ecs_is_component_enabled(world, e4, Position), false);
+    test_bool(ecs_is_enabled_component(world, e1, Position), true);
+    test_bool(ecs_is_enabled_component(world, e2, Position), true);
+    test_bool(ecs_is_enabled_component(world, e3, Position), false);
+    test_bool(ecs_is_enabled_component(world, e4, Position), false);
 
     ecs_fini(world);
 }

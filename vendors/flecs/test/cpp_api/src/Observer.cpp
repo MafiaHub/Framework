@@ -108,25 +108,6 @@ void Observer_2_terms_un_set() {
     test_int(count, 1); 
 }
 
-void Observer_observer_w_self() {
-    flecs::world world;
-
-    auto self = world.entity();
-
-    bool invoked = false;
-    world.observer<Position>()
-        .event(flecs::OnAdd)
-        .self(self)
-        .iter([&](flecs::iter& it) {
-            test_assert(it.self() == self);
-            invoked = true;
-        });
-
-    world.entity().set<Position>({10, 20});
-
-    test_bool(invoked, true);
-}
-
 void Observer_10_terms() {
     flecs::world ecs;
 
@@ -149,7 +130,7 @@ void Observer_10_terms() {
         .iter([&](flecs::iter& it) {
             test_int(it.count(), 1);
             test_assert(it.entity(0) == e);
-            test_int(it.term_count(), 10);
+            test_int(it.field_count(), 10);
             count ++;
         });
 
@@ -199,7 +180,7 @@ void Observer_20_terms() {
         .iter([&](flecs::iter& it) {
             test_int(it.count(), 1);
             test_assert(it.entity(0) == e);
-            test_int(it.term_count(), 20);
+            test_int(it.field_count(), 20);
             count ++;
         });
 
@@ -405,4 +386,152 @@ void Observer_yield_existing_2_terms() {
         });
 
     test_int(count, 6);
+}
+
+void Observer_default_ctor() {
+    flecs::world world;
+
+    struct TagA { };
+
+    flecs::observer o;
+    test_assert(o == 0);
+
+    int32_t count = 0;
+    o = world.observer<TagA>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e, TagA) {
+            count ++;
+        });
+    
+    world.entity().add<TagA>();
+    
+    test_int(count, 1);
+}
+
+void Observer_entity_ctor() {
+    flecs::world world;
+
+    struct TagA { };
+
+    flecs::observer o = world.observer<TagA>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e, TagA) { });
+    
+    flecs::entity oe = o;
+
+    flecs::observer eo = world.observer(oe);
+    test_assert(eo == o);
+}
+
+void Observer_on_add() {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<Position>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e, Position& p) {
+            invoked ++;
+        });
+
+    world.entity()
+        .add<Position>();
+
+    test_int(invoked, 1);
+}
+
+void Observer_on_remove() {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<Position>()
+        .event(flecs::OnRemove)
+        .each([&](flecs::entity e, Position& p) {
+            invoked ++;
+        });
+
+    auto e = world.entity()
+        .add<Position>();
+
+    test_int(invoked, 0);
+    
+    e.remove<Position>();
+
+    test_int(invoked, 1);
+}
+
+struct MyTag { };
+
+void Observer_on_add_tag_action() {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<MyTag>()
+        .event(flecs::OnAdd)
+        .iter([&](flecs::iter it, MyTag*) {
+            invoked ++;
+        });
+
+    world.entity()
+        .add<MyTag>();
+
+    test_int(invoked, 1);
+}
+
+void Observer_on_add_tag_iter() {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<MyTag>()
+        .event(flecs::OnAdd)
+        .iter([&](flecs::iter it, MyTag*) {
+            invoked ++;
+        });
+
+    world.entity()
+        .add<MyTag>();
+
+    test_int(invoked, 1);
+}
+
+void Observer_on_add_tag_each() {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<MyTag>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e, MyTag) {
+            invoked ++;
+        });
+
+    world.entity()
+        .add<MyTag>();
+
+    test_int(invoked, 1);
+}
+
+void Observer_on_add_expr() {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Tag>();
+
+    world.observer<>().expr("Tag")
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e) {
+            invoked ++;
+        });
+
+    auto e = world.entity().add<Tag>();
+
+    test_int(invoked, 1);
+    
+    e.remove<Tag>();
+
+    test_int(invoked, 1);
 }

@@ -16,7 +16,7 @@ struct event_builder_base {
         m_desc.event = event;
     }
 
-    /** Add component to trigger on */
+    /** Add component to emit for */
     template <typename T>
     Base& id() {
         m_ids.array = m_ids_array;
@@ -26,37 +26,37 @@ struct event_builder_base {
     }
     
     /** 
-     * Add pair to trigger on
-     * @tparam R the relation type.
-     * @tparam O the object type.
+     * Add pair to emit for
+     * @tparam First The first element of the pair.
+     * @tparam Second the second element of a pair.
      */
-    template <typename R, typename O>
+    template <typename First, typename Second>
     Base& id() {
         return id(
-            ecs_pair(_::cpp_type<R>::id(this->m_world), 
-                _::cpp_type<O>::id(this->m_world)));
+            ecs_pair(_::cpp_type<First>::id(this->m_world), 
+                _::cpp_type<Second>::id(this->m_world)));
     }
 
     /** 
-     * Add pair to trigger on
-     * @tparam R the relation type.
-     * @param object The object id.
+     * Add pair to emit for
+     * @tparam First The first element of the pair.
+     * @param second The second element of the pair id.
      */
-    template <typename R>
-    Base& id(entity_t object) {
-        return id(ecs_pair(_::cpp_type<R>::id(this->m_world), object));
+    template <typename First>
+    Base& id(entity_t second) {
+        return id(ecs_pair(_::cpp_type<First>::id(this->m_world), second));
     }
 
     /** 
-     * Add pair to trigger on
-     * @param relation The relation type.
-     * @param object The object id.
+     * Add pair to emit for
+     * @param first The first element of the pair type.
+     * @param second The second element of the pair id.
      */
-    Base& id(entity_t relation, entity_t object) {
-        return id(ecs_pair(relation, object));
+    Base& id(entity_t first, entity_t second) {
+        return id(ecs_pair(first, second));
     }
 
-    /** Add (component) id to trigger on */
+    /** Add (component) id to emit for */
     Base& id(flecs::id_t id) {
         m_ids.array = m_ids_array;
         m_ids.array[m_ids.count] = id;
@@ -64,11 +64,11 @@ struct event_builder_base {
         return *this;
     }
 
-    /** Set entity for which to trigger */
+    /** Set entity for which to emit event */
     Base& entity(flecs::entity_t e) {
         ecs_record_t *r = ecs_record_find(m_world, e);
         
-        /* can't trigger for empty entity */
+        /* Can't emit for empty entity */
         ecs_assert(r != nullptr, ECS_INVALID_PARAMETER, nullptr);
         ecs_assert(r->table != nullptr, ECS_INVALID_PARAMETER, nullptr);
 
@@ -78,7 +78,7 @@ struct event_builder_base {
         return *this;
     }
 
-    /* Set table for which to trigger */
+    /* Set table for which to emit event */
     Base& table(flecs::table_t *t, int32_t offset = 0, int32_t count = 0) {
         m_desc.table = t;
         m_desc.offset = offset;
@@ -104,7 +104,7 @@ struct event_builder_base {
 protected:
     flecs::world_t *m_world;
     ecs_event_desc_t m_desc;
-    flecs::ids_t m_ids;
+    flecs::type_t m_ids;
     flecs::id_t m_ids_array[ECS_EVENT_DESC_ID_COUNT_MAX];
 
 private:

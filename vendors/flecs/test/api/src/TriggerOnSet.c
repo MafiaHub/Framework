@@ -1,12 +1,17 @@
 #include <api.h>
 
 static
+void Trigger(ecs_iter_t *it) {
+    probe_iter(it);
+}
+
+static
 void OnSet(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
 
     Velocity *v = NULL;
-    if (it->term_count >= 2) {
-        v = ecs_term(it, Velocity, 2);
+    if (it->field_count >= 2) {
+        v = ecs_field(it, Velocity, 2);
     }
 
     probe_iter(it);
@@ -30,11 +35,11 @@ void Dummy(ecs_iter_t *it) {
 }
 
 void TriggerOnSet_set() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -63,11 +68,11 @@ void TriggerOnSet_set() {
 }
 
 void TriggerOnSet_set_new() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -93,11 +98,11 @@ void TriggerOnSet_set_new() {
 }
 
 void TriggerOnSet_set_again() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -133,11 +138,11 @@ void TriggerOnSet_set_again() {
 }
 
 void TriggerOnSet_clone() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -171,11 +176,11 @@ void TriggerOnSet_clone() {
 }
 
 void TriggerOnSet_clone_w_value() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -224,7 +229,7 @@ static bool set_called;
 
 static
 void OnAdd_check_order(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
 
     test_assert(!add_called);
     test_assert(!set_called);
@@ -242,7 +247,7 @@ void OnAdd_check_order(ecs_iter_t *it) {
 
 static
 void OnSet_check_order(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
 
     probe_iter(it);
 
@@ -258,12 +263,12 @@ void OnSet_check_order(ecs_iter_t *it) {
 }
 
 void TriggerOnSet_set_and_add_system() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ECS_OBSERVER(world, OnSet_check_order, EcsOnSet, Position);
-    ECS_TRIGGER(world, OnAdd_check_order, EcsOnAdd, Position);
+    ECS_OBSERVER(world, OnAdd_check_order, EcsOnAdd, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -298,11 +303,11 @@ void TriggerOnSet_set_and_add_system() {
 
 static
 void OnSetShared(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
 
     Velocity *v = NULL;
-    if (it->term_count >= 2) {
-        v = ecs_term(it, Velocity, 2);
+    if (it->field_count >= 2) {
+        v = ecs_field(it, Velocity, 2);
     }
 
     probe_iter(it);
@@ -317,14 +322,14 @@ void OnSetShared(ecs_iter_t *it) {
 }
 
 void TriggerOnSet_on_set_after_override() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ECS_PREFAB(world, Prefab, Position);
     ecs_set(world, Prefab, Position, {1, 3});
 
-    ECS_TRIGGER(world, OnSetShared, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSetShared, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -398,8 +403,8 @@ void TriggerOnSet_on_set_after_override_w_new() {
     ecs_set(world, Prefab, Position, {1, 3});
 
     Probe ctx = {0};
-    ecs_entity_t t1 = ecs_trigger_init(world, &(ecs_trigger_desc_t) {
-        .term.id = ecs_id(Position),
+    ecs_entity_t t1 = ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0].id = ecs_id(Position),
         .events = {EcsOnSet},
         .callback = OnSet,
         .ctx = &ctx
@@ -426,14 +431,14 @@ void TriggerOnSet_on_set_after_override_w_new() {
 }
 
 void TriggerOnSet_on_set_after_override_w_new_w_count() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ECS_PREFAB(world, Prefab, Position, OVERRIDE | Position);
     ecs_set(world, Prefab, Position, {1, 3});
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -463,14 +468,14 @@ void TriggerOnSet_on_set_after_override_w_new_w_count() {
 }
 
 void TriggerOnSet_on_set_after_override_1_of_2_overridden() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
     ECS_PREFAB(world, Prefab, Position, OVERRIDE | Position);
     ecs_set(world, Prefab, Position, {1, 3});
 
-    ECS_TRIGGER(world, OnSet, EcsOnSet, Position);
+    ECS_OBSERVER(world, OnSet, EcsOnSet, Position);
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -501,10 +506,10 @@ void SetPosition(ecs_iter_t *it) {
 }
 
 void TriggerOnSet_on_set_after_snapshot_restore() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
-    ECS_TRIGGER(world, SetPosition, EcsOnSet, Position);
+    ECS_OBSERVER(world, SetPosition, EcsOnSet, Position);
 
     const ecs_entity_t *ids = ecs_bulk_new(world, Position, 10);
     test_assert(ids != NULL);
@@ -548,12 +553,12 @@ void TriggerOnSet_on_set_after_snapshot_restore() {
 }
 
 void TriggerOnSet_emplace() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .term.id = ecs_id(Position),
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0].id = ecs_id(Position),
         .events = {EcsOnSet},
         .callback = Dummy
     });
@@ -573,12 +578,12 @@ void TriggerOnSet_emplace() {
 }
 
 void TriggerOnSet_un_set_tag_w_remove() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .term.id = Tag,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0].id = Tag,
         .events = {EcsUnSet},
         .callback = Dummy
     });
@@ -591,18 +596,18 @@ void TriggerOnSet_un_set_tag_w_remove() {
     test_int(dummy_called, 0);
 
     ecs_remove(world, e, Tag);
-    test_int(dummy_called, 0);
+    test_int(dummy_called, 1);
 
     ecs_fini(world);
 }
 
 void TriggerOnSet_un_set_tag_w_clear() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .term.id = Tag,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0].id = Tag,
         .events = {EcsUnSet},
         .callback = Dummy
     });
@@ -615,18 +620,18 @@ void TriggerOnSet_un_set_tag_w_clear() {
     test_int(dummy_called, 0);
 
     ecs_clear(world, e);
-    test_int(dummy_called, 0);
+    test_int(dummy_called, 1);
 
     ecs_fini(world);
 }
 
 void TriggerOnSet_un_set_tag_w_delete() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_TAG(world, Tag);
 
-    ecs_trigger_init(world, &(ecs_trigger_desc_t){
-        .term.id = Tag,
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms[0].id = Tag,
         .events = {EcsUnSet},
         .callback = Dummy
     });
@@ -639,7 +644,38 @@ void TriggerOnSet_un_set_tag_w_delete() {
     test_int(dummy_called, 0);
 
     ecs_delete(world, e);
-    test_int(dummy_called, 0);
+    test_int(dummy_called, 1);
+
+    ecs_fini(world);
+}
+
+void TriggerOnSet_on_set_after_remove_override() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Velocity);
+    ECS_ENTITY(world, Base, Position);
+    ECS_OBSERVER(world, Trigger, EcsOnSet, Position);
+
+    Probe ctx = { 0 };
+    ecs_set_context(world, &ctx);
+
+    ecs_entity_t e = ecs_new(world, Position);
+    test_int(ctx.invoked, 0);
+
+    ecs_add_pair(world, e, EcsIsA, Base);
+    test_int(ctx.invoked, 0);
+
+    ecs_remove(world, e, Position);
+    test_int(ctx.invoked, 1);
+    test_int(ctx.count, 1);
+    test_int(ctx.system, Trigger);
+    test_int(ctx.term_count, 1);
+    test_null(ctx.param);
+
+    test_int(ctx.e[0], e);
+    test_int(ctx.c[0][0], ecs_id(Position));
+    test_int(ctx.s[0][0], 0);
 
     ecs_fini(world);
 }

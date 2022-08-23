@@ -7,18 +7,18 @@ typedef struct {
 } Position, Velocity;
 
 /* Move system implementation. System callbacks may be called multiple times,
- * as entities are grouped by which components they have, and each group has
- * its own set of component arrays. */
+ * as entities are grouped in tables by which components they have, and each 
+ * table has its own set of component arrays. */
 void Move(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
     /* Print the set of components for the iterated over entities */
-    char *type_str = ecs_type_str(it->world, it->type);
+    char *type_str = ecs_table_str(it->world, it->table);
     printf("Move entities with [%s]\n", type_str);
     ecs_os_free(type_str);
 
-    /* Iterate entities for the current group */
+    /* Iterate entities for the current table */
     for (int i = 0; i < it->count; i ++) {
         p[i].x += v[i].x;
         p[i].y += v[i].y;

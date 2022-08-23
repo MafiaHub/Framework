@@ -68,17 +68,17 @@ int main(int argc, char *argv[]) {
     // The way to read how this query is evaluated is:
     // - find all entities with (Platoon, *), store * in _Platoon
     // - check if _Platoon has (Player, *), store * in _Player
-    ecs_rule_t *r = ecs_rule_init(ecs, &(ecs_filter_desc_t) {
+    ecs_rule_t *r = ecs_rule(ecs, {
         .terms = {
-            { .pred.entity = RangedUnit },
+            { .first.id = RangedUnit },
             {
-                .pred.entity = Platoon, 
-                .obj = { .name = (char*)"Platoon", .var = EcsVarIsVariable },
+                .first.id = Platoon, 
+                .second = { .name = (char*)"Platoon", .flags = EcsIsVariable },
             },
             { 
-                .pred.entity = Player, 
-                .subj = { .name = (char*)"Platoon", .var = EcsVarIsVariable },
-                .obj = { .name = (char*)"Player", .var = EcsVarIsVariable },
+                .first.id = Player, 
+                .src = { .name = (char*)"Platoon", .flags = EcsIsVariable },
+                .second = { .name = (char*)"Player", .flags = EcsIsVariable },
             }
         }
     });
@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
         ecs_entity_t player = ecs_iter_get_var(&it, player_var);
         ecs_entity_t platoon = ecs_iter_get_var(&it, platoon_var);
         char *platoon_str = ecs_get_fullpath(ecs, platoon);
-        char *class_str = ecs_id_str(ecs, ecs_term_id(&it, 1));
+        char *class_str = ecs_id_str(ecs, ecs_field_id(&it, 1));
 
         for (int i = 0; i < it.count; i ++) {
             char *unit_str = ecs_get_fullpath(ecs, it.entities[i]);

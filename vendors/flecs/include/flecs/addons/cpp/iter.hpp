@@ -6,8 +6,8 @@ namespace flecs
  * This class can be used when a system does not know the type of a column at
  * compile time.
  */
-struct unsafe_column {
-    unsafe_column(void* array, size_t size, size_t count, bool is_shared = false)
+struct unchecked_column {
+    unchecked_column(void* array, size_t size, size_t count, bool is_shared = false)
         : m_array(array)
         , m_size(size)
         , m_count(count) 
@@ -19,7 +19,7 @@ struct unsafe_column {
      * @param index Index of element.
      * @return Reference to element.
      */
-    void* operator[](size_t index) {
+    void* operator[](size_t index) const {
         ecs_assert(index < m_count, ECS_COLUMN_INDEX_OUT_OF_RANGE, NULL);
         ecs_assert(!m_is_shared, ECS_INVALID_PARAMETER, NULL);
         return ECS_OFFSET(m_array, m_size * index);
@@ -65,7 +65,7 @@ struct column {
      * @param index Index of element.
      * @return Reference to element.
      */
-    T& operator[](size_t index) {
+    T& operator[](size_t index) const {
         ecs_assert(index < m_count, ECS_COLUMN_INDEX_OUT_OF_RANGE, NULL);
         ecs_assert(!index || !m_is_shared, ECS_INVALID_PARAMETER, NULL);
         ecs_assert(m_array != nullptr, ECS_COLUMN_INDEX_OUT_OF_RANGE, NULL);
@@ -77,7 +77,7 @@ struct column {
      *
      * @return Reference to the first element.
      */
-    T& operator*() {
+    T& operator*() const {
       ecs_assert(m_array != nullptr, ECS_COLUMN_INDEX_OUT_OF_RANGE, NULL);
       return *m_array;
     }
@@ -87,7 +87,7 @@ struct column {
      * 
      * @return Pointer to the first element.
      */
-    T* operator->() {
+    T* operator->() const {
         ecs_assert(m_array != nullptr, ECS_COLUMN_INDEX_OUT_OF_RANGE, NULL);
         return m_array;
     }
@@ -185,25 +185,22 @@ public:
         return static_cast<size_t>(m_iter->count);
     }
 
-    FLECS_FLOAT delta_time() const {
+    ecs_ftime_t delta_time() const {
         return m_iter->delta_time;
     }
 
-    FLECS_FLOAT delta_system_time() const {
+    ecs_ftime_t delta_system_time() const {
         return m_iter->delta_system_time;
     }
 
     flecs::type type() const;
 
+    flecs::table table() const;
+
     /** Is current type a module or does it contain module contents? */
     bool has_module() const {
         return ecs_table_has_module(m_iter->table);
     }
-
-    /** Access self.
-     * 'self' is an entity that can be associated with a trigger, observer or
-     * system when they are created. */
-    flecs::entity self() const;
 
     /** Access ctx. 
      * ctx contains the context pointer assigned to a system.
@@ -234,60 +231,60 @@ public:
      */
     flecs::entity entity(size_t row) const;
 
-    /** Returns whether term is owned.
+    /** Returns whether field is matched on self.
      * 
-     * @param index The term index.
+     * @param index The field index.
      */
-    bool is_owned(int32_t index) const {
-        return ecs_term_is_owned(m_iter, index);
+    bool is_self(int32_t index) const {
+        return ecs_field_is_self(m_iter, index);
     }
 
-    /** Returns whether term is set.
+    /** Returns whether field is set.
      * 
-     * @param index The term index.
+     * @param index The field index.
      */
     bool is_set(int32_t index) const {
-        return ecs_term_is_set(m_iter, index);
+        return ecs_field_is_set(m_iter, index);
     }
 
-    /** Returns whether term is readonly.
+    /** Returns whether field is readonly.
      *
-     * @param index The term index.
+     * @param index The field index.
      */
     bool is_readonly(int32_t index) const {
-        return ecs_term_is_readonly(m_iter, index);
+        return ecs_field_is_readonly(m_iter, index);
     }
 
-    /** Number of terms in iteator.
+    /** Number of fields in iteator.
      */
-    int32_t term_count() const {
-        return m_iter->term_count;
+    int32_t field_count() const {
+        return m_iter->field_count;
     }
 
-    /** Size of term data type.
+    /** Size of field data type.
      *
-     * @param index The term id.
+     * @param index The field id.
      */
     size_t size(int32_t index) const {
-        return ecs_term_size(m_iter, index);
+        return ecs_field_size(m_iter, index);
     }
 
-    /** Obtain term source (0 if self)
+    /** Obtain field source (0 if This)
      *
-     * @param index The term index.
+     * @param index The field index.
      */    
-    flecs::entity source(int32_t index) const;
+    flecs::entity src(int32_t index) const;
 
-    /** Obtain component id of term.
+    /** Obtain id matched for field.
      *
-     * @param index The term index.
+     * @param index The field index.
      */
     flecs::entity id(int32_t index) const;
 
-    /** Obtain pair id of term.
-     * This operation will fail if the term is not a pair.
+    /** Obtain pair id matched for field.
+     * This operation will fail if the id is not a pair.
      * 
-     * @param index The term index.
+     * @param index The field index.
      */
     flecs::id pair(int32_t index) const;
 
@@ -298,80 +295,47 @@ public:
         return flecs::string(s);
     }
 
-    /** Obtain term with const type.
-     * If the specified term index does not match with the provided type, the
+    /** Get readonly access to field data.
+     * If the specified field index does not match with the provided type, the
      * function will assert.
      *
-     * @tparam T Type of the term.
-     * @param index The term index.
-     * @return The term data.
+     * @tparam T Type of the field.
+     * @param index The field index.
+     * @return The field data.
      */
     template <typename T, typename A = actual_type_t<T>,
         typename std::enable_if<std::is_const<T>::value, void>::type* = nullptr>
         
-    flecs::column<A> term(int32_t index) const {
-        return get_term<A>(index);
+    flecs::column<A> field(int32_t index) const {
+        return get_field<A>(index);
     }
 
-    /** Obtain term with non-const type.
-     * If the specified term id does not match with the provided type or if
-     * the term is readonly, the function will assert.
+    /** Get read/write access to field data.
+     * If the matched id for the specified field does not match with the provided type or if
+     * the field is readonly, the function will assert.
      *
-     * @tparam T Type of the term.
-     * @param index The term index.
-     * @return The term data.
+     * @tparam T Type of the field.
+     * @param index The field index.
+     * @return The field data.
      */
     template <typename T, typename A = actual_type_t<T>,
         typename std::enable_if<
             std::is_const<T>::value == false, void>::type* = nullptr>
 
-    flecs::column<A> term(int32_t index) const {
-        ecs_assert(!ecs_term_is_readonly(m_iter, index), 
-            ECS_COLUMN_ACCESS_VIOLATION, NULL);
-        return get_term<A>(index);
+    flecs::column<A> field(int32_t index) const {
+        ecs_assert(!ecs_field_is_readonly(m_iter, index), 
+            ECS_ACCESS_VIOLATION, NULL);
+        return get_field<A>(index);
     }
 
-    /** Obtain unsafe term.
-     * Unsafe terms are required when a system does not know at compile time
-     * which component will be passed to it. 
+    /** Get unchecked access to field data.
+     * Unchecked access is required when a system does not know the type of a
+     * field at compile time.
      *
-     * @param index The term index. 
+     * @param index The field index. 
      */
-    flecs::unsafe_column term(int32_t index) const {
-        return get_unsafe_term(index);
-    }
-
-    /** Obtain owned term.
-     * Same as iter::term, but ensures that term is owned.
-     *
-     * @tparam T of the term.
-     * @param index The term index.
-     * @return The term data.
-     */
-    template <typename T, typename A = actual_type_t<T>>
-    flecs::column<A> term_owned(int32_t index) const {
-        ecs_assert(!!ecs_term_is_owned(m_iter, index), ECS_COLUMN_IS_SHARED, NULL);
-        return this->term<A>(index);
-    }
-
-    /** Obtain shared term.
-     * Same as iter::term, but ensures that term is shared.
-     *
-     * @tparam T of the term.
-     * @param index The term index.
-     * @return The component term.
-     */
-    template <typename T, typename A = actual_type_t<T>>
-    const T& term_shared(int32_t index) const {
-        ecs_assert(
-            ecs_term_id(m_iter, index) == 
-                _::cpp_type<T>::id(m_iter->world), 
-                    ECS_COLUMN_TYPE_MISMATCH, NULL);
-
-        ecs_assert(!ecs_term_is_owned(m_iter, index), 
-            ECS_COLUMN_IS_NOT_SHARED, NULL);
-
-        return *static_cast<A*>(ecs_term_w_size(m_iter, sizeof(A), index));
+    flecs::unchecked_column field(int32_t index) const {
+        return get_unchecked_field(index);
     }
 
     /** Obtain the total number of tables the iterator will iterate over.
@@ -431,6 +395,11 @@ public:
         ecs_query_skip(m_iter);
     }
 
+    /* Return group id for current table (grouped queries only) */
+    uint64_t group_id() const {
+        return m_iter->group_id;
+    }
+
 #ifdef FLECS_RULES
     /** Get value of variable by id.
      * Get value of a query variable for current result.
@@ -444,20 +413,19 @@ public:
 #endif
 
 private:
-    /* Get term, check if correct type is used */
+    /* Get field, check if correct type is used */
     template <typename T, typename A = actual_type_t<T>>
-    flecs::column<T> get_term(int32_t index) const {
+    flecs::column<T> get_field(int32_t index) const {
 
 #ifndef FLECS_NDEBUG
-        ecs_entity_t term_id = ecs_term_id(m_iter, index);
-        ecs_assert(term_id & ECS_PAIR || term_id & ECS_SWITCH || 
-            term_id & ECS_CASE ||
+        ecs_entity_t term_id = ecs_field_id(m_iter, index);
+        ecs_assert(ECS_HAS_ID_FLAG(term_id, PAIR) ||
             term_id == _::cpp_type<T>::id(m_iter->world), 
             ECS_COLUMN_TYPE_MISMATCH, NULL);
 #endif
 
         size_t count;
-        bool is_shared = !ecs_term_is_owned(m_iter, index);
+        bool is_shared = !ecs_field_is_self(m_iter, index);
 
         /* If a shared column is retrieved with 'column', there will only be a
          * single value. Ensure that the application does not accidentally read
@@ -471,14 +439,14 @@ private:
         }
         
         return flecs::column<A>(
-            static_cast<T*>(ecs_term_w_size(m_iter, sizeof(A), index)), 
+            static_cast<T*>(ecs_field_w_size(m_iter, sizeof(A), index)), 
             count, is_shared);
     }
 
-    flecs::unsafe_column get_unsafe_term(int32_t index) const {
+    flecs::unchecked_column get_unchecked_field(int32_t index) const {
         size_t count;
-        size_t size = ecs_term_size(m_iter, index);
-        bool is_shared = !ecs_term_is_owned(m_iter, index);
+        size_t size = ecs_field_size(m_iter, index);
+        bool is_shared = !ecs_field_is_self(m_iter, index);
 
         /* If a shared column is retrieved with 'column', there will only be a
          * single value. Ensure that the application does not accidentally read
@@ -491,8 +459,8 @@ private:
             count = static_cast<size_t>(m_iter->count);
         }
 
-        return flecs::unsafe_column(
-            ecs_term_w_size(m_iter, 0, index), size, count, is_shared);
+        return flecs::unchecked_column(
+            ecs_field_w_size(m_iter, 0, index), size, count, is_shared);
     }     
 
     flecs::iter_t *m_iter;

@@ -297,7 +297,7 @@ void SystemBuilder_string_term() {
     int32_t count = 0;
 
     auto s = ecs.system<>()
-        .term("Position")
+        .expr("Position")
         .each([&](flecs::entity e) {
             count ++;
             test_assert(e == e1);
@@ -326,8 +326,8 @@ void SystemBuilder_singleton_term() {
     auto s = ecs.system<Entity>()
         .term<Singleton>().singleton()
         .iter([&](flecs::iter& it, Entity *e) {
-            auto s = it.term<const Singleton>(2);
-            test_assert(!it.is_owned(2));
+            auto s = it.field<const Singleton>(2);
+            test_assert(!it.is_self(2));
             test_int(s->value, 10);
             
             const Singleton& s_ref = *s;
@@ -380,7 +380,7 @@ void SystemBuilder_10_terms() {
         .iter([&](flecs::iter& it) {
             test_int(it.count(), 1);
             test_assert(it.entity(0) == e);
-            test_int(it.term_count(), 10);
+            test_int(it.field_count(), 10);
             count ++;
         });
 
@@ -440,7 +440,7 @@ void SystemBuilder_20_terms() {
         .iter([&](flecs::iter& it) {
             test_int(it.count(), 1);
             test_assert(it.entity(0) == e);
-            test_int(it.term_count(), 20);
+            test_int(it.field_count(), 20);
             count ++;
         });
 
@@ -453,7 +453,7 @@ void SystemBuilder_name_arg() {
     flecs::world ecs;
 
     auto s = ecs.system<const Position>("MySystem")
-        .arg(1).subj().name("MySystem")
+        .arg(1).src().name("MySystem")
         .iter([](flecs::iter& Iter, const Position* Config)
         { });
 

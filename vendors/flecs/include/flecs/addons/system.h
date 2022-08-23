@@ -27,54 +27,20 @@ extern "C" {
 
 /* Component used to provide a tick source to systems */
 typedef struct EcsTickSource {
-    bool tick;                 /* True if providing tick */
-    FLECS_FLOAT time_elapsed;  /* Time elapsed since last tick */
+    bool tick;                   /* True if providing tick */
+    ecs_ftime_t time_elapsed;  /* Time elapsed since last tick */
 } EcsTickSource;
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Systems API
 ////////////////////////////////////////////////////////////////////////////////
 
-/** System status change callback */
-typedef enum ecs_system_status_t {
-    EcsSystemStatusNone = 0,
-    EcsSystemEnabled,
-    EcsSystemDisabled,
-    EcsSystemActivated,
-    EcsSystemDeactivated
-} ecs_system_status_t;
-
-/** System status action.
- * The status action is invoked whenever a system is enabled or disabled. Note
- * that a system may be enabled but may not actually match any entities. In this
- * case the system is enabled but not _active_.
- *
- * In addition to communicating the enabled / disabled status, the action also
- * communicates changes in the activation status of the system. A system becomes
- * active when it has one or more matching entities, and becomes inactive when
- * it no longer matches any entities.
- * 
- * A system switches between enabled and disabled when an application invokes the
- * ecs_enable operation with a state different from the state of the system, for
- * example the system is disabled, and ecs_enable is invoked with enabled: true.
- *
- * @param world The world.
- * @param system The system for which the action has changed.
- * @param status The status that triggered the callback.
- * @param ctx Context passed to ecs_system_desc_t as status_ctx.
- */
-typedef void (*ecs_system_status_action_t)(
-    ecs_world_t *world,
-    ecs_entity_t system,
-    ecs_system_status_t status,
-    void *ctx);
-
 /* Use with ecs_system_init */
 typedef struct ecs_system_desc_t {
     int32_t _canary;
 
-    /* System entity creation parameters */
-    ecs_entity_desc_t entity;
+    /* Existing entity to associate with system (optional) */
+    ecs_entity_t entity;
 
     /* System query parameters */
     ecs_query_desc_t query;
@@ -98,17 +64,8 @@ typedef struct ecs_system_desc_t {
      * frame, typically once for each matching table. */
     ecs_iter_action_t callback;
 
-    /* System status callback, invoked when system status changes */
-    ecs_system_status_action_t status_callback;
-
-    /* Associate with entity. */
-    ecs_entity_t self;    
-
     /* Context to be passed to callback (as ecs_iter_t::param) */
     void *ctx;
-
-    /* Context to be passed to system status callback */
-    void *status_ctx;
 
     /* Binding context, for when system is implemented in other language */
     void *binding_ctx;
@@ -117,11 +74,10 @@ typedef struct ecs_system_desc_t {
      * When set, functions are called unconditionally, even when the ctx
      * pointers are NULL. */
     ecs_ctx_free_t ctx_free;
-    ecs_ctx_free_t status_ctx_free;
-    ecs_ctx_free_t binding_ctx_free;   
+    ecs_ctx_free_t binding_ctx_free;
 
     /* Interval in seconds at which the system should run */
-    FLECS_FLOAT interval;
+    ecs_ftime_t interval;
 
     /* Rate at which the system should run */
     int32_t rate;
@@ -144,22 +100,30 @@ ecs_entity_t ecs_system_init(
     const ecs_system_desc_t *desc);
 
 #ifndef FLECS_LEGACY
-#define ECS_SYSTEM_DEFINE(world, id, kind, ...) \
+#define ECS_SYSTEM_DEFINE(world, id_, phase, ...) \
     { \
         ecs_system_desc_t desc = {0}; \
-        desc.entity.name = #id; \
-        desc.entity.add[0] = kind; \
+        ecs_entity_desc_t edesc = {0}; \
+        edesc.id = ecs_id(id_);\
+        edesc.name = #id_;\
+        edesc.add[0] = ((phase) ? ecs_pair(EcsDependsOn, (phase)) : 0); \
+        edesc.add[1] = (phase); \
+        desc.entity = ecs_entity_init(world, &edesc);\
         desc.query.filter.expr = #__VA_ARGS__; \
-        desc.callback = id; \
-        ecs_id(id) = ecs_system_init(world, &desc); \
+        desc.callback = id_; \
+        ecs_id(id_) = ecs_system_init(world, &desc); \
     } \
-    ecs_assert(ecs_id(id) != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, NULL);
 
-#define ECS_SYSTEM(world, id, kind, ...) \
-    ecs_entity_t ecs_id(id); ECS_SYSTEM_DEFINE(world, id, kind, __VA_ARGS__);\
+#define ECS_SYSTEM(world, id, phase, ...) \
+    ecs_entity_t ecs_id(id) = 0; ECS_SYSTEM_DEFINE(world, id, phase, __VA_ARGS__);\
     ecs_entity_t id = ecs_id(id);\
     (void)ecs_id(id);\
     (void)id;
+
+#define ecs_system(world, ...)\
+    ecs_system_init(world, &(ecs_system_desc_t) __VA_ARGS__ )
+
 #endif
 
 /** Run a specific system manually.
@@ -193,7 +157,7 @@ FLECS_API
 ecs_entity_t ecs_run(
     ecs_world_t *world,
     ecs_entity_t system,
-    FLECS_FLOAT delta_time,
+    ecs_ftime_t delta_time,
     void *param);
 
 /** Same as ecs_run, but subdivides entities across number of provided stages.
@@ -212,7 +176,7 @@ ecs_entity_t ecs_run_worker(
     ecs_entity_t system,
     int32_t stage_current,
     int32_t stage_count,
-    FLECS_FLOAT delta_time,
+    ecs_ftime_t delta_time,
     void *param);
 
 /** Run system with offset/limit and type filter.
@@ -239,7 +203,7 @@ FLECS_API
 ecs_entity_t ecs_run_w_filter(
     ecs_world_t *world,
     ecs_entity_t system,
-    FLECS_FLOAT delta_time,
+    ecs_ftime_t delta_time,
     int32_t offset,
     int32_t limit,
     void *param);

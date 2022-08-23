@@ -19,7 +19,7 @@
 #endif // FLECS_NO_REST
 #endif // ECS_TARGET_EM
 
-/* Blacklist macro's */
+/* Blacklist macros */
 #ifdef FLECS_NO_CPP
 #undef FLECS_CPP
 #endif
@@ -37,6 +37,9 @@
 #endif
 #ifdef FLECS_NO_SNAPSHOT
 #undef FLECS_SNAPSHOT
+#endif
+#ifdef FLECS_NO_MONITOR
+#undef FLECS_MONITOR
 #endif
 #ifdef FLECS_NO_STATS
 #undef FLECS_STATS
@@ -87,8 +90,14 @@
 #undef FLECS_REST
 #endif
 
-/* Always included, if disabled log functions are replaced with dummy macro's */
+/* Always included, if disabled log functions are replaced with dummy macros */
 #include "flecs/addons/log.h"
+
+#ifdef FLECS_MONITOR
+#define FLECS_STATS
+#define FLECS_SYSTEM
+#define FLECS_TIMER
+#endif
 
 #ifdef FLECS_APP
 #ifdef FLECS_NO_APP
@@ -119,6 +128,18 @@
 #error "FLECS_NO_SYSTEM failed: SYSTEM is required by other addons"
 #endif
 #include "../addons/system.h"
+#endif
+#ifdef FLECS_STATS
+#ifdef FLECS_NO_STATS
+#error "FLECS_NO_STATS failed: STATS is required by other addons"
+#endif
+#include "../addons/stats.h"
+#endif
+#ifdef FLECS_MONITOR
+#ifdef FLECS_NO_MONITOR
+#error "FLECS_NO_MONITOR failed: MONITOR is required by other addons"
+#endif
+#include "../addons/monitor.h"
 #endif
 #ifdef FLECS_COREDOC
 #ifdef FLECS_NO_COREDOC
@@ -182,12 +203,6 @@
 #error "FLECS_NO_SNAPSHOT failed: SNAPSHOT is required by other addons"
 #endif
 #include "../addons/snapshot.h"
-#endif
-#ifdef FLECS_STATS
-#ifdef FLECS_NO_STATS
-#error "FLECS_NO_STATS failed: STATS is required by other addons"
-#endif
-#include "../addons/stats.h"
 #endif
 #ifdef FLECS_PARSER
 #ifdef FLECS_NO_PARSER

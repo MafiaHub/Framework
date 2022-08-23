@@ -12,7 +12,6 @@ flecs_deps = dependency('threads')
 
 flecs_src = files(
     'src/addons/coredoc.c',
-    'src/addons/deprecated.c',
     'src/addons/doc.c',
     'src/addons/expr/deserialize.c',
     'src/addons/expr/serialize.c',
@@ -29,6 +28,7 @@ flecs_src = files(
     'src/addons/meta/cursor.c',
     'src/addons/meta_c.c',
     'src/addons/module.c',
+    'src/addons/monitor.c',
     'src/addons/os_api_impl/os_api_impl.c',
     'src/addons/parser.c',
     'src/addons/pipeline/pipeline.c',
@@ -45,6 +45,7 @@ flecs_src = files(
     'src/datastructures/hash.c',
     'src/datastructures/hashmap.c',
     'src/datastructures/map.c',
+    'src/datastructures/stack_allocator.c',
     'src/datastructures/name_index.c',
     'src/datastructures/qsort.c',
     'src/datastructures/sparse.c',
@@ -55,6 +56,7 @@ flecs_src = files(
     'src/entity.c',
     'src/filter.c',
     'src/hierarchy.c',
+    'src/id_record.c',
     'src/iter.c',
     'src/misc.c',
     'src/observable.c',
@@ -63,10 +65,10 @@ flecs_src = files(
     'src/poly.c',
     'src/query.c',
     'src/stage.c',
+    'src/storage.c',
     'src/table_cache.c',
     'src/table_graph.c',
     'src/table.c',
-    'src/trigger.c',
     'src/search.c',
     'src/world.c',
 )

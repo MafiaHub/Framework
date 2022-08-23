@@ -169,3 +169,232 @@ void Filter_default_ctor_no_assign() {
     // Make sure code compiles & works
     test_assert(true);
 }
+
+void Filter_term_get_id() {
+    flecs::world ecs;
+
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+
+    auto q = ecs.query_builder()
+        .term<Position>()
+        .term<Velocity>()
+        .term(Foo, Bar)
+        .build();
+
+    test_int(q.field_count(), 3);
+    
+    flecs::term 
+    t = q.term(0);
+    test_assert(t.id() == ecs.id<Position>());
+    t = q.term(1);
+    test_assert(t.id() == ecs.id<Velocity>());
+    t = q.term(2);
+    test_assert(t.id() == ecs.pair(Foo, Bar));
+}
+
+void Filter_term_get_subj() {
+    flecs::world ecs;
+
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+    auto Src = ecs.entity();
+
+    auto q = ecs.query_builder()
+        .term<Position>()
+        .term<Velocity>().src(Src)
+        .term(Foo, Bar)
+        .build();
+
+    test_int(q.field_count(), 3);
+    
+    flecs::term 
+    t = q.term(0);
+    test_assert(t.get_src() == flecs::This);
+    t = q.term(1);
+    test_assert(t.get_src() == Src);
+    t = q.term(2);
+    test_assert(t.get_src() == flecs::This);
+}
+
+void Filter_term_get_pred() {
+    flecs::world ecs;
+
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+    auto Src = ecs.entity();
+
+    auto q = ecs.query_builder()
+        .term<Position>()
+        .term<Velocity>().src(Src)
+        .term(Foo, Bar)
+        .build();
+
+    test_int(q.field_count(), 3);
+    
+    flecs::term 
+    t = q.term(0);
+    test_assert(t.get_first() == ecs.id<Position>());
+    t = q.term(1);
+    test_assert(t.get_first() == ecs.id<Velocity>());
+    t = q.term(2);
+    test_assert(t.get_first() == Foo);
+}
+
+void Filter_term_get_obj() {
+    flecs::world ecs;
+
+    auto Foo = ecs.entity();
+    auto Bar = ecs.entity();
+    auto Src = ecs.entity();
+
+    auto q = ecs.query_builder()
+        .term<Position>()
+        .term<Velocity>().src(Src)
+        .term(Foo, Bar)
+        .build();
+
+    test_int(q.field_count(), 3);
+    
+    flecs::term 
+    t = q.term(0);
+    test_assert(t.get_second() == 0);
+    t = q.term(1);
+    test_assert(t.get_second() == 0);
+    t = q.term(2);
+    test_assert(t.get_second() == Bar);
+}
+
+void Filter_get_first() {
+    flecs::world ecs;
+
+    struct A {};
+
+    auto e1 = ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q = ecs.filter<A>();
+
+    auto first = q.iter().first();
+    test_assert(first != 0);
+    test_assert(first == e1);
+}
+
+void Filter_get_count_direct() {
+    flecs::world ecs;
+
+    struct A {};
+
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q = ecs.filter<A>();
+
+    test_int(3, q.count());
+}
+
+void Filter_get_is_true_direct() {
+    flecs::world ecs;
+
+    struct A {};
+    struct B {};
+
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q_1 = ecs.filter<A>();
+    auto q_2 = ecs.filter<B>();
+
+    test_bool(true, q_1.is_true());
+    test_bool(false, q_2.is_true());
+}
+
+void Filter_get_first_direct() {
+    flecs::world ecs;
+
+    struct A {};
+
+    auto e1 = ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q = ecs.filter<A>();
+
+    auto first = q.first();
+    test_assert(first != 0);
+    test_assert(first == e1);
+}
+
+void Filter_each_w_no_this() {
+    flecs::world ecs;
+
+    auto e = ecs.entity()
+        .set<Position>({10, 20})
+        .set<Velocity>({1, 2});
+
+    auto f = ecs.filter_builder<Position, Velocity>()
+        .arg(1).src(e)
+        .arg(2).src(e)
+        .build();
+
+    int32_t count = 0;
+
+    f.each([&](Position& p, Velocity& v) {
+        count ++;
+        test_int(p.x, 10);
+        test_int(p.y, 20);
+        test_int(v.x, 1);
+        test_int(v.y, 2);
+    });
+
+    test_int(count, 1);
+}
+
+void Filter_each_w_iter_no_this() {
+    flecs::world ecs;
+
+    auto e = ecs.entity()
+        .set<Position>({10, 20})
+        .set<Velocity>({1, 2});
+
+    auto f = ecs.filter_builder<Position, Velocity>()
+        .arg(1).src(e)
+        .arg(2).src(e)
+        .build();
+
+    int32_t count = 0;
+
+    f.each([&](flecs::iter& it, size_t index, Position& p, Velocity& v) {
+        count ++;
+        test_int(p.x, 10);
+        test_int(p.y, 20);
+        test_int(v.x, 1);
+        test_int(v.y, 2);
+        test_int(index, 0);
+        test_int(it.count(), 0);
+    });
+
+    test_int(count, 1);
+}
+
+void Filter_invalid_each_w_no_this() {
+    install_test_abort();
+
+    flecs::world ecs;
+
+    auto e = ecs.entity()
+        .set<Position>({10, 20})
+        .set<Velocity>({1, 2});
+
+    auto f = ecs.filter_builder<Position, Velocity>()
+        .arg(1).src(e)
+        .arg(2).src(e)
+        .build();
+
+    test_expect_abort();
+
+    f.each([&](flecs::entity e, Position& p, Velocity& v) { });
+}

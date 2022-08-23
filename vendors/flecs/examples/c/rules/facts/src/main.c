@@ -6,7 +6,7 @@
 //   Position, Velocity
 //
 // When written out in full, this query looks like:
-//   Position(This), Velocity(This)
+//   Position($This), Velocity($This)
 //
 // "This" is a (builtin) query variable that is unknown before we evaluate the 
 // query. Therefore this query does not test a fact, we can't know which values
@@ -22,7 +22,7 @@
 int main(int argc, char *argv[]) {
     ecs_world_t *ecs = ecs_init_w_args(argc, argv);
 
-    ECS_TAG(ecs, Likes); // Likes relation
+    ECS_TAG(ecs, Likes); // Likes relationship
 
     ecs_entity_t bob = ecs_new_entity(ecs, "Bob");
     ecs_entity_t alice = ecs_new_entity(ecs, "Alice");
@@ -47,17 +47,17 @@ int main(int argc, char *argv[]) {
     // fact, vs reusing a single rule for multiple facts.
     //
     // See the setting_variables example for more details
-    ecs_rule_t *friends = ecs_rule_init(ecs, &(ecs_filter_desc_t) {
+    ecs_rule_t *friends = ecs_rule(ecs, {
         .terms = {
             { 
-                .pred.entity = Likes, 
-                .subj = { .name = (char*)"X", .var = EcsVarIsVariable },
-                .obj = { .name = (char*)"Y", .var = EcsVarIsVariable }
+                .first.id = Likes, 
+                .src = { .name = (char*)"X", .flags = EcsIsVariable },
+                .second = { .name = (char*)"Y", .flags = EcsIsVariable }
             },
             { 
-                .pred.entity = Likes, 
-                .subj = { .name = (char*)"Y", .var = EcsVarIsVariable },
-                .obj = { .name = (char*)"X", .var = EcsVarIsVariable }
+                .first.id = Likes, 
+                .src = { .name = (char*)"Y", .flags = EcsIsVariable },
+                .second = { .name = (char*)"X", .flags = EcsIsVariable }
             }
         }
     });

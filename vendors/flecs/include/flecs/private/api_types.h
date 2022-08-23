@@ -83,21 +83,11 @@ typedef struct ecs_var_t {
 
 /** Cached reference. */
 struct ecs_ref_t {
-    ecs_entity_t entity;    /* Entity of the reference */
-    ecs_entity_t component; /* Component of the reference */
-    void *table;            /* Last known table */
-    uint32_t row;           /* Last known location in table */
-    int32_t alloc_count;    /* Last known alloc count of table */
-    ecs_record_t *record;   /* Pointer to record, if in main stage */
-    const void *ptr;        /* Cached ptr */
+    ecs_entity_t entity;    /* Entity */
+    ecs_entity_t id;        /* Component id */
+    struct ecs_table_record_t *tr; /* Table record for component */
+    ecs_record_t *record;   /* Entity index record */
 };
-
-/** Array of entity ids that, other than a type, can live on the stack */
-typedef struct ecs_ids_t {
-    ecs_id_t *array;        /* An array with entity ids */
-    int32_t count;          /* The number of entities in the array */
-    int32_t size;           /* The size of the array */
-} ecs_ids_t;
 
 /* Page-iterator specific data */
 typedef struct ecs_page_iter_t {
@@ -115,6 +105,7 @@ typedef struct ecs_worker_iter_t {
 /* Convenience struct to iterate table array for id */
 typedef struct ecs_table_cache_iter_t {
     struct ecs_table_cache_hdr_t *cur, *next;
+    struct ecs_table_cache_hdr_t *next_list;
 } ecs_table_cache_iter_t;
 
 /** Term-iterator specific data */
@@ -143,15 +134,15 @@ typedef struct ecs_term_iter_t {
 } ecs_term_iter_t;
 
 typedef enum ecs_iter_kind_t {
+    EcsIterEvalCondition,
     EcsIterEvalTables,
     EcsIterEvalChain,
-    EcsIterEvalCondition,
     EcsIterEvalNone
 } ecs_iter_kind_t;
 
 /** Filter-iterator specific data */
 typedef struct ecs_filter_iter_t {
-    ecs_filter_t filter;
+    const ecs_filter_t *filter;
     ecs_iter_kind_t kind; 
     ecs_term_iter_t term_iter;
     int32_t matches_left;
@@ -161,7 +152,7 @@ typedef struct ecs_filter_iter_t {
 /** Query-iterator specific data */
 typedef struct ecs_query_iter_t {
     ecs_query_t *query;
-    ecs_query_table_node_t *node, *prev;
+    ecs_query_table_node_t *node, *prev, *last;
     int32_t sparse_smallest;
     int32_t sparse_first;
     int32_t bitset_first;
@@ -204,7 +195,7 @@ typedef struct ecs_rule_iter_t {
  * Constants are named to enable easy macro substitution. */
 #define flecs_iter_cache_ids           (1u << 0u)
 #define flecs_iter_cache_columns       (1u << 1u)
-#define flecs_iter_cache_subjects      (1u << 2u)
+#define flecs_iter_cache_sources       (1u << 2u)
 #define flecs_iter_cache_sizes         (1u << 3u)
 #define flecs_iter_cache_ptrs          (1u << 4u)
 #define flecs_iter_cache_match_indices (1u << 5u)
@@ -215,7 +206,7 @@ typedef struct ecs_rule_iter_t {
 typedef struct ecs_iter_cache_t {
     ecs_id_t ids[ECS_TERM_CACHE_SIZE];
     int32_t columns[ECS_TERM_CACHE_SIZE];
-    ecs_entity_t subjects[ECS_TERM_CACHE_SIZE];
+    ecs_entity_t sources[ECS_TERM_CACHE_SIZE];
     ecs_size_t sizes[ECS_TERM_CACHE_SIZE];
     void *ptrs[ECS_TERM_CACHE_SIZE];
     int32_t match_indices[ECS_TERM_CACHE_SIZE];
@@ -241,50 +232,40 @@ typedef struct ecs_iter_private_t {
     ecs_iter_cache_t cache;       /* Inline arrays to reduce allocations */
 } ecs_iter_private_t;
 
-/* Bits for iterator flags */
-#define EcsIterIsValid         (1u << 0u) /* Does iterator contain valid result */
-#define EcsIterIsFilter        (1u << 1u) /* Is iterator filter (metadata only) */
-#define EcsIterIsInstanced     (1u << 2u) /* Is iterator instanced */
-#define EcsIterHasShared       (1u << 3u) /* Does result have shared terms */
-#define EcsIterTableOnly       (1u << 4u) /* Result only populates table */
-#define EcsIterEntityOptional  (1u << 5u) /* Treat terms with entity subject as optional */
-
-/** Iterator.
- */
+/** Iterator */
 struct ecs_iter_t {
     /* World */
     ecs_world_t *world;           /* The world */
-    ecs_world_t *real_world;      /* Actual world. This differs from world when in staged mode */
+    ecs_world_t *real_world;      /* Actual world. This differs from world when in readonly mode */
 
     /* Matched data */
     ecs_entity_t *entities;       /* Entity identifiers */
     void **ptrs;                  /* Pointers to components. Array if from this, pointer if not. */
     ecs_size_t *sizes;            /* Component sizes */
     ecs_table_t *table;           /* Current table */
-    ecs_type_t type;              /* Current type */
     ecs_table_t *other_table;     /* Prev or next table when adding/removing */
     ecs_id_t *ids;                /* (Component) ids */
-    ecs_var_t *variables;      /* Values of variables (if any) */
+    ecs_var_t *variables;         /* Values of variables (if any) */
     int32_t *columns;             /* Query term to table column mapping */
-    ecs_entity_t *subjects;       /* Subject (source) entities */
+    ecs_entity_t *sources;        /* Entity on which the id was matched (0 if same as entities) */
     int32_t *match_indices;       /* Indices of current match for term. Allows an iterator to iterate
                                    * all permutations of wildcards in query. */
     ecs_ref_t *references;        /* Cached refs to components (if iterating a cache) */
     ecs_flags64_t constrained_vars; /* Bitset that marks constrained variables */
+    uint64_t group_id;            /* Group id for table, if group_by is used */
+    int32_t field_count;          /* Number of fields in iterator */
 
-    /* Source information */
+    /* Input information */
     ecs_entity_t system;          /* The system (if applicable) */
     ecs_entity_t event;           /* The event (if applicable) */
     ecs_id_t event_id;            /* The (component) id for the event */
-    ecs_entity_t self;            /* Self entity (if set for system) */
 
     /* Query information */
     ecs_term_t *terms;            /* Terms of query being evaluated */
     int32_t table_count;          /* Active table count for query */
-    int32_t term_count;           /* Number of terms in query */
-    int32_t term_index;           /* Index of term that triggered an event.
+    int32_t term_index;           /* Index of term that emitted an event.
                                    * This field will be set to the 'index' field
-                                   * of a trigger/observer term. */
+                                   * of an observer term. */
     int32_t variable_count;       /* Number of variables for query */
     char **variable_names;        /* Names of variables (if any) */
 
@@ -294,8 +275,8 @@ struct ecs_iter_t {
     void *binding_ctx;            /* Binding context */
 
     /* Time */
-    FLECS_FLOAT delta_time;       /* Time elapsed since last frame */
-    FLECS_FLOAT delta_system_time;/* Time elapsed since last system invocation */
+    ecs_ftime_t delta_time;       /* Time elapsed since last frame */
+    ecs_ftime_t delta_system_time;/* Time elapsed since last system invocation */
 
     /* Iterator counters */
     int32_t frame_offset;         /* Offset relative to start of iteration */
@@ -312,7 +293,7 @@ struct ecs_iter_t {
 
     /* Chained iterators */
     ecs_iter_next_action_t next;  /* Function to progress iterator */
-    ecs_iter_action_t callback;   /* Callback of system, trigger, observer */
+    ecs_iter_action_t callback;   /* Callback of system or observer */
     ecs_iter_fini_action_t fini;  /* Function to cleanup iterator resources */
     ecs_iter_t *chain_it;         /* Optional, allows for creating iterator chains */
 };

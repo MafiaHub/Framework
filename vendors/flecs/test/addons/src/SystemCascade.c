@@ -2,10 +2,10 @@
 
 static
 void Iter(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Position *p_parent = ecs_term(it, Position, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Position *p_parent = ecs_field(it, Position, 2);
 
-    test_assert(!p_parent || !ecs_term_is_owned(it, 2));
+    test_assert(!p_parent || !ecs_field_is_self(it, 2));
 
     probe_iter(it);
 
@@ -33,7 +33,7 @@ void SystemCascade_cascade_depth_1() {
 
     ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Position(parent|cascade));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Iter,
+        .entity = Iter,
         .query.filter.instanced = true
     });
 
@@ -101,7 +101,7 @@ void SystemCascade_cascade_depth_2() {
 
     ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Position(parent|cascade));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Iter,
+        .entity = Iter,
         .query.filter.instanced = true
     });
 
@@ -182,7 +182,7 @@ void SystemCascade_cascade_depth_2_new_syntax() {
 
     ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Position(cascade(ChildOf)));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Iter,
+        .entity = Iter,
         .query.filter.instanced = true
     });
 
@@ -251,10 +251,10 @@ void SystemCascade_cascade_depth_2_new_syntax() {
 
 static
 void AddParent(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Position *p_parent = ecs_term(it, Position, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Position *p_parent = ecs_field(it, Position, 2);
 
-    test_assert(!p_parent || !ecs_term_is_owned(it, 2));
+    test_assert(!p_parent || !ecs_field_is_self(it, 2));
 
     probe_iter(it);
 
@@ -279,7 +279,7 @@ void SystemCascade_add_after_match() {
 
     ECS_SYSTEM(world, AddParent, EcsOnUpdate, Position, ?Position(parent|cascade));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = AddParent,
+        .entity = AddParent,
         .query.filter.instanced = true
     });
 
@@ -356,7 +356,7 @@ void SystemCascade_adopt_after_match() {
 
     ECS_SYSTEM(world, AddParent, EcsOnUpdate, Position, ?Position(parent|cascade));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = AddParent,
+        .entity = AddParent,
         .query.filter.instanced = true
     });
 
@@ -415,37 +415,6 @@ void SystemCascade_adopt_after_match() {
     ecs_fini(world);
 }
 
-void SystemCascade_query_w_only_cascade() {
-    ecs_world_t *world = ecs_mini();
-
-    ecs_query_t *q = ecs_query_new(world, "?Name(parent|cascade)");
-    test_assert(q != NULL);
-
-    int32_t count = 0;
-
-    /* Should match everything (since everything is a root without further 
-     * qualifications). Since no other entities have been created, all entities
-     * must be builtin ones. */
-    ecs_iter_t it = ecs_query_iter(world, q);
-    while (ecs_query_next(&it)) {
-        for (int i = 0; i < it.count; i ++) {
-            ecs_entity_t e = it.entities[i];
-            test_assert(
-                e == EcsFlecs ||
-                ecs_has_pair(world, e, EcsChildOf, EcsFlecs) ||
-                ecs_has_pair(world, e, EcsChildOf, EcsFlecsCore) ||
-                ecs_has_pair(world, e, EcsChildOf, EcsFlecsHidden)
-            );
-
-            count ++;
-        }
-    }
-
-    test_assert(count != 0);
-
-    ecs_fini(world);
-}
-
 void SystemCascade_custom_relation_cascade_depth_1() {
     ecs_world_t *world = ecs_init();
 
@@ -459,7 +428,7 @@ void SystemCascade_custom_relation_cascade_depth_1() {
 
     ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Position(cascade(Rel)));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Iter,
+        .entity = Iter,
         .query.filter.instanced = true
     });
 
@@ -528,7 +497,7 @@ void SystemCascade_custom_relation_cascade_depth_2() {
 
     ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Position(cascade(Rel)));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = Iter,
+        .entity = Iter,
         .query.filter.instanced = true
     });
 
@@ -608,7 +577,7 @@ void SystemCascade_custom_relation_add_after_match() {
 
     ECS_SYSTEM(world, AddParent, EcsOnUpdate, Position, ?Position(cascade(Rel)));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = AddParent,
+        .entity = AddParent,
         .query.filter.instanced = true
     });
 
@@ -686,7 +655,7 @@ void SystemCascade_custom_relation_adopt_after_match() {
 
     ECS_SYSTEM(world, AddParent, EcsOnUpdate, Position, ?Position(cascade(Rel)));
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity.entity = AddParent,
+        .entity = AddParent,
         .query.filter.instanced = true
     });
 

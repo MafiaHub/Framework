@@ -67,12 +67,12 @@ void SimpleModuleImport(
     
     ECS_SYSTEM_DEFINE(world, Move, EcsOnUpdate, Position, Velocity);
     ECS_SYSTEM_DEFINE(world, SimpleFooSystem, EcsOnUpdate, Position);
-    ECS_TRIGGER_DEFINE(world, SimpleFooTrigger, EcsOnAdd, Position);
+    ECS_OBSERVER_DEFINE(world, SimpleFooTrigger, EcsOnAdd, Position);
 
     ECS_TAG_DEFINE(world, SimpleFooTag);
     ECS_ENTITY_DEFINE(world, SimpleFooEntity, 0);
     ECS_PREFAB_DEFINE(world, SimpleFooPrefab, 0);
-    ECS_PIPELINE_DEFINE(world, SimpleFooPipeline, Tag);
+    ECS_PIPELINE_DEFINE(world, SimpleFooPipeline, flecs.system.System, Tag);
     ECS_TAG_DEFINE(world, Simple_underscore);
 }
 
@@ -118,18 +118,15 @@ void Modules_import_module_from_system() {
     ecs_fini(world);
 }
 
-ecs_entity_t import_module(ecs_world_t *world) {
-    ECS_IMPORT(world, SimpleModule);
-    return ecs_id(SimpleModule);
-}
-
 void Modules_import_again() {
     ecs_world_t *world = ecs_init();
 
-    ECS_IMPORT(world, SimpleModule);
+    ecs_entity_t m1 = ECS_IMPORT(world, SimpleModule);
+    ecs_entity_t m2 = ECS_IMPORT(world, SimpleModule);
 
-    test_assert(ecs_id(SimpleModule) != 0);
-    test_assert(ecs_id(SimpleModule) == import_module(world));
+    test_assert(m1 != 0);
+    test_assert(m2 != 0);
+    test_assert(m1 == m2);
     
     ecs_fini(world);
 }

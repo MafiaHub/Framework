@@ -6,7 +6,7 @@ void OnPosition(ecs_iter_t *it) {
 }
 
 void Monitor_1_comp() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -28,7 +28,7 @@ void Monitor_1_comp() {
 
     ecs_os_zeromem(&ctx);
 
-    ecs_progress(world, 0);
+    ecs_run_aperiodic(world, 0);
     test_int(ctx.invoked, 0);
 
     ecs_add(world, e, Velocity);
@@ -38,7 +38,7 @@ void Monitor_1_comp() {
 }
 
 void Monitor_2_comps() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -85,7 +85,7 @@ void Monitor_2_comps() {
 }
 
 void Monitor_1_comp_1_not() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -129,7 +129,7 @@ void Monitor_1_comp_1_not() {
 }
 
 void Monitor_1_parent() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -159,12 +159,12 @@ void Monitor_1_parent() {
 }
 
 void Monitor_1_comp_1_parent() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_OBSERVER(world, OnPosition, EcsMonitor, 
-        Position, Position(super(ChildOf)));
+        Position, Position(up(ChildOf)));
 
     Probe ctx = { 0 };
     ecs_set_context(world, &ctx);
@@ -222,7 +222,7 @@ void Monitor_1_comp_1_parent() {
 }
 
 void Monitor_1_comp_prefab_new() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -235,7 +235,7 @@ void Monitor_1_comp_prefab_new() {
 
     test_int(ctx.invoked, 0);
 
-    ecs_progress(world, 0);
+    ecs_run_aperiodic(world, 0);
     test_int(ctx.invoked, 0);
 
     ecs_add(world, Prefab, Velocity);
@@ -245,7 +245,7 @@ void Monitor_1_comp_prefab_new() {
 }
 
 void Monitor_1_comp_prefab_add() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -258,7 +258,7 @@ void Monitor_1_comp_prefab_add() {
     ecs_add(world, e, Position);
     test_int(ctx.invoked, 0);
 
-    ecs_progress(world, 0);
+    ecs_run_aperiodic(world, 0);
     test_int(ctx.invoked, 0);
 
     ecs_add(world, e, Velocity);
@@ -268,7 +268,7 @@ void Monitor_1_comp_prefab_add() {
 }
 
 void Monitor_monitor_w_and() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -308,7 +308,7 @@ void Monitor_monitor_w_and() {
 }
 
 void Monitor_monitor_w_or() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -345,7 +345,7 @@ void Monitor_monitor_w_or() {
 }
 
 void Monitor_monitor_w_not() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -379,7 +379,7 @@ void Monitor_monitor_w_not() {
 }
 
 void Monitor_monitor_w_optional() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
@@ -419,12 +419,12 @@ void Monitor_monitor_w_optional() {
 }
 
 void Monitor_monitor_w_superset() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
-    ECS_OBSERVER(world, OnPosition, EcsMonitor, Position, Velocity(super));
+    ECS_OBSERVER(world, OnPosition, EcsMonitor, Position, Velocity(up));
 
     Probe ctx = { 0 };
     ecs_set_context(world, &ctx);
@@ -466,12 +466,12 @@ void Monitor_monitor_w_superset() {
 }
 
 void Monitor_monitor_w_self_superset() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
-    ECS_OBSERVER(world, OnPosition, EcsMonitor, Position, Velocity(self|super));
+    ECS_OBSERVER(world, OnPosition, EcsMonitor, Position, Velocity(self|up));
 
     Probe ctx = { 0 };
     ecs_set_context(world, &ctx);
@@ -526,7 +526,7 @@ void Monitor_monitor_w_self_superset() {
 }
 
 void Monitor_monitor_w_wildcard() {
-    ecs_world_t *world = ecs_init();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
     ECS_TAG(world, Eats);
@@ -584,7 +584,7 @@ void Monitor_monitor_at_fini() {
 
     Probe ctx = {0};
 
-    ecs_observer_init(world, &(ecs_observer_desc_t) {
+    ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ TagA }},
         .events = {EcsMonitor},
         .callback = Monitor,
@@ -605,4 +605,125 @@ void Monitor_monitor_at_fini() {
 
     test_int(ctx.invoked, 1);
     test_int(ctx.event, EcsOnRemove);
+}
+
+typedef struct {
+    ecs_entity_t event;
+    ecs_table_t *table;
+    ecs_table_t *other_table;
+    int32_t invoked;
+} check_table_t;
+
+static void CheckTable(ecs_iter_t *it) {
+    check_table_t *ctx = it->ctx;
+
+    test_assert(it->event == ctx->event);
+    test_assert(it->table == ctx->table);
+    test_assert(it->other_table == ctx->other_table);
+
+    ctx->invoked ++;
+}
+
+void Monitor_monitor_other_table() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, X);
+    ECS_TAG(world, Y);
+
+    ecs_entity_t x = ecs_new(world, X);
+    ecs_entity_t xy = ecs_new(world, X);
+    ecs_add(world, xy, Y);
+
+    check_table_t ctx = {0};
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms = {
+            { X },
+            { Y, .oper = EcsNot }
+        },
+        .events = {EcsMonitor},
+        .callback = CheckTable,
+        .ctx = &ctx
+    });
+
+    ctx.table = ecs_get_table(world, x);
+    ctx.other_table = NULL;
+    ctx.event = EcsOnAdd;
+    ecs_entity_t e = ecs_new(world, X);
+    test_int(ctx.invoked, 1);
+
+    ctx.table = ecs_get_table(world, xy);
+    ctx.other_table = ecs_get_table(world, x);
+    ctx.event = EcsOnRemove;
+    ecs_add(world, e, Y);
+    test_int(ctx.invoked, 2);
+
+    ctx.table = ecs_get_table(world, xy);
+    ctx.other_table = ecs_get_table(world, x);
+    ctx.event = EcsOnAdd;
+    ecs_remove(world, e, Y);
+    test_int(ctx.invoked, 3);
+
+    ctx.table = ecs_get_table(world, x);
+    ctx.other_table = NULL;
+    ctx.event = EcsOnRemove;
+
+    ecs_fini(world);
+}
+
+typedef struct {
+    ecs_entity_t event;
+    Position *result;
+    int32_t invoked;
+} check_component_t;
+
+static void CheckComponent(ecs_iter_t *it) {
+    check_component_t *ctx = it->ctx;
+
+    test_assert(it->event == ctx->event);
+
+    ctx->result = ecs_field(it, Position, 1);
+    ctx->invoked ++;
+}
+
+void Monitor_monitor_component() {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_TAG(world, Tag);
+
+    check_component_t ctx = {0};
+    ecs_observer_init(world, &(ecs_observer_desc_t){
+        .filter.terms = {
+            { ecs_id(Position) },
+            { Tag, .oper = EcsNot }
+        },
+        .events = {EcsMonitor},
+        .callback = CheckComponent,
+        .ctx = &ctx
+    });
+
+    ctx.event = EcsOnAdd;
+    ecs_entity_t e = ecs_new(world, Position);
+    const Position *expect = ecs_get(world, e, Position);
+    test_int(ctx.invoked, 1);
+    test_assert(ctx.result == expect);
+
+    ctx.event = EcsOnRemove;
+    ecs_add(world, e, Tag);
+    expect = ecs_get(world, e, Position);
+    test_int(ctx.invoked, 2);
+    test_assert(ctx.result == expect);
+
+    ctx.event = EcsOnAdd;
+    ecs_remove(world, e, Tag);
+    test_int(ctx.invoked, 3);
+    test_assert(ctx.result == expect);
+
+    expect = ecs_get(world, e, Position);
+    ctx.event = EcsOnRemove;
+
+    ecs_fini(world);
+
+    test_int(ctx.invoked, 4);
+    test_assert(ctx.result == expect);
 }

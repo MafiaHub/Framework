@@ -65,7 +65,8 @@
                 "struct_w_double",
                 "struct_w_string",
                 "struct_w_entity",
-                "primitive_init"
+                "primitive_init",
+                "primitive_w_short_notation"
             ]
         }, {
             "id": "EnumTypes",
@@ -76,7 +77,8 @@
                 "enum_3_constants_manual_values",
                 "struct_w_enum",
                 "zero_initialized",
-                "enum_relation"
+                "enum_relation",
+                "enum_w_short_notation"
             ]
         }, {
             "id": "BitmaskTypes",
@@ -86,7 +88,8 @@
                 "bitmask_3_constants",
                 "bitmask_4_constants",
                 "bitmask_4_constants_manual_values",
-                "struct_w_bitmask"
+                "struct_w_bitmask",
+                "bitmask_w_short_notation"
             ]
         }, {
             "id": "StructTypes",
@@ -104,7 +107,8 @@
                 "i32_i64_i32",
                 "incomplete_member",
                 "partial_type",
-                "partial_type_custom_offset"
+                "partial_type_custom_offset",
+                "struct_w_short_notation"
             ]
         }, {
             "id": "NestedStructTypes",
@@ -155,14 +159,16 @@
                 "standaline_array_bool_3",
                 "array_of_standaline_array_bool_1",
                 "array_of_standaline_array_bool_2",
-                "array_of_standaline_array_bool_3"
+                "array_of_standaline_array_bool_3",
+                "array_w_short_notation"
             ]
         }, {
             "id": "VectorTypes",
             "testcases": [
                 "vector_bool",
                 "vector_i32",
-                "vector_struct"
+                "vector_struct",
+                "vector_w_short_notation"
             ]
         },  {
             "id": "Units",
@@ -191,7 +197,10 @@
                 "set_unit_w_derived",
                 "set_unit_w_over",
                 "set_unit_w_prefix",
-                "builtin_units"
+                "builtin_units",
+                "unit_w_short_notation",
+                "unit_prefix_w_short_notation",
+                "quantity_w_short_notation"
             ]
         }, {
             "id": "Serialized",
@@ -320,7 +329,10 @@
                 "struct_w_array_type_i32_i32",
                 "struct_w_array_type_struct",
                 "struct_w_2_array_type_i32_i32",
-                "struct_w_2_array_type_struct"
+                "struct_w_2_array_type_struct",
+                "array_move_primitive",
+                "array_move_struct",
+                "array_move_out_of_range"
             ]
         }, {
             "id": "DeserializeFromExpr",
@@ -400,6 +412,9 @@
                 "struct_i32",
                 "struct_i32_i32",
                 "struct_entity",
+                "array_i32_3",
+                "array_struct_i32_i32",
+                "array_array_i32_3",
                 "entity_entity_after_float",
                 "struct_nested_i32",
                 "struct_nested_i32_i32",
@@ -492,6 +507,9 @@
                 "struct_w_array_type_i32_i32",
                 "struct_w_2_array_type_i32_i32",
                 "struct_partial",
+                "array_i32_3",
+                "array_struct_i32_i32",
+                "array_array_i32_3",
                 "serialize_entity_empty",
                 "serialize_entity_w_name",
                 "serialize_entity_w_name_1_tag",
@@ -499,6 +517,8 @@
                 "serialize_entity_w_name_1_pair",
                 "serialize_entity_w_base",
                 "serialize_entity_w_base_override",
+                "serialize_entity_w_2_base",
+                "serialize_entity_w_nested_base",
                 "serialize_entity_w_1_component",
                 "serialize_entity_w_2_components",
                 "serialize_entity_w_primitive_component",
@@ -519,6 +539,10 @@
                 "serialize_entity_w_link",
                 "serialize_entity_w_link_no_link",
                 "serialize_entity_w_meta_ids",
+                "serialize_entity_color",
+                "serialize_entity_union_relationship",
+                "serialize_entity_union_relationship_w_labels",
+                "serialize_entity_w_union_property",
                 "serialize_iterator_1_comps_empty",
                 "serialize_iterator_1_comps_2_ents_same_table",
                 "serialize_iterator_1_tag_2_ents_same_table",
@@ -552,6 +576,11 @@
                 "serialize_iterator_w_inout_out_component",
                 "serialize_iterator_w_inout_out_reflected_component",
                 "serialize_iterator_component_from_var",
+                "serialize_iterator_color",
+                "serialize_iterator_ids",
+                "serialize_iterator_ids_2_entities",
+                "serialize_iterator_variable_ids",
+                "serialize_iterator_variable_ids_2_entities",
                 "serialize_paged_iterator",
                 "serialize_paged_iterator_w_optional_component",
                 "serialize_paged_iterator_w_optional_tag",

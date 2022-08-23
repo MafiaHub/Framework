@@ -84,7 +84,7 @@ const char* ecs_strerror(
 #else // FLECS_LOG
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Dummy macro's for when logging is disabled
+//// Dummy macros for when logging is disabled
 ////////////////////////////////////////////////////////////////////////////////
 
 #define _ecs_deprecated(file, line, msg)\
@@ -158,10 +158,10 @@ void _ecs_parser_errorv(
 
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Logging Macro's
+//// Logging macros
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef FLECS_LEGACY /* C89 doesn't support variadic macro's */
+#ifndef FLECS_LEGACY /* C89 doesn't support variadic macros */
 
 /* Base logging function. Accepts a custom level */
 #define ecs_log(level, ...)\
@@ -204,7 +204,7 @@ void _ecs_parser_errorv(
 #endif // !(defined(FLECS_LOG_0) || defined(FLECS_LOG_1) || defined(FLECS_LOG_2) || defined(FLECS_LOG_3))
 
 
-/* Define/undefine macro's based on compiled-in tracing level. This can optimize
+/* Define/undefine macros based on compiled-in tracing level. This can optimize
  * out tracing statements from a build, which improves performance. */
 
 #if defined(FLECS_LOG_3) /* All debug tracing enabled */
@@ -326,6 +326,10 @@ void _ecs_parser_errorv(
     assert(condition) /* satisfy compiler/static analyzers */
 #endif // FLECS_NDEBUG
 
+#define ecs_assert_var(var, error_code, ...)\
+    ecs_assert(var, error_code, __VA_ARGS__);\
+    (void)var
+
 /** Debug assert 
  * Assert that is only valid in debug mode (ignores FLECS_KEEP_ASSERT) */
 #ifndef FLECS_NDEBUG
@@ -357,7 +361,7 @@ void _ecs_parser_errorv(
 #endif
 #endif // FLECS_NDEBUG
 
-/** Throw
+/** Panic
  * goto error when FLECS_SOFT_ASSERT is defined, otherwise abort */
 #if defined(FLECS_NDEBUG) && !defined(FLECS_KEEP_ASSERT)
 #define ecs_throw(error_code, ...) ecs_dummy_check
@@ -389,7 +393,7 @@ void _ecs_parser_errorv(
 
 /** Enable or disable tracing.
  * This will enable builtin tracing. For tracing to work, it will have to be
- * compiled in which requires defining one of the following macro's:
+ * compiled in which requires defining one of the following macros:
  *
  * FLECS_LOG_0 - All tracing is disabled
  * FLECS_LOG_1 - Enable tracing level 1
@@ -419,6 +423,34 @@ FLECS_API
 bool ecs_log_enable_colors(
     bool enabled);
 
+/** Enable/disable logging timestamp.
+ * By default timestamps are disabled. Note that enabling timestamps introduces
+ * overhead as the logging code will need to obtain the current time.
+ *
+ * @param enabled Whether to enable tracing with timestamps.
+ * @return Previous timestamp setting.
+ */
+FLECS_API
+bool ecs_log_enable_timestamp(
+    bool enabled);
+
+/** Enable/disable logging time since last log.
+ * By default deltatime is disabled. Note that enabling timestamps introduces
+ * overhead as the logging code will need to obtain the current time.
+ * 
+ * When enabled, this logs the amount of time in seconds passed since the last
+ * log, when this amount is non-zero. The format is a '+' character followed by
+ * the number of seconds:
+ * 
+ *   +1 trace: log message
+ *
+ * @param enabled Whether to enable tracing with timestamps.
+ * @return Previous timestamp setting.
+ */
+FLECS_API
+bool ecs_log_enable_timedelta(
+    bool enabled);
+
 /** Get last logged error code.
  * Calling this operation resets the error code.
  *
@@ -444,6 +476,7 @@ int ecs_log_last_error(void);
 #define ECS_OPERATION_FAILED (10)
 #define ECS_INVALID_CONVERSION (11)
 #define ECS_ID_IN_USE (12)
+#define ECS_CYCLE_DETECTED (13)
 
 #define ECS_INCONSISTENT_NAME (20)
 #define ECS_NAME_IN_USE (21)
@@ -457,15 +490,13 @@ int ecs_log_last_error(void);
 #define ECS_MISSING_SYMBOL (29)
 #define ECS_ALREADY_IN_USE (30)
 
-#define ECS_COLUMN_ACCESS_VIOLATION (40)
+#define ECS_ACCESS_VIOLATION (40)
 #define ECS_COLUMN_INDEX_OUT_OF_RANGE (41)
 #define ECS_COLUMN_IS_NOT_SHARED (42)
 #define ECS_COLUMN_IS_SHARED (43)
 #define ECS_COLUMN_TYPE_MISMATCH (45)
 
-#define ECS_TYPE_INVALID_CASE (62)
-
-#define ECS_INVALID_WHILE_ITERATING (70)
+#define ECS_INVALID_WHILE_READONLY (70)
 #define ECS_LOCKED_STORAGE (71)
 #define ECS_INVALID_FROM_WORKER (72)
 

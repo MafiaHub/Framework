@@ -27,8 +27,8 @@ int main(int argc, char *argv[]) {
 
     // Register reflection data with units. This can improve the way information
     // is visualized in tools, such as the explorer.
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(WeatherStation),
+    ecs_struct(ecs, {
+        .entity = ecs_id(WeatherStation),
         .members = {
             {
                 .name = "temperature", 
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     ecs_entity_t e = ecs_set(ecs, 0, WeatherStation, {24, 1.2, 0.5});
 
     // Use cursor API to print values with units
-    WeatherStation *ptr = ecs_get_mut(ecs, e, WeatherStation, 0);
+    WeatherStation *ptr = ecs_get_mut(ecs, e, WeatherStation);
     ecs_meta_cursor_t cur = ecs_meta_cursor(ecs, ecs_id(WeatherStation), ptr);
 
     ecs_meta_push(&cur);

@@ -16,7 +16,7 @@ struct ecs_snapshot_t {
 /** Small footprint data structure for storing data associated with a table. */
 typedef struct ecs_table_leaf_t {
     ecs_table_t *table;
-    ecs_vector_t *type;
+    ecs_type_t type;
     ecs_data_t *data;
 } ecs_table_leaf_t;
 
@@ -34,39 +34,31 @@ ecs_data_t* duplicate_data(
     result->columns = ecs_os_memdup_n(
         main_data->columns, ecs_column_t, column_count);
 
-    /* Copy entities */
-    result->entities = ecs_vector_copy(main_data->entities, ecs_entity_t);
-
-    /* Copy record ptrs */
-    result->record_ptrs = ecs_vector_copy(
-        main_data->record_ptrs, ecs_record_t*);
-
-    ecs_size_t to_alloc = ecs_vector_size(result->entities);
+    /* Copy entities and records */
+    result->entities = ecs_storage_copy_t(&main_data->entities, ecs_entity_t);
+    result->records = ecs_storage_copy_t(&main_data->records, ecs_record_t*);
 
     /* Copy each column */
     for (i = 0; i < column_count; i ++) {
         ecs_column_t *column = &result->columns[i];
-        ecs_type_info_t *ti = &table->type_info[i];
+        ecs_type_info_t *ti = table->type_info[i];
         int32_t size = ti->size;
-        int32_t alignment = ti->alignment;
-        ecs_copy_t copy = ti->lifecycle.copy;
+        ecs_copy_t copy = ti->hooks.copy;
         if (copy) {
-            int32_t count = ecs_vector_count(column->data);
-            ecs_vector_t *dst_vec = ecs_vector_new_t(size, alignment, to_alloc);
-            ecs_vector_set_count_t(&dst_vec, size, alignment, count);
-            void *dst_ptr = ecs_vector_first_t(dst_vec, size, alignment);
-            
-            ecs_xtor_t ctor = ti->lifecycle.ctor;
+            ecs_column_t dst = ecs_storage_copy(column, size);
+            int32_t count = ecs_storage_count(column);
+            void *dst_ptr = ecs_storage_first(&dst);
+            void *src_ptr = ecs_storage_first(column);
+
+            ecs_xtor_t ctor = ti->hooks.ctor;
             if (ctor) {
                 ctor(dst_ptr, count, ti);
             }
 
-            void *src_ptr = ecs_vector_first_t(column->data, size, alignment);
             copy(dst_ptr, src_ptr, count, ti);
-
-            column->data = dst_vec;
+            *column = dst;
         } else {
-            column->data = ecs_vector_copy_t(column->data, size, alignment);
+            *column = ecs_storage_copy(column, size);
         }
     }
 
@@ -87,8 +79,8 @@ void snapshot_table(
     ecs_assert(l != NULL, ECS_INTERNAL_ERROR, NULL);
     
     l->table = table;
-    l->type = ecs_vector_copy(table->type, ecs_id_t);
-    l->data = duplicate_data(table, &table->storage);
+    l->type = flecs_type_copy(&table->type);
+    l->data = duplicate_data(table, &table->data);
 }
 
 static
@@ -101,7 +93,7 @@ ecs_snapshot_t* snapshot_create(
     ecs_snapshot_t *result = ecs_os_calloc_t(ecs_snapshot_t);
     ecs_assert(result != NULL, ECS_OUT_OF_MEMORY, NULL);
 
-    ecs_force_aperiodic((ecs_world_t*)world);
+    ecs_run_aperiodic((ecs_world_t*)world, 0);
 
     result->world = (ecs_world_t*)world;
 
@@ -207,12 +199,8 @@ void restore_unfiltered(
         /* If the world table no longer exists but the snapshot table does,
          * reinsert it */
         if (!world_table && snapshot_table) {
-            ecs_ids_t type = {
-                .array = ecs_vector_first(snapshot_table->type, ecs_id_t),
-                .count = ecs_vector_count(snapshot_table->type)
-            };
-
-            ecs_table_t *table = flecs_table_find_or_create(world, &type);
+            ecs_table_t *table = flecs_table_find_or_create(world, 
+                &snapshot_table->type);
             ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
             if (snapshot_table->data) {
@@ -229,8 +217,8 @@ void restore_unfiltered(
                     world, world_table, snapshot_table->data);
             } else {
                 flecs_table_clear_data(
-                    world, world_table, &world_table->storage);
-                flecs_table_init_data(world, world_table);
+                    world, world_table, &world_table->data);
+                flecs_table_init_data(world_table);
             }
         
         /* If the snapshot table doesn't exist, this table was created after the
@@ -242,7 +230,7 @@ void restore_unfiltered(
              * restored in a different table. Therefore first clear the data
              * from the table (which doesn't invoke triggers), and then delete
              * the table. */
-            flecs_table_clear_data(world, world_table, &world_table->storage);
+            flecs_table_clear_data(world, world_table, &world_table->data);
             flecs_delete_table(world, world_table);
         
         /* If there is no world & snapshot table, nothing needs to be done */
@@ -250,7 +238,7 @@ void restore_unfiltered(
 
         if (snapshot_table) {
             ecs_os_free(snapshot_table->data);
-            ecs_os_free(snapshot_table->type);
+            flecs_type_free(&snapshot_table->type);
         }
     }
 
@@ -292,24 +280,24 @@ void restore_filtered(
 
         ecs_data_t *data = snapshot_table->data;
         if (!data) {
-            ecs_vector_free(snapshot_table->type);
+            flecs_type_free(&snapshot_table->type);
             continue;
         }
 
         /* Delete entity from storage first, so that when we restore it to the
          * current table we can be sure that there won't be any duplicates */
-        int32_t i, entity_count = ecs_vector_count(data->entities);
-        ecs_entity_t *entities = ecs_vector_first(
-            snapshot_table->data->entities, ecs_entity_t);
+        int32_t i, entity_count = ecs_storage_count(&data->entities);
+        ecs_entity_t *entities = ecs_storage_first(
+            &snapshot_table->data->entities);
         for (i = 0; i < entity_count; i ++) {
             ecs_entity_t e = entities[i];
-            ecs_record_t *r = ecs_eis_get(world, e);
+            ecs_record_t *r = flecs_entities_get(world, e);
             if (r && r->table) {
-                flecs_table_delete(world, r->table, &r->table->storage, 
+                flecs_table_delete(world, r->table, 
                     ECS_RECORD_TO_ROW(r->row), true);
             } else {
                 /* Make sure that the entity has the same generation count */
-                ecs_eis_set_generation(world, e);
+                flecs_entities_set_generation(world, e);
             }
         }
 
@@ -317,7 +305,7 @@ void restore_filtered(
         int32_t old_count = ecs_table_count(snapshot_table->table);
         int32_t new_count = flecs_table_data_count(snapshot_table->data);
 
-        flecs_table_merge(world, table, table, &table->storage, snapshot_table->data);
+        flecs_table_merge(world, table, table, &table->data, snapshot_table->data);
 
         /* Run OnSet systems for merged entities */
         if (new_count) {
@@ -327,7 +315,7 @@ void restore_filtered(
 
         ecs_os_free(snapshot_table->data->columns);
         ecs_os_free(snapshot_table->data);
-        ecs_vector_free(snapshot_table->type);
+        flecs_type_free(&snapshot_table->type);
     }
 }
 
@@ -336,7 +324,7 @@ void ecs_snapshot_restore(
     ecs_world_t *world,
     ecs_snapshot_t *snapshot)
 {
-    ecs_force_aperiodic(world);
+    ecs_run_aperiodic(world, 0);
     
     if (snapshot->entity_index) {
         /* Unfiltered snapshots have a copy of the entity index which is
@@ -386,7 +374,7 @@ bool ecs_snapshot_next(
         it->table = table;
         it->count = ecs_table_count(table);
         if (data) {
-            it->entities = ecs_vector_first(data->entities, ecs_entity_t);
+            it->entities = ecs_storage_first(&data->entities);
         } else {
             it->entities = NULL;
         }
@@ -422,7 +410,7 @@ void ecs_snapshot_free(
                 flecs_table_clear_data(snapshot->world, table, data);
                 ecs_os_free(data);
             }
-            ecs_vector_free(snapshot_table->type);
+            flecs_type_free(&snapshot_table->type);
         }
     }    
 

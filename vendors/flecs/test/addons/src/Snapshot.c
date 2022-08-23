@@ -11,7 +11,7 @@ void Snapshot_simple_snapshot() {
 
     ecs_snapshot_t *s = ecs_snapshot_take(world);
 
-    Position *p = ecs_get_mut(world, e, Position, NULL);
+    Position *p = ecs_get_mut(world, e, Position);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
@@ -21,7 +21,7 @@ void Snapshot_simple_snapshot() {
     ecs_snapshot_restore(world, s);
 
     test_assert(ecs_has(world, e, Position));
-    p = ecs_get_mut(world, e, Position, NULL);
+    p = ecs_get_mut(world, e, Position);
     test_int(p->x, 10);
     test_int(p->y, 20);    
 
@@ -173,15 +173,16 @@ void Snapshot_snapshot_w_include_filter() {
     test_assert(e3 != 0);
     test_assert(ecs_has(world, e3, Velocity));
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position) }}
     });
 
     ecs_iter_t it = ecs_filter_iter(world, &f);
     ecs_snapshot_t *s = ecs_snapshot_take_w_iter(&it);
 
-    Position *p = ecs_get_mut(world, e1, Position, NULL);
+    Position *p = ecs_get_mut(world, e1, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -189,7 +190,7 @@ void Snapshot_snapshot_w_include_filter() {
     p->x ++;
     p->y ++;
 
-    p = ecs_get_mut(world, e2, Position, NULL);
+    p = ecs_get_mut(world, e2, Position);
     test_assert(p != NULL);
     test_int(p->x, 15);
     test_int(p->y, 25);
@@ -197,7 +198,7 @@ void Snapshot_snapshot_w_include_filter() {
     p->x ++;
     p->y ++;
 
-    Velocity *v = ecs_get_mut(world, e3, Velocity, NULL);
+    Velocity *v = ecs_get_mut(world, e3, Velocity);
     test_assert(v != NULL);
     test_int(v->x, 25); 
     test_int(v->y, 35);
@@ -208,24 +209,26 @@ void Snapshot_snapshot_w_include_filter() {
     ecs_snapshot_restore(world, s);
 
     /* Restored */
-    p = ecs_get_mut(world, e1, Position, NULL);
+    p = ecs_get_mut(world, e1, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     /* Restored */
-    p = ecs_get_mut(world, e2, Position, NULL);
+    p = ecs_get_mut(world, e2, Position);
     test_assert(p != NULL);
     test_int(p->x, 15);
     test_int(p->y, 25);
 
     /* Not restored */
-    v = ecs_get_mut(world, e3, Velocity, NULL);
+    v = ecs_get_mut(world, e3, Velocity);
     test_assert(v != NULL);
     test_int(v->x, 26); 
     test_int(v->y, 36);
 
     test_assert(ecs_new(world, 0) > e3);
+
+    ecs_filter_fini(&f);
 
     ecs_fini(world);
 }
@@ -250,15 +253,16 @@ void Snapshot_snapshot_w_exclude_filter() {
     test_assert(e3 != 0);
     test_assert(ecs_has(world, e3, Velocity));
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position), .oper = EcsNot }}
     });
 
     ecs_iter_t it = ecs_filter_iter(world, &f);
     ecs_snapshot_t *s = ecs_snapshot_take_w_iter(&it);
 
-    Position *p = ecs_get_mut(world, e1, Position, NULL);
+    Position *p = ecs_get_mut(world, e1, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -266,7 +270,7 @@ void Snapshot_snapshot_w_exclude_filter() {
     p->x ++;
     p->y ++;
 
-    p = ecs_get_mut(world, e2, Position, NULL);
+    p = ecs_get_mut(world, e2, Position);
     test_assert(p != NULL);
     test_int(p->x, 15);
     test_int(p->y, 25);
@@ -274,7 +278,7 @@ void Snapshot_snapshot_w_exclude_filter() {
     p->x ++;
     p->y ++;
 
-    Velocity *v = ecs_get_mut(world, e3, Velocity, NULL);
+    Velocity *v = ecs_get_mut(world, e3, Velocity);
     test_assert(v != NULL);
     test_int(v->x, 25); 
     test_int(v->y, 35);
@@ -285,24 +289,26 @@ void Snapshot_snapshot_w_exclude_filter() {
     ecs_snapshot_restore(world, s);
 
     /* Not restored */
-    p = ecs_get_mut(world, e1, Position, NULL);
+    p = ecs_get_mut(world, e1, Position);
     test_assert(p != NULL);
     test_int(p->x, 11);
     test_int(p->y, 21);
 
     /* Not restored */
-    p = ecs_get_mut(world, e2, Position, NULL);
+    p = ecs_get_mut(world, e2, Position);
     test_assert(p != NULL);
     test_int(p->x, 16);
     test_int(p->y, 26);
 
     /* Restored */
-    v = ecs_get_mut(world, e3, Velocity, NULL);
+    v = ecs_get_mut(world, e3, Velocity);
     test_assert(v != NULL);
     test_int(v->x, 25); 
     test_int(v->y, 35);
 
     test_assert(ecs_new(world, 0) > e3);
+
+    ecs_filter_fini(&f);
 
     ecs_fini(world);
 }
@@ -321,8 +327,9 @@ void Snapshot_snapshot_w_filter_after_new() {
     test_assert(e2 != 0);
     test_assert(ecs_has(world, e2, Velocity));
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position) }}
     });
 
@@ -366,6 +373,8 @@ void Snapshot_snapshot_w_filter_after_new() {
     test_int(v->x, 34);
     test_int(v->y, 45);
 
+    ecs_filter_fini(&f);
+
     ecs_fini(world);
 }
 
@@ -391,8 +400,9 @@ void Snapshot_snapshot_w_filter_after_delete() {
     test_assert(e4 != 0);
     test_assert(ecs_has(world, e4, Velocity));
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position) }}
     });
 
@@ -415,6 +425,8 @@ void Snapshot_snapshot_w_filter_after_delete() {
     test_assert(ecs_has(world, e1, Position));
     test_assert(ecs_has(world, e2, Velocity));
     test_assert(ecs_has(world, e3, Position));
+
+    ecs_filter_fini(&f);
 
     ecs_fini(world);
 }
@@ -456,8 +468,9 @@ void Snapshot_snapshot_free_filtered() {
     test_assert( ecs_new(world, Position) != 0);
     test_assert( ecs_new(world, Velocity) != 0);
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position) }}
     });
 
@@ -466,6 +479,8 @@ void Snapshot_snapshot_free_filtered() {
     test_assert(s != NULL);
 
     ecs_snapshot_free(s);
+
+    ecs_filter_fini(&f);
 
     ecs_fini(world);
 }
@@ -477,15 +492,15 @@ void Snapshot_snapshot_free_filtered_w_dtor() {
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
 
-    ecs_entity_t e1 = ecs_entity_init(world, &(ecs_entity_desc_t) {
+    ecs_entity_t e1 = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "e1"
     });
 
-    ecs_entity_t e2 = ecs_entity_init(world, &(ecs_entity_desc_t) {
+    ecs_entity_t e2 = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "e2"
     });
 
-    ecs_entity_t e3 = ecs_entity_init(world, &(ecs_entity_desc_t) {
+    ecs_entity_t e3 = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "e3"
     });
 
@@ -499,8 +514,9 @@ void Snapshot_snapshot_free_filtered_w_dtor() {
 
     ecs_add(world, e3, Mass);
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position) }, { ecs_id(Velocity) }}
     });
 
@@ -509,6 +525,8 @@ void Snapshot_snapshot_free_filtered_w_dtor() {
     test_assert(s != NULL);
 
     ecs_snapshot_free(s);
+
+    ecs_filter_fini(&f);
 
     ecs_fini(world);
 }
@@ -530,8 +548,9 @@ void Snapshot_snapshot_activate_table_w_filter() {
     ecs_entity_t e = ecs_set(world, 0, Position, {0, 0});
     test_assert(e != 0);
 
-    ecs_filter_t f;
-    ecs_filter_init(world, &f, &(ecs_filter_desc_t) {
+    ecs_filter_t f = ECS_FILTER_INIT;
+    ecs_filter_init(world, &(ecs_filter_desc_t){
+        .storage = &f,
         .terms = {{ ecs_id(Position) }}
     });
 
@@ -544,6 +563,8 @@ void Snapshot_snapshot_activate_table_w_filter() {
     
     ecs_progress(world, 0);
     test_bool(invoked, true);
+
+    ecs_filter_fini(&f);
 
     ecs_fini(world);
 }
@@ -562,7 +583,7 @@ void Snapshot_snapshot_copy() {
     ecs_snapshot_t *s_copy = ecs_snapshot_take_w_iter(&it);
     ecs_snapshot_free(s);
 
-    Position *p = ecs_get_mut(world, e, Position, NULL);
+    Position *p = ecs_get_mut(world, e, Position);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
@@ -572,7 +593,7 @@ void Snapshot_snapshot_copy() {
     ecs_snapshot_restore(world, s_copy);
 
     test_assert(ecs_has(world, e, Position));
-    p = ecs_get_mut(world, e, Position, NULL);
+    p = ecs_get_mut(world, e, Position);
     test_int(p->x, 10);
     test_int(p->y, 20);    
 
@@ -588,15 +609,15 @@ void Snapshot_snapshot_get_ref_after_restore() {
     test_assert(e != 0);
     test_assert(ecs_has(world, e, Position));
 
-    ecs_ref_t ref = {0};
-    const Position *p = ecs_get_ref(world, &ref, e, Position);
+    ecs_ref_t ref = ecs_ref_init(world, e, Position);
+    const Position *p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
     ecs_snapshot_t *s = ecs_snapshot_take(world);
 
-    Position *p_mut = ecs_get_mut(world, e, Position, NULL);
+    Position *p_mut = ecs_get_mut(world, e, Position);
     test_int(p_mut->x, 10);
     test_int(p_mut->y, 20);
 
@@ -606,7 +627,7 @@ void Snapshot_snapshot_get_ref_after_restore() {
     ecs_snapshot_restore(world, s);
 
     test_assert(ecs_has(world, e, Position));
-    p = ecs_get_ref(world, &ref, e, Position);
+    p = ecs_ref_get(world, &ref, Position);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -762,7 +783,7 @@ void Snapshot_snapshot_w_new_in_onset() {
     test_assert(e != 0);
     test_assert(ecs_has(world, e, Position));
 
-    ECS_TRIGGER(world, SetP, EcsOnSet, Position);
+    ECS_OBSERVER(world, SetP, EcsOnSet, Position);
 
     ecs_snapshot_t *s = ecs_snapshot_take(world);
 
@@ -783,7 +804,7 @@ static ecs_entity_t v_entity = 0;
 
 static
 void CreateV(ecs_iter_t *it) {
-    ecs_entity_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_entity_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -828,7 +849,7 @@ void Snapshot_snapshot_from_stage() {
     ecs_entity_t e1 = ecs_set(world, 0, Position, {1, 2});
     ecs_entity_t e2 = ecs_set(world, 0, Position, {3, 4});
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
 
     ecs_world_t *stage = ecs_get_stage(world, 0);
 
@@ -837,7 +858,7 @@ void Snapshot_snapshot_from_stage() {
     ecs_delete(stage, e1);
     ecs_delete(stage, e2);
 
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
 
     test_assert(!ecs_is_alive(world, e1));
     test_assert(!ecs_is_alive(world, e2));

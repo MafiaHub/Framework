@@ -77,14 +77,30 @@ void Entity_get_parent(void);
 void Entity_is_component_enabled(void);
 void Entity_is_enabled_component_enabled(void);
 void Entity_is_disabled_component_enabled(void);
+void Entity_is_pair_enabled(void);
+void Entity_is_enabled_pair_enabled(void);
+void Entity_is_disabled_pair_enabled(void);
+void Entity_is_pair_enabled_w_ids(void);
+void Entity_is_enabled_pair_enabled_w_ids(void);
+void Entity_is_disabled_pair_enabled_w_ids(void);
+void Entity_is_pair_enabled_w_tgt_id(void);
+void Entity_is_enabled_pair_enabled_w_tgt_id(void);
+void Entity_is_disabled_pair_enabled_w_tgt_id(void);
 void Entity_get_type(void);
 void Entity_get_nonempty_type(void);
 void Entity_set_no_copy(void);
 void Entity_set_copy(void);
 void Entity_set_deduced(void);
 void Entity_override(void);
+void Entity_override_id(void);
+void Entity_override_pair(void);
+void Entity_override_pair_w_tgt_id(void);
+void Entity_override_pair_w_ids(void);
 void Entity_set_override(void);
 void Entity_set_override_lvalue(void);
+void Entity_set_override_pair(void);
+void Entity_set_override_pair_w_tgt_id(void);
+void Entity_emplace_override(void);
 void Entity_implicit_name_to_char(void);
 void Entity_implicit_path_to_char(void);
 void Entity_implicit_type_str_to_char(void);
@@ -98,6 +114,10 @@ void Entity_get_2_components_w_callback(void);
 void Entity_set_1_component_w_callback(void);
 void Entity_set_2_components_w_callback(void);
 void Entity_set_3_components_w_callback(void);
+void Entity_get_mut_1_component_w_callback(void);
+void Entity_get_mut_2_components_w_callback(void);
+void Entity_get_component_w_callback_nested(void);
+void Entity_get_mut_component_w_callback_nested(void);
 void Entity_defer_set_1_component(void);
 void Entity_defer_set_2_components(void);
 void Entity_defer_set_3_components(void);
@@ -129,6 +149,7 @@ void Entity_defer_new_w_scope(void);
 void Entity_defer_new_w_with(void);
 void Entity_defer_new_w_name_scope_with(void);
 void Entity_defer_w_with_implicit_component(void);
+void Entity_defer_suspend_resume(void);
 void Entity_entity_id_str(void);
 void Entity_pair_id_str(void);
 void Entity_role_id_str(void);
@@ -166,6 +187,9 @@ void Entity_is_a(void);
 void Entity_is_a_w_type(void);
 void Entity_child_of(void);
 void Entity_child_of_w_type(void);
+void Entity_slot_of(void);
+void Entity_slot_of_w_type(void);
+void Entity_slot(void);
 void Entity_id_get_entity(void);
 void Entity_id_get_invalid_entity(void);
 void Entity_each_in_stage(void);
@@ -187,6 +211,7 @@ void Entity_entity_w_root_name_from_scope(void);
 void Entity_entity_w_type(void);
 void Entity_entity_w_nested_type(void);
 void Entity_entity_w_type_defer(void);
+void Entity_prefab_hierarchy_w_types(void);
 void Entity_entity_array(void);
 void Entity_add_if_true_T(void);
 void Entity_add_if_false_T(void);
@@ -197,7 +222,10 @@ void Entity_add_if_false_R_O(void);
 void Entity_add_if_true_R_o(void);
 void Entity_add_if_false_R_o(void);
 void Entity_add_if_true_r_o(void);
-void Entity_add_if_false_r_o(void);
+void Entity_add_if_exclusive_r_o(void);
+void Entity_add_if_exclusive_R_o(void);
+void Entity_add_if_exclusive_R_O(void);
+void Entity_add_if_pair_w_0_object(void);
 
 // Testsuite 'Pairs'
 void Pairs_add_component_pair(void);
@@ -217,7 +245,7 @@ void Pairs_get_mut_pair_existing(void);
 void Pairs_get_mut_pair_tag(void);
 void Pairs_get_mut_pair_tag_existing(void);
 void Pairs_get_relation_from_id(void);
-void Pairs_get_w_object_from_id(void);
+void Pairs_get_second_from_id(void);
 void Pairs_get_recycled_relation_from_id(void);
 void Pairs_get_recycled_object_from_id(void);
 void Pairs_get_rel_obj(void);
@@ -226,9 +254,9 @@ void Pairs_get_rel_obj_id_t(void);
 void Pairs_get_R_obj(void);
 void Pairs_get_R_obj_id(void);
 void Pairs_get_R_obj_id_t(void);
-void Pairs_get_w_object(void);
-void Pairs_get_w_object_id(void);
-void Pairs_get_w_object_id_t(void);
+void Pairs_get_second(void);
+void Pairs_get_second_id(void);
+void Pairs_get_second_id_t(void);
 void Pairs_each(void);
 void Pairs_each_pair(void);
 void Pairs_each_pair_by_type(void);
@@ -240,7 +268,7 @@ void Pairs_match_pair_obj_wildcard(void);
 void Pairs_match_pair_rel_wildcard(void);
 void Pairs_match_pair_both_wildcard(void);
 void Pairs_has_tag_w_object(void);
-void Pairs_has_w_object_tag(void);
+void Pairs_has_second_tag(void);
 void Pairs_add_pair_type(void);
 void Pairs_remove_pair_type(void);
 void Pairs_set_pair_type(void);
@@ -253,12 +281,16 @@ void Pairs_get_inline_pair_type(void);
 void Pairs_set_inline_pair_type(void);
 void Pairs_get_pair_type_object(void);
 void Pairs_set_pair_type_object(void);
-void Pairs_set_get_w_object_variants(void);
+void Pairs_set_get_second_variants(void);
 void Pairs_get_object_for_type_self(void);
 void Pairs_get_object_for_type_base(void);
 void Pairs_get_object_for_id_self(void);
 void Pairs_get_object_for_id_base(void);
 void Pairs_get_object_for_id_not_found(void);
+void Pairs_deref_pair(void);
+void Pairs_deref_const_pair(void);
+void Pairs_deref_pair_obj(void);
+void Pairs_deref_const_pair_obj(void);
 
 // Testsuite 'Enum'
 void Enum_standard_enum_reflection(void);
@@ -285,6 +317,12 @@ void Enum_add_enum_constant_w_tag(void);
 void Enum_remove_enum_constant_w_tag(void);
 void Enum_set_enum_constant_w_tag(void);
 void Enum_enum_w_incorrect_size(void);
+void Enum_add_union_enum(void);
+void Enum_add_2_union_enums(void);
+void Enum_add_2_union_enums_reverse(void);
+void Enum_constant_from_entity(void);
+void Enum_add_if(void);
+void Enum_add_if_other(void);
 
 // Testsuite 'Switch'
 void Switch_add_case(void);
@@ -295,8 +333,8 @@ void Switch_system_w_sw_type_builder(void);
 void Switch_system_w_switch(void);
 void Switch_add_case_w_type(void);
 void Switch_add_switch_w_type(void);
-void Switch_add_switch_w_type_component_first(void);
 void Switch_add_remove_switch_w_type(void);
+void Switch_switch_enum_type(void);
 
 // Testsuite 'Paths'
 void Paths_name(void);
@@ -305,26 +343,14 @@ void Paths_path_depth_2(void);
 void Paths_entity_lookup_name(void);
 void Paths_entity_lookup_depth_1(void);
 void Paths_entity_lookup_depth_2(void);
+void Paths_entity_lookup_from_0(void);
+void Paths_entity_lookup_from_0_w_world(void);
 void Paths_alias_component(void);
 void Paths_alias_scoped_component(void);
 void Paths_alias_scoped_component_w_name(void);
 void Paths_alias_entity(void);
 void Paths_alias_entity_by_name(void);
 void Paths_alias_entity_by_scoped_name(void);
-
-// Testsuite 'Type'
-void Type_type_no_name(void);
-void Type_null_args(void);
-void Type_has_type(void);
-void Type_has_entity(void);
-void Type_has_pair_type(void);
-void Type_has_pair_entity(void);
-void Type_get(void);
-void Type_get_out_of_range(void);
-void Type_has_from_stage(void);
-void Type_create_type_from_system(void);
-void Type_type_from_iter(void);
-void Type_type_from_staged_iter(void);
 
 // Testsuite 'System'
 void System_iter(void);
@@ -344,7 +370,6 @@ void System_nested_system(void);
 void System_empty_signature(void);
 void System_iter_tag(void);
 void System_each_tag(void);
-void System_system_from_id(void);
 void System_set_interval(void);
 void System_order_by_type(void);
 void System_order_by_id(void);
@@ -367,7 +392,7 @@ void System_default_ctor(void);
 void System_test_auto_defer_each(void);
 void System_test_auto_defer_iter(void);
 void System_custom_pipeline(void);
-void System_system_w_self(void);
+void System_custom_pipeline_w_kind(void);
 void System_instanced_query_w_singleton_each(void);
 void System_instanced_query_w_base_each(void);
 void System_un_instanced_query_w_singleton_each(void);
@@ -377,8 +402,9 @@ void System_instanced_query_w_base_iter(void);
 void System_un_instanced_query_w_singleton_iter(void);
 void System_un_instanced_query_w_base_iter(void);
 void System_create_w_no_template_args(void);
-void System_system_w_type_kind(void);
 void System_system_w_type_kind_type_pipeline(void);
+void System_default_ctor(void);
+void System_entity_ctor(void);
 
 // Testsuite 'Event'
 void Event_evt_1_id_entity(void);
@@ -396,19 +422,6 @@ void Event_evt_1_id_pair_rel_obj_id_entity(void);
 void Event_evt_1_id_pair_rel_obj_entity(void);
 void Event_emit_staged_from_world(void);
 void Event_emit_staged_from_stage(void);
-
-// Testsuite 'Trigger'
-void Trigger_on_add(void);
-void Trigger_on_remove(void);
-void Trigger_on_add_tag_action(void);
-void Trigger_on_add_tag_iter(void);
-void Trigger_on_add_tag_each(void);
-void Trigger_trigger_w_self(void);
-void Trigger_on_add_id(void);
-void Trigger_on_add_id_arg(void);
-void Trigger_on_add_expr(void);
-void Trigger_create_w_no_template_args(void);
-void Trigger_yield_existing(void);
 
 // Testsuite 'Iterable'
 void Iterable_page_each(void);
@@ -479,6 +492,14 @@ void Query_query_each_w_func_no_ptr(void);
 void Query_query_iter_w_func_no_ptr(void);
 void Query_query_each_w_iter(void);
 void Query_change_tracking(void);
+void Query_not_w_write(void);
+void Query_get_first(void);
+void Query_get_count_direct(void);
+void Query_get_is_true_direct(void);
+void Query_get_first_direct(void);
+void Query_each_w_no_this(void);
+void Query_each_w_iter_no_this(void);
+void Query_invalid_each_w_no_this(void);
 
 // Testsuite 'QueryBuilder'
 void QueryBuilder_builder_assign_same_type(void);
@@ -499,7 +520,6 @@ void QueryBuilder_add_optional(void);
 void QueryBuilder_ptr_type(void);
 void QueryBuilder_const_type(void);
 void QueryBuilder_string_term(void);
-void QueryBuilder_string_term_w_expr(void);
 void QueryBuilder_singleton_term(void);
 void QueryBuilder_isa_superset_term(void);
 void QueryBuilder_isa_self_superset_term(void);
@@ -513,11 +533,6 @@ void QueryBuilder_isa_superset_shortcut(void);
 void QueryBuilder_isa_superset_shortcut_w_self(void);
 void QueryBuilder_childof_superset_shortcut(void);
 void QueryBuilder_childof_superset_shortcut_w_self(void);
-void QueryBuilder_isa_superset_max_depth_1(void);
-void QueryBuilder_isa_superset_max_depth_2(void);
-void QueryBuilder_isa_superset_min_depth_2(void);
-void QueryBuilder_isa_superset_min_depth_2_max_depth_3(void);
-void QueryBuilder_role(void);
 void QueryBuilder_relation(void);
 void QueryBuilder_relation_w_object_wildcard(void);
 void QueryBuilder_relation_w_predicate_wildcard(void);
@@ -539,7 +554,15 @@ void QueryBuilder_10_terms(void);
 void QueryBuilder_20_terms(void);
 void QueryBuilder_group_by_raw(void);
 void QueryBuilder_group_by_template(void);
+void QueryBuilder_group_by_iter_one(void);
+void QueryBuilder_group_by_iter_one_template(void);
+void QueryBuilder_group_by_iter_one_all_groups(void);
 void QueryBuilder_create_w_no_template_args(void);
+void QueryBuilder_any_wildcard(void);
+void QueryBuilder_cascade(void);
+void QueryBuilder_cascade_w_relationship(void);
+void QueryBuilder_up_w_type(void);
+void QueryBuilder_cascade_w_type(void);
 
 // Testsuite 'FilterBuilder'
 void FilterBuilder_builder_assign_same_type(void);
@@ -574,10 +597,6 @@ void FilterBuilder_isa_superset_shortcut(void);
 void FilterBuilder_isa_superset_shortcut_w_self(void);
 void FilterBuilder_childof_superset_shortcut(void);
 void FilterBuilder_childof_superset_shortcut_w_self(void);
-void FilterBuilder_isa_superset_max_depth_1(void);
-void FilterBuilder_isa_superset_max_depth_2(void);
-void FilterBuilder_isa_superset_min_depth_2(void);
-void FilterBuilder_isa_superset_min_depth_2_max_depth_3(void);
 void FilterBuilder_relation(void);
 void FilterBuilder_relation_w_object_wildcard(void);
 void FilterBuilder_relation_w_predicate_wildcard(void);
@@ -607,10 +626,15 @@ void FilterBuilder_20_terms(void);
 void FilterBuilder_term_after_arg(void);
 void FilterBuilder_name_arg(void);
 void FilterBuilder_const_in_term(void);
+void FilterBuilder_const_optional(void);
 void FilterBuilder_create_w_no_template_args(void);
 void FilterBuilder_2_terms_w_expr(void);
-void FilterBuilder_assert_on_multiple_expr_calls(void);
 void FilterBuilder_assert_on_uninitialized_term(void);
+void FilterBuilder_operator_shortcuts(void);
+void FilterBuilder_inout_shortcuts(void);
+void FilterBuilder_iter_column_w_const_as_array(void);
+void FilterBuilder_iter_column_w_const_as_ptr(void);
+void FilterBuilder_iter_column_w_const_deref(void);
 
 // Testsuite 'RuleBuilder'
 void RuleBuilder_1_type(void);
@@ -627,6 +651,13 @@ void RuleBuilder_set_2_vars(void);
 void RuleBuilder_set_var_by_name(void);
 void RuleBuilder_set_2_vars_by_name(void);
 void RuleBuilder_expr_w_var(void);
+void RuleBuilder_get_first(void);
+void RuleBuilder_get_count_direct(void);
+void RuleBuilder_get_is_true_direct(void);
+void RuleBuilder_get_first_direct(void);
+void RuleBuilder_var_src_w_prefixed_name(void);
+void RuleBuilder_var_first_w_prefixed_name(void);
+void RuleBuilder_var_second_w_prefixed_name(void);
 
 // Testsuite 'SystemBuilder'
 void SystemBuilder_builder_assign_same_type(void);
@@ -656,7 +687,6 @@ void Observer_2_terms_on_add(void);
 void Observer_2_terms_on_remove(void);
 void Observer_2_terms_on_set(void);
 void Observer_2_terms_un_set(void);
-void Observer_observer_w_self(void);
 void Observer_10_terms(void);
 void Observer_20_terms(void);
 void Observer_2_entities_iter(void);
@@ -665,6 +695,14 @@ void Observer_2_entities_each(void);
 void Observer_create_w_no_template_args(void);
 void Observer_yield_existing(void);
 void Observer_yield_existing_2_terms(void);
+void Observer_default_ctor(void);
+void Observer_entity_ctor(void);
+void Observer_on_add(void);
+void Observer_on_remove(void);
+void Observer_on_add_tag_action(void);
+void Observer_on_add_tag_iter(void);
+void Observer_on_add_tag_each(void);
+void Observer_on_add_expr(void);
 
 // Testsuite 'Filter'
 void Filter_term_each_component(void);
@@ -675,6 +713,17 @@ void Filter_term_each_pair_id(void);
 void Filter_term_each_pair_relation_wildcard(void);
 void Filter_term_each_pair_object_wildcard(void);
 void Filter_default_ctor_no_assign(void);
+void Filter_term_get_id(void);
+void Filter_term_get_subj(void);
+void Filter_term_get_pred(void);
+void Filter_term_get_obj(void);
+void Filter_get_first(void);
+void Filter_get_count_direct(void);
+void Filter_get_is_true_direct(void);
+void Filter_get_first_direct(void);
+void Filter_each_w_no_this(void);
+void Filter_each_w_iter_no_this(void);
+void Filter_invalid_each_w_no_this(void);
 
 // Testsuite 'ComponentLifecycle'
 void ComponentLifecycle_ctor_on_add(void);
@@ -696,7 +745,7 @@ void ComponentLifecycle_no_default_ctor_emplace(void);
 void ComponentLifecycle_default_init(void);
 void ComponentLifecycle_no_default_ctor_add(void);
 void ComponentLifecycle_no_default_ctor_add_relation(void);
-void ComponentLifecycle_no_default_ctor_add_w_object(void);
+void ComponentLifecycle_no_default_ctor_add_second(void);
 void ComponentLifecycle_no_default_ctor_set(void);
 void ComponentLifecycle_no_copy_ctor(void);
 void ComponentLifecycle_no_move_ctor(void);
@@ -717,6 +766,15 @@ void ComponentLifecycle_grow_no_default_ctor(void);
 void ComponentLifecycle_grow_no_default_ctor_move(void);
 void ComponentLifecycle_grow_no_default_ctor_move_w_component(void);
 void ComponentLifecycle_delete_no_default_ctor(void);
+void ComponentLifecycle_on_add_hook(void);
+void ComponentLifecycle_on_remove_hook(void);
+void ComponentLifecycle_on_set_hook(void);
+void ComponentLifecycle_on_add_hook_w_entity(void);
+void ComponentLifecycle_on_remove_hook_w_entity(void);
+void ComponentLifecycle_on_set_hook_w_entity(void);
+void ComponentLifecycle_chained_hooks(void);
+void ComponentLifecycle_ctor_w_2_worlds(void);
+void ComponentLifecycle_ctor_w_2_worlds_explicit_registration(void);
 
 // Testsuite 'Refs'
 void Refs_get_ref_by_ptr(void);
@@ -725,6 +783,7 @@ void Refs_ref_after_add(void);
 void Refs_ref_after_remove(void);
 void Refs_ref_after_set(void);
 void Refs_ref_before_set(void);
+void Refs_non_const_ref(void);
 
 // Testsuite 'Module'
 void Module_import(void);
@@ -772,8 +831,6 @@ void WorldFactory_entity_w_name(void);
 void WorldFactory_entity_w_id(void);
 void WorldFactory_prefab(void);
 void WorldFactory_prefab_w_name(void);
-void WorldFactory_type(void);
-void WorldFactory_type_w_name(void);
 void WorldFactory_system(void);
 void WorldFactory_system_w_name(void);
 void WorldFactory_system_w_expr(void);
@@ -805,6 +862,10 @@ void World_reimport_namespaced_module(void);
 void World_c_interop_module(void);
 void World_c_interop_after_reset(void);
 void World_implicit_register_w_new_world(void);
+void World_implicit_register_after_reset_register_w_custom_name(void);
+void World_register_after_reset_register_w_custom_name(void);
+void World_register_builtin_after_reset(void);
+void World_register_meta_after_reset(void);
 void World_count(void);
 void World_count_id(void);
 void World_count_pair(void);
@@ -839,16 +900,18 @@ void World_entity_w_name_as_component(void);
 void World_entity_as_component_2_worlds(void);
 void World_entity_as_namespaced_component_2_worlds(void);
 void World_entity_as_component_2_worlds_implicit_namespaced(void);
-void World_type_as_component(void);
-void World_type_w_name_as_component(void);
 void World_delete_with_id(void);
 void World_delete_with_type(void);
 void World_delete_with_pair(void);
 void World_delete_with_pair_type(void);
+void World_delete_with_implicit(void);
+void World_delete_with_pair_implicit(void);
 void World_remove_all_id(void);
 void World_remove_all_type(void);
 void World_remove_all_pair(void);
 void World_remove_all_pair_type(void);
+void World_remove_all_implicit(void);
+void World_remove_all_pair_implicit(void);
 void World_get_scope(void);
 void World_get_scope_type(void);
 void World_register_namespace_after_component(void);
@@ -865,6 +928,7 @@ void World_register_w_root_name(void);
 void World_register_nested_w_root_name(void);
 void World_set_lookup_path(void);
 void World_run_post_frame(void);
+void World_component_w_low_id(void);
 
 // Testsuite 'Singleton'
 void Singleton_set_get_singleton(void);
@@ -904,6 +968,27 @@ void Meta_units(void);
 void Meta_unit_w_quantity(void);
 void Meta_unit_w_prefix(void);
 void Meta_unit_w_over(void);
+
+// Testsuite 'TableLock'
+void TableLock_each(void);
+void TableLock_each_locked(void);
+void TableLock_each_without_entity(void);
+void TableLock_each_without_entity_locked(void);
+void TableLock_iter(void);
+void TableLock_iter_locked(void);
+void TableLock_iter_without_components(void);
+void TableLock_iter_without_components_locked(void);
+void TableLock_multi_get(void);
+void TableLock_multi_get_locked(void);
+void TableLock_multi_set(void);
+void TableLock_multi_set_locked(void);
+
+// Testsuite 'Doc'
+void Doc_set_brief(void);
+void Doc_set_name(void);
+void Doc_set_link(void);
+void Doc_set_color(void);
+void Doc_get_name_no_doc_name(void);
 
 bake_test_case Entity_testcases[] = {
     {
@@ -1179,6 +1264,42 @@ bake_test_case Entity_testcases[] = {
         Entity_is_disabled_component_enabled
     },
     {
+        "is_pair_enabled",
+        Entity_is_pair_enabled
+    },
+    {
+        "is_enabled_pair_enabled",
+        Entity_is_enabled_pair_enabled
+    },
+    {
+        "is_disabled_pair_enabled",
+        Entity_is_disabled_pair_enabled
+    },
+    {
+        "is_pair_enabled_w_ids",
+        Entity_is_pair_enabled_w_ids
+    },
+    {
+        "is_enabled_pair_enabled_w_ids",
+        Entity_is_enabled_pair_enabled_w_ids
+    },
+    {
+        "is_disabled_pair_enabled_w_ids",
+        Entity_is_disabled_pair_enabled_w_ids
+    },
+    {
+        "is_pair_enabled_w_tgt_id",
+        Entity_is_pair_enabled_w_tgt_id
+    },
+    {
+        "is_enabled_pair_enabled_w_tgt_id",
+        Entity_is_enabled_pair_enabled_w_tgt_id
+    },
+    {
+        "is_disabled_pair_enabled_w_tgt_id",
+        Entity_is_disabled_pair_enabled_w_tgt_id
+    },
+    {
         "get_type",
         Entity_get_type
     },
@@ -1203,12 +1324,40 @@ bake_test_case Entity_testcases[] = {
         Entity_override
     },
     {
+        "override_id",
+        Entity_override_id
+    },
+    {
+        "override_pair",
+        Entity_override_pair
+    },
+    {
+        "override_pair_w_tgt_id",
+        Entity_override_pair_w_tgt_id
+    },
+    {
+        "override_pair_w_ids",
+        Entity_override_pair_w_ids
+    },
+    {
         "set_override",
         Entity_set_override
     },
     {
         "set_override_lvalue",
         Entity_set_override_lvalue
+    },
+    {
+        "set_override_pair",
+        Entity_set_override_pair
+    },
+    {
+        "set_override_pair_w_tgt_id",
+        Entity_set_override_pair_w_tgt_id
+    },
+    {
+        "emplace_override",
+        Entity_emplace_override
     },
     {
         "implicit_name_to_char",
@@ -1261,6 +1410,22 @@ bake_test_case Entity_testcases[] = {
     {
         "set_3_components_w_callback",
         Entity_set_3_components_w_callback
+    },
+    {
+        "get_mut_1_component_w_callback",
+        Entity_get_mut_1_component_w_callback
+    },
+    {
+        "get_mut_2_components_w_callback",
+        Entity_get_mut_2_components_w_callback
+    },
+    {
+        "get_component_w_callback_nested",
+        Entity_get_component_w_callback_nested
+    },
+    {
+        "get_mut_component_w_callback_nested",
+        Entity_get_mut_component_w_callback_nested
     },
     {
         "defer_set_1_component",
@@ -1385,6 +1550,10 @@ bake_test_case Entity_testcases[] = {
     {
         "defer_w_with_implicit_component",
         Entity_defer_w_with_implicit_component
+    },
+    {
+        "defer_suspend_resume",
+        Entity_defer_suspend_resume
     },
     {
         "entity_id_str",
@@ -1535,6 +1704,18 @@ bake_test_case Entity_testcases[] = {
         Entity_child_of_w_type
     },
     {
+        "slot_of",
+        Entity_slot_of
+    },
+    {
+        "slot_of_w_type",
+        Entity_slot_of_w_type
+    },
+    {
+        "slot",
+        Entity_slot
+    },
+    {
         "id_get_entity",
         Entity_id_get_entity
     },
@@ -1619,6 +1800,10 @@ bake_test_case Entity_testcases[] = {
         Entity_entity_w_type_defer
     },
     {
+        "prefab_hierarchy_w_types",
+        Entity_prefab_hierarchy_w_types
+    },
+    {
         "entity_array",
         Entity_entity_array
     },
@@ -1659,8 +1844,20 @@ bake_test_case Entity_testcases[] = {
         Entity_add_if_true_r_o
     },
     {
-        "add_if_false_r_o",
-        Entity_add_if_false_r_o
+        "add_if_exclusive_r_o",
+        Entity_add_if_exclusive_r_o
+    },
+    {
+        "add_if_exclusive_R_o",
+        Entity_add_if_exclusive_R_o
+    },
+    {
+        "add_if_exclusive_R_O",
+        Entity_add_if_exclusive_R_O
+    },
+    {
+        "add_if_pair_w_0_object",
+        Entity_add_if_pair_w_0_object
     }
 };
 
@@ -1734,8 +1931,8 @@ bake_test_case Pairs_testcases[] = {
         Pairs_get_relation_from_id
     },
     {
-        "get_w_object_from_id",
-        Pairs_get_w_object_from_id
+        "get_second_from_id",
+        Pairs_get_second_from_id
     },
     {
         "get_recycled_relation_from_id",
@@ -1770,16 +1967,16 @@ bake_test_case Pairs_testcases[] = {
         Pairs_get_R_obj_id_t
     },
     {
-        "get_w_object",
-        Pairs_get_w_object
+        "get_second",
+        Pairs_get_second
     },
     {
-        "get_w_object_id",
-        Pairs_get_w_object_id
+        "get_second_id",
+        Pairs_get_second_id
     },
     {
-        "get_w_object_id_t",
-        Pairs_get_w_object_id_t
+        "get_second_id_t",
+        Pairs_get_second_id_t
     },
     {
         "each",
@@ -1826,8 +2023,8 @@ bake_test_case Pairs_testcases[] = {
         Pairs_has_tag_w_object
     },
     {
-        "has_w_object_tag",
-        Pairs_has_w_object_tag
+        "has_second_tag",
+        Pairs_has_second_tag
     },
     {
         "add_pair_type",
@@ -1878,8 +2075,8 @@ bake_test_case Pairs_testcases[] = {
         Pairs_set_pair_type_object
     },
     {
-        "set_get_w_object_variants",
-        Pairs_set_get_w_object_variants
+        "set_get_second_variants",
+        Pairs_set_get_second_variants
     },
     {
         "get_object_for_type_self",
@@ -1900,6 +2097,22 @@ bake_test_case Pairs_testcases[] = {
     {
         "get_object_for_id_not_found",
         Pairs_get_object_for_id_not_found
+    },
+    {
+        "deref_pair",
+        Pairs_deref_pair
+    },
+    {
+        "deref_const_pair",
+        Pairs_deref_const_pair
+    },
+    {
+        "deref_pair_obj",
+        Pairs_deref_pair_obj
+    },
+    {
+        "deref_const_pair_obj",
+        Pairs_deref_const_pair_obj
     }
 };
 
@@ -1999,6 +2212,30 @@ bake_test_case Enum_testcases[] = {
     {
         "enum_w_incorrect_size",
         Enum_enum_w_incorrect_size
+    },
+    {
+        "add_union_enum",
+        Enum_add_union_enum
+    },
+    {
+        "add_2_union_enums",
+        Enum_add_2_union_enums
+    },
+    {
+        "add_2_union_enums_reverse",
+        Enum_add_2_union_enums_reverse
+    },
+    {
+        "constant_from_entity",
+        Enum_constant_from_entity
+    },
+    {
+        "add_if",
+        Enum_add_if
+    },
+    {
+        "add_if_other",
+        Enum_add_if_other
     }
 };
 
@@ -2036,12 +2273,12 @@ bake_test_case Switch_testcases[] = {
         Switch_add_switch_w_type
     },
     {
-        "add_switch_w_type_component_first",
-        Switch_add_switch_w_type_component_first
-    },
-    {
         "add_remove_switch_w_type",
         Switch_add_remove_switch_w_type
+    },
+    {
+        "switch_enum_type",
+        Switch_switch_enum_type
     }
 };
 
@@ -2071,6 +2308,14 @@ bake_test_case Paths_testcases[] = {
         Paths_entity_lookup_depth_2
     },
     {
+        "entity_lookup_from_0",
+        Paths_entity_lookup_from_0
+    },
+    {
+        "entity_lookup_from_0_w_world",
+        Paths_entity_lookup_from_0_w_world
+    },
+    {
         "alias_component",
         Paths_alias_component
     },
@@ -2093,57 +2338,6 @@ bake_test_case Paths_testcases[] = {
     {
         "alias_entity_by_scoped_name",
         Paths_alias_entity_by_scoped_name
-    }
-};
-
-bake_test_case Type_testcases[] = {
-    {
-        "type_no_name",
-        Type_type_no_name
-    },
-    {
-        "null_args",
-        Type_null_args
-    },
-    {
-        "has_type",
-        Type_has_type
-    },
-    {
-        "has_entity",
-        Type_has_entity
-    },
-    {
-        "has_pair_type",
-        Type_has_pair_type
-    },
-    {
-        "has_pair_entity",
-        Type_has_pair_entity
-    },
-    {
-        "get",
-        Type_get
-    },
-    {
-        "get_out_of_range",
-        Type_get_out_of_range
-    },
-    {
-        "has_from_stage",
-        Type_has_from_stage
-    },
-    {
-        "create_type_from_system",
-        Type_create_type_from_system
-    },
-    {
-        "type_from_iter",
-        Type_type_from_iter
-    },
-    {
-        "type_from_staged_iter",
-        Type_type_from_staged_iter
     }
 };
 
@@ -2215,10 +2409,6 @@ bake_test_case System_testcases[] = {
     {
         "each_tag",
         System_each_tag
-    },
-    {
-        "system_from_id",
-        System_system_from_id
     },
     {
         "set_interval",
@@ -2309,8 +2499,8 @@ bake_test_case System_testcases[] = {
         System_custom_pipeline
     },
     {
-        "system_w_self",
-        System_system_w_self
+        "custom_pipeline_w_kind",
+        System_custom_pipeline_w_kind
     },
     {
         "instanced_query_w_singleton_each",
@@ -2349,12 +2539,16 @@ bake_test_case System_testcases[] = {
         System_create_w_no_template_args
     },
     {
-        "system_w_type_kind",
-        System_system_w_type_kind
-    },
-    {
         "system_w_type_kind_type_pipeline",
         System_system_w_type_kind_type_pipeline
+    },
+    {
+        "default_ctor",
+        System_default_ctor
+    },
+    {
+        "entity_ctor",
+        System_entity_ctor
     }
 };
 
@@ -2418,53 +2612,6 @@ bake_test_case Event_testcases[] = {
     {
         "emit_staged_from_stage",
         Event_emit_staged_from_stage
-    }
-};
-
-bake_test_case Trigger_testcases[] = {
-    {
-        "on_add",
-        Trigger_on_add
-    },
-    {
-        "on_remove",
-        Trigger_on_remove
-    },
-    {
-        "on_add_tag_action",
-        Trigger_on_add_tag_action
-    },
-    {
-        "on_add_tag_iter",
-        Trigger_on_add_tag_iter
-    },
-    {
-        "on_add_tag_each",
-        Trigger_on_add_tag_each
-    },
-    {
-        "trigger_w_self",
-        Trigger_trigger_w_self
-    },
-    {
-        "on_add_id",
-        Trigger_on_add_id
-    },
-    {
-        "on_add_id_arg",
-        Trigger_on_add_id_arg
-    },
-    {
-        "on_add_expr",
-        Trigger_on_add_expr
-    },
-    {
-        "create_w_no_template_args",
-        Trigger_create_w_no_template_args
-    },
-    {
-        "yield_existing",
-        Trigger_yield_existing
     }
 };
 
@@ -2735,6 +2882,38 @@ bake_test_case Query_testcases[] = {
     {
         "change_tracking",
         Query_change_tracking
+    },
+    {
+        "not_w_write",
+        Query_not_w_write
+    },
+    {
+        "get_first",
+        Query_get_first
+    },
+    {
+        "get_count_direct",
+        Query_get_count_direct
+    },
+    {
+        "get_is_true_direct",
+        Query_get_is_true_direct
+    },
+    {
+        "get_first_direct",
+        Query_get_first_direct
+    },
+    {
+        "each_w_no_this",
+        Query_each_w_no_this
+    },
+    {
+        "each_w_iter_no_this",
+        Query_each_w_iter_no_this
+    },
+    {
+        "invalid_each_w_no_this",
+        Query_invalid_each_w_no_this
     }
 };
 
@@ -2812,10 +2991,6 @@ bake_test_case QueryBuilder_testcases[] = {
         QueryBuilder_string_term
     },
     {
-        "string_term_w_expr",
-        QueryBuilder_string_term_w_expr
-    },
-    {
         "singleton_term",
         QueryBuilder_singleton_term
     },
@@ -2866,26 +3041,6 @@ bake_test_case QueryBuilder_testcases[] = {
     {
         "childof_superset_shortcut_w_self",
         QueryBuilder_childof_superset_shortcut_w_self
-    },
-    {
-        "isa_superset_max_depth_1",
-        QueryBuilder_isa_superset_max_depth_1
-    },
-    {
-        "isa_superset_max_depth_2",
-        QueryBuilder_isa_superset_max_depth_2
-    },
-    {
-        "isa_superset_min_depth_2",
-        QueryBuilder_isa_superset_min_depth_2
-    },
-    {
-        "isa_superset_min_depth_2_max_depth_3",
-        QueryBuilder_isa_superset_min_depth_2_max_depth_3
-    },
-    {
-        "role",
-        QueryBuilder_role
     },
     {
         "relation",
@@ -2972,8 +3127,40 @@ bake_test_case QueryBuilder_testcases[] = {
         QueryBuilder_group_by_template
     },
     {
+        "group_by_iter_one",
+        QueryBuilder_group_by_iter_one
+    },
+    {
+        "group_by_iter_one_template",
+        QueryBuilder_group_by_iter_one_template
+    },
+    {
+        "group_by_iter_one_all_groups",
+        QueryBuilder_group_by_iter_one_all_groups
+    },
+    {
         "create_w_no_template_args",
         QueryBuilder_create_w_no_template_args
+    },
+    {
+        "any_wildcard",
+        QueryBuilder_any_wildcard
+    },
+    {
+        "cascade",
+        QueryBuilder_cascade
+    },
+    {
+        "cascade_w_relationship",
+        QueryBuilder_cascade_w_relationship
+    },
+    {
+        "up_w_type",
+        QueryBuilder_up_w_type
+    },
+    {
+        "cascade_w_type",
+        QueryBuilder_cascade_w_type
     }
 };
 
@@ -3107,22 +3294,6 @@ bake_test_case FilterBuilder_testcases[] = {
         FilterBuilder_childof_superset_shortcut_w_self
     },
     {
-        "isa_superset_max_depth_1",
-        FilterBuilder_isa_superset_max_depth_1
-    },
-    {
-        "isa_superset_max_depth_2",
-        FilterBuilder_isa_superset_max_depth_2
-    },
-    {
-        "isa_superset_min_depth_2",
-        FilterBuilder_isa_superset_min_depth_2
-    },
-    {
-        "isa_superset_min_depth_2_max_depth_3",
-        FilterBuilder_isa_superset_min_depth_2_max_depth_3
-    },
-    {
         "relation",
         FilterBuilder_relation
     },
@@ -3239,6 +3410,10 @@ bake_test_case FilterBuilder_testcases[] = {
         FilterBuilder_const_in_term
     },
     {
+        "const_optional",
+        FilterBuilder_const_optional
+    },
+    {
         "create_w_no_template_args",
         FilterBuilder_create_w_no_template_args
     },
@@ -3247,12 +3422,28 @@ bake_test_case FilterBuilder_testcases[] = {
         FilterBuilder_2_terms_w_expr
     },
     {
-        "assert_on_multiple_expr_calls",
-        FilterBuilder_assert_on_multiple_expr_calls
-    },
-    {
         "assert_on_uninitialized_term",
         FilterBuilder_assert_on_uninitialized_term
+    },
+    {
+        "operator_shortcuts",
+        FilterBuilder_operator_shortcuts
+    },
+    {
+        "inout_shortcuts",
+        FilterBuilder_inout_shortcuts
+    },
+    {
+        "iter_column_w_const_as_array",
+        FilterBuilder_iter_column_w_const_as_array
+    },
+    {
+        "iter_column_w_const_as_ptr",
+        FilterBuilder_iter_column_w_const_as_ptr
+    },
+    {
+        "iter_column_w_const_deref",
+        FilterBuilder_iter_column_w_const_deref
     }
 };
 
@@ -3312,6 +3503,34 @@ bake_test_case RuleBuilder_testcases[] = {
     {
         "expr_w_var",
         RuleBuilder_expr_w_var
+    },
+    {
+        "get_first",
+        RuleBuilder_get_first
+    },
+    {
+        "get_count_direct",
+        RuleBuilder_get_count_direct
+    },
+    {
+        "get_is_true_direct",
+        RuleBuilder_get_is_true_direct
+    },
+    {
+        "get_first_direct",
+        RuleBuilder_get_first_direct
+    },
+    {
+        "var_src_w_prefixed_name",
+        RuleBuilder_var_src_w_prefixed_name
+    },
+    {
+        "var_first_w_prefixed_name",
+        RuleBuilder_var_first_w_prefixed_name
+    },
+    {
+        "var_second_w_prefixed_name",
+        RuleBuilder_var_second_w_prefixed_name
     }
 };
 
@@ -3420,10 +3639,6 @@ bake_test_case Observer_testcases[] = {
         Observer_2_terms_un_set
     },
     {
-        "observer_w_self",
-        Observer_observer_w_self
-    },
-    {
         "10_terms",
         Observer_10_terms
     },
@@ -3454,6 +3669,38 @@ bake_test_case Observer_testcases[] = {
     {
         "yield_existing_2_terms",
         Observer_yield_existing_2_terms
+    },
+    {
+        "default_ctor",
+        Observer_default_ctor
+    },
+    {
+        "entity_ctor",
+        Observer_entity_ctor
+    },
+    {
+        "on_add",
+        Observer_on_add
+    },
+    {
+        "on_remove",
+        Observer_on_remove
+    },
+    {
+        "on_add_tag_action",
+        Observer_on_add_tag_action
+    },
+    {
+        "on_add_tag_iter",
+        Observer_on_add_tag_iter
+    },
+    {
+        "on_add_tag_each",
+        Observer_on_add_tag_each
+    },
+    {
+        "on_add_expr",
+        Observer_on_add_expr
     }
 };
 
@@ -3489,6 +3736,50 @@ bake_test_case Filter_testcases[] = {
     {
         "default_ctor_no_assign",
         Filter_default_ctor_no_assign
+    },
+    {
+        "term_get_id",
+        Filter_term_get_id
+    },
+    {
+        "term_get_subj",
+        Filter_term_get_subj
+    },
+    {
+        "term_get_pred",
+        Filter_term_get_pred
+    },
+    {
+        "term_get_obj",
+        Filter_term_get_obj
+    },
+    {
+        "get_first",
+        Filter_get_first
+    },
+    {
+        "get_count_direct",
+        Filter_get_count_direct
+    },
+    {
+        "get_is_true_direct",
+        Filter_get_is_true_direct
+    },
+    {
+        "get_first_direct",
+        Filter_get_first_direct
+    },
+    {
+        "each_w_no_this",
+        Filter_each_w_no_this
+    },
+    {
+        "each_w_iter_no_this",
+        Filter_each_w_iter_no_this
+    },
+    {
+        "invalid_each_w_no_this",
+        Filter_invalid_each_w_no_this
     }
 };
 
@@ -3570,8 +3861,8 @@ bake_test_case ComponentLifecycle_testcases[] = {
         ComponentLifecycle_no_default_ctor_add_relation
     },
     {
-        "no_default_ctor_add_w_object",
-        ComponentLifecycle_no_default_ctor_add_w_object
+        "no_default_ctor_add_second",
+        ComponentLifecycle_no_default_ctor_add_second
     },
     {
         "no_default_ctor_set",
@@ -3652,6 +3943,42 @@ bake_test_case ComponentLifecycle_testcases[] = {
     {
         "delete_no_default_ctor",
         ComponentLifecycle_delete_no_default_ctor
+    },
+    {
+        "on_add_hook",
+        ComponentLifecycle_on_add_hook
+    },
+    {
+        "on_remove_hook",
+        ComponentLifecycle_on_remove_hook
+    },
+    {
+        "on_set_hook",
+        ComponentLifecycle_on_set_hook
+    },
+    {
+        "on_add_hook_w_entity",
+        ComponentLifecycle_on_add_hook_w_entity
+    },
+    {
+        "on_remove_hook_w_entity",
+        ComponentLifecycle_on_remove_hook_w_entity
+    },
+    {
+        "on_set_hook_w_entity",
+        ComponentLifecycle_on_set_hook_w_entity
+    },
+    {
+        "chained_hooks",
+        ComponentLifecycle_chained_hooks
+    },
+    {
+        "ctor_w_2_worlds",
+        ComponentLifecycle_ctor_w_2_worlds
+    },
+    {
+        "ctor_w_2_worlds_explicit_registration",
+        ComponentLifecycle_ctor_w_2_worlds_explicit_registration
     }
 };
 
@@ -3679,6 +4006,10 @@ bake_test_case Refs_testcases[] = {
     {
         "ref_before_set",
         Refs_ref_before_set
+    },
+    {
+        "non_const_ref",
+        Refs_non_const_ref
     }
 };
 
@@ -3849,14 +4180,6 @@ bake_test_case WorldFactory_testcases[] = {
         WorldFactory_prefab_w_name
     },
     {
-        "type",
-        WorldFactory_type
-    },
-    {
-        "type_w_name",
-        WorldFactory_type_w_name
-    },
-    {
         "system",
         WorldFactory_system
     },
@@ -3974,6 +4297,22 @@ bake_test_case World_testcases[] = {
     {
         "implicit_register_w_new_world",
         World_implicit_register_w_new_world
+    },
+    {
+        "implicit_register_after_reset_register_w_custom_name",
+        World_implicit_register_after_reset_register_w_custom_name
+    },
+    {
+        "register_after_reset_register_w_custom_name",
+        World_register_after_reset_register_w_custom_name
+    },
+    {
+        "register_builtin_after_reset",
+        World_register_builtin_after_reset
+    },
+    {
+        "register_meta_after_reset",
+        World_register_meta_after_reset
     },
     {
         "count",
@@ -4112,14 +4451,6 @@ bake_test_case World_testcases[] = {
         World_entity_as_component_2_worlds_implicit_namespaced
     },
     {
-        "type_as_component",
-        World_type_as_component
-    },
-    {
-        "type_w_name_as_component",
-        World_type_w_name_as_component
-    },
-    {
         "delete_with_id",
         World_delete_with_id
     },
@@ -4136,6 +4467,14 @@ bake_test_case World_testcases[] = {
         World_delete_with_pair_type
     },
     {
+        "delete_with_implicit",
+        World_delete_with_implicit
+    },
+    {
+        "delete_with_pair_implicit",
+        World_delete_with_pair_implicit
+    },
+    {
         "remove_all_id",
         World_remove_all_id
     },
@@ -4150,6 +4489,14 @@ bake_test_case World_testcases[] = {
     {
         "remove_all_pair_type",
         World_remove_all_pair_type
+    },
+    {
+        "remove_all_implicit",
+        World_remove_all_implicit
+    },
+    {
+        "remove_all_pair_implicit",
+        World_remove_all_pair_implicit
     },
     {
         "get_scope",
@@ -4214,6 +4561,10 @@ bake_test_case World_testcases[] = {
     {
         "run_post_frame",
         World_run_post_frame
+    },
+    {
+        "component_w_low_id",
+        World_component_w_low_id
     }
 };
 
@@ -4354,26 +4705,100 @@ bake_test_case Meta_testcases[] = {
     }
 };
 
+bake_test_case TableLock_testcases[] = {
+    {
+        "each",
+        TableLock_each
+    },
+    {
+        "each_locked",
+        TableLock_each_locked
+    },
+    {
+        "each_without_entity",
+        TableLock_each_without_entity
+    },
+    {
+        "each_without_entity_locked",
+        TableLock_each_without_entity_locked
+    },
+    {
+        "iter",
+        TableLock_iter
+    },
+    {
+        "iter_locked",
+        TableLock_iter_locked
+    },
+    {
+        "iter_without_components",
+        TableLock_iter_without_components
+    },
+    {
+        "iter_without_components_locked",
+        TableLock_iter_without_components_locked
+    },
+    {
+        "multi_get",
+        TableLock_multi_get
+    },
+    {
+        "multi_get_locked",
+        TableLock_multi_get_locked
+    },
+    {
+        "multi_set",
+        TableLock_multi_set
+    },
+    {
+        "multi_set_locked",
+        TableLock_multi_set_locked
+    }
+};
+
+bake_test_case Doc_testcases[] = {
+    {
+        "set_brief",
+        Doc_set_brief
+    },
+    {
+        "set_name",
+        Doc_set_name
+    },
+    {
+        "set_link",
+        Doc_set_link
+    },
+    {
+        "set_color",
+        Doc_set_color
+    },
+    {
+        "get_name_no_doc_name",
+        Doc_get_name_no_doc_name
+    }
+};
+
 static bake_test_suite suites[] = {
     {
         "Entity",
         NULL,
         NULL,
-        189,
+        217,
         Entity_testcases
     },
     {
         "Pairs",
         NULL,
         NULL,
-        59,
+        63,
         Pairs_testcases
     },
     {
         "Enum",
         NULL,
         NULL,
-        24,
+        30,
         Enum_testcases
     },
     {
@@ -4387,15 +4812,8 @@ static bake_test_suite suites[] = {
         "Paths",
         NULL,
         NULL,
-        12,
+        14,
         Paths_testcases
-    },
-    {
-        "Type",
-        NULL,
-        NULL,
-        12,
-        Type_testcases
     },
     {
         "System",
@@ -4412,13 +4830,6 @@ static bake_test_suite suites[] = {
         Event_testcases
     },
     {
-        "Trigger",
-        NULL,
-        NULL,
-        11,
-        Trigger_testcases
-    },
-    {
         "Iterable",
         NULL,
         NULL,
@@ -4429,28 +4840,28 @@ static bake_test_suite suites[] = {
         "Query",
         NULL,
         NULL,
-        62,
+        70,
         Query_testcases
     },
     {
         "QueryBuilder",
         NULL,
         NULL,
-        59,
+        61,
         QueryBuilder_testcases
     },
     {
         "FilterBuilder",
         NULL,
         NULL,
-        69,
+        70,
         FilterBuilder_testcases
     },
     {
         "RuleBuilder",
         NULL,
         NULL,
-        14,
+        21,
         RuleBuilder_testcases
     },
     {
@@ -4464,28 +4875,28 @@ static bake_test_suite suites[] = {
         "Observer",
         NULL,
         NULL,
-        13,
+        20,
         Observer_testcases
     },
     {
         "Filter",
         NULL,
         NULL,
-        8,
+        19,
         Filter_testcases
     },
     {
         "ComponentLifecycle",
         NULL,
         NULL,
-        40,
+        49,
         ComponentLifecycle_testcases
     },
     {
         "Refs",
         NULL,
         NULL,
-        6,
+        7,
         Refs_testcases
     },
     {
@@ -4513,14 +4924,14 @@ static bake_test_suite suites[] = {
         "WorldFactory",
         NULL,
         NULL,
-        14,
+        12,
         WorldFactory_testcases
     },
     {
         "World",
         NULL,
         NULL,
-        82,
+        89,
         World_testcases
     },
     {
@@ -4543,6 +4954,20 @@ static bake_test_suite suites[] = {
         NULL,
         9,
         Meta_testcases
+    },
+    {
+        "TableLock",
+        NULL,
+        NULL,
+        12,
+        TableLock_testcases
+    },
+    {
+        "Doc",
+        NULL,
+        NULL,
+        5,
+        Doc_testcases
     }
 };
 

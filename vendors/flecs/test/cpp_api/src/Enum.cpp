@@ -4,6 +4,10 @@ enum StandardEnum {
     Red, Green, Blue
 };
 
+enum AnotherEnum {
+    Standing, Walking, Running
+};
+
 enum SparseEnum {
     Black = 1, White = 3, Grey = 5
 };
@@ -235,7 +239,7 @@ void Enum_add_enum_constant() {
     flecs::id id = e.type().get(0);
     test_assert(id.is_pair());
 
-    auto r = id.relation();
+    auto r = id.first();
     test_assert(r == ecs.component<StandardEnum>());
 
     auto c = r.lookup("Red");
@@ -253,7 +257,7 @@ void Enum_add_enum_class_constant() {
     flecs::id id = e.type().get(0);
     test_assert(id.is_pair());
 
-    auto r = id.relation();
+    auto r = id.first();
     test_assert(r == ecs.component<EnumClass>());
 
     auto c = r.lookup("Sand");
@@ -294,7 +298,7 @@ void Enum_has_enum() {
     test_assert(!e.has(StandardEnum::Green));
     test_assert(!e.has(StandardEnum::Blue));
 
-    auto r = e.type().get(0).relation();
+    auto r = e.type().get(0).first();
     test_assert(r != 0);
     test_assert(r == ecs.component<StandardEnum>());
 
@@ -425,12 +429,12 @@ void Enum_enum_type_from_stage() {
 
     auto stage = ecs.get_stage(0);
 
-    ecs.staging_begin();
+    ecs.readonly_begin();
 
     auto enum_type = flecs::enum_type<StandardEnum>(stage);
     test_assert(enum_type.entity() == ecs.component<StandardEnum>());
 
-    ecs.staging_end();
+    ecs.readonly_end();
 }
 
 void Enum_add_enum_from_stage() {
@@ -438,12 +442,12 @@ void Enum_add_enum_from_stage() {
 
     auto stage = ecs.get_stage(0);
 
-    ecs.staging_begin();
+    ecs.readonly_begin();
 
     auto e = stage.entity().add(StandardEnum::Red);
     test_assert(!e.has(StandardEnum::Red));
 
-    ecs.staging_end();
+    ecs.readonly_end();
 
     test_assert(e.has(StandardEnum::Red));
 }
@@ -544,9 +548,9 @@ void Enum_add_enum_constant_w_tag() {
     auto e_green = enum_type.entity(Green);
     auto e_blue = enum_type.entity(Blue);
 
-    auto t1 = e1.get_object<MyTag>();
-    auto t2 = e2.get_object<MyTag>();
-    auto t3 = e3.get_object<MyTag>();
+    auto t1 = e1.target<MyTag>();
+    auto t2 = e2.target<MyTag>();
+    auto t3 = e3.target<MyTag>();
 
     test_assert(t1 == e_red);
     test_assert(t2 == e_green);
@@ -621,4 +625,117 @@ void Enum_enum_w_incorrect_size() {
 
     test_expect_abort();
     ecs.component<EnumIncorrectType>();
+}
+
+void Enum_add_union_enum() {
+    flecs::world ecs;
+
+    ecs.component<StandardEnum>().add(flecs::Union);
+
+    auto t_color = flecs::enum_type<StandardEnum>(ecs);
+    auto red = t_color.entity(StandardEnum::Red);
+    auto blue = t_color.entity(StandardEnum::Blue);
+
+    auto e1 = ecs.entity().add(StandardEnum::Red);
+    auto e2 = ecs.entity().add(StandardEnum::Blue);
+
+    test_assert(e1.type() == e2.type());
+    test_assert(e1.target<StandardEnum>() == red);
+    test_assert(e2.target<StandardEnum>() == blue);
+    test_assert(e1.has(StandardEnum::Red));
+    test_assert(e2.has(StandardEnum::Blue));
+}
+
+void Enum_add_2_union_enums() {
+    flecs::world ecs;
+
+    ecs.component<StandardEnum>().add(flecs::Union);
+    ecs.component<AnotherEnum>().add(flecs::Union);
+
+    auto e = ecs.entity();
+    e.add(StandardEnum::Red);
+    e.add(AnotherEnum::Running);
+
+    test_assert(e.has(StandardEnum::Red));
+    test_assert(e.has(AnotherEnum::Running));
+    test_assert(e.target<StandardEnum>() != 0);
+    test_assert(e.target<AnotherEnum>() != 0);
+
+    auto t_color = flecs::enum_type<StandardEnum>(ecs);
+    auto t_AnotherEnum = flecs::enum_type<AnotherEnum>(ecs);
+    auto red = t_color.entity(StandardEnum::Red);
+    auto running = t_AnotherEnum.entity(AnotherEnum::Running);
+
+    test_assert(e.target<StandardEnum>() == red);
+    test_assert(e.target<AnotherEnum>() == running);
+}
+
+void Enum_add_2_union_enums_reverse() {
+    flecs::world ecs;
+
+    ecs.component<StandardEnum>().add(flecs::Union);
+    ecs.component<AnotherEnum>().add(flecs::Union);
+
+    auto e = ecs.entity();
+    e.add(AnotherEnum::Running);
+    e.add(StandardEnum::Red);
+
+    test_assert(e.has(StandardEnum::Red));
+    test_assert(e.has(AnotherEnum::Running));
+    test_assert(e.target<StandardEnum>() != 0);
+    test_assert(e.target<AnotherEnum>() != 0);
+
+    auto t_color = flecs::enum_type<StandardEnum>(ecs);
+    auto t_AnotherEnum = flecs::enum_type<AnotherEnum>(ecs);
+    auto red = t_color.entity(StandardEnum::Red);
+    auto running = t_AnotherEnum.entity(AnotherEnum::Running);
+
+    test_assert(e.target<StandardEnum>() == red);
+    test_assert(e.target<AnotherEnum>() == running);
+}
+
+void Enum_constant_from_entity() {
+    flecs::world ecs;
+
+    flecs::entity e_red = ecs.to_entity(StandardEnum::Red);
+    test_assert(e_red != 0);
+
+    flecs::entity e_green = ecs.to_entity(StandardEnum::Green);
+    test_assert(e_green != 0);
+
+    flecs::entity e_blue = ecs.to_entity(StandardEnum::Blue);
+    test_assert(e_blue != 0);
+
+    test_assert(e_red.to_constant<StandardEnum>() == StandardEnum::Red);
+    test_assert(e_green.to_constant<StandardEnum>() == StandardEnum::Green);
+    test_assert(e_blue.to_constant<StandardEnum>() == StandardEnum::Blue);
+}
+
+void Enum_add_if() {
+    flecs::world ecs;
+
+    auto e = ecs.entity();
+
+    e.add_if(true, StandardEnum::Red);
+    test_assert(e.has(StandardEnum::Red));
+    test_assert(e.has<StandardEnum>(ecs.to_entity(StandardEnum::Red)));
+
+    e.add_if(false, StandardEnum::Red);
+    test_assert(!e.has(StandardEnum::Red));
+    test_assert(!e.has<StandardEnum>(ecs.to_entity(StandardEnum::Red)));
+}
+
+void Enum_add_if_other() {
+    flecs::world ecs;
+
+    auto e = ecs.entity();
+
+    e.add(StandardEnum::Red);
+    test_assert(e.has(StandardEnum::Red));
+    test_assert(e.has<StandardEnum>(ecs.to_entity(StandardEnum::Red)));
+
+    e.add_if(false, StandardEnum::Blue);
+    test_assert(!e.has(StandardEnum::Blue));
+    test_assert(!e.has(StandardEnum::Red));
+    test_assert(!e.has<StandardEnum>(ecs.to_entity(StandardEnum::Red)));
 }

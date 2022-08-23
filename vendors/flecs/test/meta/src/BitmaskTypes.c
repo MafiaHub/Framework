@@ -47,7 +47,7 @@ void meta_test_constant(
         if (!ecs_os_strcmp(c->name, name)) {
             test_int(c->value, value);
 
-            ecs_u32_t *vptr = ecs_get_pair_object(world, c->constant, 
+            const ecs_u32_t *vptr = ecs_get_pair_object(world, c->constant, 
                 EcsConstant, ecs_u32_t);
             if (vptr) {
                 test_int(*vptr, value);
@@ -63,7 +63,7 @@ void meta_test_constant(
 void BitmaskTypes_bitmask_1_constant() {
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t) {
+    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t){
         .constants = {
             {"Lettuce"}
         }
@@ -78,7 +78,7 @@ void BitmaskTypes_bitmask_1_constant() {
 void BitmaskTypes_bitmask_2_constants() {
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t) {
+    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t){
         .constants = {
             {"Lettuce"}, {"Bacon"}
         }
@@ -94,7 +94,7 @@ void BitmaskTypes_bitmask_2_constants() {
 void BitmaskTypes_bitmask_3_constants() {
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t) {
+    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t){
         .constants = {
             {"Lettuce"}, {"Bacon"}, {"Tomato"}
         }
@@ -111,7 +111,7 @@ void BitmaskTypes_bitmask_3_constants() {
 void BitmaskTypes_bitmask_4_constants() {
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t) {
+    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t){
         .constants = {
             {"Lettuce"}, {"Bacon"}, {"Tomato"}, {"Cheese"}
         }
@@ -129,7 +129,7 @@ void BitmaskTypes_bitmask_4_constants() {
 void BitmaskTypes_bitmask_4_constants_manual_values() {
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t) {
+    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t){
         .constants = {
             {"Lettuce", 8}, {"Bacon", 4}, {"Tomato", 2}, {"BLT", 16}
         }
@@ -153,7 +153,7 @@ void BitmaskTypes_struct_w_bitmask() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t) {
+    ecs_entity_t b = ecs_bitmask_init(world, &(ecs_bitmask_desc_t){
         .constants = {
             {"Lettuce"}, {"Bacon"}, {"Tomato"}
         }
@@ -161,8 +161,8 @@ void BitmaskTypes_struct_w_bitmask() {
 
     test_assert(b != 0);
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"before", ecs_id(ecs_bool_t)},
             {"v", b},
@@ -177,6 +177,21 @@ void BitmaskTypes_struct_w_bitmask() {
     meta_test_member(world, t, T, before, ecs_id(ecs_bool_t), 1);
     meta_test_member(world, t, T, v, b, 1);
     meta_test_member(world, t, T, after, ecs_id(ecs_bool_t), 1);
+
+    ecs_fini(world);
+}
+
+void BitmaskTypes_bitmask_w_short_notation() {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t b = ecs_bitmask(world, {
+        .constants = {
+            {"Lettuce"}, {"Bacon"}, {"Tomato"}
+        }
+    });
+
+    test_assert(b != 0);
+    test_assert(ecs_has(world, b, EcsBitmask));
 
     ecs_fini(world);
 }

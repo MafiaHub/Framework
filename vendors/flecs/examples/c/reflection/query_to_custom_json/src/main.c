@@ -20,24 +20,24 @@ int main(int argc, char *argv[]) {
     ECS_COMPONENT(ecs, Mass);
 
     // Add reflection data to components
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Position), // Make sure to use existing id
+    ecs_struct(ecs, {
+        .entity = ecs_id(Position), // Make sure to use existing id
         .members = {
             { .name = "x", .type = ecs_id(ecs_f32_t) },
             { .name = "y", .type = ecs_id(ecs_f32_t) }
         }
     });
 
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Velocity), // Make sure to use existing id
+    ecs_struct(ecs, {
+        .entity = ecs_id(Velocity), // Make sure to use existing id
         .members = {
             { .name = "x", .type = ecs_id(ecs_f32_t) },
             { .name = "y", .type = ecs_id(ecs_f32_t) }
         }
     });
 
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Mass), // Make sure to use existing id
+    ecs_struct(ecs, {
+        .entity = ecs_id(Mass), // Make sure to use existing id
         .members = {
             { .name = "value", .type = ecs_id(ecs_f32_t) }
         }
@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
     ecs_set(ecs, d, Mass, {20});
 
     // Query for components
-    ecs_query_t *q = ecs_query_init(ecs, &(ecs_query_desc_t) {
+    ecs_query_t *q = ecs_query(ecs, {
         .filter.terms = {
             { .id = ecs_id(Position) }, { .id = ecs_id(Velocity) }
         }

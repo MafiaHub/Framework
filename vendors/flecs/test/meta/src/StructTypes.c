@@ -60,8 +60,8 @@ void StructTypes_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)}
         }
@@ -84,8 +84,8 @@ void StructTypes_i32_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_i32_t)}
@@ -111,8 +111,8 @@ void StructTypes_i32_i32_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_i32_t)},
@@ -139,8 +139,8 @@ void StructTypes_bool_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_bool_t)},
             {"y", ecs_id(ecs_i32_t)}
@@ -166,8 +166,8 @@ void StructTypes_bool_bool_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_bool_t)},
             {"y", ecs_id(ecs_bool_t)},
@@ -196,8 +196,8 @@ void StructTypes_bool_i32_bool_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_bool_t)},
             {"y", ecs_id(ecs_i32_t)},
@@ -226,8 +226,8 @@ void StructTypes_i32_bool() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_bool_t)}
@@ -253,8 +253,8 @@ void StructTypes_i32_bool_bool() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_bool_t)},
@@ -283,8 +283,8 @@ void StructTypes_i32_bool_bool_bool() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_bool_t)},
@@ -313,8 +313,8 @@ void StructTypes_i32_i64() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_i64_t)}
@@ -340,8 +340,8 @@ void StructTypes_i32_i64_i32() {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.name = "T",
+    ecs_entity_t t = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
         .members = {
             {"x", ecs_id(ecs_i32_t)},
             {"y", ecs_id(ecs_i64_t)},
@@ -401,8 +401,8 @@ void StructTypes_partial_type() {
 
     ECS_COMPONENT(world, Position);
 
-    ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Position),
+    ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(Position),
         .members = {{ .name = "x", .type = ecs_id(ecs_f32_t) }}
     });
 
@@ -429,8 +429,8 @@ void StructTypes_partial_type_custom_offset() {
 
     ECS_COMPONENT(world, Position);
 
-    ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(Position),
+    ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(Position),
         .members = {{ 
             .name = "y", 
             .type = ecs_id(ecs_f32_t), 
@@ -452,6 +452,35 @@ void StructTypes_partial_type_custom_offset() {
 
     meta_test_struct(world, s, Position);
     meta_test_member(world, s, Position, y, ecs_id(ecs_f32_t), 1);
+
+    ecs_fini(world);
+}
+
+void StructTypes_struct_w_short_notation() {
+    typedef struct {
+        ecs_i32_t x;
+        ecs_i32_t y;
+        ecs_i32_t z;
+    } T;
+
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t t = ecs_struct(world, {
+        .entity = ecs_entity(world, {.name = "T"}),
+        .members = {
+            {"x", ecs_id(ecs_i32_t)},
+            {"y", ecs_id(ecs_i32_t)},
+            {"z", ecs_id(ecs_i32_t)}
+        }
+    });
+
+    test_assert(t != 0);
+    test_str(ecs_get_name(world, t), "T");
+
+    meta_test_struct(world, t, T);
+    meta_test_member(world, t, T, x, ecs_id(ecs_i32_t), 1);
+    meta_test_member(world, t, T, y, ecs_id(ecs_i32_t), 1);
+    meta_test_member(world, t, T, z, ecs_id(ecs_i32_t), 1);
 
     ecs_fini(world);
 }

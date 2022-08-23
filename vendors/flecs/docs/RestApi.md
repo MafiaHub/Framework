@@ -19,16 +19,44 @@ When an application uses the app addon [FLECS_APP](https://flecs.docsforge.com/m
 // Start application main loop, enable REST interface
 ecs_app_run(world, &(ecs_app_desc_t){
     .enable_rest = true
-})
+});
 ```
 ```cpp
 // Start application main loop, enable REST interface
-world.app().enable_rest().run();
+world.app()
+  .enable_rest()
+  .run();
 ```
 
 To test if the REST API is working, navigate to http://localhost:27750/entity/flecs/core/World. Upon success this request should return a reply that looks like:
 ```json
 {"path":"World", "ids":[["flecs.rest.Rest"], ["flecs.core.Identifier", "flecs.core.Name"], ["flecs.core.Identifier", "flecs.core.Symbol"], ["flecs.core.ChildOf", "flecs.core"], ["flecs.doc.Description", "flecs.core.Name"], ["flecs.doc.Description", "flecs.doc.Brief"]]}
+```
+
+When the monitor module is imported, the REST API provides a `stats` endpoint with statistics for different time intervals:
+
+```c
+// Import monitor addon
+ECS_IMPORT(world, FlecsMonitor);
+```
+```cpp
+world.import<flecs::monitor>();
+```
+
+When an application uses the app addon [FLECS_APP](https://flecs.docsforge.com/master/api-app/) the monitoring can be enabled like this:
+```c
+// Start application main loop, enable REST interface and monitoring
+ecs_app_run(world, &(ecs_app_desc_t){
+    .enable_rest = true,
+    .enable_monitor = true
+});
+```
+```cpp
+// Start application main loop, enable REST interface and monitoring
+world.app()
+  .enable_rest()
+  .enable_monitor()
+  .run();
 ```
 
 For the full C/C++ API reference [see the REST addon documentation](https://flecs.docsforge.com/master/api-rest/).
@@ -60,8 +88,7 @@ This section describes the endpoints of the REST API.
 ```
 /entity/<path>
 ```
-The entity endpoint requests data from an entity. The path is the entity
-path or name of the entity to query for. The reply is formatted according to the [JSON serializer Entity](JsonFormat.md#entity) type.
+The entity endpoint requests data from an entity. The path is the entity path or name of the entity to query for. The reply is formatted according to the [JSON serializer Entity](JsonFormat.md#entity) type.
 
 The following parameters can be provided to the endpoint:
 
@@ -145,17 +172,17 @@ Add top-level "ids" array with components as specified by query.
 Add result-specific "ids" array with components as matched. Can be different from top-level "ids" array for queries with wildcards.
 
 **Default**: true
-  
-#### **subjects**
-Add result-specific "subjects" array with component source. A 0 element indicates the component is matched on the current (This) entity.
+
+#### **sources**
+Add result-specific "sources" array with component source. A 0 element indicates the component is matched on the current (This) entity.
 
 **Default**: true
-    
+
 #### **variables**
 Add result-specific "variables" array with values for variables, if any.
 
 **Default**: true
- 
+
 #### **is_set**
 Add result-specific "is_set" array with boolean elements indicating whether component was matched (used for optional terms).
 
@@ -178,8 +205,18 @@ Include doc name for entities.
 
 **Default**: false
 
+#### **entity_ids**
+Include numerical ids for entities.
+
+**Default**: false
+
 #### **variable_labels**
 Include doc name for variables.
+
+**Default**: false
+
+#### **variable_ids**
+Include numerical ids for variables.
 
 **Default**: false
 
@@ -187,7 +224,7 @@ Include doc name for variables.
 Include measurement on how long it took to serialize result.
 
 **Default**: false
-    
+
 #### **type_info**
 Add top-level "type_info" array with reflection data on the type in
 the query. If a query element has a component that has no reflection
@@ -201,3 +238,20 @@ data, a 0 element is added to the array.
 /query?q=Position&values=true
 /query?q=Position%2CVelocity
 ```
+
+### stats
+```
+/stats/<category>/<period>
+```
+The stats endpoint returns statistics for a specified category or period. This endpoint requires the monitor module to be imported (see above). The supported categories are:
+
+- `world`
+- `pipeline`
+
+The supported periods are:
+
+- 1s
+- 1m
+- 1h
+- 1d
+- 1w

@@ -25,7 +25,7 @@ public:
      * Resorting happens when a query iterator is obtained, and only if the table
      * data has changed.
      *
-     * If multiple queries that match the same (sub)set of tables specify different 
+     * If multiple queries that match the same (down)set of tables specify different 
      * sorting functions, resorting is likely to happen every time an iterator is
      * obtained, which can significantly slow down iterations.
      *
@@ -91,7 +91,7 @@ public:
     } 
 
     /** Specify parent query (creates subquery) */
-    Base& parent(const query_base& parent);
+    Base& observable(const query_base& parent);
     
 protected:
     virtual flecs::world_t* world_v() = 0;

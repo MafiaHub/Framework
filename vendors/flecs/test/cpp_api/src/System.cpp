@@ -66,11 +66,11 @@ void System_iter_shared() {
         .set<Position>({10, 20})
         .set<Velocity>({3, 4});
 
-    world.system<Position>().expr("Velocity(self|super)")
+    world.system<Position>().expr("Velocity(self|up)")
         .iter([](flecs::iter&it, Position *p) {
-            auto v = it.term<const Velocity>(2);
+            auto v = it.field<const Velocity>(2);
 
-            if (!it.is_owned(2)) {
+            if (!it.is_self(2)) {
                 for (auto i : it) {
                     p[i].x += v->x;
                     p[i].y += v->y;
@@ -342,12 +342,12 @@ void System_signature_shared() {
         .set<Position>({10, 20})
         .set<Velocity>({3, 4});
 
-    world.system<>().expr("Position, [in] Velocity(self|super)")
+    world.system<>().expr("Position, [in] Velocity(self|up)")
         .iter([](flecs::iter&it) {
             flecs::column<Position> p(it, 1);
             flecs::column<const Velocity> v(it, 2);
 
-            if (!it.is_owned(2)) {
+            if (!it.is_self(2)) {
                 for (auto i : it) {
                     p[i].x += v->x;
                     p[i].y += v->y;
@@ -516,22 +516,6 @@ void System_each_tag() {
     test_int(invoked, 1);
 }
 
-void System_system_from_id() {
-    flecs::world world;
-
-    uint32_t invoked = 0;
-
-    flecs::entity sys = world.system<>()
-        .iter([&](flecs::iter& it) {
-            invoked ++;
-        });
-
-    auto sys_from_id = world.system(sys);
-
-    sys_from_id.run();
-    test_int(invoked, 1);
-}
-
 void System_set_interval() {
     flecs::world world;
 
@@ -687,7 +671,7 @@ void System_get_query() {
     auto q = sys.query();
 
     q.iter([&](flecs::iter &it) {
-        auto pos = it.term<const Position>(1);
+        auto pos = it.field<const Position>(1);
         for (auto i : it) {
             test_int(i, pos[i].x);
             count ++;
@@ -1047,28 +1031,6 @@ void System_update_rate_filter() {
     }      
 }
 
-void System_default_ctor() {
-    flecs::world world;
-
-    flecs::system sys_var;
-
-    int count = 0;
-    auto sys = world.system<Position>()
-        .each([&](flecs::entity e, Position& p) {
-            test_int(p.x, 10);
-            test_int(p.y, 20);
-            count ++;
-        });
-
-    world.entity().set<Position>({10, 20});
-
-    sys_var = sys;
-
-    sys_var.run();
-
-    test_int(count, 1);
-}
-
 void System_test_auto_defer_each() {
     flecs::world world;
 
@@ -1136,37 +1098,42 @@ void System_test_auto_defer_iter() {
 void System_custom_pipeline() {
     flecs::world world;
 
-    auto PreFrame = world.entity();
-    auto OnFrame = world.entity();
-    auto PostFrame = world.entity();
-    
-    flecs::pipeline pip = world.pipeline("FooPipeline")
-        .add(PreFrame)
-        .add(OnFrame)
-        .add(PostFrame);
+    auto PreFrame = world.entity().add(flecs::Phase);
+    auto OnFrame = world.entity().add(flecs::Phase).depends_on(PreFrame);
+    auto PostFrame = world.entity().add(flecs::Phase).depends_on(OnFrame);
+    auto Tag = world.entity();
+
+    flecs::entity pip = world.pipeline()
+        .term(flecs::System)
+        .term(flecs::Phase).cascade(flecs::DependsOn)
+        .term(Tag)
+        .build();
 
     int count = 0;
 
-    world.system<>()
+    world.system()
         .kind(PostFrame)
         .iter([&](flecs::iter it) {
             test_int(count, 2);
             count ++;
-        });
+        })
+        .add(Tag);
 
-    world.system<>()
+    world.system()
         .kind(OnFrame)
         .iter([&](flecs::iter it) {
             test_int(count, 1);
             count ++;
-        });
+        })
+        .add(Tag);
 
-    world.system<>()
+    world.system()
         .kind(PreFrame)
         .iter([&](flecs::iter it) {
             test_int(count, 0);
             count ++;
-        });
+        })
+        .add(Tag);
 
     test_int(count, 0);
 
@@ -1177,24 +1144,46 @@ void System_custom_pipeline() {
     test_int(count, 3);
 }
 
-void System_system_w_self() {
+void System_custom_pipeline_w_kind() {
     flecs::world world;
 
-    auto self = world.entity();
+    auto Tag = world.entity();
 
-    bool invoked = false;
-    auto sys = world.system<Position>()
-        .self(self)
-        .iter([&](flecs::iter& it) {
-            test_assert(it.self() == self);
-            invoked = true;
+    flecs::entity pip = world.pipeline()
+        .term(flecs::System)
+        .term(Tag)
+        .build();
+
+    int count = 0;
+
+    world.system()
+        .kind(Tag)
+        .iter([&](flecs::iter it) {
+            test_int(count, 0);
+            count ++;
         });
 
-    world.entity().set<Position>({10, 20});
+    world.system()
+        .kind(Tag)
+        .iter([&](flecs::iter it) {
+            test_int(count, 1);
+            count ++;
+        });
 
-    sys.run();
+    world.system()
+        .kind(Tag)
+        .iter([&](flecs::iter it) {
+            test_int(count, 2);
+            count ++;
+        });
 
-    test_bool(invoked, true);
+    test_int(count, 0);
+
+    world.set_pipeline(pip);
+
+    world.progress();
+
+    test_int(count, 3);
 }
 
 void System_instanced_query_w_singleton_each() {
@@ -1515,7 +1504,7 @@ void System_instanced_query_w_base_iter() {
             test_assert(it.count() > 1);
 
             for (auto i : it) {
-                if (it.is_owned(3)) {
+                if (it.is_self(3)) {
                     p[i].x += v[i].x;
                     p[i].y += v[i].y;
                 } else {
@@ -1712,19 +1701,26 @@ void System_create_w_no_template_args() {
     test_int(count, 1);
 }
 
-struct PipelineType {
-    struct PreUpdate { };
-    struct OnUpdate { };
-};
+struct PipelineType {};
+struct First {};
+struct Second {};
 
-void System_system_w_type_kind() {
+void System_system_w_type_kind_type_pipeline() {
     flecs::world world;
 
-    auto pipeline = world.pipeline("MyPipeline")
-        .add<PipelineType::PreUpdate>()
-        .add<PipelineType::OnUpdate>();
+    world.component<Second>()
+        .add(flecs::Phase)
+        .depends_on(
+            world.component<First>()
+                .add(flecs::Phase)
+        );
 
-    world.set_pipeline(pipeline);
+    world.pipeline<PipelineType>()
+        .term(flecs::System)
+        .term(flecs::Phase).cascade(flecs::DependsOn)
+        .build();
+
+    world.set_pipeline<PipelineType>();
 
     auto entity = world.entity().add<Tag>();
 
@@ -1732,7 +1728,7 @@ void System_system_w_type_kind() {
     int32_t s2_count = 0;
 
     world.system<Tag>()
-        .kind<PipelineType::OnUpdate>()
+        .kind<Second>()
         .each([&](flecs::entity e, Tag) {
             test_assert(e == entity);
             test_int(s1_count, 0);
@@ -1741,7 +1737,7 @@ void System_system_w_type_kind() {
         });
 
     world.system<Tag>()
-        .kind<PipelineType::PreUpdate>()
+        .kind<First>()
         .each([&](flecs::entity e, Tag) {
             test_assert(e == entity);
             test_int(s1_count, 0);
@@ -1754,39 +1750,40 @@ void System_system_w_type_kind() {
     test_int(s2_count, 1);
 }
 
-void System_system_w_type_kind_type_pipeline() {
+void System_default_ctor() {
     flecs::world world;
 
-    world.pipeline<PipelineType>()
-        .add<PipelineType::PreUpdate>()
-        .add<PipelineType::OnUpdate>();
+    flecs::system sys_var;
 
-    world.set_pipeline<PipelineType>();
-
-    auto entity = world.entity().add<Tag>();
-
-    int32_t s1_count = 0;
-    int32_t s2_count = 0;
-
-    world.system<Tag>()
-        .kind<PipelineType::OnUpdate>()
-        .each([&](flecs::entity e, Tag) {
-            test_assert(e == entity);
-            test_int(s1_count, 0);
-            test_int(s2_count, 1);
-            s1_count ++;
+    int count = 0;
+    auto sys = world.system<Position>()
+        .each([&](flecs::entity e, Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            count ++;
         });
 
-    world.system<Tag>()
-        .kind<PipelineType::PreUpdate>()
-        .each([&](flecs::entity e, Tag) {
-            test_assert(e == entity);
-            test_int(s1_count, 0);
-            s2_count ++;
+    world.entity().set<Position>({10, 20});
+
+    sys_var = sys;
+
+    sys_var.run();
+
+    test_int(count, 1);
+}
+
+void System_entity_ctor() {
+    flecs::world world;
+
+    uint32_t invoked = 0;
+
+    flecs::entity sys = world.system<>()
+        .iter([&](flecs::iter& it) {
+            invoked ++;
         });
 
-    world.progress();
-    
-    test_int(s1_count, 1);
-    test_int(s2_count, 1);
+    auto sys_from_id = world.system(sys);
+
+    sys_from_id.run();
+    test_int(invoked, 1);
 }

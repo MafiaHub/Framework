@@ -19,8 +19,8 @@ int main(int argc, char *argv[]) {
     ECS_COMPONENT(ecs, TypeWithEnum);
 
     // Add reflection data to components
-    ecs_enum_init(ecs, &(ecs_enum_desc_t) {
-        .entity.entity = ecs_id(Color), // Make sure to use existing id
+    ecs_enum(ecs, {
+        .entity = ecs_id(Color), // Make sure to use existing id
         .constants = {
             { .name = "Red", .value = Red },
             { .name = "Green", .value = Green },
@@ -28,8 +28,8 @@ int main(int argc, char *argv[]) {
         }
     });
 
-    ecs_struct_init(ecs, &(ecs_struct_desc_t) {
-        .entity.entity = ecs_id(TypeWithEnum), // Make sure to use existing id
+    ecs_struct(ecs, {
+        .entity = ecs_id(TypeWithEnum), // Make sure to use existing id
         .members = {
             { .name = "color", .type = ecs_id(Color) }
         }

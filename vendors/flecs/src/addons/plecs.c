@@ -3,7 +3,6 @@
 #ifdef FLECS_PLECS
 
 #include "../private_api.h"
-#include <stdio.h>
 #include <ctype.h>
 
 #define TOK_NEWLINE '\n'
@@ -33,7 +32,8 @@ typedef struct {
     int32_t with_frame;
     int32_t using_frame;
 
-    char *comment;
+    char *annot[STACK_MAX_SIZE];
+    int32_t annot_count;
 
     bool with_stmt;
     bool scope_assign_stmt;
@@ -60,7 +60,7 @@ ecs_entity_t plecs_lookup(
             if (ecs_has_id(world, rel, EcsOneOf)) {
                 oneof = rel;
             } else {
-                oneof = ecs_get_object(world, rel, EcsOneOf, 0);
+                oneof = ecs_get_target(world, rel, EcsOneOf, 0);
             }
             if (oneof) {
                 return ecs_lookup_path_w_sep(
@@ -97,67 +97,7 @@ ecs_entity_t plecs_lookup_action(
 #endif
 
 static
-void clear_comment(
-    const char *expr,
-    const char *ptr,
-    plecs_state_t *state)
-{
-    if (state->comment) {
-        ecs_parser_error(state->name, expr, ptr - expr, "unused doc comment");
-        ecs_os_free(state->comment);
-        state->comment = NULL;
-
-        state->errors ++; /* Non-fatal error */
-    }
-}
-
-static
-const char* parse_fluff(
-    const char *expr,
-    const char *ptr,
-    plecs_state_t *state)
-{
-    char *comment;
-    const char *next = ecs_parse_fluff(ptr, &comment);
-
-    if (comment && comment[0] == '/') {
-        comment = (char*)ecs_parse_fluff(comment + 1, NULL);
-        int32_t len = (ecs_size_t)(next - comment);
-        int32_t newline_count = 0;
-
-        /* Trim trailing whitespaces */
-        while (len >= 0 && (isspace(comment[len - 1]))) {            
-            if (comment[len - 1] == '\n') {
-                newline_count ++;
-                if (newline_count > 1) {
-                    /* If newline separates comment from statement, discard */
-                    len = -1; 
-                    break;
-                }
-            }
-            len --;
-        }
-
-        if (len > 0) {
-            clear_comment(expr, ptr, state);
-            state->comment = ecs_os_calloc_n(char, len + 1);
-            ecs_os_strncpy(state->comment, comment, len);
-        } else {
-            ecs_parser_error(state->name, expr, ptr - expr, 
-                "unused doc comment");
-            state->errors ++;
-        }
-    } else {
-        if (ptr != next && state->comment) {
-            clear_comment(expr, ptr, state);
-        }
-    }
-
-    return next;
-}
-
-static
-ecs_entity_t ensure_entity(
+ecs_entity_t plecs_ensure_entity(
     ecs_world_t *world,
     plecs_state_t *state,
     const char *path,
@@ -175,7 +115,7 @@ ecs_entity_t ensure_entity(
              * with creating an entity as this can cause asserts later on */
             char *relstr = ecs_get_fullpath(world, rel);
             ecs_parser_error(state->name, 0, 0, 
-                "invalid identifier '%s' for relation '%s'", path, relstr);
+                "invalid identifier '%s' for relationship '%s'", path, relstr);
             ecs_os_free(relstr);
             return 0;
         }
@@ -207,17 +147,17 @@ ecs_entity_t ensure_entity(
 }
 
 static
-bool pred_is_subj(
+bool plecs_pred_is_subj(
     ecs_term_t *term,
     plecs_state_t *state)
 {
-    if (term->subj.name != NULL) {
+    if (term->src.name != NULL) {
         return false;
     }
-    if (term->obj.name != NULL) {
+    if (term->second.name != NULL) {
         return false;
     }
-    if (term->subj.set.mask == EcsNothing) {
+    if (ecs_term_match_0(term)) {
         return false;
     }
     if (state->with_stmt) {
@@ -238,18 +178,17 @@ bool pred_is_subj(
 
 /* Set masks aren't useful in plecs, so translate them back to entity names */
 static
-const char* set_mask_to_name(
+const char* plecs_set_mask_to_name(
     ecs_flags32_t flags) 
 {
+    flags &= EcsTraverseFlags;
     if (flags == EcsSelf) {
         return "self";
-    } else if (flags == EcsAll) {
-        return "all";
-    } else if (flags == EcsSuperSet) {
-        return "super";
-    } else if (flags == EcsSubSet) {
-        return "sub";
-    } else if (flags == EcsCascade || flags == (EcsSuperSet|EcsCascade)) {
+    } else if (flags == EcsUp) {
+        return "up";
+    } else if (flags == EcsDown) {
+        return "down";
+    } else if (flags == EcsCascade || flags == (EcsUp|EcsCascade)) {
         return "cascade";
     } else if (flags == EcsParent) {
         return "parent";
@@ -258,7 +197,52 @@ const char* set_mask_to_name(
 }
 
 static
-int create_term(
+char* plecs_trim_annot(
+    char *annot)
+{
+    annot = (char*)ecs_parse_whitespace(annot);
+    int32_t len = ecs_os_strlen(annot) - 1;
+    while (isspace(annot[len]) && (len > 0)) {
+        annot[len] = '\0';
+        len --;
+    }
+    return annot;
+}
+
+static
+void plecs_apply_annotations(
+    ecs_world_t *world,
+    ecs_entity_t subj,
+    plecs_state_t *state)
+{
+    (void)world;
+    (void)subj;
+    (void)state;
+#ifdef FLECS_DOC
+    int32_t i = 0, count = state->annot_count;
+    for (i = 0; i < count; i ++) {
+        char *annot = state->annot[i];
+        if (!ecs_os_strncmp(annot, "@brief ", 7)) {
+            annot = plecs_trim_annot(annot + 7);
+            ecs_doc_set_brief(world, subj, annot);
+        } else if (!ecs_os_strncmp(annot, "@link ", 6)) {
+            annot = plecs_trim_annot(annot + 6);
+            ecs_doc_set_link(world, subj, annot);
+        } else if (!ecs_os_strncmp(annot, "@name ", 6)) {
+            annot = plecs_trim_annot(annot + 6);
+            ecs_doc_set_name(world, subj, annot);
+        } else if (!ecs_os_strncmp(annot, "@color ", 7)) {
+            annot = plecs_trim_annot(annot + 7);
+            ecs_doc_set_color(world, subj, annot);
+        }
+    }
+#else
+    ecs_warn("cannot apply annotations, doc addon is missing");
+#endif
+}
+
+static
+int plecs_create_term(
     ecs_world_t *world, 
     ecs_term_t *term,
     const char *name,
@@ -271,36 +255,36 @@ int create_term(
     state->last_object = 0;
     state->last_assign_id = 0;
 
-    const char *pred_name = term->pred.name;
-    const char *subj_name = term->subj.name;
-    const char *obj_name = term->obj.name;
+    const char *pred_name = term->first.name;
+    const char *subj_name = term->src.name;
+    const char *obj_name = term->second.name;
 
     if (!subj_name) {
-        subj_name = set_mask_to_name(term->subj.set.mask);
+        subj_name = plecs_set_mask_to_name(term->src.flags);
     }
     if (!obj_name) {
-        obj_name = set_mask_to_name(term->obj.set.mask);
+        obj_name = plecs_set_mask_to_name(term->second.flags);
     }
 
-    if (!ecs_term_id_is_set(&term->pred)) {
+    if (!ecs_term_id_is_set(&term->first)) {
         ecs_parser_error(name, expr, column, "missing predicate in expression");
         return -1;
     }
 
-    if (state->assign_stmt && term->subj.entity != EcsThis) {
+    if (state->assign_stmt && !ecs_term_match_this(term)) {
         ecs_parser_error(name, expr, column, 
             "invalid statement in assign statement");
         return -1;
     }
 
-    bool pred_as_subj = pred_is_subj(term, state);
+    bool pred_as_subj = plecs_pred_is_subj(term, state);
 
-    ecs_entity_t pred = ensure_entity(world, state, pred_name, 0, pred_as_subj); 
-    ecs_entity_t subj = ensure_entity(world, state, subj_name, pred, true);
+    ecs_entity_t pred = plecs_ensure_entity(world, state, pred_name, 0, pred_as_subj); 
+    ecs_entity_t subj = plecs_ensure_entity(world, state, subj_name, pred, true);
     ecs_entity_t obj = 0;
 
-    if (ecs_term_id_is_set(&term->obj)) {
-        obj = ensure_entity(world, state, obj_name, pred,
+    if (ecs_term_id_is_set(&term->second)) {
+        obj = plecs_ensure_entity(world, state, obj_name, pred,
             state->assign_stmt == false);
         if (!obj) {
             return -1;
@@ -395,20 +379,22 @@ int create_term(
         ecs_add_id(world, subj, default_scope_type);
     }
 
-    /* If a comment preceded the statement, add it as a brief description */
-#ifdef FLECS_DOC
-    if (subj && state->comment) {
-        ecs_doc_set_brief(world, subj, state->comment);
-        ecs_os_free(state->comment);
-        state->comment = NULL;
+    /* If annotations preceded the statement, append */
+    if (state->annot_count) {
+        if (!subj) {
+            ecs_parser_error(name, expr, column, 
+                "missing subject for annotations");
+            return -1;
+        }
+
+        plecs_apply_annotations(world, subj, state);
     }
-#endif
 
     return 0;
 }
 
 static
-const char* parse_inherit_stmt(
+const char* plecs_parse_inherit_stmt(
     const char *name,
     const char *expr,
     const char *ptr,
@@ -433,7 +419,7 @@ const char* parse_inherit_stmt(
 }
 
 static
-const char* parse_assign_expr(
+const char* plecs_parse_assign_expr(
     ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -480,11 +466,10 @@ const char* parse_assign_expr(
         return NULL;
     }
 
-    void *value_ptr = ecs_get_mut_id(
-        world, assign_to, assign_id, NULL);
+    void *value_ptr = ecs_get_mut_id(world, assign_to, assign_id);
 
     ptr = ecs_parse_expr(world, ptr, type, value_ptr, 
-        &(ecs_parse_expr_desc_t) {
+        &(ecs_parse_expr_desc_t){
             .name = name,
             .expr = expr,
             .lookup_action = plecs_lookup_action,
@@ -501,7 +486,7 @@ const char* parse_assign_expr(
 }
 
 static
-const char* parse_assign_stmt(
+const char* plecs_parse_assign_stmt(
     ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -574,7 +559,7 @@ const char* parse_assign_stmt(
 }
 
 static
-const char* parse_using_stmt(
+const char* plecs_parse_using_stmt(
     const char *name,
     const char *expr,
     const char *ptr,
@@ -593,7 +578,7 @@ const char* parse_using_stmt(
 }
 
 static
-const char* parse_with_stmt(
+const char* plecs_parse_with_stmt(
     const char *name,
     const char *expr,
     const char *ptr,
@@ -617,7 +602,7 @@ const char* parse_with_stmt(
 }
 
 static
-const char* parse_scope_open(
+const char* plecs_parse_scope_open(
     ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -643,11 +628,11 @@ const char* parse_scope_open(
             ecs_set_scope(world, state->last_subject);
 
             /* Check if scope has a default child component */
-            ecs_entity_t def_type_src = ecs_get_object_for_id(world, scope, 
+            ecs_entity_t def_type_src = ecs_get_target_for_id(world, scope, 
                 0, ecs_pair(EcsDefaultChildComponent, EcsWildcard));
 
             if (def_type_src) {
-                default_scope_type = ecs_get_object(
+                default_scope_type = ecs_get_target(
                     world, def_type_src, EcsDefaultChildComponent, 0);
             }
         } else {
@@ -679,7 +664,7 @@ const char* parse_scope_open(
 }
 
 static
-const char* parse_scope_close(
+const char* plecs_parse_scope_close(
     ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -709,11 +694,11 @@ const char* parse_scope_close(
 
     ecs_id_t id = state->scope[state->sp];
 
-    if (!id || ECS_HAS_ROLE(id, PAIR)) {
+    if (!id || ECS_HAS_ID_FLAG(id, PAIR)) {
         ecs_set_with(world, id);
     }
 
-    if (!id || !ECS_HAS_ROLE(id, PAIR)) {
+    if (!id || !ECS_HAS_ID_FLAG(id, PAIR)) {
         ecs_set_scope(world, id);
     }
 
@@ -726,7 +711,7 @@ const char* parse_scope_close(
 }
 
 static
-const char *parse_plecs_term(
+const char *plecs_parse_plecs_term(
     ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -758,9 +743,9 @@ const char *parse_plecs_term(
         const char *tptr = ecs_parse_fluff(ptr + 1, NULL);
         if (tptr[0] == '{') {
             ecs_entity_t pred = plecs_lookup(
-                world, term.pred.name, state, 0, false);
+                world, term.first.name, state, 0, false);
             ecs_entity_t obj = plecs_lookup(
-                world, term.obj.name, state, pred, false);
+                world, term.second.name, state, pred, false);
             ecs_id_t id = 0;
             if (pred && obj) {
                 id = ecs_pair(pred, obj);
@@ -779,7 +764,7 @@ const char *parse_plecs_term(
         state->assign_stmt = true;
         state->assign_to = scope;
     }
-    if (create_term(world, &term, name, expr, (ptr - expr), state)) {
+    if (plecs_create_term(world, &term, name, expr, (ptr - expr), state)) {
         ecs_term_fini(&term);
         return NULL; /* Failed to create term */
     }
@@ -795,7 +780,50 @@ const char *parse_plecs_term(
 }
 
 static
-const char* parse_stmt(
+const char* plecs_parse_annotation(
+    const char *name,
+    const char *expr,
+    const char *ptr,
+    plecs_state_t *state)
+{
+    do {
+        if(state->annot_count >= STACK_MAX_SIZE) {
+            ecs_parser_error(name, expr, ptr - expr, 
+                "max number of annotations reached");
+            return NULL;
+        }
+
+        char ch;
+        const char *start = ptr;
+        for (; (ch = *ptr) && ch != '\n'; ptr ++) { }
+
+        int32_t len = (int32_t)(ptr - start);
+        char *annot = ecs_os_malloc_n(char, len + 1);
+        ecs_os_memcpy_n(annot, start, char, len);
+        annot[len] = '\0';
+
+        state->annot[state->annot_count] = annot;
+        state->annot_count ++;
+
+        ptr = ecs_parse_fluff(ptr, NULL);
+    } while (ptr[0] == '@');
+
+    return ptr;
+}
+
+static
+void plecs_clear_annotations(
+    plecs_state_t *state)
+{
+    int32_t i, count = state->annot_count;
+    for (i = 0; i < count; i ++) {
+        ecs_os_free(state->annot[i]);
+    }
+    state->annot_count = 0;
+}
+
+static
+const char* plecs_parse_stmt(
     ecs_world_t *world,
     const char *name,
     const char *expr,
@@ -811,26 +839,32 @@ const char* parse_stmt(
     state->last_predicate = 0;
     state->last_object = 0;
 
-    ptr = parse_fluff(expr, ptr, state);
+    plecs_clear_annotations(state);
+
+    ptr = ecs_parse_fluff(ptr, NULL);
 
     char ch = ptr[0];
 
     if (!ch) {
         goto done;
     } else if (ch == '{') {
-        ptr = parse_fluff(expr, ptr + 1, state);
+        ptr = ecs_parse_fluff(ptr + 1, NULL);
         goto scope_open;
     } else if (ch == '}') {
-        ptr = parse_fluff(expr, ptr + 1, state);
+        ptr = ecs_parse_fluff(ptr + 1, NULL);
         goto scope_close;
     } else if (ch == '(') {
         goto term_expr;
+    } else if (ch == '@') {
+        ptr = plecs_parse_annotation(name, expr, ptr, state);
+        if (!ptr) goto error;
+        goto term_expr;
     } else if (!ecs_os_strncmp(ptr, TOK_USING " ", 5)) {
-        ptr = parse_using_stmt(name, expr, ptr, state);
+        ptr = plecs_parse_using_stmt(name, expr, ptr, state);
         if (!ptr) goto error;
         goto term_expr;
     } else if (!ecs_os_strncmp(ptr, TOK_WITH " ", 5)) {
-        ptr = parse_with_stmt(name, expr, ptr, state);
+        ptr = plecs_parse_with_stmt(name, expr, ptr, state);
         if (!ptr) goto error;
         goto term_expr;
     } else {
@@ -842,11 +876,11 @@ term_expr:
         goto done;
     }
 
-    if (!(ptr = parse_plecs_term(world, name, ptr, ptr, state))) {
+    if (!(ptr = plecs_parse_plecs_term(world, name, ptr, ptr, state))) {
         goto error;
     }
 
-    ptr = parse_fluff(expr, ptr, state);
+    ptr = ecs_parse_fluff(ptr, NULL);
 
     if (ptr[0] == '{' && !isspace(ptr[-1])) {
         /* A '{' directly after an identifier (no whitespace) is a literal */
@@ -855,17 +889,17 @@ term_expr:
 
     if (!state->using_stmt) {
         if (ptr[0] == ':') {
-            ptr = parse_fluff(expr, ptr + 1, state);
+            ptr = ecs_parse_fluff(ptr + 1, NULL);
             goto inherit_stmt;
         } else if (ptr[0] == '=') {
-            ptr = parse_fluff(expr, ptr + 1, state);
+            ptr = ecs_parse_fluff(ptr + 1, NULL);
             goto assign_stmt;
         } else if (ptr[0] == ',') {
-            ptr = parse_fluff(expr, ptr + 1, state);
+            ptr = ecs_parse_fluff(ptr + 1, NULL);
             goto term_expr;
         } else if (ptr[0] == '{') {
             state->assign_stmt = false;
-            ptr = parse_fluff(expr, ptr + 1, state);
+            ptr = ecs_parse_fluff(ptr + 1, NULL);
             goto scope_open;
         }
     }
@@ -874,17 +908,17 @@ term_expr:
     goto done;
 
 inherit_stmt:
-    ptr = parse_inherit_stmt(name, expr, ptr, state);
+    ptr = plecs_parse_inherit_stmt(name, expr, ptr, state);
     if (!ptr) goto error;
 
     /* Expect base identifier */
     goto term_expr;
 
 assign_stmt:
-    ptr = parse_assign_stmt(world, name, expr, ptr, state);
+    ptr = plecs_parse_assign_stmt(world, name, expr, ptr, state);
     if (!ptr) goto error;
 
-    ptr = parse_fluff(expr, ptr, state);
+    ptr = ecs_parse_fluff(ptr, NULL);
 
     /* Assignment without a preceding component */
     if (ptr[0] == '{') {
@@ -895,10 +929,10 @@ assign_stmt:
     goto term_expr;
 
 assign_expr:
-    ptr = parse_assign_expr(world, name, expr, ptr, state);
+    ptr = plecs_parse_assign_expr(world, name, expr, ptr, state);
     if (!ptr) goto error;
 
-    ptr = parse_fluff(expr, ptr, state);
+    ptr = ecs_parse_fluff(ptr, NULL);
     if (ptr[0] == ',') {
         ptr ++;
         goto term_expr;
@@ -912,12 +946,12 @@ assign_expr:
     }
 
 scope_open:
-    ptr = parse_scope_open(world, name, expr, ptr, state);
+    ptr = plecs_parse_scope_open(world, name, expr, ptr, state);
     if (!ptr) goto error;
     goto done;
 
 scope_close:
-    ptr = parse_scope_close(world, name, expr, ptr, state);
+    ptr = plecs_parse_scope_close(world, name, expr, ptr, state);
     if (!ptr) goto error;
     goto done;
 
@@ -945,7 +979,7 @@ int ecs_plecs_from_str(
     ecs_entity_t prev_with = ecs_set_with(world, 0);
 
     do {
-        expr = ptr = parse_stmt(world, name, expr, ptr, &state);
+        expr = ptr = plecs_parse_stmt(world, name, expr, ptr, &state);
         if (!ptr) {
             goto error;
         }
@@ -957,8 +991,8 @@ int ecs_plecs_from_str(
 
     ecs_set_scope(world, prev_scope);
     ecs_set_with(world, prev_with);
-    
-    clear_comment(expr, ptr, &state);
+
+    plecs_clear_annotations(&state);
 
     if (state.sp != 0) {
         ecs_parser_error(name, expr, 0, "missing end of scope");

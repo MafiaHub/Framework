@@ -83,14 +83,30 @@
                 "is_component_enabled",
                 "is_enabled_component_enabled",
                 "is_disabled_component_enabled",
+                "is_pair_enabled",
+                "is_enabled_pair_enabled",
+                "is_disabled_pair_enabled",
+                "is_pair_enabled_w_ids",
+                "is_enabled_pair_enabled_w_ids",
+                "is_disabled_pair_enabled_w_ids",
+                "is_pair_enabled_w_tgt_id",
+                "is_enabled_pair_enabled_w_tgt_id",
+                "is_disabled_pair_enabled_w_tgt_id",
                 "get_type",
                 "get_nonempty_type",
                 "set_no_copy",
                 "set_copy",
                 "set_deduced",
                 "override",
+                "override_id",
+                "override_pair",
+                "override_pair_w_tgt_id",
+                "override_pair_w_ids",
                 "set_override",
                 "set_override_lvalue",
+                "set_override_pair",
+                "set_override_pair_w_tgt_id",
+                "emplace_override",
                 "implicit_name_to_char",
                 "implicit_path_to_char",
                 "implicit_type_str_to_char",
@@ -104,6 +120,10 @@
                 "set_1_component_w_callback",
                 "set_2_components_w_callback",
                 "set_3_components_w_callback",
+                "get_mut_1_component_w_callback",
+                "get_mut_2_components_w_callback",
+                "get_component_w_callback_nested",
+                "get_mut_component_w_callback_nested",
                 "defer_set_1_component",
                 "defer_set_2_components",
                 "defer_set_3_components",
@@ -135,6 +155,7 @@
                 "defer_new_w_with",
                 "defer_new_w_name_scope_with",
                 "defer_w_with_implicit_component",
+                "defer_suspend_resume",
                 "entity_id_str",
                 "pair_id_str",
                 "role_id_str",
@@ -172,6 +193,9 @@
                 "is_a_w_type",
                 "child_of",
                 "child_of_w_type",
+                "slot_of",
+                "slot_of_w_type",
+                "slot",
                 "id_get_entity",
                 "id_get_invalid_entity",
                 "each_in_stage",
@@ -193,6 +217,7 @@
                 "entity_w_type",
                 "entity_w_nested_type",
                 "entity_w_type_defer",
+                "prefab_hierarchy_w_types",
                 "entity_array",
                 "add_if_true_T",
                 "add_if_false_T",
@@ -203,7 +228,10 @@
                 "add_if_true_R_o",
                 "add_if_false_R_o",
                 "add_if_true_r_o",
-                "add_if_false_r_o"
+                "add_if_exclusive_r_o",
+                "add_if_exclusive_R_o",
+                "add_if_exclusive_R_O",
+                "add_if_pair_w_0_object"
             ]
         }, {
             "id": "Pairs",
@@ -225,7 +253,7 @@
                 "get_mut_pair_tag",
                 "get_mut_pair_tag_existing",
                 "get_relation_from_id",
-                "get_w_object_from_id",
+                "get_second_from_id",
                 "get_recycled_relation_from_id",
                 "get_recycled_object_from_id",
                 "get_rel_obj",
@@ -234,9 +262,9 @@
                 "get_R_obj",
                 "get_R_obj_id",
                 "get_R_obj_id_t",
-                "get_w_object",
-                "get_w_object_id",
-                "get_w_object_id_t",
+                "get_second",
+                "get_second_id",
+                "get_second_id_t",
                 "each",
                 "each_pair",
                 "each_pair_by_type",
@@ -248,7 +276,7 @@
                 "match_pair_rel_wildcard",
                 "match_pair_both_wildcard",
                 "has_tag_w_object",
-                "has_w_object_tag",
+                "has_second_tag",
                 "add_pair_type",
                 "remove_pair_type",
                 "set_pair_type",
@@ -261,12 +289,16 @@
                 "set_inline_pair_type",
                 "get_pair_type_object",
                 "set_pair_type_object",
-                "set_get_w_object_variants",
+                "set_get_second_variants",
                 "get_object_for_type_self",
                 "get_object_for_type_base",
                 "get_object_for_id_self",
                 "get_object_for_id_base",
-                "get_object_for_id_not_found"
+                "get_object_for_id_not_found",
+                "deref_pair",
+                "deref_const_pair",
+                "deref_pair_obj",
+                "deref_const_pair_obj"
             ]
         }, {
             "id": "Enum",
@@ -294,7 +326,13 @@
                 "add_enum_constant_w_tag",
                 "remove_enum_constant_w_tag",
                 "set_enum_constant_w_tag",
-                "enum_w_incorrect_size"
+                "enum_w_incorrect_size",
+                "add_union_enum",
+                "add_2_union_enums",
+                "add_2_union_enums_reverse",
+                "constant_from_entity",
+                "add_if",
+                "add_if_other"
             ]
         }, {
             "id": "Switch",
@@ -307,8 +345,8 @@
                 "system_w_switch",
                 "add_case_w_type",
                 "add_switch_w_type",
-                "add_switch_w_type_component_first",
-                "add_remove_switch_w_type"
+                "add_remove_switch_w_type",
+                "switch_enum_type"
             ]
         }, {
             "id": "Paths",
@@ -319,28 +357,14 @@
                 "entity_lookup_name",
                 "entity_lookup_depth_1",
                 "entity_lookup_depth_2",
+                "entity_lookup_from_0",
+                "entity_lookup_from_0_w_world",
                 "alias_component",
                 "alias_scoped_component",
                 "alias_scoped_component_w_name",
                 "alias_entity",
                 "alias_entity_by_name",
                 "alias_entity_by_scoped_name"
-            ]
-        }, {
-            "id": "Type",
-            "testcases": [
-                "type_no_name",
-                "null_args",
-                "has_type",
-                "has_entity",
-                "has_pair_type",
-                "has_pair_entity",
-                "get",
-                "get_out_of_range",
-                "has_from_stage",
-                "create_type_from_system",
-                "type_from_iter",
-                "type_from_staged_iter"
             ]
         }, {
             "id": "System",
@@ -362,7 +386,6 @@
                 "empty_signature",
                 "iter_tag",
                 "each_tag",
-                "system_from_id",
                 "set_interval",
                 "order_by_type",
                 "order_by_id",
@@ -385,7 +408,7 @@
                 "test_auto_defer_each",
                 "test_auto_defer_iter",
                 "custom_pipeline",
-                "system_w_self",
+                "custom_pipeline_w_kind",
                 "instanced_query_w_singleton_each",
                 "instanced_query_w_base_each",
                 "un_instanced_query_w_singleton_each",
@@ -395,8 +418,9 @@
                 "un_instanced_query_w_singleton_iter",
                 "un_instanced_query_w_base_iter",
                 "create_w_no_template_args",
-                "system_w_type_kind",
-                "system_w_type_kind_type_pipeline"
+                "system_w_type_kind_type_pipeline",
+                "default_ctor",
+                "entity_ctor"
             ]
         }, {
             "id": "Event",
@@ -416,21 +440,6 @@
                 "evt_1_id_pair_rel_obj_entity",
                 "emit_staged_from_world",
                 "emit_staged_from_stage"
-            ]
-        }, {
-            "id": "Trigger",
-            "testcases": [
-                "on_add",
-                "on_remove",
-                "on_add_tag_action",
-                "on_add_tag_iter",
-                "on_add_tag_each",
-                "trigger_w_self",
-                "on_add_id",
-                "on_add_id_arg",
-                "on_add_expr",
-                "create_w_no_template_args",
-                "yield_existing"
             ]
         }, {
             "id": "Iterable",
@@ -504,7 +513,15 @@
                 "query_each_w_func_no_ptr",
                 "query_iter_w_func_no_ptr",
                 "query_each_w_iter",
-                "change_tracking"
+                "change_tracking",
+                "not_w_write",
+                "get_first",
+                "get_count_direct",
+                "get_is_true_direct",
+                "get_first_direct",
+                "each_w_no_this",
+                "each_w_iter_no_this",
+                "invalid_each_w_no_this"
             ]
         }, {
             "id": "QueryBuilder",
@@ -527,7 +544,6 @@
                 "ptr_type",
                 "const_type",
                 "string_term",
-                "string_term_w_expr",
                 "singleton_term",
                 "isa_superset_term",
                 "isa_self_superset_term",
@@ -541,11 +557,6 @@
                 "isa_superset_shortcut_w_self",
                 "childof_superset_shortcut",
                 "childof_superset_shortcut_w_self",
-                "isa_superset_max_depth_1",
-                "isa_superset_max_depth_2",
-                "isa_superset_min_depth_2",
-                "isa_superset_min_depth_2_max_depth_3",
-                "role",
                 "relation",
                 "relation_w_object_wildcard",
                 "relation_w_predicate_wildcard",
@@ -567,8 +578,16 @@
                 "20_terms",
                 "group_by_raw",
                 "group_by_template",
-                "create_w_no_template_args"
-            ]         
+                "group_by_iter_one",
+                "group_by_iter_one_template",
+                "group_by_iter_one_all_groups",
+                "create_w_no_template_args",
+                "any_wildcard",
+                "cascade",
+                "cascade_w_relationship",
+                "up_w_type",
+                "cascade_w_type"
+            ]
         }, {
             "id": "FilterBuilder",
             "testcases": [
@@ -604,10 +623,6 @@
                 "isa_superset_shortcut_w_self",
                 "childof_superset_shortcut",
                 "childof_superset_shortcut_w_self",
-                "isa_superset_max_depth_1",
-                "isa_superset_max_depth_2",
-                "isa_superset_min_depth_2",
-                "isa_superset_min_depth_2_max_depth_3",
                 "relation",
                 "relation_w_object_wildcard",
                 "relation_w_predicate_wildcard",
@@ -637,10 +652,15 @@
                 "term_after_arg",
                 "name_arg",
                 "const_in_term",
+                "const_optional",
                 "create_w_no_template_args",
                 "2_terms_w_expr",
-                "assert_on_multiple_expr_calls",
-                "assert_on_uninitialized_term"
+                "assert_on_uninitialized_term",
+                "operator_shortcuts",
+                "inout_shortcuts",
+                "iter_column_w_const_as_array",
+                "iter_column_w_const_as_ptr",
+                "iter_column_w_const_deref"
             ]
         }, {
             "id": "RuleBuilder",
@@ -658,7 +678,14 @@
                 "set_2_vars",
                 "set_var_by_name",
                 "set_2_vars_by_name",
-                "expr_w_var"
+                "expr_w_var",
+                "get_first",
+                "get_count_direct",
+                "get_is_true_direct",
+                "get_first_direct",
+                "var_src_w_prefixed_name",
+                "var_first_w_prefixed_name",
+                "var_second_w_prefixed_name"
             ]
         }, {
             "id": "SystemBuilder",
@@ -692,7 +719,6 @@
                 "2_terms_on_remove",
                 "2_terms_on_set",
                 "2_terms_un_set",
-                "observer_w_self",
                 "10_terms",
                 "20_terms",
                 "2_entities_iter",
@@ -700,7 +726,15 @@
                 "2_entities_each",
                 "create_w_no_template_args",
                 "yield_existing",
-                "yield_existing_2_terms"
+                "yield_existing_2_terms",
+                "default_ctor",
+                "entity_ctor",
+                "on_add",
+                "on_remove",
+                "on_add_tag_action",
+                "on_add_tag_iter",
+                "on_add_tag_each",
+                "on_add_expr"
             ]
         }, {
             "id": "Filter",
@@ -712,7 +746,18 @@
                 "term_each_pair_id",
                 "term_each_pair_relation_wildcard",
                 "term_each_pair_object_wildcard",
-                "default_ctor_no_assign"
+                "default_ctor_no_assign",
+                "term_get_id",
+                "term_get_subj",
+                "term_get_pred",
+                "term_get_obj",
+                "get_first",
+                "get_count_direct",
+                "get_is_true_direct",
+                "get_first_direct",
+                "each_w_no_this",
+                "each_w_iter_no_this",
+                "invalid_each_w_no_this"
             ]
         }, {
             "id": "ComponentLifecycle",
@@ -736,7 +781,7 @@
                 "default_init",
                 "no_default_ctor_add",
                 "no_default_ctor_add_relation",
-                "no_default_ctor_add_w_object",
+                "no_default_ctor_add_second",
                 "no_default_ctor_set",
                 "no_copy_ctor",
                 "no_move_ctor",
@@ -756,7 +801,16 @@
                 "grow_no_default_ctor",
                 "grow_no_default_ctor_move",
                 "grow_no_default_ctor_move_w_component",
-                "delete_no_default_ctor"
+                "delete_no_default_ctor",
+                "on_add_hook",
+                "on_remove_hook",
+                "on_set_hook",
+                "on_add_hook_w_entity",
+                "on_remove_hook_w_entity",
+                "on_set_hook_w_entity",
+                "chained_hooks",
+                "ctor_w_2_worlds",
+                "ctor_w_2_worlds_explicit_registration"
             ]
         }, {
             "id": "Refs",
@@ -766,7 +820,8 @@
                 "ref_after_add",
                 "ref_after_remove",
                 "ref_after_set",
-                "ref_before_set"
+                "ref_before_set",
+                "non_const_ref"
             ]
         }, {
             "id": "Module",
@@ -822,8 +877,6 @@
                 "entity_w_id",
                 "prefab",
                 "prefab_w_name",
-                "type",
-                "type_w_name",
                 "system",
                 "system_w_name",
                 "system_w_expr",
@@ -857,6 +910,10 @@
                 "c_interop_module",
                 "c_interop_after_reset",
                 "implicit_register_w_new_world",
+                "implicit_register_after_reset_register_w_custom_name",
+                "register_after_reset_register_w_custom_name",
+                "register_builtin_after_reset",
+                "register_meta_after_reset",
                 "count",
                 "count_id",
                 "count_pair",
@@ -891,16 +948,18 @@
                 "entity_as_component_2_worlds",
                 "entity_as_namespaced_component_2_worlds",
                 "entity_as_component_2_worlds_implicit_namespaced",
-                "type_as_component",
-                "type_w_name_as_component",
                 "delete_with_id",
                 "delete_with_type",
                 "delete_with_pair",
                 "delete_with_pair_type",
+                "delete_with_implicit",
+                "delete_with_pair_implicit",
                 "remove_all_id",
                 "remove_all_type",
                 "remove_all_pair",
                 "remove_all_pair_type",
+                "remove_all_implicit",
+                "remove_all_pair_implicit",
                 "get_scope",
                 "get_scope_type",
                 "register_namespace_after_component",
@@ -916,7 +975,8 @@
                 "register_w_root_name",
                 "register_nested_w_root_name",
                 "set_lookup_path",
-                "run_post_frame"
+                "run_post_frame",
+                "component_w_low_id"
             ]
         }, {
             "id": "Singleton",
@@ -962,6 +1022,31 @@
                 "unit_w_quantity",
                 "unit_w_prefix",
                 "unit_w_over"
+            ]
+        }, {
+            "id": "TableLock",
+            "testcases": [
+                "each",
+                "each_locked",
+                "each_without_entity",
+                "each_without_entity_locked",
+                "iter",
+                "iter_locked",
+                "iter_without_components",
+                "iter_without_components_locked",
+                "multi_get",
+                "multi_get_locked",
+                "multi_set",
+                "multi_set_locked"
+            ]
+        }, {
+            "id": "Doc",
+            "testcases": [
+                "set_brief",
+                "set_name",
+                "set_link",
+                "set_color",
+                "get_name_no_doc_name"
             ]
         }]
     }

@@ -2,19 +2,19 @@
 
 static
 void Iter(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
+    Position *p = ecs_field(it, Position, 1);
     Velocity *v = NULL;
     Mass *m = NULL;
 
-    if (it->term_count >= 2) {
-        if (ecs_term_size(it, 2) == sizeof(Velocity)) {
-            v = ecs_term(it, Velocity, 2);
+    if (it->field_count >= 2) {
+        if (ecs_field_size(it, 2) == sizeof(Velocity)) {
+            v = ecs_field(it, Velocity, 2);
         }
     }
 
-    if (it->term_count >= 3) {
-        if (ecs_term_size(it, 3) == sizeof(Mass)) {
-            m = ecs_term(it, Mass, 3);
+    if (it->field_count >= 3) {
+        if (ecs_field_size(it, 3) == sizeof(Mass)) {
+            m = ecs_field(it, Mass, 3);
         }
     }
 
@@ -1050,8 +1050,8 @@ void SystemPeriodic_match_2_systems_w_populated_table() {
 }
 
 void TestOptional_w_column(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
     test_assert(p != NULL);
     test_assert(v == NULL);
@@ -1060,8 +1060,8 @@ void TestOptional_w_column(ecs_iter_t *it) {
 }
 
 void TestOptional_w_shared(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
     test_assert(p != NULL);
     test_assert(v == NULL);
@@ -1250,7 +1250,7 @@ void SystemPeriodic_disabled_feature() {
     ECS_SYSTEM(world, NormalSystem, EcsOnUpdate, Position);
     ECS_SYSTEM(world, NormalSystem2, EcsOnUpdate, Position);
 
-    ECS_TYPE(world, Type, NormalSystem, NormalSystem2);
+    ECS_PREFAB(world, Type, NormalSystem, NormalSystem2);
 
     ecs_progress(world, 0);
 
@@ -1285,8 +1285,8 @@ void SystemPeriodic_disabled_nested_feature() {
     ECS_SYSTEM(world, NormalSystem2, EcsOnUpdate, Position);
     ECS_SYSTEM(world, NormalSystem3, EcsOnUpdate, Position);
 
-    ECS_TYPE(world, NestedType, NormalSystem2, NormalSystem3);
-    ECS_TYPE(world, Type, NormalSystem, NestedType);
+    ECS_PREFAB(world, NestedType, NormalSystem2, NormalSystem3);
+    ECS_PREFAB(world, Type, NormalSystem, NestedType);
 
     ecs_progress(world, 0);
 
@@ -1314,11 +1314,11 @@ void SystemPeriodic_disabled_nested_feature() {
 }
 
 void TwoRefs(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
-    test_assert(!ecs_term_is_owned(it, 1));
-    test_assert(!ecs_term_is_owned(it, 2));
+    test_assert(!ecs_field_is_self(it, 1));
+    test_assert(!ecs_field_is_self(it, 2));
 
     (void)p;
     (void)v;
@@ -1497,7 +1497,7 @@ void SystemPeriodic_match_prefab_and_normal() {
 
 static
 void TestIsSharedOnNotSet(ecs_iter_t *it) {
-    test_assert(ecs_term_is_owned(it, 2) != false);
+    test_assert(ecs_field_is_self(it, 2) != false);
 }
 
 void SystemPeriodic_is_shared_on_column_not_set() {
@@ -1626,7 +1626,7 @@ void SystemPeriodic_shared_column() {
     ECS_ENTITY(world, e2, Position, (IsA, base));
     ECS_ENTITY(world, e3, Position);
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, Velocity(super));
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, Velocity(up));
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -1655,7 +1655,7 @@ void SystemPeriodic_shared_not_column() {
     ECS_ENTITY(world, e1, Position, Velocity);
     ECS_ENTITY(world, e2, Position, (IsA, base));
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, !Velocity(super));
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, !Velocity(up));
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -1692,7 +1692,7 @@ void SystemPeriodic_shared_or_column() {
     ECS_ENTITY(world, e3, Position, (IsA, base1));
     ECS_ENTITY(world, e4, Position, (IsA, base2));
 
-    ECS_SYSTEM(world, SharedOr, EcsOnUpdate, Position, Velocity(super) || Mass(super));
+    ECS_SYSTEM(world, SharedOr, EcsOnUpdate, Position, Velocity(up) || Mass(up));
 
     Probe ctx = {0};
     ecs_set_context(world, &ctx);
@@ -1823,7 +1823,8 @@ void SystemPeriodic_sys_context() {
     ECS_SYSTEM(world, TestContext, EcsOnUpdate, Position);
 
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity = {.entity = TestContext}, .ctx = &param
+        .entity = TestContext,
+        .ctx = &param
     });
 
     test_assert(ecs_get_system_ctx(world, TestContext) == &param);
@@ -1844,7 +1845,8 @@ void SystemPeriodic_get_sys_context_from_param() {
     ecs_set_context(world, &param);
 
     ecs_system_init(world, &(ecs_system_desc_t){
-        .entity = {.entity = TestContext}, .ctx = &param
+        .entity = TestContext,
+        .ctx = &param
     });
 
     ecs_progress(world, 1);
@@ -1881,7 +1883,7 @@ static void AssertReadonly(ecs_iter_t *it) {
     test_assert(dummy_invoked == 0);
     dummy_invoked = it->entities[0];
 
-    test_assert( ecs_term_is_readonly(it, 1) == true);
+    test_assert( ecs_field_is_readonly(it, 1) == true);
 }
 
 void SystemPeriodic_shared_only() {
@@ -1889,7 +1891,7 @@ void SystemPeriodic_shared_only() {
 
     ECS_COMPONENT(world, Position);
 
-    ECS_SYSTEM(world, AssertReadonly, EcsOnUpdate, Position(super));
+    ECS_SYSTEM(world, AssertReadonly, EcsOnUpdate, Position(up));
 
     ecs_entity_t base = ecs_new(world, Position);
     ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
@@ -1940,7 +1942,7 @@ void SystemPeriodic_and_type() {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-    ECS_TYPE(world, MyType, Position, Velocity);
+    ECS_PREFAB(world, MyType, Position, Velocity);
 
     ECS_SYSTEM(world, TypeSystem, EcsOnUpdate, AND | MyType);
 
@@ -1971,7 +1973,7 @@ void SystemPeriodic_or_type() {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-    ECS_TYPE(world, MyType, Position, Velocity);
+    ECS_PREFAB(world, MyType, Position, Velocity);
 
     ECS_SYSTEM(world, TypeSystem, EcsOnUpdate, OR | MyType);
 

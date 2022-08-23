@@ -1059,7 +1059,7 @@ void SingleThreadStaging_remove_add_2_same_to_current() {
 
 static
 void AddRemoveAdd(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -1890,7 +1890,7 @@ void SingleThreadStaging_add_to_current_in_on_add() {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-    ECS_TRIGGER(world, Add_to_current, EcsOnAdd, Position);
+    ECS_OBSERVER(world, Add_to_current, EcsOnAdd, Position);
 
     IterData ctx = {.component = ecs_id(Velocity)};
     ecs_set_context(world, &ctx);
@@ -1916,7 +1916,7 @@ void SingleThreadStaging_remove_from_current_in_on_add() {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-    ECS_TRIGGER(world, Remove_from_current, EcsOnAdd, Position);
+    ECS_OBSERVER(world, Remove_from_current, EcsOnAdd, Position);
 
     IterData ctx = {.component = ecs_id(Position)};
     ecs_set_context(world, &ctx);
@@ -1942,7 +1942,7 @@ void SingleThreadStaging_remove_added_component_in_on_add() {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
-    ECS_TRIGGER(world, Remove_from_current, EcsOnAdd, Position);
+    ECS_OBSERVER(world, Remove_from_current, EcsOnAdd, Position);
 
     IterData ctx = {.component = ecs_id(Position)};
     ecs_set_context(world, &ctx);
@@ -1967,8 +1967,8 @@ static Probe pv_probe;
 
 static
 void On_PV(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
     probe_system_w_ctx(it, &pv_probe);
 
@@ -2029,7 +2029,7 @@ void Set_velocity_on_new(ecs_iter_t *it) {
 
 static
 void On_V(ecs_iter_t *it) {
-    Velocity *v = ecs_term(it, Velocity, 1);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     probe_iter(it);
 
@@ -2073,14 +2073,13 @@ void SingleThreadStaging_match_table_created_w_new_in_progress() {
     ecs_fini(world);
 }
 
-
 void SingleThreadStaging_match_table_created_w_new_in_on_set() {
     ecs_world_t *world = ecs_init();
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ECS_TRIGGER(world, Set_velocity_on_new, EcsOnSet, Position);
+    ECS_OBSERVER(world, Set_velocity_on_new, EcsOnSet, Position);
     ECS_SYSTEM(world, On_V, EcsOnUpdate, Velocity);
 
     IterData add_ctx = {.component = ecs_id(Velocity)};
@@ -2147,7 +2146,7 @@ void SingleThreadStaging_merge_table_w_container_added_on_set() {
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, Create_container, EcsOnSet, Position);
+    ECS_OBSERVER(world, Create_container, EcsOnSet, Position);
 
     /* Entity is not yet a container. Adding this entity to another entity would
      * cause an error */
@@ -2200,7 +2199,7 @@ void SingleThreadStaging_merge_table_w_container_added_on_set_reverse() {
 
     ECS_COMPONENT(world, Position);
 
-    ECS_TRIGGER(world, Create_container_reverse, EcsOnSet, Position);
+    ECS_OBSERVER(world, Create_container_reverse, EcsOnSet, Position);
 
     /* Entity is not yet a container. Adding this entity to another entity would
      * cause an error */
@@ -2230,7 +2229,7 @@ void SingleThreadStaging_merge_table_w_container_added_on_set_reverse() {
 
 static
 void Task(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     ecs_entity_t *e = ecs_get_context(it->world);
 
@@ -2257,8 +2256,8 @@ void SingleThreadStaging_merge_after_tasks() {
 
 static
 void OverrideAfterRemove(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
+    Position *p = ecs_field(it, Position, 1);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -2298,7 +2297,7 @@ void SingleThreadStaging_override_after_remove_in_progress() {
 
 static
 void GetParentInProgress(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
     
     ecs_world_t *world = it->world;
 
@@ -2324,7 +2323,7 @@ void SingleThreadStaging_get_parent_in_progress() {
 
     ecs_progress(world, 1);
 
-    ecs_entity_t parent = ecs_get_object(world, e, EcsChildOf, 0);
+    ecs_entity_t parent = ecs_get_target(world, e, EcsChildOf, 0);
     test_assert(parent != 0);
 
     ecs_fini(world);
@@ -2334,8 +2333,8 @@ static
 void AddInProgress(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
 
-    ecs_id_t ecs_id(Position) = ecs_term_id(it, 1);
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Position) = ecs_field_id(it, 1);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
     
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -2346,8 +2345,8 @@ void AddInProgress(ecs_iter_t *it) {
 
 static
 void Move(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -2403,7 +2402,7 @@ void SingleThreadStaging_clear_stage_after_merge() {
 
     ECS_COMPONENT(world, Position);
 
-    ecs_set(world, ecs_id(Position), EcsComponentLifecycle, {
+    ecs_set_hooks(world, Position, {
         .move = ecs_move(Position)
     });
 
@@ -2433,14 +2432,13 @@ void SingleThreadStaging_clear_stage_after_merge() {
 void MutableTest(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
 
-    Velocity *v = ecs_term(it, Velocity, 2);
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    Velocity *v = ecs_field(it, Velocity, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
-        bool is_added;
-        Velocity *v_mut = ecs_get_mut(
-            world, it->entities[i], Velocity, &is_added);
+        bool is_added = !ecs_has(world, it->entities[i], Velocity);
+        Velocity *v_mut = ecs_get_mut(world, it->entities[i], Velocity);
 
         test_assert(v_mut != NULL);
         test_assert(v_mut != v);
@@ -2534,17 +2532,16 @@ void SingleThreadStaging_get_mutable_from_main() {
 void MutableTest_w_Add(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
 
-    Velocity *v = ecs_term(it, Velocity, 2);
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
-    ecs_id_t ecs_id(MyTag) = ecs_term_id(it, 3);
+    Velocity *v = ecs_field(it, Velocity, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
+    ecs_id_t ecs_id(MyTag) = ecs_field_id(it, 3);
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
         ecs_add(world, it->entities[i], MyTag);
 
-        bool is_added;
-        Velocity *v_mut = ecs_get_mut(
-            world, it->entities[i], Velocity, &is_added);
+        bool is_added = !ecs_has(world, it->entities[i], Velocity);
+        Velocity *v_mut = ecs_get_mut(world, it->entities[i], Velocity);
 
         // Even though component is added to stage, is_added should only be true
         // if the component is added for the first time, which requires the app
@@ -2613,7 +2610,7 @@ void SingleThreadStaging_get_mutable_w_add() {
 
 static
 void OnAdd(ecs_iter_t *it) {
-    Velocity *v = ecs_term(it, Velocity, 1);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -2624,7 +2621,7 @@ void OnAdd(ecs_iter_t *it) {
 
 static
 void AddInProgress2(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int i;
     for (i = 0; i < it->count; i ++) {
@@ -2638,7 +2635,7 @@ void SingleThreadStaging_on_add_after_new_type_in_progress() {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_SYSTEM(world, AddInProgress2, EcsOnUpdate, Position, Velocity());
-    ECS_TRIGGER(world, OnAdd, EcsOnAdd, Velocity);
+    ECS_OBSERVER(world, OnAdd, EcsOnAdd, Velocity);
 
     ecs_entity_t e = ecs_new(world, Position);
 
@@ -2740,59 +2737,28 @@ void SingleThreadStaging_modify_after_lock() {
     ecs_fini(world);
 }
 
-void SingleThreadStaging_get_empty_case_from_stage() {
-    ecs_world_t *world = ecs_init();
-
-    ECS_TAG(world, CaseOne);
-    ECS_TAG(world, CaseTwo);
-    ECS_TYPE(world, Switch, CaseOne, CaseTwo);
-
-    ecs_entity_t e = ecs_new_id(world);
-    ecs_add_id(world, e, ECS_SWITCH | Switch);
-
-    ecs_frame_begin(world, 1);
-
-    ecs_staging_begin(world);
-
-    ecs_world_t *stage = ecs_get_stage(world, 0);
-
-    ecs_entity_t c = ecs_get_case(world, e, Switch);
-    test_assert(c == 0);
-
-    c = ecs_get_case(stage, e, Switch);
-    test_assert(c == 0);
-
-    ecs_staging_end(world);
-
-    ecs_frame_end(world);
-
-    ecs_fini(world);
-}
-
 void SingleThreadStaging_get_case_from_stage() {
     ecs_world_t *world = ecs_init();
 
+    ECS_ENTITY(world, Switch, Union);
     ECS_TAG(world, CaseOne);
     ECS_TAG(world, CaseTwo);
-    ECS_TYPE(world, Switch, CaseOne, CaseTwo);
 
-    ecs_entity_t e = ecs_new_id(world);
-    ecs_add_id(world, e, ECS_SWITCH | Switch);
-    ecs_add_id(world, e, ECS_CASE | CaseOne);
+    ecs_entity_t e = ecs_new_w_pair(world, Switch, CaseOne);
 
     ecs_frame_begin(world, 1);
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
 
     ecs_world_t *stage = ecs_get_stage(world, 0);
 
-    ecs_entity_t c = ecs_get_case(world, e, Switch);
+    ecs_entity_t c = ecs_get_target(world, e, Switch, 0);
     test_assert(c == CaseOne);
 
-    c = ecs_get_case(stage, e, Switch);
+    c = ecs_get_target(stage, e, Switch, 0);
     test_assert(c == CaseOne);
 
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
 
     ecs_frame_end(world);
 
@@ -2802,20 +2768,118 @@ void SingleThreadStaging_get_case_from_stage() {
 void SingleThreadStaging_get_object_from_stage() {
     ecs_world_t *world = ecs_init();
 
-    ECS_TAG(world, CaseOne);
-    ECS_TAG(world, CaseTwo);
-    ECS_TYPE(world, Switch, CaseOne, CaseTwo);
-
     ecs_entity_t parent = ecs_new_id(world);
     ecs_entity_t e = ecs_new_w_pair(world, EcsChildOf, parent);
 
-    ecs_staging_begin(world);
+    ecs_readonly_begin(world);
 
     ecs_world_t *stage = ecs_get_stage(world, 0);
 
-    test_assert(parent == ecs_get_object(stage, e, EcsChildOf, 0));
+    test_assert(parent == ecs_get_target(stage, e, EcsChildOf, 0));
 
-    ecs_staging_end(world);
+    ecs_readonly_end(world);
+
+    ecs_fini(world);
+}
+
+void SingleThreadStaging_add_to_world_while_readonly() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    ecs_entity_t e = ecs_new_id(world);
+
+    ecs_readonly_begin(world);
+    ecs_add(world, e, Tag);
+    test_assert(!ecs_has(world, e, Tag));
+    ecs_readonly_end(world);
+
+    test_assert(ecs_has(world, e, Tag));
+
+    ecs_fini(world);
+}
+
+void SingleThreadStaging_add_to_world_and_stage_while_readonly() {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, TagA);
+    ECS_TAG(world, TagB);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_world_t *stage = ecs_get_stage(world, 0);
+
+    ecs_readonly_begin(world);
+    ecs_add(world, e, TagA);
+    ecs_add(stage, e, TagB);
+    test_assert(!ecs_has(world, e, TagA));
+    test_assert(!ecs_has(world, e, TagB));
+    ecs_readonly_end(world);
+
+    test_assert(ecs_has(world, e, TagA));
+    test_assert(ecs_has(world, e, TagB));
+
+    ecs_fini(world);
+}
+
+void SingleThreadStaging_add_to_world_while_readonly_n_stages() {
+    install_test_abort();
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    ecs_set_stage_count(world, 2);
+
+    ecs_entity_t e = ecs_new_id(world);
+
+    ecs_readonly_begin(world);
+    test_expect_abort();
+    ecs_add(world, e, Tag);
+}
+
+void SingleThreadStaging_lookup_after_stage_count_change() {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_set_stage_count(world, 2);
+
+    /* Make sure we can still lookup entities from flecs.core */
+    test_assert(ecs_lookup_fullpath(world, "$") != 0);
+
+    ecs_fini(world);
+}
+
+void SingleThreadStaging_lookup_w_scope_after_stage_count_change() {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t parent = ecs_new_entity(world, "parent");
+    ecs_entity_t child = ecs_new_entity(world, "child");
+    ecs_add_pair(world, child, EcsChildOf, parent);
+
+    test_assert(ecs_lookup_fullpath(world, "parent.child") != 0);
+    ecs_set_scope(world, parent);
+    test_assert(ecs_lookup_fullpath(world, "parent.child") != 0);
+    test_assert(ecs_lookup_fullpath(world, "child") != 0);
+
+    ecs_set_stage_count(world, 2);
+
+    test_assert(ecs_lookup_fullpath(world, "parent.child") != 0);
+    test_assert(ecs_lookup_fullpath(world, "child") != 0);
+
+    ecs_fini(world);
+}
+
+void SingleThreadStaging_with_after_stage_count_change() {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t tag = ecs_new_id(world);
+    ecs_set_with(world, tag);
+
+    ecs_entity_t e1 = ecs_new(world, 0);
+    test_assert(ecs_has_id(world, e1, tag));
+
+    ecs_set_stage_count(world, 2);
+
+    ecs_entity_t e2 = ecs_new(world, 0);
+    test_assert(ecs_has_id(world, e2, tag));
 
     ecs_fini(world);
 }

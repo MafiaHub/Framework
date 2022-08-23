@@ -206,7 +206,7 @@ void RuleBuilder_pair_term_w_var() {
         .add<Likes, Pears>();
 
     auto r = ecs.rule_builder()
-        .term<Likes>().obj().var("Food")
+        .term<Likes>().second().var("Food")
         .build();
 
     int food_var = r.find_var("Food");
@@ -249,8 +249,8 @@ void RuleBuilder_2_pair_terms_w_var() {
     Bob.add<Likes>(Alice);
 
     auto r = ecs.rule_builder()
-        .term<Eats>().obj().var("Food")
-        .term<Likes>().obj().var("Person")
+        .term<Eats>().second().var("Food")
+        .term<Likes>().second().var("Person")
         .build();
 
     int food_var = r.find_var("Food");
@@ -298,7 +298,7 @@ void RuleBuilder_set_var() {
         .add<Likes>(Pears);
 
     auto r = ecs.rule_builder()
-        .term<Likes>().obj().var("Food")
+        .term<Likes>().second().var("Food")
         .build();
 
     int food_var = r.find_var("Food");
@@ -337,8 +337,8 @@ void RuleBuilder_set_2_vars() {
     Bob.add<Likes>(Alice);
 
     auto r = ecs.rule_builder()
-        .term<Eats>().obj().var("Food")
-        .term<Likes>().obj().var("Person")
+        .term<Eats>().second().var("Food")
+        .term<Likes>().second().var("Person")
         .build();
 
     int food_var = r.find_var("Food");
@@ -377,7 +377,7 @@ void RuleBuilder_set_var_by_name() {
         .add<Likes>(Pears);
 
     auto r = ecs.rule_builder()
-        .term<Likes>().obj().var("Food")
+        .term<Likes>().second().var("Food")
         .build();
 
     int count = 0;
@@ -411,8 +411,8 @@ void RuleBuilder_set_2_vars_by_name() {
     Bob.add<Likes>(Alice);
 
     auto r = ecs.rule_builder()
-        .term<Eats>().obj().var("Food")
-        .term<Likes>().obj().var("Person")
+        .term<Eats>().second().var("Food")
+        .term<Likes>().second().var("Person")
         .build();
 
     int food_var = r.find_var("Food");
@@ -445,7 +445,7 @@ void RuleBuilder_expr_w_var() {
     auto e = ecs.entity().add(rel, obj);
 
     auto r = ecs.rule_builder()
-        .term("(Rel, $X)")
+        .expr("(Rel, $X)")
         .build();
 
     int x_var = r.find_var("X");
@@ -455,6 +455,150 @@ void RuleBuilder_expr_w_var() {
     r.each([&](flecs::iter& it, size_t index) {
         test_assert(it.entity(index) == e);
         test_assert(it.pair(1).second() == obj);
+        count ++;
+    });
+
+    test_int(count, 1);
+
+    r.destruct();
+}
+
+void RuleBuilder_get_first() {
+    flecs::world ecs;
+
+    struct A {};
+
+    auto e1 = ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q = ecs.rule<A>();
+
+    auto first = q.iter().first();
+    test_assert(first != 0);
+    test_assert(first == e1);
+
+    q.destruct();
+}
+
+void RuleBuilder_get_count_direct() {
+    flecs::world ecs;
+
+    struct A {};
+
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q = ecs.rule<A>();
+
+    test_int(3, q.count());
+
+    q.destruct();
+}
+
+void RuleBuilder_get_is_true_direct() {
+    flecs::world ecs;
+
+    struct A {};
+    struct B {};
+
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q_1 = ecs.rule<A>();
+    auto q_2 = ecs.rule<B>();
+
+    test_bool(true, q_1.is_true());
+    test_bool(false, q_2.is_true());
+
+    q_1.destruct();
+    q_2.destruct();
+}
+
+void RuleBuilder_get_first_direct() {
+    flecs::world ecs;
+
+    struct A {};
+
+    auto e1 = ecs.entity().add<A>();
+    ecs.entity().add<A>();
+    ecs.entity().add<A>();
+
+    auto q = ecs.rule<A>();
+
+    auto first = q.first();
+    test_assert(first != 0);
+    test_assert(first == e1);
+
+    q.destruct();
+}
+
+void RuleBuilder_var_src_w_prefixed_name() {
+    flecs::world ecs;
+
+    struct Foo { };
+
+    auto r = ecs.rule_builder()
+        .term<Foo>().src("$Var")
+        .build();
+
+    auto e = ecs.entity().add<Foo>();
+
+    int32_t count = 0;
+    r.iter([&](flecs::iter& it) {
+        test_assert(it.get_var("Var") == e);
+        count ++;
+    });
+
+    test_int(count, 1);
+
+    r.destruct();
+}
+
+void RuleBuilder_var_first_w_prefixed_name() {
+    flecs::world ecs;
+
+    struct Foo { };
+
+    auto r = ecs.rule_builder()
+        .term<Foo>()
+        .term().first("$Var")
+        .build();
+
+    auto e = ecs.entity().add<Foo>();
+
+    int32_t count = 0;
+    r.iter([&](flecs::iter& it) {
+        test_int(it.count(), 1);
+        test_uint(it.entity(0), e);
+        test_assert(it.get_var("Var") == ecs.id<Foo>());
+        count ++;
+    });
+
+    test_int(count, 1);
+
+    r.destruct();
+}
+
+void RuleBuilder_var_second_w_prefixed_name() {
+    flecs::world ecs;
+
+    struct Foo { };
+
+    auto r = ecs.rule_builder()
+        .term<Foo>().second("$Var")
+        .build();
+
+    auto t = ecs.entity();
+    auto e = ecs.entity().add<Foo>(t);
+
+    int32_t count = 0;
+    r.iter([&](flecs::iter& it) {
+        test_int(it.count(), 1);
+        test_uint(it.entity(0), e);
+        test_assert(it.get_var("Var") == t);
         count ++;
     });
 

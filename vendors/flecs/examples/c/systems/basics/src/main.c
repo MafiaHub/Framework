@@ -6,8 +6,8 @@ typedef struct {
 } Position, Velocity;
 
 void Move(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    const Velocity *v = ecs_term(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 1);
+    const Velocity *v = ecs_field(it, Velocity, 2);
 
     for (int i = 0; i < it->count; i ++) {
         p[i].x += v[i].x;
@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
 
     // Create a system for Position, Velocity. Systems are like queries (see
     // queries) with a function that can be ran or scheduled (see pipeline).
-    ecs_entity_t move = ecs_system_init(ecs, &(ecs_system_desc_t) {
+    ecs_entity_t move = ecs_system(ecs, {
         .query.filter.terms = {
             { .id = ecs_id(Position) },
             { .id = ecs_id(Velocity), .inout = EcsIn }

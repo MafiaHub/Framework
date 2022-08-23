@@ -6,9 +6,9 @@ void Internals_setup() {
 
 static
 void Iter(ecs_iter_t *it) {
-    Position *p = ecs_term(it, Position, 1);
-    Velocity *v = ecs_term(it, Velocity, 2);
-    Mass *m = ecs_term(it, Mass, 3);
+    Position *p = ecs_field(it, Position, 1);
+    Velocity *v = ecs_field(it, Velocity, 2);
+    Mass *m = ecs_field(it, Mass, 3);
 
     probe_iter(it);
 
@@ -140,7 +140,7 @@ static int invoked = 0;
 
 static
 void CreateNewTable(ecs_iter_t *it) {
-    ecs_id_t ecs_id(Velocity) = ecs_term_id(it, 2);
+    ecs_id_t ecs_id(Velocity) = ecs_field_id(it, 2);
 
     int32_t i;
     for (i = 0; i < it->count; i ++) {
@@ -216,7 +216,7 @@ void Internals_create_65k_tables() {
         ecs_entity_t e = ecs_new_id(world);
         ecs_add_id(world, e, e);
         test_assert(ecs_has_id(world, e, e));
-        test_int(ecs_vector_count(ecs_get_type(world, e)), 1);
+        test_int(ecs_get_type(world, e)->count, 1);
     }
     
     ecs_fini(world);
@@ -237,7 +237,7 @@ void Internals_no_duplicate_root_table_id() {
         test_assert(ecs_has_id(world, e, i + 1000));
     }
 
-    ecs_entity_t f = ecs_entity_init(world, &(ecs_entity_desc_t) {
+    ecs_entity_t f = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "Foo"
     });
     
@@ -259,5 +259,62 @@ void Internals_override_os_api_w_addon() {
     test_assert(ecs_os_has_heap());
 
     ecs_world_t *world = ecs_init();
+    ecs_fini(world);
+}
+
+void Internals_records_resize_on_override() {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t TagA = ecs_new_id(world);
+    ecs_entity_t TagB = ecs_new_id(world);
+    ecs_entity_t TagC = ecs_new_id(world);
+    ecs_entity_t TagD = ecs_new_id(world);
+    ecs_entity_t TagE = ecs_new_id(world);
+    ecs_entity_t TagF = ecs_new_id(world);
+    ecs_entity_t TagG = ecs_new_id(world);
+    ecs_entity_t TagH = ecs_new_id(world);
+
+    ecs_entity_t RelA = ecs_new_id(world);
+    ecs_entity_t RelB = ecs_new_id(world);
+    ecs_entity_t RelC = ecs_new_id(world);
+    ecs_entity_t RelD = ecs_new_id(world);
+    ecs_entity_t RelE = ecs_new_id(world);
+    ecs_entity_t RelF = ecs_new_id(world);
+    ecs_entity_t RelG = ecs_new_id(world);
+    ecs_entity_t TgtA = ecs_new_id(world);
+    ecs_entity_t TgtB = ecs_new_id(world);
+
+    ecs_entity_t e = ecs_new_id(world);
+    ecs_add_id(world, e, TagA);
+    ecs_add_id(world, e, TagB);
+    ecs_add_id(world, e, TagC);
+    ecs_add_id(world, e, TagD);
+    ecs_add_id(world, e, TagE);
+    ecs_add_id(world, e, TagF);
+    ecs_add_id(world, e, TagG);
+    ecs_add_id(world, e, TagH);
+    ecs_add_pair(world, e, RelA, TgtA);
+    ecs_add_pair(world, e, RelB, TgtA);
+    ecs_add_pair(world, e, RelC, TgtA);
+    ecs_add_pair(world, e, RelD, TgtA);
+    ecs_add_pair(world, e, RelE, TgtA);
+    ecs_add_pair(world, e, RelF, TgtA);
+    ecs_override_pair(world, e, RelG, TgtB);
+
+    test_assert(ecs_has_id(world, e, TagA));
+    test_assert(ecs_has_id(world, e, TagB));
+    test_assert(ecs_has_id(world, e, TagC));
+    test_assert(ecs_has_id(world, e, TagD));
+    test_assert(ecs_has_id(world, e, TagE));
+    test_assert(ecs_has_id(world, e, TagF));
+    test_assert(ecs_has_id(world, e, TagG));
+    test_assert(ecs_has_id(world, e, TagH));
+    test_assert(ecs_has_pair(world, e, RelA, TgtA));
+    test_assert(ecs_has_pair(world, e, RelB, TgtA));
+    test_assert(ecs_has_pair(world, e, RelC, TgtA));
+    test_assert(ecs_has_pair(world, e, RelD, TgtA));
+    test_assert(ecs_has_pair(world, e, RelE, TgtA));
+    test_assert(ecs_has_pair(world, e, RelF, TgtA));
+
     ecs_fini(world);
 }

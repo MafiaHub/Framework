@@ -26,7 +26,7 @@ int main(int, char *[]) {
     // The equivalent query in the DSL is:
     //   Likes($X, $Y), Likes($Y, $X)
     //
-    // This is also an example of a query where all subjects are variables. By
+    // This is also an example of a query where all sources are variables. By
     // default queries use the builtin "This" variable as subject, which is what
     // populates the entities array in the query result (accessed by the
     // iter::entity function). 
@@ -34,8 +34,8 @@ int main(int, char *[]) {
     // Because this query does not use This at all, the entities array will not
     // be populated, and it.count() will always be 0.
     auto r = ecs.rule_builder()
-        .term<Likes>().subj().var("X").obj().var("Y")
-        .term<Likes>().subj().var("Y").obj().var("X")
+        .term<Likes>().src().var("X").second().var("Y")
+        .term<Likes>().src().var("Y").second().var("X")
         .build();
 
     // Lookup the index of the variables. This will let us quickly lookup their

@@ -19,6 +19,8 @@ struct world_async_stage;
 struct iter;
 struct entity_view;
 struct entity;
+struct type;
+struct table;
 struct untyped_component;
 
 template <typename T>
@@ -43,12 +45,10 @@ struct each_invoker;
 
 // Mixin forward declarations
 #include "mixins/id/decl.hpp"
-#include "mixins/type/decl.hpp"
 #include "mixins/term/decl.hpp"
 #include "mixins/filter/decl.hpp"
 #include "mixins/event/decl.hpp"
 #include "mixins/query/decl.hpp"
-#include "mixins/trigger/decl.hpp"
 #include "mixins/observer/decl.hpp"
 #ifdef FLECS_SYSTEM
 #include "mixins/system/decl.hpp"
@@ -77,6 +77,9 @@ struct each_invoker;
 #ifdef FLECS_UNITS
 #include "mixins/units/decl.hpp"
 #endif
+#ifdef FLECS_MONITOR
+#include "mixins/monitor/decl.hpp"
+#endif
 #ifdef FLECS_JSON
 #include "mixins/json/decl.hpp"
 #endif
@@ -95,18 +98,18 @@ struct each_invoker;
 #include "utils/iterable.hpp"
 #include "component.hpp"
 #include "type.hpp"
+#include "table.hpp"
 
 // Mixin implementations
 #include "mixins/id/impl.hpp"
 #include "mixins/entity/impl.hpp"
 #include "mixins/component/impl.hpp"
-#include "mixins/type/impl.hpp"
 #include "mixins/term/impl.hpp"
 #include "mixins/filter/impl.hpp"
 #include "mixins/event/impl.hpp"
 #include "mixins/query/impl.hpp"
-#include "mixins/trigger/impl.hpp"
 #include "mixins/observer/impl.hpp"
+#include "mixins/enum/impl.hpp"
 #ifdef FLECS_MODULE
 #include "mixins/module/impl.hpp"
 #endif
@@ -139,6 +142,9 @@ struct each_invoker;
 #endif
 #ifdef FLECS_UNITS
 #include "mixins/units/impl.hpp"
+#endif
+#ifdef FLECS_MONITOR
+#include "mixins/monitor/impl.hpp"
 #endif
 
 #include "impl.hpp"

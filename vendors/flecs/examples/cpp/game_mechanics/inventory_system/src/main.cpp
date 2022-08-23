@@ -4,7 +4,7 @@
 // This example shows one possible way to implement an inventory system using
 // ECS relationships.
 
-// Inventory tags/relations
+// Inventory tags/relationships
 struct Item { };        // Base item type
 struct Container { };   // Container tag
 struct Inventory { };   // Inventory tag
@@ -92,7 +92,7 @@ flecs::entity get_container(flecs::entity container) {
     if (container.has<Container>()) {
         return container;
     }
-    return container.get_object<Inventory>();
+    return container.target<Inventory>();
 }
 
 // Iterate all items in an inventory
@@ -277,7 +277,7 @@ void print_items(flecs::entity container) {
 int main(int, char *[]) {
     flecs::world ecs;
 
-    // Register ContainedBy relation
+    // Register ContainedBy relationship
     ecs.component<ContainedBy>()
         .add(flecs::Exclusive); // Item can only be contained by one container
 

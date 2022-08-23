@@ -37,38 +37,31 @@ extern "C" {
 /** This allows passing 0 as type to functions that accept ids */
 #define FLECS__E0 0
 
-////////////////////////////////////////////////////////////////////////////////
-//// Functions used in declarative (macro) API
-////////////////////////////////////////////////////////////////////////////////
-
 FLECS_API
 char* ecs_module_path_from_c(
     const char *c_name);
 
-FLECS_API
-bool ecs_component_has_actions(
-    const ecs_world_t *world,
-    ecs_entity_t component);
-
-////////////////////////////////////////////////////////////////////////////////
-//// Signature API
-////////////////////////////////////////////////////////////////////////////////
-
 bool ecs_identifier_is_0(
     const char *id);
 
-const char* ecs_identifier_is_var(
-    const char *id);
-
-////////////////////////////////////////////////////////////////////////////////
-//// Ctor that initializes component to 0
-////////////////////////////////////////////////////////////////////////////////
-
+/* Constructor that zeromem's a component value */
 FLECS_API
 void ecs_default_ctor(
     void *ptr, 
     int32_t count, 
     const ecs_type_info_t *ctx);
+
+/* Create allocated string from format */
+FLECS_DBG_API
+char* ecs_vasprintf(
+    const char *fmt,
+    va_list args);
+
+/* Create allocated string from format */
+FLECS_DBG_API
+char* ecs_asprintf(
+    const char *fmt,
+    ...);
 
 /** Calculate offset from address */
 #ifdef __cplusplus
@@ -76,8 +69,10 @@ void ecs_default_ctor(
 #else
 #define ECS_OFFSET(o, offset) (void*)(((uintptr_t)(o)) + ((uintptr_t)(offset)))
 #endif
+#define ECS_OFFSET_T(o, T) ECS_OFFSET(o, ECS_SIZEOF(T))
 
 #define ECS_ELEM(ptr, size, index) ECS_OFFSET(ptr, (size) * (index))
+#define ECS_ELEM_T(o, T, index) ECS_ELEM(o, ECS_SIZEOF(T), index)
 
 /** Enable/disable bitsets */
 #define ECS_BIT_SET(flags, bit) (flags) |= (bit)

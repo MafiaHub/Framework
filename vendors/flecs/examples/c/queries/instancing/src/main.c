@@ -39,11 +39,11 @@ int main(int argc, char *argv[]) {
 
     // Create a query for Position, Velocity. We'll create a few entities that
     // have Velocity as owned and shared component.
-    ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t) {
+    ecs_query_t *q = ecs_query(world, {
         .filter = {
             .terms = {
                 // Position must always be owned by the entity
-                { .id = ecs_id(Position), .subj.set.mask = EcsSelf }, 
+                { .id = ecs_id(Position), .src.flags = EcsSelf }, 
                 { .id = ecs_id(Velocity) } // Velocity may be shared (default)
             },
             .instanced = true
@@ -78,12 +78,12 @@ int main(int argc, char *argv[]) {
     // in the case of a shared field, it is accessed as a pointer.
     ecs_iter_t it = ecs_query_iter(world, q);
     while (ecs_query_next(&it)) {
-        Position *p = ecs_term(&it, Position, 1);
-        Position *v = ecs_term(&it, Velocity, 2);
+        Position *p = ecs_field(&it, Position, 1);
+        Position *v = ecs_field(&it, Velocity, 2);
 
         // Check if Velocity is owned, in which case it's accessed as array.
         // Position will always be owned, since we set the term to Self.
-        if (ecs_term_is_owned(&it, 2)) { // Velocity is term 2
+        if (ecs_field_is_self(&it, 2)) { // Velocity is term 2
             printf("Velocity is owned\n");
             for (int i = 0; i < it.count; i ++) {
                 // If Velocity is shared, access the field as an array.
