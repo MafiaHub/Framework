@@ -14,17 +14,20 @@
 #include <string>
 #include <utils/hashing.h>
 
+#include <typeinfo>
+
 namespace Framework::Networking::RPC {
+    template <class T>
     class IRPC {
       private:
         SLNet::Packet *packet{};
         uint32_t _hashName = 0;
 
       public:
-        IRPC(const std::string &name): _hashName(Utils::Hashing::CalculateCRC32(name.c_str(), name.length())) {};
+        IRPC(): _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
-        virtual bool Valid()                                     = 0;
+        virtual bool Valid() const                               = 0;
 
         uint32_t GetHashName() const {
             return _hashName;

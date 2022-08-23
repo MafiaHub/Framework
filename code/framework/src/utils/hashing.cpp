@@ -275,4 +275,8 @@ namespace Framework::Utils::Hashing {
         for (remaining = (ptrdiff_t )len; remaining--; c++) result = (result >> 8) ^ (crc32_table[(result ^ *c) & 0xff]);
         return ~result;
     }
+
+    uint32_t CalculateCRC32(std::string data) {
+        return CalculateCRC32(data.c_str(), data.length());
+    }
 } // namespace Framework::Utils::Hashing

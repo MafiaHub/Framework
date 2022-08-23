@@ -10,7 +10,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace Framework::Utils::Hashing {
     uint32_t CalculateCRC32(const char *data, size_t len);
+    uint32_t CalculateCRC32(std::string data);
 } // namespace Framework::Utils::Hashing
