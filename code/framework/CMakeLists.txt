@@ -151,7 +151,7 @@ if(WIN32)
     link_shared_deps(FrameworkClient)
 endif()
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer mongoose NodeJS libsig v8pp)
+target_link_libraries(FrameworkServer mongoose NodeJS libsig)
 
 # Platform-dependent post processing
 if (WIN32)
