@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "scripting/engine.h"
+#include "scripting/module.h"
 
 MODULE(scripting_engine, {
     using namespace Framework::Scripting;

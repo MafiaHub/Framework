@@ -15,15 +15,14 @@
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
-#include "scripting/builtins/entity.h"
-
-#include "scripting/builtins/player.h"
-
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
 #include "nlohmann/json.hpp"
 #include "optick.h"
+
+#include <cppfs/FileHandle.h>
+#include <cppfs/fs.h>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
