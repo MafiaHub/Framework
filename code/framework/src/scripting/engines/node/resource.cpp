@@ -12,8 +12,8 @@
 
 #include "engine.h"
 #include "resource.h"
-#include "scripting/v8_helpers/v8_string.h"
-#include "scripting/v8_helpers/v8_try_catch.h"
+#include "v8_helpers/v8_string.h"
+#include "v8_helpers/v8_try_catch.h"
 
 static const char bootstrap_code[] = "";
 

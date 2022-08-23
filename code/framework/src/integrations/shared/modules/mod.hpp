@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "scripting/v8_helpers/v8_serialization.h"
+#include "scripting/engines/node/v8_helpers/v8_serialization.h"
 
 #include <flecs/flecs.h>
 #include <string>

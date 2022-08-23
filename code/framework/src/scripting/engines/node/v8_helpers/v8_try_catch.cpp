@@ -9,7 +9,7 @@
 #include "v8_try_catch.h"
 
 #include <logging/logger.h>
-#include <scripting/resource.h>
+#include "../resource.h"
 
 namespace Framework::Scripting::Helpers {
     bool TryCatch(const fu2::function<bool() const> &fn, v8::Isolate *isolate, v8::Local<v8::Context> context) {
@@ -31,7 +31,7 @@ namespace Framework::Scripting::Helpers {
             return false;
         }
 
-        auto resource = static_cast<Framework::Scripting::Resource *>(context->GetAlignedPointerFromEmbedderData(0));
+        auto resource = static_cast<Engines::Node::Resource *>(context->GetAlignedPointerFromEmbedderData(0));
         if (!resource) {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Failed to acquire resource instance from embedded data");
             return false;
@@ -65,9 +65,9 @@ namespace Framework::Scripting::Helpers {
                     }
 
                     auto stackTrace = tryCatch.StackTrace(context);
-                    resource->InvokeErrorEvent(exception.IsEmpty() ? "unknown" : *v8::String::Utf8Value(isolate, exception),
+                    /*resource->InvokeErrorEvent(exception.IsEmpty() ? "unknown" : *v8::String::Utf8Value(isolate, exception),
                         (!stackTrace.IsEmpty() && stackTrace.ToLocalChecked()->IsString()) ? *v8::String::Utf8Value(isolate, stackTrace.ToLocalChecked()) : "",
-                        *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
+                        *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());*/
                 }
                 else {
                     Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Exception at {}", resource->GetName());

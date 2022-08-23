@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "../errors.h"
+#include "../../../errors.h"
 #include "v8_class.h"
 
 #include <map>

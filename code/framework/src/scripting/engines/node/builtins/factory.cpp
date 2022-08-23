@@ -8,7 +8,7 @@
 
 #include "factory.h"
 
-#include "../keys.h"
+#include "../../../keys.h"
 #include "../v8_helpers/v8_class.h"
 
 #include <string>

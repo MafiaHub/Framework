@@ -66,5 +66,9 @@ namespace Framework::Scripting::Engines::Node {
         bool IsLoaded() override {
             return _loaded;
         }
+
+        std::string &GetName() {
+            return _name;
+        }
     };
 }

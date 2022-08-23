@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "../errors.h"
+#include "../../../errors.h"
 #include "../resource.h"
 #include "../v8_helpers/helpers.h"
 #include "../v8_helpers/v8_string.h"
@@ -21,25 +21,12 @@ namespace Framework::Scripting::Builtins {
             if (!info[0]->IsString() || !info[1]->IsFunction()) {
                 return;
             }
-            auto isolate = info.GetIsolate();
-            if (!isolate) {
-                return;
-            }
-            auto context = isolate->GetEnteredOrMicrotaskContext();
-            if (context.IsEmpty()) {
-                return;
-            }
-            auto resource = static_cast<Framework::Scripting::Resource *>(context->GetAlignedPointerFromEmbedderData(0));
-            if (!resource) {
-                return;
-            }
 
-            v8::Local<v8::String> eventName       = info[0]->ToString(context).ToLocalChecked();
+            V8_GET_SUITE();
+
+            v8::Local<v8::String> eventName       = info[0]->ToString(ctx).ToLocalChecked();
             v8::Local<v8::Function> eventCallback = info[1].As<v8::Function>();
             resource->SubscribeEvent(Helpers::ToCString(eventName), eventCallback, Helpers::SourceLocation::GetCurrent(isolate));
-            return;
-        }
-        else {
             return;
         }
     }

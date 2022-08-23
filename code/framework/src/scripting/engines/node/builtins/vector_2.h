@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "../keys.h"
+#include "../../../keys.h"
 #include "../resource.h"
 #include "../v8_helpers/helpers.h"
 #include "../v8_helpers/v8_class.h"

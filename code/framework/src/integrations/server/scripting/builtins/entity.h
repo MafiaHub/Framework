@@ -9,12 +9,12 @@
 #pragma once
 
 #include "../server.h"
-#include "scripting/builtins/factory.h"
+#include "scripting/engines/node/builtins/factory.h"
 #include "scripting/keys.h"
-#include "scripting/resource.h"
-#include "scripting/v8_helpers/helpers.h"
-#include "scripting/v8_helpers/v8_class.h"
-#include "scripting/v8_helpers/v8_module.h"
+#include "scripting/engines/node/resource.h"
+#include "scripting/engines/node/v8_helpers/helpers.h"
+#include "scripting/engines/node/v8_helpers/v8_class.h"
+#include "scripting/engines/node/v8_helpers/v8_module.h"
 
 #include "logging/logger.h"
 
