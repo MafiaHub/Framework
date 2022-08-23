@@ -12,6 +12,7 @@
 
 #include "engine.h"
 #include "resource.h"
+#include "sdk.h"
 #include "v8_helpers/v8_string.h"
 #include "v8_helpers/v8_try_catch.h"
 
@@ -67,8 +68,10 @@ namespace Framework::Scripting::Engines::Node {
         context->SetAlignedPointerInEmbedderData(1, this);
         _context.Reset(_isolate, context);
 
-        // Register the SDK
-        // TODO: fix me
+        // Register the SDK on the global object template
+        const auto sdk = new SDK;
+        sdk->Init(_isolate);
+        _isolate->GetCurrentContext()->Global()->Set(context, v8::String::NewFromUtf8(_isolate, "mylib").ToLocalChecked(), sdk->GetNewInstance());
 
         // Initialize our uv loop
         _uvLoop = new uv_loop_t;
