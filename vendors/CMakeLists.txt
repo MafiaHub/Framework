@@ -148,3 +148,9 @@ if (WIN32)
     set(StackWalker_DISABLE_TESTS CACHE BOOL "" ON)
     add_subdirectory(StackWalker)
 endif ()
+
+# Build v8pp
+set(V8PP_ISOLATE_DATA_SLOT 1 CACHE STRING "v8::Isolate data slot number, used in v8pp for shared data")
+set(V8PP_HEADER_ONLY 1 CACHE BOOL "Header-only library")
+set(V8_COMPRESS_POINTERS 0 CACHE BOOL "Use new V8 ABI with V8_COMPRESS_POINTERS and V8_31BIT_SMIS_ON_64BIT_ARCH")
+add_subdirectory(v8pp)
