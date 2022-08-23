@@ -28,13 +28,13 @@ set(FRAMEWORK_SRC
     )
 
 set(FRAMEWORK_SERVER_SRC
-    src/scripting/sdk.cpp
-    src/scripting/engine.cpp
+    src/scripting/module.cpp
+    src/scripting/engines/node/engine.cpp
+    src/scripting/engines/node/resource.cpp
     src/scripting/events.cpp
     src/scripting/resource.cpp
-    src/scripting/resource_manager.cpp
 
-    src/scripting/builtins/factory.cpp
+        src/scripting/builtins/factory.cpp
 
     src/scripting/v8_helpers/argstack.cpp
     src/scripting/v8_helpers/v8_class.cpp

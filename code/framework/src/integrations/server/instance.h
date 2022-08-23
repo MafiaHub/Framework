@@ -61,7 +61,7 @@ namespace Framework::Integrations::Server {
         std::string firebaseApiKey;
 
         // scripting
-        Framework::Scripting::SDKRegisterCallback sdkRegisterCallback;
+        // Framework::Scripting::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
@@ -96,7 +96,7 @@ namespace Framework::Integrations::Server {
         OnPlayerConnectionCallback _onPlayerConnectCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectCallback;
 
-        void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
+        // void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
 
       public:
         Instance();
@@ -133,9 +133,9 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Framework::Scripting::Engine> GetScriptingEngine() const {
+        /*std::shared_ptr<Framework::Scripting::Engine> GetScriptingEngine() const {
             return _scriptingEngine;
-        }
+        }*/
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
             return _worldEngine;

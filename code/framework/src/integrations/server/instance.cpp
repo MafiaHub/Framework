@@ -88,12 +88,12 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        const auto sdkCallback = [this](Framework::Scripting::SDK *sdk) {
+        /*const auto sdkCallback = [this](Framework::Scripting::SDK *sdk) {
             this->RegisterScriptingBuiltins(sdk);
-        };
+        };*/
 
         // Initialize the scripting engine
-        if (_scriptingEngine->Init(sdkCallback) != Framework::Scripting::EngineError::ENGINE_NONE) {
+        if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
@@ -337,7 +337,7 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
+    /*void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
         using namespace Framework::Scripting;
         Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
         Builtins::PlayerRegister(sdk->GetRootModule());
@@ -348,5 +348,5 @@ namespace Framework::Integrations::Server {
         }
         
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
-    }
+    }*/
 } // namespace Framework::Integrations::Server
