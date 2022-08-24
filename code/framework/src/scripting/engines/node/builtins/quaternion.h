@@ -10,10 +10,6 @@
 
 #include "../../../keys.h"
 #include "../resource.h"
-#include "../v8_helpers/helpers.h"
-#include "../v8_helpers/v8_class.h"
-#include "../v8_helpers/v8_module.h"
-#include "factory.h"
 
 #include <glm/ext.hpp>
 #include <glm/ext/matrix_relational.hpp>
@@ -22,111 +18,100 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+
+#include <list>
 #include <iomanip>
 #include <sstream>
 
+#include <v8pp/class.hpp>
+#include <v8pp/module.hpp>
+
 namespace Framework::Scripting::Builtins {
-    inline void QuatExtract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &w, double &x, double &y, double &z) {
-        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "w"), ctx, w);
-        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "x"), ctx, x);
-        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "y"), ctx, y);
-        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "z"), ctx, z);
-    }
+    class Quaternion {
+      private:
+        glm::quat _data;
 
-    static void QuaternionConstructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_VALIDATE_CTOR_CALL();
-
-        V8_GET_SELF();
-        V8_DEFINE_STACK();
-
-        double w, x, y, z;
-        if (!Helpers::GetQuat(ctx, stack, w, x, y, z)) {
-            Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
-            return;
+      public:
+        Quaternion(float w, float x, float y, float z) {
+            _data = {w, x, y, z};
         }
 
-        V8_DEF_PROP("w", v8::Number::New(isolate, w));
-        V8_DEF_PROP("x", v8::Number::New(isolate, x));
-        V8_DEF_PROP("y", v8::Number::New(isolate, y));
-        V8_DEF_PROP("z", v8::Number::New(isolate, z));
-    }
-
-    static void QuaternionConj(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        // Construct our objects
-        glm::quat oldQuat(w, x, y, z);
-        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::conjugate(oldQuat)));
-    }
-
-    static void QuaternionCross(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newW, newX, newY, newZ;
-        if (!Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
-            Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
-            return;
+        float GetW() const {
+            return _data.w;
         }
 
-        // Acquire old values
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        // Construct our objects
-        glm::quat oldQuat(w, x, y, z);
-        glm::quat newQuat(newW, newX, newY, newZ);
-        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::cross(oldQuat, newQuat)));
-    }
-
-    static void QuaternionDot(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newW, newX, newY, newZ;
-        if (!Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
-            Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
-            return;
+        float GetX() const {
+            return _data.x;
         }
 
-        // Acquire old values
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
+        float GetY() const {
+            return _data.y;
+        }
 
-        // Construct our objects
-        glm::quat oldQuat(w, x, y, z);
-        glm::quat newQuat(newW, newX, newY, newZ);
-        V8_RETURN(static_cast<float>(glm::dot(oldQuat, newQuat)));
-    }
+        float GetZ() const {
+            return _data.z;
+        }
 
-    static void QuaternionInverse(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
+        double GetLength() const {
+            return glm::length(_data);
+        }
 
-        V8_GET_SELF();
+        std::string ToString() const {
+            std::ostringstream ss;
+            ss << std::fixed << std::setprecision(4) << "Quaternion{ w: " << _data.w << ", x: " << _data.x << ", y: " << _data.y << ", z: " << _data.z << " }";
+            return ss.str();
+        }
 
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
+        std::list<double> ToArray() const {
+            return {_data.w, _data.x, _data.y, _data.z};
+        }
 
-        // Construct our objects
-        glm::quat oldQuat(w, x, y, z);
-        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::inverse(oldQuat)));
-    }
+        void Add(double w, double x, double y, double z) {
+            glm::quat newQuat(w, x, y, z);
+            _data += newQuat;
+        }
 
+        void Sub(double w, double x, double y, double z){
+            glm::quat newQuat(w, x, y, z);
+            _data -= newQuat;
+        }
+
+        void Mul(double w, double x, double y, double z){
+            glm::quat newQuat(w, x, y, z);
+            _data *= newQuat;
+        }
+
+        void Div(double w, double x, double y, double z){
+            glm::quat newQuat(w, x, y, z);
+            _data *= newQuat;
+        }
+
+        void Lerp(double w, double x, double y, double z, double f){
+            glm::quat newQuat(w, x, y, z);
+            _data = glm::mix(_data, newQuat, static_cast<float>(f));
+        }
+
+        void Conjugate(double w, double x, double y, double z){
+            glm::quat newQuat(w, x, y, z);
+            _data = glm::conjugate(_data);
+        }
+
+        void Cross(double w, double x, double y, double z){
+            glm::quat newQuat(w, x, y, z);
+            _data = glm::cross(_data, newQuat);
+        }
+
+        float Dot(double w, double x, double y, double z){
+            glm::quat newQuat(w, x, y, z);
+            return glm::dot(_data, newQuat);
+        }
+
+        void Inverse(){
+            _data = glm::inverse(_data);
+        }
+    };
+
+    /*
     static void QuaternionRotateVector3(const v8::FunctionCallbackInfo<v8::Value> &info) {
         V8_GET_SUITE();
 
@@ -147,75 +132,6 @@ namespace Framework::Scripting::Builtins {
         glm::quat oldQuat(w, x, y, z);
         glm::vec3 point(pX, pY, pZ);
         V8_RETURN(CreateVector3(V8_RES_GETROOT(resource), ctx, oldQuat * point));
-    }
-
-    static void QuaternionSlerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newW, newX, newY, newZ;
-        if (!Helpers::GetQuat(ctx, stack, newW, newX, newY, newZ)) {
-            Helpers::Throw(isolate, "Argument must be a Quaternion or an array of 4 numbers");
-            return;
-        }
-
-        // Acquire factor
-        double f;
-        Helpers::SafeToNumber(info[4], ctx, f);
-
-        // Acquire old values
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        // Construct our objects
-        glm::quat oldQuat(w, x, y, z);
-        glm::quat newQuat(newW, newX, newY, newZ);
-        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, glm::mix(oldQuat, newQuat, static_cast<float>(f))));
-    }
-
-    static void QuaternionLength(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_GET_SELF();
-
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        glm::quat nativeQuat(w, x, y, z);
-        V8_RETURN(static_cast<double>(glm::length(nativeQuat)));
-    }
-
-    static void QuaternionToArray(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_GET_SELF();
-
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        v8::Local<v8::Array> arr = v8::Array::New(isolate, 4);
-        (void)arr->Set(ctx, 0, v8::Number::New(isolate, w));
-        (void)arr->Set(ctx, 1, v8::Number::New(isolate, x));
-        (void)arr->Set(ctx, 2, v8::Number::New(isolate, y));
-        (void)arr->Set(ctx, 3, v8::Number::New(isolate, z));
-        V8_RETURN(arr);
-    }
-
-    static void QuaternionToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_GET_SELF();
-
-        double w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        std::ostringstream ss;
-        ss << std::fixed << std::setprecision(4) << "Quaternion{ w: " << w << ", x: " << x << ", y: " << y << ", z: " << z << " }";
-        V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
     }
 
     static void QuaternionFromEuler(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -247,31 +163,32 @@ namespace Framework::Scripting::Builtins {
         glm::quat newQuat(glm::angleAxis(static_cast<float>(angle), glm::vec3(axisX, axisY, axisZ)));
 
         V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, newQuat));
-    }
+    }*/
 
-    static void QuaternionRegister(Scripting::Helpers::V8Module *rootModule) {
+    static void QuaternionRegister(v8::Isolate *isolate, v8pp::module *rootModule) {
         if (!rootModule) {
             return;
         }
 
-        auto quatClass = new Helpers::V8Class(
-            GetKeyName(Keys::KEY_QUATERNION), QuaternionConstructor, V8_CLASS_CB {
-                v8::Isolate *isolate = v8::Isolate::GetCurrent();
-                Helpers::SetAccessor(isolate, tpl, "length", QuaternionLength);
+        v8pp::class_<Quaternion> cls(isolate);
+        cls.ctor<float, float, float, float>();
+        cls.property("w", &Quaternion::GetW);
+        cls.property("x", &Quaternion::GetX);
+        cls.property("y", &Quaternion::GetY);
+        cls.property("z", &Quaternion::GetZ);
+        cls.property("length", &Quaternion::GetLength);
+        cls.function("toString", &Quaternion::ToString);
+        cls.function("toArray", &Quaternion::ToArray);
+        cls.function("add", &Quaternion::Add);
+        cls.function("sub", &Quaternion::Sub);
+        cls.function("mul", &Quaternion::Mul);
+        cls.function("div", &Quaternion::Div);
+        cls.function("lerp", &Quaternion::Lerp);
+        cls.function("conjugate", &Quaternion::Conjugate);
+        cls.function("cross", &Quaternion::Cross);
+        cls.function("dot", &Quaternion::Dot);
+        cls.function("inverse", &Quaternion::Inverse);
 
-                Helpers::SetStaticMethod(isolate, tpl, "fromEuler", QuaternionFromEuler);
-                Helpers::SetStaticMethod(isolate, tpl, "fromAxisAngle", QuaternionFromAxisAngle);
-
-                Helpers::SetMethod(isolate, tpl, "conj", QuaternionConj);
-                Helpers::SetMethod(isolate, tpl, "dot", QuaternionDot);
-                Helpers::SetMethod(isolate, tpl, "cross", QuaternionCross);
-                Helpers::SetMethod(isolate, tpl, "inverse", QuaternionInverse);
-                Helpers::SetMethod(isolate, tpl, "toArray", QuaternionToArray);
-                Helpers::SetMethod(isolate, tpl, "toString", QuaternionToString);
-                Helpers::SetMethod(isolate, tpl, "rotateVec3", QuaternionRotateVector3);
-                Helpers::SetMethod(isolate, tpl, "slerp", QuaternionSlerp);
-            });
-
-        rootModule->AddClass(quatClass);
+        rootModule->class_("Quaternion", cls);
     }
 } // namespace Framework::Scripting::Builtins

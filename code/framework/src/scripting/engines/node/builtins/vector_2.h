@@ -10,226 +10,91 @@
 
 #include "../../../keys.h"
 #include "../resource.h"
-#include "../v8_helpers/helpers.h"
-#include "../v8_helpers/v8_class.h"
-#include "../v8_helpers/v8_module.h"
-#include "factory.h"
 
 #include <glm/glm.hpp>
+#include <v8pp/module.hpp>
+#include <v8pp/class.hpp>
+
+#include <list>
 #include <iomanip>
 #include <sstream>
 
 namespace Framework::Scripting::Builtins {
-    inline void Vector2Extract(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, double &x, double &y) {
-        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "x"), ctx, x);
-        Helpers::SafeToNumber(Helpers::Get(ctx, obj, "y"), ctx, y);
-    }
+    class Vector2 {
+      private:
+        glm::vec2 _data;
 
-    static void Vector2Constructor(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_VALIDATE_CTOR_CALL();
-
-        V8_GET_SELF();
-        V8_DEFINE_STACK();
-
-        double x, y;
-        if (!Helpers::GetVec2(ctx, stack, x, y)) {
-            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
-            return;
+      public:
+        Vector2(double x, double y) {
+            _data = {x, y};
         }
 
-        Helpers::DefineOwnProperty(isolate, ctx, _this, "x", v8::Number::New(isolate, x), v8::PropertyAttribute::ReadOnly);
-        Helpers::DefineOwnProperty(isolate, ctx, _this, "y", v8::Number::New(isolate, y), v8::PropertyAttribute::ReadOnly);
-    }
-
-    static void Vector2Add(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newX, newY;
-        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
-            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
-            return;
+        double GetX() const {
+            return _data.x;
         }
 
-        // Acquire old values
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        // Construct our objects
-        glm::vec2 oldVec(x, y);
-        glm::vec2 newVec(newX, newY);
-        oldVec += newVec;
-        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
-    }
-
-    static void Vector2Sub(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newX, newY;
-        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
-            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
-            return;
+        double GetY() const {
+            return _data.y;
         }
 
-        // Acquire old values
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        // Construct our objects
-        glm::vec2 oldVec(x, y);
-        glm::vec2 newVec(newX, newY);
-        oldVec -= newVec;
-        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
-    }
-
-    static void Vector2Mul(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newX, newY;
-        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
-            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
-            return;
+        double GetLength() const {
+            return glm::length(_data);
         }
 
-        // Acquire old values
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        // Construct our objects
-        glm::vec2 oldVec(x, y);
-        glm::vec2 newVec(newX, newY);
-        oldVec *= newVec;
-        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
-    }
-
-    static void Vector2Div(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newX, newY;
-        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
-            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
-            return;
+        std::string ToString() const {
+            std::ostringstream ss;
+            ss << std::fixed << std::setprecision(4) << "Vector2{ x: " << _data.x << ", y: " << _data.y << " }";
+            return ss.str();
         }
 
-        // Acquire old values
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        // Construct our objects
-        glm::vec2 oldVec(x, y);
-        glm::vec2 newVec(newX, newY);
-        oldVec /= newVec;
-        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, oldVec));
-    }
-
-    static void Vector2Lerp(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        // Acquire new values
-        V8_DEFINE_STACK();
-
-        double newX, newY;
-        if (!Helpers::GetVec2(ctx, stack, newX, newY)) {
-            Helpers::Throw(isolate, "Argument must be a Vector2 or an array of 2 numbers");
-            return;
+        std::list<double> ToArray() const {
+            return {_data.x, _data.y};
         }
 
-        // Acquire factor
-        double f;
-        Helpers::SafeToNumber(stack.Pop(), ctx, f);
+        void Add(double x, double y) {
+            glm::vec2 newVec(x, y);
+            _data += newVec;
+        }
 
-        // Acquire old values
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
+        void Sub(double x, double y){
+            glm::vec2 newVec(x, y);
+            _data -= newVec;
+        }
 
-        // Construct our objects
-        glm::vec2 oldVec(x, y);
-        glm::vec2 newVec(newX, newY);
-        V8_RETURN(CreateVector2(resource->GetSDK()->GetRootModule(), ctx, glm::mix(oldVec, newVec, static_cast<float>(f))));
-    }
+        void Mul(double x, double y){
+            glm::vec2 newVec(x, y);
+            _data *= newVec;
+        }
 
-    static void Vector2Length(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        v8::Isolate *isolate       = info.GetIsolate();
-        v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext();
+        void Div(double x, double y){
+            glm::vec2 newVec(x, y);
+            _data *= newVec;
+        }
 
-        V8_GET_SELF();
+        void Lerp(double x, double y, double f){
+            glm::vec2 newVec(x, y);
+            _data = glm::mix(_data, newVec, static_cast<float>(f));
+        }
+    };
 
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        glm::vec2 nativeVec(x, y);
-        V8_RETURN(static_cast<double>(glm::length(nativeVec)));
-    }
-
-    static void Vector2ToArray(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_GET_SELF();
-
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        v8::Local<v8::Array> arr = v8::Array::New(isolate, 2);
-        (void)arr->Set(ctx, 0, v8::Number::New(isolate, x));
-        (void)arr->Set(ctx, 1, v8::Number::New(isolate, y));
-        V8_RETURN(arr);
-    }
-
-    static void Vector2ToString(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_ISOLATE_CONTEXT();
-
-        V8_GET_SELF();
-
-        double x, y;
-        Vector2Extract(ctx, _this, x, y);
-
-        std::ostringstream ss;
-        ss << std::fixed << std::setprecision(4) << "Vector2{ x: " << x << ", y: " << y << " }";
-        V8_RETURN(v8::String::NewFromUtf8(isolate, (ss.str().c_str()), v8::NewStringType::kNormal).ToLocalChecked());
-    }
-
-    static void Vector2Register(Scripting::Helpers::V8Module *rootModule) {
+    static void Vector2Register(v8::Isolate *isolate, v8pp::module *rootModule) {
         if (!rootModule) {
             return;
         }
 
-        auto vec2Class = new Helpers::V8Class(
-            GetKeyName(Keys::KEY_VECTOR_2), Vector2Constructor, V8_CLASS_CB {
-                v8::Isolate *isolate = v8::Isolate::GetCurrent();
-                Helpers::SetAccessor(isolate, tpl, "length", Vector2Length);
+        v8pp::class_<Vector2> cls(isolate);
+        cls.ctor<double, double>();
+        cls.property("x", &Vector2::GetX);
+        cls.property("y", &Vector2::GetY);
+        cls.property("length", &Vector2::GetLength);
+        cls.function("toString", &Vector2::ToString);
+        cls.function("toArray", &Vector2::ToArray);
+        cls.function("add", &Vector2::Add);
+        cls.function("sub", &Vector2::Sub);
+        cls.function("mul", &Vector2::Mul);
+        cls.function("div", &Vector2::Div);
+        cls.function("lerp", &Vector2::Lerp);
 
-                Helpers::SetMethod(isolate, tpl, "add", Vector2Add);
-                Helpers::SetMethod(isolate, tpl, "sub", Vector2Sub);
-                Helpers::SetMethod(isolate, tpl, "mul", Vector2Mul);
-                Helpers::SetMethod(isolate, tpl, "div", Vector2Div);
-                Helpers::SetMethod(isolate, tpl, "lerp", Vector2Lerp);
-                Helpers::SetMethod(isolate, tpl, "toArray", Vector2ToArray);
-                Helpers::SetMethod(isolate, tpl, "toString", Vector2ToString);
-            });
-
-        rootModule->AddClass(vec2Class);
+        rootModule->class_("Vector2", cls);
     }
 } // namespace Framework::Scripting::Builtins

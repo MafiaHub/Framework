@@ -34,8 +34,7 @@ set(FRAMEWORK_SERVER_SRC
     src/scripting/engines/node/sdk.cpp
     src/scripting/events.cpp
 
-    src/scripting/engines/node/builtins/factory.cpp
-    src/scripting/engines/node/v8_helpers/argstack.cpp
+        src/scripting/engines/node/v8_helpers/argstack.cpp
     src/scripting/engines/node/v8_helpers/v8_class.cpp
     src/scripting/engines/node/v8_helpers/v8_module.cpp
     src/scripting/engines/node/v8_helpers/v8_source_location.cpp

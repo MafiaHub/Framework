@@ -8,9 +8,16 @@
 
 #include "sdk.h"
 
+#include "builtins/quaternion.h"
+#include "builtins/vector_2.h"
+#include "builtins/vector_3.h"
+
 namespace Framework::Scripting::Engines::Node {
     bool SDK::Init(v8::Isolate *isolate) {
         _module = new v8pp::module(isolate);
-        _module->const_("PI", 3.1415);
+
+        Builtins::QuaternionRegister(isolate, _module);
+        Builtins::Vector3Register(isolate, _module);
+        Builtins::Vector2Register(isolate, _module);
     }
 } // namespace Framework::Scripting::Engines::Node

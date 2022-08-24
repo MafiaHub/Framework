@@ -76,7 +76,7 @@ namespace Framework::Scripting::Engines::Node {
         const auto sdk = new SDK;
         sdk->Init(_isolate);
         _isolate->GetCurrentContext()->Global()->Set(context, v8::String::NewFromUtf8(_isolate, "sdk").ToLocalChecked(), sdk->GetNewInstance());
-        
+
         // Initialize our uv loop
         _uvLoop = new uv_loop_t;
         uv_loop_init(_uvLoop);
