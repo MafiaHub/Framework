@@ -12,7 +12,6 @@
 #pragma once
 
 #include "../../../keys.h"
-#include "argstack.h"
 #include "v8_string.h"
 
 #include <v8.h>
@@ -124,75 +123,6 @@ namespace Framework::Scripting::Helpers {
             return false;
         out = maybeVal.ToLocalChecked()->Uint64Value();
         return true;
-    }
-
-    inline bool GetVec3(v8::Local<v8::Context> ctx, ArgumentStack &stack, double &x, double &y, double &z) {
-        v8::Local<v8::Value> front = stack.Peek();
-        if (front->IsObject() && Helpers::ToString(front.As<v8::Object>()->GetConstructorName()) == GetKeyName(Keys::KEY_VECTOR_3)) {
-            auto arg = stack.Pop();
-            if (!arg->IsObject()) {
-                return false;
-            }
-
-            v8::Local<v8::Object> vec3 = arg.As<v8::Object>();
-            bool r1                    = SafeToNumber(Get(ctx, vec3, "x"), ctx, x);
-            bool r2                    = SafeToNumber(Get(ctx, vec3, "y"), ctx, y);
-            bool r3                    = SafeToNumber(Get(ctx, vec3, "z"), ctx, z);
-            return r1 && r2 && r3;
-        }
-        else {
-            bool r1 = SafeToNumber(stack.Pop(), ctx, x);
-            bool r2 = SafeToNumber(stack.Pop(), ctx, y);
-            bool r3 = SafeToNumber(stack.Pop(), ctx, z);
-            return r1 && r2 && r3;
-        }
-        return false;
-    }
-
-    inline bool GetVec2(v8::Local<v8::Context> ctx, ArgumentStack &stack, double &x, double &y) {
-        v8::Local<v8::Value> front = stack.Peek();
-        if (front->IsObject() && Helpers::ToString(front.As<v8::Object>()->GetConstructorName()) == GetKeyName(Keys::KEY_VECTOR_2)) {
-            auto arg = stack.Pop();
-            if (!arg->IsObject()) {
-                return false;
-            }
-
-            v8::Local<v8::Object> vec2 = arg.As<v8::Object>();
-            bool r1                    = SafeToNumber(Get(ctx, vec2, "x"), ctx, x);
-            bool r2                    = SafeToNumber(Get(ctx, vec2, "y"), ctx, y);
-            return r1 && r2;
-        }
-        else {
-            bool r1 = SafeToNumber(stack.Pop(), ctx, x);
-            bool r2 = SafeToNumber(stack.Pop(), ctx, y);
-            return r1 && r2;
-        }
-        return false;
-    }
-
-    inline bool GetQuat(v8::Local<v8::Context> ctx, ArgumentStack &stack, double &w, double &x, double &y, double &z) {
-        v8::Local<v8::Value> front = stack.Peek();
-        if (front->IsObject() && Helpers::ToString(front.As<v8::Object>()->GetConstructorName()) == GetKeyName(Keys::KEY_QUATERNION)) {
-            auto arg = stack.Pop();
-            if (!arg->IsObject()) {
-                return false;
-            }
-
-            v8::Local<v8::Object> quat = arg.As<v8::Object>();
-            bool r1                    = SafeToNumber(Get(ctx, quat, "w"), ctx, w);
-            bool r2                    = SafeToNumber(Get(ctx, quat, "x"), ctx, x);
-            bool r3                    = SafeToNumber(Get(ctx, quat, "y"), ctx, y);
-            bool r4                    = SafeToNumber(Get(ctx, quat, "z"), ctx, z);
-            return r1 && r2 && r3 && r4;
-        }
-        else {
-            bool r1 = SafeToNumber(stack.Pop(), ctx, w);
-            bool r2 = SafeToNumber(stack.Pop(), ctx, x);
-            bool r3 = SafeToNumber(stack.Pop(), ctx, y);
-            bool r4 = SafeToNumber(stack.Pop(), ctx, z);
-            return r1 && r2 && r3 && r4;
-        }
-        return false;
     }
 
     inline v8::Local<v8::String> JSValue(const char *val) {

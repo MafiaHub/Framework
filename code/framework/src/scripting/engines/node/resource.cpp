@@ -13,6 +13,9 @@
 #include "engine.h"
 #include "resource.h"
 #include "sdk.h"
+
+#include "../../events.h"
+
 #include "v8_helpers/v8_string.h"
 #include "v8_helpers/v8_try_catch.h"
 
@@ -69,7 +72,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::Context::Scope scope(context);
 
         // Assign ourselves in the context (allows to be fetched later on)
-        context->SetAlignedPointerInEmbedderData(1, this);
+        context->SetAlignedPointerInEmbedderData(0, this);
         _context.Reset(_isolate, context);
 
         // Register the SDK on the global object template
@@ -102,6 +105,7 @@ namespace Framework::Scripting::Engines::Node {
         Run();
 
         _loaded = true;
+        InvokeEvent(Events[EventIDs::RESOURCE_LOADED], _name);
         return true;
     }
 
@@ -146,8 +150,6 @@ namespace Framework::Scripting::Engines::Node {
         node::CallbackScope callbackScope(_isolate, _asyncResource.Get(_isolate), _asyncContext);
 
         uv_run(_uvLoop, UV_RUN_NOWAIT);
-
-        // TODO: tick the event handlers
 
         // Update the file watcher
         if (!_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
