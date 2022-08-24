@@ -19,7 +19,7 @@
 #include <list>
 #include <sstream>
 
-namespace Framework::Scripting::Builtins {
+namespace Framework::Scripting::Engines::Node::Builtins {
     class Vector3 {
       private:
         glm::vec3 _data;

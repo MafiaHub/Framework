@@ -19,7 +19,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace Framework::Scripting::Builtins {
+namespace Framework::Scripting::Engines::Node::Builtins {
     class Vector2 {
       private:
         glm::vec2 _data;

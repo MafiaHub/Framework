@@ -15,7 +15,7 @@
 
 #include <v8.h>
 
-namespace Framework::Scripting::Builtins {
+namespace Framework::Scripting::Engines::Node::Builtins {
     static void OnEvent(const v8::FunctionCallbackInfo<v8::Value> &info) {
         if (info.Length() == 2) {
             if (!info[0]->IsString() || !info[1]->IsFunction()) {

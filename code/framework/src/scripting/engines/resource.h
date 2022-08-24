@@ -16,7 +16,6 @@ namespace Framework::Scripting::Engines {
         virtual void Update(bool) = 0;
 
         virtual bool IsLoaded() = 0;
-
       private:
         virtual bool LoadPackageFile() = 0;
         virtual bool WatchChanges() = 0;
