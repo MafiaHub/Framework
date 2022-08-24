@@ -8,6 +8,8 @@
 
 #include "client.h"
 
+#include "game_rpc/set_transform.h"
+
 #include <optick.h>
 
 namespace Framework::World {
@@ -77,6 +79,9 @@ namespace Framework::World {
                 }
             }
         });
+
+        // Register built-in RPCs
+        InitRPCs(peer);
     }
 
     void ClientEngine::OnDisconnect() {
@@ -102,6 +107,19 @@ namespace Framework::World {
         _world->defer_end();
 
         _networkPeer = nullptr;
+    }
+    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) {
+        net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+            const auto e = GetEntityByServerID(msg->GetServerID());
+            if (!e.is_alive()) {
+                return;
+            }
+            auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr     = msg->GetTransform();
+        });
     }
 
 } // namespace Framework::World

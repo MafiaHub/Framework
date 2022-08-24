@@ -55,5 +55,19 @@ namespace Framework::Networking {
         void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = std::move(callback);
         }
+
+        template <typename T>
+        bool SendGameRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            SLNet::BitStream bs;
+            bs.Write(Messages::INTERNAL_RPC);
+            bs.Write(rpc.GetHashName());
+            rpc.Serialize(&bs, true);
+            rpc.Serialize2(&bs, true);
+
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+                return false;
+            }
+            return true;
+        }
     };
 }; // namespace Framework::Networking

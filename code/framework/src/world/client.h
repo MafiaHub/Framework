@@ -23,6 +23,8 @@ namespace Framework::World {
         flecs::entity _streamEntities;
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
         OnEntityDestroyCallback _onEntityDestroyCallback;
+      private:
+        void InitRPCs(Networking::NetworkPeer *peer);
       public:
         EngineError Init();
 
