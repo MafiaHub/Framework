@@ -25,7 +25,7 @@ elseif (UNIX)
 endif ()
 
 target_include_directories(NodeJS INTERFACE "include")
-target_link_libraries(NodeJS INTERFACE ${NODEJS_LIBS})
+target_link_libraries(NodeJS INTERFACE node.102)
 message(STATUS "NodeJS libraries: ${NODEJS_LIBS}")
 
 # TODO shit code
