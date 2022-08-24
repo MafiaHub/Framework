@@ -16,7 +16,11 @@
 #include "v8_helpers/v8_string.h"
 #include "v8_helpers/v8_try_catch.h"
 
-static const char bootstrap_code[] = "";
+static const char bootstrap_code[] = R"(
+const publicRequire = require("module").createRequire(process.cwd() + "/resources/" + "{}" + "/");
+globalThis.require = publicRequire;
+require("vm").runInThisContext(process.argv[1]);
+)";
 
 namespace Framework::Scripting::Engines::Node {
     Resource::Resource(IEngine *engine, v8::Isolate *isolate, std::string &path): _engine(engine), _isolate(isolate), _loaded(false), _isShuttingDown(false), _path(path) {
@@ -72,7 +76,7 @@ namespace Framework::Scripting::Engines::Node {
         const auto sdk = new SDK;
         sdk->Init(_isolate);
         _isolate->GetCurrentContext()->Global()->Set(context, v8::String::NewFromUtf8(_isolate, "sdk").ToLocalChecked(), sdk->GetNewInstance());
-
+        
         // Initialize our uv loop
         _uvLoop = new uv_loop_t;
         uv_loop_init(_uvLoop);
@@ -88,7 +92,7 @@ namespace Framework::Scripting::Engines::Node {
         node::SetIsolateUpForNode(_isolate, is);
 
         // Load the environment
-        node::LoadEnvironment(_env, bootstrap_code);
+        node::LoadEnvironment(_env, fmt::format(bootstrap_code, _name).c_str());
 
         // Create our resource representation
         _asyncResource.Reset(_isolate, v8::Object::New(_isolate));
