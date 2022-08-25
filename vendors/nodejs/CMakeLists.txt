@@ -1,4 +1,4 @@
-add_library(NodeJS INTERFACE)
+add_library(NodeJS STATIC dummy.cpp)
 
 # Build nghttp2
 if (UNIX)
@@ -9,6 +9,9 @@ if (CMAKE_CL_64)
     target_link_directories(NodeJS INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/lib/win64")
     file(GLOB NODEJS_LIBS "${CMAKE_CURRENT_SOURCE_DIR}/lib/win64/*.lib")
     set(NODEJS_ARCH "win64")
+    add_custom_command(TARGET NodeJS POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/lib/win64/libnode.dll" "${CMAKE_BINARY_DIR}/bin/"
+            )
 elseif (WIN32)
     target_link_directories(NodeJS INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32")
     file(GLOB NODEJS_LIBS "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32/*.lib")
@@ -24,13 +27,12 @@ elseif (UNIX)
     set(NODEJS_ARCH "linux")
 endif ()
 
-target_include_directories(NodeJS INTERFACE "include")
-target_link_libraries(NodeJS INTERFACE libnode)
+target_include_directories(NodeJS PUBLIC "include")
 
 if (WIN32)
-  target_link_libraries(NodeJS INTERFACE libnode.lib dbghelp.lib winmm.lib shlwapi.lib)
+  target_link_libraries(NodeJS libnode.lib dbghelp.lib winmm.lib shlwapi.lib)
 else()
-  target_link_libraries(NodeJS INTERFACE node.102)
+  target_link_libraries(NodeJS node.102)
 endif ()
 
 message(STATUS "NodeJS libraries: ${NODEJS_LIBS}")
