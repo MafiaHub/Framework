@@ -25,7 +25,14 @@ elseif (UNIX)
 endif ()
 
 target_include_directories(NodeJS INTERFACE "include")
-target_link_libraries(NodeJS INTERFACE node.102)
+target_link_libraries(NodeJS INTERFACE libnode)
+
+if (WIN32)
+  target_link_libraries(NodeJS INTERFACE libnode.lib dbghelp.lib winmm.lib shlwapi.lib)
+else()
+  target_link_libraries(NodeJS INTERFACE node.102)
+endif ()
+
 message(STATUS "NodeJS libraries: ${NODEJS_LIBS}")
 
 # TODO shit code
