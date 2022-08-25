@@ -54,5 +54,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Always bind the mod-side in last
         //TODO: register callback
+
+        return true;
     }
 } // namespace Framework::Scripting::Engines::Node

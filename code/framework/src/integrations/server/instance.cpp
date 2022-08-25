@@ -23,6 +23,7 @@
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
+#include <csignal>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
