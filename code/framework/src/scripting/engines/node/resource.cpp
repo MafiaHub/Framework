@@ -35,12 +35,6 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool Resource::Init() {
-        if (LoadPackageFile()) {
-            if (Init()) {
-                WatchChanges();
-            }
-        }
-
         if (_loaded) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' is already loaded", _name);
             return false;
@@ -264,5 +258,12 @@ namespace Framework::Scripting::Engines::Node {
             return true;
         });
         return true;
+    }
+    void Resource::Preload() {
+        if (LoadPackageFile()) {
+            if (Init()) {
+                WatchChanges();
+            }
+        }
     }
 } // namespace Framework::Scripting::Engines::Node

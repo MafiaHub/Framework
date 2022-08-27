@@ -15,6 +15,7 @@ namespace Framework::Scripting::Engines {
         virtual bool Init()       = 0;
         virtual bool Shutdown()   = 0;
         virtual void Update(bool) = 0;
+        virtual void Preload()    = 0;
 
         virtual bool IsLoaded() = 0;
 

@@ -106,6 +106,8 @@ namespace Framework::Scripting {
             return false;
         }
 
+        res->Preload();
+
         // If loading failed, just free everything and return
         if (!res->IsLoaded()) {
             delete res;

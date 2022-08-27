@@ -72,6 +72,7 @@ namespace Framework::Scripting::Engines::Node {
         bool WatchChanges() override;
         bool Compile(const std::string &, const std::string &) override;
         bool Run() override;
+        void Preload() override;
 
         bool IsLoaded() override {
             return _loaded;
