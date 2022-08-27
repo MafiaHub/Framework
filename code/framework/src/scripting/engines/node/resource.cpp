@@ -26,13 +26,7 @@ require("vm").runInThisContext(process.argv[1]);
 )";
 
 namespace Framework::Scripting::Engines::Node {
-    Resource::Resource(IEngine *engine, v8::Isolate *isolate, std::string &path): _engine(engine), _isolate(isolate), _loaded(false), _isShuttingDown(false), _path(path) {
-        if (LoadPackageFile()) {
-            if (Init()) {
-                WatchChanges();
-            }
-        }
-    }
+    Resource::Resource(IEngine *engine, v8::Isolate *isolate, std::string &path): _engine(engine), _isolate(isolate), _loaded(false), _isShuttingDown(false), _path(path) {}
 
     Resource::~Resource() {
         if (_loaded) {
@@ -41,6 +35,12 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool Resource::Init() {
+        if (LoadPackageFile()) {
+            if (Init()) {
+                WatchChanges();
+            }
+        }
+
         if (_loaded) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' is already loaded", _name);
             return false;
@@ -64,7 +64,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
 
-        // Alocate our global object template
+        // Allocate our global object template
         v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
 
         // Allocate our context

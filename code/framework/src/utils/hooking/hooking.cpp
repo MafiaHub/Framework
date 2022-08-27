@@ -28,6 +28,7 @@ namespace hook {
     }
 #else
     void *AllocateFunctionStub(void *ptr, int type) {
+        (void)type;
         return ptr;
     }
 #endif

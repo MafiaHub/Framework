@@ -18,7 +18,7 @@ namespace Framework::Networking {
         {SLNet::FAILED_TO_CREATE_NETWORK_THREAD, "Failed to create network thread"}, {SLNet::COULD_NOT_GENERATE_GUID, "Could not generate GUID"},
         {SLNet::STARTUP_OTHER_FAILURE, "Unknown failure"}};
 
-    std::unordered_map<uint8_t, const char *> ConnectionAttemptString = {{SLNet::INVALID_PARAMETER, "Invalid paremeter"},
+    std::unordered_map<uint8_t, const char *> ConnectionAttemptString = {{SLNet::INVALID_PARAMETER, "Invalid parameter"},
         {SLNet::CANNOT_RESOLVE_DOMAIN_NAME, "Cannot resolve domain name"}, {SLNet::ALREADY_CONNECTED_TO_ENDPOINT, "Already connected to endpoint"},
         {SLNet::CONNECTION_ATTEMPT_ALREADY_IN_PROGRESS, "Connection attempt already in progress"}, {SLNet::SECURITY_INITIALIZATION_FAILED, "Security initialization failed"}};
 }; // namespace Framework::Networking

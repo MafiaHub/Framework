@@ -11,7 +11,6 @@
 #include "backend.h"
 
 #ifdef WIN32
-#define _WINSOCKAPI_
 #include <d3d11.h>
 #else
 #define ID3D11Device        void

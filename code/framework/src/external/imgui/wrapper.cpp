@@ -14,7 +14,6 @@
 #include <backends/imgui_impl_dx9.h>
 #include <backends/imgui_impl_sdl.h>
 #include <backends/imgui_impl_win32.h>
-#include <imgui.h>
 
 #include <optick.h>
 
@@ -156,6 +155,9 @@ namespace Framework::External::ImGUI {
         } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_RenderDrawData(drawData);
+        } break;
+        case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
+            assert(0 && "D3D12 backend not implemented");
         } break;
         }
 

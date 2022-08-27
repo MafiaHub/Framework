@@ -101,7 +101,7 @@ namespace Framework::Networking {
             }
             _state = CONNECTED;
             return true;
-        } break;
+        };
 
         case ID_NO_FREE_INCOMING_CONNECTIONS: {
             if (_onPlayerDisconnectedCallback) {
@@ -109,7 +109,7 @@ namespace Framework::Networking {
             }
             _state = DISCONNECTED;
             return true;
-        } break;
+        };
 
         case ID_DISCONNECTION_NOTIFICATION: {
             if (_onPlayerDisconnectedCallback) {
@@ -117,7 +117,7 @@ namespace Framework::Networking {
             }
             _state = DISCONNECTED;
             return true;
-        } break;
+        };
 
         case ID_CONNECTION_LOST: {
             if (_onPlayerDisconnectedCallback) {
@@ -125,7 +125,7 @@ namespace Framework::Networking {
             }
             _state = DISCONNECTED;
             return true;
-        } break;
+        };
 
         case ID_CONNECTION_ATTEMPT_FAILED: {
             if (_onPlayerDisconnectedCallback) {
@@ -133,7 +133,7 @@ namespace Framework::Networking {
             }
             _state = DISCONNECTED;
             return true;
-        } break;
+        };
 
         case ID_INVALID_PASSWORD: {
             if (_onPlayerDisconnectedCallback) {
@@ -141,7 +141,7 @@ namespace Framework::Networking {
             }
             _state = DISCONNECTED;
             return true;
-        } break;
+        };
 
         case ID_CONNECTION_BANNED: {
             if (_onPlayerDisconnectedCallback) {
@@ -149,7 +149,7 @@ namespace Framework::Networking {
             }
             _state = DISCONNECTED;
             return true;
-        } break;
+        };
         }
         return false;
     }

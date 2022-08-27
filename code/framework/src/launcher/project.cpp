@@ -18,10 +18,8 @@
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
-#include <cppfs/FilePath.h>
 #include <cppfs/fs.h>
 #include <fstream>
-#include <function2.hpp>
 #include <ostream>
 #include <utils/hooking/hooking.h>
 #include <utils/minidump.h>

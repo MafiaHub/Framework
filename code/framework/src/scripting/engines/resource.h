@@ -11,15 +11,17 @@
 namespace Framework::Scripting::Engines {
     class IResource {
       public:
-        virtual bool Init() = 0;
-        virtual bool Shutdown() = 0;
+        virtual ~IResource() {}
+        virtual bool Init()       = 0;
+        virtual bool Shutdown()   = 0;
         virtual void Update(bool) = 0;
 
         virtual bool IsLoaded() = 0;
+
       private:
-        virtual bool LoadPackageFile() = 0;
-        virtual bool WatchChanges() = 0;
+        virtual bool LoadPackageFile()                                 = 0;
+        virtual bool WatchChanges()                                    = 0;
         virtual bool Compile(const std::string &, const std::string &) = 0;
-        virtual bool Run() = 0;
+        virtual bool Run()                                             = 0;
     };
-}
+} // namespace Framework::Scripting::Engines

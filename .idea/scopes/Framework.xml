@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="Framework" pattern="(!file[Framework]:*/&amp;&amp;!file[Framework]:code//*||file[Framework]:code/framework//*)&amp;&amp;!file[Framework]:code/framework/src/utils/hooking//*" />
+</component>

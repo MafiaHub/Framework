@@ -13,10 +13,8 @@
 #include <logging/logger.h>
 #include <utils/safe_win32.h>
 
-#include <fmt/core.h>
 #include <imgui/imgui.h>
 
-#include <numeric>
 #include <regex>
 #include <sstream>
 
@@ -47,7 +45,7 @@ namespace Framework::External::ImGUI::Widgets {
         }
 
         if (GetAsyncKeyState(VK_MENU) & 0x1) {
-            if (_consoleControl == false) {
+            if (!_consoleControl) {
                 // take back controls
                 LockControls(true);
                 _consoleControl = true;

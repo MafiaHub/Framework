@@ -8,8 +8,6 @@
 
 #include "sdk.h"
 
-#include <v8.h>
-
 #include <string>
 
 #include "builtins/quaternion.h"

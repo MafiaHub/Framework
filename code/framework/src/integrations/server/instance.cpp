@@ -18,7 +18,6 @@
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
-#include "nlohmann/json.hpp"
 #include "optick.h"
 
 #include <cppfs/FileHandle.h>

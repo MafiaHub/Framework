@@ -14,7 +14,7 @@
 #ifdef _M_AMD64
 
 //NOTE: Hooking.Aux
-#include <tlhelp32.h>
+//#include <tlhelp32.h>
 struct DisableToolHelpScope {
     inline DisableToolHelpScope() {
         // write code to disable hooks

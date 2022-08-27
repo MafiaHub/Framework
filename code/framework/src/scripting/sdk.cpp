@@ -8,10 +8,10 @@
 
 #include "sdk.h"
 
-#include "builtins/core.h"
-#include "builtins/quaternion.h"
-#include "builtins/vector_2.h"
-#include "builtins/vector_3.h"
+#include "scripting/engines/node/builtins/core.h"
+#include "scripting/engines/node/builtins/quaternion.h"
+#include "scripting/engines/node/builtins/vector_2.h"
+#include "scripting/engines/node/builtins/vector_3.h"
 #include "logging/logger.h"
 
 namespace Framework::Scripting {
