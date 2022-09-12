@@ -20,14 +20,14 @@ namespace Framework::Scripting::Engines::Node {
         std::vector<std::string> errors;
 
         // Initialize the node with the provided arguments
-         node::InitializeNodeWithArgs(&argv, &eav, &errors);
-        if (errors.size() > 0) {
+        const auto initCode = node::InitializeNodeWithArgs(&argv, &eav, &errors);
+        if (initCode != 0) {
             for (std::string &error : errors) { Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error); }
             return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;
         }
 
         // Initialize the platform
-        _platform = node::MultiIsolatePlatform::Create(4, (v8::TracingController *)nullptr);
+        _platform = node::MultiIsolatePlatform::Create(4);
         v8::V8::InitializePlatform(_platform.get());
         v8::V8::Initialize();
 
@@ -101,7 +101,7 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     Resource *Engine::UnloadResource(std::string fullPath) {
-        //TODO: fix me
+        // TODO: fix me
         return nullptr;
     }
 } // namespace Framework::Scripting::Engines::Node
