@@ -20,6 +20,9 @@ namespace Framework::Scripting::Engines::Node {
         v8::Isolate *_isolate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
 
+        int _processArgsCount;
+        char **_processArgs;
+
       public:
         EngineError Init() override;
         EngineError Shutdown() override;
@@ -34,6 +37,11 @@ namespace Framework::Scripting::Engines::Node {
 
         node::MultiIsolatePlatform *GetPlatform() const {
             return _platform.get();
+        }
+
+        void SetProcessArguments(int argc, char **argv) override {
+            _processArgsCount = argc;
+            _processArgs      = argv;
         }
     };
 } // namespace Framework::Scripting::Engines::Node

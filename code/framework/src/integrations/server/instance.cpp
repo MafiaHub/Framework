@@ -92,6 +92,7 @@ namespace Framework::Integrations::Server {
         };*/
 
         // Initialize the scripting engine
+        _scriptingEngine->SetProcessArguments(opts.argc, opts.argv);
         if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
@@ -130,7 +131,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitEndpoints() {
-        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback& cb) {
+        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback &cb) {
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;
@@ -218,10 +219,10 @@ namespace Framework::Integrations::Server {
             _streamingFactory->SetupServer(newPlayer, guid.g);
 
             auto nickname = msg->GetPlayerName();
-            if (nickname.size() > 64){
+            if (nickname.size() > 64) {
                 nickname = nickname.substr(0, 64);
             }
-            
+
             _playerFactory->SetupServer(newPlayer, guid.g, nickname);
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
@@ -345,7 +346,7 @@ namespace Framework::Integrations::Server {
         if (_opts.sdkRegisterCallback) {
             _opts.sdkRegisterCallback(sdk);
         }
-        
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
     }*/
 } // namespace Framework::Integrations::Server

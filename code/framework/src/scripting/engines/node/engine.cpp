@@ -15,12 +15,13 @@
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init() {
         // Define the arguments to be passed to the node instance
-        std::vector<std::string> argv = {"main.exe"};
-        std::vector<std::string> eav  = {};
-        std::vector<std::string> errors;
+        _processArgs = uv_setup_args(_processArgsCount, _processArgs);
+        std::vector<std::string> args(_processArgs, _processArgs + _processArgsCount);
+        std::vector<std::string> exec_args {};
+        std::vector<std::string> errors {};
 
         // Initialize the node with the provided arguments
-        const auto initCode = node::InitializeNodeWithArgs(&argv, &eav, &errors);
+        int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
         if (initCode != 0) {
             for (std::string &error : errors) { Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error); }
             return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;

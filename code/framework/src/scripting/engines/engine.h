@@ -17,11 +17,13 @@ namespace Framework::Scripting::Engines {
     class IEngine {
       public:
         virtual ~IEngine() {}
-        virtual EngineError Init()     = 0;
-        virtual EngineError Shutdown() = 0;
-        virtual void Update()          = 0;
+        virtual EngineError Init() = 0;
+        virtual EngineError Shutdown()         = 0;
+        virtual void Update()                  = 0;
 
         virtual IResource *LoadResource(std::string)   = 0;
         virtual IResource *UnloadResource(std::string) = 0;
+
+        virtual void SetProcessArguments(int, char **) = 0;
     };
 } // namespace Framework::Scripting::Engines

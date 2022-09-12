@@ -31,6 +31,7 @@ namespace Framework::Scripting {
         }
 
         _engineType = engineType;
+        _engine->SetProcessArguments(_processArgsCount, _processArgs);
         if (_engine->Init() != EngineError::ENGINE_NONE) {
             delete _engine;
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
