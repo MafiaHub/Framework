@@ -65,9 +65,9 @@ namespace Framework::HTTP {
         mg_http_listen(&_manager, address.c_str(), &HandleWebRequest, this);
 
         _webThread = std::thread([this]() {
-            OPTICK_THREAD("WebWorker");
+            //OPTICK_THREAD("WebWorker");
             while (this->_running) {
-                OPTICK_EVENT();
+                //OPTICK_EVENT();
                 mg_mgr_poll(&_manager, 1000);
             }
         });
