@@ -27,7 +27,7 @@ jobs:
             buildDir: '${{ github.workspace }}/build/'
         strategy:
             matrix:
-                os: [ macos-10.15, self-hosted, ubuntu-18.04 ]
+                os: [ macos-10.15, win-self, ubuntu-18.04 ]
             fail-fast: false
         runs-on: ${{ matrix.os }}
         needs: prep
