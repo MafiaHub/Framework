@@ -16,6 +16,9 @@ elseif (WIN32)
     target_link_directories(NodeJS INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32")
     file(GLOB NODEJS_LIBS "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32/*.lib")
     set(NODEJS_ARCH "win32")
+    add_custom_command(TARGET NodeJS POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/lib/win32/libnode.dll" "${CMAKE_BINARY_DIR}/bin/"
+            )
 elseif (APPLE)
     target_link_directories(NodeJS INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/lib/darwin")
     file(GLOB NODEJS_LIBS "${CMAKE_CURRENT_SOURCE_DIR}/lib/darwin/*.a")
