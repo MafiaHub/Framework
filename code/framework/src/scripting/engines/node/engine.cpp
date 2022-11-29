@@ -15,8 +15,7 @@
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init() {
         // Define the arguments to be passed to the node instance
-        _processArgs = uv_setup_args(_processArgsCount, _processArgs);
-        std::vector<std::string> args(_processArgs, _processArgs + _processArgsCount);
+        std::vector<std::string> args = { "mafiahub-server", "--experimental-specifier-resolution=node", "--trace-warnings" };
         std::vector<std::string> exec_args {};
         std::vector<std::string> errors {};
 
