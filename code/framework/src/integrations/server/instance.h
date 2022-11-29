@@ -41,6 +41,9 @@ namespace Framework::Integrations::Server {
         std::string bindPassword;
         bool bindPublicServer = false;
 
+        std::string webBindHost;
+        int32_t webBindPort;
+
         int32_t maxPlayers;
         std::string httpServeDir;
 
