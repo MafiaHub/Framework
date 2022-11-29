@@ -47,8 +47,13 @@ namespace Framework::Integrations::Server {
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
-        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
-                                    {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}});
+        options.add_options("", {
+            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, 
+            {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+            {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)},
+            {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
+            {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}
+        });
 
         // Try to parse and return if anything wrong happened
         auto result = options.parse(_opts.argc, _opts.argv);
@@ -70,7 +75,7 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
-        if (!_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir)) {
+        if (!_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
