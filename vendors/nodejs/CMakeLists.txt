@@ -35,7 +35,7 @@ target_include_directories(NodeJS PUBLIC "include")
 if (WIN32)
   target_link_libraries(NodeJS libnode.lib dbghelp.lib winmm.lib shlwapi.lib)
 else()
-  target_link_libraries(NodeJS node.102)
+  target_link_libraries(NodeJS node.108)
 endif ()
 
 message(STATUS "NodeJS libraries: ${NODEJS_LIBS}")
