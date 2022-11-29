@@ -22,7 +22,7 @@ if (MSVC)
     set(CMAKE_EXE_LINKER_FLAGS "/SAFESEH:NO")
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DFW_DEBUG")
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif ()
 
 add_subdirectory(vendors)
