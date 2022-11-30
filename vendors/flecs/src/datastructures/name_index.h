@@ -7,14 +7,20 @@
 #define FLECS_NAME_INDEX_H
 
 void flecs_name_index_init(
-    ecs_hashmap_t *hm);
+    ecs_hashmap_t *hm,
+    ecs_allocator_t *allocator);
 
-ecs_hashmap_t* flecs_name_index_new(void);
+ecs_hashmap_t* flecs_name_index_new(
+    ecs_world_t *world,
+    ecs_allocator_t *allocator);
 
 void flecs_name_index_fini(
     ecs_hashmap_t *map);
 
 void flecs_name_index_free(
+    ecs_hashmap_t *map);
+
+ecs_hashmap_t* flecs_name_index_copy(
     ecs_hashmap_t *map);
 
 ecs_hashed_string_t flecs_get_hashed_string(

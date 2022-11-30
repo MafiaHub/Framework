@@ -35,6 +35,10 @@ void ecs_os_set_api(
     }
 }
 
+ecs_os_api_t ecs_os_get_api(void) {
+    return ecs_os_api;
+}
+
 void ecs_os_init(void)
 {
     if (!ecs_os_api_initialized) {
@@ -56,11 +60,19 @@ void ecs_os_fini(void) {
     }
 }
 
-#if !defined(ECS_TARGET_WINDOWS) && !defined(ECS_TARGET_EM) && !defined(ECS_TARGET_ANDROID)
+/* Assume every non-glibc Linux target has no execinfo.
+   This mainly fixes musl support, as musl doesn't define any preprocessor macro specifying its presence. */ 
+#if defined(ECS_TARGET_LINUX) && !defined(__GLIBC__)
+#define HAVE_EXECINFO 0
+#elif !defined(ECS_TARGET_WINDOWS) && !defined(ECS_TARGET_EM) && !defined(ECS_TARGET_ANDROID)
+#define HAVE_EXECINFO 1
+#endif
+
+#if HAVE_EXECINFO
 #include <execinfo.h>
 #define ECS_BT_BUF_SIZE 100
-static
-void dump_backtrace(
+
+void flecs_dump_backtrace(
     FILE *stream) 
 {
     int nptrs;
@@ -81,16 +93,16 @@ void dump_backtrace(
     free(strings);
 }
 #else
-static
-void dump_backtrace(
+void flecs_dump_backtrace(
     FILE *stream)
 { 
     (void)stream;
 }
 #endif
+#undef HAVE_EXECINFO_H
 
 static
-void log_msg(
+void flecs_log_msg(
     int32_t level,
     const char *file, 
     int32_t line,  
@@ -211,7 +223,7 @@ void log_msg(
     fputs("\n", stream);
 
     if (level == -4) {
-        dump_backtrace(stream);
+        flecs_dump_backtrace(stream);
     }
 }
 
@@ -281,14 +293,14 @@ void ecs_os_gettime(ecs_time_t *time) {
 
 static
 void* ecs_os_api_malloc(ecs_size_t size) {
-    ecs_os_api_malloc_count ++;
+    ecs_os_linc(&ecs_os_api_malloc_count);
     ecs_assert(size > 0, ECS_INVALID_PARAMETER, NULL);
     return malloc((size_t)size);
 }
 
 static
 void* ecs_os_api_calloc(ecs_size_t size) {
-    ecs_os_api_calloc_count ++;
+    ecs_os_linc(&ecs_os_api_calloc_count);
     ecs_assert(size > 0, ECS_INVALID_PARAMETER, NULL);
     return calloc(1, (size_t)size);
 }
@@ -298,10 +310,10 @@ void* ecs_os_api_realloc(void *ptr, ecs_size_t size) {
     ecs_assert(size > 0, ECS_INVALID_PARAMETER, NULL);
 
     if (ptr) {
-        ecs_os_api_realloc_count ++;
+        ecs_os_linc(&ecs_os_api_realloc_count);
     } else {
         /* If not actually reallocing, treat as malloc */
-        ecs_os_api_malloc_count ++; 
+        ecs_os_linc(&ecs_os_api_malloc_count);
     }
     
     return realloc(ptr, (size_t)size);
@@ -310,7 +322,7 @@ void* ecs_os_api_realloc(void *ptr, ecs_size_t size) {
 static
 void ecs_os_api_free(void *ptr) {
     if (ptr) {
-        ecs_os_api_free_count ++;
+        ecs_os_linc(&ecs_os_api_free_count);
     }
     free(ptr);
 }
@@ -350,16 +362,16 @@ char* ecs_os_api_module_to_dl(const char *module) {
     char *file_base = module_file_base(module, '_');
 
 #   if defined(ECS_TARGET_LINUX) || defined(ECS_TARGET_FREEBSD)
-    ecs_strbuf_appendstr(&lib, "lib");
+    ecs_strbuf_appendlit(&lib, "lib");
     ecs_strbuf_appendstr(&lib, file_base);
-    ecs_strbuf_appendstr(&lib, ".so");
+    ecs_strbuf_appendlit(&lib, ".so");
 #   elif defined(ECS_TARGET_DARWIN)
-    ecs_strbuf_appendstr(&lib, "lib");
+    ecs_strbuf_appendlit(&lib, "lib");
     ecs_strbuf_appendstr(&lib, file_base);
-    ecs_strbuf_appendstr(&lib, ".dylib");
+    ecs_strbuf_appendlit(&lib, ".dylib");
 #   elif defined(ECS_TARGET_WINDOWS)
     ecs_strbuf_appendstr(&lib, file_base);
-    ecs_strbuf_appendstr(&lib, ".dll");
+    ecs_strbuf_appendlit(&lib, ".dll");
 #   endif
 
     ecs_os_free(file_base);
@@ -375,7 +387,7 @@ char* ecs_os_api_module_to_etc(const char *module) {
     char *file_base = module_file_base(module, '-');
 
     ecs_strbuf_appendstr(&lib, file_base);
-    ecs_strbuf_appendstr(&lib, "/etc");
+    ecs_strbuf_appendlit(&lib, "/etc");
 
     ecs_os_free(file_base);
 
@@ -408,7 +420,7 @@ void ecs_os_set_api_defaults(void)
     ecs_os_api.get_time_ = ecs_os_gettime;
 
     /* Logging */
-    ecs_os_api.log_ = log_msg;
+    ecs_os_api.log_ = flecs_log_msg;
 
     /* Modules */
     if (!ecs_os_api.module_to_dl_) {

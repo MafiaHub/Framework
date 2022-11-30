@@ -53,6 +53,10 @@ If you want to use the [flecs.c](https://raw.githubusercontent.com/SanderMertens
 #define flecs_STATIC
 ```
 
+If you are building on Windows with mingw/gcc/clang, add `-lWs2_32` to the linker command (only needed for the HTTP/REST addons).
+
+Make sure to compile C++ files as at least C++11 by adding `-std=c++0x` or higher to gcc/clang compile commands.
+
 By default Flecs includes many features that may not be useful for every project. Builds can be customized to minimize the overhead of the library. See the [Addons](#addons) section for more information on customized builds.
 
 ## Documentation
@@ -146,6 +150,10 @@ https://nicok.itch.io/sol-survivor-demo
 https://github.com/ConfettiFX/The-Forge
 ![image](docs/img/projects/the_forge.png)
 
+### Equilibrium Engine
+https://github.com/clibequilibrium/EquilibriumEngine
+![image](docs/img/projects/equilibrium_engine.png)
+
 ### Gravitas
 https://thepunkcollective.itch.io/gravitas
 ![image](docs/img/projects/gravitas.png)
@@ -174,6 +182,7 @@ https://www.flecs.dev/city ([repository](https://github.com/flecs-hub/city))
 - [Flecs + SDL + Web ASM example](https://github.com/HeatXD/flecs_web_demo) ([live demo](https://heatxd.github.io/flecs_web_demo/))
 - [Flecs + Raylib example](https://github.com/Lexxicon/FlecsRaylib)
 - [Flecs + gunslinger example](https://github.com/MrFrenik/gs_examples/blob/main/ex_demos/flecs/source/main.c)
+- [Flecs based 3D game engine with editor](https://bit.ly/3T9cc1o)
 
 ### Flecs links
 - [Discord](https://discord.gg/BEzP5Rgrrp)

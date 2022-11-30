@@ -44,7 +44,11 @@ namespace _ {
 #elif defined(__clang__)
 #define ECS_SIZE_T_STR "size_t"
 #else
+#ifdef ECS_TARGET_WINDOWS
+#define ECS_SIZE_T_STR "constexpr size_t; size_t = long long unsigned int"
+#else
 #define ECS_SIZE_T_STR "constexpr size_t; size_t = long unsigned int"
+#endif
 #endif
 
 template <typename E>
@@ -140,9 +144,7 @@ struct enum_type {
 #endif
 
         ecs_log_push();
-        ecs_add_id(world, id, flecs::Exclusive);
-        ecs_add_id(world, id, flecs::OneOf);
-        ecs_add_id(world, id, flecs::Tag);
+        ecs_cpp_enum_init(world, id);
         data.id = id;
         data.min = FLECS_ENUM_MAX(int);
         init< enum_last<E>::value >(world);

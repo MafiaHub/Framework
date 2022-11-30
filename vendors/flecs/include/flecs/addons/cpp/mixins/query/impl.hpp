@@ -59,6 +59,29 @@ struct query_base {
         return ecs_query_orphaned(m_query);
     }
 
+    /** Get info for group. 
+     * 
+     * @param group_id The group id for which to retrieve the info.
+     * @return The group info.
+     */
+    const flecs::query_group_info_t* group_info(uint64_t group_id) {
+        return ecs_query_get_group_info(m_query, group_id);
+    }
+
+    /** Get context for group. 
+     * 
+     * @param group_id The group id for which to retrieve the context.
+     * @return The group context.
+     */
+    void* group_ctx(uint64_t group_id) {
+        const flecs::query_group_info_t *gi = group_info(group_id);
+        if (gi) {
+            return gi->ctx;
+        } else {
+            return NULL;
+        }
+    }
+
     /** Free the query.
      */
     void destruct() {
@@ -98,6 +121,10 @@ struct query_base {
         char *result = ecs_filter_str(m_world, f);
         return flecs::string(result);
     }
+
+    flecs::entity entity() {
+        return flecs::entity(m_world, ecs_query_entity(m_query));
+    }
     
     operator query<>() const;
 
@@ -116,8 +143,11 @@ public:
 private:
     using Terms = typename _::term_ptrs<Components...>::array;
 
-    ecs_iter_t get_iter() const override {
-        return ecs_query_iter(m_world, m_query);
+    ecs_iter_t get_iter(flecs::world_t *world) const override {
+        if (!world) {
+            world = m_world;
+        }
+        return ecs_query_iter(world, m_query);
     }
 
     ecs_iter_next_action_t next_action() const override {

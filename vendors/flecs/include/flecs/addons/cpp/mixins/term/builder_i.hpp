@@ -282,14 +282,14 @@ struct term_builder_i : term_id_builder_i<Base> {
     }
 
     /** Short for inout_stage(flecs::In) 
-     *   Use when system uses get
+     *   Use when system uses get.
      */
     Base& read() {
-        return this->inout_stage(flecs::Out);
+        return this->inout_stage(flecs::In);
     }
 
     /** Short for inout_stage(flecs::InOut) 
-     *   Use when system uses get_mut
+     *   Use when system uses get_mut.
      */
     Base& read_write() {
         return this->inout_stage(flecs::InOut);
@@ -370,6 +370,12 @@ struct term_builder_i : term_id_builder_i<Base> {
 
         ecs_assert(sid != 0, ECS_INVALID_PARAMETER, NULL);
         m_term->src.id = sid;
+        return *this;
+    }
+
+    /* Filter terms are not triggered on by observers */
+    Base& filter() {
+        m_term->src.flags |= flecs::Filter;
         return *this;
     }
 

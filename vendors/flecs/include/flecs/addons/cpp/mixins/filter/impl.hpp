@@ -146,8 +146,11 @@ public:
     }
 
 private:
-    ecs_iter_t get_iter() const override {
-        return ecs_filter_iter(m_world, m_filter_ptr);
+    ecs_iter_t get_iter(flecs::world_t *world) const override {
+        if (!world) {
+            world = m_world;
+        }
+        return ecs_filter_iter(world, m_filter_ptr);
     }
 
     ecs_iter_next_action_t next_action() const override {

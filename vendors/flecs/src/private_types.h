@@ -1,5 +1,5 @@
 /**
- * @file private_api.h
+ * @file private_types.h
  * @brief Private types.
  */
 
@@ -18,6 +18,7 @@
 
 #include "flecs.h"
 #include "datastructures/entity_index.h"
+#include "datastructures/stack_allocator.h"
 #include "flecs/private/bitset.h"
 #include "flecs/private/switch_list.h"
 
@@ -102,29 +103,34 @@ typedef struct ecs_table_event_t {
      * initializing an event a bit simpler. */
 } ecs_table_event_t;
 
-/** A component column. */
-struct ecs_column_t {
-    void *array;
-    int32_t count;
-    int32_t size;
-};
-
 /** Stage-specific component data */
 struct ecs_data_t {
-    ecs_column_t entities;       /* Entity identifiers */
-    ecs_column_t records;    /* Ptrs to records in main entity index */
-    ecs_column_t *columns;       /* Component columns */
+    ecs_vec_t entities;       /* Entity identifiers */
+    ecs_vec_t records;    /* Ptrs to records in main entity index */
+    ecs_vec_t *columns;       /* Component columns */
     ecs_switch_t *sw_columns;    /* Switch columns */
     ecs_bitset_t *bs_columns;    /* Bitset columns */
 };
 
 /** Cache of added/removed components for non-trivial edges between tables */
+#define ECS_TABLE_DIFF_INIT { .added = {0}}
+
 typedef struct ecs_table_diff_t {
     ecs_type_t added;         /* Components added between tables */
     ecs_type_t removed;       /* Components removed between tables */
     ecs_type_t on_set;        /* OnSet from exposing/adding base components */
     ecs_type_t un_set;        /* UnSet from hiding/removing base components */
 } ecs_table_diff_t;
+
+/** Builder for table diff. The table diff type itself doesn't use ecs_vec_t to
+ * conserve memory on table edges (a type doesn't have the size field), whereas
+ * a vec for the builder is more convenient to use & has allocator support. */
+typedef struct ecs_table_diff_builder_t {
+    ecs_vec_t added;
+    ecs_vec_t removed;
+    ecs_vec_t on_set;
+    ecs_vec_t un_set;
+} ecs_table_diff_builder_t;
 
 /** Edge linked list (used to keep track of incoming edges) */
 typedef struct ecs_graph_edge_hdr_t {
@@ -189,6 +195,7 @@ struct ecs_table_t {
 
     int32_t refcount;                /* Increased when used as storage table */
     int32_t lock;                    /* Prevents modifications */
+    int32_t observed_count;          /* Number of observed entities in table */
     uint16_t record_count;           /* Table record count including wildcards */
 };
 
@@ -234,10 +241,12 @@ typedef struct ecs_query_table_match_t ecs_query_table_match_t;
  * query. A single node may refer to the table multiple times with different
  * offset/count parameters, which enables features such as sorting. */
 struct ecs_query_table_node_t {
-    ecs_query_table_match_t *match;  /* Reference to the match */
+    ecs_query_table_node_t *next, *prev;
+    ecs_table_t *table;              /* The current table. */
+    uint64_t group_id;        /* Value used to organize tables in groups */
     int32_t offset;                  /* Starting point in table  */
     int32_t count;                   /* Number of entities to iterate in table */
-    ecs_query_table_node_t *next, *prev;
+    ecs_query_table_match_t *match;  /* Reference to the match */
 };
 
 /** Type containing data for a table matched with a query. 
@@ -245,17 +254,15 @@ struct ecs_query_table_node_t {
 struct ecs_query_table_match_t {
     ecs_query_table_node_t node; /* Embedded list node */
 
-    ecs_table_t *table;       /* The current table. */
-    int32_t *columns;         /* Mapping from query terms to table columns */
+    int32_t *columns;         /* Mapping from query fields to table columns */
+    int32_t *storage_columns; /* Mapping from query fields to storage columns */
     ecs_id_t *ids;            /* Resolved (component) ids for current table */
     ecs_entity_t *sources;    /* Subjects (sources) of ids */
     ecs_size_t *sizes;        /* Sizes for ids for current table */
-    ecs_ref_t *references;    /* Cached components for non-this terms */
+    ecs_vec_t refs;           /* Cached components for non-this terms */
 
     ecs_vector_t *sparse_columns;  /* Column ids of sparse columns */
     ecs_vector_t *bitset_columns;  /* Column ids with disabled flags */
-
-    uint64_t group_id;        /* Value used to organize tables in groups */
 
     /* Next match in cache for same table (includes empty tables) */
     ecs_query_table_match_t *next_match;
@@ -276,7 +283,7 @@ typedef struct ecs_query_table_t {
 typedef struct ecs_query_table_list_t {
     ecs_query_table_node_t *first;
     ecs_query_table_node_t *last;
-    int32_t count;
+    ecs_query_group_info_t info;
 } ecs_query_table_list_t;
 
 /* Query event type for notifying queries of world events */
@@ -292,6 +299,15 @@ typedef struct ecs_query_event_t {
     ecs_table_t *table;
     ecs_query_t *parent_query;
 } ecs_query_event_t;
+
+/* Query level block allocators have sizes that depend on query field count */
+typedef struct ecs_query_allocators_t {
+    ecs_block_allocator_t columns;
+    ecs_block_allocator_t ids;
+    ecs_block_allocator_t sources;
+    ecs_block_allocator_t sizes;
+    ecs_block_allocator_t monitors;
+} ecs_query_allocators_t;
 
 /** Query that is automatically matched against tables */
 struct ecs_query_t {
@@ -309,15 +325,17 @@ struct ecs_query_t {
     /* Contains head/tail to nodes of query groups (if group_by is used) */
     ecs_map_t groups;
 
-    /* Used for sorting */
+    /* Table sorting */
     ecs_entity_t order_by_component;
     ecs_order_by_action_t order_by;
     ecs_sort_table_action_t sort_table;
     ecs_vector_t *table_slices;
 
-    /* Used for grouping */
+    /* Table grouping */
     ecs_entity_t group_by_id;
     ecs_group_by_action_t group_by;
+    ecs_group_create_action_t on_group_create;
+    ecs_group_delete_action_t on_group_delete;
     void *group_by_ctx;
     ecs_ctx_free_t group_by_ctx_free;
 
@@ -338,6 +356,9 @@ struct ecs_query_t {
     ecs_iterable_t iterable;
     ecs_poly_dtor_t dtor;
     ecs_entity_t entity;
+
+    /* Query-level allocators */
+    ecs_query_allocators_t allocators;
 };
 
 /** All observers for a specific (component) id */
@@ -360,74 +381,96 @@ typedef struct ecs_event_record_t {
     ecs_map_t event_ids;     /* map<id, ecs_event_id_record_t> */
 } ecs_event_record_t;
 
+/* World level allocators are for operations that are not multithreaded */
+typedef struct ecs_world_allocators_t {
+    ecs_map_params_t ptr;
+    ecs_map_params_t query_table_list;
+    ecs_block_allocator_t query_table;
+    ecs_block_allocator_t query_table_match;
+    ecs_block_allocator_t graph_edge_lo;
+    ecs_block_allocator_t graph_edge;
+    ecs_block_allocator_t id_record;
+    ecs_block_allocator_t table_diff;
+    ecs_block_allocator_t sparse_chunk;
+    ecs_block_allocator_t hashmap;
+
+    /* Temporary vectors used for creating table diff id sequences */
+    ecs_table_diff_builder_t diff_builder;
+} ecs_world_allocators_t;
+
+/* Stage level allocators are for operations that can be multithreaded */
+typedef struct ecs_stage_allocators_t {
+    ecs_stack_t iter_stack;
+    ecs_stack_t deser_stack;
+    ecs_block_allocator_t cmd_entry_chunk;
+} ecs_stage_allocators_t;
+
 /** Types for deferred operations */
-typedef enum ecs_defer_op_kind_t {
-    EcsOpNew,
+typedef enum ecs_cmd_kind_t {
     EcsOpClone,
     EcsOpBulkNew,
     EcsOpAdd,
     EcsOpRemove,   
     EcsOpSet,
+    EcsOpEmplace,
     EcsOpMut,
     EcsOpModified,
     EcsOpDelete,
     EcsOpClear,
     EcsOpOnDeleteAction,
     EcsOpEnable,
-    EcsOpDisable
-} ecs_defer_op_kind_t;
+    EcsOpDisable,
+    EcsOpSkip
+} ecs_cmd_kind_t;
 
-typedef struct ecs_defer_op_1_t {
-    ecs_entity_t entity;        /* Entity id */
+typedef struct ecs_cmd_1_t {
     void *value;                /* Component value (used by set / get_mut) */
     ecs_size_t size;            /* Size of value */
     bool clone_value;           /* Clone entity with value (used for clone) */ 
-} ecs_defer_op_1_t;
+} ecs_cmd_1_t;
 
-typedef struct ecs_defer_op_n_t {
+typedef struct ecs_cmd_n_t {
     ecs_entity_t *entities;  
     int32_t count;
-} ecs_defer_op_n_t;
+} ecs_cmd_n_t;
 
-typedef struct ecs_defer_op_t {
-    ecs_defer_op_kind_t kind;         /* Operation kind */    
+typedef struct ecs_cmd_t {
+    ecs_cmd_kind_t kind;   /* Command kind */
+    int32_t next_for_entity;    /* Next operation for entity */    
     ecs_id_t id;                /* (Component) id */
+    ecs_id_record_t *idr;       /* Id record (only for set/mut/emplace) */
+    ecs_entity_t entity;        /* Entity id */
+
     union {
-        ecs_defer_op_1_t _1;
-        ecs_defer_op_n_t _n;
+        ecs_cmd_1_t _1;    /* Data for single entity operation */
+        ecs_cmd_n_t _n;    /* Data for multi entity operation */
     } is;
-} ecs_defer_op_t;
+} ecs_cmd_t;
 
-/** Stack allocator for quick allocation of small temporary values */
-#define ECS_STACK_PAGE_SIZE (4096)
+/* Entity specific metadata for command in defer queue */
+typedef struct ecs_cmd_entry_t {
+    int32_t first;
+    int32_t last; /* If -1, a delete command was inserted */
+} ecs_cmd_entry_t;
 
-typedef struct ecs_stack_page_t {
-    void *data;
-    struct ecs_stack_page_t *next;
-    ecs_size_t sp;
-} ecs_stack_page_t;
-
-typedef struct ecs_stack_t {
-    ecs_stack_page_t first;
-    ecs_stack_page_t *cur;
-} ecs_stack_t;
-
-/** A stage is a data structure in which delta's are stored until it is safe to
- * merge those delta's with the main world stage. A stage allows flecs systems
- * to arbitrarily add/remove/set components and create/delete entities while
- * iterating. Additionally, worker threads have their own stage that lets them
- * mutate the state of entities without requiring locks. */
+/** A stage is a context that allows for safely using the API from multiple 
+ * threads. Stage pointers can be passed to the world argument of API 
+ * operations, which causes the operation to be ran on the stage instead of the
+ * world. */
 struct ecs_stage_t {
     ecs_header_t hdr;
 
-    int32_t id;                  /* Unique id that identifies the stage */
+    /* Unique id that identifies the stage */
+    int32_t id;
 
     /* Deferred command queue */
     int32_t defer;
-    ecs_vector_t *defer_queue;
-    ecs_stack_t defer_stack; /* Temp memory used by deferred commands */
-    bool defer_suspend;
+    ecs_vec_t commands;
+    ecs_stack_t defer_stack;    /* Temp memory used by deferred commands */
+    ecs_sparse_t cmd_entries;   /* <entity, op_entry_t> - command combining */
+    bool defer_suspend;         /* Suspend deferring without flushing */
 
+    /* Thread context */
     ecs_world_t *thread_ctx;     /* Points to stage when a thread stage */
     ecs_world_t *world;          /* Reference to world */
     ecs_os_thread_t thread;      /* Thread handle (0 if no threading is used) */
@@ -444,6 +487,10 @@ struct ecs_stage_t {
     /* Properties */
     bool auto_merge;             /* Should this stage automatically merge? */
     bool async;                  /* Is stage asynchronous? (write only) */
+
+    /* Thread specific allocators */
+    ecs_stage_allocators_t allocators;
+    ecs_allocator_t allocator;
 };
 
 /* Component monitor */
@@ -477,9 +524,6 @@ typedef struct ecs_store_t {
 
     /* Root table */
     ecs_table_t root;
-
-    /* Table edge cache */
-    ecs_graph_edge_hdr_t *first_free;
 
     /* Records cache */
     ecs_vector_t *records;
@@ -537,7 +581,6 @@ struct ecs_world_t {
     /* -- Identifiers -- */
     ecs_hashmap_t aliases;
     ecs_hashmap_t symbols;
-    const char *name_prefix;     /* Remove prefix from C names in modules */
 
     /* -- Staging -- */
     ecs_stage_t *stages;         /* Stages */
@@ -560,6 +603,10 @@ struct ecs_world_t {
 
     /* -- World flags -- */
     ecs_flags32_t flags;
+
+    /* -- Allocators -- */
+    ecs_world_allocators_t allocators; /* Static allocation sizes */
+    ecs_allocator_t allocator;         /* Dynamic allocation sizes */
 
     void *context;               /* Application context */
     ecs_vector_t *fini_actions;  /* Callbacks to execute when world exits */

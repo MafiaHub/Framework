@@ -2,6 +2,25 @@
 
 #ifdef FLECS_META
 
+/* ecs_string_t lifecycle */
+
+static ECS_COPY(ecs_string_t, dst, src, {
+    ecs_os_free(*(ecs_string_t*)dst);
+    *(ecs_string_t*)dst = ecs_os_strdup(*(ecs_string_t*)src);
+})
+
+static ECS_MOVE(ecs_string_t, dst, src, {
+    ecs_os_free(*(ecs_string_t*)dst);
+    *(ecs_string_t*)dst = *(ecs_string_t*)src;
+    *(ecs_string_t*)src = NULL;
+})
+
+static ECS_DTOR(ecs_string_t, ptr, { 
+    ecs_os_free(*(ecs_string_t*)ptr);
+    *(ecs_string_t*)ptr = NULL;
+})
+
+
 /* EcsMetaTypeSerialized lifecycle */
 
 void ecs_meta_dtor_serialized(
@@ -13,8 +32,7 @@ void ecs_meta_dtor_serialized(
     for (i = 0; i < count; i ++) {
         ecs_meta_type_op_t *op = &ops[i];
         if (op->members) {
-            flecs_hashmap_fini(op->members);
-            ecs_os_free(op->members);
+            flecs_name_index_free(op->members);
         }
     }
 
@@ -32,8 +50,7 @@ static ECS_COPY(EcsMetaTypeSerialized, dst, src, {
     for (o = 0; o < count; o ++) {
         ecs_meta_type_op_t *op = &ops[o];
         if (op->members) {
-            op->members = ecs_os_memdup_t(op->members, ecs_hashmap_t);
-            flecs_hashmap_copy(op->members, op->members);
+            op->members = flecs_name_index_copy(op->members);
         }
     }
 })
@@ -541,7 +558,8 @@ int add_constant_to_enum(
     }
 
     if (!ptr->constants) {
-        ptr->constants = ecs_map_new(ecs_enum_constant_t, 1);
+        ptr->constants = ecs_map_new(ecs_enum_constant_t,
+            &world->allocator, 1);
     }
 
     c = ecs_map_ensure(ptr->constants, ecs_enum_constant_t, value);
@@ -608,7 +626,8 @@ int add_constant_to_bitmask(
     }
 
     if (!ptr->constants) {
-        ptr->constants = ecs_map_new(ecs_bitmask_constant_t, 1);
+        ptr->constants = ecs_map_new(ecs_bitmask_constant_t, 
+            &world->allocator, 1);
     }
 
     c = ecs_map_ensure(ptr->constants, ecs_bitmask_constant_t, value);
@@ -893,7 +912,7 @@ bool flecs_unit_validate(
             uptr = ecs_get(world, over, EcsUnit);
             ecs_assert(uptr != NULL, ECS_INTERNAL_ERROR, NULL);
             if (uptr->symbol) {
-                ecs_strbuf_appendstr(&sbuf, "/");
+                ecs_strbuf_appendch(&sbuf, '/');
                 ecs_strbuf_appendstr(&sbuf, uptr->symbol);
                 must_match = true;
             }
@@ -1170,6 +1189,13 @@ void FlecsMetaImport(
     ECS_PRIMITIVE(world, entity, EcsEntity);
 
     #undef ECS_PRIMITIVE
+
+    ecs_set_hooks(world, ecs_string_t, {
+        .ctor = ecs_default_ctor,
+        .copy = ecs_copy(ecs_string_t),
+        .move = ecs_move(ecs_string_t),
+        .dtor = ecs_dtor(ecs_string_t)
+    });
 
     /* Set default child components */
     ecs_add_pair(world, ecs_id(EcsStruct), 

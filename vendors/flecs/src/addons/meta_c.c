@@ -120,14 +120,16 @@ const char* parse_c_identifier(
 
     /* Ignore whitespaces */
     ptr = ecs_parse_eol_and_whitespace(ptr);
+    ch = *ptr;
 
-    if (!isalpha(*ptr)) {
-        ecs_meta_error(ctx, ptr, 
-            "invalid identifier (starts with '%c')", *ptr);
+    if (!isalpha(ch) && (ch != '_')) {
+        ecs_meta_error(ctx, ptr, "invalid identifier (starts with '%c')", ch);
         goto error;
     }
 
-    while ((ch = *ptr) && !isspace(ch) && ch != ';' && ch != ',' && ch != ')' && ch != '>' && ch != '}') {
+    while ((ch = *ptr) && !isspace(ch) && ch != ';' && ch != ',' && ch != ')' && 
+        ch != '>' && ch != '}' && ch != '*') 
+    {
         /* Type definitions can contain macros or templates */
         if (ch == '(' || ch == '<') {
             if (!params) {

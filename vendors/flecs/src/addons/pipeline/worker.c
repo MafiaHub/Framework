@@ -215,7 +215,7 @@ bool ecs_worker_sync(
 
     int32_t stage_count = ecs_get_stage_count(world);
     ecs_assert(stage_count != 0, ECS_INTERNAL_ERROR, NULL);
-    int32_t build_count = world->info.pipeline_build_count_total;
+    int64_t build_count = world->info.pipeline_build_count_total;
 
     /* If there are no threads, merge in place */
     if (stage_count == 1) {
@@ -274,11 +274,6 @@ void ecs_workers_progress(
     ecs_assert(!ecs_is_deferred(world), ECS_INVALID_OPERATION, NULL);
     int32_t stage_count = ecs_get_stage_count(world);
 
-    ecs_time_t start = {0};
-    if (world->flags & EcsWorldMeasureFrameTime) {
-        ecs_time_measure(&start);
-    }
-
     EcsPipeline *pq = ecs_get_mut(world, pipeline, EcsPipeline);
     ecs_assert(pq != NULL, ECS_INTERNAL_ERROR, NULL);
 
@@ -291,6 +286,7 @@ void ecs_workers_progress(
     ecs_vector_t *ops = pq->ops;
     ecs_pipeline_op_t *op = ecs_vector_first(ops, ecs_pipeline_op_t);
     if (!op) {
+        ecs_pipeline_fini_iter(pq);
         return;
     }
 
@@ -307,8 +303,12 @@ void ecs_workers_progress(
 
         /* Synchronize n times for each op in the pipeline */
         for (; op <= op_last; op ++) {
+            bool is_threaded = world->flags & EcsWorldMultiThreaded;
             if (!op->no_staging) {
                 ecs_readonly_begin(world);
+            }
+            if (!op->multi_threaded) {
+                world->flags &= ~EcsWorldMultiThreaded;
             }
 
             /* Signal workers that they should start running systems */
@@ -322,6 +322,9 @@ void ecs_workers_progress(
             if (!op->no_staging) {
                 ecs_readonly_end(world);
             }
+            if (is_threaded) {
+                world->flags |= EcsWorldMultiThreaded;
+            }
 
             if (ecs_pipeline_update(world, pipeline, false)) {
                 ecs_assert(!ecs_is_deferred(world), ECS_INVALID_OPERATION, NULL);
@@ -330,13 +333,13 @@ void ecs_workers_progress(
                 op = pq->cur_op - 1;
                 op_last = ecs_vector_last(pq->ops, ecs_pipeline_op_t);
                 ecs_assert(op <= op_last, ECS_INTERNAL_ERROR, NULL);
+
+                if (op == op_last) {
+                    ecs_pipeline_fini_iter(pq);
+                }
             }
         }
-    }
-
-    if (world->flags & EcsWorldMeasureFrameTime) {
-        world->info.system_time_total += (float)ecs_time_measure(&start);
-    }    
+    } 
 }
 
 /* -- Public functions -- */

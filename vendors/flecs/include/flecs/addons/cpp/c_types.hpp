@@ -5,6 +5,8 @@
 namespace flecs {
 
 using world_t = ecs_world_t;
+using world_info_t = ecs_world_info_t;
+using query_group_info_t = ecs_query_group_info_t;
 using id_t = ecs_id_t;
 using entity_t = ecs_entity_t;
 using type_t = ecs_type_t;
@@ -77,6 +79,7 @@ static const uint32_t Cascade = EcsCascade;
 static const uint32_t Parent = EcsParent;
 static const uint32_t IsVariable = EcsIsVariable;
 static const uint32_t IsEntity = EcsIsEntity;
+static const uint32_t Filter = EcsFilter;
 static const uint32_t TraverseFlags = EcsTraverseFlags;
 
 /* Builtin entity ids */

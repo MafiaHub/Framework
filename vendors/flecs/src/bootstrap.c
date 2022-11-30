@@ -57,34 +57,6 @@ void ecs_on_set(EcsIdentifier)(ecs_iter_t *it) {
 
     int i, count = it->count;
 
-    /* If the kind is Symbol and the table contains child entities, make sure
-     * the symbol names are correct. This makes it possible to inherit from
-     * entities with symbols, without getting symbol conflicts */
-    if (evt == EcsOnSet) {
-        if (kind == EcsSymbol && (it->table->flags & EcsTableHasChildOf)) {
-            for (i = 0; i < count; i ++) {
-                EcsIdentifier *cur = &ptr[i];
-                if (!cur->value) {
-                    continue;
-                }
-
-                /* If symbol contains a '.' it's a scoped symbol generated from
-                 * a path (likely a type). Only replace symbols that are scoped,
-                 * as we should not replace names of plain C types. */
-                ecs_entity_t e = it->entities[i];
-                if (strrchr(cur->value, '.')) {
-                    char *path = ecs_get_path_w_sep(world, 0, e, NULL, NULL);
-                    if (ecs_os_strcmp(path, cur->value)) {
-                        ecs_os_free(cur->value);
-                        cur->value = path;
-                    } else {
-                        ecs_os_free(path);
-                    }
-                }
-            }
-        }
-    }
-    
     for (i = 0; i < count; i ++) {
         EcsIdentifier *cur = &ptr[i];
         uint64_t hash;
@@ -161,7 +133,7 @@ static ECS_DTOR(EcsPoly, ptr, {
 /* -- Builtin triggers -- */
 
 static
-void assert_relation_unused(
+void flecs_assert_relation_unused(
     ecs_world_t *world, 
     ecs_entity_t rel,
     ecs_entity_t property)
@@ -198,7 +170,7 @@ error:
 }
 
 static
-bool set_id_flag(
+bool flecs_set_id_flag(
     ecs_id_record_t *idr, 
     ecs_flags32_t flag)
 {
@@ -210,7 +182,7 @@ bool set_id_flag(
 }
 
 static
-bool unset_id_flag(
+bool flecs_unset_id_flag(
     ecs_id_record_t *idr, 
     ecs_flags32_t flag)
 {
@@ -222,7 +194,7 @@ bool unset_id_flag(
 }
 
 static
-void register_id_flag_for_relation(
+void flecs_register_id_flag_for_relation(
     ecs_iter_t *it,
     ecs_entity_t prop,
     ecs_flags32_t flag,
@@ -239,31 +211,31 @@ void register_id_flag_for_relation(
 
         if (event == EcsOnAdd) {
             ecs_id_record_t *idr = flecs_id_record_ensure(world, e);
-            changed |= set_id_flag(idr, flag);
+            changed |= flecs_set_id_flag(idr, flag);
             idr = flecs_id_record_ensure(world, ecs_pair(e, EcsWildcard));
             do {
-                changed |= set_id_flag(idr, flag);
+                changed |= flecs_set_id_flag(idr, flag);
             } while ((idr = idr->first.next));
             if (entity_flag) flecs_add_flag(world, e, entity_flag);
         } else if (event == EcsOnRemove) {
             ecs_id_record_t *idr = flecs_id_record_get(world, e);
-            if (idr) changed |= unset_id_flag(idr, not_flag);
+            if (idr) changed |= flecs_unset_id_flag(idr, not_flag);
             idr = flecs_id_record_get(world, ecs_pair(e, EcsWildcard));
             if (idr) {
                 do {
-                    changed |= unset_id_flag(idr, not_flag);
+                    changed |= flecs_unset_id_flag(idr, not_flag);
                 } while ((idr = idr->first.next));
             }
         }
 
         if (changed) {
-            assert_relation_unused(world, e, prop);
+            flecs_assert_relation_unused(world, e, prop);
         }
     }
 }
 
 static
-void register_final(ecs_iter_t *it) {
+void flecs_register_final(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     
     int i, count = it->count;
@@ -282,32 +254,32 @@ void register_final(ecs_iter_t *it) {
 }
 
 static
-void register_on_delete(ecs_iter_t *it) {
+void flecs_register_on_delete(ecs_iter_t *it) {
     ecs_id_t id = ecs_field_id(it, 1);
-    register_id_flag_for_relation(it, EcsOnDelete, 
+    flecs_register_id_flag_for_relation(it, EcsOnDelete, 
         ECS_ID_ON_DELETE_FLAG(ECS_PAIR_SECOND(id)),
         EcsIdOnDeleteMask,
         EcsEntityObservedId);
 }
 
 static
-void register_on_delete_object(ecs_iter_t *it) {
+void flecs_register_on_delete_object(ecs_iter_t *it) {
     ecs_id_t id = ecs_field_id(it, 1);
-    register_id_flag_for_relation(it, EcsOnDeleteTarget, 
+    flecs_register_id_flag_for_relation(it, EcsOnDeleteTarget, 
         ECS_ID_ON_DELETE_OBJECT_FLAG(ECS_PAIR_SECOND(id)),
         EcsIdOnDeleteObjectMask,
         EcsEntityObservedId);  
 }
 
 static
-void register_acyclic(ecs_iter_t *it) {
-    register_id_flag_for_relation(it, EcsAcyclic, EcsIdAcyclic, 
+void flecs_register_acyclic(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsAcyclic, EcsIdAcyclic, 
         EcsIdAcyclic, 0);
 }
 
 static
-void register_tag(ecs_iter_t *it) {
-    register_id_flag_for_relation(it, EcsTag, EcsIdTag, ~EcsIdTag, 0);
+void flecs_register_tag(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsTag, EcsIdTag, ~EcsIdTag, 0);
 
     /* Ensure that all id records for tag have type info set to NULL */
     ecs_world_t *world = it->real_world;
@@ -321,7 +293,7 @@ void register_tag(ecs_iter_t *it) {
             ecs_assert(idr != NULL, ECS_INTERNAL_ERROR, NULL);
             do {
                 if (idr->type_info != NULL) {
-                    assert_relation_unused(world, e, EcsTag);
+                    flecs_assert_relation_unused(world, e, EcsTag);
                 }
                 idr->type_info = NULL;
             } while ((idr = idr->first.next));
@@ -330,29 +302,29 @@ void register_tag(ecs_iter_t *it) {
 }
 
 static
-void register_exclusive(ecs_iter_t *it) {
-    register_id_flag_for_relation(it, EcsExclusive, EcsIdExclusive, 
+void flecs_register_exclusive(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsExclusive, EcsIdExclusive, 
         EcsIdExclusive, 0);
 }
 
 static
-void register_dont_inherit(ecs_iter_t *it) {
-    register_id_flag_for_relation(it, EcsDontInherit, 
+void flecs_register_dont_inherit(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsDontInherit, 
         EcsIdDontInherit, EcsIdDontInherit, 0);
 }
 
 static
-void register_with(ecs_iter_t *it) {
-    register_id_flag_for_relation(it, EcsWith, EcsIdWith, 0, 0);
+void flecs_register_with(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsWith, EcsIdWith, 0, 0);
 }
 
 static
-void register_union(ecs_iter_t *it) {
-    register_id_flag_for_relation(it, EcsUnion, EcsIdUnion, 0, 0);
+void flecs_register_union(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsUnion, EcsIdUnion, 0, 0);
 }
 
 static
-void register_slot_of(ecs_iter_t *it) {
+void flecs_register_slot_of(ecs_iter_t *it) {
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
         ecs_add_id(it->world, it->entities[i], EcsUnion);
@@ -360,7 +332,7 @@ void register_slot_of(ecs_iter_t *it) {
 }
 
 static
-void on_symmetric_add_remove(ecs_iter_t *it) {
+void flecs_on_symmetric_add_remove(ecs_iter_t *it) {
     ecs_entity_t pair = ecs_field_id(it, 1);
 
     if (!ECS_HAS_ID_FLAG(pair, PAIR)) {
@@ -388,38 +360,44 @@ void on_symmetric_add_remove(ecs_iter_t *it) {
 }
 
 static
-void register_symmetric(ecs_iter_t *it) {
+void flecs_register_symmetric(ecs_iter_t *it) {
     ecs_world_t *world = it->real_world;
 
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
         ecs_entity_t r = it->entities[i];
-        assert_relation_unused(world, r, EcsSymmetric);
+        flecs_assert_relation_unused(world, r, EcsSymmetric);
 
         /* Create observer that adds the reverse relationship when R(X, Y) is
          * added, or remove the reverse relationship when R(X, Y) is removed. */
         ecs_observer_init(world, &(ecs_observer_desc_t){
             .entity = ecs_entity(world, {.add = {ecs_childof(EcsFlecsInternals)}}),
             .filter.terms[0] = { .id = ecs_pair(r, EcsWildcard) },
-            .callback = on_symmetric_add_remove,
+            .callback = flecs_on_symmetric_add_remove,
             .events = {EcsOnAdd, EcsOnRemove}
         });
     } 
 }
 
 static
-void on_component(ecs_iter_t *it) {
+void flecs_on_component(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     EcsComponent *c = ecs_field(it, EcsComponent, 1);
 
     int i, count = it->count;
     for (i = 0; i < count; i ++) {
         ecs_entity_t e = it->entities[i];
+
+        uint32_t component_id = (uint32_t)e; /* Strip generation */
+        ecs_assert(component_id < ECS_MAX_COMPONENT_ID, ECS_OUT_OF_RANGE,
+            "component id must be smaller than %u", ECS_MAX_COMPONENT_ID);
+        (void)component_id;
+
         if (it->event == EcsOnSet) {
             if (flecs_type_info_init_id(
                 world, e, c[i].size, c[i].alignment, NULL))
             {
-                assert_relation_unused(world, e, ecs_id(EcsComponent));
+                flecs_assert_relation_unused(world, e, ecs_id(EcsComponent));
             }
         } else if (it->event == EcsOnRemove) {
             flecs_type_info_free(world, e);
@@ -428,7 +406,7 @@ void on_component(ecs_iter_t *it) {
 }
 
 static
-void ensure_module_tag(ecs_iter_t *it) {
+void flecs_ensure_module_tag(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
 
     int i, count = it->count;
@@ -444,7 +422,7 @@ void ensure_module_tag(ecs_iter_t *it) {
 /* -- Triggers for keeping hashed ids in sync -- */
 
 static
-void on_parent_change(ecs_iter_t *it) {
+void flecs_on_parent_change(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     ecs_table_t *other_table = it->other_table, *table = it->table;
 
@@ -486,7 +464,7 @@ void on_parent_change(ecs_iter_t *it) {
     }
 
     /* Get the table column with names */
-    const EcsIdentifier *names = ecs_iter_column(it, EcsIdentifier, col);
+    EcsIdentifier *names = ecs_iter_column(it, EcsIdentifier, col);
 
     ecs_hashmap_t *from_index = 0;
     if (from_has_name) {
@@ -500,7 +478,7 @@ void on_parent_change(ecs_iter_t *it) {
     int32_t i, count = it->count;
     for (i = 0; i < count; i ++) {
         ecs_entity_t e = it->entities[i];
-        const EcsIdentifier *name = &names[i];
+        EcsIdentifier *name = &names[i];
 
         uint64_t index_hash = name->index_hash;
         if (from_index && index_hash) {
@@ -511,6 +489,7 @@ void on_parent_change(ecs_iter_t *it) {
             ecs_assert(name->hash != 0, ECS_INTERNAL_ERROR, NULL);
             flecs_name_index_ensure(
                 to_index, e, name_str, name->length, name->hash);
+            name->index = to_index;
         }
     }
 }
@@ -519,7 +498,7 @@ void on_parent_change(ecs_iter_t *it) {
 /* -- Iterable mixins -- */
 
 static
-void on_event_iterable_init(
+void flecs_on_event_iterable_init(
     const ecs_world_t *world,
     const ecs_poly_t *poly, /* Observable */
     ecs_iter_t *it,
@@ -531,12 +510,12 @@ void on_event_iterable_init(
 
 /* -- Bootstrapping -- */
 
-#define bootstrap_component(world, table, name)\
-    _bootstrap_component(world, table, ecs_id(name), #name, sizeof(name),\
+#define flecs_bootstrap_builtin_t(world, table, name)\
+    flecs_bootstrap_builtin(world, table, ecs_id(name), #name, sizeof(name),\
         ECS_ALIGNOF(name))
 
 static
-void _bootstrap_component(
+void flecs_bootstrap_builtin(
     ecs_world_t *world,
     ecs_table_t *table,
     ecs_entity_t entity,
@@ -546,16 +525,16 @@ void _bootstrap_component(
 {
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_column_t *columns = table->data.columns;
+    ecs_vec_t *columns = table->data.columns;
     ecs_assert(columns != NULL, ECS_INTERNAL_ERROR, NULL);
 
     ecs_record_t *record = flecs_entities_ensure(world, entity);
     record->table = table;
 
-    int32_t index = flecs_table_append(world, table, entity, record, false);
+    int32_t index = flecs_table_append(world, table, entity, record, false, false);
     record->row = ECS_ROW_TO_RECORD(index, 0);
 
-    EcsComponent *component = ecs_storage_first(&columns[0]);
+    EcsComponent *component = ecs_vec_first(&columns[0]);
     component[index].size = size;
     component[index].alignment = alignment;
 
@@ -563,14 +542,14 @@ void _bootstrap_component(
     ecs_size_t symbol_length = ecs_os_strlen(symbol);
     ecs_size_t name_length = symbol_length - 3;
 
-    EcsIdentifier *name_col = ecs_storage_first(&columns[1]);
+    EcsIdentifier *name_col = ecs_vec_first(&columns[1]);
     name_col[index].value = ecs_os_strdup(name);
     name_col[index].length = name_length;
     name_col[index].hash = flecs_hash(name, name_length);
     name_col[index].index_hash = 0;
     name_col[index].index = NULL;
 
-    EcsIdentifier *symbol_col = ecs_storage_first(&columns[2]);
+    EcsIdentifier *symbol_col = ecs_vec_first(&columns[2]);
     symbol_col[index].value = ecs_os_strdup(symbol);
     symbol_col[index].length = symbol_length;
     symbol_col[index].hash = flecs_hash(symbol, symbol_length);    
@@ -585,7 +564,7 @@ void _bootstrap_component(
  * and alignment of the EcsComponent and EcsIdentifier components, which haven't
  * been created yet */
 static
-ecs_table_t* bootstrap_component_table(
+ecs_table_t* flecs_bootstrap_component_table(
     ecs_world_t *world)
 {
     /* Before creating table, manually set flags for ChildOf/Identifier, as this
@@ -622,18 +601,18 @@ ecs_table_t* bootstrap_component_table(
     ecs_data_t *data = &result->data;
 
     /* Preallocate enough memory for initial components */
-    ecs_storage_init_t(&data->entities, ecs_entity_t, EcsFirstUserComponentId);
-    ecs_storage_init_t(&data->records, ecs_record_t, EcsFirstUserComponentId);
-
-    ecs_storage_init_t(&data->columns[0], EcsComponent, EcsFirstUserComponentId);
-    ecs_storage_init_t(&data->columns[1], EcsIdentifier, EcsFirstUserComponentId);
-    ecs_storage_init_t(&data->columns[2], EcsIdentifier, EcsFirstUserComponentId);
+    ecs_allocator_t *a = &world->allocator;
+    ecs_vec_init_t(a, &data->entities, ecs_entity_t, EcsFirstUserComponentId);
+    ecs_vec_init_t(a, &data->records, ecs_record_t*, EcsFirstUserComponentId);
+    ecs_vec_init_t(a, &data->columns[0], EcsComponent, EcsFirstUserComponentId);
+    ecs_vec_init_t(a, &data->columns[1], EcsIdentifier, EcsFirstUserComponentId);
+    ecs_vec_init_t(a, &data->columns[2], EcsIdentifier, EcsFirstUserComponentId);
     
     return result;
 }
 
 static
-void bootstrap_entity(
+void flecs_bootstrap_entity(
     ecs_world_t *world,
     ecs_entity_t id,
     const char *name,
@@ -681,8 +660,8 @@ void flecs_bootstrap(
     /* Bootstrap builtin components */
     flecs_type_info_init(world, EcsComponent, { 
         .ctor = ecs_default_ctor,
-        .on_set = on_component,
-        .on_remove = on_component
+        .on_set = flecs_on_component,
+        .on_remove = flecs_on_component
     });
 
     flecs_type_info_init(world, EcsIdentifier, {
@@ -710,13 +689,13 @@ void flecs_bootstrap(
     world->idr_any = flecs_id_record_ensure(world, EcsAny);
 
     /* Create table for initial components */
-    ecs_table_t *table = bootstrap_component_table(world);
+    ecs_table_t *table = flecs_bootstrap_component_table(world);
     assert(table != NULL);
 
-    bootstrap_component(world, table, EcsIdentifier);
-    bootstrap_component(world, table, EcsComponent);
-    bootstrap_component(world, table, EcsIterable);
-    bootstrap_component(world, table, EcsPoly);
+    flecs_bootstrap_builtin_t(world, table, EcsIdentifier);
+    flecs_bootstrap_builtin_t(world, table, EcsComponent);
+    flecs_bootstrap_builtin_t(world, table, EcsIterable);
+    flecs_bootstrap_builtin_t(world, table, EcsPoly);
 
     world->info.last_component_id = EcsFirstUserComponentId;
     world->info.last_id = EcsFirstUserEntityId;
@@ -724,14 +703,14 @@ void flecs_bootstrap(
     world->info.max_id = 0;
 
     /* Make EcsOnAdd, EcsOnSet events iterable to enable .yield_existing */
-    ecs_set(world, EcsOnAdd, EcsIterable, { .init = on_event_iterable_init });
-    ecs_set(world, EcsOnSet, EcsIterable, { .init = on_event_iterable_init });
+    ecs_set(world, EcsOnAdd, EcsIterable, { .init = flecs_on_event_iterable_init });
+    ecs_set(world, EcsOnSet, EcsIterable, { .init = flecs_on_event_iterable_init });
     
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .entity = ecs_entity(world, {.add = { ecs_childof(EcsFlecsInternals)}}),
         .filter.terms[0] = { .id = EcsTag, .src.flags = EcsSelf },
         .events = {EcsOnAdd, EcsOnRemove},
-        .callback = register_tag,
+        .callback = flecs_register_tag,
         .yield_existing = true
     });
 
@@ -766,12 +745,12 @@ void flecs_bootstrap(
     ecs_add_id(world, EcsFlecsInternals, EcsModule);
 
     /* Initialize builtin entities */
-    bootstrap_entity(world, EcsWorld, "World", EcsFlecsCore);
-    bootstrap_entity(world, EcsWildcard, "*", EcsFlecsCore);
-    bootstrap_entity(world, EcsAny, "_", EcsFlecsCore);
-    bootstrap_entity(world, EcsThis, "This", EcsFlecsCore);
-    bootstrap_entity(world, EcsVariable, "$", EcsFlecsCore);
-    bootstrap_entity(world, EcsFlag, "Flag", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsWorld, "World", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsWildcard, "*", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsAny, "_", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsThis, "This", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsVariable, "$", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsFlag, "Flag", EcsFlecsCore);
 
     /* Component/relationship properties */
     flecs_bootstrap_tag(world, EcsTransitive);
@@ -800,12 +779,12 @@ void flecs_bootstrap(
     flecs_bootstrap_tag(world, EcsDependsOn);
 
     /* Builtin events */
-    bootstrap_entity(world, EcsOnAdd, "OnAdd", EcsFlecsCore);
-    bootstrap_entity(world, EcsOnRemove, "OnRemove", EcsFlecsCore);
-    bootstrap_entity(world, EcsOnSet, "OnSet", EcsFlecsCore);
-    bootstrap_entity(world, EcsUnSet, "UnSet", EcsFlecsCore);
-    bootstrap_entity(world, EcsOnTableEmpty, "OnTableEmpty", EcsFlecsCore);
-    bootstrap_entity(world, EcsOnTableFill, "OnTableFilled", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnAdd, "OnAdd", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnRemove, "OnRemove", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnSet, "OnSet", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsUnSet, "UnSet", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnTableEmpty, "OnTableEmpty", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnTableFill, "OnTableFilled", EcsFlecsCore);
 
     /* Tag relationships (relationships that should never have data) */
     ecs_add_id(world, EcsIsA, EcsTag);
@@ -849,13 +828,13 @@ void flecs_bootstrap(
         },
         .events = { EcsOnAdd, EcsOnRemove },
         .yield_existing = true,
-        .callback = on_parent_change
+        .callback = flecs_on_parent_change
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ .id = EcsFinal, .src.flags = EcsSelf }, match_prefab },
         .events = {EcsOnAdd},
-        .callback = register_final
+        .callback = flecs_register_final
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
@@ -864,7 +843,7 @@ void flecs_bootstrap(
             match_prefab
         },
         .events = {EcsOnAdd, EcsOnRemove},
-        .callback = register_on_delete
+        .callback = flecs_register_on_delete
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
@@ -873,7 +852,7 @@ void flecs_bootstrap(
             match_prefab
         },
         .events = {EcsOnAdd, EcsOnRemove},
-        .callback = register_on_delete_object
+        .callback = flecs_register_on_delete_object
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
@@ -882,25 +861,25 @@ void flecs_bootstrap(
             match_prefab
         },
         .events = {EcsOnAdd, EcsOnRemove},
-        .callback = register_acyclic
+        .callback = flecs_register_acyclic
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ .id = EcsExclusive, .src.flags = EcsSelf  }, match_prefab },
         .events = {EcsOnAdd},
-        .callback = register_exclusive
+        .callback = flecs_register_exclusive
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ .id = EcsSymmetric, .src.flags = EcsSelf  }, match_prefab },
         .events = {EcsOnAdd},
-        .callback = register_symmetric
+        .callback = flecs_register_symmetric
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ .id = EcsDontInherit, .src.flags = EcsSelf }, match_prefab },
         .events = {EcsOnAdd},
-        .callback = register_dont_inherit
+        .callback = flecs_register_dont_inherit
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
@@ -909,13 +888,13 @@ void flecs_bootstrap(
             match_prefab
         },
         .events = {EcsOnAdd},
-        .callback = register_with
+        .callback = flecs_register_with
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ .id = EcsUnion, .src.flags = EcsSelf }, match_prefab },
         .events = {EcsOnAdd},
-        .callback = register_union
+        .callback = flecs_register_union
     });
 
     /* Entities used as slot are marked as exclusive to ensure a slot can always
@@ -926,7 +905,7 @@ void flecs_bootstrap(
             match_prefab
         },
         .events = {EcsOnAdd},
-        .callback = register_slot_of
+        .callback = flecs_register_slot_of
     });
 
     /* Define observer to make sure that adding a module to a child entity also
@@ -934,7 +913,7 @@ void flecs_bootstrap(
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {{ .id = EcsModule, .src.flags = EcsSelf }, match_prefab},
         .events = {EcsOnAdd},
-        .callback = ensure_module_tag
+        .callback = flecs_ensure_module_tag
     });
 
     /* Set scope back to flecs core */
@@ -964,6 +943,8 @@ void flecs_bootstrap(
     flecs_bootstrap_hierarchy(world);
 
     ecs_set_scope(world, 0);
+
+    ecs_set_name_prefix(world, NULL);
 
     ecs_log_pop();
 }

@@ -75,7 +75,8 @@ ecs_entity_t ecs_cpp_component_register(
     const char *symbol,
     ecs_size_t size,
     ecs_size_t alignment,
-    bool implicit_name);
+    bool implicit_name,
+    bool *existing_out);
 
 FLECS_API
 ecs_entity_t ecs_cpp_component_register_explicit(
@@ -87,7 +88,13 @@ ecs_entity_t ecs_cpp_component_register_explicit(
     const char *symbol,
     size_t size,
     size_t alignment,
-    bool is_component);
+    bool is_component,
+    bool *existing_out);
+
+FLECS_API
+void ecs_cpp_enum_init(
+    ecs_world_t *world,
+    ecs_entity_t id);
 
 FLECS_API
 ecs_entity_t ecs_cpp_enum_constant_register(

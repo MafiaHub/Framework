@@ -5,8 +5,6 @@ const ecs_id_t ECS_PAIR =                                          (1ull << 63);
 const ecs_id_t ECS_OVERRIDE =                                      (1ull << 62);
 const ecs_id_t ECS_TOGGLE =                                        (1ull << 61);
 const ecs_id_t ECS_AND =                                           (1ull << 60);
-const ecs_id_t ECS_OR =                                            (1ull << 59);
-const ecs_id_t ECS_NOT =                                           (1ull << 58);
 
 /** Builtin component ids */
 const ecs_entity_t ecs_id(EcsComponent) =                           1;
@@ -174,7 +172,7 @@ const ecs_stage_t* flecs_stage_from_readonly_world(
     return NULL;    
 }
 
-ecs_stage_t *flecs_stage_from_world(
+ecs_stage_t* flecs_stage_from_world(
     ecs_world_t **world_ptr)
 {
     ecs_world_t *world = *world_ptr;
@@ -185,7 +183,7 @@ ecs_stage_t *flecs_stage_from_world(
                NULL);
 
     if (ecs_poly_is(world, ecs_world_t)) {
-        ecs_assert(!(world->flags & EcsWorldReadonly) || (ecs_get_stage_count(world) <= 1), 
+        ecs_assert(!(world->flags & EcsWorldMultiThreaded), 
             ECS_INVALID_OPERATION, NULL);
         return &world->stages[0];
 
@@ -233,13 +231,13 @@ ecs_world_t* flecs_suspend_readonly(
     ecs_world_t *temp_world = world;
     ecs_stage_t *stage = flecs_stage_from_world(&temp_world);
     state->defer_count = stage->defer;
-    state->defer_queue = stage->defer_queue;
+    state->commands = stage->commands;
     state->defer_stack = stage->defer_stack;
     flecs_stack_init(&stage->defer_stack);
     state->scope = stage->scope;
     state->with = stage->with;
     stage->defer = 0;
-    stage->defer_queue = NULL;
+    ecs_vec_init_t(NULL, &stage->commands, ecs_cmd_t, 0);
     
     return world;
 }
@@ -262,12 +260,8 @@ void flecs_resume_readonly(
         /* Restore readonly state / defer count */
         ECS_BIT_COND(world->flags, EcsWorldReadonly, state->is_readonly);
         stage->defer = state->defer_count;
-        if (stage->defer_queue) {
-            ecs_assert(ecs_vector_count(stage->defer_queue) == 0, 
-                ECS_INTERNAL_ERROR, NULL);
-            ecs_vector_free(stage->defer_queue);
-        }
-        stage->defer_queue = state->defer_queue;
+        ecs_vec_fini_t(&stage->allocator, &stage->commands, ecs_cmd_t);
+        stage->commands = state->commands;
         flecs_stack_fini(&stage->defer_stack);
         stage->defer_stack = state->defer_stack;
         stage->scope = state->scope;
@@ -280,7 +274,7 @@ void flecs_resume_readonly(
  * themselves with component monitors to determine whether they need to rematch
  * with tables. */
 static
-void eval_component_monitor(
+void flecs_eval_component_monitor(
     ecs_world_t *world)
 {
     ecs_poly_assert(world, ecs_world_t);
@@ -336,7 +330,7 @@ void flecs_monitor_register(
 
     ecs_map_t *monitors = &world->monitors.monitors;
 
-    ecs_map_init_if(monitors, ecs_monitor_t, 1);
+    ecs_map_init_if(monitors, ecs_monitor_t, &world->allocator, 1);
 
     ecs_monitor_t *m = ecs_map_ensure(monitors, ecs_monitor_t, id);
     ecs_assert(m != NULL, ECS_INTERNAL_ERROR, NULL);        
@@ -386,28 +380,32 @@ void flecs_monitor_unregister(
 }
 
 static
-void init_store(
+void flecs_init_store(
     ecs_world_t *world) 
 {
     ecs_os_memset(&world->store, 0, ECS_SIZEOF(ecs_store_t));
     
     /* Initialize entity index */
-    flecs_sparse_init(&world->store.entity_index, ecs_record_t);
+    flecs_sparse_init(&world->store.entity_index, 
+        &world->allocator, &world->allocators.sparse_chunk,
+        ecs_record_t);
     flecs_sparse_set_id_source(&world->store.entity_index, 
         &world->info.last_id);
 
     /* Initialize root table */
-    flecs_sparse_init(&world->store.tables, ecs_table_t);
+    flecs_sparse_init(&world->store.tables, 
+        &world->allocator, &world->allocators.sparse_chunk,
+        ecs_table_t);
 
     /* Initialize table map */
-    flecs_table_hashmap_init(&world->store.table_map);
+    flecs_table_hashmap_init(world, &world->store.table_map);
 
     /* Initialize one root table per stage */
     flecs_init_root_table(world);
 }
 
 static
-void clean_tables(
+void flecs_clean_tables(
     ecs_world_t *world)
 {
     int32_t i, count = flecs_sparse_count(&world->store.tables);
@@ -430,7 +428,7 @@ void clean_tables(
     for (i = 1; i < count; i ++) {
         ecs_table_t *t = flecs_sparse_get_dense(&world->store.tables, 
             ecs_table_t, i);
-        flecs_table_free_type(t);
+        flecs_table_free_type(world, t);
     }
 
     /* Clear the root table */
@@ -440,7 +438,7 @@ void clean_tables(
 }
 
 static
-void fini_roots(ecs_world_t *world) {
+void flecs_fini_roots(ecs_world_t *world) {
     ecs_id_record_t *idr = flecs_id_record_get(world, ecs_pair(EcsChildOf, 0));
 
     ecs_run_aperiodic(world, EcsAperiodicEmptyTables);
@@ -470,6 +468,8 @@ void fini_roots(ecs_world_t *world) {
          * table which reduces moving components around */
         for (i = count - 1; i >= 0; i --) {
             ecs_record_t *r = flecs_entities_get(world, entities[i]);
+            ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
+
             ecs_flags32_t flags = ECS_RECORD_TO_ROW_FLAGS(r->row);
             if (!(flags & EcsEntityObservedTarget)) {
                 continue; /* Filter out entities that aren't objects */
@@ -483,25 +483,19 @@ void fini_roots(ecs_world_t *world) {
 }
 
 static
-void fini_store(ecs_world_t *world) {
-    clean_tables(world);
+void flecs_fini_store(ecs_world_t *world) {
+    flecs_clean_tables(world);
     flecs_sparse_fini(&world->store.tables);
     flecs_table_release(world, &world->store.root);
     flecs_sparse_clear(&world->store.entity_index);
     flecs_hashmap_fini(&world->store.table_map);
     ecs_vector_free(world->store.records);
     ecs_vector_free(world->store.marked_ids);
-
-    ecs_graph_edge_hdr_t *cur, *next = world->store.first_free;
-    while ((cur = next)) {
-        next = cur->next;
-        ecs_os_free(cur);
-    }
 }
 
 /* Implementation for iterable mixin */
 static
-bool world_iter_next(
+bool flecs_world_iter_next(
     ecs_iter_t *it)
 {
     if (ECS_BIT_IS_SET(it->flags, EcsIterIsValid)) {
@@ -519,7 +513,7 @@ bool world_iter_next(
 }
 
 static
-void world_iter_init(
+void flecs_world_iter_init(
     const ecs_world_t *world,
     const ecs_poly_t *poly,
     ecs_iter_t *iter,
@@ -534,13 +528,58 @@ void world_iter_init(
         iter[0] = (ecs_iter_t){
             .world = (ecs_world_t*)world,
             .real_world = (ecs_world_t*)ecs_get_world(world),
-            .next = world_iter_next
+            .next = flecs_world_iter_next
         };
     }
 }
 
+static 
+void flecs_world_allocators_init(
+    ecs_world_t *world)
+{
+    ecs_world_allocators_t *a = &world->allocators;
+
+    flecs_allocator_init(&world->allocator);
+
+    ecs_map_params_init(&a->ptr, &world->allocator, void*);
+    ecs_map_params_init(&a->query_table_list, &world->allocator,
+        ecs_query_table_list_t);
+
+    flecs_ballocator_init_t(&a->query_table, ecs_query_table_t);
+    flecs_ballocator_init_t(&a->query_table_match, ecs_query_table_match_t);
+    flecs_ballocator_init_n(&a->graph_edge_lo, ecs_graph_edge_t, ECS_HI_COMPONENT_ID);
+    flecs_ballocator_init_t(&a->graph_edge, ecs_graph_edge_t);
+    flecs_ballocator_init_t(&a->id_record, ecs_id_record_t);
+    flecs_ballocator_init_t(&a->table_diff, ecs_table_diff_t);
+    flecs_ballocator_init_n(&a->sparse_chunk, int32_t, FLECS_SPARSE_CHUNK_SIZE);
+    flecs_ballocator_init_t(&a->hashmap, ecs_hashmap_t);
+    flecs_table_diff_builder_init(world, &world->allocators.diff_builder);
+}
+
+static 
+void flecs_world_allocators_fini(
+    ecs_world_t *world)
+{
+    ecs_world_allocators_t *a = &world->allocators;
+
+    ecs_map_params_fini(&a->ptr);
+    ecs_map_params_fini(&a->query_table_list);
+
+    flecs_ballocator_fini(&a->query_table);
+    flecs_ballocator_fini(&a->query_table_match);
+    flecs_ballocator_fini(&a->graph_edge_lo);
+    flecs_ballocator_fini(&a->graph_edge);
+    flecs_ballocator_fini(&a->id_record);
+    flecs_ballocator_fini(&a->table_diff);
+    flecs_ballocator_fini(&a->sparse_chunk);
+    flecs_ballocator_fini(&a->hashmap);
+    flecs_table_diff_builder_fini(world, &world->allocators.diff_builder);
+
+    flecs_allocator_fini(&world->allocator);
+}
+
 static
-void log_addons(void) {
+void flecs_log_addons(void) {
     ecs_trace("addons included in build:");
     ecs_log_push();
     #ifdef FLECS_CPP
@@ -640,7 +679,7 @@ ecs_world_t *ecs_mini(void) {
         ecs_trace("time management not available");
     }
 
-    log_addons();
+    flecs_log_addons();
 
 #ifdef FLECS_SANITIZE
     ecs_trace("sanitize build, rebuild without FLECS_SANITIZE for (much) "
@@ -664,15 +703,23 @@ ecs_world_t *ecs_mini(void) {
     ecs_assert(world != NULL, ECS_OUT_OF_MEMORY, NULL);
     ecs_poly_init(world, ecs_world_t);
 
+    flecs_world_allocators_init(world);
+
     world->self = world;
-    world->type_info = flecs_sparse_new(ecs_type_info_t);
-    ecs_map_init(&world->id_index, ecs_id_record_t*, ECS_HI_COMPONENT_ID);
+    world->type_info = flecs_sparse_new(
+        &world->allocator, &world->allocators.sparse_chunk, 
+        ecs_type_info_t);
+    ecs_map_init_w_params(&world->id_index, &world->allocators.ptr);
     flecs_observable_init(&world->observable);
-    world->iterable.init = world_iter_init;
-    world->pending_tables = flecs_sparse_new(ecs_table_t*);
-    world->pending_buffer = flecs_sparse_new(ecs_table_t*);
-    flecs_name_index_init(&world->aliases);
-    flecs_name_index_init(&world->symbols);
+    world->iterable.init = flecs_world_iter_init;
+    world->pending_tables = flecs_sparse_new(
+        &world->allocator, &world->allocators.sparse_chunk,
+        ecs_table_t*);
+    world->pending_buffer = flecs_sparse_new(
+        &world->allocator, &world->allocators.sparse_chunk,
+        ecs_table_t*);
+    flecs_name_index_init(&world->aliases, &world->allocator);
+    flecs_name_index_init(&world->symbols, &world->allocator);
 
     world->info.time_scale = 1.0;
 
@@ -683,7 +730,7 @@ ecs_world_t *ecs_mini(void) {
     ecs_set_stage_count(world, 1);
     ecs_default_lookup_path[0] = EcsFlecsCore;
     ecs_set_lookup_path(world, ecs_default_lookup_path);
-    init_store(world);
+    flecs_init_store(world);
 
     flecs_bootstrap(world);
 
@@ -835,7 +882,7 @@ void ecs_default_ctor(
 }
 
 static
-void default_copy_ctor(void *dst_ptr, const void *src_ptr,
+void flecs_default_copy_ctor(void *dst_ptr, const void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     const ecs_type_hooks_t *cl = &ti->hooks;
@@ -844,7 +891,7 @@ void default_copy_ctor(void *dst_ptr, const void *src_ptr,
 }
 
 static
-void default_move_ctor(void *dst_ptr, void *src_ptr,
+void flecs_default_move_ctor(void *dst_ptr, void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     const ecs_type_hooks_t *cl = &ti->hooks;
@@ -853,7 +900,7 @@ void default_move_ctor(void *dst_ptr, void *src_ptr,
 }
 
 static
-void default_ctor_w_move_w_dtor(void *dst_ptr, void *src_ptr,
+void flecs_default_ctor_w_move_w_dtor(void *dst_ptr, void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     const ecs_type_hooks_t *cl = &ti->hooks;
@@ -863,7 +910,7 @@ void default_ctor_w_move_w_dtor(void *dst_ptr, void *src_ptr,
 }
 
 static
-void default_move_ctor_w_dtor(void *dst_ptr, void *src_ptr,
+void flecs_default_move_ctor_w_dtor(void *dst_ptr, void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     const ecs_type_hooks_t *cl = &ti->hooks;
@@ -872,7 +919,7 @@ void default_move_ctor_w_dtor(void *dst_ptr, void *src_ptr,
 }
 
 static
-void default_move(void *dst_ptr, void *src_ptr,
+void flecs_default_move(void *dst_ptr, void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     const ecs_type_hooks_t *cl = &ti->hooks;
@@ -880,7 +927,7 @@ void default_move(void *dst_ptr, void *src_ptr,
 }
 
 static
-void default_dtor(void *dst_ptr, void *src_ptr,
+void flecs_default_dtor(void *dst_ptr, void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     /* When there is no move, destruct the destination component & memcpy the
@@ -892,7 +939,7 @@ void default_dtor(void *dst_ptr, void *src_ptr,
 }
 
 static
-void default_move_w_dtor(void *dst_ptr, void *src_ptr,
+void flecs_default_move_w_dtor(void *dst_ptr, void *src_ptr,
     int32_t count, const ecs_type_info_t *ti)
 {
     /* If a component has a move, the move will take care of memcpying the data
@@ -965,11 +1012,11 @@ void ecs_set_hooks_id(
 
     /* Set default copy ctor, move ctor and merge */
     if (h->copy && !h->copy_ctor) {
-        ti->hooks.copy_ctor = default_copy_ctor;
+        ti->hooks.copy_ctor = flecs_default_copy_ctor;
     }
 
     if (h->move && !h->move_ctor) {
-        ti->hooks.move_ctor = default_move_ctor;
+        ti->hooks.move_ctor = flecs_default_move_ctor;
     }
 
     if (!h->ctor_move_dtor) {
@@ -978,11 +1025,11 @@ void ecs_set_hooks_id(
                 if (h->move_ctor) {
                     /* If an explicit move ctor has been set, use callback 
                      * that uses the move ctor vs. using a ctor+move */
-                    ti->hooks.ctor_move_dtor = default_move_ctor_w_dtor;
+                    ti->hooks.ctor_move_dtor = flecs_default_move_ctor_w_dtor;
                 } else {
                     /* If no explicit move_ctor has been set, use
                      * combination of ctor + move + dtor */
-                    ti->hooks.ctor_move_dtor = default_ctor_w_move_w_dtor;
+                    ti->hooks.ctor_move_dtor = flecs_default_ctor_w_move_w_dtor;
                 }
             } else {
                 /* If no dtor has been set, this is just a move ctor */
@@ -994,13 +1041,13 @@ void ecs_set_hooks_id(
     if (!h->move_dtor) {
         if (h->move) {
             if (h->dtor) {
-                ti->hooks.move_dtor = default_move_w_dtor;
+                ti->hooks.move_dtor = flecs_default_move_w_dtor;
             } else {
-                ti->hooks.move_dtor = default_move;
+                ti->hooks.move_dtor = flecs_default_move;
             }
         } else {
             if (h->dtor) {
-                ti->hooks.move_dtor = default_dtor;
+                ti->hooks.move_dtor = flecs_default_dtor;
             }
         }
     }
@@ -1059,7 +1106,7 @@ error:
 
 /* Unset data in tables */
 static
-void fini_unset_tables(
+void flecs_fini_unset_tables(
     ecs_world_t *world)
 {
     ecs_sparse_t *tables = &world->store.tables;
@@ -1073,7 +1120,7 @@ void fini_unset_tables(
 
 /* Invoke fini actions */
 static
-void fini_actions(
+void flecs_fini_actions(
     ecs_world_t *world)
 {
     ecs_vector_each(world->fini_actions, ecs_action_elem_t, elem, {
@@ -1085,7 +1132,7 @@ void fini_actions(
 
 /* Cleanup remaining type info elements */
 static
-void fini_type_info(
+void flecs_fini_type_info(
     ecs_world_t *world)
 {
     int32_t i, count = flecs_sparse_count(world->type_info);
@@ -1128,7 +1175,7 @@ int ecs_fini(
      * policies get a chance to execute. */
     ecs_dbg_1("#[bold]cleanup root entities");
     ecs_log_push_1();
-    fini_roots(world);
+    flecs_fini_roots(world);
     ecs_log_pop_1();
 
     world->flags |= EcsWorldFini;
@@ -1137,7 +1184,7 @@ int ecs_fini(
      * destroying the storage */
     ecs_dbg_1("#[bold]run fini actions");
     ecs_log_push_1();
-    fini_actions(world);
+    flecs_fini_actions(world);
     ecs_log_pop_1();
 
     ecs_dbg_1("#[bold]cleanup remaining entities");
@@ -1149,11 +1196,11 @@ int ecs_fini(
 
     /* Run UnSet/OnRemove actions for components while the store is still
      * unmodified by cleanup. */
-    fini_unset_tables(world);
+    flecs_fini_unset_tables(world);
 
     /* This will destroy all entities and components. After this point no more
      * user code is executed. */
-    fini_store(world);
+    flecs_fini_store(world);
 
     /* Purge deferred operations from the queue. This discards operations but
      * makes sure that any resources in the queue are freed */
@@ -1168,12 +1215,14 @@ int ecs_fini(
     ecs_log_push_1();
     flecs_sparse_fini(&world->store.entity_index);
     flecs_fini_id_records(world);
-    fini_type_info(world);
+    flecs_fini_type_info(world);
     flecs_observable_fini(&world->observable);
     flecs_name_index_fini(&world->aliases);
     flecs_name_index_fini(&world->symbols);
     ecs_set_stage_count(world, 0);
     ecs_log_pop_1();
+
+    flecs_world_allocators_fini(world);
 
     /* End of the world */
     ecs_poly_free(world, ecs_world_t);
@@ -1206,7 +1255,7 @@ void flecs_eval_component_monitors(
 {
     ecs_poly_assert(world, ecs_world_t);  
     flecs_process_pending_tables(world);  
-    eval_component_monitor(world);
+    flecs_eval_component_monitor(world);
 }
 
 void ecs_measure_frame_time(
@@ -1216,7 +1265,7 @@ void ecs_measure_frame_time(
     ecs_poly_assert(world, ecs_world_t);
     ecs_check(ecs_os_has_time(), ECS_MISSING_OS_API, NULL);
 
-    if (world->info.target_fps == 0.0f || enable) {
+    if (world->info.target_fps == (ecs_ftime_t)0 || enable) {
         ECS_BIT_COND(world->flags, EcsWorldMeasureFrameTime, enable);
     }
 error:
@@ -1329,6 +1378,10 @@ ecs_type_info_t* flecs_type_info_ensure(
             world->type_info, ecs_type_info_t, component);
         ecs_assert(ti_mut != NULL, ECS_INTERNAL_ERROR, NULL);
         ti_mut->component = component;
+        const char *sym = ecs_get_symbol(world, component);
+        if (sym) {
+            ti_mut->name = ecs_os_strdup(sym);
+        }
     } else {
         ti_mut = (ecs_type_info_t*)ti;
     }
@@ -1409,6 +1462,11 @@ void flecs_type_info_fini(
     if (ti->hooks.binding_ctx_free) {
         ti->hooks.binding_ctx_free(ti->hooks.binding_ctx);
     }
+    if (ti->name) {
+        /* Safe to cast away const, world has ownership over string */
+        ecs_os_free((char*)ti->name);
+        ti->name = NULL;
+    }
 }
 
 void flecs_type_info_free(
@@ -1436,7 +1494,7 @@ ecs_ftime_t flecs_insert_sleep(
 {
     ecs_poly_assert(world, ecs_world_t);  
 
-    ecs_time_t start = *stop;
+    ecs_time_t start = *stop, now = start;
     ecs_ftime_t delta_time = (ecs_ftime_t)ecs_time_measure(stop);
 
     if (world->info.target_fps == (ecs_ftime_t)0.0) {
@@ -1461,11 +1519,12 @@ ecs_ftime_t flecs_insert_sleep(
             ecs_sleepf((double)sleep_time);
         }
 
-        ecs_time_t now = start;
+        now = start;
         delta_time = (ecs_ftime_t)ecs_time_measure(&now);
     } while ((target_delta_time - delta_time) > 
         (sleep_time / (ecs_ftime_t)2.0));
 
+    *stop = now;
     return delta_time;
 }
 
@@ -1483,8 +1542,6 @@ ecs_ftime_t flecs_start_measure_frame(
         do {
             if (world->frame_start_time.nanosec || world->frame_start_time.sec){ 
                 delta_time = flecs_insert_sleep(world, &t);
-
-                ecs_time_measure(&t);
             } else {
                 ecs_time_measure(&t);
                 if (world->info.target_fps != 0) {
@@ -1734,7 +1791,6 @@ void flecs_process_pending_tables(
             }
         }
         flecs_sparse_clear(pending_tables);
-
         ecs_defer_end(world);
 
         world->pending_buffer = pending_tables;
