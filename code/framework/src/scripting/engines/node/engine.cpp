@@ -11,18 +11,21 @@
 #include <uv.h>
 
 #include "engine.h"
+#include "sdk.h"
 
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init() {
         // Define the arguments to be passed to the node instance
-        std::vector<std::string> args = { "mafiahub-server", "--experimental-specifier-resolution=node", "--trace-warnings" };
+        std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--trace-warnings"};
         std::vector<std::string> exec_args {};
         std::vector<std::string> errors {};
 
         // Initialize the node with the provided arguments
         int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
         if (initCode != 0) {
-            for (std::string &error : errors) { Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error); }
+            for (std::string &error : errors) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error);
+            }
             return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;
         }
 
@@ -45,6 +48,23 @@ namespace Framework::Scripting::Engines::Node {
         // Register the IsWorker data slot
         _isolate->SetData(v8::Isolate::GetNumberOfDataSlots() - 1, new bool(false));
 
+        // Allocate our scopes
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolateScope(_isolate);
+        v8::HandleScope handleScope(_isolate);
+
+        // Create our global object template
+        v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
+
+        // Initialize our SDK and bind to the global object template
+        const auto sdk = new SDK;
+        sdk->Init(_isolate);
+        global->Set(v8pp::to_v8(_isolate, "sdk"), sdk->GetObjectTemplate());
+
+        // Reset and save the global object template pointer
+        _globalObjectTemplate.Reset(_isolate, global);
+
+        // Ye
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Node.JS engine initialized!");
         return EngineError::ENGINE_NONE;
     }

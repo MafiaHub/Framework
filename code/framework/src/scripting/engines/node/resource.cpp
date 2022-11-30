@@ -12,7 +12,6 @@
 
 #include "engine.h"
 #include "resource.h"
-#include "sdk.h"
 
 #include "../../events.h"
 
@@ -58,21 +57,13 @@ namespace Framework::Scripting::Engines::Node {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
 
-        // Allocate our global object template
-        v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
-
         // Allocate our context
-        v8::Local<v8::Context> context = node::NewContext(_isolate, global);
+        v8::Local<v8::Context> context = v8::Context::New(_isolate, nullptr, reinterpret_cast<Node::Engine *>(_engine)->GetGlobalObjectTemplate());
         v8::Context::Scope scope(context);
 
         // Assign ourselves in the context (allows to be fetched later on)
         context->SetAlignedPointerInEmbedderData(0, this);
         _context.Reset(_isolate, context);
-
-        // Register the SDK on the global object template
-        const auto sdk = new SDK;
-        sdk->Init(_isolate);
-        _isolate->GetCurrentContext()->Global()->Set(context, v8::String::NewFromUtf8(_isolate, "sdk").ToLocalChecked(), sdk->GetNewInstance());
 
         // Initialize our uv loop
         _uvLoop = new uv_loop_t;
@@ -227,7 +218,7 @@ namespace Framework::Scripting::Engines::Node {
             }
             else {
                 auto originValue = Helpers::MakeString(isolate, path).ToLocalChecked();
-                //v8::ScriptOrigin scriptOrigin(originValue);
+                // v8::ScriptOrigin scriptOrigin(originValue);
 
                 script = v8::Script::Compile(context, source, nullptr);
             }

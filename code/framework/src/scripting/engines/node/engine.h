@@ -18,6 +18,7 @@ namespace Framework::Scripting::Engines::Node {
     class Engine: public IEngine {
       private:
         v8::Isolate *_isolate;
+        v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
 
       public:
@@ -34,6 +35,10 @@ namespace Framework::Scripting::Engines::Node {
 
         node::MultiIsolatePlatform *GetPlatform() const {
             return _platform.get();
+        }
+
+        v8::Local<v8::ObjectTemplate> GetGlobalObjectTemplate() const {
+            return _globalObjectTemplate.Get(_isolate);
         }
 
         void SetProcessArguments(int argc, char **argv) override {}

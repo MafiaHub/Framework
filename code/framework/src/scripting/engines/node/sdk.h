@@ -20,6 +20,10 @@ namespace Framework::Scripting::Engines::Node {
       public:
         bool Init(v8::Isolate *);
 
+        v8::Local<v8::ObjectTemplate> GetObjectTemplate() const {
+            return _module->impl();
+        }
+
         v8::Local<v8::Object> GetNewInstance() const {
             return _module->new_instance();
         }
