@@ -94,7 +94,7 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        const auto sdkCallback = [this](void *sdk) {
+        const auto sdkCallback = [this](Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
             this->RegisterScriptingBuiltins(sdk);
         };
 
@@ -348,10 +348,14 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(void *sdk) {
-        // HINT: here you would need to cast to node specific SDK pointer, then access object template and set your bindings
-        // Framework::Scripting::Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
-        // Framework::Scripting::Builtins::PlayerRegister(sdk->GetRootModule());
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
+        switch(sdk.GetKind()) 
+        {
+        case Framework::Scripting::EngineTypes::ENGINE_NODE: {
+            auto nodeSDK = sdk.GetNodeSDK();
+
+        } break;
+        }
 
         // mod-specific builtins
         if (_opts.sdkRegisterCallback) {

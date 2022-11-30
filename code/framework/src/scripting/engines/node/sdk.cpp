@@ -52,7 +52,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Always bind the mod-side in last
         if(cb){
-            cb(this);
+            cb(Framework::Scripting::Engines::SDKRegisterWrapper(this, ENGINE_NODE));
         }
 
         return true;

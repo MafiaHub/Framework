@@ -11,14 +11,13 @@
 #include <map>
 #include <string>
 
+#include "engine_kind.h"
 #include "engines/engine.h"
 #include "engines/resource.h"
 #include "engines/callback.h"
 #include "errors.h"
 
 namespace Framework::Scripting {
-    enum EngineTypes { ENGINE_NODE, ENGINE_LUA, ENGINE_SQUIRREL };
-
     class Module {
       private:
         std::map<std::string, Engines::IResource *> _resources;
@@ -48,6 +47,10 @@ namespace Framework::Scripting {
             return _engine;
         }
 
+        EngineTypes GetEngineType() const {
+            return _engineType;
+        }
+                
         void SetProcessArguments(int argc, char **argv) {
             _processArgsCount = argc;
             _processArgs      = argv;

@@ -88,7 +88,7 @@ namespace Framework::Integrations::Server {
         void InitModules();
         void InitNetworkingMessages();
         bool LoadConfigFromJSON();
-        void RegisterScriptingBuiltins(void *);
+        void RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper);
 
         // managers
         flecs::entity _weatherManager;
