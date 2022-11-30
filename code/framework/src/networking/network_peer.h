@@ -125,5 +125,7 @@ namespace Framework::Networking {
 
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
+
+        static inline NetworkPeer *_networkRef = nullptr;
     };
 } // namespace Framework::Networking

@@ -22,7 +22,7 @@
 #include "cxxopts.hpp"
 #include "optick.h"
 
-#include "scripting/builtins/entity.h"
+#include "scripting/builtins/node/entity.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>

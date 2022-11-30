@@ -16,6 +16,7 @@
 namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
         _peer = SLNet::RakPeerInterface::GetInstance();
+        _networkRef = this; // ugly code
 
         RegisterMessage(Messages::INTERNAL_RPC, [&](SLNet::Packet *p) {
             SLNet::BitStream bs(p->data + 1, p->length, false);
