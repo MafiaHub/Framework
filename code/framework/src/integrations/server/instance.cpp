@@ -343,9 +343,8 @@ namespace Framework::Integrations::Server {
     }
 
     /*void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
-        using namespace Framework::Scripting;
-        Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
-        Builtins::PlayerRegister(sdk->GetRootModule());
+        Framework::Scripting::Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
+        Framework::Scripting::Builtins::PlayerRegister(sdk->GetRootModule());
 
         // mod-specific builtins
         if (_opts.sdkRegisterCallback) {

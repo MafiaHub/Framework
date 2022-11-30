@@ -87,6 +87,7 @@ namespace Framework::Integrations::Server {
         void InitModules();
         void InitNetworkingMessages();
         bool LoadConfigFromJSON();
+        // void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
 
         // managers
         flecs::entity _weatherManager;
@@ -98,9 +99,6 @@ namespace Framework::Integrations::Server {
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectCallback;
-
-        // void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
-
       public:
         Instance();
         ~Instance();
