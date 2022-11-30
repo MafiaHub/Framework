@@ -13,10 +13,12 @@
 
 #include "../engine.h"
 #include "resource.h"
+#include "sdk.h"
 
 namespace Framework::Scripting::Engines::Node {
     class Engine: public IEngine {
       private:
+        SDK *_sdk = nullptr;
         v8::Isolate *_isolate;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
@@ -42,5 +44,10 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         void SetProcessArguments(int argc, char **argv) override {}
+
+      protected:
+        SDK *GetSDK() const {
+            return _sdk;
+        }
     };
 } // namespace Framework::Scripting::Engines::Node

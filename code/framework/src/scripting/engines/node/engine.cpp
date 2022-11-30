@@ -11,7 +11,6 @@
 #include <uv.h>
 
 #include "engine.h"
-#include "sdk.h"
 
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init() {
@@ -57,9 +56,9 @@ namespace Framework::Scripting::Engines::Node {
         v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
 
         // Initialize our SDK and bind to the global object template
-        const auto sdk = new SDK;
-        sdk->Init(_isolate);
-        global->Set(v8pp::to_v8(_isolate, "sdk"), sdk->GetObjectTemplate());
+        _sdk = new SDK;
+        _sdk->Init(_isolate);
+        global->Set(v8pp::to_v8(_isolate, "sdk"), _sdk->GetObjectTemplate());
 
         // Reset and save the global object template pointer
         _globalObjectTemplate.Reset(_isolate, global);
