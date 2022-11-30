@@ -22,6 +22,8 @@
 #include "cxxopts.hpp"
 #include "optick.h"
 
+#include "scripting/builtins/entity.h"
+
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <csignal>
@@ -353,7 +355,7 @@ namespace Framework::Integrations::Server {
         {
         case Framework::Scripting::EngineTypes::ENGINE_NODE: {
             auto nodeSDK = sdk.GetNodeSDK();
-
+            Framework::Integrations::Scripting::EntityRegister(nodeSDK->GetIsolate(), nodeSDK->GetModule());
         } break;
         }
 

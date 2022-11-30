@@ -18,12 +18,17 @@ namespace Framework::Scripting::Engines::Node {
     class SDK {
       private:
         v8pp::module *_module;
+        v8::Isolate *_isolate;
 
       public:
         bool Init(v8::Isolate *, SDKRegisterCallback = nullptr);
 
         v8pp::module *GetModule() const {
             return _module;
+        }
+
+        v8::Isolate *GetIsolate() const {
+            return _isolate;
         }
 
         v8::Local<v8::ObjectTemplate> GetObjectTemplate() const {

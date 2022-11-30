@@ -18,11 +18,10 @@ namespace Framework::Scripting::Engines::Node {
 namespace Framework::Scripting::Engines {
     class SDKRegisterWrapper final {
       private:
-        Framework::Scripting::EngineTypes _kind;
+        Framework::Scripting::EngineTypes _kind = ENGINE_NODE;
         void *_sdk = nullptr;
 
       public:
-        SDKRegisterWrapper(): _sdk(nullptr) {}
         SDKRegisterWrapper(void *sdk, Framework::Scripting::EngineTypes kind): _sdk(sdk), _kind(kind) {}
 
         Framework::Scripting::EngineTypes GetKind() const {

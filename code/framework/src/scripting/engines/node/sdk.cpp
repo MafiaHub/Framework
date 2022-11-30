@@ -41,6 +41,7 @@ namespace Framework::Scripting::Engines::Node {
 
     bool SDK::Init(v8::Isolate *isolate, SDKRegisterCallback cb) {
         _module = new v8pp::module(isolate);
+        _isolate = isolate;
 
         // Bind the module handler
         _module->function("on", &On);

@@ -38,5 +38,7 @@ namespace Framework::World {
         flecs::world *GetWorld() {
             return _world.get();
         }
+
+        static inline flecs::world *_worldRef = nullptr;
     };
 } // namespace Framework::World
