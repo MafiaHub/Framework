@@ -37,9 +37,6 @@ namespace Framework::Scripting {
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
         }
 
-        // Load the resources
-        LoadAllResources();
-
         // Everything just went fine hihi
 
         return ModuleError::MODULE_NONE;
