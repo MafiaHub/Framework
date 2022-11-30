@@ -39,7 +39,7 @@ namespace Framework::Scripting::Engines::Node {
         }
     }
 
-    bool SDK::Init(v8::Isolate *isolate) {
+    bool SDK::Init(v8::Isolate *isolate, SDKRegisterCallback cb) {
         _module = new v8pp::module(isolate);
 
         // Bind the module handler
@@ -51,7 +51,9 @@ namespace Framework::Scripting::Engines::Node {
         Builtins::Vector2Register(isolate, _module);
 
         // Always bind the mod-side in last
-        //TODO: register callback
+        if(cb){
+            cb(this);
+        }
 
         return true;
     }

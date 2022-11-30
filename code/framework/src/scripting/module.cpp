@@ -16,7 +16,7 @@
 #include "module.h"
 
 namespace Framework::Scripting {
-    ModuleError Module::Init(EngineTypes engineType) {
+    ModuleError Module::Init(EngineTypes engineType, Engines::SDKRegisterCallback cb) {
         // Initialize the engine based on the desired type
         switch (engineType) {
         case ENGINE_NODE: {
@@ -32,7 +32,7 @@ namespace Framework::Scripting {
 
         _engineType = engineType;
         _engine->SetProcessArguments(_processArgsCount, _processArgs);
-        if (_engine->Init() != EngineError::ENGINE_NONE) {
+        if (_engine->Init(cb) != EngineError::ENGINE_NONE) {
             delete _engine;
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
         }

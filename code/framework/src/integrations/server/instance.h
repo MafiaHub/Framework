@@ -16,6 +16,7 @@
 #include "logging/logger.h"
 #include "networking/engine.h"
 #include "scripting/server.h"
+#include "scripting/engines/callback.h"
 #include "utils/config.h"
 #include "world/server.h"
 
@@ -64,7 +65,7 @@ namespace Framework::Integrations::Server {
         std::string firebaseApiKey;
 
         // scripting
-        // Framework::Scripting::SDKRegisterCallback sdkRegisterCallback;
+        Framework::Scripting::Engines::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
@@ -87,7 +88,7 @@ namespace Framework::Integrations::Server {
         void InitModules();
         void InitNetworkingMessages();
         bool LoadConfigFromJSON();
-        // void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
+        void RegisterScriptingBuiltins(void *);
 
         // managers
         flecs::entity _weatherManager;

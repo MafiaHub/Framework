@@ -13,7 +13,7 @@
 #include "engine.h"
 
 namespace Framework::Scripting::Engines::Node {
-    EngineError Engine::Init() {
+    EngineError Engine::Init(SDKRegisterCallback cb) {
         // Define the arguments to be passed to the node instance
         std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--trace-warnings"};
         std::vector<std::string> exec_args {};
@@ -57,7 +57,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Initialize our SDK and bind to the global object template
         _sdk = new SDK;
-        _sdk->Init(_isolate);
+        _sdk->Init(_isolate, cb);
         global->Set(v8pp::to_v8(_isolate, "sdk"), _sdk->GetObjectTemplate());
 
         // Reset and save the global object template pointer

@@ -12,13 +12,19 @@
 #include <v8pp/class.hpp>
 #include <v8pp/module.hpp>
 
+#include "../callback.h"
+
 namespace Framework::Scripting::Engines::Node {
     class SDK {
       private:
         v8pp::module *_module;
 
       public:
-        bool Init(v8::Isolate *);
+        bool Init(v8::Isolate *, SDKRegisterCallback = nullptr);
+
+        v8pp::module *GetModule() const {
+            return _module;
+        }
 
         v8::Local<v8::ObjectTemplate> GetObjectTemplate() const {
             return _module->impl();

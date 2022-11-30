@@ -12,12 +12,13 @@
 
 #include "../errors.h"
 #include "resource.h"
+#include "callback.h"
 
 namespace Framework::Scripting::Engines {
     class IEngine {
       public:
         virtual ~IEngine() {}
-        virtual EngineError Init() = 0;
+        virtual EngineError Init(SDKRegisterCallback) = 0;
         virtual EngineError Shutdown()         = 0;
         virtual void Update()                  = 0;
 

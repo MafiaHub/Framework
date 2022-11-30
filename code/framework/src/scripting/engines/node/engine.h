@@ -12,6 +12,7 @@
 #include <v8.h>
 
 #include "../engine.h"
+#include "../callback.h"
 #include "resource.h"
 #include "sdk.h"
 
@@ -24,7 +25,7 @@ namespace Framework::Scripting::Engines::Node {
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
 
       public:
-        EngineError Init() override;
+        EngineError Init(SDKRegisterCallback) override;
         EngineError Shutdown() override;
         void Update() override;
 

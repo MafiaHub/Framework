@@ -15,6 +15,8 @@
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
+#include "scripting/engines/node/sdk.h"
+
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
@@ -92,13 +94,13 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        /*const auto sdkCallback = [this](Framework::Scripting::SDK *sdk) {
+        const auto sdkCallback = [this](void *sdk) {
             this->RegisterScriptingBuiltins(sdk);
-        };*/
+        };
 
         // Initialize the scripting engine
         _scriptingEngine->SetProcessArguments(opts.argc, opts.argv);
-        if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE) != Framework::Scripting::ModuleError::MODULE_NONE) {
+        if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE, sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
@@ -346,9 +348,10 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    /*void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
-        Framework::Scripting::Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
-        Framework::Scripting::Builtins::PlayerRegister(sdk->GetRootModule());
+    void Instance::RegisterScriptingBuiltins(void *sdk) {
+        // HINT: here you would need to cast to node specific SDK pointer, then access object template and set your bindings
+        // Framework::Scripting::Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
+        // Framework::Scripting::Builtins::PlayerRegister(sdk->GetRootModule());
 
         // mod-specific builtins
         if (_opts.sdkRegisterCallback) {
@@ -356,5 +359,5 @@ namespace Framework::Integrations::Server {
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
-    }*/
+    }
 } // namespace Framework::Integrations::Server

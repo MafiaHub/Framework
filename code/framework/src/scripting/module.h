@@ -13,6 +13,7 @@
 
 #include "engines/engine.h"
 #include "engines/resource.h"
+#include "engines/callback.h"
 #include "errors.h"
 
 namespace Framework::Scripting {
@@ -33,7 +34,7 @@ namespace Framework::Scripting {
 
         ~Module() = default;
 
-        ModuleError Init(EngineTypes engineType);
+        ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
         ModuleError Shutdown();
 
         void Update();
