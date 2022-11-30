@@ -97,7 +97,7 @@ namespace Framework::World {
             for (size_t i = 0; i < it.count(); i++) {
                 if (_onEntityDestroyCallback) {
                     if (!_onEntityDestroyCallback(it.entity(i))) {
-                        return;
+                        continue;
                     }
                 }
 
