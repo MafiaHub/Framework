@@ -47,9 +47,9 @@ namespace Framework::Scripting::Engines::Node {
         _module->function("on", &On);
 
         // Bind the builtins
-        Builtins::QuaternionRegister(isolate, _module);
-        Builtins::Vector3Register(isolate, _module);
-        Builtins::Vector2Register(isolate, _module);
+        Builtins::Quaternion::Register(isolate, _module);
+        Builtins::Vector3::Register(isolate, _module);
+        Builtins::Vector2::Register(isolate, _module);
 
         // Always bind the mod-side in last
         if(cb){

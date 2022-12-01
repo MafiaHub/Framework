@@ -75,26 +75,26 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             glm::vec2 newVec(x, y);
             _data = glm::mix(_data, newVec, static_cast<float>(f));
         }
-    };
 
-    static void Vector2Register(v8::Isolate *isolate, v8pp::module *rootModule) {
-        if (!rootModule) {
-            return;
+        static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
+            if (!rootModule) {
+                return;
+            }
+
+            v8pp::class_<Vector2> cls(isolate);
+            cls.ctor<double, double>();
+            cls.property("x", &Vector2::GetX);
+            cls.property("y", &Vector2::GetY);
+            cls.property("length", &Vector2::GetLength);
+            cls.function("toString", &Vector2::ToString);
+            cls.function("toArray", &Vector2::ToArray);
+            cls.function("add", &Vector2::Add);
+            cls.function("sub", &Vector2::Sub);
+            cls.function("mul", &Vector2::Mul);
+            cls.function("div", &Vector2::Div);
+            cls.function("lerp", &Vector2::Lerp);
+
+            rootModule->class_("Vector2", cls);
         }
-
-        v8pp::class_<Vector2> cls(isolate);
-        cls.ctor<double, double>();
-        cls.property("x", &Vector2::GetX);
-        cls.property("y", &Vector2::GetY);
-        cls.property("length", &Vector2::GetLength);
-        cls.function("toString", &Vector2::ToString);
-        cls.function("toArray", &Vector2::ToArray);
-        cls.function("add", &Vector2::Add);
-        cls.function("sub", &Vector2::Sub);
-        cls.function("mul", &Vector2::Mul);
-        cls.function("div", &Vector2::Div);
-        cls.function("lerp", &Vector2::Lerp);
-
-        rootModule->class_("Vector2", cls);
-    }
+    };
 } // namespace Framework::Scripting::Builtins

@@ -79,27 +79,27 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             glm::vec3 newVec(x, y, z);
             _data = glm::mix(_data, newVec, static_cast<float>(f));
         };
-    };
 
-    static void Vector3Register(v8::Isolate *isolate, v8pp::module *rootModule) {
-        if (!rootModule) {
-            return;
+        static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
+            if (!rootModule) {
+                return;
+            }
+
+            v8pp::class_<Vector3> cls(isolate);
+            cls.ctor<double, double, double>();
+            cls.property("x", &Vector3::GetX);
+            cls.property("y", &Vector3::GetY);
+            cls.property("z", &Vector3::GetZ);
+            cls.property("length", &Vector3::GetLength);
+            cls.function("toString", &Vector3::ToString);
+            cls.function("toArray", &Vector3::ToArray);
+            cls.function("add", &Vector3::Add);
+            cls.function("sub", &Vector3::Sub);
+            cls.function("mul", &Vector3::Mul);
+            cls.function("div", &Vector3::Div);
+            cls.function("lerp", &Vector3::Lerp);
+
+            rootModule->class_("Vector3", cls);
         }
-
-        v8pp::class_<Vector3> cls(isolate);
-        cls.ctor<double, double, double>();
-        cls.property("x", &Vector3::GetX);
-        cls.property("y", &Vector3::GetY);
-        cls.property("z", &Vector3::GetZ);
-        cls.property("length", &Vector3::GetLength);
-        cls.function("toString", &Vector3::ToString);
-        cls.function("toArray", &Vector3::ToArray);
-        cls.function("add", &Vector3::Add);
-        cls.function("sub", &Vector3::Sub);
-        cls.function("mul", &Vector3::Mul);
-        cls.function("div", &Vector3::Div);
-        cls.function("lerp", &Vector3::Lerp);
-
-        rootModule->class_("Vector3", cls);
-    }
+    };
 } // namespace Framework::Scripting::Builtins
