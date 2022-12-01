@@ -16,10 +16,10 @@
 #include <flecs/flecs.h>
 #include <memory>
 
-#define FW_SEND_COMPONENT_GAME_RPC(rpc, ent, c)\
+#define FW_SEND_COMPONENT_GAME_RPC(rpc, ent, ...)\
     do {\
         auto s = rpc {};\
-        s.FromParameters(*c);\
+        s.FromParameters(__VA_ARGS__);\
         s.SetServerID(ent.id());\
         auto net = reinterpret_cast < Framework::Networking::NetworkServer*>(Framework::Networking::NetworkPeer::_networkRef);\
         if (net) {\
