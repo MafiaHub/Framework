@@ -52,7 +52,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             return _data.z;
         }
 
-        double GetLength() const {
+        float GetLength() const {
             return glm::length(_data);
         }
 
@@ -62,46 +62,46 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             return ss.str();
         }
 
-        std::list<double> ToArray() const {
+        std::list<float> ToArray() const {
             return {_data.w, _data.x, _data.y, _data.z};
         }
 
-        void Add(double w, double x, double y, double z) {
+        void Add(float w, float x, float y, float z) {
             glm::quat newQuat(w, x, y, z);
             _data += newQuat;
         }
 
-        void Sub(double w, double x, double y, double z){
+        void Sub(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
             _data -= newQuat;
         }
 
-        void Mul(double w, double x, double y, double z){
+        void Mul(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
             _data *= newQuat;
         }
 
-        void Div(double w, double x, double y, double z){
+        void Div(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
             _data *= newQuat;
         }
 
-        void Lerp(double w, double x, double y, double z, double f){
+        void Lerp(float w, float x, float y, float z, float f){
             glm::quat newQuat(w, x, y, z);
             _data = glm::mix(_data, newQuat, static_cast<float>(f));
         }
 
-        void Conjugate(double w, double x, double y, double z){
+        void Conjugate(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
             _data = glm::conjugate(_data);
         }
 
-        void Cross(double w, double x, double y, double z){
+        void Cross(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
             _data = glm::cross(_data, newQuat);
         }
 
-        float Dot(double w, double x, double y, double z){
+        float Dot(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
             return glm::dot(_data, newQuat);
         }
@@ -146,13 +146,13 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         V8_DEFINE_STACK();
 
-        double pX, pY, pZ;
+        float pX, pY, pZ;
         if (!Helpers::GetVec3(ctx, stack, pX, pY, pZ)) {
             Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
         }
 
-        double w, x, y, z;
+        float w, x, y, z;
         QuatExtract(ctx, _this, w, x, y, z);
 
         // Construct our objects
@@ -166,7 +166,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         V8_DEFINE_STACK();
 
-        double x, y, z;
+        float x, y, z;
         if (!Helpers::GetVec3(ctx, stack, x, y, z)) {
             Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
             return;
@@ -181,7 +181,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         V8_GET_SELF();
 
-        double angle, axisX, axisY, axisZ;
+        float angle, axisX, axisY, axisZ;
         Helpers::SafeToNumber(info[0], ctx, angle);
         Helpers::SafeToNumber(info[1], ctx, axisX);
         Helpers::SafeToNumber(info[2], ctx, axisY);
