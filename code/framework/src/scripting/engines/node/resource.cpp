@@ -142,6 +142,9 @@ namespace Framework::Scripting::Engines::Node {
             _watcher.watch(0);
             _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
         }
+
+        // Notify the resource
+        InvokeEvent(Events[EventIDs::RESOURCE_UPDATED]);
     }
 
     bool Resource::WatchChanges() {

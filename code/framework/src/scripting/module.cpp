@@ -61,7 +61,13 @@ namespace Framework::Scripting {
             return;
         }
 
+        // Update the engine (no way?)
         _engine->Update();
+
+        // Manually tick the resources since the engine is not handling that very specific part (poor arch design)
+        for (auto res: _resources) {
+            res.second->Update(true);
+        }
     }
 
     void Module::LoadAllResources() {

@@ -12,7 +12,7 @@
 #include <string>
 
 namespace Framework::Scripting {
-    enum class EventIDs { RESOURCE_LOADED, RESOURCE_UNLOADING };
+    enum class EventIDs { RESOURCE_LOADED, RESOURCE_UNLOADING, RESOURCE_UPDATED };
 
     extern std::map<EventIDs, std::string> Events;
 } // namespace Framework::Scripting
