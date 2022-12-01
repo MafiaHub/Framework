@@ -18,6 +18,7 @@ namespace Framework::World {
 
         _world = std::make_unique<flecs::world>();
         _worldRef = _world.get();
+        _worldEngineRef = this;
 
         // Register a base module
         _world->import<Modules::Base>();
