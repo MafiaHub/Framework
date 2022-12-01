@@ -28,7 +28,7 @@
 
 namespace Framework::Integrations::Scripting {
     class Entity {
-      private:
+      protected:
         flecs::entity _ent {};
 
       public:
@@ -44,7 +44,7 @@ namespace Framework::Integrations::Scripting {
             return _ent.name().c_str();
         }
 
-        std::string ToString() const {
+        virtual std::string ToString() const {
             std::ostringstream ss;
             ss << "Entity{ id: " << _ent.id() << " }";
             return ss.str();
