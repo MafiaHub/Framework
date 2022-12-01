@@ -15,6 +15,7 @@
 #include <logging/logger.h>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 #include <utils/hashing.h>
 
 namespace Framework::Networking {
@@ -22,7 +23,7 @@ namespace Framework::Networking {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
-        std::unordered_map<uint32_t, Messages::PacketCallback> _registeredRPCs;
+        std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
       public:
@@ -63,13 +64,13 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()] = [callback, _rpc](SLNet::Packet *p) {
+            _registeredRPCs[_rpc.GetHashName()].push_back([callback, _rpc](SLNet::Packet *p) {
                 SLNet::BitStream bs(p->data + 5, p->length, false);
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
                 callback(p->guid, &rpc);
-            };
+            });
         }
 
         template <typename T>
@@ -80,7 +81,7 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()] = [callback, _rpc](SLNet::Packet *p) {
+            _registeredRPCs[_rpc.GetHashName()].push_back([callback, _rpc](SLNet::Packet *p) {
                 SLNet::BitStream bs(p->data + 5, p->length, false);
                 T rpc = {};
                 rpc.SetPacket(p);
@@ -91,7 +92,7 @@ namespace Framework::Networking {
                 } else {
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());
                 }
-            };
+            });
         }
 
         template <typename T>

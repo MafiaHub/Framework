@@ -16,6 +16,16 @@
 #include <flecs/flecs.h>
 #include <memory>
 
+#define FW_SEND_COMPONENT_RPC(rpc, c)\
+    do {\
+        auto s = rpc {};\
+        s.FromParameters(*c);\
+        auto net = Framework::Networking::NetworkPeer::_networkRef;\
+        if (net) {\
+            net->SendRPC<rpc>(s);\
+        }\
+    } while (0)
+
 namespace Framework::World {
     class Engine {
       protected:

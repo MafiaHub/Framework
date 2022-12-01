@@ -31,26 +31,6 @@ namespace Framework::Integrations::Scripting {
       private:
         flecs::entity _ent {};
 
-        void SendTransformUpdate() {
-            const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            auto sendTr = Framework::World::RPC::SetTransform {};
-            sendTr.FromParameters(*tr);
-            auto net = Framework::Networking::NetworkPeer::_networkRef;
-            if (net){
-                net->SendRPC<Framework::World::RPC::SetTransform>(sendTr);
-            }
-        }
-
-        void SendFrameUpdate() {
-            const auto fr = _ent.get<Framework::World::Modules::Base::Frame>();
-            auto sendFr   = Framework::World::RPC::SetFrame{};
-            sendFr.FromParameters(*fr);
-            auto net = Framework::Networking::NetworkPeer::_networkRef;
-            if (net) {
-                net->SendRPC<Framework::World::RPC::SetFrame>(sendFr);
-            }
-        }
-
       public:
         Entity(flecs::entity_t ent) {
             _ent = flecs::entity(Framework::World::Engine::_worldRef->get_world(), ent);
@@ -73,37 +53,37 @@ namespace Framework::Integrations::Scripting {
         void SetPosition(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->pos = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-            SendTransformUpdate();
+            FW_SEND_COMPONENT_RPC(Framework::World::RPC::SetTransform, tr);
         }
 
         void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->rot = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
-            SendTransformUpdate();
+            FW_SEND_COMPONENT_RPC(Framework::World::RPC::SetTransform, tr);
         }
 
         void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->vel = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-            SendTransformUpdate();
+            FW_SEND_COMPONENT_RPC(Framework::World::RPC::SetTransform, tr);
         }
 
         void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->scale = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-            SendFrameUpdate();
+            FW_SEND_COMPONENT_RPC(Framework::World::RPC::SetFrame, fr);
         }
 
         void SetModelName(std::string name) {
             auto fr   = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelName = name;
-            SendFrameUpdate();
+            FW_SEND_COMPONENT_RPC(Framework::World::RPC::SetFrame, fr);
         }
 
         void SetModelHash(uint64_t hash) {
             auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelHash = hash;
-            SendFrameUpdate();
+            FW_SEND_COMPONENT_RPC(Framework::World::RPC::SetFrame, fr);
         }
 
         Framework::Scripting::Engines::Node::Builtins::Vector3 GetPosition() const {

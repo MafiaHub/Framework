@@ -24,7 +24,9 @@ namespace Framework::Networking {
             bs.Read(hashName);
 
             if (_registeredRPCs.find(hashName) != _registeredRPCs.end()) {
-                _registeredRPCs[hashName](p);
+                for (const auto &cb : _registeredRPCs[hashName]) {
+                    cb(p);
+                }
             }
         });
     }
