@@ -28,7 +28,7 @@
 
 namespace Framework::Integrations::Scripting {
     class Entity {
-      private:
+      protected:
         flecs::entity _ent {};
 
       public:
@@ -44,7 +44,7 @@ namespace Framework::Integrations::Scripting {
             return _ent.name().c_str();
         }
 
-        std::string ToString() const {
+        virtual std::string ToString() const {
             std::ostringstream ss;
             ss << "Entity{ id: " << _ent.id() << " }";
             return ss.str();
@@ -115,32 +115,32 @@ namespace Framework::Integrations::Scripting {
             const auto fr = _ent.get<Framework::World::Modules::Base::Frame>();
             return fr->modelHash;
         }
-    };
 
-    static void EntityRegister(v8::Isolate *isolate, v8pp::module *rootModule) {
-        if (!rootModule) {
-            return;
+        static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
+            if (!rootModule) {
+                return;
+            }
+
+            v8pp::class_<Entity> cls(isolate);
+            cls.ctor<flecs::entity_t>();
+            cls.property("id", &Entity::GetID);
+            cls.property("name", &Entity::GetName);
+            cls.function("toString", &Entity::ToString);
+            cls.function("setPosition", &Entity::SetPosition);
+            cls.function("setRotation", &Entity::SetRotation);
+            cls.function("setVelocity", &Entity::SetVelocity);
+            cls.function("setScale", &Entity::SetScale);
+            cls.function("setModelName", &Entity::SetModelName);
+            cls.function("setModelHash", &Entity::SetModelHash);
+
+            cls.function("getPosition", &Entity::GetPosition);
+            cls.function("getRotation", &Entity::GetRotation);
+            cls.function("getVelocity", &Entity::GetVelocity);
+            cls.function("getModelName", &Entity::GetModelName);
+            cls.function("getModelHash", &Entity::GetModelHash);
+            cls.function("getScale", &Entity::GetScale);
+
+            rootModule->class_("Entity", cls);
         }
-
-        v8pp::class_<Entity> cls(isolate);
-        cls.ctor<flecs::entity_t>();
-        cls.property("id", &Entity::GetID);
-        cls.property("name", &Entity::GetName);
-        cls.function("toString", &Entity::ToString);
-        cls.function("setPosition", &Entity::SetPosition);
-        cls.function("setRotation", &Entity::SetRotation);
-        cls.function("setVelocity", &Entity::SetVelocity);
-        cls.function("setScale", &Entity::SetScale);
-        cls.function("setModelName", &Entity::SetModelName);
-        cls.function("setModelHash", &Entity::SetModelHash);
-
-        cls.function("getPosition", &Entity::GetPosition);
-        cls.function("getRotation", &Entity::GetRotation);
-        cls.function("getVelocity", &Entity::GetVelocity);
-        cls.function("getModelName", &Entity::GetModelName);
-        cls.function("getModelHash", &Entity::GetModelHash);
-        cls.function("getScale", &Entity::GetScale);
-
-        rootModule->class_("Entity", cls);
-    }
+    };
 } // namespace Framework::Integrations::Scripting

@@ -109,6 +109,33 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         void Inverse(){
             _data = glm::inverse(_data);
         }
+
+        static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
+            if (!rootModule) {
+                return;
+            }
+
+            v8pp::class_<Quaternion> cls(isolate);
+            cls.ctor<float, float, float, float>();
+            cls.property("w", &Quaternion::GetW);
+            cls.property("x", &Quaternion::GetX);
+            cls.property("y", &Quaternion::GetY);
+            cls.property("z", &Quaternion::GetZ);
+            cls.property("length", &Quaternion::GetLength);
+            cls.function("toString", &Quaternion::ToString);
+            cls.function("toArray", &Quaternion::ToArray);
+            cls.function("add", &Quaternion::Add);
+            cls.function("sub", &Quaternion::Sub);
+            cls.function("mul", &Quaternion::Mul);
+            cls.function("div", &Quaternion::Div);
+            cls.function("lerp", &Quaternion::Lerp);
+            cls.function("conjugate", &Quaternion::Conjugate);
+            cls.function("cross", &Quaternion::Cross);
+            cls.function("dot", &Quaternion::Dot);
+            cls.function("inverse", &Quaternion::Inverse);
+
+            rootModule->class_("Quaternion", cls);
+        }
     };
 
     /*
@@ -164,31 +191,4 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, newQuat));
     }*/
-
-    static void QuaternionRegister(v8::Isolate *isolate, v8pp::module *rootModule) {
-        if (!rootModule) {
-            return;
-        }
-
-        v8pp::class_<Quaternion> cls(isolate);
-        cls.ctor<float, float, float, float>();
-        cls.property("w", &Quaternion::GetW);
-        cls.property("x", &Quaternion::GetX);
-        cls.property("y", &Quaternion::GetY);
-        cls.property("z", &Quaternion::GetZ);
-        cls.property("length", &Quaternion::GetLength);
-        cls.function("toString", &Quaternion::ToString);
-        cls.function("toArray", &Quaternion::ToArray);
-        cls.function("add", &Quaternion::Add);
-        cls.function("sub", &Quaternion::Sub);
-        cls.function("mul", &Quaternion::Mul);
-        cls.function("div", &Quaternion::Div);
-        cls.function("lerp", &Quaternion::Lerp);
-        cls.function("conjugate", &Quaternion::Conjugate);
-        cls.function("cross", &Quaternion::Cross);
-        cls.function("dot", &Quaternion::Dot);
-        cls.function("inverse", &Quaternion::Inverse);
-
-        rootModule->class_("Quaternion", cls);
-    }
 } // namespace Framework::Scripting::Builtins

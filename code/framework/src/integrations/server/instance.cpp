@@ -355,7 +355,7 @@ namespace Framework::Integrations::Server {
         {
         case Framework::Scripting::EngineTypes::ENGINE_NODE: {
             auto nodeSDK = sdk.GetNodeSDK();
-            Framework::Integrations::Scripting::EntityRegister(nodeSDK->GetIsolate(), nodeSDK->GetModule());
+            Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
         } break;
         }
 
