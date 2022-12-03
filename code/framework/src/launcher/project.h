@@ -22,6 +22,18 @@
 
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
+    enum class ProjectLaunchType {PE_LOADING, DLL_INJECTION};
+
+    enum DLLInjectionResults {
+        INJECT_LIBRARY_RESULT_OK,
+
+        INJECT_LIBRARY_RESULT_WRITE_FAILED,
+        INJECT_LIBRARY_GET_RETURN_CODE_FAILED,
+        INJECT_LIBRARY_LOAD_LIBRARY_FAILED,
+        INJECT_LIBRARY_THREAD_CREATION_FAILED,
+
+        INJECT_LIBRARY_OPEN_PROCESS_FAIL
+    };
 
     struct ProjectConfiguration {
         using DialogPromptSelectorProc = fu2::function<std::wstring(std::wstring gameExePath) const>;
@@ -31,6 +43,7 @@ namespace Framework::Launcher {
         std::wstring classicGamePath;
         std::string name;
         ProjectPlatform platform;
+        ProjectLaunchType launchType = ProjectLaunchType::PE_LOADING;
         AppId_t steamAppId  = 430;
         uintptr_t loadLimit = SIZE_MAX;
 
@@ -125,6 +138,20 @@ namespace Framework::Launcher {
 
         void AllocateDeveloperConsole() const;
 
-        bool Run();
+        bool RunWithPELoading();
+        bool RunWithDLLInjection();
+
+        const char *InjectLibraryResultToString(const DLLInjectionResults result) {
+            switch (result) {
+            case INJECT_LIBRARY_RESULT_OK: return "Ok";
+            case INJECT_LIBRARY_RESULT_WRITE_FAILED: return "Failed to write memory into process";
+            case INJECT_LIBRARY_GET_RETURN_CODE_FAILED: return "Failed to get return code of the load call";
+            case INJECT_LIBRARY_LOAD_LIBRARY_FAILED: return "Failed to load library";
+            case INJECT_LIBRARY_THREAD_CREATION_FAILED: return "Failed to create remote thread";
+
+            case INJECT_LIBRARY_OPEN_PROCESS_FAIL: return "Open of the process failed";
+            default: return "Unknown error";
+            }
+        }
     };
 } // namespace Framework::Launcher
