@@ -116,6 +116,10 @@ namespace Framework::Integrations::Scripting {
             return fr->modelHash;
         }
 
+        void Destruct() {
+            Framework::World::ServerEngine::RemoveEntity(_ent);
+        }
+
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
             if (!rootModule) {
                 return;
@@ -125,6 +129,8 @@ namespace Framework::Integrations::Scripting {
             cls.property("id", &Entity::GetID);
             cls.property("name", &Entity::GetName);
             cls.function("toString", &Entity::ToString);
+            cls.function("destruct", &Entity::Destruct);
+
             cls.function("setPosition", &Entity::SetPosition);
             cls.function("setRotation", &Entity::SetRotation);
             cls.function("setVelocity", &Entity::SetVelocity);
