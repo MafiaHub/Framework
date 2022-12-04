@@ -72,7 +72,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         void Div(double x, double y, double z) {
             glm::vec3 newVec(x, y, z);
-            _data *= newVec;
+            _data /= newVec;
         }
 
         void Lerp(double x, double y, double z, double f) {

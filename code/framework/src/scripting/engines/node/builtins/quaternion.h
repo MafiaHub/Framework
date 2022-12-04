@@ -83,7 +83,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         void Div(float w, float x, float y, float z){
             glm::quat newQuat(w, x, y, z);
-            _data *= newQuat;
+            _data /= newQuat;
         }
 
         void Lerp(float w, float x, float y, float z, float f){
