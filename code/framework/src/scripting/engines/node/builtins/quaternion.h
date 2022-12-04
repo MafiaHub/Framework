@@ -18,6 +18,7 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/vec3.hpp>
 
 #include <list>
 #include <iomanip>
@@ -81,11 +82,6 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             _data *= newQuat;
         }
 
-        void Div(float w, float x, float y, float z){
-            glm::quat newQuat(w, x, y, z);
-            _data /= newQuat;
-        }
-
         void Lerp(float w, float x, float y, float z, float f){
             glm::quat newQuat(w, x, y, z);
             _data = glm::mix(_data, newQuat, static_cast<float>(f));
@@ -110,6 +106,14 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             _data = glm::inverse(_data);
         }
 
+        void FromEuler(float x, float y, float z) {
+            _data = glm::quat(glm::vec3(x, y, z));
+        }
+
+        void FromAxisAngle(float x, float y, float z, float angle) {
+            _data = glm::quat(glm::angleAxis(static_cast<float>(angle), glm::vec3(x, y, z)));
+        }
+
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
             if (!rootModule) {
                 return;
@@ -127,68 +131,15 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             cls.function("add", &Quaternion::Add);
             cls.function("sub", &Quaternion::Sub);
             cls.function("mul", &Quaternion::Mul);
-            cls.function("div", &Quaternion::Div);
             cls.function("lerp", &Quaternion::Lerp);
             cls.function("conjugate", &Quaternion::Conjugate);
             cls.function("cross", &Quaternion::Cross);
             cls.function("dot", &Quaternion::Dot);
             cls.function("inverse", &Quaternion::Inverse);
+            cls.function("fromEuler", &Quaternion::FromEuler);
+            cls.function("fromAxisAngle", &Quaternion::FromAxisAngle);
 
             rootModule->class_("Quaternion", cls);
         }
     };
-
-    /*
-    static void QuaternionRotateVector3(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        V8_DEFINE_STACK();
-
-        float pX, pY, pZ;
-        if (!Helpers::GetVec3(ctx, stack, pX, pY, pZ)) {
-            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
-            return;
-        }
-
-        float w, x, y, z;
-        QuatExtract(ctx, _this, w, x, y, z);
-
-        // Construct our objects
-        glm::quat oldQuat(w, x, y, z);
-        glm::vec3 point(pX, pY, pZ);
-        V8_RETURN(CreateVector3(V8_RES_GETROOT(resource), ctx, oldQuat * point));
-    }
-
-    static void QuaternionFromEuler(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_DEFINE_STACK();
-
-        float x, y, z;
-        if (!Helpers::GetVec3(ctx, stack, x, y, z)) {
-            Helpers::Throw(isolate, "Argument must be a Vector3 or an array of 3 numbers");
-            return;
-        }
-        glm::quat newQuat(glm::vec3(x, y, z));
-
-        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, newQuat));
-    }
-
-    static void QuaternionFromAxisAngle(const v8::FunctionCallbackInfo<v8::Value> &info) {
-        V8_GET_SUITE();
-
-        V8_GET_SELF();
-
-        float angle, axisX, axisY, axisZ;
-        Helpers::SafeToNumber(info[0], ctx, angle);
-        Helpers::SafeToNumber(info[1], ctx, axisX);
-        Helpers::SafeToNumber(info[2], ctx, axisY);
-        Helpers::SafeToNumber(info[3], ctx, axisZ);
-
-        glm::quat newQuat(glm::angleAxis(static_cast<float>(angle), glm::vec3(axisX, axisY, axisZ)));
-
-        V8_RETURN(CreateQuaternion(V8_RES_GETROOT(resource), ctx, newQuat));
-    }*/
 } // namespace Framework::Scripting::Builtins
