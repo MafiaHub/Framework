@@ -99,8 +99,6 @@ namespace Framework::World::Modules {
 
             // TODO expose STL types once https://github.com/SanderMertens/flecs/issues/712 is resolved.
 
-            auto _vec3 = world.component<glm::vec3>();
-            auto _quat = world.component<glm::quat>();
             auto _transform = world.component<Transform>();
             auto _frame = world.component<Frame>();
             auto _streamable = world.component<Streamable>();
@@ -112,6 +110,8 @@ namespace Framework::World::Modules {
             // Windows bind metadata
             #ifdef _WIN32
             {
+                auto _vec3 = world.component<glm::vec3>();
+                auto _quat = world.component<glm::quat>();
                 _vec3
                     .member<float>("x")
                     .member<float>("y")
