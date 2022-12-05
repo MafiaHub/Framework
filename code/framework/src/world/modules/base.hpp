@@ -99,12 +99,40 @@ namespace Framework::World::Modules {
 
             // TODO expose STL types once https://github.com/SanderMertens/flecs/issues/712 is resolved.
 
-            world.component<Transform>();
-            world.component<Frame>();
-            world.component<Streamable>();
-            world.component<Streamer>();
+            auto _vec3 = world.component<glm::vec3>();
+            auto _quat = world.component<glm::quat>();
+            auto _transform = world.component<Transform>();
+            auto _frame = world.component<Frame>();
+            auto _streamable = world.component<Streamable>();
+            auto _streamer = world.component<Streamer>();
+
             world.component<PendingRemoval>();
             world.component<ServerID>();
+
+            // Windows bind metadata
+            #ifdef _WIN32
+            {
+                _vec3.member<float>("x")
+                    .member<float>("y")
+                    .member<float>("z");
+                _quat.member<float>("w")
+                    .member<float>("x")
+                    .member<float>("y")
+                    .member<float>("z");
+                _transform.member<glm::vec3>("pos")
+                    .member<glm::quat>("rot")
+                    .member<glm::vec3>("vel");
+                _frame.member<uint64_t>("modelHash")
+                    .member<glm::vec3>("scale");
+                _streamable.member<int>("virtualWorld")
+                    .member<bool>("isVisible")
+                    .member<bool>("alwaysVisible")
+                    .member<double>("updateInterval")
+                    .member<uint64_t>("owner");
+                _streamer.member<float>("range")
+                    .member<uint64_t>("guid");
+            }
+            #endif
         }
 
         static void SetupDefaultEvents(Streamable *streamable);
