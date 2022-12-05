@@ -112,24 +112,30 @@ namespace Framework::World::Modules {
             // Windows bind metadata
             #ifdef _WIN32
             {
-                _vec3.member<float>("x")
-                    .member<float>("y")
-                    .member<float>("z");
-                _quat.member<float>("w")
+                _vec3
                     .member<float>("x")
                     .member<float>("y")
                     .member<float>("z");
-                _transform.member<glm::vec3>("pos")
+                _quat
+                    .member<float>("w")
+                    .member<float>("x")
+                    .member<float>("y")
+                    .member<float>("z");
+                _transform
+                    .member<glm::vec3>("pos")
                     .member<glm::quat>("rot")
                     .member<glm::vec3>("vel");
-                _frame.member<uint64_t>("modelHash")
+                _frame
+                    .member<uint64_t>("modelHash")
                     .member<glm::vec3>("scale");
-                _streamable.member<int>("virtualWorld")
+                _streamable
+                    .member<int>("virtualWorld")
                     .member<bool>("isVisible")
                     .member<bool>("alwaysVisible")
                     .member<double>("updateInterval")
                     .member<uint64_t>("owner");
-                _streamer.member<float>("range")
+                _streamer
+                    .member<float>("range")
                     .member<uint64_t>("guid");
             }
             #endif
