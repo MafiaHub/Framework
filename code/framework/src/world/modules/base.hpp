@@ -99,37 +99,10 @@ namespace Framework::World::Modules {
 
             // TODO expose STL types once https://github.com/SanderMertens/flecs/issues/712 is resolved.
 
-            world.component<glm::vec3>()
-                .member<float>("x")
-                .member<float>("y")
-                .member<float>("z");
-
-            world.component<glm::quat>()
-                .member<float>("w")
-                .member<float>("x")
-                .member<float>("y")
-                .member<float>("z");
-
-            world.component<Transform>()
-                .member<glm::vec3>("pos")
-                .member<glm::quat>("rot")
-                .member<glm::vec3>("vel");
-
-            world.component<Frame>()
-                .member<uint64_t>("modelHash")
-                .member<glm::vec3>("scale");
-
-            world.component<Streamable>()
-                .member<int>("virtualWorld")
-                .member<bool>("isVisible")
-                .member<bool>("alwaysVisible")
-                .member<double>("updateInterval")
-                .member<uint64_t>("owner");
-
-            world.component<Streamer>()
-                .member<float>("range")
-                .member<uint64_t>("guid");
-
+            world.component<Transform>();
+            world.component<Frame>();
+            world.component<Streamable>();
+            world.component<Streamer>();
             world.component<PendingRemoval>();
             world.component<ServerID>();
         }
