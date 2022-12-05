@@ -116,6 +116,46 @@ namespace Framework::Integrations::Scripting {
             return fr->modelHash;
         }
 
+        void SetVisible(bool visible) {
+            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            st->isVisible = visible;
+        }
+
+        void SetAlwaysVisible(bool visible) {
+            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            st->alwaysVisible = visible;
+        }
+
+        bool IsVisible() const {
+            const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
+            return st->isVisible;
+        }
+
+        bool IsAlwaysVisible() const {
+            const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
+            return st->alwaysVisible;
+        }
+
+        void SetVirtualWorld(int virtualWorld) {
+            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            st->virtualWorld = virtualWorld;
+        }
+
+        int GetVirtualWorld() const {
+            const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
+            return st->virtualWorld;
+        }
+
+        void SetUpdateInterval(double interval) {
+            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            st->updateInterval = interval;
+        }
+
+        double GetUpdateInterval() const {
+            const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
+            return st->updateInterval;
+        }
+
         void Destruct() {
             Framework::World::ServerEngine::RemoveEntity(_ent);
         }
@@ -144,6 +184,15 @@ namespace Framework::Integrations::Scripting {
             cls.function("getModelName", &Entity::GetModelName);
             cls.function("getModelHash", &Entity::GetModelHash);
             cls.function("getScale", &Entity::GetScale);
+
+            cls.function("setVisible", &Entity::SetVisible);
+            cls.function("setAlwaysVisible", &Entity::SetAlwaysVisible);
+            cls.function("setVirtualWorld", &Entity::SetVirtualWorld);
+            cls.function("setUpdateInterval", &Entity::SetUpdateInterval);
+            cls.function("getVisible", &Entity::IsVisible);
+            cls.function("getAlwaysVisible", &Entity::IsAlwaysVisible);
+            cls.function("getVirtualWorld", &Entity::GetVirtualWorld);
+            cls.function("getUpdateInterval", &Entity::GetUpdateInterval);
 
             rootModule->class_("Entity", cls);
         }
