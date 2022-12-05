@@ -44,7 +44,7 @@ namespace Framework::Launcher::Loaders {
             HMODULE module = ResolveLibrary(name);
 
             if (!module) {
-                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load dependent module %s. Error code was %i.\n", name, GetLastError());
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load dependent module {}. Error code was {}.", name, GetLastError());
             }
 
             // "don't load"
@@ -84,7 +84,7 @@ namespace Framework::Launcher::Loaders {
                     char pathName[MAX_PATH];
                     GetModuleFileNameA(module, pathName, sizeof(pathName));
 
-                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load function %s in dependent module %s (%s).\n", functionName, name, pathName);
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load function {} in dependent module {} ({}).", functionName, name, pathName);
                 }
 
                 *addressTableEntry = (uintptr_t)function;

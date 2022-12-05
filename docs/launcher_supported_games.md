@@ -7,3 +7,6 @@
 * GTA: San Andreas (Steam + Retail)
 * Cyberpunk 2077 (GOG)
 
+# Framework launcher unsuported games
+
+* Mafia 2 Classic Steam (tested multiple times and multiple ways, still crashing for unknown reason)

@@ -12,10 +12,10 @@ elseif(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/win_32/crashpad_handler.exe" "${CMAKE_BINARY_DIR}/bin/"
             )
 elseif(APPLE)
-    target_link_directories(Sentry PUBLIC "lib/osx")
-    file(GLOB SENTRY_LIBS "lib/osx/*.a")
+    target_link_directories(Sentry PUBLIC "lib/darwin_x64")
+    file(GLOB SENTRY_LIBS "lib/darwin_x64/*.a")
     add_custom_command(TARGET Sentry POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/osx/crashpad_handler" "${CMAKE_BINARY_DIR}/"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/darwin_x64/crashpad_handler" "${CMAKE_BINARY_DIR}/"
             )
 else()
     target_link_directories(Sentry PUBLIC "lib/linux")

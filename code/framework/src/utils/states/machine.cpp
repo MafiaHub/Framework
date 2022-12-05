@@ -31,6 +31,7 @@ namespace Framework::Utils::States {
             return false;
         }
 
+        // Already transitionning to a new state, so we cannot request a new one.
         if (_nextState != nullptr) {
             return false;
         }

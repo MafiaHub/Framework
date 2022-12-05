@@ -248,7 +248,8 @@ ecs_entity_t ecs_cpp_component_register(
     const char *symbol,
     ecs_size_t size,
     ecs_size_t alignment,
-    bool implicit_name)
+    bool implicit_name,
+    bool *existing_out)
 {
     (void)size;
     (void)alignment;
@@ -273,10 +274,6 @@ ecs_entity_t ecs_cpp_component_register(
         const EcsComponent *component = ecs_get(world, ent, EcsComponent);
         if (component != NULL) {
             const char *sym = ecs_get_symbol(world, ent);
-            ecs_assert(!existing || (sym != NULL), ECS_MISSING_SYMBOL, 
-                ecs_get_name(world, ent));
-            (void)existing;
-
             if (sym && ecs_os_strcmp(sym, symbol)) {
                 /* Application is trying to register a type with an entity that
                  * was already associated with another type. In most cases this
@@ -306,6 +303,8 @@ ecs_entity_t ecs_cpp_component_register(
                     ecs_abort(ECS_NAME_IN_USE, NULL);
                 }
                 ecs_os_free(type_path);
+            } else if (!sym) {
+                ecs_set_symbol(world, ent, symbol);
             }
         }
 
@@ -314,6 +313,10 @@ ecs_entity_t ecs_cpp_component_register(
     } else if (!implicit_name) {
         ent = ecs_lookup_symbol(world, symbol, false);
         ecs_assert(ent == 0 || (ent == id), ECS_INCONSISTENT_COMPONENT_ID, symbol);
+    }
+
+    if (existing_out) {
+        *existing_out = existing;
     }
 
     return ent;
@@ -328,9 +331,11 @@ ecs_entity_t ecs_cpp_component_register_explicit(
     const char *symbol,
     size_t size,
     size_t alignment,
-    bool is_component)
+    bool is_component,
+    bool *existing_out)
 {
     char *existing_name = NULL;
+    if (existing_out) *existing_out = false;
 
     // If an explicit id is provided, it is possible that the symbol and
     // name differ from the actual type, as the application may alias
@@ -343,6 +348,7 @@ ecs_entity_t ecs_cpp_component_register_explicit(
             if (id) {
                 existing_name = ecs_get_path_w_sep(world, 0, id, "::", "::");
                 name = existing_name;
+                if (existing_out) *existing_out = true;
             } else {
                 // If type is not yet known, derive from type name
                 name = ecs_cpp_trim_module(world, type_name);
@@ -390,6 +396,18 @@ ecs_entity_t ecs_cpp_component_register_explicit(
     ecs_os_free(existing_name);
 
     return entity;
+}
+
+void ecs_cpp_enum_init(
+    ecs_world_t *world,
+    ecs_entity_t id)
+{
+    ecs_suspend_readonly_state_t readonly_state;
+    world = flecs_suspend_readonly(world, &readonly_state);
+    ecs_add_id(world, id, EcsExclusive);
+    ecs_add_id(world, id, EcsOneOf);
+    ecs_add_id(world, id, EcsTag);
+    flecs_resume_readonly(world, &readonly_state);
 }
 
 ecs_entity_t ecs_cpp_enum_constant_register(

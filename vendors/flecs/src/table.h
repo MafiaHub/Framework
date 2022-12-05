@@ -14,10 +14,12 @@ void flecs_table_init(
 
 /** Copy type. */
 ecs_type_t flecs_type_copy(
+    ecs_world_t *world,
     const ecs_type_t *src);
 
 /** Free type. */
 void flecs_type_free(
+    ecs_world_t *world,
     ecs_type_t *type);
 
 /** Find or create table for a set of components */
@@ -27,6 +29,7 @@ ecs_table_t* flecs_table_find_or_create(
 
 /* Initialize columns for data */
 void flecs_table_init_data(
+    ecs_world_t *world,
     ecs_table_t *table); 
 
 /* Clear all entities from a table. */
@@ -60,7 +63,8 @@ int32_t flecs_table_append(
     ecs_table_t *table,
     ecs_entity_t entity,
     ecs_record_t *record,
-    bool construct);
+    bool construct,
+    bool on_add);
 
 /* Delete an entity from the table. */
 void flecs_table_delete(
@@ -107,10 +111,7 @@ bool flecs_table_shrink(
 
 /* Get dirty state for table columns */
 int32_t* flecs_table_get_dirty_state(
-    ecs_table_t *table);
-
-/* Get monitor for monitoring table changes */
-int32_t* flecs_table_get_monitor(
+    ecs_world_t *world,
     ecs_table_t *table);
 
 /* Initialize root table */
@@ -129,6 +130,7 @@ void flecs_table_free(
 
 /* Free table */
 void flecs_table_free_type(
+    ecs_world_t *world,
     ecs_table_t *table);     
     
 /* Replace data */
@@ -181,7 +183,7 @@ void flecs_table_delete_entities(
     ecs_world_t *world,
     ecs_table_t *table);
 
-ecs_column_t *ecs_table_column_for_id(
+ecs_vec_t *ecs_table_column_for_id(
     const ecs_world_t *world,
     const ecs_table_t *table,
     ecs_id_t id);
@@ -199,5 +201,36 @@ void flecs_table_claim(
 bool flecs_table_release(
     ecs_world_t *world, 
     ecs_table_t *table);
+
+/* Table diff builder, used to build id lists that indicate the difference in
+ * ids between two tables. */
+void flecs_table_diff_builder_init(
+    ecs_world_t *world,
+    ecs_table_diff_builder_t *builder);
+
+void flecs_table_diff_builder_fini(
+    ecs_world_t *world,
+    ecs_table_diff_builder_t *builder);
+
+void flecs_table_diff_builder_clear(
+    ecs_table_diff_builder_t *builder);
+
+void flecs_table_diff_build_append_table(
+    ecs_world_t *world,
+    ecs_table_diff_builder_t *dst,
+    ecs_table_diff_t *src);
+
+void flecs_table_diff_build(
+    ecs_world_t *world,
+    ecs_table_diff_builder_t *builder,
+    ecs_table_diff_t *diff,
+    int32_t added_offset,
+    int32_t removed_offset,
+    int32_t on_set_offset,
+    int32_t un_set_offset);
+
+void flecs_table_diff_build_noalloc(
+    ecs_table_diff_builder_t *builder,
+    ecs_table_diff_t *diff);
 
 #endif

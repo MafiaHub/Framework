@@ -1,3 +1,0 @@
-<component name="DependencyValidationManager">
-  <scope name="Essentials" pattern="file[Framework]:code/framework//*&amp;&amp;!file[Framework]:code/framework/src/utils/hooking//*" />
-</component>

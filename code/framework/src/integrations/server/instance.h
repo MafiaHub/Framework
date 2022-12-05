@@ -16,6 +16,7 @@
 #include "logging/logger.h"
 #include "networking/engine.h"
 #include "scripting/server.h"
+#include "scripting/engines/callback.h"
 #include "utils/config.h"
 #include "world/server.h"
 
@@ -41,6 +42,9 @@ namespace Framework::Integrations::Server {
         std::string bindPassword;
         bool bindPublicServer = false;
 
+        std::string webBindHost;
+        int32_t webBindPort;
+
         int32_t maxPlayers;
         std::string httpServeDir;
 
@@ -61,7 +65,7 @@ namespace Framework::Integrations::Server {
         std::string firebaseApiKey;
 
         // scripting
-        Framework::Scripting::SDKRegisterCallback sdkRegisterCallback;
+        Framework::Scripting::Engines::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
@@ -84,6 +88,7 @@ namespace Framework::Integrations::Server {
         void InitModules();
         void InitNetworkingMessages();
         bool LoadConfigFromJSON();
+        void RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper);
 
         // managers
         flecs::entity _weatherManager;
@@ -95,9 +100,6 @@ namespace Framework::Integrations::Server {
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectCallback;
-
-        void RegisterScriptingBuiltins(Framework::Scripting::SDK *);
-
       public:
         Instance();
         ~Instance();
@@ -133,9 +135,9 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Framework::Scripting::Engine> GetScriptingEngine() const {
+        /*std::shared_ptr<Framework::Scripting::Engine> GetScriptingEngine() const {
             return _scriptingEngine;
-        }
+        }*/
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
             return _worldEngine;

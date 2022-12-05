@@ -12,6 +12,7 @@
 
 namespace Framework::External::Firebase {
     FirebaseError Wrapper::Init(const std::string &projectId, const std::string &appId, const std::string &apiKey) {
+        return FirebaseError::FIREBASE_NONE;
         // Init the firebase options
         firebase::AppOptions opts;
         opts.set_api_key(apiKey.c_str());

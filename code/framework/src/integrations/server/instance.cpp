@@ -15,15 +15,18 @@
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
-#include "scripting/builtins/entity.h"
-
-#include "scripting/builtins/player.h"
+#include "scripting/engines/node/sdk.h"
 
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
-#include "nlohmann/json.hpp"
 #include "optick.h"
+
+#include "scripting/builtins/node/entity.h"
+
+#include <cppfs/FileHandle.h>
+#include <cppfs/fs.h>
+#include <csignal>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
@@ -48,8 +51,13 @@ namespace Framework::Integrations::Server {
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
-        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
-                                    {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}});
+        options.add_options("", {
+            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, 
+            {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+            {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)},
+            {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
+            {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}
+        });
 
         // Try to parse and return if anything wrong happened
         auto result = options.parse(_opts.argc, _opts.argv);
@@ -71,7 +79,7 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
-        if (!_webServer->Init(_opts.bindHost, _opts.bindPort, _opts.httpServeDir)) {
+        if (!_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
@@ -88,12 +96,13 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        const auto sdkCallback = [this](Framework::Scripting::SDK *sdk) {
+        const auto sdkCallback = [this](Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
             this->RegisterScriptingBuiltins(sdk);
         };
 
         // Initialize the scripting engine
-        if (_scriptingEngine->Init(sdkCallback) != Framework::Scripting::EngineError::ENGINE_NONE) {
+        _scriptingEngine->SetProcessArguments(opts.argc, opts.argv);
+        if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE, sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
@@ -127,11 +136,15 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+
+        // Load the scripting resources when everything is ready
+        _scriptingEngine->LoadAllResources();
         return ServerError::SERVER_NONE;
     }
 
     void Instance::InitEndpoints() {
-        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback& cb) {
+        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback &cb) {
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;
@@ -219,10 +232,10 @@ namespace Framework::Integrations::Server {
             _streamingFactory->SetupServer(newPlayer, guid.g);
 
             auto nickname = msg->GetPlayerName();
-            if (nickname.size() > 64){
+            if (nickname.size() > 64) {
                 nickname = nickname.substr(0, 64);
             }
-            
+
             _playerFactory->SetupServer(newPlayer, guid.g, nickname);
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
@@ -337,16 +350,20 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::SDK *sdk) {
-        using namespace Framework::Scripting;
-        Builtins::EntityRegister(_worldEngine, sdk->GetRootModule());
-        Builtins::PlayerRegister(sdk->GetRootModule());
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
+        switch(sdk.GetKind()) 
+        {
+        case Framework::Scripting::EngineTypes::ENGINE_NODE: {
+            auto nodeSDK = sdk.GetNodeSDK();
+            Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
+        } break;
+        }
 
         // mod-specific builtins
         if (_opts.sdkRegisterCallback) {
             _opts.sdkRegisterCallback(sdk);
         }
-        
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
     }
 } // namespace Framework::Integrations::Server

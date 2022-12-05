@@ -8,8 +8,6 @@
 
 #include "config.h"
 
-#include <nlohmann/json.hpp>
-
 namespace Framework::Utils {
     Config::Config() {
         _document = new nlohmann::json();

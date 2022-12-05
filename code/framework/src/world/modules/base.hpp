@@ -27,9 +27,9 @@ namespace Framework::World::Modules {
         };
 
         struct Frame {
-            std::string modelName;
             uint64_t modelHash{};
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
+            std::string modelName;
         };
 
         struct PendingRemoval {
@@ -49,9 +49,9 @@ namespace Framework::World::Modules {
             bool isVisible          = true;
             bool alwaysVisible      = false;
             double updateInterval = (1000.0/60.0); // 16.1667~ ms interval
+            uint64_t owner   = 0;
 
             AssignOwnerProc assignOwnerProc;
-            uint64_t owner   = 0;
 
             struct Events {
                 using Proc = fu2::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity) const>;
@@ -88,22 +88,57 @@ namespace Framework::World::Modules {
             struct StreamData {
                 double lastUpdate = 0.0;
             };
-            std::unordered_map<flecs::entity_t, StreamData> entities;
             float range = 100.0f;
-
             uint64_t guid = (uint64_t)-1;
             std::string nickname;
+            std::unordered_map<flecs::entity_t, StreamData> entities;
         };
 
         explicit Base(flecs::world &world) {
             world.module<Base>();
 
-            world.component<Transform>();
-            world.component<Frame>();
-            world.component<Streamable>();
-            world.component<Streamer>();
+            // TODO expose STL types once https://github.com/SanderMertens/flecs/issues/712 is resolved.
+
+            auto _transform = world.component<Transform>();
+            auto _frame = world.component<Frame>();
+            auto _streamable = world.component<Streamable>();
+            auto _streamer = world.component<Streamer>();
+
             world.component<PendingRemoval>();
             world.component<ServerID>();
+
+            // Windows bind metadata
+            #ifdef _WIN32
+            {
+                auto _vec3 = world.component<glm::vec3>();
+                auto _quat = world.component<glm::quat>();
+                _vec3
+                    .member<float>("x")
+                    .member<float>("y")
+                    .member<float>("z");
+                _quat
+                    .member<float>("w")
+                    .member<float>("x")
+                    .member<float>("y")
+                    .member<float>("z");
+                _transform
+                    .member<glm::vec3>("pos")
+                    .member<glm::quat>("rot")
+                    .member<glm::vec3>("vel");
+                _frame
+                    .member<uint64_t>("modelHash")
+                    .member<glm::vec3>("scale");
+                _streamable
+                    .member<int>("virtualWorld")
+                    .member<bool>("isVisible")
+                    .member<bool>("alwaysVisible")
+                    .member<double>("updateInterval")
+                    .member<uint64_t>("owner");
+                _streamer
+                    .member<float>("range")
+                    .member<uint64_t>("guid");
+            }
+            #endif
         }
 
         static void SetupDefaultEvents(Streamable *streamable);

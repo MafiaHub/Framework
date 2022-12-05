@@ -8,6 +8,9 @@
 
 #include "client.h"
 
+#include "game_rpc/set_transform.h"
+#include "game_rpc/set_frame.h"
+
 #include <optick.h>
 
 namespace Framework::World {
@@ -77,6 +80,9 @@ namespace Framework::World {
                 }
             }
         });
+
+        // Register built-in RPCs
+        InitRPCs(peer);
     }
 
     void ClientEngine::OnDisconnect() {
@@ -92,7 +98,7 @@ namespace Framework::World {
             for (size_t i = 0; i < it.count(); i++) {
                 if (_onEntityDestroyCallback) {
                     if (!_onEntityDestroyCallback(it.entity(i))) {
-                        return;
+                        continue;
                     }
                 }
 
@@ -102,6 +108,30 @@ namespace Framework::World {
         _world->defer_end();
 
         _networkPeer = nullptr;
+    }
+    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) {
+        net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+            const auto e = GetEntityByServerID(msg->GetServerID());
+            if (!e.is_alive()) {
+                return;
+            }
+            auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr     = msg->GetTransform();
+        });
+        net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+            const auto e = GetEntityByServerID(msg->GetServerID());
+            if (!e.is_alive()) {
+                return;
+            }
+            auto fr = e.get_mut<World::Modules::Base::Frame>();
+            *fr     = msg->GetFrame();
+        });
     }
 
 } // namespace Framework::World

@@ -9,7 +9,6 @@
 #include "interpolator.h"
 
 #include <algorithm>
-#include <glm/trigonometric.hpp>
 
 namespace math {
     inline float Unlerp(const float from, const float to, const float pos) {

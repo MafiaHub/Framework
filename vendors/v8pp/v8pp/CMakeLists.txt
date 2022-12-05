@@ -1,19 +1,13 @@
 # v8pp target
 
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+include(GNUInstallDirs)
 
-# HACK HACK HACK
-add_library(V8::v8 SHARED IMPORTED)
-add_library(V8::libplatform SHARED IMPORTED)
-if(WIN32)
-    message(STATUS "${V8_DLL}")
-    set_target_properties(V8::v8 PROPERTIES
-        IMPORTED_IMPLIB ${V8_LIB} IMPORTED_LOCATION "no.dll")
-    set_target_properties(V8::libplatform PROPERTIES
-        IMPORTED_IMPLIB ${V8_LIBPLATFORM} IMPORTED_LOCATION "no.dll")
+if(DEFINED VCPKG_TARGET_TRIPLET)
+	find_package(V8 CONFIG REQUIRED)
+else()
+	list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+	find_package(V8 REQUIRED)
 endif()
-target_include_directories(V8::v8 INTERFACE ${V8_INCLUDE_DIRS})
-target_include_directories(V8::libplatform INTERFACE ${V8_INCLUDE_DIRS})
 
 configure_file(config.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/config.hpp)
 
@@ -58,13 +52,13 @@ else()
 	)
 endif()
 
-set(CMAKE_CXX_RTTI ON)
+#set(CMAKE_CXX_RTTI OFF)
 if(MSVC)
-	#set(V8PP_COMPILE_OPTIONS /GR- /EHsc /permissive- /W4)
+	set(V8PP_COMPILE_OPTIONS /GR- /EHsc /permissive- /W4)
 	# disable specific warnings
 	list(APPEND V8PP_COMPILE_OPTIONS /wd4190)
 	# set warning level 3 for system headers
-	#list(APPEND V8PP_COMPILE_OPTIONS /experimental:external /external:anglebrackets /external:W3)
+	list(APPEND V8PP_COMPILE_OPTIONS /experimental:external /external:anglebrackets /external:W3)
 else()
 	set(V8PP_COMPILE_OPTIONS -fexceptions -Wall -Wextra -Wpedantic)
 endif()
@@ -77,7 +71,6 @@ if(V8PP_HEADER_ONLY)
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
 		$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-    # target_link_libraries(v8pp INTERFACE V8::v8 V8::libplatform)
 else()
 	add_library(v8pp ${V8PP_HEADERS} ${V8PP_SOURCES})
 	target_compile_definitions(v8pp PUBLIC ${V8PP_DEFINES})
@@ -86,7 +79,7 @@ else()
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
 		$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-	target_link_libraries(v8pp PUBLIC V8::v8 V8::libplatform)
+	target_link_libraries(v8pp PUBLIC V8::V8)
 	if(BUILD_SHARED_LIBS)
 		target_link_libraries(v8pp PUBLIC ${CMAKE_DL_LIBS})
 	endif()
@@ -95,7 +88,6 @@ endif()
 #source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${V8PP_HEADERS} ${V8PP_SOURCES})
 
 # Install
-include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 set(targets_export_name v8pp_Targets)

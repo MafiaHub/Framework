@@ -69,14 +69,18 @@ void notify_subset(
             flecs_set_observers_notify(it, observable, ids, event,
                 ecs_pair(rel, EcsWildcard));
 
-            ecs_entity_t *entities = ecs_storage_first(&table->data.entities);
-            ecs_record_t **records = ecs_storage_first(&table->data.records);
+            if (!table->observed_count) {
+                continue;
+            }
+
+            ecs_entity_t *entities = ecs_vec_first(&table->data.entities);
+            ecs_record_t **records = ecs_vec_first(&table->data.records);
 
             for (e = 0; e < entity_count; e ++) {
                 uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(records[e]->row);
                 if (flags & EcsEntityObservedAcyclic) {
                     /* Only notify for entities that are used in pairs with
-                    * acyclic relationships */
+                     * acyclic relationships */
                     notify_subset(world, it, observable, entities[e], event, ids);
                 }
             }
@@ -104,16 +108,31 @@ void flecs_emit(
     int32_t row = desc->offset;
     int32_t i, count = desc->count;
     ecs_entity_t relationship = desc->relationship;
+    ecs_time_t t = {0};
+    bool measure_time = world->flags & EcsWorldMeasureSystemTime;
+    if (measure_time) {
+        ecs_time_measure(&t);
+    }
 
     if (!count) {
         count = ecs_table_count(table) - row;
     }
 
+    ecs_id_t ids_cache = 0;
+    void *ptrs_cache = NULL;
+    ecs_size_t sizes_cache = 0;
+    int32_t columns_cache = 0;
+    ecs_entity_t sources_cache = 0;
     ecs_iter_t it = {
         .world = stage,
         .real_world = world,
         .table = table,
         .field_count = 1,
+        .ids = &ids_cache,
+        .ptrs = &ptrs_cache,
+        .sizes = &sizes_cache,
+        .columns = &columns_cache,
+        .sources = &sources_cache,
         .other_table = desc->other_table,
         .offset = row,
         .count = count,
@@ -134,26 +153,33 @@ void flecs_emit(
     }
 
     if (count && !desc->table_event) {
-        ecs_record_t **recs = ecs_storage_get_t(
-            &table->data.records, ecs_record_t*, row);
+        if (!table->observed_count) {
+            goto done;
+        }
 
+        ecs_record_t **recs = ecs_vec_get_t(
+            &table->data.records, ecs_record_t*, row);
         for (i = 0; i < count; i ++) {
             ecs_record_t *r = recs[i];
             if (!r) {
                 /* If the event is emitted after a bulk operation, it's possible
-                 * that it hasn't been populate with entities yet. */
+                 * that it hasn't been populated with entities yet. */
                 continue;
             }
 
             uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(recs[i]->row);
             if (flags & EcsEntityObservedAcyclic) {
-                notify_subset(world, &it, observable, ecs_storage_first_t(
+                notify_subset(world, &it, observable, ecs_vec_first_t(
                     &table->data.entities, ecs_entity_t)[row + i], event, ids);
             }
         }
     }
-    
+
+done:
 error:
+    if (measure_time) {
+        world->info.emit_time_total += (ecs_ftime_t)ecs_time_measure(&t);
+    }
     return;
 }
 

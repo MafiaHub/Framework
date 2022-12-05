@@ -12,5 +12,5 @@
 #include <string>
 
 namespace Framework::Scripting {
-    std::map<EventIDs, std::string> Events = {{EventIDs::RESOURCE_LOADED, "resourceLoaded"}, {EventIDs::RESOURCE_UNLOADING, "resourceUnloading"}};
+    std::map<EventIDs, std::string> Events = {{EventIDs::RESOURCE_LOADED, "resourceLoaded"}, {EventIDs::RESOURCE_UNLOADING, "resourceUnloading"}, {EventIDs::RESOURCE_UPDATED, "resourceUpdated"}};
 } // namespace Framework::Scripting

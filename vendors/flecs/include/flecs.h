@@ -23,11 +23,22 @@
 #define ecs_ftime_t ecs_float_t
 #endif
 
-/* FLECS_LEGACY should be defined when building for C89 */
+/** FLECS_LEGACY
+ * Define when building for C89 
+ */
 // #define FLECS_LEGACY
 
-/* FLECS_NO_DEPRECATED_WARNINGS disables deprecated warnings */
+/** FLECS_NO_DEPRECATED_WARNINGS
+ * disables deprecated warnings 
+ */
 #define FLECS_NO_DEPRECATED_WARNINGS
+
+/** FLECS_ACCURATE_COUNTERS
+ * Define to ensure that global counters used for statistics (such as the 
+ * allocation counters in the OS API) are accurate in multithreaded
+ * applications, at the cost of increased overhead. 
+ */
+// #define FLECS_ACCURATE_COUNTERS
 
 /* Make sure provided configuration is valid */
 #if defined(FLECS_DEBUG) && defined(FLECS_NDEBUG)
@@ -37,9 +48,10 @@
 #error "invalid configuration: cannot both define FLECS_DEBUG and NDEBUG"
 #endif
 
-/* Flecs debugging enables asserts, which are used for input parameter checking
- * and cheap (constant time) sanity checks. There are lots of asserts in every
- * part of the code, so this will slow down code. */
+/** Flecs debugging enables asserts.
+ * Used for input parameter checking and cheap sanity checks. There are lots of 
+ * asserts in every part of the code, so this will slow down applications. 
+ */
 #if !defined(FLECS_DEBUG) && !defined(FLECS_NDEBUG) 
 #if defined(NDEBUG)
 #define FLECS_NDEBUG
@@ -48,8 +60,10 @@
 #endif
 #endif
 
-/* FLECS_SANITIZE enables expensive checks that can detect issues early. This
- * will severely slow down code. */
+/** FLECS_SANITIZE
+ * Enables expensive checks that can detect issues early. Recommended for
+ * running tests or when debugging issues. This will severely slow down code.
+ */
 // #define FLECS_SANITIZE
 #ifdef FLECS_SANITIZE
 #define FLECS_DEBUG /* If sanitized mode is enabled, so is debug mode */
@@ -59,13 +73,30 @@
  * test with the FLECS_DEBUG or FLECS_SANITIZE flags enabled. There's a good
  * chance that this gives you more information about the issue! */
 
-/* FLECS_SOFT_ASSERT disables aborting for recoverable errors */
+/** FLECS_SOFT_ASSERT 
+ * Define to not abort for recoverable errors, like invalid parameters. An error
+ * is still thrown to the console. This is recommended for when running inside a
+ * third party runtime, such as the Unreal editor.
+ * 
+ * Note that internal sanity checks (ECS_INTERNAL_ERROR) will still abort a
+ * process, as this gives more information than a (likely) subsequent crash.
+ * 
+ * When a soft assert occurs, the code will attempt to minimize the number of 
+ * side effects of the failed operation, but this may not always be possible.
+ * Even though an application may still be able to continue running after a soft 
+ * assert, it should be treated as if in an undefined state. 
+ */
 // #define FLECS_SOFT_ASSERT
 
-/* FLECS_KEEP_ASSERT keeps asserts in release mode. */
+/** FLECS_KEEP_ASSERT
+ * By default asserts are disabled in release mode, when either FLECS_NDEBUG or
+ * NDEBUG is defined. Defining FLECS_KEEP_ASSERT ensures that asserts are not
+ * disabled. This define can be combined with FLECS_SOFT_ASSERT. 
+ */
 // #define FLECS_KEEP_ASSERT
 
-/* The following macros let you customize with which addons Flecs is built.
+/** Custom builds. 
+ * The following macros let you customize with which addons Flecs is built.
  * Without any addons Flecs is just a minimal ECS storage, but addons add 
  * features such as systems, scheduling and reflection. If an addon is disabled,
  * it is excluded from the build, so that it consumes no resources. By default
@@ -87,8 +118,6 @@
  *   ecs_log_set_level(0);
  * which outputs the full list of addons Flecs was compiled with.
  */
-
-/* Define if you want to create a custom build by whitelisting addons */
 // #define FLECS_CUSTOM_BUILD
 
 #ifndef FLECS_CUSTOM_BUILD
@@ -122,7 +151,9 @@
 
 #include "flecs/private/api_defines.h"
 #include "flecs/private/vector.h"           /* Vector datatype */
+#include "flecs/private/block_allocator.h"  /* Block allocator */
 #include "flecs/private/map.h"              /* Map */
+#include "flecs/private/allocator.h"        /* Allocator */
 #include "flecs/private/strbuf.h"           /* String builder */
 #include "flecs/os_api.h"  /* Abstraction for operating system functions */
 
@@ -220,10 +251,9 @@ typedef struct ecs_mixins_t ecs_mixins_t;
  */
 
 /* Maximum number of components to add/remove in a single operation */
+#ifndef ECS_ID_CACHE_SIZE
 #define ECS_ID_CACHE_SIZE (32)
-
-/* Maximum number of terms cached in static arrays */
-#define ECS_TERM_CACHE_SIZE (4)
+#endif
 
 /* Maximum number of terms in desc (larger, as these are temp objects) */
 #define ECS_TERM_DESC_CACHE_SIZE (16)
@@ -233,9 +263,6 @@ typedef struct ecs_mixins_t ecs_mixins_t;
 
 /* Maximum number of query variables per query */
 #define ECS_VARIABLE_COUNT_MAX (64)
-
-/* Number of query variables in iterator cache */
-#define ECS_VARIABLE_CACHE_SIZE (4)
 
 /** @} */
 
@@ -319,12 +346,25 @@ typedef void (*ecs_sort_table_action_t)(
     int32_t hi,
     ecs_order_by_action_t order_by);
 
-/** Callback used for ranking types */
+/** Callback used for grouping tables in a query */
 typedef uint64_t (*ecs_group_by_action_t)(
     ecs_world_t *world,
     ecs_table_t *table,
     ecs_id_t group_id,
     void *ctx);
+
+/* Callback invoked when a query creates a new group. */
+typedef void* (*ecs_group_create_action_t)(
+    ecs_world_t *world,
+    uint64_t group_id,
+    void *group_by_ctx); /* from ecs_query_desc_t */
+
+/* Callback invoked when a query deletes an existing group. */
+typedef void (*ecs_group_delete_action_t)(
+    ecs_world_t *world,
+    uint64_t group_id,
+    void *group_ctx,     /* return value from ecs_group_create_action_t */
+    void *group_by_ctx); /* from ecs_query_desc_t */
 
 /** Initialization action for modules */
 typedef void (*ecs_module_action_t)(
@@ -427,6 +467,7 @@ typedef enum ecs_oper_kind_t {
 #define EcsParent                     (1u << 5) /* Short for up(ChildOf) */
 #define EcsIsVariable                 (1u << 6) /* Term id is a variable */
 #define EcsIsEntity                   (1u << 7) /* Term id is an entity */
+#define EcsFilter                     (1u << 8) /* Prevent observer from triggering on term */
 
 #define EcsTraverseFlags              (EcsUp|EcsDown|EcsSelf|EcsCascade|EcsParent)
 
@@ -515,7 +556,7 @@ struct ecs_observer_t {
     ecs_ctx_free_t ctx_free;    /* Callback to free ctx */
     ecs_ctx_free_t binding_ctx_free; /* Callback to free binding_ctx */
 
-    ecs_observable_t *observable;  /* Observable for observer */
+    ecs_observable_t *observable; /* Observable for observer */
 
     int32_t *last_event_id;     /* Last handled event id */
 
@@ -586,6 +627,7 @@ struct ecs_type_info_t {
     ecs_size_t alignment;    /* Alignment of type */
     ecs_type_hooks_t hooks;  /* Type hooks */
     ecs_entity_t component;  /* Handle to component (do not set) */
+    const char *name;        /* Type name. */
 };
 
 /** @} */
@@ -593,6 +635,7 @@ struct ecs_type_info_t {
 
 #include "flecs/private/api_types.h"        /* Supporting API types */
 #include "flecs/private/api_support.h"      /* Supporting API functions */
+#include "flecs/private/vec.h"              /* Vector */
 #include "flecs/private/sparse.h"           /* Sparse set */
 #include "flecs/private/hashmap.h"          /* Hashmap */
 
@@ -679,7 +722,7 @@ typedef struct ecs_filter_desc_t {
     int32_t _canary;
 
     /* Terms of the filter. If a filter has more terms than 
-     * ECS_TERM_CACHE_SIZE use terms_buffer */
+     * ECS_TERM_DESC_CACHE_SIZE use terms_buffer */
     ecs_term_t terms[ECS_TERM_DESC_CACHE_SIZE];
 
     /* For filters with lots of terms an outside array can be provided. */
@@ -738,6 +781,14 @@ typedef struct ecs_query_desc_t {
      * used to sort entities (tables), so that entities (tables) of the same
      * rank are "grouped" together when iterated. */
     ecs_group_by_action_t group_by;
+
+    /* Callback that is invoked when a new group is created. The return value of
+     * the callback is stored as context for a group. */
+    ecs_group_create_action_t on_group_create;
+
+    /* Callback that is invoked when an existing group is deleted. The return 
+     * value of the on_group_create callback is passed as context parameter. */
+    ecs_group_delete_action_t on_group_delete;
 
     /* Context to pass to group_by */
     void *group_by_ctx;
@@ -848,6 +899,12 @@ typedef ecs_iterable_t EcsIterable;
  * @{
  */
 
+/* Utility to hold a value of a dynamic type */
+typedef struct ecs_value_t {
+    ecs_entity_t type;
+    void *ptr;
+} ecs_value_t;
+
 /** Type that contains information about the world. */
 typedef struct ecs_world_info_t {
     ecs_entity_t last_component_id;   /* Last issued component entity id */
@@ -860,20 +917,24 @@ typedef struct ecs_world_info_t {
     ecs_ftime_t time_scale;           /* Time scale applied to delta_time */
     ecs_ftime_t target_fps;           /* Target fps */
     ecs_ftime_t frame_time_total;     /* Total time spent processing a frame */
-    float system_time_total;          /* Total time spent in systems */
-    float merge_time_total;           /* Total time spent in merges */
+    ecs_ftime_t system_time_total;    /* Total time spent in systems */
+    ecs_ftime_t emit_time_total;      /* Total time spent notifying observers */
+    ecs_ftime_t merge_time_total;     /* Total time spent in merges */
     ecs_ftime_t world_time_total;     /* Time elapsed in simulation */
     ecs_ftime_t world_time_total_raw; /* Time elapsed in simulation (no scaling) */
+    ecs_ftime_t rematch_time_total;   /* Time spent on query rematching */
     
-    int32_t frame_count_total;        /* Total number of frames */
-    int32_t merge_count_total;        /* Total number of merges */
+    int64_t frame_count_total;        /* Total number of frames */
+    int64_t merge_count_total;        /* Total number of merges */
+    int64_t rematch_count_total;      /* Total number of rematches */
 
-    int32_t id_create_total;          /* Total number of times a new id was created */
-    int32_t id_delete_total;          /* Total number of times an id was deleted */
-    int32_t table_create_total;       /* Total number of times a table was created */
-    int32_t table_delete_total;       /* Total number of times a table was deleted */
-    int32_t pipeline_build_count_total; /* Total number of pipeline builds */
-    int32_t systems_ran_frame;  /* Total number of systems ran in last frame */
+    int64_t id_create_total;          /* Total number of times a new id was created */
+    int64_t id_delete_total;          /* Total number of times an id was deleted */
+    int64_t table_create_total;       /* Total number of times a table was created */
+    int64_t table_delete_total;       /* Total number of times a table was deleted */
+    int64_t pipeline_build_count_total; /* Total number of pipeline builds */
+    int64_t systems_ran_frame;        /* Total number of systems ran in last frame */
+    int64_t observers_ran_frame;      /* Total number of times observer was invoked */
 
     int32_t id_count;                 /* Number of ids in the world (excluding wildcards) */
     int32_t tag_id_count;             /* Number of tag (no data) ids in the world */
@@ -888,16 +949,33 @@ typedef struct ecs_world_info_t {
     int32_t table_record_count;       /* Total number of table records (entries in table caches) */
     int32_t table_storage_count;      /* Total number of table storages */
 
-    /* -- Defered operation counts -- */
-    int32_t new_count;
-    int32_t bulk_new_count;
-    int32_t delete_count;
-    int32_t clear_count;
-    int32_t add_count;
-    int32_t remove_count;
-    int32_t set_count;
-    int32_t discard_count;
+    /* -- Command counts -- */
+    struct {
+        int64_t add_count;             /* add commands processed */
+        int64_t remove_count;          /* remove commands processed */
+        int64_t delete_count;          /* delete commands processed */
+        int64_t clear_count;           /* clear commands processed */
+        int64_t set_count;             /* set commands processed */
+        int64_t get_mut_count;         /* get_mut/emplace commands processed */
+        int64_t modified_count;        /* modified commands processed */
+        int64_t other_count;           /* other commands processed */
+        int64_t discard_count;         /* commands discarded, happens when entity is no longer alive when running the command */
+        int64_t batched_entity_count;  /* entities for which commands were batched */
+        int64_t batched_command_count; /* commands batched */
+    } cmd;
+
+    const char *name_prefix;          /* Value set by ecs_set_name_prefix. Used
+                                       * to remove library prefixes of symbol
+                                       * names (such as Ecs, ecs_) when 
+                                       * registering them as names. */
 } ecs_world_info_t;
+
+/** Type that contains information about a query group. */
+typedef struct ecs_query_group_info_t {
+    int32_t match_count;  /* How often tables have been matched/unmatched */
+    int32_t table_count;  /* Number of tables in group */
+    void *ctx;            /* Group context, returned by on_group_create */
+} ecs_query_group_info_t;
 
 /** @} */
 
@@ -931,12 +1009,6 @@ FLECS_API extern const ecs_id_t ECS_TOGGLE;
 
 /** Include all components from entity to which AND is applied */
 FLECS_API extern const ecs_id_t ECS_AND;
-
-/** Include at least one component from entity to which OR is applied */
-FLECS_API extern const ecs_id_t ECS_OR;
-
-/** Exclude all components from entity to which NOT is applied */
-FLECS_API extern const ecs_id_t ECS_NOT;
 
 /** @} */
 
@@ -1537,7 +1609,9 @@ bool _ecs_poly_is(
  */
 
 /** Create new entity id.
- * This operation returns an unused entity id.
+ * This operation returns an unused entity id. This operation is guaranteed to
+ * return an empty entity as it does not use values set by ecs_set_scope or
+ * ecs_set_with.
  *
  * @param world The world.
  * @return The new entity id.
@@ -1554,6 +1628,9 @@ ecs_entity_t ecs_new_id(
  * Note that ECS_HI_COMPONENT_ID does not represent the maximum number of 
  * components that can be created, only the maximum number of components that
  * can take advantage of these optimizations.
+ * 
+ * This operation is guaranteed to return an empty entity as it does not use 
+ * values set by ecs_set_scope or ecs_set_with.
  * 
  * This operation does not recycle ids.
  *
@@ -1919,6 +1996,18 @@ void* ecs_ref_get_id(
     const ecs_world_t *world,
     ecs_ref_t *ref,
     ecs_id_t id);
+
+/** Update ref.
+ * Ensures contents of ref are up to date. Same as ecs_ref_get_id, but does not
+ * return pointer to component id. 
+ * 
+ * @param world The world.
+ * @param ref The ref.
+ */
+FLECS_API
+void ecs_ref_update(
+    const ecs_world_t *world,
+    ecs_ref_t *ref);
 
 /** @} */
 
@@ -2900,7 +2989,7 @@ ecs_iter_t ecs_term_chain_iter(
     const ecs_iter_t *it,
     ecs_term_t *term);
 
-/** Progress the term iterator.
+/** Progress a term iterator.
  * This operation progresses the term iterator to the next table. The 
  * iterator must have been initialized with `ecs_term_iter`. This operation 
  * must be invoked at least once before interpreting the contents of the 
@@ -2911,6 +3000,29 @@ ecs_iter_t ecs_term_chain_iter(
  */
 FLECS_API
 bool ecs_term_next(
+    ecs_iter_t *it);
+
+/** Iterator for a parent's children.
+ * This operation is equivalent to a term iterator for (ChildOf, parent). 
+ * Iterate the result with ecs_children_next.
+ * 
+ * @param world The world.
+ * @param parent The parent for which to iterate the children.
+ * @return The iterator.
+ */
+FLECS_API
+ecs_iter_t ecs_children(
+    const ecs_world_t *world,
+    ecs_entity_t parent);
+
+/** Progress a children iterator.
+ * Equivalent to ecs_term_next.
+ * 
+ * @param it The iterator.
+ * @returns True if more data is available, false if not.
+ */
+FLECS_API
+bool ecs_children_next(
     ecs_iter_t *it);
 
 /** Test whether term id is set.
@@ -3342,7 +3454,7 @@ const ecs_filter_t* ecs_query_get_filter(
 FLECS_API
 ecs_iter_t ecs_query_iter(
     const ecs_world_t *world,
-    ecs_query_t *query);  
+    ecs_query_t *query);
 
 /** Progress the query iterator.
  * This operation progresses the query iterator to the next table. The 
@@ -3362,6 +3474,41 @@ bool ecs_query_next(
  */
 FLECS_API
 bool ecs_query_next_instanced(
+    ecs_iter_t *iter);
+
+/** Fast alternative to ecs_query_next that only returns matched tables.
+ * This operation only populates the ecs_iter_t::table field. To access the
+ * matched components, call ecs_query_populate.
+ * 
+ * If this operation is used with a query that has inout/out terms, those terms
+ * will not be marked dirty unless ecs_query_populate is called. 
+ * 
+ * @param iter The iterator.
+ * @returns True if more data is available, false if not.
+ */
+FLECS_API
+bool ecs_query_next_table(
+    ecs_iter_t *iter);
+
+/** Populate iterator fields.
+ * This operation can be combined with ecs_query_next_table to populate the
+ * iterator fields for the current table.
+ * 
+ * Populating fields conditionally can save time when a query uses change 
+ * detection, and only needs iterator data when the table has changed. When this
+ * operation is called, inout/out terms will be marked dirty.
+ * 
+ * In cases where inout/out terms are conditionally written and no changes
+ * were made after calling ecs_query_populate, the ecs_query_skip function can
+ * be called to prevent the matched table components from being marked dirty.
+ * 
+ * This operation does should not be used with queries that match disabled 
+ * components, union relationships, or with queries that use order_by.
+ * 
+ * @param iter The iterator.
+ */
+FLECS_API
+void ecs_query_populate(
     ecs_iter_t *iter);
 
 /** Returns whether the query data changed since the last iteration.
@@ -3439,6 +3586,32 @@ void ecs_query_set_group(
     ecs_iter_t *it,
     uint64_t group_id);
 
+/** Get context of query group.
+ * This operation returns the context of a query group as returned by the 
+ * on_group_create callback.
+ * 
+ * @param query The query.
+ * @param group_id The group for which to obtain the context.
+ * @return The group context, NULL if the group doesn't exist.
+ */
+FLECS_API
+void* ecs_query_get_group_ctx(
+    ecs_query_t *query,
+    uint64_t group_id);
+
+/** Get information about query group.
+ * This operation returns information about a query group, including the group
+ * context returned by the on_group_create callback.
+ * 
+ * @param query The query.
+ * @param group_id The group for which to obtain the group info.
+ * @return The group info, NULL if the group doesn't exist.
+ */
+FLECS_API
+const ecs_query_group_info_t* ecs_query_get_group_info(
+    ecs_query_t *query,
+    uint64_t group_id);
+
 /** Returns whether query is orphaned.
  * When the parent query of a subquery is deleted, it is left in an orphaned
  * state. The only valid operation on an orphaned query is deleting it. Only
@@ -3487,6 +3660,12 @@ int32_t ecs_query_empty_table_count(
  */
 FLECS_API
 int32_t ecs_query_entity_count(
+    const ecs_query_t *query);
+
+/** Get entity associated with query.
+ */
+FLECS_API
+ecs_entity_t ecs_query_entity(
     const ecs_query_t *query);
 
 /** @} */
@@ -3666,10 +3845,7 @@ bool ecs_iter_next(
     ecs_iter_t *it);
 
 /** Cleanup iterator resources.
- * This operation cleans up any resources associated with the iterator. 
- * Iterators may contain allocated resources when the number of matched terms
- * exceeds ECS_TERM_CACHE_SIZE and/or when the source for the iterator requires
- * to keep state while iterating.
+ * This operation cleans up any resources associated with the iterator.
  * 
  * This operation should only be used when an iterator is not iterated until
  * completion (next has not yet returned false). When an iterator is iterated
@@ -4556,9 +4732,24 @@ const ecs_type_t* ecs_table_get_type(
  * @param table The table.
  * @return The component array, or NULL if the index is not a component.
  */
+FLECS_API
 void* ecs_table_get_column(
     ecs_table_t *table,
     int32_t index);
+
+/** Get column index for id.
+ * This operation returns the index for an id in the table's type.
+ * 
+ * @param world The world.
+ * @param table The table.
+ * @param id The id.
+ * @return The index of the id in the table type, or -1 if not found.
+ */
+FLECS_API
+int32_t ecs_table_get_index(
+    const ecs_world_t *world,
+    const ecs_table_t *table,
+    ecs_id_t id);
 
 /** Get storage type for table.
  *
@@ -4570,11 +4761,13 @@ ecs_table_t* ecs_table_get_storage_table(
     const ecs_table_t *table);
 
 /** Convert index in table type to index in table storage type. */
+FLECS_API
 int32_t ecs_table_type_to_storage_index(
     const ecs_table_t *table,
     int32_t index);
 
 /** Convert index in table storage type to index in table type. */
+FLECS_API
 int32_t ecs_table_storage_to_type_index(
     const ecs_table_t *table,
     int32_t index);
@@ -4723,6 +4916,172 @@ void* ecs_record_get_column(
     size_t c_size);
 
 /** @} */
+
+/**
+ * @defgroup values API for dynamic values.
+ * @brief Construct, destruct, copy and move dynamically created values.
+ * @{
+ */
+
+/** Construct a value in existing storage 
+ *
+ * @param world The world.
+ * @param type The type of the value to create.
+ * @param ptr Pointer to a value of type 'type'
+ * @return Zero if success, nonzero if failed.
+ */
+FLECS_API
+int ecs_value_init(
+    const ecs_world_t *world,
+    ecs_entity_t type,
+    void *ptr);
+
+/** Construct a value in existing storage 
+ *
+ * @param world The world.
+ * @param ti The type info of the type to create.
+ * @param ptr Pointer to a value of type 'type'
+ * @return Zero if success, nonzero if failed.
+ */
+FLECS_API
+int ecs_value_init_w_type_info(
+    const ecs_world_t *world,
+    const ecs_type_info_t *ti,
+    void *ptr);
+
+/** Construct a value in new storage 
+ * 
+ * @param world The world.
+ * @param type The type of the value to create.
+ * @return Pointer to type if success, NULL if failed.
+ */
+FLECS_API
+void* ecs_value_new(
+    ecs_world_t *world,
+    ecs_entity_t type);
+
+/** Destruct a value 
+ * 
+ * @param world The world.
+ * @param ti Type info of the value to destruct.
+ * @param ptr Pointer to constructed value of type 'type'.
+ * @return Zero if success, nonzero if failed. 
+ */
+int ecs_value_fini_w_type_info(
+    const ecs_world_t *world,
+    const ecs_type_info_t *ti,
+    void *ptr);
+
+/** Destruct a value 
+ * 
+ * @param world The world.
+ * @param type The type of the value to destruct.
+ * @param ptr Pointer to constructed value of type 'type'.
+ * @return Zero if success, nonzero if failed. 
+ */
+FLECS_API
+int ecs_value_fini(
+    const ecs_world_t *world,
+    ecs_entity_t type,
+    void* ptr);
+
+/** Destruct a value, free storage
+ * 
+ * @param world The world.
+ * @param type The type of the value to destruct.
+ * @return Zero if success, nonzero if failed. 
+ */
+FLECS_API
+int ecs_value_free(
+    ecs_world_t *world,
+    ecs_entity_t type,
+    void* ptr);
+
+/** Copy value.
+ * 
+ * @param world The world.
+ * @param ti Type info of the value to copy.
+ * @param dst Pointer to the storage to copy to.
+ * @param src Pointer to the value to copy.
+ * @return Zero if success, nonzero if failed. 
+ */
+FLECS_API
+int ecs_value_copy_w_type_info(
+    const ecs_world_t *world,
+    const ecs_type_info_t *ti,
+    void* dst,
+    const void *src);
+
+/** Copy value.
+ * 
+ * @param world The world.
+ * @param type The type of the value to copy.
+ * @param dst Pointer to the storage to copy to.
+ * @param src Pointer to the value to copy.
+ * @return Zero if success, nonzero if failed. 
+ */
+FLECS_API
+int ecs_value_copy(
+    const ecs_world_t *world,
+    ecs_entity_t type,
+    void* dst,
+    const void *src);
+
+/** Move value.
+ * 
+ * @param world The world.
+ * @param ti Type info of the value to move.
+ * @param dst Pointer to the storage to move to.
+ * @param src Pointer to the value to move.
+ * @return Zero if success, nonzero if failed. 
+ */
+int ecs_value_move_w_type_info(
+    const ecs_world_t *world,
+    const ecs_type_info_t *ti,
+    void* dst,
+    void *src);
+
+/** Move value.
+ * 
+ * @param world The world.
+ * @param type The type of the value to move.
+ * @param dst Pointer to the storage to move to.
+ * @param src Pointer to the value to move.
+ * @return Zero if success, nonzero if failed. 
+ */
+int ecs_value_move(
+    const ecs_world_t *world,
+    ecs_entity_t type,
+    void* dst,
+    void *src);
+
+/** Move construct value.
+ * 
+ * @param world The world.
+ * @param ti Type info of the value to move.
+ * @param dst Pointer to the storage to move to.
+ * @param src Pointer to the value to move.
+ * @return Zero if success, nonzero if failed. 
+ */
+int ecs_value_move_ctor_w_type_info(
+    const ecs_world_t *world,
+    const ecs_type_info_t *ti,
+    void* dst,
+    void *src);
+
+/** Move construct value.
+ * 
+ * @param world The world.
+ * @param type The type of the value to move.
+ * @param dst Pointer to the storage to move to.
+ * @param src Pointer to the value to move.
+ * @return Zero if success, nonzero if failed. 
+ */
+int ecs_value_move_ctor(
+    const ecs_world_t *world,
+    ecs_entity_t type,
+    void* dst,
+    void *src);
 
 #include "flecs/addons/flecs_c.h"
 #include "flecs/private/addons.h"

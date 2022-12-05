@@ -304,7 +304,8 @@ typedef enum ecs_meta_type_op_kind_t {
     EcsOpUPtr,
     EcsOpIPtr,
     EcsOpString,
-    EcsOpEntity
+    EcsOpEntity,
+    EcsMetaTypeOpKindLast = EcsOpEntity
 } ecs_meta_type_op_kind_t;
 
 typedef struct ecs_meta_type_op_t {
@@ -470,6 +471,11 @@ FLECS_API
 int ecs_meta_set_null(
     ecs_meta_cursor_t *cursor);
 
+/** Set field with dynamic value */
+FLECS_API
+int ecs_meta_set_value(
+    ecs_meta_cursor_t *cursor,
+    const ecs_value_t *value);
 
 /** Functions for getting members. */
 
@@ -511,7 +517,6 @@ const char* ecs_meta_get_string(
 FLECS_API
 ecs_entity_t ecs_meta_get_entity(
     const ecs_meta_cursor_t *cursor);
-
 
 /** API functions for creating meta types */
 

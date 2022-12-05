@@ -12,20 +12,20 @@
 
 #include <PacketPriority.h>
 #include <RakPeerInterface.h>
+#include <logging/logger.h>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 #include <utils/hashing.h>
-#include <logging/logger.h>
 
 namespace Framework::Networking {
     class NetworkPeer {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
-        std::unordered_map<uint32_t, Messages::PacketCallback> _registeredRPCs;
+        std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
-
       public:
         NetworkPeer();
 
@@ -57,20 +57,42 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        void RegisterRPC(fu2::function<void(T *) const> callback) {
+        void RegisterRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()] = [callback](SLNet::Packet *p) {
+            _registeredRPCs[_rpc.GetHashName()].push_back([callback, _rpc](SLNet::Packet *p) {
                 SLNet::BitStream bs(p->data + 5, p->length, false);
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
-                callback(&rpc);
-            };
+                callback(p->guid, &rpc);
+            });
+        }
+
+        template <typename T>
+        void RegisterGameRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
+            T _rpc = {};
+
+            if (callback == nullptr) {
+                return;
+            }
+
+            _registeredRPCs[_rpc.GetHashName()].push_back([callback, _rpc](SLNet::Packet *p) {
+                SLNet::BitStream bs(p->data + 5, p->length, false);
+                T rpc = {};
+                rpc.SetPacket(p);
+                rpc.Serialize(&bs, false);
+                rpc.Serialize2(&bs, false);
+                if (rpc.Valid2()) {
+                    callback(p->guid, &rpc);
+                } else {
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());
+                }
+            });
         }
 
         template <typename T>
@@ -79,11 +101,11 @@ namespace Framework::Networking {
             bs.Write(Messages::INTERNAL_RPC);
             bs.Write(rpc.GetHashName());
             rpc.Serialize(&bs, true);
+            assert(!rpc.IsGameRPC() && "Game RPCs cannot be sent via SendRPC()");
 
             if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
                 return false;
             }
-
             return true;
         }
 
@@ -104,5 +126,7 @@ namespace Framework::Networking {
 
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
+
+        static inline NetworkPeer *_networkRef = nullptr;
     };
 } // namespace Framework::Networking

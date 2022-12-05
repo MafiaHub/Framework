@@ -40,8 +40,6 @@ namespace Framework::Integrations::Shared::Archetypes {
 
             auto streamable = e.get_mut<World::Modules::Base::Streamable>();
             World::Modules::Base::SetupDefaultEvents(streamable);
-
-            e.add<Integrations::Shared::Modules::Mod::CustomData>();
         }
     };
 } // namespace Framework::Integrations::Shared::Archetypes

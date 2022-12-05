@@ -1,7 +1,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <WinSock2.h>
+#include <winsock2.h>
 #include <windows.h>
 
 static
@@ -40,6 +40,20 @@ int32_t win_adec(
     int32_t *count) 
 {
     return InterlockedDecrement(count);
+}
+
+static
+int64_t win_lainc(
+    int64_t *count) 
+{
+    return InterlockedIncrement64(count);
+}
+
+static
+int64_t win_ladec(
+    int64_t *count) 
+{
+    return InterlockedDecrement64(count);
 }
 
 static
@@ -223,6 +237,8 @@ void ecs_set_os_api_impl(void) {
     api.thread_join_ = win_thread_join;
     api.ainc_ = win_ainc;
     api.adec_ = win_adec;
+    api.lainc_ = win_lainc;
+    api.ladec_ = win_ladec;
     api.mutex_new_ = win_mutex_new;
     api.mutex_free_ = win_mutex_free;
     api.mutex_lock_ = win_mutex_lock;

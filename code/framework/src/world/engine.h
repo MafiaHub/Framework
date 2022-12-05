@@ -16,6 +16,27 @@
 #include <flecs/flecs.h>
 #include <memory>
 
+#define FW_SEND_COMPONENT_GAME_RPC(rpc, ent, ...)\
+    do {\
+        auto s = rpc {};\
+        s.FromParameters(__VA_ARGS__);\
+        s.SetServerID(ent.id());\
+        auto net = reinterpret_cast < Framework::Networking::NetworkServer*>(Framework::Networking::NetworkPeer::_networkRef);\
+        if (net) {\
+            net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine*>(Framework::World::Engine::_worldEngineRef), s);\
+        }\
+    } while (0)
+
+#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                                                                                                                                                                             \
+    do {                                                                                                                                                                                                                                                                               \
+        auto s = rpc {};                                                                                                                                                                                                                                                               \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                          \
+        auto net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                          \
+        if (net) {                                                                                                                                                                                                                                                                     \
+            net->SendRPC<rpc>(s);                                                                                                                                                   \
+        }                                                                                                                                                                                                                                                                              \
+    } while (0)
+
 namespace Framework::World {
     class Engine {
       protected:
@@ -38,5 +59,8 @@ namespace Framework::World {
         flecs::world *GetWorld() {
             return _world.get();
         }
+
+        static inline flecs::world *_worldRef = nullptr;
+        static inline Engine *_worldEngineRef = nullptr;
     };
 } // namespace Framework::World

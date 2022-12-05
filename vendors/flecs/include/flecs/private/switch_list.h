@@ -37,35 +37,22 @@ typedef struct ecs_switch_node_t {
     int32_t prev;           /* Prev node in list */
 } ecs_switch_node_t;
 
-struct ecs_switch_t {
-    // uint64_t min;           /* Minimum value the switch can store */
-    // uint64_t max;           /* Maximum value the switch can store */
-    // ecs_switch_header_t *headers;   /* Array with headers, indexed by value */
-    
-    ecs_map_t headers;
-    ecs_vector_t *nodes;    /* Vector with nodes, of type ecs_switch_node_t */
-    ecs_vector_t *values;   /* Vector with values, of type uint64_t */
+struct ecs_switch_t {    
+    ecs_map_t hdrs;     /* map<uint64_t, ecs_switch_header_t> */
+    ecs_vec_t nodes;    /* vec<ecs_switch_node_t> */
+    ecs_vec_t values;   /* vec<uint64_t> */
 };
 
 /** Init new switch. */
 FLECS_DBG_API
 void flecs_switch_init(
     ecs_switch_t* sw,
-    int32_t elements);
-
-/** Create new switch. */
-FLECS_DBG_API
-ecs_switch_t* flecs_switch_new(
+    ecs_allocator_t *allocator,
     int32_t elements);
 
 /** Fini switch. */
 FLECS_DBG_API
 void flecs_switch_fini(
-    ecs_switch_t *sw);
-
-/** Free switch. */
-FLECS_DBG_API
-void flecs_switch_free(
     ecs_switch_t *sw);
 
 /** Remove all values. */
@@ -129,7 +116,7 @@ void flecs_switch_swap(
 
 /** Get vector with all values. Use together with count(). */
 FLECS_DBG_API
-ecs_vector_t* flecs_switch_values(
+ecs_vec_t* flecs_switch_values(
     const ecs_switch_t *sw);    
 
 /** Return number of different values. */

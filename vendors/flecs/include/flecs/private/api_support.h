@@ -21,7 +21,14 @@ extern "C" {
  * lower than this constant are looked up in an array, whereas constants higher
  * than this id are looked up in a map. Increasing this value can improve
  * performance at the cost of (significantly) higher memory usage. */
+#ifndef ECS_HI_COMPONENT_ID
 #define ECS_HI_COMPONENT_ID (256) /* Maximum number of components */
+#endif
+
+/** This is the largest possible component id. Components for the most part
+ * occupy the same id range as entities, however they are not allowed to overlap
+ * with (8) bits reserved for id flags. */
+#define ECS_MAX_COMPONENT_ID (~((uint32_t)(ECS_ID_FLAGS_MASK >> 32)))
 
 /** The maximum number of nested function calls before the core will throw a
  * cycle detected error */
@@ -62,6 +69,10 @@ FLECS_DBG_API
 char* ecs_asprintf(
     const char *fmt,
     ...);
+
+FLECS_DBG_API
+int32_t flecs_table_observed_count(
+    const ecs_table_t *table);
 
 /** Calculate offset from address */
 #ifdef __cplusplus

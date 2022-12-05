@@ -10,13 +10,10 @@
 #include <winnt.h>
 
 #include "logging/logger.h"
-#include <fmt/core.h>
 
 #include <StackWalker.h>
 
 #include <string>
-
-#include <psapi.h>
 
 using CoreSetExceptionOverride = LONG(*)(EXCEPTION_POINTERS*);
 

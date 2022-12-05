@@ -10,7 +10,6 @@
 #include "table_cache.h"
 #include "id_record.h"
 #include "observable.h"
-#include "storage.h"
 #include "iter.h"
 #include "table.h"
 #include "poly.h"
@@ -18,7 +17,6 @@
 #include "world.h"
 #include "datastructures/qsort.h"
 #include "datastructures/name_index.h"
-#include "datastructures/stack_allocator.h"
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,7 +38,7 @@ void flecs_bootstrap(
     ecs_add_id(world, name, EcsFinal);\
     ecs_add_pair(world, name, EcsChildOf, ecs_get_scope(world));\
     ecs_set(world, name, EcsComponent, {.size = 0});\
-    ecs_set_name(world, name, (char*)&#name[ecs_os_strlen(world->name_prefix)]);\
+    ecs_set_name(world, name, (char*)&#name[ecs_os_strlen(world->info.name_prefix)]);\
     ecs_set_symbol(world, name, #name)
 
 
@@ -248,6 +246,7 @@ uint64_t flecs_string_hash(
     const void *ptr);
 
 void flecs_table_hashmap_init(
+    ecs_world_t *world,
     ecs_hashmap_t *hm);
 
 #define assert_func(cond) _assert_func(cond, #cond, __FILE__, __LINE__, __func__)
@@ -257,5 +256,11 @@ void _assert_func(
     const char *file,
     int32_t line,
     const char *func);
+
+void flecs_dump_backtrace(
+    FILE *stream);
+
+bool flecs_isident(
+    char ch);
 
 #endif

@@ -18,10 +18,8 @@
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
-#include <cppfs/FilePath.h>
 #include <cppfs/fs.h>
 #include <fstream>
-#include <function2.hpp>
 #include <ostream>
 #include <utils/hooking/hooking.h>
 #include <utils/minidump.h>
@@ -250,12 +248,16 @@ namespace Framework::Launcher {
 
         Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading game {}", Utils::StringUtils::WideToNormal(_gamePath));
 
-        // Inner run the project
-        if (!Run()) {
+
+        // Run with type depending
+        if (_config.launchType == ProjectLaunchType::PE_LOADING) {
+            return RunWithPELoading();
+        }
+        else if(_config.launchType == ProjectLaunchType::DLL_INJECTION){
+            return RunWithDLLInjection();
+        } else {
             return false;
         }
-
-        return true;
     }
 
     bool Project::RunInnerSteamChecks() {
@@ -380,7 +382,123 @@ namespace Framework::Launcher {
         return true;
     }
 
-    bool Project::Run() {
+    DLLInjectionResults InjectLibraryIntoProcess(HANDLE hProcess, const wchar_t *szLibraryPath) {
+        DLLInjectionResults result = INJECT_LIBRARY_RESULT_OK;
+
+        // Get the length of the library path
+        size_t sLibraryPathLen = (wcslen(szLibraryPath) + 1);
+
+        // Allocate the a block of memory in our target process for the library path
+        void *pRemoteLibraryPath = VirtualAllocEx(hProcess, NULL, sLibraryPathLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+
+        // Write our library path to the allocated block of memory
+        SIZE_T sBytesWritten = 0;
+        WriteProcessMemory(hProcess, pRemoteLibraryPath, (void *)szLibraryPath, sLibraryPathLen, &sBytesWritten);
+
+        if (sBytesWritten != sLibraryPathLen) {
+            result = INJECT_LIBRARY_RESULT_WRITE_FAILED;
+        }
+        else {
+            // Get the handle of Kernel32.dll
+            HMODULE hKernel32 = GetModuleHandle("Kernel32");
+
+            // Get the address of the LoadLibraryA function from Kernel32.dll
+            FARPROC pfnLoadLibraryA = GetProcAddress(hKernel32, "LoadLibraryA");
+
+            // Create a thread inside the target process to load our library
+            HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pfnLoadLibraryA, pRemoteLibraryPath, 0, NULL);
+
+            if (hThread) {
+                // Wait for the created thread to end
+                WaitForSingleObject(hThread, INFINITE);
+
+                DWORD dwExitCode = 0;
+                if (GetExitCodeThread(hThread, &dwExitCode)) {
+                    // Should never happen as we wait for the thread to be finished.
+                    assert(dwExitCode != STILL_ACTIVE);
+                }
+                else {
+                    result = INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
+                }
+
+                // In case LoadLibrary returns handle equal to zero there was some problem.
+                if (dwExitCode == 0) {
+                    result = INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
+                }
+
+                // Close our thread handle
+                CloseHandle(hThread);
+            }
+            else {
+                // Thread creation failed
+                result = INJECT_LIBRARY_THREAD_CREATION_FAILED;
+            }
+        }
+
+        // Free the allocated block of memory inside the target process
+        VirtualFreeEx(hProcess, pRemoteLibraryPath, 0, MEM_RELEASE);
+        return result;
+    }
+
+    DLLInjectionResults InjectLibraryIntoProcess(DWORD dwProcessId, const wchar_t *szLibraryPath) {
+        // Open our target process
+        HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+
+        if (!hProcess) {
+            // Failed to open the process
+            return INJECT_LIBRARY_OPEN_PROCESS_FAIL;
+        }
+
+        // Inject the library into the process
+        DLLInjectionResults result = InjectLibraryIntoProcess(hProcess, szLibraryPath);
+
+        // Close the process handle
+        CloseHandle(hProcess);
+        return result;
+    }
+
+    bool Project::RunWithDLLInjection() {
+        // Method cannot be called directly
+        if (_gamePath.empty()) {
+            MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        gImagePath = _gamePath.c_str();
+        gDllName   = _config.destinationDllName.c_str();
+
+        // Prepare startup info
+        STARTUPINFOW siStartupInfo;
+        PROCESS_INFORMATION piProcessInfo;
+        memset(&siStartupInfo, 0, sizeof(siStartupInfo));
+        memset(&piProcessInfo, 0, sizeof(piProcessInfo));
+        siStartupInfo.cb = sizeof(siStartupInfo);
+
+        // Create the game process and suspend it
+        if (!CreateProcessW(NULL, (LPWSTR)_gamePath.c_str(), NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, gProjectDllPath, &siStartupInfo, &piProcessInfo)) {
+            MessageBoxA(nullptr, "Failed to start game binary, cannot launch", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
+        // Inject the client dll inside
+        std::wstring completeDllPAth                 = gProjectDllPath + std::wstring(L"\\") + gDllName;
+        const DLLInjectionResults moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPAth.c_str());
+
+        // Was it successfull?
+        if (moduleInjectResult != INJECT_LIBRARY_RESULT_OK) {
+            MessageBoxA(nullptr, "Failed to inject module into game process", _config.name.c_str(), MB_ICONERROR);
+
+            TerminateProcess(piProcessInfo.hProcess, 0);
+            return false;
+        }
+
+        // Resume the game main thread
+        ResumeThread(piProcessInfo.hThread);
+
+        return true;
+    }
+
+    bool Project::RunWithPELoading() {
         // Method cannot be called directly
         if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);

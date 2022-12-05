@@ -11,10 +11,8 @@
 
 __declspec(thread) uint8_t tls1[sizeof(int) * 17600];
 
-#include <Windows.h>
-
-extern "C" extern uint8_t _tls_start;
-extern "C" extern uint32_t _tls_index;
+extern "C" uint8_t _tls_start;
+extern "C" uint32_t _tls_index;
 
 class TlsActivation {
   public:

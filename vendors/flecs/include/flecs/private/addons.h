@@ -94,9 +94,15 @@
 #include "flecs/addons/log.h"
 
 #ifdef FLECS_MONITOR
+#ifndef FLECS_STATS
 #define FLECS_STATS
+#endif
+#ifndef FLECS_SYSTEM
 #define FLECS_SYSTEM
+#endif
+#ifndef FLECS_TIMER
 #define FLECS_TIMER
+#endif
 #endif
 
 #ifdef FLECS_APP
@@ -160,7 +166,9 @@
 #include "../addons/json.h"
 #endif
 #if defined(FLECS_EXPR) || defined(FLECS_META_C)
+#ifndef FLECS_META
 #define FLECS_META
+#endif
 #endif
 #ifdef FLECS_UNITS
 #ifdef FLECS_NO_UNITS

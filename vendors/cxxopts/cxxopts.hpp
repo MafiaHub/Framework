@@ -22,6 +22,8 @@ THE SOFTWARE.
 
 */
 
+#define CXXOPTS_NO_RTTI
+
 #ifndef CXXOPTS_HPP_INCLUDED
 #define CXXOPTS_HPP_INCLUDED
 
@@ -2243,6 +2245,7 @@ OptionParser::parse(int argc, const char* const* argv)
           {
             if (m_allow_unrecognised)
             {
+              unmatched.push_back(std::string("-") + s[i]);
               continue;
             }
             //error

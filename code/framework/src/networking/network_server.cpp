@@ -38,7 +38,7 @@ namespace Framework::Networking {
                 _onPlayerConnectCallback(packet);
             }
             return true;
-        } break;
+        };
 
         case ID_DISCONNECTION_NOTIFICATION: {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
@@ -46,14 +46,14 @@ namespace Framework::Networking {
                 _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
             }
             return true;
-        } break;
+        };
         case ID_CONNECTION_LOST: {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::LOST);
             }
             return true;
-        } break;
+        };
         default:
             break;
         }
@@ -72,5 +72,27 @@ namespace Framework::Networking {
 
     int NetworkServer::GetPing(SLNet::RakNetGUID guid) {
         return _peer->GetAveragePing(guid);
+    }
+    bool NetworkServer::SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, SLNet::RakNetGUID guid, SLNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) {
+        const auto ent = world->WrapEntity(ent_id);
+
+        if (!ent.is_alive()) {
+            return false;
+        }
+
+        const auto streamers = world->FindVisibleStreamers(ent);
+
+        for (const auto &streamer_ent : streamers) {
+            const auto streamer = streamer_ent.get<World::Modules::Base::Streamer>();
+            if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+                continue;
+            }
+            if (streamer->guid == excludeGUID.g) {
+                continue;
+            }
+            _peer->Send(&bs, priority, reliability, 0, SLNet::RakNetGUID(streamer->guid), false);
+        }
+
+        return true;
     }
 } // namespace Framework::Networking
