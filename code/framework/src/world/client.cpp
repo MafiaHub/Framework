@@ -8,8 +8,8 @@
 
 #include "client.h"
 
-#include "game_rpc/set_transform.h"
 #include "game_rpc/set_frame.h"
+#include "game_rpc/set_transform.h"
 
 #include <optick.h>
 

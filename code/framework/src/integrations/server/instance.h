@@ -15,8 +15,8 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
-#include "scripting/server.h"
 #include "scripting/engines/callback.h"
+#include "scripting/server.h"
 #include "utils/config.h"
 #include "world/server.h"
 
@@ -63,9 +63,6 @@ namespace Framework::Integrations::Server {
         std::string firebaseProjectId;
         std::string firebaseAppId;
         std::string firebaseApiKey;
-
-        // scripting
-        Framework::Scripting::Engines::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
@@ -100,6 +97,7 @@ namespace Framework::Integrations::Server {
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectCallback;
+
       public:
         Instance();
         ~Instance();
@@ -112,6 +110,8 @@ namespace Framework::Integrations::Server {
         virtual void PostUpdate() {}
 
         virtual void PreShutdown() {}
+
+        virtual void ModuleRegister(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {}
 
         void Update();
 
