@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -12,11 +12,11 @@
 #include "../resource.h"
 
 #include <glm/glm.hpp>
-#include <v8pp/module.hpp>
 #include <v8pp/class.hpp>
+#include <v8pp/module.hpp>
 
-#include <list>
 #include <iomanip>
+#include <list>
 #include <sstream>
 
 namespace Framework::Scripting::Engines::Node::Builtins {
@@ -56,22 +56,22 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             _data += newVec;
         }
 
-        void Sub(double x, double y){
+        void Sub(double x, double y) {
             glm::vec2 newVec(x, y);
             _data -= newVec;
         }
 
-        void Mul(double x, double y){
+        void Mul(double x, double y) {
             glm::vec2 newVec(x, y);
             _data *= newVec;
         }
 
-        void Div(double x, double y){
+        void Div(double x, double y) {
             glm::vec2 newVec(x, y);
             _data /= newVec;
         }
 
-        void Lerp(double x, double y, double f){
+        void Lerp(double x, double y, double f) {
             glm::vec2 newVec(x, y);
             _data = glm::mix(_data, newVec, static_cast<float>(f));
         }
@@ -97,4 +97,4 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             rootModule->class_("Vector2", cls);
         }
     };
-} // namespace Framework::Scripting::Builtins
+} // namespace Framework::Scripting::Engines::Node::Builtins

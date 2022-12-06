@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -38,7 +38,8 @@ MODULE(job_system, {
                 if (counter == 0) {
                     counter = 1;
                     return false;
-                } else if (counter == 1) {
+                }
+                else if (counter == 1) {
                     counter = 42;
                 }
                 return true;

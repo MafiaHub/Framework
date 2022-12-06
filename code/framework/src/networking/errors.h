@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <cstdint>
+#include <unordered_map>
 
 namespace Framework::Networking {
     enum ServerError { SERVER_NONE, SERVER_PEER_FAILED, SERVER_PEER_NULL };

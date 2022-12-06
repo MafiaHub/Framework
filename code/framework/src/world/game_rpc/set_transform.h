@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -15,8 +15,9 @@ namespace Framework::World::RPC {
     class SetTransform final: public Networking::RPC::IGameRPC<SetTransform> {
       private:
         World::Modules::Base::Transform _transform;
+
       public:
-        void FromParameters(const World::Modules::Base::Transform& tr) {
+        void FromParameters(const World::Modules::Base::Transform &tr) {
             _transform = tr;
         }
 

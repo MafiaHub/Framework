@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -65,7 +65,7 @@ namespace Framework::Scripting {
         _engine->Update();
 
         // Manually tick the resources since the engine is not handling that very specific part (poor arch design)
-        for (auto res: _resources) {
+        for (auto res : _resources) {
             res.second->Update(true);
         }
     }
@@ -77,7 +77,9 @@ namespace Framework::Scripting {
             return;
         }
 
-        for (auto it = dir.begin(); it != dir.end(); ++it) { LoadResource(*it); }
+        for (auto it = dir.begin(); it != dir.end(); ++it) {
+            LoadResource(*it);
+        }
     }
 
     void Module::UnloadAllResources() {
@@ -87,7 +89,9 @@ namespace Framework::Scripting {
             return;
         }
 
-        for (auto it = dir.begin(); it != dir.end(); ++it) { UnloadResource(*it); }
+        for (auto it = dir.begin(); it != dir.end(); ++it) {
+            UnloadResource(*it);
+        }
     }
 
     bool Module::LoadResource(std::string name) {

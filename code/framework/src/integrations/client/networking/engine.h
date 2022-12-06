@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -13,7 +13,7 @@
 namespace Framework::Integrations::Client::Networking {
     class Engine {
       private:
-        std::unique_ptr<Framework::Networking::NetworkClient> _networkClient{};
+        std::unique_ptr<Framework::Networking::NetworkClient> _networkClient {};
 
       public:
         Engine();

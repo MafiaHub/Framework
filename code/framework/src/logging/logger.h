@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -11,9 +11,9 @@
 #include <chrono>
 #include <map>
 #include <spdlog/async.h>
+#include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/spdlog.h>
 #include <unordered_map>
-#include <spdlog/sinks/ringbuffer_sink.h>
 
 #define FRAMEWORK_INNER_NETWORKING   "Networking"
 #define FRAMEWORK_INNER_SCRIPTING    "Scripting"

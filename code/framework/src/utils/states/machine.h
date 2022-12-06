@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -36,7 +36,7 @@ namespace Framework::Utils::States {
 
         bool RequestNextState(int32_t);
 
-        template<typename T>
+        template <typename T>
         void RegisterState() {
             auto ptr = std::make_shared<T>();
             _states.insert(std::make_pair(ptr->GetId(), ptr));

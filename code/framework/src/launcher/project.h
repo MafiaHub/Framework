@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,9 +8,8 @@
 
 #pragma once
 
-
-#include "utils/minidump.h"
 #include "utils/config.h"
+#include "utils/minidump.h"
 #include <external/steam/wrapper.h>
 
 #include <Windows.h>
@@ -22,7 +21,7 @@
 
 namespace Framework::Launcher {
     enum class ProjectPlatform { CLASSIC, STEAM };
-    enum class ProjectLaunchType {PE_LOADING, DLL_INJECTION};
+    enum class ProjectLaunchType { PE_LOADING, DLL_INJECTION };
 
     enum DLLInjectionResults {
         INJECT_LIBRARY_RESULT_OK,
@@ -44,8 +43,8 @@ namespace Framework::Launcher {
         std::string name;
         ProjectPlatform platform;
         ProjectLaunchType launchType = ProjectLaunchType::PE_LOADING;
-        AppId_t steamAppId  = 430;
-        uintptr_t loadLimit = SIZE_MAX;
+        AppId_t steamAppId           = 430;
+        uintptr_t loadLimit          = SIZE_MAX;
 
         // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
         bool loadClientManually = false;

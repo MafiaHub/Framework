@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -25,7 +25,7 @@ namespace Framework::Networking::Messages {
             return GAME_CONNECTION_HANDSHAKE;
         }
 
-        void FromParameters(const std::string& playerName, const std::string& playerSteamId, const std::string& playerDiscordId, const std::string& clientVersion) {
+        void FromParameters(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId, const std::string &clientVersion) {
             _playerName      = SLNet::RakString(playerName.c_str());
             _playerSteamId   = SLNet::RakString(playerSteamId.c_str());
             _playerDiscordId = SLNet::RakString(playerDiscordId.c_str());

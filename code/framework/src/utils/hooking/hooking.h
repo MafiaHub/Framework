@@ -1,7 +1,7 @@
 /*
  * MafiaHub OSS license
  * Copyright (c) 2020, CitizenFX
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -88,7 +88,7 @@ namespace hook {
 #if defined(_M_IX86)
         LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
 #elif defined(_M_AMD64)
-        LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
+        LPVOID *tlsBase       = (LPVOID *)__readgsqword(0x58);
 #endif
 
         return (T)tlsBase[*tlsIndex];
@@ -452,13 +452,13 @@ namespace hook {
         }
     };
 
-#define DEFINE_INJECT_HOOK(hookName, hookAddress)                                                                                                                                  \
-    class _zz_inject_hook_##hookName: public hook::inject_hook {                                                                                                                   \
-      public:                                                                                                                                                                      \
-        _zz_inject_hook_##hookName(uint32_t address): hook::inject_hook(address) {};                                                                                               \
-        ReturnType run();                                                                                                                                                          \
-    };                                                                                                                                                                             \
-    static _zz_inject_hook_##hookName hookName(hookAddress);                                                                                                                       \
+#define DEFINE_INJECT_HOOK(hookName, hookAddress)                                                                                                                                                                                                                                      \
+    class _zz_inject_hook_##hookName: public hook::inject_hook {                                                                                                                                                                                                                       \
+      public:                                                                                                                                                                                                                                                                          \
+        _zz_inject_hook_##hookName(uint32_t address): hook::inject_hook(address) {};                                                                                                                                                                                                   \
+        ReturnType run();                                                                                                                                                                                                                                                              \
+    };                                                                                                                                                                                                                                                                                 \
+    static _zz_inject_hook_##hookName hookName(hookAddress);                                                                                                                                                                                                                           \
     _zz_inject_hook_##hookName::ReturnType _zz_inject_hook_##hookName::run()
 #endif
 

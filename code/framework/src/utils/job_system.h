@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -29,7 +29,7 @@ namespace Framework::Utils {
 
         bool Shutdown();
 
-        void EnqueueJob(const JobProc& job, JobPriority priority = JobPriority::Normal, bool repeatOnFail = false);
+        void EnqueueJob(const JobProc &job, JobPriority priority = JobPriority::Normal, bool repeatOnFail = false);
 
         bool IsQueueEmpty(JobPriority priority);
 

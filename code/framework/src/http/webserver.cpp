@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -65,9 +65,9 @@ namespace Framework::HTTP {
         mg_http_listen(&_manager, address.c_str(), &HandleWebRequest, this);
 
         _webThread = std::thread([this]() {
-            //OPTICK_THREAD("WebWorker");
+            // OPTICK_THREAD("WebWorker");
             while (this->_running) {
-                //OPTICK_EVENT();
+                // OPTICK_EVENT();
                 mg_mgr_poll(&_manager, 1000);
             }
         });
@@ -86,7 +86,7 @@ namespace Framework::HTTP {
         return true;
     }
 
-    void Webserver::RegisterRequest(const char *path, const RequestCallback& callback) {
+    void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) {
         if (strlen(path) > 0 && callback) {
             _registeredRequestCallback.insert({path, callback});
             Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Registered request callback for path: {}", path);

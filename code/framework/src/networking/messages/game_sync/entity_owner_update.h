@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -24,7 +24,7 @@ namespace Framework::Networking::Messages {
         }
 
         void FromParameters(uint64_t owner) {
-            _owner     = owner;
+            _owner = owner;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

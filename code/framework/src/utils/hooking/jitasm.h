@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -418,11 +418,7 @@ namespace jitasm {
             /// NONE
             Opd(): opdtype_(O_TYPE_NONE) {}
             /// REG
-            Opd(OpdSize opdsize, const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF)
-                : opdtype_(O_TYPE_REG)
-                , opdsize_(static_cast<uint8>(opdsize))
-                , reg_(reg)
-                , reg_assignable_(reg_assignable) {}
+            Opd(OpdSize opdsize, const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF): opdtype_(O_TYPE_REG), opdsize_(static_cast<uint8>(opdsize)), reg_(reg), reg_assignable_(reg_assignable) {}
             /// MEM
             Opd(OpdSize opdsize, OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp)
                 : opdtype_(O_TYPE_MEM)
@@ -521,8 +517,7 @@ namespace jitasm {
                     return reg_ == rhs.reg_ && reg_assignable_ == rhs.reg_assignable_;
                 }
                 if (IsMem()) {
-                    return base_ == rhs.base_ && index_ == rhs.index_ && scale_ == rhs.scale_ && disp_ == rhs.disp_ && base_size_ == rhs.base_size_
-                           && index_size_ == rhs.index_size_;
+                    return base_ == rhs.base_ && index_ == rhs.index_ && scale_ == rhs.scale_ && disp_ == rhs.disp_ && base_size_ == rhs.base_size_ && index_size_ == rhs.index_size_;
                 }
                 if (IsImm()) {
                     return imm_ == rhs.imm_;
@@ -623,8 +618,7 @@ namespace jitasm {
             /// REG
             explicit OpdT(const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF): Opd(ToOpdSize<Size>(), reg, reg_assignable) {}
             /// MEM
-            OpdT(OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-                : Opd(ToOpdSize<Size>(), base_size, index_size, base, index, scale, disp) {}
+            OpdT(OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp): Opd(ToOpdSize<Size>(), base_size, index_size, base, index, scale, disp) {}
 
           protected:
             /// IMM
@@ -2007,8 +2001,8 @@ namespace jitasm {
         uint32 encoding_flag_;               ///< EncodingFlags
         detail::Opd opd_[MAX_OPERAND_COUNT]; ///< Operands
 
-        Instr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(), const detail::Opd &opd2 = detail::Opd(),
-            const detail::Opd &opd3 = detail::Opd(), const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(), const detail::Opd &opd6 = detail::Opd())
+        Instr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(), const detail::Opd &opd2 = detail::Opd(), const detail::Opd &opd3 = detail::Opd(), const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(),
+            const detail::Opd &opd6 = detail::Opd())
             : id_(id)
             , opcode_(opcode)
             , encoding_flag_(encoding_flag) {
@@ -2814,8 +2808,7 @@ namespace jitasm {
             for (InstrList::iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
                 Instr &instr = *it;
                 if (IsJump(instr.GetID())) {
-                    instr =
-                        Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8(0x7F), Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
+                    instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8(0x7F), Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
                 }
             }
 
@@ -2899,13 +2892,17 @@ namespace jitasm {
 
             // Count total size of machine code
             Backend pre;
-            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) { pre.Assemble(*it); }
+            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
+                pre.Assemble(*it);
+            }
             size_t codesize = pre.GetSize();
 
             // Write machine code to the buffer
             codebuff_.Reset(codesize);
             Backend backend(codebuff_.GetPointer(), codebuff_.GetBufferSize());
-            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) { backend.Assemble(*it); }
+            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
+                backend.Assemble(*it);
+            }
 
             InstrList().swap(instrs_);
             LabelList().swap(labels_);
@@ -2925,8 +2922,8 @@ namespace jitasm {
             return codebuff_.GetCodeSize();
         }
 
-        void AppendInstr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(), const detail::Opd &opd2 = detail::Opd(),
-            const detail::Opd &opd3 = detail::Opd(), const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(), const detail::Opd &opd6 = detail::Opd()) {
+        void AppendInstr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(), const detail::Opd &opd2 = detail::Opd(), const detail::Opd &opd3 = detail::Opd(), const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(),
+            const detail::Opd &opd6 = detail::Opd()) {
             instrs_.push_back(Instr(id, opcode, encoding_flag, opd1, opd2, opd3, opd4, opd5, opd6));
         }
 
@@ -4604,8 +4601,7 @@ namespace jitasm {
             AppendInstr(I_MOV, 0x8B, E_REXW_PREFIX, W(dst), R(src));
         }
         void mov(const Reg64 &dst, const Imm64 &imm) {
-            detail::IsInt32(imm.GetImm()) ? AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), Imm32((sint32)imm.GetImm()))
-                                          : AppendInstr(I_MOV, 0xB8, E_REXW_PREFIX, W(dst), imm);
+            detail::IsInt32(imm.GetImm()) ? AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), Imm32((sint32)imm.GetImm())) : AppendInstr(I_MOV, 0xB8, E_REXW_PREFIX, W(dst), imm);
         }
         void mov(const Mem64 &dst, const Imm32 &imm) {
             AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), imm);
@@ -6043,31 +6039,21 @@ namespace jitasm {
         void xlatb() {
             AppendInstr(I_XLATB, 0xD7, 0, Dummy(RW(al)), Dummy(R(ebx)));
         }
-        void xor (const Reg8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, E_SPECIAL, Imm8(6), RW(dst), imm); } void
-            xor (const Mem8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, 0, Imm8(6), RW(dst), imm); } void
-            xor (const Reg16 &dst,
-                const Imm16
-                    &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
-            xor (const Mem16 &dst,
-                const Imm16 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+        void xor (const Reg8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, E_SPECIAL, Imm8(6), RW(dst), imm); } void xor (const Mem8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, 0, Imm8(6), RW(dst), imm); } void
+            xor (const Reg16 &dst, const Imm16 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Mem16 &dst, const Imm16 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
             xor (const Reg32 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
-            xor (const Mem32 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
-            xor (const Reg8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void
-            xor (const Mem8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x30, 0, R(src), RW(dst)); } void
-            xor (const Reg8 &dst, const Mem8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void
-            xor (const Reg16 &dst, const Reg16 &src) { AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src)); } void
-            xor (const Mem16 &dst, const Reg16 &src) { AppendInstr(I_XOR, 0x31, E_OPERAND_SIZE_PREFIX, R(src), RW(dst)); } void
-            xor (const Reg16 &dst, const Mem16 &src) { AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src)); } void
-            xor (const Reg32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); } void
+            xor (const Mem32 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void xor (const Reg8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void
+            xor (const Mem8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x30, 0, R(src), RW(dst)); } void xor (const Reg8 &dst, const Mem8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void
+            xor (const Reg16 &dst, const Reg16 &src) { AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src)); } void xor (const Mem16 &dst, const Reg16 &src) { AppendInstr(I_XOR, 0x31, E_OPERAND_SIZE_PREFIX, R(src), RW(dst)); } void
+            xor (const Reg16 &dst, const Mem16 &src) { AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src)); } void xor (const Reg32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); } void
             xor (const Mem32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x31, 0, R(src), RW(dst)); } void
             xor (const Reg32 &dst, const Mem32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); }
 #ifdef JITASM64
             void
-            xor (const Reg64 &dst,
-                const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Reg64 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
             xor (const Mem64 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
-            xor (const Reg64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); } void
-            xor (const Mem64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x31, E_REXW_PREFIX, R(src), RW(dst)); } void
+            xor (const Reg64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); } void xor (const Mem64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x31, E_REXW_PREFIX, R(src), RW(dst)); } void
             xor (const Reg64 &dst, const Mem64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); }
 #endif
 
@@ -13883,7 +13869,9 @@ namespace jitasm {
 
             size_t count_bit() const {
                 size_t count = 0;
-                for (size_t i = 0; i < size(); ++i) { count += detail::Count1Bits(at(i)); }
+                for (size_t i = 0; i < size(); ++i) {
+                    count += detail::Count1Bits(at(i));
+                }
                 return count;
             }
 
@@ -13914,12 +13902,16 @@ namespace jitasm {
             void set_union(const BitVector &rhs) {
                 if (size() < rhs.size())
                     resize(rhs.size());
-                for (size_t i = 0; i < rhs.size(); ++i) { at(i) |= rhs[i]; }
+                for (size_t i = 0; i < rhs.size(); ++i) {
+                    at(i) |= rhs[i];
+                }
             }
 
             void set_subtract(const BitVector &rhs) {
                 const size_t min_size = size() < rhs.size() ? size() : rhs.size();
-                for (size_t i = 0; i < min_size; ++i) { at(i) &= ~rhs[i]; }
+                for (size_t i = 0; i < min_size; ++i) {
+                    at(i) &= ~rhs[i];
+                }
             }
         };
 
@@ -14139,15 +14131,13 @@ namespace jitasm {
                 std::vector<int> assignment_table;   ///< Register assignment table
 
                 Interval(size_t instr_idx, const std::vector<uint32> &assignables): instr_idx_offset(instr_idx), reg_assignables(assignables) {}
-                Interval(size_t instr_idx, const BitVector &l, const BitVector &s, const std::vector<uint32> &assignables)
-                    : instr_idx_offset(instr_idx)
-                    , liveness(l)
-                    , spill(s)
-                    , reg_assignables(assignables) {}
+                Interval(size_t instr_idx, const BitVector &l, const BitVector &s, const std::vector<uint32> &assignables): instr_idx_offset(instr_idx), liveness(l), spill(s), reg_assignables(assignables) {}
 
                 void UpdateUse(size_t var, RegUsePointRange &range, const Interval *next_interval) {
                     // step range
-                    while (!range.empty() && range.first->instr_idx < instr_idx_offset) { ++range.first; }
+                    while (!range.empty() && range.first->instr_idx < instr_idx_offset) {
+                        ++range.first;
+                    }
 
                     // check if variables used in this interval
                     const bool used = !range.empty() && (!next_interval || range.first->instr_idx < next_interval->instr_idx_offset);
@@ -14209,7 +14199,9 @@ namespace jitasm {
 
                 RegUsePoint use_point(instr_idx, opd_type, reg_assignable);
                 std::vector<RegUsePoint>::reverse_iterator it = use_points[reg.id].rbegin();
-                while (it != use_points[reg.id].rend() && use_point < *it) { ++it; }
+                while (it != use_points[reg.id].rend() && use_point < *it) {
+                    ++it;
+                }
                 use_points[reg.id].insert(it.base(), use_point);
             }
 
@@ -14233,7 +14225,9 @@ namespace jitasm {
                 // initialize use_points ranges
                 std::vector<RegUsePointRange> use_points_ranges;
                 use_points_ranges.reserve(use_points.size());
-                for (size_t i = 0; i < use_points.size(); ++i) { use_points_ranges.push_back(RegUsePointRange(use_points[i])); }
+                for (size_t i = 0; i < use_points.size(); ++i) {
+                    use_points_ranges.push_back(RegUsePointRange(use_points[i]));
+                }
 
                 // build interval
                 BitVector *last_liveness = NULL;
@@ -14337,12 +14331,13 @@ namespace jitasm {
             };
 
             /// Spill identification
-            void SpillIdentification(
-                uint32 available_reg_count, const std::vector<int> &total_spill_cost, int freq, const Interval *last_interval, std::vector<VarAttribute> &var_attrs) {
+            void SpillIdentification(uint32 available_reg_count, const std::vector<int> &total_spill_cost, int freq, const Interval *last_interval, std::vector<VarAttribute> &var_attrs) {
                 // initialize use_points ranges
                 std::vector<RegUsePointRange> interval_use_points;
                 interval_use_points.reserve(use_points.size());
-                for (size_t i = 0; i < use_points.size(); ++i) { interval_use_points.push_back(RegUsePointRange(use_points[i])); }
+                for (size_t i = 0; i < use_points.size(); ++i) {
+                    interval_use_points.push_back(RegUsePointRange(use_points[i]));
+                }
 
                 std::vector<size_t> live_vars;
                 std::vector<int> cur_spill_cost;
@@ -14514,10 +14509,9 @@ namespace jitasm {
                     uint32 cur_avail              = available_reg;
                     const size_t num_of_live_vars = live_vars.size();
                     for (size_t i = 0; i < live_vars.size(); ++i) {
-                        const size_t var     = live_vars[i];
-                        const bool first_try = (i < num_of_live_vars); // Try to assign for the first time
-                        const uint32 reg_assignable =
-                            first_try && var < cur_interval->reg_assignables.size() ? cur_interval->reg_assignables[var] : 0xFFFFFFFF; // Ignore constraint if it is retried
+                        const size_t var            = live_vars[i];
+                        const bool first_try        = (i < num_of_live_vars);                                                                                    // Try to assign for the first time
+                        const uint32 reg_assignable = first_try && var < cur_interval->reg_assignables.size() ? cur_interval->reg_assignables[var] : 0xFFFFFFFF; // Ignore constraint if it is retried
                         JITASM_ASSERT((cur_avail & reg_assignable) != 0);
                         int assigned_reg = -1;
                         if (var < NUM_OF_PHYSICAL_REG && first_try) {
@@ -14574,7 +14568,9 @@ namespace jitasm {
             void DumpIntervals(size_t block_id, bool dump_assigned_reg) const {
                 avoid_unused_warn(block_id);
                 JITASM_TRACE("---- Block%d ----\n", block_id);
-                for (size_t i = 0; i < intervals.size(); ++i) { intervals[i].Dump(dump_assigned_reg); }
+                for (size_t i = 0; i < intervals.size(); ++i) {
+                    intervals[i].Dump(dump_assigned_reg);
+                }
             }
         };
 
@@ -14590,13 +14586,7 @@ namespace jitasm {
             size_t loop_depth;               ///< Loop nesting depth
             Lifetime lifetime[3];            ///< Variable lifetime (0: GP, 1: MMX, 2: XMM/YMM)
 
-            BasicBlock(size_t instr_begin_, size_t instr_end_, BasicBlock *successor0 = NULL, BasicBlock *successor1 = NULL)
-                : instr_begin(instr_begin_)
-                , instr_end(instr_end_)
-                , depth((size_t)-1)
-                , dfs_parent(NULL)
-                , immediate_dominator(NULL)
-                , loop_depth(0) {
+            BasicBlock(size_t instr_begin_, size_t instr_end_, BasicBlock *successor0 = NULL, BasicBlock *successor1 = NULL): instr_begin(instr_begin_), instr_end(instr_end_), depth((size_t)-1), dfs_parent(NULL), immediate_dominator(NULL), loop_depth(0) {
                 successor[0] = successor0;
                 successor[1] = successor1;
             }
@@ -14809,7 +14799,9 @@ namespace jitasm {
 
                 // Set loop depth
                 for (std::vector<std::pair<size_t, size_t> >::iterator it = backedges.begin(); it != backedges.end(); ++it) {
-                    for (size_t i = it->second; i <= it->first; ++i) { depth_first_blocks_[i]->loop_depth++; }
+                    for (size_t i = it->second; i <= it->first; ++i) {
+                        depth_first_blocks_[i]->loop_depth++;
+                    }
                 }
             }
 
@@ -14870,7 +14862,9 @@ namespace jitasm {
             }
 
             void clear() {
-                for (BlockList::iterator it = blocks_.begin(); it != blocks_.end(); ++it) { delete *it; }
+                for (BlockList::iterator it = blocks_.begin(); it != blocks_.end(); ++it) {
+                    delete *it;
+                }
                 blocks_.clear();
                 depth_first_blocks_.clear();
             }
@@ -14915,8 +14909,7 @@ namespace jitasm {
                             }
                         }
                     }
-                    JITASM_TRACE("\tnode%d[label=\"Block%d\\ninstruction %d - %d\\nloop depth %d\\n%s\\n%s\"];\n", block->instr_begin, block->depth, block->instr_begin,
-                        block->instr_end - 1, block->loop_depth, live_in.c_str(), live_out.c_str());
+                    JITASM_TRACE("\tnode%d[label=\"Block%d\\ninstruction %d - %d\\nloop depth %d\\n%s\\n%s\"];\n", block->instr_begin, block->depth, block->instr_begin, block->instr_end - 1, block->loop_depth, live_in.c_str(), live_out.c_str());
                     int constraint = 0;
                     avoid_unused_warn(constraint);
                     if (block->successor[0])
@@ -14940,7 +14933,9 @@ namespace jitasm {
                 for (size_t instr_idx = 0; instr_idx < f.instrs_.size(); ++instr_idx) {
                     InstrID instr_id = f.instrs_[instr_idx].GetID();
                     if (Frontend::IsJump(instr_id) || instr_id == I_RET || instr_id == I_IRET) {
-                        while (blocks_[block_idx]->instr_end <= instr_idx) { ++block_idx; }
+                        while (blocks_[block_idx]->instr_end <= instr_idx) {
+                            ++block_idx;
+                        }
                         BasicBlock *cur_block = blocks_[block_idx];
                         JITASM_ASSERT(block_idx == std::distance(blocks_.begin(), get_block(instr_idx)));
 
@@ -14987,7 +14982,9 @@ namespace jitasm {
                 MakeDepthFirstBlocks(*get_block(0));
 
                 // Numbering depth
-                for (size_t i = 0; i < depth_first_blocks_.size(); ++i) { depth_first_blocks_[i]->depth = i; }
+                for (size_t i = 0; i < depth_first_blocks_.size(); ++i) {
+                    depth_first_blocks_[i]->depth = i;
+                }
 
                 // Detect loops
                 DetectLoops();
@@ -15042,8 +15039,7 @@ namespace jitasm {
 
             for (Frontend::InstrList::iterator it = instrs.begin(); it != instrs.end(); ++it) {
                 const InstrID instr_id = it->GetID();
-                if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG || instr_id == I_COMPILER_DECLARE_RESULT_REG || instr_id == I_COMPILER_PROLOG
-                    || instr_id == I_COMPILER_EPILOG) {
+                if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG || instr_id == I_COMPILER_DECLARE_RESULT_REG || instr_id == I_COMPILER_PROLOG || instr_id == I_COMPILER_EPILOG) {
                     compile_process = true;
                 }
 
@@ -15096,9 +15092,8 @@ namespace jitasm {
             // Instructions
             // SUB, SBB, XOR, PXOR, XORPS, XORPD, PANDN, PSUBxx, PCMPxx
             const InstrID id = instr.GetID();
-            if (id == I_SUB || id == I_SBB || id == I_XOR || id == I_PXOR || id == I_XORPS || id == I_XORPD || id == I_PANDN || id == I_PSUBB || id == I_PSUBW || id == I_PSUBD
-                || id == I_PSUBQ || id == I_PSUBSB || id == I_PSUBSW || id == I_PSUBUSB || id == I_PSUBUSW || id == I_PCMPEQB || id == I_PCMPEQW || id == I_PCMPEQD
-                || id == I_PCMPEQQ || id == I_PCMPGTB || id == I_PCMPGTW || id == I_PCMPGTD || id == I_PCMPGTQ) {
+            if (id == I_SUB || id == I_SBB || id == I_XOR || id == I_PXOR || id == I_XORPS || id == I_XORPD || id == I_PANDN || id == I_PSUBB || id == I_PSUBW || id == I_PSUBD || id == I_PSUBQ || id == I_PSUBSB || id == I_PSUBSW || id == I_PSUBUSB || id == I_PSUBUSW
+                || id == I_PCMPEQB || id == I_PCMPEQW || id == I_PCMPEQD || id == I_PCMPEQQ || id == I_PCMPGTB || id == I_PCMPGTW || id == I_PCMPGTD || id == I_PCMPGTQ) {
                 // source and destination operands are the same register.
                 // 8bit or 16bit register cannot break dependence.
                 const detail::Opd &opd0 = instr.GetOpd(0);
@@ -15176,15 +15171,13 @@ namespace jitasm {
                         block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), type, O_SIZE_32, 0xFFFFFFFF);
                         block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESI), type, O_SIZE_32, 0xFFFFFFFF);
                         block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EDI), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESP), static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ | O_TYPE_WRITE), O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESP), static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ | O_TYPE_WRITE), O_SIZE_32, 0xFFFFFFFF);
                     }
                     else if (instr.GetID() == I_VZEROALL || instr.GetID() == I_VZEROUPPER) {
                         // Add use point of vzeroall/vzeroupper
                         const OpdType type = static_cast<OpdType>(O_TYPE_REG | (instr.GetID() == I_VZEROALL ? O_TYPE_WRITE : O_TYPE_READ | O_TYPE_WRITE));
                         for (int j = 0; j < NUM_OF_PHYSICAL_REG; ++j) {
-                            block->GetLifetime(R_TYPE_YMM)
-                                .AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_YMM, static_cast<PhysicalRegID>(YMM0 + j)), type, O_SIZE_256, 0xFFFFFFFF);
+                            block->GetLifetime(R_TYPE_YMM).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_YMM, static_cast<PhysicalRegID>(YMM0 + j)), type, O_SIZE_256, 0xFFFFFFFF);
                         }
                     }
                     else {
@@ -15201,14 +15194,12 @@ namespace jitasm {
                                 // Memory operand
                                 const RegID &base = opd.GetBase();
                                 if (!base.IsInvalid()) {
-                                    block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                                        instr_offset, base, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ), opd.GetAddressBaseSize(), 0xFFFFFFFF);
+                                    block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, base, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ), opd.GetAddressBaseSize(), 0xFFFFFFFF);
                                     var_manager.UpdateVarSize(R_TYPE_GP, base.id, opd.GetAddressBaseSize());
                                 }
                                 const RegID &index = opd.GetIndex();
                                 if (!index.IsInvalid()) {
-                                    block->GetLifetime(index.GetType())
-                                        .AddUsePoint(instr_offset, index, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ), opd.GetAddressIndexSize(), 0xFFFFFFFF);
+                                    block->GetLifetime(index.GetType()).AddUsePoint(instr_offset, index, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ), opd.GetAddressIndexSize(), 0xFFFFFFFF);
                                     var_manager.UpdateVarSize(index.GetType(), index.id, opd.GetAddressIndexSize());
                                 }
                             }
@@ -15474,9 +15465,13 @@ namespace jitasm {
                 if (nodes_[v].lowlink == nodes_[v].index && !scc_.empty()) {
                     // v is the root of scc_
                     size_t i = 0;
-                    while (scc_[i] != v) { ++i; }
+                    while (scc_[i] != v) {
+                        ++i;
+                    }
                     fn(&scc_[i], scc_.size() - i);
-                    while (i < scc_.size()) { scc_.pop_back(); }
+                    while (i < scc_.size()) {
+                        scc_.pop_back();
+                    }
                 }
             }
 
@@ -15502,7 +15497,9 @@ namespace jitasm {
             const std::vector<VarAttribute> *var_attrs;
 
             Operations(const Lifetime::Interval *first, const Lifetime::Interval *second, const std::vector<VarAttribute> *vattrs): interval(first, second), var_attrs(vattrs) {
-                for (size_t i = 0; i < NUM_OF_PHYSICAL_REG; ++i) { move[i] = load[i] = store[i] = -1; }
+                for (size_t i = 0; i < NUM_OF_PHYSICAL_REG; ++i) {
+                    move[i] = load[i] = store[i] = -1;
+                }
             }
 
             void operator()(size_t var) {
@@ -15565,8 +15562,7 @@ namespace jitasm {
          * - Store to stack slot
          */
         template <class RegOp>
-        inline void GenerateInterIntervalInstr(
-            const Lifetime::Interval &first_interval, const Lifetime::Interval &second_interval, const std::vector<VarAttribute> &var_attrs, RegOp reg_operator) {
+        inline void GenerateInterIntervalInstr(const Lifetime::Interval &first_interval, const Lifetime::Interval &second_interval, const std::vector<VarAttribute> &var_attrs, RegOp reg_operator) {
 #ifdef JITASM_DEBUG_DUMP
             first_interval.Dump(true);
 #endif
@@ -15603,18 +15599,15 @@ namespace jitasm {
         inline void GenerateInterBlockInstr(const BasicBlock *first_block, const BasicBlock *second_block, Frontend &f, const VariableManager &var_manager) {
             if (!first_block->lifetime[0].intervals.empty() && !second_block->lifetime[0].intervals.empty()) {
                 JITASM_TRACE("---- General purpose register ----\n");
-                GenerateInterIntervalInstr(
-                    first_block->lifetime[0].intervals.back(), second_block->lifetime[0].intervals.front(), var_manager.GetAttributes(0), GpRegOperator(&f, &var_manager));
+                GenerateInterIntervalInstr(first_block->lifetime[0].intervals.back(), second_block->lifetime[0].intervals.front(), var_manager.GetAttributes(0), GpRegOperator(&f, &var_manager));
             }
             if (!first_block->lifetime[1].intervals.empty() && !second_block->lifetime[1].intervals.empty()) {
                 JITASM_TRACE("---- MMX register ----\n");
-                GenerateInterIntervalInstr(
-                    first_block->lifetime[1].intervals.back(), second_block->lifetime[1].intervals.front(), var_manager.GetAttributes(1), MmxRegOperator(&f, &var_manager));
+                GenerateInterIntervalInstr(first_block->lifetime[1].intervals.back(), second_block->lifetime[1].intervals.front(), var_manager.GetAttributes(1), MmxRegOperator(&f, &var_manager));
             }
             if (!first_block->lifetime[2].intervals.empty() && !second_block->lifetime[2].intervals.empty()) {
                 JITASM_TRACE("---- XMM/YMM register ----\n");
-                GenerateInterIntervalInstr(
-                    first_block->lifetime[2].intervals.back(), second_block->lifetime[2].intervals.front(), var_manager.GetAttributes(2), XmmRegOperator(&f, &var_manager));
+                GenerateInterIntervalInstr(first_block->lifetime[2].intervals.back(), second_block->lifetime[2].intervals.front(), var_manager.GetAttributes(2), XmmRegOperator(&f, &var_manager));
             }
         }
 
@@ -15739,12 +15732,13 @@ namespace jitasm {
          * - Generate instructions for register move and spill
          * - Generate function prolog and epilog
          */
-        inline void RewriteInstructions(
-            Frontend &f, const ControlFlowGraph &cfg, const VariableManager &var_manager, const uint32 (&preserved_reg)[3], const Addr &preserved_reg_stack) {
+        inline void RewriteInstructions(Frontend &f, const ControlFlowGraph &cfg, const VariableManager &var_manager, const uint32 (&preserved_reg)[3], const Addr &preserved_reg_stack) {
             // Prepare instruction number ordered labels for adjusting label position
             std::vector<OrderedLabel> orderd_labels; // instruction number order
             orderd_labels.reserve(f.labels_.size());
-            for (size_t i = 0; i < f.labels_.size(); ++i) { orderd_labels.push_back(OrderedLabel(i, f.labels_[i].instr_number)); }
+            for (size_t i = 0; i < f.labels_.size(); ++i) {
+                orderd_labels.push_back(OrderedLabel(i, f.labels_[i].instr_number));
+            }
             std::sort(orderd_labels.begin(), orderd_labels.end());
             std::vector<OrderedLabel>::iterator cur_label = orderd_labels.begin();
 
@@ -16541,13 +16535,7 @@ namespace jitasm {
             uint32 index_mmx;
             uint32 index_xmm;
 
-            ArgInfo(const Addr &addr_, PhysicalRegID reg_id_, uint32 flg, uint32 idx_gp = 0, uint32 idx_mmx = 0, uint32 idx_xmm_ = 0)
-                : addr(addr_)
-                , reg_id(reg_id_)
-                , flag(flg)
-                , index_gp(idx_gp)
-                , index_mmx(idx_mmx)
-                , index_xmm(idx_xmm_) {}
+            ArgInfo(const Addr &addr_, PhysicalRegID reg_id_, uint32 flg, uint32 idx_gp = 0, uint32 idx_mmx = 0, uint32 idx_xmm_ = 0): addr(addr_), reg_id(reg_id_), flag(flg), index_gp(idx_gp), index_mmx(idx_mmx), index_xmm(idx_xmm_) {}
 
             template <class CurArgTraits, class NextArgTraits>
             ArgInfo Next() const {
@@ -17069,8 +17057,7 @@ namespace jitasm {
 
             template <class R, class A1>
             ArgInfo ArgInfo1() {
-                return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * (2 + ResultT<R>::ArgR)),
-                    static_cast<PhysicalRegID>(ArgTraits<ResultT<R>::ArgR + 0, A1>::reg_id), ArgTraits<ResultT<R>::ArgR + 0, A1>::flag);
+                return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * (2 + ResultT<R>::ArgR)), static_cast<PhysicalRegID>(ArgTraits<ResultT<R>::ArgR + 0, A1>::reg_id), ArgTraits<ResultT<R>::ArgR + 0, A1>::flag);
             }
             template <class R, class A1, class A2>
             ArgInfo ArgInfo2() {
@@ -17440,14 +17427,14 @@ namespace jitasm {
             struct Arg<__m128i, 16>: Arg<__m128, 16> {
                 Arg(Frontend &f, const ArgInfo &arg_info): Arg<__m128, 16>(f, arg_info) {}
             };
-#endif // JITASM_EMMINTRIN
+#endif    // JITASM_EMMINTRIN
         } // namespace calling_convention_cdecl
 
     } // namespace detail
 
     /// cdecl function
-    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone, class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone,
-        class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone, class A9 = detail::ArgNone, class A10 = detail::ArgNone>
+    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone, class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone, class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone,
+        class A9 = detail::ArgNone, class A10 = detail::ArgNone>
     struct function_cdecl: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10);
         typedef detail::ResultT<R> Result; ///< main function result type
@@ -17464,10 +17451,9 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                    Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                    Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()), Arg<A10>(*this, ArgInfo10<R, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()),
+                    Arg<A10>(*this, ArgInfo10<R, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17486,10 +17472,9 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()), Arg<A10>(*this, ArgInfo10<void, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()),
+                Arg<A10>(*this, ArgInfo10<void, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()));
             Epilog();
         }
     };
@@ -17511,10 +17496,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                    Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                    Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17533,10 +17516,8 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()));
             Epilog();
         }
     };
@@ -17558,9 +17539,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                    Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17579,9 +17559,8 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()));
             Epilog();
         }
     };
@@ -17603,9 +17582,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                    Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17624,9 +17602,8 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()));
             Epilog();
         }
     };
@@ -17648,8 +17625,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17668,8 +17645,8 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()), Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()));
             Epilog();
         }
     };
@@ -17691,8 +17668,7 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17711,8 +17687,7 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()));
             Epilog();
         }
     };
@@ -17733,10 +17708,7 @@ namespace jitasm {
             using namespace detail::calling_convention_cdecl;
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
-            static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()),
-                    Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()))
-                .StoreResult(*this, result_dst);
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>())).StoreResult(*this, result_dst);
             Epilog();
         }
     };
@@ -17754,8 +17726,7 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()),
-                Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()));
             Epilog();
         }
     };
@@ -17776,17 +17747,14 @@ namespace jitasm {
             using namespace detail::calling_convention_cdecl;
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
-            static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()))
-                .StoreResult(*this, result_dst);
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>())).StoreResult(*this, result_dst);
             Epilog();
         }
     };
 
     // specialization for 3 arguments and no result
     template <class Derived, class A1, class A2, class A3>
-    struct function_cdecl<void, Derived, A1, A2, A3, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>
-        : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17804,8 +17772,7 @@ namespace jitasm {
 
     // specialization for 2 arguments
     template <class R, class Derived, class A1, class A2>
-    struct function_cdecl<R, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-        detail::ArgNone>: Frontend {
+    struct function_cdecl<R, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -17826,8 +17793,7 @@ namespace jitasm {
 
     // specialization for 2 arguments and no result
     template <class Derived, class A1, class A2>
-    struct function_cdecl<void, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-        detail::ArgNone>: Frontend {
+    struct function_cdecl<void, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17845,8 +17811,7 @@ namespace jitasm {
 
     // specialization for 1 argument
     template <class R, class Derived, class A1>
-    struct function_cdecl<R, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-        detail::ArgNone>: Frontend {
+    struct function_cdecl<R, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -17867,8 +17832,7 @@ namespace jitasm {
 
     // specialization for 1 argument and no result
     template <class Derived, class A1>
-    struct function_cdecl<void, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-        detail::ArgNone>: Frontend {
+    struct function_cdecl<void, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17886,8 +17850,7 @@ namespace jitasm {
 
     // specialization for no arguments
     template <class R, class Derived>
-    struct function_cdecl<R, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-        detail::ArgNone, detail::ArgNone>: Frontend {
+    struct function_cdecl<R, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)();
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -17907,8 +17870,7 @@ namespace jitasm {
 
     // specialization for no arguments and no result
     template <class Derived>
-    struct function_cdecl<void, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-        detail::ArgNone, detail::ArgNone>: Frontend {
+    struct function_cdecl<void, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)();
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17924,8 +17886,8 @@ namespace jitasm {
     };
 
     /// function
-    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone, class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone,
-        class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone, class A9 = detail::ArgNone, class A10 = detail::ArgNone>
+    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone, class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone, class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone,
+        class A9 = detail::ArgNone, class A10 = detail::ArgNone>
     struct function: function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10> {};
 
 } // namespace jitasm

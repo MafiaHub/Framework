@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -27,7 +27,7 @@ namespace Framework::Networking::RPC {
         IRPC(): _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
-        virtual bool Valid() const = 0;
+        virtual bool Valid() const                               = 0;
 
         uint32_t GetHashName() const {
             return _hashName;

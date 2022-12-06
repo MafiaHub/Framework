@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -9,24 +9,9 @@
 #pragma once
 
 namespace Framework::Scripting {
-    enum class EngineError {
-        ENGINE_NONE,
-        ENGINE_NODE_INIT_FAILED,
-        ENGINE_PLATFORM_INIT_FAILED,
-        ENGINE_V8_INIT_FAILED,
-        ENGINE_UV_LOOP_INIT_FAILED,
-        ENGINE_ISOLATE_ALLOCATION_FAILED,
-        ENGINE_ISOLATE_DATA_ALLOCATION_FAILED,
-        ENGINE_PLATFORM_NULL,
-        ENGINE_ISOLATE_NULL
-    };
+    enum class EngineError { ENGINE_NONE, ENGINE_NODE_INIT_FAILED, ENGINE_PLATFORM_INIT_FAILED, ENGINE_V8_INIT_FAILED, ENGINE_UV_LOOP_INIT_FAILED, ENGINE_ISOLATE_ALLOCATION_FAILED, ENGINE_ISOLATE_DATA_ALLOCATION_FAILED, ENGINE_PLATFORM_NULL, ENGINE_ISOLATE_NULL };
 
-    enum class ModuleError {
-        MODULE_NONE,
-        MODULE_ENGINE_NULL,
-        MODULE_ENGINE_INIT_FAILED,
-        MODULE_RESOURCE_MANAGER_NULL
-    };
+    enum class ModuleError { MODULE_NONE, MODULE_ENGINE_NULL, MODULE_ENGINE_INIT_FAILED, MODULE_RESOURCE_MANAGER_NULL };
 
     enum class ResourceManagerError { RESOURCE_MANAGER_NONE, RESOURCE_ALREADY_LOADED, RESOURCE_NOT_LOADED, RESOURCE_LOADING_FAILED, RESOURCE_NAME_INVALID };
 

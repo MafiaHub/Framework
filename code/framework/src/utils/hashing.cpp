@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -272,7 +272,7 @@ namespace Framework::Utils::Hashing {
         ptrdiff_t remaining;
         uint32_t result = ~((uint32_t)0);
         char const *c   = (char const *)data;
-        for (remaining = (ptrdiff_t )len; remaining--; c++) result = (result >> 8) ^ (crc32_table[(result ^ *c) & 0xff]);
+        for (remaining = (ptrdiff_t)len; remaining--; c++) result = (result >> 8) ^ (crc32_table[(result ^ *c) & 0xff]);
         return ~result;
     }
 

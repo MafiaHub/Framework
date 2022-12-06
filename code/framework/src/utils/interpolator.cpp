@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -19,8 +19,7 @@ namespace math {
         return static_cast<float>((pos - from) / (to - from));
     }
 
-    inline float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to,
-        const std::chrono::high_resolution_clock::time_point &pos) {
+    inline float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to, const std::chrono::high_resolution_clock::time_point &pos) {
         float r = std::chrono::duration<float, std::milli>(to - from).count();
 
         // Avoid dividing by 0 (results in INF values)

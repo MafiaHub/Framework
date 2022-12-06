@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -11,16 +11,16 @@
 #include "scripting/engines/resource.h"
 #include "scripting/keys.h"
 
-#include "scripting/engines/node/builtins/vector_3.h"
 #include "scripting/engines/node/builtins/quaternion.h"
+#include "scripting/engines/node/builtins/vector_3.h"
 
 #include <glm/glm.hpp>
 #include <v8pp/class.hpp>
 #include <v8pp/module.hpp>
 
 #include "world/engine.h"
-#include "world/game_rpc/set_transform.h"
 #include "world/game_rpc/set_frame.h"
+#include "world/game_rpc/set_transform.h"
 
 #include <iomanip>
 #include <list>
@@ -69,13 +69,13 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
-            auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+            auto fr   = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->scale = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         void SetModelName(std::string name) {
-            auto fr   = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+            auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelName = name;
             FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
@@ -117,12 +117,12 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetVisible(bool visible) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st       = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->isVisible = visible;
         }
 
         void SetAlwaysVisible(bool visible) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st           = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->alwaysVisible = visible;
         }
 
@@ -137,7 +137,7 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetVirtualWorld(int virtualWorld) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st          = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->virtualWorld = virtualWorld;
         }
 
@@ -147,7 +147,7 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetUpdateInterval(double interval) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st            = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->updateInterval = interval;
         }
 

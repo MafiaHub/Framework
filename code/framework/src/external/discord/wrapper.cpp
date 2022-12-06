@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -46,8 +46,7 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage,
-        const std::string &largeText, const std::string &smallImage, const std::string &smallText) {
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) {
         if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
@@ -74,7 +73,7 @@ namespace Framework::External::Discord {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
-    void Wrapper::SignInWithDiscord(const DiscordLoginProc& proc) {
+    void Wrapper::SignInWithDiscord(const DiscordLoginProc &proc) {
         _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
             if (result == discord::Result::Ok) {
                 proc(tokenData.GetAccessToken());

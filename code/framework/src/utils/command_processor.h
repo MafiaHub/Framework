@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -13,21 +13,13 @@
 
 #include "result.h"
 
-#include <memory>
-#include <vector>
-#include <unordered_map>
 #include <function2.hpp>
+#include <memory>
+#include <unordered_map>
+#include <vector>
 
 namespace Framework::Utils {
-    enum CommandProcessorError {
-        ERROR_NONE,
-        ERROR_NONE_PRINT_HELP,
-        ERROR_EMPTY_INPUT,
-        ERROR_CMD_ALREADY_EXISTS,
-        ERROR_CMD_UNSPECIFIED_NAME,
-        ERROR_CMD_UNKNOWN,
-        ERROR_INTERNAL
-    };
+    enum CommandProcessorError { ERROR_NONE, ERROR_NONE_PRINT_HELP, ERROR_EMPTY_INPUT, ERROR_CMD_ALREADY_EXISTS, ERROR_CMD_UNSPECIFIED_NAME, ERROR_CMD_UNKNOWN, ERROR_INTERNAL };
 
     using CommandProc = fu2::function<void(cxxopts::ParseResult &) const>;
     class CommandProcessor {

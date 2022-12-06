@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <imgui/imgui.h>
 #include <fmt/format.h>
+#include <imgui/imgui.h>
 
 #include <string>
 
@@ -22,10 +22,9 @@ namespace Framework::External::ImGUI::Widgets {
     };
     // Adapted from Mafia: Oakwood Multiplayer
     static inline void DrawCornerText(Corner corner, const std::string &text, bool shadow = true) {
-        constexpr float padding               = 2.0f;
+        constexpr float padding       = 2.0f;
         ImGuiIO &io                   = ImGui::GetIO();
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings
-                                        | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
         ImVec2 work_pos               = viewport->WorkPos;
         ImVec2 work_size              = viewport->WorkSize;
@@ -49,4 +48,4 @@ namespace Framework::External::ImGUI::Widgets {
         }
         ImGui::End();
     }
-};
+}; // namespace Framework::External::ImGUI::Widgets

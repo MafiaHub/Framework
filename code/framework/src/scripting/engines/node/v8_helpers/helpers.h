@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -25,14 +25,12 @@ namespace Framework::Scripting::Helpers {
         tpl->Set(isolate, name, v8::FunctionTemplate::New(isolate, callback));
     }
 
-    inline void SetAccessor(
-        v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
-        tpl->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::Local<v8::Value>(),
-            v8::AccessControl::DEFAULT, setter != nullptr ? v8::PropertyAttribute::None : v8::PropertyAttribute::ReadOnly);
+    inline void SetAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
+        tpl->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::Local<v8::Value>(), v8::AccessControl::DEFAULT,
+            setter != nullptr ? v8::PropertyAttribute::None : v8::PropertyAttribute::ReadOnly);
     }
 
-    inline void SetStaticAccessor(
-        v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
+    inline void SetStaticAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
         tpl->SetNativeDataProperty(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter);
     }
 
@@ -49,21 +47,17 @@ namespace Framework::Scripting::Helpers {
             return;
         }
     }
-    inline void RegisterProperty(v8::Local<v8::Context> ctx, v8::Local<v8::Object> exports, const std::string &_name, v8::AccessorNameGetterCallback getter,
-        v8::AccessorNameSetterCallback setter = nullptr, void *data = nullptr) {
+    inline void RegisterProperty(v8::Local<v8::Context> ctx, v8::Local<v8::Object> exports, const std::string &_name, v8::AccessorNameGetterCallback getter, v8::AccessorNameSetterCallback setter = nullptr, void *data = nullptr) {
         v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-        exports->SetNativeDataProperty(
-            ctx, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::External::New(isolate, data));
+        exports->SetNativeDataProperty(ctx, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::External::New(isolate, data));
     }
 
-    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, const char *name, v8::Local<v8::Value> value,
-        v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
+    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, const char *name, v8::Local<v8::Value> value, v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
         val->DefineOwnProperty(ctx, v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), value, attributes);
     }
 
-    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, v8::Local<v8::String> name, v8::Local<v8::Value> value,
-        v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
+    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, v8::Local<v8::String> name, v8::Local<v8::Value> value, v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
         val->DefineOwnProperty(ctx, name, value, attributes);
     }
 
@@ -97,7 +91,7 @@ namespace Framework::Scripting::Helpers {
 
     inline bool SafeToBoolean(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, bool &out) {
         v8::Local maybeVal = val->ToBoolean(ctx->GetIsolate());
-        out = maybeVal->Value();
+        out                = maybeVal->Value();
         return true;
     }
 
@@ -158,7 +152,9 @@ namespace Framework::Scripting::Helpers {
     template <class T>
     inline v8::Local<v8::Array> JSValue(std::vector<T> &arr) {
         auto jsArr = v8::Array::New(v8::Isolate::GetCurrent(), arr.size());
-        for (int i = 0; i < arr.size(); i++) { jsArr->Set(v8::Isolate::GetCurrent()->GetEnteredOrMicrotaskContext(), i, JSValue(arr[i])); }
+        for (int i = 0; i < arr.size(); i++) {
+            jsArr->Set(v8::Isolate::GetCurrent()->GetEnteredOrMicrotaskContext(), i, JSValue(arr[i]));
+        }
         return jsArr;
     }
     // Returns null
@@ -176,15 +172,15 @@ namespace Framework::Scripting::Helpers {
 
 #define V8_GET_ISOLATE() v8::Isolate *isolate = info.GetIsolate()
 #define V8_GET_CONTEXT() v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext()
-#define V8_GET_ISOLATE_CONTEXT()                                                                                                                                                   \
-    V8_GET_ISOLATE();                                                                                                                                                              \
+#define V8_GET_ISOLATE_CONTEXT()                                                                                                                                                                                                                                                       \
+    V8_GET_ISOLATE();                                                                                                                                                                                                                                                                  \
     V8_GET_CONTEXT()
 
 #define V8_GET_RESOURCE() auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0))
 
-#define V8_GET_SUITE()                                                                                                                                                             \
-    V8_GET_ISOLATE();                                                                                                                                                              \
-    V8_GET_CONTEXT();                                                                                                                                                              \
+#define V8_GET_SUITE()                                                                                                                                                                                                                                                                 \
+    V8_GET_ISOLATE();                                                                                                                                                                                                                                                                  \
+    V8_GET_CONTEXT();                                                                                                                                                                                                                                                                  \
     V8_GET_RESOURCE()
 
 #define V8_RETURN(ret) info.GetReturnValue().Set(ret)
@@ -195,10 +191,10 @@ namespace Framework::Scripting::Helpers {
 
 #define V8_DEFINE_STACK() Helpers::ArgumentStack stack(info)
 
-#define V8_VALIDATE_CTOR_CALL()                                                                                                                                                    \
-    if (!info.IsConstructCall()) {                                                                                                                                                 \
-        Helpers::Throw(isolate, "Function cannot be called without new keyword");                                                                                                \
-        return;                                                                                                                                                                    \
+#define V8_VALIDATE_CTOR_CALL()                                                                                                                                                                                                                                                        \
+    if (!info.IsConstructCall()) {                                                                                                                                                                                                                                                     \
+        Helpers::Throw(isolate, "Function cannot be called without new keyword");                                                                                                                                                                                                      \
+        return;                                                                                                                                                                                                                                                                        \
     }
 
 #define V8_MODULE_CB [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj)

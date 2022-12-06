@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -12,9 +12,9 @@
 #include <string>
 
 #include "engine_kind.h"
+#include "engines/callback.h"
 #include "engines/engine.h"
 #include "engines/resource.h"
-#include "engines/callback.h"
 #include "errors.h"
 
 // TODO find a better way to invoke resource events globally
@@ -50,12 +50,12 @@ namespace Framework::Scripting {
         void InvokeEvent(const std::string name, Args &&...args) {
             for (auto &resource : _resources) {
                 switch (_engineType) {
-                    case EngineTypes::ENGINE_NODE: {
-                        auto *nodeResource = static_cast<Engines::Node::Resource *>(resource.second);
-                        nodeResource->InvokeEvent(name, std::forward<Args>(args)...);
-                        break;
-                    }
-                    default: break;
+                case EngineTypes::ENGINE_NODE: {
+                    auto *nodeResource = static_cast<Engines::Node::Resource *>(resource.second);
+                    nodeResource->InvokeEvent(name, std::forward<Args>(args)...);
+                    break;
+                }
+                default: break;
                 }
             }
         }

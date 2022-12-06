@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -94,7 +94,9 @@ namespace Framework::Scripting::Engines::Node {
             // +1 to allocate array for arg_count == 0
             v8::Local<v8::Value> v8_args[arg_count + 1] = {v8pp::to_v8(_isolate, std::forward<Args>(args))...};
 
-            for (auto it = _eventHandlers[name].begin(); it != _eventHandlers[name].end(); ++it) { it->Get(_isolate)->Call(_context.Get(_isolate), v8::Undefined(_isolate), arg_count, v8_args); }
+            for (auto it = _eventHandlers[name].begin(); it != _eventHandlers[name].end(); ++it) {
+                it->Get(_isolate)->Call(_context.Get(_isolate), v8::Undefined(_isolate), arg_count, v8_args);
+            }
         }
     };
 } // namespace Framework::Scripting::Engines::Node
