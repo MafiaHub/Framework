@@ -34,7 +34,7 @@ namespace Framework::Networking::Messages {
         // Game sync entity streamer messages
         GAME_SYNC_ENTITY_SPAWN,
         GAME_SYNC_ENTITY_UPDATE,
-        GAME_SYNC_ENTITY_SELF_UPDATE, // server sends data to streamer
+        GAME_SYNC_ENTITY_SELF_UPDATE,  // server sends data to streamer
         GAME_SYNC_ENTITY_OWNER_UPDATE, // server sends data about owned entity
         GAME_SYNC_ENTITY_DESPAWN,
 
@@ -48,7 +48,7 @@ namespace Framework::Networking::Messages {
      */
     class IMessage {
       private:
-        SLNet::Packet *packet{};
+        SLNet::Packet *packet {};
 
       public:
         virtual uint8_t GetMessageID() const = 0;
@@ -78,29 +78,6 @@ namespace Framework::Networking::Messages {
 
         SLNet::Packet *GetPacket() const {
             return packet;
-        }
-
-        template<typename T>
-        void SerializeOptional(SLNet::BitStream *bs, bool write, Utils::Optional<T> &opt) {
-            if (write) {
-                if (opt.HasValue()) {
-                    bool hasValue = true;
-                    bs->Serialize(true, hasValue);
-                    bs->Serialize(true, opt.Value());
-                } else {
-                    bool hasValue = false;
-                    bs->Serialize(true, hasValue);
-                }
-            } else {
-                bool hasValue = false;
-                bs->Serialize(false, hasValue);
-
-                if (hasValue) {
-                    T val {};
-                    bs->Serialize(false, val);
-                    opt = Utils::Optional<T>(val);
-                }
-            }
         }
     };
 } // namespace Framework::Networking::Messages
