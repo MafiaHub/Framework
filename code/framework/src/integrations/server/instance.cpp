@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -14,6 +14,8 @@
 #include "networking/messages/client_handshake.h"
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
+
+#include "../shared/modules/mod.hpp"
 
 #include "scripting/engines/node/sdk.h"
 
@@ -37,8 +39,8 @@ namespace Framework::Integrations::Server {
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
-        _playerFactory    = std::make_shared<Integrations::Shared::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_shared<Integrations::Shared::Archetypes::StreamingFactory>();
+        _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
     }
 
     Instance::~Instance() {
@@ -51,13 +53,9 @@ namespace Framework::Integrations::Server {
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
-        options.add_options("", {
-            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, 
-            {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
-            {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)},
-            {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
-            {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}
-        });
+        options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+                                    {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
+                                    {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}});
 
         // Try to parse and return if anything wrong happened
         auto result = options.parse(_opts.argc, _opts.argv);
@@ -123,6 +121,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize mod subsystems
         PostInit();
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Mod subsystems initialized");
 
         // Init the signals handlers if enabled
         if (_opts.enableSignals) {
@@ -139,6 +138,7 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
         // Load the scripting resources when everything is ready
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Loading all scripting resources...");
         _scriptingEngine->LoadAllResources();
         return ServerError::SERVER_NONE;
     }
@@ -163,7 +163,7 @@ namespace Framework::Integrations::Server {
         if (_worldEngine) {
             auto world = _worldEngine->GetWorld();
 
-            world->import<Integrations::Shared::Modules::Mod>();
+            world->import <Integrations::Shared::Modules::Mod>();
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Core ecs modules have been imported!");
@@ -265,25 +265,9 @@ namespace Framework::Integrations::Server {
             net->GetPeer()->CloseConnection(guid, true);
         });
 
-        // default entity events
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+        Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
-            const auto e = _worldEngine->WrapEntity(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            if (!GetWorldEngine()->IsEntityOwner(e, guid.g)) {
-                return;
-            }
-
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-        });
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Game sync networking messages registered");
     }
 
     ServerError Instance::Shutdown() {
@@ -336,7 +320,9 @@ namespace Framework::Integrations::Server {
         }
     }
     void Instance::Run() {
-        while (_alive) { Update(); }
+        while (_alive) {
+            Update();
+        }
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
@@ -351,19 +337,16 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
-        switch(sdk.GetKind()) 
-        {
+        switch (sdk.GetKind()) {
         case Framework::Scripting::EngineTypes::ENGINE_NODE: {
             auto nodeSDK = sdk.GetNodeSDK();
             Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
         } break;
         }
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
 
         // mod-specific builtins
-        if (_opts.sdkRegisterCallback) {
-            _opts.sdkRegisterCallback(sdk);
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
+        ModuleRegister(sdk);
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Mod bindings are set up!");
     }
 } // namespace Framework::Integrations::Server

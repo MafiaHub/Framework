@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,17 +8,22 @@
 
 #pragma once
 
-#include "../shared/types/player.hpp"
-#include "../shared/types/streaming.hpp"
+#include <utils/safe_win32.h>
+
 #include "errors.h"
 #include "external/firebase/wrapper.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
-#include "scripting/server.h"
 #include "scripting/engines/callback.h"
+#include "scripting/server.h"
 #include "utils/config.h"
 #include "world/server.h"
+
+#include <flecs.h>
+
+#include "world/types/player.hpp"
+#include "world/types/streaming.hpp"
 
 #include <chrono>
 #include <memory>
@@ -63,9 +68,6 @@ namespace Framework::Integrations::Server {
         std::string firebaseProjectId;
         std::string firebaseAppId;
         std::string firebaseApiKey;
-
-        // scripting
-        Framework::Scripting::Engines::SDKRegisterCallback sdkRegisterCallback;
     };
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
@@ -94,12 +96,13 @@ namespace Framework::Integrations::Server {
         flecs::entity _weatherManager;
 
         // entity factories
-        std::shared_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
-        std::shared_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
+        std::shared_ptr<World::Archetypes::PlayerFactory> _playerFactory;
+        std::shared_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectCallback;
+
       public:
         Instance();
         ~Instance();
@@ -112,6 +115,8 @@ namespace Framework::Integrations::Server {
         virtual void PostUpdate() {}
 
         virtual void PreShutdown() {}
+
+        virtual void ModuleRegister(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {}
 
         void Update();
 
@@ -151,11 +156,11 @@ namespace Framework::Integrations::Server {
             return _webServer;
         }
 
-        std::shared_ptr<Shared::Archetypes::PlayerFactory> GetPlayerFactory() const {
+        std::shared_ptr<World::Archetypes::PlayerFactory> GetPlayerFactory() const {
             return _playerFactory;
         }
 
-        std::shared_ptr<Shared::Archetypes::StreamingFactory> GetStreamingFactory() const {
+        std::shared_ptr<World::Archetypes::StreamingFactory> GetStreamingFactory() const {
             return _streamingFactory;
         }
     };

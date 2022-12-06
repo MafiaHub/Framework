@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -12,10 +12,13 @@
 #include <string>
 
 #include "engine_kind.h"
+#include "engines/callback.h"
 #include "engines/engine.h"
 #include "engines/resource.h"
-#include "engines/callback.h"
 #include "errors.h"
+
+// TODO find a better way to invoke resource events globally
+#include "engines/node/resource.h"
 
 namespace Framework::Scripting {
     class Module {
@@ -43,6 +46,20 @@ namespace Framework::Scripting {
         bool LoadResource(std::string);
         bool UnloadResource(std::string);
 
+        template <typename... Args>
+        void InvokeEvent(const std::string name, Args &&...args) {
+            for (auto &resource : _resources) {
+                switch (_engineType) {
+                case EngineTypes::ENGINE_NODE: {
+                    auto *nodeResource = static_cast<Engines::Node::Resource *>(resource.second);
+                    nodeResource->InvokeEvent(name, std::forward<Args>(args)...);
+                    break;
+                }
+                default: break;
+                }
+            }
+        }
+
         Engines::IEngine *GetEngine() const {
             return _engine;
         }
@@ -50,7 +67,7 @@ namespace Framework::Scripting {
         EngineTypes GetEngineType() const {
             return _engineType;
         }
-                
+
         void SetProcessArguments(int argc, char **argv) {
             _processArgsCount = argc;
             _processArgs      = argv;

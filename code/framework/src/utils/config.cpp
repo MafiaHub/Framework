@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -19,7 +19,7 @@ namespace Framework::Utils {
     bool Config::Parse(const std::string &content) {
         try {
             const auto doc = nlohmann::json::parse(content, nullptr, true, true);
-            *_document = doc;
+            *_document     = doc;
         }
         catch (nlohmann::json::exception &e) {
             _lastError = e.what();

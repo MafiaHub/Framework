@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -25,8 +25,8 @@ namespace Framework::External::Sentry {
     };
 
     struct ScreenInformation {
-        int _width  = 0;
-        int _height = 0;
+        int _width       = 0;
+        int _height      = 0;
         bool _fullscreen = false;
     };
 

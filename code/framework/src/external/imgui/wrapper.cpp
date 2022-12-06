@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -171,7 +171,8 @@ namespace Framework::External::ImGUI {
 
         if (ImGui_ImplSDL2_ProcessEvent(event)) {
             return InputState::BLOCK;
-        } else {
+        }
+        else {
             return InputState::PASS;
         }
     }
@@ -183,13 +184,14 @@ namespace Framework::External::ImGUI {
 
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return InputState::BLOCK;
-        } else {
+        }
+        else {
             return InputState::PASS;
         }
     }
 
     void Wrapper::ShowCursor(bool show) {
-        ImGuiIO &io = ImGui::GetIO();
+        ImGuiIO &io        = ImGui::GetIO();
         io.MouseDrawCursor = show;
     }
 

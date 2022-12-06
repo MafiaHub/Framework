@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -18,8 +18,8 @@ namespace Framework::External::Discord {
     class Wrapper final {
       private:
         bool _initialized = false;
-        discord::User _user{};
-        discord::Core *_instance{};
+        discord::User _user {};
+        discord::Core *_instance {};
 
       public:
         using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
@@ -32,11 +32,10 @@ namespace Framework::External::Discord {
         }
 
         DiscordError Update();
-        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText,
-            const std::string &smallImage, const std::string &smallText);
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText);
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
 
-        void SignInWithDiscord(const DiscordLoginProc& proc);
+        void SignInWithDiscord(const DiscordLoginProc &proc);
 
         discord::ActivityManager &GetActivityManager();
         discord::UserManager &GetUserManager();

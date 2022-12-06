@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -18,7 +18,7 @@ namespace Framework::Networking {
     }
 
     ClientError NetworkClient::Init() {
-        SLNet::SocketDescriptor sd{};
+        SLNet::SocketDescriptor sd {};
         SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
@@ -76,7 +76,7 @@ namespace Framework::Networking {
 
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
-        
+
         if (_onPlayerDisconnectedCallback) {
             _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
         }

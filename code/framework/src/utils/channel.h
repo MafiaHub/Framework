@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -9,8 +9,8 @@
 #pragma once
 
 #include <function2.hpp>
-#include <queue>
 #include <mutex>
+#include <queue>
 
 namespace Framework::Utils {
     template <typename ProcT = fu2::function<void() const>>

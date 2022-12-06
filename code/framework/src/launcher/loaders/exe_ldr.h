@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -13,10 +13,10 @@
  * See:https://github.com/citizenfx/fivem/blob/master/code/LICENSE
  */
 
+#include <Windows.h>
 #include <cstdint>
 #include <function2.hpp>
 #include <vector>
-#include <Windows.h>
 #include <winnt.h>
 
 namespace Framework::Launcher::Loaders {
@@ -27,10 +27,10 @@ namespace Framework::Launcher::Loaders {
 
       private:
         const uint8_t *_origBinary;
-        HMODULE _module{};
+        HMODULE _module {};
         uintptr_t _loadLimit;
 
-        void *_entryPoint{};
+        void *_entryPoint {};
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;

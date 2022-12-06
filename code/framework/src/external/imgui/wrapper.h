@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -15,10 +15,10 @@
 
 #include <SDL.h>
 
-#include <function2.hpp>
-#include <queue>
-#include <mutex>
 #include <atomic>
+#include <function2.hpp>
+#include <mutex>
+#include <queue>
 
 namespace Framework::Graphics {
     class Renderer;
@@ -40,6 +40,7 @@ namespace Framework::External::ImGUI {
     class Wrapper final {
       public:
         using RenderProc = fu2::function<void() const>;
+
       private:
         Config _config;
         bool _initialized = false;
@@ -59,7 +60,7 @@ namespace Framework::External::ImGUI {
         Error Update();
         Error Render();
 
-        inline void PushWidget(const RenderProc& proc) {
+        inline void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);
         }
 

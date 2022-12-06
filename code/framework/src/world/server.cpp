@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -22,11 +22,11 @@ namespace Framework::World {
 
         // Set up the monitoring service, visit https://www.flecs.dev/explorer/ to monitor server performance
         GetWorld()->set<flecs::Rest>({});
-        GetWorld()->import<flecs::monitor>();
+        GetWorld()->import <flecs::monitor>();
 
         // Set up a proc to validate entity visibility.
-        _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS,
-                             const Modules::Base::Transform &rhsTr, const Modules::Base::Streamable &rhsS) -> bool {
+        _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
+                               const Modules::Base::Streamable &rhsS) -> bool {
             if (!e.is_valid())
                 return false;
             if (!e.is_alive())
@@ -71,52 +71,47 @@ namespace Framework::World {
         };
 
         // Set up a system to remove entities we no longer need.
-        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities")
-            .kind(flecs::PostUpdate)
-            .interval(tickInterval * 4.0f)
-            .each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
-                // Remove the entity from all streamers.
-                _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                    if (rhsS.entities.find(e) != rhsS.entities.end()) {
-                        rhsS.entities.erase(e);
+        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(tickInterval * 4.0f).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
+            // Remove the entity from all streamers.
+            _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                if (rhsS.entities.find(e) != rhsS.entities.end()) {
+                    rhsS.entities.erase(e);
 
-                        // Ensure we despawn the entity from the client.
-                        if (streamable.GetBaseEvents().despawnProc)
-                            streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+                    // Ensure we despawn the entity from the client.
+                    if (streamable.GetBaseEvents().despawnProc)
+                        streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+                }
+            });
+
+            e.destruct();
+        });
+
+        // Set up a system to assign entity owners.
+        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(flecs::PostUpdate).interval(tickInterval * 4.0f).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
+            // Let user provide custom ownership assignment.
+            if (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable)) {
+                /* no op */
+            }
+            else {
+                // Assign the entity to the closest streamer.
+                uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
+                float closestDist         = std::numeric_limits<float>::max();
+                _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                    const auto rhsTr      = rhsE.get<Modules::Base::Transform>();
+                    const auto rhsRs      = rhsE.get<Modules::Base::Streamable>();
+                    const auto canBeOwner = _isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
+                    if (canBeOwner) {
+                        const auto dist = glm::distance(tr.pos, rhsTr->pos);
+                        if (dist < closestDist) {
+                            closestDist      = dist;
+                            closestOwnerGUID = rhsS.guid;
+                        }
                     }
                 });
 
-                e.destruct();
-            });
-
-        // Set up a system to assign entity owners.
-        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership")
-            .kind(flecs::PostUpdate)
-            .interval(tickInterval * 4.0f)
-            .each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
-                // Let user provide custom ownership assignment.
-                if (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable)) {
-                    /* no op */
-                } else {
-                    // Assign the entity to the closest streamer.
-                    uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
-                    float closestDist = std::numeric_limits<float>::max();
-                    _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                        const auto rhsTr = rhsE.get<Modules::Base::Transform>();
-                        const auto rhsRs = rhsE.get<Modules::Base::Streamable>();
-                        const auto canBeOwner = _isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
-                        if (canBeOwner) {
-                            const auto dist = glm::distance(tr.pos, rhsTr->pos);
-                            if (dist < closestDist) {
-                                closestDist = dist;
-                                closestOwnerGUID = rhsS.guid;
-                            }
-                        }
-                    });
-
-                    streamable.owner = closestOwnerGUID;
-                }
-            });
+                streamable.owner = closestOwnerGUID;
+            }
+        });
 
         // Set up a system to stream entities to clients.
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
@@ -164,7 +159,8 @@ namespace Framework::World {
                                         otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
                                     data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                 }
-                            } else {
+                            }
+                            else {
                                 auto &data = map_it->second;
 
                                 // If the entity is owned by this streamer, we send a full update.
@@ -200,7 +196,7 @@ namespace Framework::World {
         Engine::Update();
     }
 
-    flecs::entity ServerEngine::CreateEntity(const std::string& name) {
+    flecs::entity ServerEngine::CreateEntity(const std::string &name) {
         if (name.empty()) {
             return _world->entity();
         }
@@ -242,7 +238,6 @@ namespace Framework::World {
         });
         return streamers;
     }
-
 
     void ServerEngine::RemoveEntity(flecs::entity e) {
         if (e.is_alive()) {

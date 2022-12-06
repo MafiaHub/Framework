@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -11,9 +11,7 @@
 #include <logging/logger.h>
 
 namespace Framework::Utils::States {
-    Machine::Machine(): _currentState(nullptr), _nextState(nullptr), _currentContext(Context::Enter) {
-
-    }
+    Machine::Machine(): _currentState(nullptr), _nextState(nullptr), _currentContext(Context::Enter) {}
 
     Machine::~Machine() {
         _states.clear();
@@ -37,14 +35,14 @@ namespace Framework::Utils::States {
         }
 
         // Mark it for processing and force the actual state to exit
-        _nextState = (*it).second;
+        _nextState      = (*it).second;
         _currentContext = Context::Exit;
-        
+
         Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_UTILS)->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
         return true;
     }
 
-    bool Machine::Update() {        
+    bool Machine::Update() {
         if (_currentState != nullptr) {
             // Otherwise, we just process the current state
             if (_currentContext == Context::Enter) {
@@ -81,4 +79,4 @@ namespace Framework::Utils::States {
 
         return true;
     }
-}
+} // namespace Framework::Utils::States

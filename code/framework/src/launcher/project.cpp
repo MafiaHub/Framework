@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -129,7 +129,7 @@ namespace Framework::Launcher {
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
         _steamWrapper = std::make_unique<External::Steam::Wrapper>();
-        _minidump = std::make_unique<Utils::MiniDump>();
+        _minidump     = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
 
         _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(gProjectDllPath));
@@ -179,7 +179,9 @@ namespace Framework::Launcher {
             addDllDirectory(_gamePath.c_str());
 
             // add any custom search paths from the mod
-            for (auto &path : _config.additionalSearchPaths) { addDllDirectory((_gamePath + L"\\" + path).c_str()); }
+            for (auto &path : _config.additionalSearchPaths) {
+                addDllDirectory((_gamePath + L"\\" + path).c_str());
+            }
 
             // add our own paths now
             addDllDirectory(gProjectDllPath);
@@ -204,9 +206,9 @@ namespace Framework::Launcher {
             HMODULE steamDll {};
 
 #ifdef _M_IX86
-                steamDll = LoadLibraryW(L"fw_steam_api.dll");
+            steamDll = LoadLibraryW(L"fw_steam_api.dll");
 #else
-                steamDll = LoadLibraryW(L"fw_steam_api64.dll");
+            steamDll = LoadLibraryW(L"fw_steam_api64.dll");
 #endif
 
             if (!steamDll) {
@@ -248,14 +250,14 @@ namespace Framework::Launcher {
 
         Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading game {}", Utils::StringUtils::WideToNormal(_gamePath));
 
-
         // Run with type depending
         if (_config.launchType == ProjectLaunchType::PE_LOADING) {
             return RunWithPELoading();
         }
-        else if(_config.launchType == ProjectLaunchType::DLL_INJECTION){
+        else if (_config.launchType == ProjectLaunchType::DLL_INJECTION) {
             return RunWithDLLInjection();
-        } else {
+        }
+        else {
             return false;
         }
     }
@@ -295,8 +297,7 @@ namespace Framework::Launcher {
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
         if (initResult != External::Steam::SteamError::STEAM_NONE) {
-            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? Error Code #{}", initResult).c_str(),
-                _config.name.c_str(), MB_ICONERROR);
+            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? Error Code #{}", initResult).c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -344,8 +345,7 @@ namespace Framework::Launcher {
                 handle = cppfs::fs::open(path);
 
                 if (!handle.isFile()) {
-                    MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(),
-                        _config.name.c_str(), MB_ICONERROR);
+                    MessageBoxA(nullptr, ("Cannot find a game executable by given path:\n" + std::string(path) + "\n\n Please check your path and try again!").c_str(), _config.name.c_str(), MB_ICONERROR);
                     return false;
                 }
 
@@ -364,7 +364,7 @@ namespace Framework::Launcher {
 #else
                     auto steamDllName = "/steam_api64.dll";
 #endif
-                    auto steamDll     = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
+                    auto steamDll = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
 
                     if (steamDll.exists()) {
                         Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Steam dll found in the game directory, switching to steam platform");

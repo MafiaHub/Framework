@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -26,6 +26,7 @@ namespace Framework::Networking::RPC {
       private:
         SLNet::Packet *packet {};
         uint32_t _hashName = 0;
+
       protected:
         flecs::entity_t _serverID = 0;
 
@@ -40,7 +41,7 @@ namespace Framework::Networking::RPC {
         }
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
-        virtual bool Valid() const = 0;
+        virtual bool Valid() const                               = 0;
 
         void Serialize2(SLNet::BitStream *bs, bool write) {
             bs->Serialize(write, _serverID);

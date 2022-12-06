@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -16,24 +16,45 @@
 #include <flecs/flecs.h>
 #include <memory>
 
-#define FW_SEND_COMPONENT_GAME_RPC(rpc, ent, ...)\
-    do {\
-        auto s = rpc {};\
-        s.FromParameters(__VA_ARGS__);\
-        s.SetServerID(ent.id());\
-        auto net = reinterpret_cast < Framework::Networking::NetworkServer*>(Framework::Networking::NetworkPeer::_networkRef);\
-        if (net) {\
-            net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine*>(Framework::World::Engine::_worldEngineRef), s);\
-        }\
-    } while (0)
-
-#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                                                                                                                                                                             \
+#define FW_SEND_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                                      \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
-        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                          \
-        auto net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                          \
-        if (net) {                                                                                                                                                                                                                                                                     \
-            net->SendRPC<rpc>(s);                                                                                                                                                   \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
+        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        if (__net) {                                                                                                                                                                                                                                                                   \
+            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::World::Engine::_worldEngineRef), s);                                                                                                                                                 \
+        }                                                                                                                                                                                                                                                                              \
+    } while (0)
+
+#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                                                                                                                                                                                \
+    do {                                                                                                                                                                                                                                                                               \
+        auto s = rpc {};                                                                                                                                                                                                                                                               \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        if (__net) {                                                                                                                                                                                                                                                                   \
+            __net->SendRPC<rpc>(s);                                                                                                                                                                                                                                                    \
+        }                                                                                                                                                                                                                                                                              \
+    } while (0)
+
+#define FW_SEND_COMPONENT_GAME_RPC_TO(rpc, ent, guid, ...)                                                                                                                                                                                                                             \
+    do {                                                                                                                                                                                                                                                                               \
+        auto s = rpc {};                                                                                                                                                                                                                                                               \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
+        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        if (__net) {                                                                                                                                                                                                                                                                   \
+            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::World::Engine::_worldEngineRef), s, guid);                                                                                                                                           \
+        }                                                                                                                                                                                                                                                                              \
+    } while (0)
+
+#define FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)                                                                                                                                                                                                                                       \
+    do {                                                                                                                                                                                                                                                                               \
+        auto s = rpc {};                                                                                                                                                                                                                                                               \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        if (__net) {                                                                                                                                                                                                                                                                   \
+            __net->SendRPC<rpc>(s, guid);                                                                                                                                                                                                                                              \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 

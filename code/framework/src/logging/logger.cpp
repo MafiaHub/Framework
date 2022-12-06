@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -56,7 +56,7 @@ namespace Framework::Logging {
         std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink};
         auto spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
         spdLogger->set_level(spdlog::level::trace);
-        
+
         try {
             spdlog::register_logger(spdLogger);
         }

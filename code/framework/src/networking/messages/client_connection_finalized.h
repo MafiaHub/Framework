@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -17,7 +17,7 @@
 namespace Framework::Networking::Messages {
     class ClientConnectionFinalized final: public IMessage {
       private:
-        float _serverTickRate = 0.0f;
+        float _serverTickRate     = 0.0f;
         flecs::entity_t _entityID = 0;
 
       public:

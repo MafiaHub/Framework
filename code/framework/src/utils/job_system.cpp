@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -103,7 +103,7 @@ namespace Framework::Utils {
         return true;
     }
 
-    void JobSystem::EnqueueJob(const JobProc& job, JobPriority priority, bool repeatOnFail) {
+    void JobSystem::EnqueueJob(const JobProc &job, JobPriority priority, bool repeatOnFail) {
         const std::lock_guard<std::recursive_mutex> lock(_mutex);
         Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} was enqueued", priority);
         _jobs[priority].push(Job {job, priority, JobStatus::Pending, repeatOnFail});

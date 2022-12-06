@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <function2.hpp>
 #include "../engine_kind.h"
+#include <function2.hpp>
 
 namespace Framework::Scripting::Engines::Node {
     class SDK;
@@ -19,7 +19,7 @@ namespace Framework::Scripting::Engines {
     class SDKRegisterWrapper final {
       private:
         Framework::Scripting::EngineTypes _kind = ENGINE_NODE;
-        void *_sdk = nullptr;
+        void *_sdk                              = nullptr;
 
       public:
         SDKRegisterWrapper(void *sdk, Framework::Scripting::EngineTypes kind): _sdk(sdk), _kind(kind) {}
@@ -33,4 +33,4 @@ namespace Framework::Scripting::Engines {
         }
     };
     using SDKRegisterCallback = fu2::function<void(SDKRegisterWrapper)>;
-}
+} // namespace Framework::Scripting::Engines

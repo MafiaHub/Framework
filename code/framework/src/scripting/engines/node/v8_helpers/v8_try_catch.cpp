@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,8 +8,8 @@
 
 #include "v8_try_catch.h"
 
-#include <logging/logger.h>
 #include "../resource.h"
+#include <logging/logger.h>
 
 namespace Framework::Scripting::Helpers {
     bool TryCatch(const fu2::function<bool() const> &fn, v8::Isolate *isolate, v8::Local<v8::Context> context) {
@@ -49,9 +49,7 @@ namespace Framework::Scripting::Helpers {
                 v8::ScriptOrigin origin                    = message->GetScriptOrigin();
 
                 if (!origin.ResourceName()->IsUndefined()) {
-                    Logging::GetInstance()
-                        ->Get(FRAMEWORK_INNER_SCRIPTING)
-                        ->debug("[Helpers] exception at {}: {}: {}", resource->GetName(), *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
+                    Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] exception at {}: {}: {}", resource->GetName(), *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
 
                     if (!maybeSourceLine.IsEmpty()) {
                         v8::Local<v8::String> sourceLine = maybeSourceLine.ToLocalChecked();

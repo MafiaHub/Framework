@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -34,14 +34,14 @@ namespace Framework::Graphics {
 
     class Renderer {
       private:
-        RendererConfiguration _config{};
-        RendererState _state = RendererState::STATE_NOT_INITIALIZED;
+        RendererConfiguration _config {};
+        RendererState _state     = RendererState::STATE_NOT_INITIALIZED;
         RendererBackend _backend = RendererBackend::BACKEND_D3D_11;
 
-        HWND _window{};
+        HWND _window {};
 
-        D3D9Backend *_d3d9Backend{};
-        D3D11Backend *_d3d11Backend{};
+        D3D9Backend *_d3d9Backend {};
+        D3D11Backend *_d3d11Backend {};
 
         bool _initialized = false;
 

@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -8,10 +8,11 @@
 
 #include "instance.h"
 
-#include <networking/messages/client_handshake.h>
 #include <networking/messages/client_connection_finalized.h>
+#include <networking/messages/client_handshake.h>
 #include <networking/messages/client_kick.h>
-#include <networking/messages/game_sync/entity_messages.h>
+
+#include "../shared/modules/mod.hpp"
 
 #include <logging/logger.h>
 
@@ -23,13 +24,13 @@ namespace Framework::Integrations::Client {
     Instance::Instance() {
         OPTICK_START_CAPTURE();
         _networkingEngine = std::make_unique<Networking::Engine>();
-        _presence    = std::make_unique<External::Discord::Wrapper>();
-        _imguiApp    = std::make_unique<External::ImGUI::Wrapper>();
-        _renderer    = std::make_unique<Graphics::Renderer>();
-        _worldEngine = std::make_unique<World::ClientEngine>();
-        _renderIO    = std::make_unique<Graphics::RenderIO>();
-        _playerFactory    = std::make_unique<Integrations::Shared::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_unique<Integrations::Shared::Archetypes::StreamingFactory>();
+        _presence         = std::make_unique<External::Discord::Wrapper>();
+        _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
+        _renderer         = std::make_unique<Graphics::Renderer>();
+        _worldEngine      = std::make_unique<World::ClientEngine>();
+        _renderIO         = std::make_unique<Graphics::RenderIO>();
+        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
     }
 
     Instance::~Instance() {
@@ -42,42 +43,43 @@ namespace Framework::Integrations::Client {
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
                 _presence->Init(opts.discordAppId);
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
             }
         }
 
         if (opts.useRenderer) {
             if (_renderer) {
                 _renderer->Init(opts.rendererOptions);
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
         }
 
         if (_networkingEngine) {
             _networkingEngine->Init();
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
         }
 
         if (_worldEngine) {
             _worldEngine->Init();
 
-            _worldEngine->GetWorld()->import<Shared::Modules::Mod>();
+            _worldEngine->GetWorld()->import <Shared::Modules::Mod>();
+
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Core ecs modules have been imported!");
         }
 
         InitNetworkingMessages();
+
         PostInit();
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
 
         // Init the render device
         if (opts.useRenderer) {
             _renderer->SetWindow(opts.rendererOptions.windowHandle);
 
             switch (opts.rendererOptions.backend) {
-                case Graphics::RendererBackend::BACKEND_D3D_9:
-                    _renderer->GetD3D9Backend()->Init(opts.rendererOptions.d3d9.device, nullptr);
-                    break;
-                case Graphics::RendererBackend::BACKEND_D3D_11:
-                    _renderer->GetD3D11Backend()->Init(opts.rendererOptions.d3d11.device, opts.rendererOptions.d3d11.deviceContext);
-                    break;
-                default:
-                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented");
-                    break;
+            case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(opts.rendererOptions.d3d9.device, nullptr); break;
+            case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(opts.rendererOptions.d3d11.device, opts.rendererOptions.d3d11.deviceContext); break;
+            default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
             }
         }
 
@@ -93,7 +95,7 @@ namespace Framework::Integrations::Client {
             }
         }
 
-        Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Initialize success");
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
         _initialized = true;
         return ClientError::CLIENT_NONE;
     }
@@ -207,75 +209,8 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        // default entity events
-        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [this](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            if (_worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
-                return;
-            }
-            const auto e = _worldEngine->CreateEntity(msg->GetServerID());
-            _streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
+        Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
 
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-        });
-        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [this](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            e.destruct();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-
-            auto es = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-            auto es = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            // Nothing to do for now.
-        });
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
     }
 } // namespace Framework::Integrations::Client

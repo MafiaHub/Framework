@@ -1,6 +1,6 @@
 /*
  * MafiaHub OSS license
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -20,8 +20,8 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 
-#include <list>
 #include <iomanip>
+#include <list>
 #include <sstream>
 
 #include <v8pp/class.hpp>
@@ -72,37 +72,37 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             _data += newQuat;
         }
 
-        void Sub(float w, float x, float y, float z){
+        void Sub(float w, float x, float y, float z) {
             glm::quat newQuat(w, x, y, z);
             _data -= newQuat;
         }
 
-        void Mul(float w, float x, float y, float z){
+        void Mul(float w, float x, float y, float z) {
             glm::quat newQuat(w, x, y, z);
             _data *= newQuat;
         }
 
-        void Lerp(float w, float x, float y, float z, float f){
+        void Lerp(float w, float x, float y, float z, float f) {
             glm::quat newQuat(w, x, y, z);
             _data = glm::mix(_data, newQuat, static_cast<float>(f));
         }
 
-        void Conjugate(float w, float x, float y, float z){
+        void Conjugate(float w, float x, float y, float z) {
             glm::quat newQuat(w, x, y, z);
             _data = glm::conjugate(_data);
         }
 
-        void Cross(float w, float x, float y, float z){
+        void Cross(float w, float x, float y, float z) {
             glm::quat newQuat(w, x, y, z);
             _data = glm::cross(_data, newQuat);
         }
 
-        float Dot(float w, float x, float y, float z){
+        float Dot(float w, float x, float y, float z) {
             glm::quat newQuat(w, x, y, z);
             return glm::dot(_data, newQuat);
         }
 
-        void Inverse(){
+        void Inverse() {
             _data = glm::inverse(_data);
         }
 
@@ -142,4 +142,4 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             rootModule->class_("Quaternion", cls);
         }
     };
-} // namespace Framework::Scripting::Builtins
+} // namespace Framework::Scripting::Engines::Node::Builtins

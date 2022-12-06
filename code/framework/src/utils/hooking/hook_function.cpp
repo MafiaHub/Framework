@@ -1,7 +1,7 @@
 /*
  * MafiaHub OSS license
  * Copyright (c) 2020, CitizenFX
- * Copyright (c) 2022, MafiaHub. All rights reserved.
+ * Copyright (c) 2021-2022, MafiaHub. All rights reserved.
  *
  * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
  * See LICENSE file in the source repository for information regarding licensing.
@@ -17,7 +17,9 @@ void HookFunctionBase::Register() {
 }
 
 void HookFunctionBase::RunAll() {
-    for (auto func = g_hookFunctions; func; func = func->m_next) { func->Run(); }
+    for (auto func = g_hookFunctions; func; func = func->m_next) {
+        func->Run();
+    }
 }
 
 static RuntimeHookFunction *g_runtimeHookFunctions;
