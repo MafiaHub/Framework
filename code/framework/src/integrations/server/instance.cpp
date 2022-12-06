@@ -119,6 +119,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize mod subsystems
         PostInit();
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Mod subsystems initialized");
 
         // Init the signals handlers if enabled
         if (_opts.enableSignals) {
@@ -135,6 +136,7 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
         // Load the scripting resources when everything is ready
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Loading all scripting resources...");
         _scriptingEngine->LoadAllResources();
         return ServerError::SERVER_NONE;
     }
@@ -280,6 +282,8 @@ namespace Framework::Integrations::Server {
             auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr     = msg->GetTransform();
         });
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Game sync networking messages registered");
     }
 
     ServerError Instance::Shutdown() {
@@ -355,10 +359,10 @@ namespace Framework::Integrations::Server {
             Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
         } break;
         }
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
 
         // mod-specific builtins
         ModuleRegister(sdk);
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Mod bindings are set up!");
     }
 } // namespace Framework::Integrations::Server

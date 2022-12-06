@@ -13,15 +13,8 @@
 
 namespace Framework::Integrations::Shared::Modules {
     struct Mod {
-        struct Environment {
-            flecs::string weatherName;
-            float timeHours;
-        };
-
         Mod(flecs::world &world) {
             world.module<Mod>();
-
-            world.component<Environment>();
         }
     };
 } // namespace Framework::Integrations::Shared::Modules
