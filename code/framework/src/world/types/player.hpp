@@ -8,20 +8,13 @@
 
 #pragma once
 
-#include "networking/network_peer.h"
-#include "world/modules/base.hpp"
-
-#include "../modules/mod.hpp"
-
-#include "networking/messages/game_sync/entity_update.h"
-
-#include "streaming.hpp"
-
 #include <flecs/flecs.h>
+
+#include "world/modules/base.hpp"
 
 #include <string>
 
-namespace Framework::Integrations::Shared::Archetypes {
+namespace Framework::World::Archetypes {
     class PlayerFactory {
       private:
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
@@ -37,13 +30,13 @@ namespace Framework::Integrations::Shared::Archetypes {
         inline void SetupServer(flecs::entity e, uint64_t guid, std::string nickname) {
             SetupDefaults(e, guid);
 
-            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
+            auto streamable             = e.get_mut<World::Modules::Base::Streamable>();
             streamable->assignOwnerProc = [](flecs::entity, World::Modules::Base::Streamable &) {
                 return true; /* always keep current owner */
             };
 
-            auto streamer = e.get_mut<World::Modules::Base::Streamer>();
+            auto streamer      = e.get_mut<World::Modules::Base::Streamer>();
             streamer->nickname = nickname;
         }
     };
-} // namespace Framework::Integrations::Shared::Archetypes
+} // namespace Framework::World::Archetypes

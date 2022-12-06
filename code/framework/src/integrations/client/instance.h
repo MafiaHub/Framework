@@ -23,21 +23,21 @@
 #include <utility>
 #include <world/client.h>
 
-#include "../shared/types/player.hpp"
-#include "../shared/types/streaming.hpp"
+#include "world/types/player.hpp"
+#include "world/types/streaming.hpp"
 
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
-    using NetworkConnectionClosedCallback = fu2::function<void() const>;
+    using NetworkConnectionClosedCallback    = fu2::function<void() const>;
 
     struct InstanceOptions {
-        int64_t discordAppId = 0;
-        bool usePresence     = true;
-        bool useRenderer     = true;
-        [[maybe_unused]] bool useNetworking   = true;
-        bool useImGUI        = false;
+        int64_t discordAppId                = 0;
+        bool usePresence                    = true;
+        bool useRenderer                    = true;
+        [[maybe_unused]] bool useNetworking = true;
+        bool useImGUI                       = false;
 
         Graphics::RendererConfiguration rendererOptions = {};
     };
@@ -68,8 +68,8 @@ namespace Framework::Integrations::Client {
         NetworkConnectionClosedCallback _onConnectionClosed;
 
         // Entity factories
-        std::unique_ptr<Shared::Archetypes::PlayerFactory> _playerFactory;
-        std::unique_ptr<Shared::Archetypes::StreamingFactory> _streamingFactory;
+        std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
+        std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
         void InitNetworkingMessages();
 
@@ -107,7 +107,7 @@ namespace Framework::Integrations::Client {
             _onConnectionClosed = std::move(cb);
         }
 
-        Networking::Engine* GetNetworkingEngine() const {
+        Networking::Engine *GetNetworkingEngine() const {
             return _networkingEngine.get();
         }
 
@@ -127,15 +127,15 @@ namespace Framework::Integrations::Client {
             return _renderer.get();
         }
 
-        Graphics::RenderIO* GetRenderIO() const {
+        Graphics::RenderIO *GetRenderIO() const {
             return _renderIO.get();
         }
 
-        Shared::Archetypes::PlayerFactory* GetPlayerFactory() const {
+        World::Archetypes::PlayerFactory *GetPlayerFactory() const {
             return _playerFactory.get();
         }
 
-        Shared::Archetypes::StreamingFactory* GetStreamingFactory() const {
+        World::Archetypes::StreamingFactory *GetStreamingFactory() const {
             return _streamingFactory.get();
         }
     };

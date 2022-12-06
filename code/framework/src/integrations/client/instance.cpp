@@ -11,7 +11,8 @@
 #include <networking/messages/client_connection_finalized.h>
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_kick.h>
-#include <networking/messages/game_sync/entity_messages.h>
+
+#include "../shared/modules/mod.hpp"
 
 #include <logging/logger.h>
 
@@ -28,8 +29,8 @@ namespace Framework::Integrations::Client {
         _renderer         = std::make_unique<Graphics::Renderer>();
         _worldEngine      = std::make_unique<World::ClientEngine>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
-        _playerFactory    = std::make_unique<Integrations::Shared::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_unique<Integrations::Shared::Archetypes::StreamingFactory>();
+        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
     }
 
     Instance::~Instance() {
@@ -208,76 +209,7 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        // default entity events
-        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [this](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            if (_worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
-                return;
-            }
-            const auto e = _worldEngine->CreateEntity(msg->GetServerID());
-            _streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
-
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-        });
-        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [this](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            e.destruct();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-
-            auto es   = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-            auto es   = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            // Nothing to do for now.
-        });
+        Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
     }

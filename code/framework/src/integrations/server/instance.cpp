@@ -15,6 +15,8 @@
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
+#include "../shared/modules/mod.hpp"
+
 #include "scripting/engines/node/sdk.h"
 
 #include "utils/version.h"
@@ -37,8 +39,8 @@ namespace Framework::Integrations::Server {
         _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
-        _playerFactory    = std::make_shared<Integrations::Shared::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_shared<Integrations::Shared::Archetypes::StreamingFactory>();
+        _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
     }
 
     Instance::~Instance() {
@@ -263,25 +265,7 @@ namespace Framework::Integrations::Server {
             net->GetPeer()->CloseConnection(guid, true);
         });
 
-        // default entity events
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [this](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = _worldEngine->WrapEntity(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            if (!GetWorldEngine()->IsEntityOwner(e, guid.g)) {
-                return;
-            }
-
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-        });
+        Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Game sync networking messages registered");
     }

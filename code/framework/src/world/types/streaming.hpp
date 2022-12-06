@@ -8,22 +8,17 @@
 
 #pragma once
 
-#include "networking/network_peer.h"
-#include "world/modules/base.hpp"
-
-#include "../modules/mod.hpp"
-
-#include "networking/messages/game_sync/entity_update.h"
-
 #include <flecs/flecs.h>
 
-namespace Framework::Integrations::Shared::Archetypes {
+#include "world/modules/base.hpp"
+
+namespace Framework::World::Archetypes {
     class StreamingFactory {
       private:
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
-            e.add<World::Modules::Base::Transform>();
+            e.add<Framework::World::Modules::Base::Transform>();
 
-            auto streamable   = e.get_mut<World::Modules::Base::Streamable>();
+            auto streamable   = e.get_mut<Framework::World::Modules::Base::Streamable>();
             streamable->owner = guid;
         }
 
@@ -31,15 +26,15 @@ namespace Framework::Integrations::Shared::Archetypes {
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-            World::Modules::Base::SetupDefaultClientEvents(streamable);
+            auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            Framework::World::Modules::Base::SetupClientEmitters(streamable);
         }
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            auto streamable = e.get_mut<World::Modules::Base::Streamable>();
-            World::Modules::Base::SetupDefaultEvents(streamable);
+            auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            Framework::World::Modules::Base::SetupServerEmitters(streamable);
         }
     };
-} // namespace Framework::Integrations::Shared::Archetypes
+} // namespace Framework::World::Archetypes
