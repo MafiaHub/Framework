@@ -118,6 +118,8 @@ namespace Framework::Scripting {
             return false;
         }
 
+        res->SetModule(this);
+
         _resources[name] = res;
         return true;
     }
