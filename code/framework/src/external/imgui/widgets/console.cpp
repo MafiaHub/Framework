@@ -19,7 +19,7 @@
 #include <sstream>
 
 namespace Framework::External::ImGUI::Widgets {
-    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor): _commandProcessor(commandProcessor), _logger(Framework::Logging::GetLogger("Console").get()) {}
+    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor, std::shared_ptr<Framework::Input::IInput> input): _commandProcessor(commandProcessor), _input(input), _logger(Framework::Logging::GetLogger("Console").get()) {}
 
     void Console::Toggle() {
         if (_isOpen)
@@ -44,7 +44,7 @@ namespace Framework::External::ImGUI::Widgets {
             return _isOpen;
         }
 
-        if (GetAsyncKeyState(VK_MENU) & 0x1) {
+        if (_input->IsKeyPressed(FW_KEY_MENU)) {
             if (!_consoleControl) {
                 // take back controls
                 LockControls(true);
@@ -71,12 +71,13 @@ namespace Framework::External::ImGUI::Widgets {
             ImGui::PushFontShadow(0xFF000000);
         }
 
-        auto windowFlags = ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse;
+        auto windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
         if (_consoleControl) {
             windowFlags |= ImGuiWindowFlags_MenuBar;
-        } else {
-            windowFlags |= ImGuiWindowFlags_NoMouseInputs|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize;
+        }
+        else {
+            windowFlags |= ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
         }
 
         if (!ImGui::Begin("Console", &_shouldDisplayWidget, windowFlags)) {
@@ -118,7 +119,9 @@ namespace Framework::External::ImGUI::Widgets {
                     ImGui::EndMenu();
                 }
 
-                for (auto &menuBarDrawer : _menuBarDrawers) { menuBarDrawer(); }
+                for (auto &menuBarDrawer : _menuBarDrawers) {
+                    menuBarDrawer();
+                }
 
                 ImGui::EndMenuBar();
             }
@@ -130,12 +133,14 @@ namespace Framework::External::ImGUI::Widgets {
         }
 
         const float reservedHeightMultiline = (_consoleControl && _isMultiline) ? 30.0f : 0.0f;
-        const float reservedHeightFocus = _consoleControl ? 20.0f : 0.0f;
-        const float reservedHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() + reservedHeightFocus /* extra space for more items */ + reservedHeightMultiline /* for multiline input */;
+        const float reservedHeightFocus     = _consoleControl ? 20.0f : 0.0f;
+        const float reservedHeight          = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() + reservedHeightFocus /* extra space for more items */ + reservedHeightMultiline /* for multiline input */;
         ImGui::BeginChild("ScrollingRegion", ImVec2(0, -reservedHeight), false, ImGuiWindowFlags_HorizontalScrollbar);
         if (ringBuffer != nullptr) {
             std::vector<std::string> log_message = ringBuffer->last_formatted();
-            for (std::string &log : log_message) { FormatLog(log); }
+            for (std::string &log : log_message) {
+                FormatLog(log);
+            }
         }
         if (_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
             ImGui::SetScrollHereY(0.0f);
@@ -151,7 +156,7 @@ namespace Framework::External::ImGUI::Widgets {
                     data->InsertChars(0, _autocompleteWord.c_str());
 
                     ImGui::SetKeyboardFocusHere(-1);
-                    _focusOnInput  = true;
+                    _focusOnInput = true;
                 }
                 return 0;
             };
@@ -161,14 +166,16 @@ namespace Framework::External::ImGUI::Widgets {
             if (!_consoleControl) {
                 // Block input if console is unfocused
                 flags = ImGuiInputTextFlags_ReadOnly;
-            } else if (_updateInputText) {
+            }
+            else if (_updateInputText) {
                 flags = ImGuiInputTextFlags_CallbackAlways;
             }
 
             bool wasInputProcessed;
             if (_isMultiline) {
                 wasInputProcessed = ImGui::InputTextMultiline("##console_text", consoleText, 512, {0, 50.0f}, flags, getCallback(inputEditCallback), &inputEditCallback);
-            } else {
+            }
+            else {
                 wasInputProcessed = ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback);
             }
 
@@ -223,7 +230,7 @@ namespace Framework::External::ImGUI::Widgets {
                             _autocompleteWord  = command;
                             _updateInputText   = true;
                             isAutocompleteOpen = false;
-                            _focusOnInput    = true;
+                            _focusOnInput      = true;
                         }
                     }
 
@@ -253,8 +260,8 @@ namespace Framework::External::ImGUI::Widgets {
             if (ImGui::Button("Send") && _consoleControl) {
                 SendCommand(consoleText);
 
-                consoleText[0]  = '\0';
-                _focusOnInput = true;
+                consoleText[0] = '\0';
+                _focusOnInput  = true;
             }
         }
 
@@ -298,7 +305,7 @@ namespace Framework::External::ImGUI::Widgets {
         LockControls(true);
 
         _isOpen         = true;
-        _focusOnInput = true;
+        _focusOnInput   = true;
         _consoleControl = true;
 
         return true;
@@ -312,8 +319,8 @@ namespace Framework::External::ImGUI::Widgets {
 
         int logCount = 1;
         for (std::sregex_iterator i = brackets_begin; i != brackets_end; ++i) {
-            const std::smatch& match     = *i;
-            std::string match_str = match.str();
+            const std::smatch &match = *i;
+            std::string match_str    = match.str();
 
             if (logCount == 1) {
                 ImGui::TextColored(ImVec4(0.5f, 1, 1, 1), "%s", match_str.c_str());

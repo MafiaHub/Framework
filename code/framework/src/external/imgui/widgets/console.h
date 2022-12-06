@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <input/input.h>
 #include <utils/command_processor.h>
 
 #include <spdlog/spdlog.h>
@@ -22,23 +23,24 @@ namespace Framework::External::ImGUI::Widgets {
         using MenuBarProc = fu2::function<void() const>;
 
       protected:
-        bool _shouldDisplayWidget     = true;
-        bool _autoScroll              = true;
-        bool _isOpen                  = false;
-        bool _updateInputText         = false;
-        bool _focusOnInput            = false;
-        bool _isMultiline             = false;
-        bool _consoleControl          = false;
-        float _consoleUnfocusedAlpha  = 0.25f;
+        bool _shouldDisplayWidget    = true;
+        bool _autoScroll             = true;
+        bool _isOpen                 = false;
+        bool _updateInputText        = false;
+        bool _focusOnInput           = false;
+        bool _isMultiline            = false;
+        bool _consoleControl         = false;
+        float _consoleUnfocusedAlpha = 0.25f;
         std::string _autocompleteWord;
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
+        std::shared_ptr<Framework::Input::IInput> _input;
         std::vector<MenuBarProc> _menuBarDrawers;
         spdlog::logger *_logger;
         static void FormatLog(std::string log);
         void SendCommand(const std::string &command);
 
       public:
-        explicit Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor);
+        explicit Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor, std::shared_ptr<Framework::Input::IInput> input);
         ~Console() = default;
 
         void Toggle();
@@ -49,7 +51,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         virtual void LockControls(bool lock) = 0;
 
-        void RegisterMenuBarDrawer(const MenuBarProc& proc) {
+        void RegisterMenuBarDrawer(const MenuBarProc &proc) {
             _menuBarDrawers.push_back(proc);
         }
 
