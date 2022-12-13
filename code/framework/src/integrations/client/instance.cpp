@@ -20,6 +20,8 @@
 
 #include <optick.h>
 
+#include "core_modules.h"
+
 namespace Framework::Integrations::Client {
     Instance::Instance() {
         OPTICK_START_CAPTURE();
@@ -122,6 +124,8 @@ namespace Framework::Integrations::Client {
         if (_worldEngine) {
             _worldEngine->Shutdown();
         }
+
+        CoreModules::Reset();
 
         return ClientError::CLIENT_NONE;
     }

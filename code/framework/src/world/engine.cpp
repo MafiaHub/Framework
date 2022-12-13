@@ -14,11 +14,9 @@
 
 namespace Framework::World {
     EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
+        CoreModules::SetWorldEngine(this);
         _networkPeer = networkPeer;
-
-        _world          = std::make_unique<flecs::world>();
-        _worldRef       = _world.get();
-        _worldEngineRef = this;
+        _world       = std::make_unique<flecs::world>();
 
         // Register a base module
         _world->import <Modules::Base>();
@@ -30,6 +28,7 @@ namespace Framework::World {
     }
 
     EngineError Engine::Shutdown() {
+        CoreModules::SetWorldEngine(nullptr);
         return EngineError::ENGINE_NONE;
     }
 

@@ -13,10 +13,12 @@
 #include <logging/logger.h>
 #include <optick.h>
 
+#include "core_modules.h"
+
 namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
-        _peer       = SLNet::RakPeerInterface::GetInstance();
-        _networkRef = this; // ugly code
+        _peer = SLNet::RakPeerInterface::GetInstance();
+        CoreModules::SetNetworkPeer(this);
 
         RegisterMessage(Messages::INTERNAL_RPC, [&](SLNet::Packet *p) {
             SLNet::BitStream bs(p->data + 1, p->length, false);
@@ -29,6 +31,10 @@ namespace Framework::Networking {
                 }
             }
         });
+    }
+
+    NetworkPeer::~NetworkPeer() {
+        CoreModules::SetNetworkPeer(nullptr);
     }
 
     bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) {

@@ -30,6 +30,8 @@
 #include <cppfs/fs.h>
 #include <csignal>
 
+#include "core_modules.h"
+
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false) {
         OPTICK_START_CAPTURE();
@@ -290,6 +292,8 @@ namespace Framework::Integrations::Server {
         // Detach signal handlers
         sig_detach(SIGINT, sig_slot(this, &Instance::OnSignal));
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
+
+        CoreModules::Reset();
 
         _alive = false;
         return ServerError::SERVER_NONE;

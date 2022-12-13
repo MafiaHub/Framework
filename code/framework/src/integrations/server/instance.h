@@ -116,7 +116,9 @@ namespace Framework::Integrations::Server {
 
         virtual void PreShutdown() {}
 
-        virtual void ModuleRegister(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {}
+        virtual void ModuleRegister(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
+            (void)sdk;
+        }
 
         void Update();
 
@@ -140,9 +142,9 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        /*std::shared_ptr<Framework::Scripting::Engine> GetScriptingEngine() const {
+        std::shared_ptr<Scripting::ServerEngine> GetScriptingEngine() const {
             return _scriptingEngine;
-        }*/
+        }
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
             return _worldEngine;

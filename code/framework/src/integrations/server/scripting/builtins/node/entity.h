@@ -26,6 +26,8 @@
 #include <list>
 #include <sstream>
 
+#include "core_modules.h"
+
 namespace Framework::Integrations::Scripting {
     class Entity {
       protected:
@@ -33,7 +35,11 @@ namespace Framework::Integrations::Scripting {
 
       public:
         Entity(flecs::entity_t ent) {
-            _ent = flecs::entity(Framework::World::Engine::_worldRef->get_world(), ent);
+            _ent = flecs::entity(CoreModules::GetWorldEngine()->GetWorld()->get_world(), ent);
+        }
+
+        static v8::Local<v8::Object> WrapEntity(v8::Isolate *isolate, flecs::entity e) {
+            return v8pp::class_<Framework::Integrations::Scripting::Entity>::create_object(isolate, e.id());
         }
 
         flecs::entity_t GetID() const {
@@ -42,6 +48,11 @@ namespace Framework::Integrations::Scripting {
 
         std::string GetName() const {
             return _ent.name().c_str();
+        }
+
+        std::string GetNickname() const {
+            const auto s = _ent.get<Framework::World::Modules::Base::Streamer>();
+            return !!s ? s->nickname : "<unknown>";
         }
 
         virtual std::string ToString() const {
@@ -170,6 +181,7 @@ namespace Framework::Integrations::Scripting {
             cls.property("name", &Entity::GetName);
             cls.function("toString", &Entity::ToString);
             cls.function("destruct", &Entity::Destruct);
+            cls.function("getNickname", &Entity::GetNickname);
 
             cls.function("setPosition", &Entity::SetPosition);
             cls.function("setRotation", &Entity::SetRotation);

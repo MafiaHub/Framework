@@ -16,14 +16,16 @@
 #include <flecs/flecs.h>
 #include <memory>
 
+#include "core_modules.h"
+
 #define FW_SEND_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                                      \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::World::Engine::_worldEngineRef), s);                                                                                                                                                 \
+            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s);                                                                                                                                                             \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
@@ -31,7 +33,7 @@
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
             __net->SendRPC<rpc>(s);                                                                                                                                                                                                                                                    \
         }                                                                                                                                                                                                                                                                              \
@@ -42,9 +44,9 @@
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::World::Engine::_worldEngineRef), s, guid);                                                                                                                                           \
+            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, guid);                                                                                                                                                       \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
@@ -52,7 +54,7 @@
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::Networking::NetworkPeer::_networkRef);                                                                                                                                                        \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
             __net->SendRPC<rpc>(s, guid);                                                                                                                                                                                                                                              \
         }                                                                                                                                                                                                                                                                              \
@@ -80,8 +82,5 @@ namespace Framework::World {
         flecs::world *GetWorld() {
             return _world.get();
         }
-
-        static inline flecs::world *_worldRef = nullptr;
-        static inline Engine *_worldEngineRef = nullptr;
     };
 } // namespace Framework::World

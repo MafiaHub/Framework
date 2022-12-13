@@ -29,6 +29,7 @@ namespace Framework::Networking {
 
       public:
         NetworkPeer();
+        ~NetworkPeer();
 
         bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 

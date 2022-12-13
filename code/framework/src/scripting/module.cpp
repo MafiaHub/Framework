@@ -15,6 +15,8 @@
 #include "engines/node/engine.h"
 #include "module.h"
 
+#include "core_modules.h"
+
 namespace Framework::Scripting {
     ModuleError Module::Init(EngineTypes engineType, Engines::SDKRegisterCallback cb) {
         // Initialize the engine based on the desired type
@@ -38,6 +40,7 @@ namespace Framework::Scripting {
         }
 
         // Everything just went fine hihi
+        CoreModules::SetScriptingModule(this);
 
         return ModuleError::MODULE_NONE;
     }
@@ -52,6 +55,8 @@ namespace Framework::Scripting {
         }
 
         _engine->Shutdown();
+
+        CoreModules::SetScriptingModule(nullptr);
 
         return ModuleError::MODULE_NONE;
     }

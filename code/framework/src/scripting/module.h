@@ -32,8 +32,7 @@ namespace Framework::Scripting {
         EngineTypes _engineType;
 
       public:
-        Module() = default;
-
+        Module()  = default;
         ~Module() = default;
 
         ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
