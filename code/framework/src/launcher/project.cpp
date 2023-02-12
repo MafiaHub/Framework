@@ -597,6 +597,7 @@ namespace Framework::Launcher {
         });
 
         loader.LoadIntoModule(base);
+        loader.Protect();
 
         // Once loaded, we can close handles
         UnmapViewOfFile(data);

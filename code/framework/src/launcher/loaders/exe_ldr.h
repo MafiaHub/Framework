@@ -36,6 +36,7 @@ namespace Framework::Launcher::Loaders {
         FunctionResolverProc _functionResolver;
 
         fu2::function<void(void **base, uint32_t *index)> _tlsInitializer;
+        std::vector<std::tuple<void *, DWORD, DWORD>> _targetProtections;
 
       private:
         void LoadSection(IMAGE_SECTION_HEADER *section);
@@ -84,6 +85,7 @@ namespace Framework::Launcher::Loaders {
             return _entryPoint;
         }
 
+        void Protect();
         void LoadIntoModule(HMODULE module);
     };
 } // namespace Framework::Launcher::Loaders

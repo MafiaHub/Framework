@@ -45,6 +45,7 @@ namespace Framework::Launcher::Loaders {
 
             if (!module) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load dependent module {}. Error code was {}.", name, GetLastError());
+                exit(0);
             }
 
             // "don't load"
@@ -108,9 +109,56 @@ namespace Framework::Launcher::Loaders {
         if (section->SizeOfRawData > 0) {
             uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
 
-            DWORD oldProtect;
-            VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect);
             memcpy(targetAddress, sourceAddress, sizeOfData);
+        }
+
+        DWORD oldProtect;
+        VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+        DWORD protection = 0;
+        if (section->Characteristics & IMAGE_SCN_MEM_NOT_CACHED) {
+            protection |= PAGE_NOCACHE;
+        }
+
+        if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE) {
+            if (section->Characteristics & IMAGE_SCN_MEM_READ) {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_EXECUTE_READWRITE;
+                }
+                else {
+                    protection |= PAGE_EXECUTE_READ;
+                }
+            }
+            else {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_EXECUTE_WRITECOPY;
+                }
+                else {
+                    protection |= PAGE_EXECUTE;
+                }
+            }
+        }
+        else {
+            if (section->Characteristics & IMAGE_SCN_MEM_READ) {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_READWRITE;
+                }
+                else {
+                    protection |= PAGE_READONLY;
+                }
+            }
+            else {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
+                    protection |= PAGE_WRITECOPY;
+                }
+                else {
+                    protection |= PAGE_NOACCESS;
+                }
+            }
+        }
+
+        if (protection) {
+            _targetProtections.push_back({targetAddress, section->Misc.VirtualSize, protection});
         }
     }
 
@@ -120,6 +168,13 @@ namespace Framework::Launcher::Loaders {
         for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
             LoadSection(section);
             section++;
+        }
+    }
+
+    void ExecutableLoader::Protect() {
+        for (const auto &protection : _targetProtections) {
+            DWORD op;
+            VirtualProtect(std::get<0>(protection), std::get<1>(protection), std::get<2>(protection), &op);
         }
     }
 
