@@ -100,20 +100,36 @@ namespace Framework::Launcher::Loaders {
 
     void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
         void *targetAddress       = GetTargetRVA<uint8_t>(section->VirtualAddress);
-        const void *sourceAddress = _origBinary + section->PointerToRawData;
+        if (!targetAddress) {
+            return;
+        }
 
+        // Check if the target address is within the allowed bounds
         if ((uintptr_t)targetAddress >= (_loadLimit + hook::baseAddressDifference)) {
             return;
         }
 
-        if (section->SizeOfRawData > 0) {
-            uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
-
-            memcpy(targetAddress, sourceAddress, sizeOfData);
+        // Check if the section has any data to be copied
+        if (section->SizeOfRawData == 0) {
+            return;
         }
 
+        const void *sourceAddress = _origBinary + section->PointerToRawData;
+        if (!sourceAddress) {
+            return;
+        }
+
+        // Calculate the size of data to be copied
+        uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
+
+        // Copy the data
+        memcpy(targetAddress, sourceAddress, sizeOfData);
+
+        // Change the protection attributes of the target address
         DWORD oldProtect;
-        VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect);
+        if (!VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            return;
+        }
 
         DWORD protection = 0;
         if (section->Characteristics & IMAGE_SCN_MEM_NOT_CACHED) {
