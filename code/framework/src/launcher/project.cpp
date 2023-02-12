@@ -33,7 +33,7 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 // allocate space for game
 #ifdef _M_AMD64
 #pragma bss_seg(".fwgame")
-char fwgame_seg[0x13000000];
+char fwgame_seg[0x1F000000];
 #else
 #pragma bss_seg(".fwgame")
 char fwgame_seg[0x2500000];
@@ -537,7 +537,7 @@ namespace Framework::Launcher {
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loaded game ({:.02f} MB)", (float(dwFileLength) / 1024.0f / 1024.0f));
+        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loaded game ({:.02f} MB or {})", (float(dwFileLength) / 1024.0f / 1024.0f), dwFileLength);
 
         auto base = GetModuleHandle(nullptr);
 
