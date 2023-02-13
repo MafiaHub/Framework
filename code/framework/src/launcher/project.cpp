@@ -386,7 +386,7 @@ namespace Framework::Launcher {
         DLLInjectionResults result = INJECT_LIBRARY_RESULT_OK;
 
         // Get the length of the library path
-        size_t sLibraryPathLen = (wcslen(szLibraryPath) + 1);
+        size_t sLibraryPathLen = (wcslen(szLibraryPath) + 1) * sizeof(WCHAR);
 
         // Allocate the a block of memory in our target process for the library path
         void *pRemoteLibraryPath = VirtualAllocEx(hProcess, NULL, sLibraryPathLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -489,8 +489,8 @@ namespace Framework::Launcher {
         }
 
         // Inject the client dll inside
-        std::wstring completeDllPAth                 = gProjectDllPath + std::wstring(L"\\") + gDllName;
-        const DLLInjectionResults moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPAth.c_str());
+        std::wstring completeDllPath                 = gProjectDllPath + std::wstring(L"\\") + gDllName;
+        const DLLInjectionResults moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
 
         // Was it successfull?
         if (moduleInjectResult != INJECT_LIBRARY_RESULT_OK) {
