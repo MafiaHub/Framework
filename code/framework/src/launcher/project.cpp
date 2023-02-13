@@ -30,14 +30,25 @@ __declspec(dllexport) unsigned long NvOptimusEnablement        = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
-// allocate space for game
+// linker config for sections
+#pragma comment(linker, "/merge:.data=.cld")
+#pragma comment(linker, "/merge:.rdata=.clr")
+#pragma comment(linker, "/merge:.cl=.zdata")
+#pragma comment(linker, "/merge:.text=.zdata")
+#pragma comment(linker, "/section:.zdata,re")
+
+//allocate space for game
 #ifdef _M_AMD64
 #pragma bss_seg(".fwgame")
-char fwgame_seg[0x1F000000];
+char fwgame_seg[0x6fffffff];
 #else
 #pragma bss_seg(".fwgame")
 char fwgame_seg[0x2500000];
 #endif
+
+// mark the end section we merge with .text
+#pragma data_seg(".fwend")
+uint8_t zdata[200] = {1};
 
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;

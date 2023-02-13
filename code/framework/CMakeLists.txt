@@ -96,7 +96,7 @@ if(WIN32)
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
         src/utils/memory.cpp)
-    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /SUBSYSTEM:windows /SECTIONLAYOUT:@${CMAKE_CURRENT_SOURCE_DIR}/src/launcher/SectionLayout.txt)
+    target_link_options(FrameworkLoader PUBLIC /IGNORE:4254 /SAFESEH:NO /DYNAMICBASE:NO /LARGEADDRESSAWARE /FORCE:MULTIPLE /STACK:12000000,4096 /INCREMENTAL:NO /SUBSYSTEM:windows /LAST:.zdata /ENTRY:mainCRTStartup)
 
     if(CMAKE_CL_64)
         target_link_options(FrameworkLoader PUBLIC /BASE:0x140000000)
