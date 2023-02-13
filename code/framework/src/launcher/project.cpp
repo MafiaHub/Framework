@@ -393,45 +393,53 @@ namespace Framework::Launcher {
 
         // Write our library path to the allocated block of memory
         SIZE_T sBytesWritten = 0;
-        WriteProcessMemory(hProcess, pRemoteLibraryPath, (void *)szLibraryPath, sLibraryPathLen, &sBytesWritten);
+        BOOL bWriteSuccess = WriteProcessMemory(hProcess, pRemoteLibraryPath, (void *)szLibraryPath, sLibraryPathLen, &sBytesWritten);
 
-        if (sBytesWritten != sLibraryPathLen) {
+        if (!bWriteSuccess || sBytesWritten != sLibraryPathLen) {
             result = INJECT_LIBRARY_RESULT_WRITE_FAILED;
         }
         else {
             // Get the handle of Kernel32.dll
-            HMODULE hKernel32 = GetModuleHandle("Kernel32");
-
-            // Get the address of the LoadLibraryA function from Kernel32.dll
-            FARPROC pfnLoadLibraryA = GetProcAddress(hKernel32, "LoadLibraryA");
-
-            // Create a thread inside the target process to load our library
-            HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pfnLoadLibraryA, pRemoteLibraryPath, 0, NULL);
-
-            if (hThread) {
-                // Wait for the created thread to end
-                WaitForSingleObject(hThread, INFINITE);
-
-                DWORD dwExitCode = 0;
-                if (GetExitCodeThread(hThread, &dwExitCode)) {
-                    // Should never happen as we wait for the thread to be finished.
-                    assert(dwExitCode != STILL_ACTIVE);
-                }
-                else {
-                    result = INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
-                }
-
-                // In case LoadLibrary returns handle equal to zero there was some problem.
-                if (dwExitCode == 0) {
-                    result = INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
-                }
-
-                // Close our thread handle
-                CloseHandle(hThread);
+            HMODULE hKernel32 = GetModuleHandle("kernel32.dll");
+            if (hKernel32 == NULL) {
+                result = INJECT_LIBRARY_GET_MODULE_HANDLE_FAILED;
             }
             else {
-                // Thread creation failed
-                result = INJECT_LIBRARY_THREAD_CREATION_FAILED;
+                // Get the address of the LoadLibraryA function from Kernel32.dll
+                FARPROC pfnLoadLibraryW = GetProcAddress(hKernel32, "LoadLibraryW");
+                if (pfnLoadLibraryW == NULL) {
+                    result = INJECT_LIBRARY_GET_PROC_ADDRESS_FAILED;
+                }
+                else {
+                    // Create a thread inside the target process to load our library
+                    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pfnLoadLibraryW, pRemoteLibraryPath, 0, NULL);
+
+                    if (hThread) {
+                        // Wait for the created thread to end
+                        WaitForSingleObject(hThread, INFINITE);
+
+                        DWORD dwExitCode = 0;
+                        if (GetExitCodeThread(hThread, &dwExitCode)) {
+                            // Should never happen as we wait for the thread to be finished.
+                            assert(dwExitCode != STILL_ACTIVE);
+                        }
+                        else {
+                            result = INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
+                        }
+
+                        // In case LoadLibrary returns handle equal to zero there was some problem.
+                        if (dwExitCode == 0) {
+                            result = INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
+                        }
+
+                        // Close our thread handle
+                        CloseHandle(hThread);
+                    }
+                    else {
+                        // Thread creation failed
+                        result = INJECT_LIBRARY_THREAD_CREATION_FAILED;
+                    }
+                }
             }
         }
 
