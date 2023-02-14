@@ -1,8 +1,4 @@
 <div align="center">
-   <img src="https://user-images.githubusercontent.com/9026786/132325309-2e8ebecf-1154-45b2-b07a-ac9c0d3f6f94.png" alt="MafiaHub Framework" />
-</div>
-
-<div align="center">
     <a href="https://discord.gg/eBQ4QHX"><img src="https://img.shields.io/discord/402098213114347520.svg" alt="Discord server" /></a>
     <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MafiaHub%20OSS-blue" alt="license" /></a>
 </div>
