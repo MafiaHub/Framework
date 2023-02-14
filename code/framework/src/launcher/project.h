@@ -62,6 +62,9 @@ namespace Framework::Launcher {
         // additional DLL search paths
         std::vector<std::wstring> additionalSearchPaths;
 
+        // Additional arguments
+        std::wstring additionalDLLInjectionArguments = L"";
+
         // alternative game working directory
         bool useAlternativeWorkDir = false; // Uses the game's root directory by default
         std::wstring alternativeWorkDir;

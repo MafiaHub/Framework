@@ -284,6 +284,8 @@ namespace Framework::Launcher {
             SetEnvironmentVariableW(L"PATH", newPath.c_str());
         }
 
+        auto test = LoadLibraryW(L"d3d12.dll");
+
         // Update the game path to include the executable name;
         _gamePath += std::wstring(L"/") + _config.executableName;
 
@@ -519,7 +521,15 @@ namespace Framework::Launcher {
             return false;
         }
 
+        // Fix the path
         std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
+
+        // Append the optional additional arguments
+        if (_config.additionalDLLInjectionArguments.length() > 0) {
+            _gamePath = _gamePath + L" " + _config.additionalDLLInjectionArguments;
+        }
+
+        // Compute the global variable
         gImagePath = _gamePath.c_str();
         gDllName   = _config.destinationDllName.c_str();
 
