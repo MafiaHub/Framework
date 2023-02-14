@@ -24,6 +24,8 @@
 #include <utils/hooking/hooking.h>
 #include <utils/minidump.h>
 
+#include <utils/hooking/jitasm.h>
+
 // Enforce discrete GPU on mobile units.
 extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement        = 0x00000001;
@@ -114,8 +116,8 @@ DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD n
 
         return (DWORD)wcslen(gImagePath);
     }
-
-    return GetModuleFileNameW(hModule, lpFilename, nSize);
+    auto len = GetModuleFileNameW(hModule, lpFilename, nSize);
+    return len;
 }
 
 DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
@@ -128,6 +130,40 @@ DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR 
     return GetModuleFileNameExW(hProcess, hModule, lpFilename, nSize);
 }
 
+HMODULE WINAPI GetModuleHandleW_Hook(LPWSTR lpModuleName) {
+    if (lpModuleName == nullptr) {
+        return (HMODULE)GetModuleHandle(nullptr);
+    }
+
+    return GetModuleHandleW(lpModuleName);
+}
+
+HMODULE WINAPI GetModuleHandleA_Hook(LPSTR lpModuleName) {
+    if (lpModuleName == nullptr) {
+        return (HMODULE)GetModuleHandle(nullptr);
+    }
+
+    return GetModuleHandleA(lpModuleName);
+}
+
+BOOL WINAPI GetModuleHandleExW_Hook(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule) {
+    if (lpModuleName == nullptr) {
+        *phModule = (HMODULE)GetModuleHandle(nullptr);
+        return TRUE;
+    }
+
+    return GetModuleHandleExW(dwFlags, lpModuleName, phModule);
+}
+
+BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *phModule) {
+    if (lpModuleName == nullptr) {
+        *phModule = (HMODULE)GetModuleHandle(nullptr);
+        return TRUE;
+    }
+
+    return GetModuleHandleExA(dwFlags, lpModuleName, phModule);
+}
+
 namespace Framework::Launcher {
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
         // Fetch the current working directory
@@ -136,7 +172,7 @@ namespace Framework::Launcher {
         Logging::GetInstance()->SetLogName(_config.name);
 
         auto projectPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
-        std::replace(projectPath.begin(), projectPath.end(), '\\', '/');
+        std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
         _steamWrapper = std::make_unique<External::Steam::Wrapper>();
@@ -483,6 +519,7 @@ namespace Framework::Launcher {
             return false;
         }
 
+        std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
         gImagePath = _gamePath.c_str();
         gDllName   = _config.destinationDllName.c_str();
 
@@ -530,6 +567,7 @@ namespace Framework::Launcher {
             return false;
         }
 
+        std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
         gImagePath = _gamePath.c_str();
         gDllName   = _config.destinationDllName.c_str();
 
@@ -606,6 +644,18 @@ namespace Framework::Launcher {
             }
             if (exportName == "GetModuleFileNameExW") {
                 return reinterpret_cast<LPVOID>(GetModuleFileNameExW_Hook);
+            }
+            if (exportName == "GetModuleHandleA") {
+                return reinterpret_cast<LPVOID>(GetModuleHandleA_Hook);
+            }
+            if (exportName == "GetModuleHandleExA") {
+                return reinterpret_cast<LPVOID>(GetModuleHandleExA_Hook);
+            }
+            if (exportName == "GetModuleHandleW") {
+                return reinterpret_cast<LPVOID>(GetModuleHandleW_Hook);
+            }
+            if (exportName == "GetModuleHandleExW") {
+                return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
