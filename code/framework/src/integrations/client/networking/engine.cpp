@@ -16,11 +16,7 @@ namespace Framework::Integrations::Client::Networking {
     }
 
     bool Engine::Init() {
-        if (!_networkClient->Init()) {
-            return false;
-        }
-
-        return true;
+        return _networkClient->Init() == Framework::Networking::CLIENT_NONE;
     }
 
     bool Engine::Connect(const std::string &host, const int32_t port, const std::string password) {
