@@ -44,25 +44,37 @@ namespace Framework::Integrations::Client {
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
-                _presence->Init(opts.discordAppId);
+                if (_presence->Init(opts.discordAppId) != Framework::External::DiscordError::DISCORD_NONE) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
+                    return ClientError::CLIENT_ENGINES_ERROR;
+                }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
             }
         }
 
         if (opts.useRenderer) {
             if (_renderer) {
-                _renderer->Init(opts.rendererOptions);
+                if (_renderer->Init(opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Renderer failed to initialize");
+                    return ClientError::CLIENT_ENGINES_ERROR;
+                }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
         }
 
         if (_networkingEngine) {
-            _networkingEngine->Init();
+            if (!_networkingEngine->Init()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Networking engine failed to initialize");
+                return ClientError::CLIENT_ENGINES_ERROR;
+            }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
         }
 
         if (_worldEngine) {
-            _worldEngine->Init();
+            if (_worldEngine->Init() != Framework::World::EngineError::ENGINE_NONE) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
+                return ClientError::CLIENT_ENGINES_ERROR;
+            }
 
             _worldEngine->GetWorld()->import <Shared::Modules::Mod>();
 
