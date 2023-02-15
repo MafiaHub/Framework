@@ -284,8 +284,6 @@ namespace Framework::Launcher {
             SetEnvironmentVariableW(L"PATH", newPath.c_str());
         }
 
-        auto test = LoadLibraryW(L"d3d12.dll");
-
         // Update the game path to include the executable name;
         _gamePath += std::wstring(L"/") + _config.executableName;
 
