@@ -364,6 +364,13 @@ namespace Framework::Launcher {
 
         // Set classic game path to the one found by Steam just for sake of having that information stored in the config file.
         _config.classicGamePath = _gamePath;
+
+        // Make sure Steam is aware of himself
+        auto appId              = std::to_wstring(_config.steamAppId);
+        SetEnvironmentVariableW(L"SteamAppId", appId.c_str());
+
+        // Now we have everything we want, just say goodbye
+        _steamWrapper->Shutdown();
         return true;
     }
 
