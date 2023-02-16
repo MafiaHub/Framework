@@ -64,37 +64,37 @@ namespace Framework::Integrations::Scripting {
         void SetPosition(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->pos = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-            FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+            FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
         }
 
         void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->rot = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
-            FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+            FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
         }
 
         void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->vel = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-            FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+            FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
         }
 
         void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto fr   = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->scale = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-            FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
+            FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         void SetModelName(std::string name) {
             auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelName = name;
-            FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
+            FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         void SetModelHash(uint64_t hash) {
             auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelHash = hash;
-            FW_SEND_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
+            FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         Framework::Scripting::Engines::Node::Builtins::Vector3 GetPosition() const {

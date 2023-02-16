@@ -18,6 +18,28 @@
 #include <string>
 #include <vector>
 
+#define FW_SEND_SERVER_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                                      \
+    do {                                                                                                                                                                                                                                                                               \
+        auto s = rpc {};                                                                                                                                                                                                                                                               \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
+        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
+        if (__net) {                                                                                                                                                                                                                                                                   \
+            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s);                                                                                                                                                             \
+        }                                                                                                                                                                                                                                                                              \
+    } while (0)
+
+#define FW_SEND_SERVER_COMPONENT_GAME_RPC_TO(rpc, ent, guid, ...)                                                                                                                                                                                                                             \
+    do {                                                                                                                                                                                                                                                                               \
+        auto s = rpc {};                                                                                                                                                                                                                                                               \
+        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
+        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
+        auto __net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
+        if (__net) {                                                                                                                                                                                                                                                                   \
+            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, guid);                                                                                                                                                       \
+        }                                                                                                                                                                                                                                                                              \
+    } while (0)
+
 namespace Framework::World {
     class ServerEngine: public Engine {
       protected:
