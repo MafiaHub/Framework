@@ -10,6 +10,7 @@
 
 #include "utils/safe_win32.h"
 
+#include "backend/d3d12.h"
 #include "backend/d3d11.h"
 #include "backend/d3d9.h"
 #include "errors.h"
@@ -29,6 +30,11 @@ namespace Framework::Graphics {
                 ID3D11Device *device;
                 ID3D11DeviceContext *deviceContext;
             } d3d11;
+
+            struct {
+                ID3D12Device *device;
+                // todo
+            } d3d12;
         };
     };
 
@@ -42,6 +48,7 @@ namespace Framework::Graphics {
 
         D3D9Backend *_d3d9Backend {};
         D3D11Backend *_d3d11Backend {};
+        D3D12Backend *_d3d12Backend {};
 
         bool _initialized = false;
 
@@ -61,6 +68,10 @@ namespace Framework::Graphics {
 
         D3D11Backend *GetD3D11Backend() const {
             return _d3d11Backend;
+        }
+
+        D3D12Backend *GetD3D12Backend() const {
+            return _d3d12Backend;
         }
 
         HWND GetWindow() const {

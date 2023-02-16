@@ -24,6 +24,9 @@ namespace Framework::Graphics {
         else if (_config.backend == RendererBackend::BACKEND_D3D_9) {
             _d3d9Backend = new D3D9Backend;
         }
+        else if (_config.backend == RendererBackend::BACKEND_D3D_12) {
+            _d3d12Backend = new D3D12Backend;
+        }
 
         _initialized = true;
         return RendererError::RENDERER_NONE;
@@ -40,6 +43,9 @@ namespace Framework::Graphics {
         else if (_d3d9Backend) {
             _d3d9Backend->Shutdown();
         }
+        else if (_d3d12Backend) {
+            _d3d12Backend->Shutdown();
+        }
 
         _initialized = false;
         return RendererError::RENDERER_NONE;
@@ -52,6 +58,9 @@ namespace Framework::Graphics {
         }
         else if (_d3d9Backend) {
             _d3d9Backend->Update();
+        }
+        else if (_d3d12Backend) {
+            _d3d12Backend->Update();
         }
     }
 } // namespace Framework::Graphics

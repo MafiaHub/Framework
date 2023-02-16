@@ -11,6 +11,7 @@
 #include "graphics/renderer.h"
 
 #include <backends/imgui_impl_dx11.h>
+#include <backends/imgui_impl_dx12.h>
 #include <backends/imgui_impl_dx9.h>
 #include <backends/imgui_impl_sdl.h>
 #include <backends/imgui_impl_win32.h>
@@ -55,7 +56,11 @@ namespace Framework::External::ImGUI {
             const auto renderBackend = _config.renderer->GetD3D11Backend();
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
         } break;
-        case Graphics::RendererBackend::BACKEND_D3D_12: break;
+        case Graphics::RendererBackend::BACKEND_D3D_12: {
+            const auto renderBackend = _config.renderer->GetD3D12Backend();
+            // ImGui_ImplDX12_Init(renderBackend->GetDevice());
+            //todo
+        } break;
         }
 
         switch (_config.windowBackend) {
@@ -83,7 +88,9 @@ namespace Framework::External::ImGUI {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_Shutdown();
         } break;
-        case Graphics::RendererBackend::BACKEND_D3D_12: break;
+        case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
+            ImGui_ImplDX12_Shutdown();
+        } break;
         }
 
         switch (_config.windowBackend) {
@@ -112,7 +119,9 @@ namespace Framework::External::ImGUI {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_NewFrame();
         } break;
-        case Graphics::RendererBackend::BACKEND_D3D_12: break;
+        case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
+            ImGui_ImplDX12_NewFrame();
+        } break;
         }
 
         switch (_config.windowBackend) {
@@ -157,7 +166,7 @@ namespace Framework::External::ImGUI {
             ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
-            assert(0 && "D3D12 backend not implemented");
+            ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
         }
 
