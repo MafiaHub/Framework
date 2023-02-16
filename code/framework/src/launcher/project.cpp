@@ -55,6 +55,7 @@ uint8_t zdata[200] = {1};
 static const wchar_t *gImagePath;
 static const wchar_t *gDllName;
 HMODULE tlsDll {};
+static Framework::Launcher::ProjectConfiguration *gConfig = nullptr;
 
 static wchar_t gProjectDllPath[32768];
 
@@ -82,10 +83,30 @@ void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
     return GetStartupInfoA(lpStartupInfo);
 }
 
-LPSTR WINAPI GetCommandLineA_Stub() {
-    Framework::Launcher::Project::InitialiseClientDLL();
+LPWSTR WINAPI GetCommandLineW_Stub() {
+    if (!gConfig->loadClientManually) {
+        Framework::Launcher::Project::InitialiseClientDLL();
+    }
 
-    return GetCommandLineA();
+    static wchar_t buffer[MAX_PATH]={0};
+    wcscpy_s(buffer, MAX_PATH, GetCommandLineW());
+    wcscat_s(buffer, MAX_PATH, gConfig->additionalLaunchArguments.c_str());
+
+    return buffer;
+}
+
+
+LPSTR WINAPI GetCommandLineA_Stub() {
+    if (!gConfig->loadClientManually) {
+        Framework::Launcher::Project::InitialiseClientDLL();
+    }
+    auto args = Framework::Utils::StringUtils::WideToNormalDirect(gConfig->additionalLaunchArguments);
+
+    static char buffer[MAX_PATH]={0};
+    strcpy_s(buffer, MAX_PATH, GetCommandLineA());
+    strcat_s(buffer, MAX_PATH, args.c_str());
+
+    return buffer;
 }
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
@@ -166,6 +187,7 @@ BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *
 
 namespace Framework::Launcher {
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
+        gConfig = &_config;
         // Fetch the current working directory
         GetCurrentDirectoryW(32768, gProjectDllPath);
 
@@ -530,8 +552,8 @@ namespace Framework::Launcher {
         std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
 
         // Append the optional additional arguments
-        if (_config.additionalDLLInjectionArguments.length() > 0) {
-            _gamePath = _gamePath + L" " + _config.additionalDLLInjectionArguments;
+        if (_config.additionalLaunchArguments.length() > 0) {
+            _gamePath = _gamePath + L" " + _config.additionalLaunchArguments;
         }
 
         // Compute the global variable
@@ -645,7 +667,10 @@ namespace Framework::Launcher {
             if (!_config.loadClientManually && exportName == "GetStartupInfoA") {
                 return reinterpret_cast<LPVOID>(GetStartupInfoA_Stub);
             }
-            if (!_config.loadClientManually && exportName == "GetCommandLineA") {
+            if (exportName == "GetCommandLineW") {
+                return reinterpret_cast<LPVOID>(GetCommandLineW_Stub);
+            }
+            if (exportName == "GetCommandLineA") {
                 return reinterpret_cast<LPVOID>(GetCommandLineA_Stub);
             }
             if (exportName == "GetModuleFileNameA") {
