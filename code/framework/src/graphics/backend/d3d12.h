@@ -19,9 +19,17 @@
 
 namespace Framework::Graphics {
     class D3D12Backend: public Backend<ID3D12Device *, ID3D12DeviceContext *> {
+      private:
+        ID3D12DescriptorHeap *_srvHeap = nullptr;
       public:
         bool Init(ID3D12Device *, ID3D12DeviceContext *) override;
         bool Shutdown() override;
         void Update() override;
+
+        int NumFramesInFlight() const;
+
+        ID3D12DescriptorHeap *GetSRVHeap() const {
+            return _srvHeap;
+        }
     };
 } // namespace Framework::Graphics

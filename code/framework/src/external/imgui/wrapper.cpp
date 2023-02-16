@@ -58,8 +58,10 @@ namespace Framework::External::ImGUI {
         } break;
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             const auto renderBackend = _config.renderer->GetD3D12Backend();
-            // ImGui_ImplDX12_Init(renderBackend->GetDevice());
-            //todo
+            ImGui_ImplDX12_Init(renderBackend->GetDevice(), renderBackend->NumFramesInFlight(),
+                DXGI_FORMAT_R8G8B8A8_UNORM, renderBackend->GetSRVHeap(),
+                renderBackend->GetSRVHeap()->GetCPUDescriptorHandleForHeapStart(),
+                renderBackend->GetSRVHeap()->GetGPUDescriptorHandleForHeapStart());
         } break;
         }
 
