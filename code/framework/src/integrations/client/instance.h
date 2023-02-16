@@ -39,6 +39,7 @@ namespace Framework::Integrations::Client {
         [[maybe_unused]] bool useNetworking = true;
         bool useImGUI                       = false;
 
+        bool initRendererManually = false;
         Graphics::RendererConfiguration rendererOptions = {};
     };
 
@@ -51,6 +52,7 @@ namespace Framework::Integrations::Client {
     class Instance {
       private:
         bool _initialized = false;
+        bool _renderInitialized = false;
         InstanceOptions _opts;
 
         std::unique_ptr<Networking::Engine> _networkingEngine;
@@ -86,6 +88,12 @@ namespace Framework::Integrations::Client {
         virtual bool PostInit()    = 0;
         virtual bool PreShutdown() = 0;
         virtual void PostUpdate()  = 0;
+
+        ClientError RenderInit();
+
+        InstanceOptions *GetOptions() {
+            return &_opts;
+        }
 
         bool IsInitialized() const {
             return _initialized;

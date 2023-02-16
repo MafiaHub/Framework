@@ -52,16 +52,6 @@ namespace Framework::Integrations::Client {
             }
         }
 
-        if (opts.useRenderer) {
-            if (_renderer) {
-                if (_renderer->Init(opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Renderer failed to initialize");
-                    return ClientError::CLIENT_ENGINES_ERROR;
-                }
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
-            }
-        }
-
         if (_networkingEngine) {
             if (!_networkingEngine->Init()) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Networking engine failed to initialize");
@@ -86,22 +76,48 @@ namespace Framework::Integrations::Client {
         PostInit();
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
 
-        // Init the render device
-        if (opts.useRenderer) {
-            _renderer->SetWindow(opts.rendererOptions.windowHandle);
-
-            switch (opts.rendererOptions.backend) {
-            case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(opts.rendererOptions.d3d9.device, nullptr); break;
-            case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(opts.rendererOptions.d3d11.device, opts.rendererOptions.d3d11.deviceContext); break;
-            default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
+        if (!opts.initRendererManually) {
+            if (RenderInit() != ClientError::CLIENT_NONE) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Rendering subsystems failed to initialize");
+                return ClientError::CLIENT_ENGINES_ERROR;
             }
         }
 
-        if (opts.useImGUI) {
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
+        _initialized = true;
+        return ClientError::CLIENT_NONE;
+    }
+
+    ClientError Instance::RenderInit() {
+        if (_renderInitialized) {
+            return ClientError::CLIENT_NONE;
+        }
+
+        // Init the render device
+        if (_opts.useRenderer) {
+            if (_renderer) {
+                if (_renderer->Init(_opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Renderer failed to initialize");
+                    return ClientError::CLIENT_ENGINES_ERROR;
+                }
+
+                _renderer->SetWindow(_opts.rendererOptions.windowHandle);
+
+                switch (_opts.rendererOptions.backend) {
+                case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(_opts.rendererOptions.d3d9.device, nullptr); break;
+                case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions.d3d11.device, _opts.rendererOptions.d3d11.deviceContext); break;
+                case Graphics::RendererBackend::BACKEND_D3D_12: _renderer->GetD3D12Backend()->Init(_opts.rendererOptions.d3d12.device, nullptr); break;
+                default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
+            }
+        }
+
+        if (_opts.useImGUI) {
             // Init the ImGui internal instance
             External::ImGUI::Config imguiConfig;
-            imguiConfig.renderBackend = opts.rendererOptions.backend;
-            imguiConfig.windowBackend = opts.rendererOptions.platform;
+            imguiConfig.renderBackend = _opts.rendererOptions.backend;
+            imguiConfig.windowBackend = _opts.rendererOptions.platform;
             imguiConfig.renderer      = _renderer.get();
             imguiConfig.windowHandle  = _renderer->GetWindow();
             if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
@@ -109,8 +125,7 @@ namespace Framework::Integrations::Client {
             }
         }
 
-        Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
-        _initialized = true;
+        _renderInitialized = true;
         return ClientError::CLIENT_NONE;
     }
 
