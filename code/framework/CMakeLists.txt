@@ -69,6 +69,7 @@ if(WIN32)
     list(APPEND FRAMEWORK_CLIENT_SRC
         src/graphics/backend/d3d9.cpp
         src/graphics/backend/d3d11.cpp
+        src/graphics/backend/d3d12.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
