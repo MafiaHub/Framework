@@ -168,7 +168,8 @@ namespace Framework::External::ImGUI {
             ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
-            ImGui_ImplDX11_RenderDrawData(drawData);
+            //TODO(DavoSK): pass second argument here
+            //ImGui_ImplDX12_RenderDrawData(drawData);
         } break;
         }
 
