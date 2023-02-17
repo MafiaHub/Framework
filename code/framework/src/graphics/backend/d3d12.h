@@ -10,10 +10,11 @@
 
 #include "backend.h"
 
+#include <memory>
+
 #ifdef WIN32
 #include <d3d12.h>
 #include <dxgi1_4.h>
-#include <atlbase.h>
 #else
 #define ID3D12Device        void
 #endif
@@ -22,27 +23,25 @@
 #include <vector>
 
 namespace Framework::Graphics {
-    class D3D12Backend: public Backend<ID3D12Device *, ID3D12DeviceContext *> {
+    class D3D12Backend: public Backend<ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *> {
       private:
-        //ID3D12DescriptorHeap *_srvHeap = nullptr;
         IDXGISwapChain3* _swapChain = nullptr;
         UINT _frameBufferCount = 0;
-        CComPtr<ID3D12DescriptorHeap> _rtvHeap = nullptr;
-	      CComPtr<ID3D12DescriptorHeap> _srvHeap = nullptr;
-        CComPtr<ID3D12GraphicsCommandList> _commandList = nullptr;
-        CComPtr<ID3D12CommandQueue> _commandQueue = nullptr;
+        ID3D12DescriptorHeap* _rtvHeap = nullptr;
+	    ID3D12DescriptorHeap* _srvHeap = nullptr;
+        ID3D12GraphicsCommandList* _commandList = nullptr;
+        ID3D12CommandQueue* _commandQueue = nullptr;
 
         struct FrameContext {
-          CComPtr<ID3D12CommandAllocator> _commandAllocator = nullptr;
-          CComPtr<ID3D12Resource> _mainRenderTargetResource = nullptr;
+          ID3D12CommandAllocator* _commandAllocator = nullptr;
+          ID3D12Resource* _mainRenderTargetResource = nullptr;
           D3D12_CPU_DESCRIPTOR_HANDLE _mainRenderTargetDescriptor;
         };
 
         std::vector<FrameContext> _frameContext;
         D3D12_RESOURCE_BARRIER _barrier{};
       public:
-        bool Init(ID3D12Device *, ID3D12DeviceContext *) override;
-        bool InitEx(IDXGISwapChain3* pSwapChain, CComPtr<ID3D12CommandQueue> commandQueue);
+        bool Init(ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *) override;
         bool Shutdown() override;
         void Update() override;
         void Begin();
@@ -54,7 +53,7 @@ namespace Framework::Graphics {
         }
 
         ID3D12GraphicsCommandList* GetGraphicsCommandList() const {
-          return _commandList.p;
+          return _commandList;
         }
     };
 } // namespace Framework::Graphics

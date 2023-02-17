@@ -11,28 +11,22 @@
 #include <logging/logger.h>
 
 namespace Framework::Graphics {
-    bool D3D12Backend::Init(ID3D12Device *device, ID3D12DeviceContext *context) {
+    bool D3D12Backend::Init(ID3D12Device *device, ID3D12DeviceContext *context, IDXGISwapChain3 *swapChain, ID3D12CommandQueue *commandQueue) {
         _device  = device;
         _context = context;
-        Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("D3D12 device {}", fmt::ptr(device));
-        return true;
-    }
-
-    bool D3D12Backend::InitEx(IDXGISwapChain3* pSwapChain, CComPtr<ID3D12CommandQueue> commandQueue) {
-        
-        //#1 get device from swapchain (meybe different device)
+        //#1 get device from swapchain (maybe different device)
         ID3D12Device* pD3DDevice;
-        if (FAILED(pSwapChain->GetDevice(__uuidof(ID3D12Device), (void**)&pD3DDevice))) {
+        if (FAILED(swapChain->GetDevice(__uuidof(ID3D12Device), (void**)&pD3DDevice))) {
             return false;
         }
-        
-        _swapChain = pSwapChain;
+
+        _swapChain = swapChain;
         _commandQueue = commandQueue;
 
         //#2 get count of buffers
         {
             DXGI_SWAP_CHAIN_DESC desc{};
-            pSwapChain->GetDesc(&desc);
+            swapChain->GetDesc(&desc);
             _frameBufferCount = desc.BufferCount;
 
             _frameContext.clear();
@@ -68,7 +62,7 @@ namespace Framework::Graphics {
 
             for (UINT i = 0; i < _frameBufferCount; i++) {
                 _frameContext[i]._mainRenderTargetDescriptor = rtvHandle;
-                pSwapChain->GetBuffer(i, IID_PPV_ARGS(&_frameContext[i]._mainRenderTargetResource));
+                swapChain->GetBuffer(i, IID_PPV_ARGS(&_frameContext[i]._mainRenderTargetResource));
                 pD3DDevice->CreateRenderTargetView(_frameContext[i]._mainRenderTargetResource, nullptr, rtvHandle);
                 rtvHandle.ptr += rtvDescriptorSize;
             }
@@ -91,10 +85,19 @@ namespace Framework::Graphics {
             }
         }
 
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("D3D12 device {}", fmt::ptr(device));
         return true;
     }
 
     bool D3D12Backend::Shutdown() {
+        // release objects
+        _rtvHeap->Release();
+        _srvHeap->Release();
+        _commandList->Release();
+        for (auto& frameContext : _frameContext) {
+            frameContext._commandAllocator->Release();
+            frameContext._mainRenderTargetResource->Release();
+        }
         return true;
     }
 
@@ -108,7 +111,7 @@ namespace Framework::Graphics {
 		_barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 		_barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
 		_barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        
+
 		_commandList->Reset(currentFrameContext._commandAllocator, nullptr);
 		_commandList->ResourceBarrier(1, &_barrier);
 		_commandList->OMSetRenderTargets(1, &currentFrameContext._mainRenderTargetDescriptor, FALSE, nullptr);
@@ -122,7 +125,7 @@ namespace Framework::Graphics {
 		_commandList->Close();
 		_commandQueue->ExecuteCommandLists(1, (ID3D12CommandList**)&_commandList);
     }
- 
+
     void D3D12Backend::Update() {
     }
 

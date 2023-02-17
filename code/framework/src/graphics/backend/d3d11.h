@@ -18,9 +18,9 @@
 #endif
 
 namespace Framework::Graphics {
-    class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *> {
+    class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, void*, void*> {
       public:
-        bool Init(ID3D11Device *, ID3D11DeviceContext *) override;
+        bool Init(ID3D11Device *, ID3D11DeviceContext *, void*, void*) override;
         bool Shutdown() override;
         void Update() override;
     };

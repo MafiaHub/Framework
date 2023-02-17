@@ -9,7 +9,7 @@
 #pragma once
 
 namespace Framework::Graphics {
-    template <typename TDevice, typename TContext>
+    template <typename TDevice, typename TContext, typename TSwapChain, typename TCommandQueue>
     class Backend {
       protected:
         TDevice _device;
@@ -18,7 +18,7 @@ namespace Framework::Graphics {
       public:
         Backend() = default;
 
-        virtual bool Init(TDevice device, TContext context) = 0;
+        virtual bool Init(TDevice device, TContext context, TSwapChain swapChain, TCommandQueue commandList) = 0;
         virtual bool Shutdown()                             = 0;
 
         virtual void Update() = 0;

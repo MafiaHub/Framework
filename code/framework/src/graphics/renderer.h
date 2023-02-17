@@ -15,7 +15,6 @@
 #include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
-#include "atlbase.h"
 
 namespace Framework::Graphics {
     struct RendererConfiguration {
@@ -34,7 +33,7 @@ namespace Framework::Graphics {
         struct {
             ID3D12Device *device = nullptr;
             IDXGISwapChain3 *swapchain = nullptr;
-            CComPtr<ID3D12CommandQueue> commandQueue = nullptr;
+            ID3D12CommandQueue *commandQueue = nullptr;
             // todo
         } d3d12;
     };
