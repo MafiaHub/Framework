@@ -144,7 +144,7 @@ namespace Framework::External::ImGUI {
             _renderQueue.pop();
         }
 
-        ImGui::Render();
+        ImGui::Render(); 
 
         return Error::IMGUI_NONE;
     }
@@ -169,7 +169,8 @@ namespace Framework::External::ImGUI {
         } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
             //TODO(DavoSK): pass second argument here
-            //ImGui_ImplDX12_RenderDrawData(drawData);
+            const auto renderBackend = _config.renderer->GetD3D12Backend();
+            ImGui_ImplDX12_RenderDrawData(drawData, renderBackend->GetGraphicsCommandList());
         } break;
         }
 

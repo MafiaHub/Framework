@@ -106,7 +106,11 @@ namespace Framework::Integrations::Client {
                 switch (_opts.rendererOptions.backend) {
                 case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(_opts.rendererOptions.d3d9.device, nullptr); break;
                 case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions.d3d11.device, _opts.rendererOptions.d3d11.deviceContext); break;
-                case Graphics::RendererBackend::BACKEND_D3D_12: _renderer->GetD3D12Backend()->Init(_opts.rendererOptions.d3d12.device, nullptr); break;
+                case Graphics::RendererBackend::BACKEND_D3D_12: {
+                    const auto& ctx = _opts.rendererOptions.d3d12;
+                    _renderer->GetD3D12Backend()->Init(ctx.device, nullptr);
+                    _renderer->GetD3D12Backend()->InitEx(ctx.swapchain, ctx.commandQueue);
+                } break;
                 default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");

@@ -15,6 +15,7 @@
 #include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
+#include "atlbase.h"
 
 namespace Framework::Graphics {
     struct RendererConfiguration {
@@ -22,25 +23,25 @@ namespace Framework::Graphics {
         PlatformBackend platform;
         HWND windowHandle;
 
-        union {
-            struct {
-                IDirect3DDevice9 *device;
-            } d3d9;
-            struct {
-                ID3D11Device *device;
-                ID3D11DeviceContext *deviceContext;
-            } d3d11;
+        struct {
+            IDirect3DDevice9 *device;
+        } d3d9;
+        struct {
+            ID3D11Device *device;
+            ID3D11DeviceContext *deviceContext;
+        } d3d11;
 
-            struct {
-                ID3D12Device *device;
-                // todo
-            } d3d12;
-        };
+        struct {
+            ID3D12Device *device = nullptr;
+            IDXGISwapChain3 *swapchain = nullptr;
+            CComPtr<ID3D12CommandQueue> commandQueue = nullptr;
+            // todo
+        } d3d12;
     };
 
     class Renderer {
       private:
-        RendererConfiguration _config {};
+        RendererConfiguration _config{};
         RendererState _state     = RendererState::STATE_NOT_INITIALIZED;
         RendererBackend _backend = RendererBackend::BACKEND_D3D_11;
 
