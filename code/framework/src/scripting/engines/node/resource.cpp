@@ -221,9 +221,9 @@ namespace Framework::Scripting::Engines::Node {
             }
             else {
                 auto originValue = Helpers::MakeString(isolate, path).ToLocalChecked();
-                // v8::ScriptOrigin scriptOrigin(originValue);
+                v8::ScriptOrigin scriptOrigin(isolate, originValue);
 
-                script = v8::Script::Compile(context, source, nullptr);
+                script = v8::Script::Compile(context, source, &scriptOrigin);
             }
             if (script.IsEmpty())
                 return false;
