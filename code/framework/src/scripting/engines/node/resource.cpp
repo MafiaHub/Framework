@@ -197,6 +197,12 @@ namespace Framework::Scripting::Engines::Node {
             _name       = root["name"].get<std::string>();
             _version    = root["version"].get<std::string>();
             _entryPoint = root["main"].get<std::string>();
+
+            if (root.contains("mod")) {
+                if (_engine->GetModName() != root["mod"].get<std::string>()) {
+                    return false;
+                }
+            }
         }
         catch (nlohmann::detail::type_error &err) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The package.json is not valid:\n\t{}", err.what());

@@ -26,5 +26,8 @@ namespace Framework::Scripting::Engines {
         virtual IResource *UnloadResource(std::string) = 0;
 
         virtual void SetProcessArguments(int, char **) = 0;
+
+        virtual void SetModName(std::string) = 0;
+        virtual std::string GetModName() const = 0;
     };
 } // namespace Framework::Scripting::Engines

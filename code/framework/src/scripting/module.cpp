@@ -31,6 +31,7 @@ namespace Framework::Scripting {
 
         default: break;
         }
+        _engine->SetModName(_modName);
 
         _engineType = engineType;
         _engine->SetProcessArguments(_processArgsCount, _processArgs);
@@ -38,6 +39,7 @@ namespace Framework::Scripting {
             delete _engine;
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
         }
+
 
         // Everything just went fine hihi
         CoreModules::SetScriptingModule(this);

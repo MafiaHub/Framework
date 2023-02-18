@@ -107,6 +107,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize the scripting engine
         _scriptingEngine->SetProcessArguments(opts.argc, opts.argv);
+        _scriptingEngine->SetModName(opts.modName);
         if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE, sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;

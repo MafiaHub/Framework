@@ -27,6 +27,7 @@ namespace Framework::Scripting {
 
         int _processArgsCount;
         char **_processArgs;
+        std::string _modName;
 
         Engines::IEngine *_engine = nullptr;
         EngineTypes _engineType;
@@ -70,6 +71,10 @@ namespace Framework::Scripting {
         void SetProcessArguments(int argc, char **argv) {
             _processArgsCount = argc;
             _processArgs      = argv;
+        }
+
+        void SetModName(std::string name) {
+            _modName = name;
         }
     };
 } // namespace Framework::Scripting

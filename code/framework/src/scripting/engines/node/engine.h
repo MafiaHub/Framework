@@ -23,6 +23,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::Isolate *_isolate;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
+        std::string _modName;
 
       public:
         EngineError Init(SDKRegisterCallback) override;
@@ -45,6 +46,14 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         void SetProcessArguments(int argc, char **argv) override {}
+
+        void SetModName(std::string name) override {
+            _modName = name;
+        }
+
+        std::string GetModName() const {
+            return _modName;
+        }
 
       protected:
         SDK *GetSDK() const {
