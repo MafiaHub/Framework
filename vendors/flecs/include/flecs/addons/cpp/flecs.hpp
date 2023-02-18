@@ -1,8 +1,6 @@
 /**
- * @file flecs.hpp
- * @brief Flecs C++ API.
- *
- * Modern C++11 API
+ * @file addons/cpp/flecs.hpp
+ * @brief Flecs C++11 API.
  */
 
 #pragma once
@@ -10,7 +8,11 @@
 // STL includes
 #include <type_traits>
 
-// Forward declarations
+/**
+ * @defgroup cpp C++ API
+ * @{
+ */
+
 namespace flecs 
 {
 
@@ -21,6 +23,7 @@ struct entity_view;
 struct entity;
 struct type;
 struct table;
+struct table_range;
 struct untyped_component;
 
 template <typename T>
@@ -90,9 +93,9 @@ struct each_invoker;
 #include "log.hpp"
 #include "pair.hpp"
 #include "lifecycle_traits.hpp"
+#include "ref.hpp"
 #include "world.hpp"
 #include "iter.hpp"
-#include "ref.hpp"
 #include "entity.hpp"
 #include "invoker.hpp"
 #include "utils/iterable.hpp"
@@ -147,4 +150,23 @@ struct each_invoker;
 #include "mixins/monitor/impl.hpp"
 #endif
 
-#include "impl.hpp"
+#include "impl/iter.hpp"
+#include "impl/world.hpp"
+
+/**
+ * @defgroup cpp_core Core
+ * @brief Core ECS functionality (entities, storage, queries)
+ * 
+ * @{
+ * @}
+ */
+
+/**
+ * @defgroup cpp_addons Addons
+ * @brief C++ APIs for addons.
+ * 
+ * @{
+ * @}
+ */
+
+/** @} */

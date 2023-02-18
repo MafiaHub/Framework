@@ -1,10 +1,18 @@
+/**
+ * @file addons/cpp/mixins/query/builder_i.hpp
+ * @brief Query builder interface.
+ */
+
 #pragma once
 
 #include "../filter/builder_i.hpp"
 
 namespace flecs {
 
-// Query builder interface
+/** Query builder interface.
+ * 
+ * \ingroup cpp_core_queries
+ */
 template<typename Base, typename ... Components>
 struct query_builder_i : filter_builder_i<Base, Components ...> {
 private:

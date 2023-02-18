@@ -1,5 +1,5 @@
 /**
- * @file app.h
+ * @file addons/app.h
  * @brief App addon.
  *
  * The app addon is a wrapper around the application's main loop. Its main
@@ -21,23 +21,31 @@
 extern "C" {
 #endif
 
+/**
+ * @defgroup c_addons_app App
+ * @brief Optional addon for running the main application loop.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
+
 /** Callback type for init action. */
 typedef int(*ecs_app_init_action_t)(
     ecs_world_t *world);
 
 /** Used with ecs_app_run. */
 typedef struct ecs_app_desc_t {
-    ecs_ftime_t target_fps;   /* Target FPS. */
-    ecs_ftime_t delta_time;   /* Frame time increment (0 for measured values) */
-    int32_t threads;          /* Number of threads. */
-    int32_t frames;           /* Number of frames to run (0 for infinite) */
-    bool enable_rest;         /* Allows HTTP clients to access ECS data */
-    bool enable_monitor;      /* Periodically collect statistics */
+    ecs_ftime_t target_fps;   /**< Target FPS. */
+    ecs_ftime_t delta_time;   /**< Frame time increment (0 for measured values) */
+    int32_t threads;          /**< Number of threads. */
+    int32_t frames;           /**< Number of frames to run (0 for infinite) */
+    bool enable_rest;         /**< Allows HTTP clients to access ECS data */
+    bool enable_monitor;      /**< Periodically collect statistics */
 
-    ecs_app_init_action_t init; /* If set, function is ran before starting the
+    ecs_app_init_action_t init; /**< If set, function is ran before starting the
                                  * main loop. */
 
-    void *ctx;                /* Reserved for custom run/frame actions */
+    void *ctx;                /**< Reserved for custom run/frame actions */
 } ecs_app_desc_t;
 
 /** Callback type for run action. */
@@ -96,6 +104,8 @@ int ecs_app_set_run_action(
 FLECS_API
 int ecs_app_set_frame_action(
     ecs_app_frame_action_t callback);
+
+/** @} */
 
 #ifdef __cplusplus
 }

@@ -1,3 +1,21 @@
+/**
+ * @file datastructures/strbuf.c
+ * @brief Utility for constructing strings.
+ *
+ * A buffer builds up a list of elements which individually can be up to N bytes
+ * large. While appending, data is added to these elements. More elements are
+ * added on the fly when needed. When an application calls ecs_strbuf_get, all
+ * elements are combined in one string and the element administration is freed.
+ *
+ * This approach prevents reallocs of large blocks of memory, and therefore
+ * copying large blocks of memory when appending to a large buffer. A buffer
+ * preallocates some memory for the element overhead so that for small strings
+ * there is hardly any overhead, while for large strings the overhead is offset
+ * by the reduced time spent on copying memory.
+ * 
+ * The functionality provided by strbuf is similar to std::stringstream.
+ */
+
 #include "../private_api.h"
 #include <math.h>
 
@@ -529,6 +547,18 @@ bool ecs_strbuf_appendstr_zerocpy(
     return true;
 }
 
+bool ecs_strbuf_appendstr_zerocpyn(
+    ecs_strbuf_t *b,
+    char *str,
+    int32_t n)
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
+    flecs_strbuf_init(b);
+    flecs_strbuf_grow_str(b, str, str, n);
+    return true;
+}
+
 bool ecs_strbuf_appendstr_zerocpy_const(
     ecs_strbuf_t *b,
     const char* str)
@@ -538,6 +568,19 @@ bool ecs_strbuf_appendstr_zerocpy_const(
     /* Removes const modifier, but logic prevents changing / delete string */
     flecs_strbuf_init(b);
     flecs_strbuf_grow_str(b, (char*)str, NULL, 0);
+    return true;
+}
+
+bool ecs_strbuf_appendstr_zerocpyn_const(
+    ecs_strbuf_t *b,
+    const char *str,
+    int32_t n)
+{
+    ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
+    /* Removes const modifier, but logic prevents changing / delete string */
+    flecs_strbuf_init(b);
+    flecs_strbuf_grow_str(b, (char*)str, NULL, n);
     return true;
 }
 

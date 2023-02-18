@@ -1,5 +1,5 @@
 /**
- * @file log.h
+ * @file addons/log.h
  * @brief Logging addon.
  * 
  * The logging addon provides an API for (debug) tracing and reporting errors
@@ -33,6 +33,14 @@ extern "C" {
 #endif
 
 #ifdef FLECS_LOG
+
+/**
+ * @defgroup c_addons_log Log
+ * @brief Logging functions.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Tracing
@@ -107,6 +115,22 @@ const char* ecs_strerror(
 ////////////////////////////////////////////////////////////////////////////////
 
 FLECS_API
+void _ecs_print(
+    int32_t level,
+    const char *file,
+    int32_t line,
+    const char *fmt,
+    ...);
+
+FLECS_API
+void _ecs_printv(
+    int level,
+    const char *file,
+    int32_t line,
+    const char *fmt,
+    va_list args);
+
+FLECS_API
 void _ecs_log(
     int32_t level,
     const char *file,
@@ -164,6 +188,12 @@ void _ecs_parser_errorv(
 #ifndef FLECS_LEGACY /* C89 doesn't support variadic macros */
 
 /* Base logging function. Accepts a custom level */
+#define ecs_print(level, ...)\
+    _ecs_print(level, __FILE__, __LINE__, __VA_ARGS__)
+
+#define ecs_printv(level, fmt, args)\
+    _ecs_printv(level, __FILE__, __LINE__, fmt, args)
+
 #define ecs_log(level, ...)\
     _ecs_log(level, __FILE__, __LINE__, __VA_ARGS__)
 
@@ -308,13 +338,13 @@ void _ecs_parser_errorv(
 #define ecs_log_push() _ecs_log_push(0)
 #define ecs_log_pop() _ecs_log_pop(0)
 
-/** Abort 
+/** Abort.
  * Unconditionally aborts process. */
 #define ecs_abort(error_code, ...)\
     _ecs_abort(error_code, __FILE__, __LINE__, __VA_ARGS__);\
     ecs_os_abort(); abort(); /* satisfy compiler/static analyzers */
 
-/** Assert 
+/** Assert. 
  * Aborts if condition is false, disabled in debug mode. */
 #if defined(FLECS_NDEBUG) && !defined(FLECS_KEEP_ASSERT)
 #define ecs_assert(condition, error_code, ...)
@@ -330,7 +360,7 @@ void _ecs_parser_errorv(
     ecs_assert(var, error_code, __VA_ARGS__);\
     (void)var
 
-/** Debug assert 
+/** Debug assert.
  * Assert that is only valid in debug mode (ignores FLECS_KEEP_ASSERT) */
 #ifndef FLECS_NDEBUG
 #define ecs_dbg_assert(condition, error_code, ...) ecs_assert(condition, error_code, __VA_ARGS__)
@@ -344,7 +374,7 @@ void _ecs_parser_errorv(
         goto error;\
     }
 
-/** Check
+/** Check.
  * goto error if condition is false. */
 #if defined(FLECS_NDEBUG) && !defined(FLECS_KEEP_ASSERT)
 #define ecs_check(condition, error_code, ...) ecs_dummy_check
@@ -361,7 +391,7 @@ void _ecs_parser_errorv(
 #endif
 #endif // FLECS_NDEBUG
 
-/** Panic
+/** Panic.
  * goto error when FLECS_SOFT_ASSERT is defined, otherwise abort */
 #if defined(FLECS_NDEBUG) && !defined(FLECS_KEEP_ASSERT)
 #define ecs_throw(error_code, ...) ecs_dummy_check
@@ -521,5 +551,7 @@ int ecs_log_last_error(void);
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */
 
 #endif // FLECS_LOG_H

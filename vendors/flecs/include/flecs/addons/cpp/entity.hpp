@@ -1,13 +1,31 @@
+/**
+ * @file addons/cpp/entity.hpp
+ * @brief Entity class.
+ * 
+ * This class provides read/write access to entities.
+ */
+
 #pragma once
 
 #include "entity_view.hpp"
 #include "mixins/entity/builder.hpp"
 
+/**
+ * @defgroup cpp_entities Entities
+ * @brief Entity operations.
+ * 
+ * \ingroup cpp_core
+ * @{
+ */
+
 namespace flecs
 {
 
-/** Entity class
- * This class provides access to entities. */
+/** Entity.
+ * Class with read/write operations for entities.
+ * 
+ * \ingroup cpp_entities
+*/
 struct entity : entity_builder<entity>
 {
     entity() : entity_builder<entity>() { }
@@ -96,9 +114,12 @@ struct entity : entity_builder<entity>
      * @tparam First The first part of the pair.
      * @tparam Second the second part of the pair.
      */
-    template <typename First, typename Second>
-    First* get_mut() const {
-        return this->get_mut<First>(_::cpp_type<Second>::id(m_world));
+    template <typename First, typename Second, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>
+    A* get_mut() const {
+        return static_cast<A*>(ecs_get_mut_id(m_world, m_id, ecs_pair(
+            _::cpp_type<First>::id(m_world),
+            _::cpp_type<Second>::id(m_world))));
     }
 
     /** Get mutable pointer for a pair.
@@ -204,8 +225,33 @@ struct entity : entity_builder<entity>
     ref<T> get_ref() const {
         // Ensure component is registered
         _::cpp_type<T>::id(m_world);
-        ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
         return ref<T>(m_world, m_id);
+    }
+
+    template <typename First, typename Second, typename P = flecs::pair<First, Second>, 
+        typename A = actual_type_t<P>>
+    ref<A> get_ref() const {
+        // Ensure component is registered
+        _::cpp_type<A>::id(m_world);
+        return ref<A>(m_world, m_id, 
+            ecs_pair(_::cpp_type<First>::id(m_world),
+                _::cpp_type<Second>::id(m_world)));
+    }
+
+    template <typename First>
+    ref<First> get_ref(flecs::entity_t second) const {
+        // Ensure component is registered
+        _::cpp_type<First>::id(m_world);
+        return ref<First>(m_world, m_id, 
+            ecs_pair(_::cpp_type<First>::id(m_world), second));
+    }
+
+    template <typename Second>
+    ref<Second> get_ref_second(flecs::entity_t first) const {
+        // Ensure component is registered
+        _::cpp_type<Second>::id(m_world);
+        return ref<Second>(m_world, m_id, 
+            ecs_pair(first, _::cpp_type<Second>::id(m_world)));
     }
 
     /** Clear an entity.
@@ -241,6 +287,12 @@ struct entity : entity_builder<entity>
     flecs::entity null() {
         return flecs::entity();
     }
+
+#   ifdef FLECS_JSON
+#   include "mixins/json/entity.inl"
+#   endif
 };
 
 } // namespace flecs
+
+/** @} */

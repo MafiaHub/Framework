@@ -1,5 +1,5 @@
 /**
- * @file doc.h
+ * @file addons/doc.h
  * @brief Doc module.
  *
  * The monitor module automatically tracks statistics from the stats addon and
@@ -7,6 +7,14 @@
  */
 
 #ifdef FLECS_MONITOR
+
+/**
+ * @defgroup c_addons_monitor Monitor
+ * @brief The monitor addon periodically tracks statistics for the world and systems.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #ifndef FLECS_MONITOR_H
 #define FLECS_MONITOR_H
@@ -58,5 +66,7 @@ void FlecsMonitorImport(
 #endif
 
 #endif
+
+/** @} */
 
 #endif

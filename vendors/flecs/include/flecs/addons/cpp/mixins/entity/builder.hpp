@@ -1,8 +1,16 @@
+/**
+ * @file addons/cpp/mixins/entity/builder.hpp
+ * @brief Entity builder.
+ */
+
 #pragma once
 
 namespace flecs
 {
 
+/** Entity builder. 
+ * \ingroup cpp_entities
+ */
 template <typename Self>
 struct entity_builder : entity_view {
 
@@ -392,9 +400,20 @@ struct entity_builder : entity_view {
      * @tparam T The component to set and for which to add the OVERRIDE flag
      */    
     template <typename T>
-    Self& set_override(T val) {
+    Self& set_override(const T& val) {
         this->override<T>();
         return this->set<T>(val);
+    }
+
+    /** Set component, mark component for auto-overriding.
+     * @see override(flecs::id_t id)
+     *
+     * @tparam T The component to set and for which to add the OVERRIDE flag
+     */    
+    template <typename T>
+    Self& set_override(T&& val) {
+        this->override<T>();
+        return this->set<T>(FLECS_FWD(val));
     }
 
     /** Set pair, mark component for auto-overriding.
@@ -404,9 +423,21 @@ struct entity_builder : entity_view {
      * @param second The second element of the pair.
      */    
     template <typename First>
-    Self& set_override(flecs::entity_t second, First val) {
+    Self& set_override(flecs::entity_t second, const First& val) {
         this->override<First>(second);
         return this->set<First>(second, val);
+    }
+
+    /** Set pair, mark component for auto-overriding.
+     * @see override(flecs::id_t id)
+     *
+     * @tparam First The first element of the pair.
+     * @param second The second element of the pair.
+     */    
+    template <typename First>
+    Self& set_override(flecs::entity_t second, First&& val) {
+        this->override<First>(second);
+        return this->set<First>(second, FLECS_FWD(val));
     }
 
     /** Set component, mark component for auto-overriding.
@@ -417,22 +448,55 @@ struct entity_builder : entity_view {
      */    
     template <typename First, typename Second, typename P = pair<First, Second>, 
         typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>    
-    Self& set_override(A val) {
+    Self& set_override(const A& val) {
         this->override<First, Second>();
         return this->set<First, Second>(val);
+    }
+
+    /** Set component, mark component for auto-overriding.
+     * @see override(flecs::id_t id)
+     *
+     * @tparam First The first element of the pair.
+     * @tparam Second The second element of the pair.
+     */    
+    template <typename First, typename Second, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>    
+    Self& set_override(A&& val) {
+        this->override<First, Second>();
+        return this->set<First, Second>(FLECS_FWD(val));
     }
 
     /** Emplace component, mark component for auto-overriding.
      * @see override(flecs::id_t id)
      *
-     * @tparam T The component to set and for which to add the OVERRIDE flag
+     * @tparam T The component to emplace and override.
      */    
     template <typename T, typename ... Args>
     Self& emplace_override(Args&&... args) {
         this->override<T>();
 
         flecs::emplace<T>(this->m_world, this->m_id, 
-            FLECS_FWD(args)...);
+            _::cpp_type<T>::id(this->m_world), FLECS_FWD(args)...);
+
+        return to_base();  
+    }
+
+    /** Emplace pair, mark pair for auto-overriding.
+     * @see override(flecs::id_t id)
+     *
+     * @tparam First The first element of the pair to emplace and override.
+     * @tparam Second The second element of the pair to emplace and override.
+     */    
+    template <typename First, typename Second, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0,
+            typename ... Args>
+    Self& emplace_override(Args&&... args) {
+        this->override<First, Second>();
+
+        flecs::emplace<A>(this->m_world, this->m_id, 
+            ecs_pair(_::cpp_type<First>::id(this->m_world),
+                _::cpp_type<Second>::id(this->m_world)),
+                    FLECS_FWD(args)...);
 
         return to_base();  
     }
@@ -642,6 +706,21 @@ struct entity_builder : entity_view {
      */
     template <typename First, typename Second, typename P = pair<First, Second>, 
         typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>
+    Self& set(A&& value) {
+        flecs::set<P>(this->m_world, this->m_id, FLECS_FWD(value));
+        return to_base();
+    }
+
+    /** Set a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the pair, it will be added.
+     *
+     * @tparam First The first element of the pair.
+     * @tparam Second The second element of the pair
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>
     Self& set(const A& value) {
         flecs::set<P>(this->m_world, this->m_id, value);
         return to_base();
@@ -659,6 +738,22 @@ struct entity_builder : entity_view {
     Self& set(Second second, const First& value) {
         auto first = _::cpp_type<First>::id(this->m_world);
         flecs::set(this->m_world, this->m_id, value, 
+            ecs_pair(first, second));
+        return to_base();
+    }
+
+    /** Set a pair for an entity.
+     * This operation sets the pair value, and uses First as type. If the
+     * entity did not yet have the pair, it will be added.
+     *
+     * @tparam First The first element of the pair.
+     * @param second The second element of the pair.
+     * @param value The value to set.
+     */
+    template <typename First, typename Second, if_not_t< is_enum<Second>::value > = 0>
+    Self& set(Second second, First&& value) {
+        auto first = _::cpp_type<First>::id(this->m_world);
+        flecs::set(this->m_world, this->m_id, FLECS_FWD(value), 
             ecs_pair(first, second));
         return to_base();
     }
@@ -690,6 +785,22 @@ struct entity_builder : entity_view {
     Self& set_second(entity_t first, const Second& value) {
         auto second = _::cpp_type<Second>::id(this->m_world);
         flecs::set(this->m_world, this->m_id, value, 
+            ecs_pair(first, second));
+        return to_base();
+    }
+
+    /** Set a pair for an entity.
+     * This operation sets the pair value, and uses Second as type. If the
+     * entity did not yet have the pair, it will be added.
+     *
+     * @tparam Second The second element of the pair
+     * @param first The first element of the pair.
+     * @param value The value to set.
+     */
+    template <typename Second>
+    Self& set_second(entity_t first, Second&& value) {
+        auto second = _::cpp_type<Second>::id(this->m_world);
+        flecs::set(this->m_world, this->m_id, FLECS_FWD(value), 
             ecs_pair(first, second));
         return to_base();
     }
@@ -736,9 +847,35 @@ struct entity_builder : entity_view {
      * @tparam T the component to emplace
      * @param args The arguments to pass to the constructor of T
      */
-    template <typename T, typename ... Args>
+    template<typename T, typename ... Args, typename A = actual_type_t<T>>
     Self& emplace(Args&&... args) {
-        flecs::emplace<T>(this->m_world, this->m_id, 
+        flecs::emplace<A>(this->m_world, this->m_id, 
+            _::cpp_type<T>::id(this->m_world), FLECS_FWD(args)...);
+        return to_base();
+    }
+
+    template <typename First, typename Second, typename ... Args, typename P = pair<First, Second>, 
+        typename A = actual_type_t<P>, if_not_t< flecs::is_pair<First>::value> = 0>
+    Self& emplace(Args&&... args) {
+        flecs::emplace<A>(this->m_world, this->m_id, 
+            ecs_pair(_::cpp_type<First>::id(this->m_world),
+                _::cpp_type<Second>::id(this->m_world)),
+            FLECS_FWD(args)...);
+        return to_base();
+    }
+
+    template <typename First, typename ... Args>
+    Self& emplace_first(flecs::entity_t second, Args&&... args) {
+        flecs::emplace<First>(this->m_world, this->m_id, 
+            ecs_pair(_::cpp_type<First>::id(this->m_world), second),
+            FLECS_FWD(args)...);
+        return to_base();
+    }
+
+    template <typename Second, typename ... Args>
+    Self& emplace_second(flecs::entity_t first, Args&&... args) {
+        flecs::emplace<Second>(this->m_world, this->m_id, 
+            ecs_pair(first, _::cpp_type<Second>::id(this->m_world)),
             FLECS_FWD(args)...);
         return to_base();
     }
@@ -755,7 +892,7 @@ struct entity_builder : entity_view {
         return to_base();
     }
 
-    /** Entities created in function will have (First, this) 
+    /** Entities created in function will have (First, this).
      * This operation is thread safe.
      *
      * @tparam First The first element of the pair
@@ -767,7 +904,7 @@ struct entity_builder : entity_view {
         return to_base();
     }
 
-    /** Entities created in function will have (first, this) 
+    /** Entities created in function will have (first, this).
      *
      * @param first The first element of the pair.
      * @param func The function to call.

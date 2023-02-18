@@ -1,17 +1,6 @@
 /**
  * @file strbuf.h
  * @brief Utility for constructing strings.
- *
- * A buffer builds up a list of elements which individually can be up to N bytes
- * large. While appending, data is added to these elements. More elements are
- * added on the fly when needed. When an application calls ecs_strbuf_get, all
- * elements are combined in one string and the element administration is freed.
- *
- * This approach prevents reallocs of large blocks of memory, and therefore
- * copying large blocks of memory when appending to a large buffer. A buffer
- * preallocates some memory for the element overhead so that for small strings
- * there is hardly any overhead, while for large strings the overhead is offset
- * by the reduced time spent on copying memory.
  */
 
 #ifndef FLECS_STRBUF_H_
@@ -139,12 +128,28 @@ bool ecs_strbuf_appendstr_zerocpy(
     ecs_strbuf_t *buffer,
     char *str);
 
+/* Append string to buffer, transfer ownership to buffer.
+ * Returns false when max is reached, true when there is still space */
+FLECS_API
+bool ecs_strbuf_appendstr_zerocpyn(
+    ecs_strbuf_t *buffer,
+    char *str,
+    int32_t n);
+
 /* Append string to buffer, do not free/modify string.
  * Returns false when max is reached, true when there is still space */
 FLECS_API
 bool ecs_strbuf_appendstr_zerocpy_const(
     ecs_strbuf_t *buffer,
     const char *str);
+
+/* Append string to buffer, transfer ownership to buffer.
+ * Returns false when max is reached, true when there is still space */
+FLECS_API
+bool ecs_strbuf_appendstr_zerocpyn_const(
+    ecs_strbuf_t *buffer,
+    const char *str,
+    int32_t n);
 
 /* Append n characters to buffer.
  * Returns false when max is reached, true when there is still space */

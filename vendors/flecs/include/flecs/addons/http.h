@@ -1,5 +1,5 @@
 /**
- * @file http.h
+ * @file addons/http.h
  * @brief HTTP addon.
  * 
  * Minimalistic HTTP server that can receive and reply to simple HTTP requests.
@@ -18,6 +18,14 @@
  */
 
 #ifdef FLECS_HTTP
+
+/**
+ * @defgroup c_addons_http Http
+ * @brief Simple HTTP server used for serving up REST API.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #if !defined(FLECS_OS_API_IMPL) && !defined(FLECS_NO_OS_API_IMPL)
 #define FLECS_OS_API_IMPL
@@ -81,15 +89,26 @@ typedef struct {
 
 /** A reply */
 typedef struct {
-    int code;                   /* default = 200 */
-    ecs_strbuf_t body;          /* default = "" */
-    const char* status;         /* default = OK */
-    const char* content_type;   /* default = application/json */
-    ecs_strbuf_t headers;       /* default = "" */
+    int code;                   /**< default = 200 */
+    ecs_strbuf_t body;          /**< default = "" */
+    const char* status;         /**< default = OK */
+    const char* content_type;   /**< default = application/json */
+    ecs_strbuf_t headers;       /**< default = "" */
 } ecs_http_reply_t;
 
 #define ECS_HTTP_REPLY_INIT \
     (ecs_http_reply_t){200, ECS_STRBUF_INIT, "OK", "application/json", ECS_STRBUF_INIT}
+
+/* Global statistics. */
+extern int64_t ecs_http_request_received_count;
+extern int64_t ecs_http_request_invalid_count;
+extern int64_t ecs_http_request_handled_ok_count;
+extern int64_t ecs_http_request_handled_error_count;
+extern int64_t ecs_http_request_not_handled_count;
+extern int64_t ecs_http_request_preflight_count;
+extern int64_t ecs_http_send_ok_count;
+extern int64_t ecs_http_send_error_count;
+extern int64_t ecs_http_busy_count;
 
 /** Request callback.
  * Invoked for each valid request. The function should populate the reply and
@@ -102,11 +121,11 @@ typedef bool (*ecs_http_reply_action_t)(
 
 /** Used with ecs_http_server_init. */
 typedef struct {
-    ecs_http_reply_action_t callback; /* Function called for each request  */
-    void *ctx;                        /* Passed to callback (optional) */
-    uint16_t port;                    /* HTTP port */
-    const char *ipaddr;               /* Interface to listen on (optional) */
-    int32_t send_queue_wait_ms;       /* Send queue wait time when empty */
+    ecs_http_reply_action_t callback; /**< Function called for each request  */
+    void *ctx;                        /**< Passed to callback (optional) */
+    uint16_t port;                    /**< HTTP port */
+    const char *ipaddr;               /**< Interface to listen on (optional) */
+    int32_t send_queue_wait_ms;       /**< Send queue wait time when empty */
 } ecs_http_server_desc_t;
 
 /** Create server. 
@@ -183,6 +202,8 @@ const char* ecs_http_get_param(
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */
 
 #endif // FLECS_HTTP_H
 

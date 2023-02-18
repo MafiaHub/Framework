@@ -1,3 +1,8 @@
+/**
+ * @file expr/deserialize.c
+ * @brief Deserialize flecs string format into (component) values.
+ */
+
 #include "../../private_api.h"
 #include <ctype.h>
 
@@ -160,7 +165,7 @@ const char *ecs_parse_expr_token(
         }
     }
 
-    while ((ptr = ecs_parse_token(name, expr, ptr, token_ptr))) {
+    while ((ptr = ecs_parse_token(name, expr, ptr, token_ptr, 0))) {
         if (ptr[0] == '|' && ptr[1] != '|') {
             token_ptr = &token_ptr[ptr - start];
             token_ptr[0] = '|';
@@ -721,7 +726,7 @@ const char* flecs_binary_expr_parse(
             return NULL;
         }
 
-        ptr = ecs_parse_fluff(ptr, NULL);
+        ptr = ecs_parse_ws_eol(ptr);
 
         ecs_value_t rvalue = {0};
         const char *rptr = flecs_parse_expr(world, stack, ptr, &rvalue, op, desc);
@@ -778,13 +783,13 @@ const char* flecs_parse_expr(
     const char *expr = desc ? desc->expr : NULL;
     expr = expr ? expr : ptr;
 
-    ptr = ecs_parse_fluff(ptr, NULL);
+    ptr = ecs_parse_ws_eol(ptr);
 
     /* Check for postfix operators */
     ecs_expr_oper_t unary_op = EcsExprOperUnknown;
     if (ptr[0] == '-' && !isdigit(ptr[1])) {
         unary_op = EcsMin;
-        ptr = ecs_parse_fluff(ptr + 1, NULL);
+        ptr = ecs_parse_ws_eol(ptr + 1);
     }
 
     /* Initialize storage and cursor. If expression starts with a '(' storage
@@ -836,7 +841,7 @@ const char* flecs_parse_expr(
                     "missing closing parenthesis");
                 return NULL;
             }
-            ptr = ecs_parse_fluff(ptr + 1, NULL);
+            ptr = ecs_parse_ws_eol(ptr + 1);
             is_lvalue = true;
 
         } else if (!ecs_os_strcmp(token, "{")) {
@@ -956,7 +961,7 @@ const char* flecs_parse_expr(
             is_lvalue = true;
 
         } else {
-            const char *tptr = ecs_parse_fluff(ptr, NULL);
+            const char *tptr = ecs_parse_ws_eol(ptr);
             for (; ptr != tptr; ptr ++) {
                 if (ptr[0] == '\n') {
                     newline = true;
@@ -1049,7 +1054,7 @@ const char* flecs_parse_expr(
             break;
         }
 
-        ptr = ecs_parse_fluff(ptr, NULL);
+        ptr = ecs_parse_ws_eol(ptr);
     }
 
     if (!value->ptr) {

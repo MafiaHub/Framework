@@ -1,5 +1,20 @@
+/**
+ * @file addons/cpp/component.hpp
+ * @brief Registering/obtaining info from components.
+ */
+
 #pragma once
+
 #include <ctype.h>
+#include <stdio.h>
+
+/**
+ * @defgroup cpp_components Components
+ * @brief Registering and working with components.
+ * 
+ * \ingroup cpp_core
+ * @{
+ */
 
 namespace flecs {
 
@@ -183,7 +198,9 @@ struct cpp_type_impl {
             s_id = entity;
 
             // If component is enum type, register constants
+            #if FLECS_CPP_ENUM_REFLECTION_SUPPORT            
             _::init_enum<T>(world, entity);
+            #endif
         }
 
         // By now the identifier must be valid and known with the world.
@@ -326,14 +343,24 @@ struct cpp_type<T, if_t< is_pair<T>::value >>
 
 } // namespace _
 
+/** Untyped component class.
+ * Generic base class for flecs::component.
+ * 
+ * \ingroup cpp_components
+ */
 struct untyped_component : entity {
     using entity::entity;
     
 #   ifdef FLECS_META
-#   include "mixins/meta/component.inl"
+#   include "mixins/meta/untyped_component.inl"
 #   endif
 };
 
+/** Component class.
+ * Class used to register components and component metadata.
+ * 
+ * \ingroup cpp_components
+ */
 template <typename T>
 struct component : untyped_component {
     /** Register a component.
@@ -370,7 +397,7 @@ struct component : untyped_component {
              * this operation does nothing besides returning the existing id */
             id = _::cpp_type<T>::id_explicit(world, name, allow_tag, id);
 
-            ecs_cpp_component_validate(world, id, n,
+            ecs_cpp_component_validate(world, id, n, _::symbol_name<T>(),
                 _::cpp_type<T>::size(),
                 _::cpp_type<T>::alignment(),
                 implicit_name);
@@ -378,7 +405,20 @@ struct component : untyped_component {
             /* If component is registered from an existing scope, ignore the
              * namespace in the name of the component. */
             if (implicit_name && (ecs_get_scope(world) != 0)) {
-                const char *last_elem = strrchr(n, ':');
+                /* If the type is a template type, make sure to ignore ':'
+                 * inside the template parameter list. */
+                const char *start = strchr(n, '<'), *last_elem = NULL;
+                if (start) {
+                    const char *ptr = start;
+                    while (ptr[0] && (ptr[0] != ':') && (ptr > n)) {
+                        ptr --;
+                    }
+                    if (ptr[0] == ':') {
+                        last_elem = ptr;
+                    }
+                } else {
+                    last_elem = strrchr(n, ':');
+                }
                 if (last_elem) {
                     name = last_elem + 1;
                 }
@@ -453,6 +493,10 @@ struct component : untyped_component {
         return *this;
     }
 
+#   ifdef FLECS_META
+#   include "mixins/meta/component.inl"
+#   endif
+
 private:
     using BindingCtx = _::component_binding_ctx;
 
@@ -488,7 +532,7 @@ flecs::entity_t type_id() {
     }
 }
 
-/** Reset static component variables.
+/** Reset static component ids.
  * When components are registered their component ids are stored in a static
  * type specific variable. This stored id is passed into component registration
  * functions to ensure consistent ids across worlds.
@@ -507,9 +551,13 @@ flecs::entity_t type_id() {
  * Also note that this operation does not actually change the static component
  * variables. It only ensures that the next time a component id is requested, a
  * new id will be generated.
+ * 
+ * \ingroup cpp_components
  */
 inline void reset() {
     ecs_cpp_reset_count_inc();
 }
 
 }
+
+/** @} */

@@ -1,3 +1,8 @@
+/**
+ * @file addons/cpp/mixins/term/builder_i.hpp
+ * @brief Term builder interface.
+ */
+
 #pragma once
 
 #include "../../utils/signature.hpp"
@@ -9,6 +14,8 @@ namespace flecs
  * A term identifier describes a single identifier in a term. Identifier
  * descriptions can reference entities by id, name or by variable, which means
  * the entity will be resolved when the term is evaluated.
+ * 
+ * \ingroup cpp_core_filters
  */
 template<typename Base>
 struct term_id_builder_i {
@@ -125,7 +132,11 @@ private:
     }
 };
 
-/** Term builder. A term is a single element of a query expression. */
+/** Term builder interface. 
+ * A term is a single element of a query expression. 
+ * 
+ * \ingroup cpp_addons_filter
+ */
 template<typename Base>
 struct term_builder_i : term_id_builder_i<Base> {
     term_builder_i() : m_term(nullptr) { }
@@ -269,7 +280,7 @@ struct term_builder_i : term_id_builder_i<Base> {
         this->assert_term();
         m_term->inout = static_cast<ecs_inout_kind_t>(inout);
         if (m_term->oper != EcsNot) {
-            this->entity(0);
+            this->src().entity(0);
         }
         return *this;
     }
@@ -281,14 +292,14 @@ struct term_builder_i : term_id_builder_i<Base> {
         return this->inout_stage(flecs::Out);
     }
 
-    /** Short for inout_stage(flecs::In) 
+    /** Short for inout_stage(flecs::In).
      *   Use when system uses get.
      */
     Base& read() {
         return this->inout_stage(flecs::In);
     }
 
-    /** Short for inout_stage(flecs::InOut) 
+    /** Short for inout_stage(flecs::InOut).
      *   Use when system uses get_mut.
      */
     Base& read_write() {

@@ -1,6 +1,5 @@
-
 /**
- * @file rules.h
+ * @file addons/rules.h
  * @brief Rule query engine addon.
  * 
  * Rules are advanced queries that in addition to the capabilities of regular
@@ -13,6 +12,14 @@
  */
 
 #ifdef FLECS_RULES
+
+/**
+ * @defgroup c_addons_rules Rules
+ * @brief Rules are an advanced query engine for matching against entity graphs.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #ifndef FLECS_RULES_H
 #define FLECS_RULES_H
@@ -191,5 +198,7 @@ char* ecs_rule_str(
 #endif
 
 #endif // FLECS_RULES_H
+
+/** @} */
 
 #endif // FLECS_RULES

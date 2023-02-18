@@ -1,3 +1,8 @@
+/**
+ * @file addons/cpp/mixins/pipeline/impl.hpp
+ * @brief Pipeline module implementation.
+ */
+
 #pragma once
 
 #include "builder.hpp"
@@ -47,7 +52,7 @@ inline bool world::progress(ecs_ftime_t delta_time) const {
     return ecs_progress(m_world, delta_time);
 }
 
-inline void world::run_pipeline(const flecs::entity pip, ecs_ftime_t delta_time) const {
+inline void world::run_pipeline(const flecs::entity_t pip, ecs_ftime_t delta_time) const {
     return ecs_run_pipeline(m_world, pip, delta_time);
 }
 

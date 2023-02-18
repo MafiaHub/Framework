@@ -1,8 +1,19 @@
-////////////////////////////////////////////////////////////////////////////////
-//// Aliases for types/constants from C API
-////////////////////////////////////////////////////////////////////////////////
+/**
+ * @file addons/cpp/c_types.hpp
+ * @brief Aliases for types/constants from C API
+ */
+
+#pragma once
 
 namespace flecs {
+
+/**
+ * @defgroup cpp_globals API Types & Globals
+ * @brief Types & constants bridged from C API.
+ * 
+ * \ingroup cpp_core
+ * @{
+ */
 
 using world_t = ecs_world_t;
 using world_info_t = ecs_world_info_t;
@@ -12,6 +23,7 @@ using entity_t = ecs_entity_t;
 using type_t = ecs_type_t;
 using table_t = ecs_table_t;
 using filter_t = ecs_filter_t;
+using observer_t = ecs_observer_t;
 using query_t = ecs_query_t;
 using rule_t = ecs_rule_t;
 using ref_t = ecs_ref_t;
@@ -70,6 +82,8 @@ static const flecs::entity_t OnAdd = EcsOnAdd;
 static const flecs::entity_t OnRemove = EcsOnRemove;
 static const flecs::entity_t OnSet = EcsOnSet;
 static const flecs::entity_t UnSet = EcsUnSet;
+static const flecs::entity_t OnTableCreate = EcsOnTableCreate;
+static const flecs::entity_t OnTableDelete = EcsOnTableDelete;
 
 /* Builtin term flags */
 static const uint32_t Self = EcsSelf;
@@ -99,6 +113,7 @@ static const flecs::entity_t Tag = EcsTag;
 static const flecs::entity_t Union = EcsUnion;
 static const flecs::entity_t Exclusive = EcsExclusive;
 static const flecs::entity_t Acyclic = EcsAcyclic;
+static const flecs::entity_t Traversable = EcsTraversable;
 static const flecs::entity_t Symmetric = EcsSymmetric;
 static const flecs::entity_t With = EcsWith;
 static const flecs::entity_t OneOf = EcsOneOf;
@@ -119,5 +134,7 @@ static const flecs::entity_t OnDeleteTarget = EcsOnDeleteTarget;
 static const flecs::entity_t Remove = EcsRemove;
 static const flecs::entity_t Delete = EcsDelete;
 static const flecs::entity_t Panic = EcsPanic;
+
+/** @} */
 
 }

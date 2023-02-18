@@ -38,10 +38,9 @@ extern "C" {
 //// Entity flags (set in upper bits of ecs_record_t::row)
 ////////////////////////////////////////////////////////////////////////////////
 
-#define EcsEntityObserved             (1u << 31)
-#define EcsEntityObservedId           (1u << 30)
-#define EcsEntityObservedTarget       (1u << 29)
-#define EcsEntityObservedAcyclic      (1u << 28)
+#define EcsEntityIsId                 (1u << 31)
+#define EcsEntityIsTarget             (1u << 30)
+#define EcsEntityIsTraversable        (1u << 29)
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,7 +62,7 @@ extern "C" {
 
 #define EcsIdExclusive                 (1u << 6)
 #define EcsIdDontInherit               (1u << 7)
-#define EcsIdAcyclic                   (1u << 8)
+#define EcsIdTraversable               (1u << 8)
 #define EcsIdTag                       (1u << 9)
 #define EcsIdWith                      (1u << 10)
 #define EcsIdUnion                     (1u << 11)
@@ -91,14 +90,21 @@ extern "C" {
 ////////////////////////////////////////////////////////////////////////////////
 
 #define EcsIterIsValid                 (1u << 0u)  /* Does iterator contain valid result */
-#define EcsIterIsFilter                (1u << 1u)  /* Is iterator filter (metadata only) */
+#define EcsIterNoData                  (1u << 1u)  /* Does iterator provide (component) data */
 #define EcsIterIsInstanced             (1u << 2u)  /* Is iterator instanced */
 #define EcsIterHasShared               (1u << 3u)  /* Does result have shared terms */
 #define EcsIterTableOnly               (1u << 4u)  /* Result only populates table */
 #define EcsIterEntityOptional          (1u << 5u)  /* Treat terms with entity subject as optional */
 #define EcsIterNoResults               (1u << 6u)  /* Iterator has no results */
 #define EcsIterIgnoreThis              (1u << 7u)  /* Only evaluate non-this terms */
+#define EcsIterMatchVar                (1u << 8u)
 
+////////////////////////////////////////////////////////////////////////////////
+//// Filter flags (used by ecs_filter_t::flags)
+////////////////////////////////////////////////////////////////////////////////
+
+#define EcsEventTableOnly              (1u << 8u)   /* Table event (no data, same as iter flags) */
+#define EcsEventNoOnSet                (1u << 16u)  /* Don't emit OnSet/UnSet for inherited ids */
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Filter flags (used by ecs_filter_t::flags)
@@ -110,7 +116,7 @@ extern "C" {
 #define EcsFilterMatchDisabled         (1u << 4u)  /* Does filter match disabled entities */
 #define EcsFilterMatchEmptyTables      (1u << 5u)  /* Does filter return empty tables */
 #define EcsFilterMatchAnything         (1u << 6u)  /* False if filter has no/only Not terms */
-#define EcsFilterIsFilter              (1u << 7u)  /* When true, data fields won't be populated */
+#define EcsFilterNoData                (1u << 7u)  /* When true, data fields won't be populated */
 #define EcsFilterIsInstanced           (1u << 8u)  /* Is filter instanced (see ecs_filter_desc_t) */
 #define EcsFilterPopulate              (1u << 9u)  /* Populate data, ignore non-matching fields */
 
@@ -131,13 +137,15 @@ extern "C" {
 #define EcsTableHasCopy                (1u << 10u)
 #define EcsTableHasMove                (1u << 11u)
 #define EcsTableHasUnion               (1u << 12u)
-#define EcsTableHasToggle            (1u << 13u)
+#define EcsTableHasToggle              (1u << 13u)
 #define EcsTableHasOverrides           (1u << 14u)
 
 #define EcsTableHasOnAdd               (1u << 15u) /* Same values as id flags */
 #define EcsTableHasOnRemove            (1u << 16u)
 #define EcsTableHasOnSet               (1u << 17u)
 #define EcsTableHasUnSet               (1u << 18u)
+
+#define EcsTableHasObserved            (1u << 20u)
 
 #define EcsTableMarkedForDelete        (1u << 30u)
 

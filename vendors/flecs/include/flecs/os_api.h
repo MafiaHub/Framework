@@ -13,6 +13,14 @@
 #ifndef FLECS_OS_API_H
 #define FLECS_OS_API_H
 
+/**
+ * @defgroup c_os_api OS API
+ * @brief Interface for providing OS specific functionality.
+ * 
+ * \ingroup c
+ * @{
+ */
+
 #include <stdarg.h>
 #include <errno.h>
 
@@ -45,6 +53,9 @@ typedef uintptr_t ecs_os_cond_t;
 typedef uintptr_t ecs_os_mutex_t;
 typedef uintptr_t ecs_os_dl_t;
 typedef uintptr_t ecs_os_sock_t;
+
+/* 64 bit thread id */
+typedef uint64_t ecs_os_thread_id_t;
 
 /* Generic function pointer type */
 typedef void (*ecs_os_proc_t)(void);
@@ -92,6 +103,9 @@ ecs_os_thread_t (*ecs_os_api_thread_new_t)(
 typedef
 void* (*ecs_os_api_thread_join_t)(
     ecs_os_thread_t thread);
+
+typedef
+ecs_os_thread_id_t (*ecs_os_api_thread_self_t)(void);
 
 /* Atomic increment / decrement */
 typedef
@@ -208,6 +222,7 @@ typedef struct ecs_os_api_t {
     /* Threads */
     ecs_os_api_thread_new_t thread_new_;
     ecs_os_api_thread_join_t thread_join_;
+    ecs_os_api_thread_self_t thread_self_;
 
     /* Atomic incremenet / decrement */
     ecs_os_api_ainc_t ainc_;
@@ -326,8 +341,6 @@ void ecs_os_set_api_defaults(void);
 #define ecs_os_strdup(str) ecs_os_api.strdup_(str)
 #endif
 
-#define ecs_os_strset(dst, src) ecs_os_free(*dst); *dst = ecs_os_strdup(src)
-
 #ifdef __cplusplus
 #define ecs_os_strlen(str) static_cast<ecs_size_t>(strlen(str))
 #define ecs_os_strncmp(str1, str2, num) strncmp(str1, str2, static_cast<size_t>(num))
@@ -391,6 +404,7 @@ void ecs_os_set_api_defaults(void);
 /* Threads */
 #define ecs_os_thread_new(callback, param) ecs_os_api.thread_new_(callback, param)
 #define ecs_os_thread_join(thread) ecs_os_api.thread_join_(thread)
+#define ecs_os_thread_self() ecs_os_api.thread_self_()
 
 /* Atomic increment / decrement */
 #define ecs_os_ainc(value) ecs_os_api.ainc_(value)
@@ -434,6 +448,9 @@ void ecs_os_fatal(const char *file, int32_t line, const char *msg);
 
 FLECS_API
 const char* ecs_os_strerror(int err);
+
+FLECS_API
+void ecs_os_strset(char **str, const char *value);
 
 #ifdef FLECS_ACCURATE_COUNTERS
 #define ecs_os_inc(v)  (ecs_os_ainc(v))
@@ -512,5 +529,7 @@ bool ecs_os_has_modules(void);
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */
 
 #endif

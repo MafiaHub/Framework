@@ -1,3 +1,8 @@
+/**
+ * @file addons/cpp/mixins/observer/builder.hpp
+ * @brief Observer builder.
+ */
+
 #pragma once
 
 #include "../../utils/node_builder.hpp"
@@ -11,6 +16,10 @@ namespace _ {
         observer_builder_i, Components ...>;
 }
 
+/** Observer builder.
+ * 
+ * \ingroup cpp_observers
+ */
 template <typename ... Components>
 struct observer_builder final : _::observer_builder_base<Components...> {
     observer_builder(flecs::world_t* world, const char *name = nullptr)

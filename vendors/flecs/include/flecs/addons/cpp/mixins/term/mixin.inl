@@ -1,3 +1,13 @@
+/**
+ * @file addons/cpp/mixins/term/mixin.inl
+ * @brief Term world mixin.
+ */
+
+/**
+ * \memberof flecs::world
+ * \ingroup cpp_core_filters
+ */
+
 /** Create a term.
  * 
  */
@@ -13,3 +23,5 @@ flecs::term term() const;
  */
 template<typename First, typename Second>
 flecs::term term() const;
+
+/** @} */

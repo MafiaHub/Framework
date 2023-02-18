@@ -1,5 +1,5 @@
 /**
- * @file snapshot.h
+ * @file addons/snapshot.h
  * @brief Snapshot addon.
  *
  * A snapshot records the state of a world in a way so that it can be restored
@@ -11,6 +11,14 @@
  */
 
 #ifdef FLECS_SNAPSHOT
+
+/**
+ * @defgroup c_addons_snapshot Snapshot
+ * @brief Save & restore world.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #ifndef FLECS_SNAPSHOT_H
 #define FLECS_SNAPSHOT_H
@@ -93,5 +101,7 @@ void ecs_snapshot_free(
 #endif
 
 #endif
+
+/** @} */
 
 #endif

@@ -1,3 +1,19 @@
+/**
+ * @file id_record.c
+ * @brief Index for looking up tables by (component) id.
+ * 
+ * An id record stores the administration for an in use (component) id, that is
+ * an id that has been used in tables.
+ * 
+ * An id record contains a table cache, which stores the list of tables that
+ * have the id. Each entry in the cache (a table record) stores the first 
+ * occurrence of the id in the table and the number of occurrences of the id in
+ * the table (in the case of wildcard ids).
+ * 
+ * Id records are used in lots of scenarios, like uncached queries, or for 
+ * getting a component array/component for an entity.
+ */
+
 #include "private_api.h"
 
 static
@@ -65,8 +81,8 @@ void flecs_insert_id_elem(
             ECS_INTERNAL_ERROR, NULL);
         flecs_id_record_elem_insert(widr, idr, &idr->second);
 
-        if (idr->flags & EcsIdAcyclic) {
-            flecs_id_record_elem_insert(widr, idr, &idr->acyclic);
+        if (idr->flags & EcsIdTraversable) {
+            flecs_id_record_elem_insert(widr, idr, &idr->trav);
         }
     }
 }
@@ -87,14 +103,14 @@ void flecs_remove_id_elem(
             ECS_INTERNAL_ERROR, NULL);
         flecs_id_record_elem_remove(idr, &idr->second);
 
-        if (idr->flags & EcsIdAcyclic) {
-            flecs_id_record_elem_remove(idr, &idr->acyclic);
+        if (idr->flags & EcsIdTraversable) {
+            flecs_id_record_elem_remove(idr, &idr->trav);
         }
     }
 }
 
 static
-ecs_id_t flecs_id_record_id(
+ecs_id_t flecs_id_record_hash(
     ecs_id_t id)
 {
     id = ecs_strip_generation(id);
@@ -117,33 +133,52 @@ ecs_id_record_t* flecs_id_record_new(
     ecs_world_t *world,
     ecs_id_t id)
 {
-    ecs_id_record_t *idr = flecs_bcalloc(&world->allocators.id_record);
+    ecs_id_record_t *idr, *idr_t = NULL;
+    ecs_id_t hash = flecs_id_record_hash(id);
+    if (hash >= ECS_HI_ID_RECORD_ID) {
+        idr = flecs_bcalloc(&world->allocators.id_record);
+        ecs_map_insert_ptr(&world->id_index_hi, hash, idr);
+    } else {
+        idr = &world->id_index_lo[hash];
+        ecs_os_zeromem(idr);
+    }
+
     ecs_table_cache_init(world, &idr->cache);
 
     idr->id = id;
     idr->refcount = 1;
+    idr->reachable.current = -1;
 
     bool is_wildcard = ecs_id_is_wildcard(id);
 
-    ecs_entity_t rel = 0, obj = 0, role = id & ECS_ID_FLAGS_MASK;
+    ecs_entity_t rel = 0, tgt = 0, role = id & ECS_ID_FLAGS_MASK;
     if (ECS_HAS_ID_FLAG(id, PAIR)) {
         rel = ecs_pair_first(world, id);
         ecs_assert(rel != 0, ECS_INTERNAL_ERROR, NULL);
 
-        /* Relationship object can be 0, as tables without a ChildOf relationship are
-         * added to the (ChildOf, 0) id record */
-        obj = ECS_PAIR_SECOND(id);
-        if (obj) {
-            obj = ecs_get_alive(world, obj);
-            ecs_assert(obj != 0, ECS_INTERNAL_ERROR, NULL);
+        /* Relationship object can be 0, as tables without a ChildOf 
+         * relationship are added to the (ChildOf, 0) id record */
+        tgt = ECS_PAIR_SECOND(id);
+        if (tgt) {
+            tgt = ecs_get_alive(world, tgt);
+            ecs_assert(tgt != 0, ECS_INTERNAL_ERROR, NULL);
         }
 
         /* Check constraints */
-        if (obj && !ecs_id_is_wildcard(obj)) {
+        if (tgt && !ecs_id_is_wildcard(tgt)) {
+            /* Check if target of relationship satisfies OneOf property */
             ecs_entity_t oneof = flecs_get_oneof(world, rel);
-            ecs_check( !oneof || ecs_has_pair(world, obj, EcsChildOf, oneof),
+            ecs_check( !oneof || ecs_has_pair(world, tgt, EcsChildOf, oneof),
                 ECS_CONSTRAINT_VIOLATED, NULL);
             (void)oneof;
+
+            /* Check if we're not trying to inherit from a final target */
+            if (rel == EcsIsA) {
+                bool is_final = ecs_has_id(world, tgt, EcsFinal);
+                ecs_check(!is_final, ECS_CONSTRAINT_VIOLATED, 
+                    "cannot inherit from final entity");
+                (void)is_final;
+            }
         }
 
         if (!is_wildcard && ECS_IS_PAIR(id) && (rel != EcsFlag)) {
@@ -154,10 +189,12 @@ ecs_id_record_t* flecs_id_record_new(
             idr->flags = idr_r->flags;
 
             /* If pair is not a wildcard, append it to wildcard lists. These 
-             * allow for quickly enumerating all relationships for an object, or all 
-             * objecs for a relationship. */
+             * allow for quickly enumerating all relationships for an object, 
+             * or all objecs for a relationship. */
             flecs_insert_id_elem(world, idr, ecs_pair(rel, EcsWildcard), idr_r);
-            flecs_insert_id_elem(world, idr, ecs_pair(EcsWildcard, obj), NULL);
+
+            idr_t = flecs_id_record_ensure(world, ecs_pair(EcsWildcard, tgt));
+            flecs_insert_id_elem(world, idr, ecs_pair(EcsWildcard, tgt), idr_t);
 
             if (rel == EcsUnion) {
                 idr->flags |= EcsIdUnion;
@@ -173,8 +210,8 @@ ecs_id_record_t* flecs_id_record_new(
     if (!is_wildcard && (!role || ECS_IS_PAIR(id))) {
         if (!(idr->flags & EcsIdTag)) {
             const ecs_type_info_t *ti = flecs_type_info_get(world, rel);
-            if (!ti && obj) {
-                ti = flecs_type_info_get(world, obj);
+            if (!ti && tgt) {
+                ti = flecs_type_info_get(world, tgt);
             }
             idr->type_info = ti;
         }
@@ -185,14 +222,18 @@ ecs_id_record_t* flecs_id_record_new(
      * won't contain any tables with deleted ids. */
 
     /* Flag for OnDelete policies */
-    flecs_add_flag(world, rel, EcsEntityObservedId);
-    if (obj) {
+    flecs_add_flag(world, rel, EcsEntityIsId);
+    if (tgt) {
         /* Flag for OnDeleteTarget policies */
-        flecs_add_flag(world, obj, EcsEntityObservedTarget);
-        if (ecs_has_id(world, rel, EcsAcyclic)) {
+        flecs_add_flag(world, tgt, EcsEntityIsTarget);
+        if (idr->flags & EcsIdTraversable) {
             /* Flag used to determine if object should be traversed when
              * propagating events or with super/subset queries */
-            flecs_add_flag(world, obj, EcsEntityObservedAcyclic);
+            ecs_record_t *r = flecs_add_flag(
+                world, tgt, EcsEntityIsTraversable);
+
+            /* Add reference to (*, tgt) id record to entity record */
+            r->idr = idr_t;
         }
     }
 
@@ -262,6 +303,12 @@ void flecs_id_record_free(
 
     flecs_id_record_assert_empty(idr);
 
+    if (!(world->flags & EcsWorldQuit)) {
+        /* Id is still in use by a filter, query, rule or observer */
+        ecs_assert((idr->keep_alive == 0), 
+            ECS_ID_IN_USE, "cannot delete id that is queried for");
+    }
+
     if (ECS_IS_PAIR(id)) {
         ecs_entity_t rel = ecs_pair_first(world, id);
         ecs_entity_t obj = ECS_PAIR_SECOND(id);
@@ -319,13 +366,18 @@ void flecs_id_record_free(
         world->info.wildcard_id_count --;
     }
 
-    /* Unregister the id record from the world */
-    ecs_map_remove(&world->id_index, flecs_id_record_id(id));
-
-    /* Free resources */
+    /* Unregister the id record from the world & free resources */
     ecs_table_cache_fini(&idr->cache);
     flecs_name_index_free(idr->name_index);
-    flecs_bfree(&world->allocators.id_record, idr);
+    ecs_vec_fini_t(&world->allocator, &idr->reachable.ids, ecs_reachable_elem_t);
+
+    ecs_id_t hash = flecs_id_record_hash(id);
+    if (hash >= ECS_HI_ID_RECORD_ID) {
+        ecs_map_remove(&world->id_index_hi, hash);
+        flecs_bfree(&world->allocators.id_record, idr);
+    } else {
+        idr->id = 0; /* Tombstone */
+    }
 
     if (ecs_should_log_1()) {
         char *id_str = ecs_id_str(world, id);
@@ -338,19 +390,10 @@ ecs_id_record_t* flecs_id_record_ensure(
     ecs_world_t *world,
     ecs_id_t id)
 {
-    ecs_poly_assert(world, ecs_world_t);
-
-    ecs_id_record_t **idr_ptr = ecs_map_ensure(&world->id_index, 
-        ecs_id_record_t*, ecs_strip_generation(id));
-    ecs_id_record_t *idr = idr_ptr[0];
+    ecs_id_record_t *idr = flecs_id_record_get(world, id);
     if (!idr) {
         idr = flecs_id_record_new(world, id);
-        idr_ptr = ecs_map_get(&world->id_index, 
-            ecs_id_record_t*, flecs_id_record_id(id));
-        ecs_assert(idr_ptr != NULL, ECS_INTERNAL_ERROR, NULL);
-        idr_ptr[0] = idr;
     }
-
     return idr;
 }
 
@@ -359,8 +402,22 @@ ecs_id_record_t* flecs_id_record_get(
     ecs_id_t id)
 {
     ecs_poly_assert(world, ecs_world_t);
-    return ecs_map_get_ptr(&world->id_index, ecs_id_record_t*,
-        flecs_id_record_id(id));
+    if (id == ecs_pair(EcsIsA, EcsWildcard)) {
+        return world->idr_isa_wildcard;
+    }
+
+    ecs_id_t hash = flecs_id_record_hash(id);
+    ecs_id_record_t *idr = NULL;
+    if (hash >= ECS_HI_ID_RECORD_ID) {
+        idr = ecs_map_get_deref(&world->id_index_hi, ecs_id_record_t, hash);
+    } else {
+        idr = &world->id_index_lo[hash];
+        if (!idr->id) {
+            idr = NULL;
+        }
+    }
+
+    return idr;
 }
 
 ecs_id_record_t* flecs_query_id_record_get(
@@ -369,9 +426,9 @@ ecs_id_record_t* flecs_query_id_record_get(
 {
     ecs_id_record_t *idr = flecs_id_record_get(world, id);
     if (!idr) {
-        if (ECS_IS_PAIR(id)) {
-            idr = flecs_id_record_get(world,
-                ecs_pair(EcsUnion, ECS_PAIR_FIRST(id)));
+        ecs_entity_t first = ECS_PAIR_FIRST(id);
+        if (ECS_IS_PAIR(id) && (first != EcsWildcard)) {
+            idr = flecs_id_record_get(world, ecs_pair(EcsUnion, first));
         }
         return idr;
     }
@@ -519,24 +576,41 @@ const ecs_table_record_t* flecs_id_record_get_table(
     const ecs_id_record_t *idr,
     const ecs_table_t *table)
 {
-    if (!idr) {
-        return NULL;
-    }
+    ecs_assert(idr != NULL, ECS_INTERNAL_ERROR, NULL);
     return (ecs_table_record_t*)ecs_table_cache_get(&idr->cache, table);
+}
+
+void flecs_init_id_records(
+    ecs_world_t *world)
+{
+    /* Cache often used id records on world */
+    world->idr_wildcard = flecs_id_record_ensure(world, EcsWildcard);
+    world->idr_wildcard_wildcard = flecs_id_record_ensure(world, 
+        ecs_pair(EcsWildcard, EcsWildcard));
+    world->idr_any = flecs_id_record_ensure(world, EcsAny);
+    world->idr_isa_wildcard = flecs_id_record_ensure(world, 
+        ecs_pair(EcsIsA, EcsWildcard));
 }
 
 void flecs_fini_id_records(
     ecs_world_t *world)
 {
-    ecs_map_iter_t it = ecs_map_iter(&world->id_index);
-    ecs_id_record_t *idr;
-    while ((idr = ecs_map_next_ptr(&it, ecs_id_record_t*, NULL))) {
-        flecs_id_record_release(world, idr);
+    ecs_map_iter_t it = ecs_map_iter(&world->id_index_hi);
+    while (ecs_map_next(&it)) {
+        flecs_id_record_release(world, ecs_map_ptr(&it));
     }
 
-    ecs_assert(ecs_map_count(&world->id_index) == 0, ECS_INTERNAL_ERROR, NULL);
+    int32_t i;
+    for (i = 0; i < ECS_HI_ID_RECORD_ID; i ++) {
+        ecs_id_record_t *idr = &world->id_index_lo[i];
+        if (idr->id) {
+            flecs_id_record_release(world, idr);
+        }
+    }
 
-    ecs_map_fini(&world->id_index);
-    flecs_sparse_free(world->pending_tables);
-    flecs_sparse_free(world->pending_buffer);
+    ecs_assert(ecs_map_count(&world->id_index_hi) == 0, 
+        ECS_INTERNAL_ERROR, NULL);
+
+    ecs_map_fini(&world->id_index_hi);
+    ecs_os_free(world->id_index_lo);
 }

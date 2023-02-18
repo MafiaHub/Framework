@@ -1,9 +1,6 @@
 /**
  * @file hashmap.h
- * @brief Hashmap datastructure.
- *
- * Datastructure that computes a hash to store & retrieve values. Similar to
- * ecs_map_t, but allows for arbitrary keytypes.
+ * @brief Hashmap data structure.
  */
 
 #ifndef FLECS_HASHMAP_H
@@ -26,6 +23,7 @@ typedef struct {
     ecs_size_t key_size;
     ecs_size_t value_size;
     ecs_block_allocator_t *hashmap_allocator;
+    ecs_block_allocator_t bucket_allocator;
     ecs_map_t impl;
 } ecs_hashmap_t;
 
@@ -123,8 +121,8 @@ void flecs_hm_bucket_remove(
 
 FLECS_DBG_API
 void flecs_hashmap_copy(
-    const ecs_hashmap_t *src,
-    ecs_hashmap_t *dst);
+    ecs_hashmap_t *dst,
+    const ecs_hashmap_t *src);
 
 FLECS_DBG_API
 flecs_hashmap_iter_t flecs_hashmap_iter(

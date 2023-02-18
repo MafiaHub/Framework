@@ -1,3 +1,8 @@
+/**
+ * @file hierarchy.c
+ * @brief API for entity paths and name lookups.
+ */
+
 #include "private_api.h"
 #include <ctype.h>
 
@@ -19,7 +24,7 @@ bool flecs_path_append(
     const char *name = NULL;
     ecs_size_t name_len = 0;
 
-    if (ecs_is_valid(world, child)) {
+    if (child && ecs_is_alive(world, child)) {
         cur = ecs_get_target(world, child, EcsChildOf, 0);
         if (cur) {
             ecs_assert(cur != child, ECS_CYCLE_DETECTED, NULL);
@@ -56,8 +61,7 @@ bool flecs_path_append(
     return cur != 0;
 }
 
-static
-bool flecs_is_string_number(
+bool flecs_name_is_id(
     const char *name)
 {
     ecs_assert(name != NULL, ECS_INTERNAL_ERROR, NULL);
@@ -78,18 +82,21 @@ bool flecs_is_string_number(
     return i >= length;
 }
 
-static 
 ecs_entity_t flecs_name_to_id(
     const ecs_world_t *world,
     const char *name)
 {
-    long int result = atol(name);
+    int64_t result = atoll(name);
     ecs_assert(result >= 0, ECS_INTERNAL_ERROR, NULL);
     ecs_entity_t alive = ecs_get_alive(world, (ecs_entity_t)result);
     if (alive) {
         return alive;
     } else {
-        return (ecs_entity_t)result;
+        if ((uint32_t)result == (uint64_t)result) {
+            return (ecs_entity_t)result;
+        } else {
+            return 0;
+        }
     }
 }
 
@@ -286,8 +293,14 @@ ecs_entity_t ecs_lookup_child(
     ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
     world = ecs_get_world(world);
 
-    if (flecs_is_string_number(name)) {
-        return flecs_name_to_id(world, name);
+    if (flecs_name_is_id(name)) {
+        ecs_entity_t result = flecs_name_to_id(world, name);
+        if (result && ecs_is_alive(world, result)) {
+            if (parent && !ecs_has_pair(world, result, EcsChildOf, parent)) {
+                return 0;
+            }
+            return result;
+        }
     }
 
     ecs_id_t pair = ecs_childof(parent);
@@ -317,7 +330,7 @@ ecs_entity_t ecs_lookup(
         return e;
     }
 
-    if (flecs_is_string_number(name)) {
+    if (flecs_name_is_id(name)) {
         return flecs_name_to_id(world, name);
     }
 
@@ -368,10 +381,6 @@ ecs_entity_t ecs_lookup_path_w_sep(
         return 0;
     }
 
-    if (!sep) {
-        sep = ".";
-    }
-
     ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
     const ecs_world_t *stage = world;
     world = ecs_get_world(world);
@@ -404,6 +413,10 @@ ecs_entity_t ecs_lookup_path_w_sep(
     }
 
     parent = flecs_get_parent_from_path(stage, parent, &path, prefix, true);
+
+    if (!sep[0]) {
+        return ecs_lookup_child(world, parent, path);
+    }
 
 retry:
     cur = parent;
@@ -559,69 +572,76 @@ ecs_entity_t ecs_add_path_w_sep(
 
     char *name = NULL;
 
-    while ((ptr = flecs_path_elem(ptr, sep, &len))) {
-        if (len < size) {
-            ecs_os_memcpy(elem, ptr_start, len);
-        } else {
-            if (size == ECS_NAME_BUFFER_LENGTH) {
-                elem = NULL;
-            }
-
-            elem = ecs_os_realloc(elem, len + 1);
-            ecs_os_memcpy(elem, ptr_start, len);
-            size = len + 1;          
-        }
-
-        elem[len] = '\0';
-        ptr_start = ptr;
-
-        ecs_entity_t e = ecs_lookup_child(world, cur, elem);
-        if (!e) {
-            if (name) {
-                ecs_os_free(name);
-            }
-
-            name = ecs_os_strdup(elem);
-
-            /* If this is the last entity in the path, use the provided id */
-            bool last_elem = false;
-            if (!flecs_path_elem(ptr, sep, NULL)) {
-                e = entity;
-                last_elem = true;
-            }
-
-            if (!e) {
-                if (last_elem) {
-                    ecs_entity_t prev = ecs_set_scope(world, 0);
-                    e = ecs_new(world, 0);
-                    ecs_set_scope(world, prev);
-                } else {
-                    e = ecs_new_id(world);
+    if (sep[0]) {
+        while ((ptr = flecs_path_elem(ptr, sep, &len))) {
+            if (len < size) {
+                ecs_os_memcpy(elem, ptr_start, len);
+            } else {
+                if (size == ECS_NAME_BUFFER_LENGTH) {
+                    elem = NULL;
                 }
+
+                elem = ecs_os_realloc(elem, len + 1);
+                ecs_os_memcpy(elem, ptr_start, len);
+                size = len + 1;          
             }
 
-            if (cur) {
-                ecs_add_pair(world, e, EcsChildOf, cur);
-            } else if (last_elem && root_path) {
-                ecs_remove_pair(world, e, EcsChildOf, EcsWildcard);
+            elem[len] = '\0';
+            ptr_start = ptr;
+
+            ecs_entity_t e = ecs_lookup_child(world, cur, elem);
+            if (!e) {
+                if (name) {
+                    ecs_os_free(name);
+                }
+
+                name = ecs_os_strdup(elem);
+
+                /* If this is the last entity in the path, use the provided id */
+                bool last_elem = false;
+                if (!flecs_path_elem(ptr, sep, NULL)) {
+                    e = entity;
+                    last_elem = true;
+                }
+
+                if (!e) {
+                    if (last_elem) {
+                        ecs_entity_t prev = ecs_set_scope(world, 0);
+                        e = ecs_new(world, 0);
+                        ecs_set_scope(world, prev);
+                    } else {
+                        e = ecs_new_id(world);
+                    }
+                }
+
+                if (cur) {
+                    ecs_add_pair(world, e, EcsChildOf, cur);
+                } else if (last_elem && root_path) {
+                    ecs_remove_pair(world, e, EcsChildOf, EcsWildcard);
+                }
+
+                ecs_set_name(world, e, name);
             }
 
-            ecs_set_name(world, e, name);
+            cur = e;
         }
 
-        cur = e;
-    }
+        if (entity && (cur != entity)) {
+            ecs_throw(ECS_ALREADY_DEFINED, name);
+        }
 
-    if (entity && (cur != entity)) {
-        ecs_throw(ECS_ALREADY_DEFINED, name);
-    }
+        if (name) {
+            ecs_os_free(name);
+        }
 
-    if (name) {
-        ecs_os_free(name);
-    }
-
-    if (elem != buff) {
-        ecs_os_free(elem);
+        if (elem != buff) {
+            ecs_os_free(elem);
+        }
+    } else {
+        if (parent) {
+            ecs_add_pair(world, entity, EcsChildOf, parent);
+        }
+        ecs_set_name(world, entity, path);
     }
 
     return cur;

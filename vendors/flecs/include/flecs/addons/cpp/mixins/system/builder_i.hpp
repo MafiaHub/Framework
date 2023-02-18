@@ -1,10 +1,19 @@
+/**
+ * @file addons/cpp/mixins/system/builder_i.hpp
+ * @brief System builder interface.
+ */
+
 #pragma once
 
 #include "../query/builder_i.hpp"
 
 namespace flecs 
 {
-// System builder interface
+
+/** System builder interface.
+ * 
+ * \ingroup cpp_addons_systems
+ */
 template<typename Base, typename ... Components>
 struct system_builder_i : query_builder_i<Base, Components ...> {
 private:
@@ -55,8 +64,8 @@ public:
      *
      * @param value If false system will always run staged.
      */
-    Base& no_staging(bool value = true) {
-        m_desc->no_staging = value;
+    Base& no_readonly(bool value = true) {
+        m_desc->no_readonly = value;
         return *this;
     }
 
@@ -98,9 +107,25 @@ public:
         return *this;
     }
 
+    /** Set tick source.
+     * This operation sets a shared tick source for the system.
+     *
+     * @param tick_source The tick source to use for the system.
+     */
+    Base& tick_source(flecs::entity_t tick_source) {
+        m_desc->tick_source = tick_source;
+        return *this;
+    }
+
     /** Set system context */
     Base& ctx(void *ptr) {
         m_desc->ctx = ptr;
+        return *this;
+    }
+
+    /** Set system run callback */
+    Base& run(ecs_iter_action_t action) {
+        m_desc->run = action;
         return *this;
     }
 
@@ -114,5 +139,7 @@ private:
 
     ecs_system_desc_t *m_desc;
 };
+
+/** @} */
 
 }

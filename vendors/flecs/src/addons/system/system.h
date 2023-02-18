@@ -1,3 +1,8 @@
+/**
+ * @file addons/system/system.c
+ * @brief Internal types and functions for system addon.
+ */
+
 #ifndef FLECS_SYSTEM_PRIVATE_H
 #define FLECS_SYSTEM_PRIVATE_H
 
@@ -22,10 +27,10 @@ typedef struct ecs_system_t {
     
     /* Schedule parameters */
     bool multi_threaded;
-    bool no_staging;
+    bool no_readonly;
 
     int64_t invoke_count;           /* Number of times system is invoked */
-    float time_spent;               /* Time spent on running system */
+    ecs_ftime_t time_spent;         /* Time spent on running system */
     ecs_ftime_t time_passed;        /* Time passed since last invocation */
     int64_t last_frame;             /* Last frame for which the system was considered */
 

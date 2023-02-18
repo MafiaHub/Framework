@@ -1,7 +1,24 @@
+/**
+ * @file poly.c
+ * @brief Functions for managing poly objects.
+ * 
+ * The poly framework makes it possible to generalize common functionality for
+ * different kinds of API objects, as well as improved type safety checks. Poly
+ * objects have a header that identifiers what kind of object it is. This can
+ * then be used to discover a set of "mixins" implemented by the type.
+ * 
+ * Mixins are like a vtable, but for members. Each type populates the table with
+ * offsets to the members that correspond with the mixin. If an entry in the
+ * mixin table is not set, the type does not support the mixin.
+ * 
+ * An example is the Iterable mixin, which makes it possible to create an 
+ * iterator for any poly object (like filters, queries, the world) that 
+ * implements the Iterable mixin.
+ */
+
 #include "private_api.h"
 
 static const char* mixin_kind_str[] = {
-    [EcsMixinBase] = "base (should never be requested by application)",
     [EcsMixinWorld] = "world",
     [EcsMixinEntity] = "entity",
     [EcsMixinObservable] = "observable",
@@ -22,7 +39,6 @@ ecs_mixins_t ecs_world_t_mixins = {
 ecs_mixins_t ecs_stage_t_mixins = {
     .type_name = "ecs_stage_t",
     .elems = {
-        [EcsMixinBase] = offsetof(ecs_stage_t, world),
         [EcsMixinWorld] = offsetof(ecs_stage_t, world)
     }
 };
@@ -30,8 +46,8 @@ ecs_mixins_t ecs_stage_t_mixins = {
 ecs_mixins_t ecs_query_t_mixins = {
     .type_name = "ecs_query_t",
     .elems = {
-        [EcsMixinWorld] = offsetof(ecs_query_t, world),
-        [EcsMixinEntity] = offsetof(ecs_query_t, entity),
+        [EcsMixinWorld] = offsetof(ecs_query_t, filter.world),
+        [EcsMixinEntity] = offsetof(ecs_query_t, filter.entity),
         [EcsMixinIterable] = offsetof(ecs_query_t, iterable),
         [EcsMixinDtor] = offsetof(ecs_query_t, dtor)
     }
@@ -40,8 +56,8 @@ ecs_mixins_t ecs_query_t_mixins = {
 ecs_mixins_t ecs_observer_t_mixins = {
     .type_name = "ecs_observer_t",
     .elems = {
-        [EcsMixinWorld] = offsetof(ecs_observer_t, world),
-        [EcsMixinEntity] = offsetof(ecs_observer_t, entity),
+        [EcsMixinWorld] = offsetof(ecs_observer_t, filter.world),
+        [EcsMixinEntity] = offsetof(ecs_observer_t, filter.entity),
         [EcsMixinDtor] = offsetof(ecs_observer_t, dtor)
     }
 };
@@ -49,12 +65,15 @@ ecs_mixins_t ecs_observer_t_mixins = {
 ecs_mixins_t ecs_filter_t_mixins = {
     .type_name = "ecs_filter_t",
     .elems = {
-        [EcsMixinIterable] = offsetof(ecs_filter_t, iterable)
+        [EcsMixinWorld] = offsetof(ecs_filter_t, world),
+        [EcsMixinEntity] = offsetof(ecs_filter_t, entity),
+        [EcsMixinIterable] = offsetof(ecs_filter_t, iterable),
+        [EcsMixinDtor] = offsetof(ecs_filter_t, dtor)
     }
 };
 
 static
-void* get_mixin(
+void* assert_mixin(
     const ecs_poly_t *poly,
     ecs_mixin_kind_t kind)
 {
@@ -66,51 +85,16 @@ void* get_mixin(
     ecs_assert(hdr->magic == ECS_OBJECT_MAGIC, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_mixins_t *mixins = hdr->mixins;
-    if (!mixins) {
-        /* Object has no mixins */
-        goto not_found;
-    }
+    ecs_assert(mixins != NULL, ECS_INVALID_PARAMETER, NULL);
 
     ecs_size_t offset = mixins->elems[kind];
-    if (offset == 0) {
-        /* Object has mixins but not the requested one. Try to find the mixin
-         * in the poly's base */
-        goto find_in_base;
-    }
+    ecs_assert(offset != 0, ECS_INVALID_PARAMETER, 
+        "mixin %s not available for type %s",
+            mixin_kind_str[kind], mixins ? mixins->type_name : "unknown");
+    (void)mixin_kind_str;
 
     /* Object has mixin, return its address */
     return ECS_OFFSET(hdr, offset);
-
-find_in_base:    
-    if (offset) {
-        /* If the poly has a base, try to find the mixin in the base */
-        ecs_poly_t *base = *(ecs_poly_t**)ECS_OFFSET(hdr, offset);
-        if (base) {
-            return get_mixin(base, kind);
-        }
-    }
-    
-not_found:
-    /* Mixin wasn't found for poly */
-    return NULL;
-}
-
-static
-void* assert_mixin(
-    const ecs_poly_t *poly,
-    ecs_mixin_kind_t kind)
-{
-    void *ptr = get_mixin(poly, kind);
-    if (!ptr) {
-        const ecs_header_t *header = poly;
-        const ecs_mixins_t *mixins = header->mixins;
-        ecs_err("%s not available for type %s", 
-            mixin_kind_str[kind],
-            mixins ? mixins->type_name : "unknown");
-        ecs_os_abort();
-    }
-
-    return ptr;
 }
 
 void* _ecs_poly_init(
@@ -250,7 +234,16 @@ ecs_observable_t* ecs_get_observable(
 const ecs_world_t* ecs_get_world(
     const ecs_poly_t *poly)
 {
+    if (((ecs_header_t*)poly)->type == ecs_world_t_magic) {
+        return poly;
+    }
     return *(ecs_world_t**)assert_mixin(poly, EcsMixinWorld);
+}
+
+ecs_entity_t ecs_get_entity(
+    const ecs_poly_t *poly)
+{
+    return *(ecs_entity_t*)assert_mixin(poly, EcsMixinEntity);
 }
 
 ecs_poly_dtor_t* ecs_get_dtor(

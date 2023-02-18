@@ -1,5 +1,5 @@
 /**
- * @file doc.h
+ * @file addons/doc.h
  * @brief Doc module.
  *
  * The doc module allows for documenting entities (and thus components, systems)
@@ -20,6 +20,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @defgroup c_addons_doc Doc
+ * @brief Utilities for documenting entities, components and systems.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 FLECS_API extern const ecs_entity_t ecs_id(EcsDocDescription);
 FLECS_API extern const ecs_entity_t EcsDocBrief;
@@ -160,6 +168,8 @@ const char* ecs_doc_get_color(
 FLECS_API
 void FlecsDocImport(
     ecs_world_t *world);
+
+/* @} */
 
 #ifdef __cplusplus
 }

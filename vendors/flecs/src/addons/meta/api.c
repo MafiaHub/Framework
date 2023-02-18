@@ -1,3 +1,8 @@
+/**
+ * @file meta/api.c
+ * @brief API for creating entities with reflection data.
+ */
+
 #include "meta.h"
 
 #ifdef FLECS_META
@@ -185,6 +190,24 @@ ecs_entity_t ecs_struct_init(
         ecs_delete(world, t);
         return 0;
     }
+
+    return t;
+}
+
+ecs_entity_t ecs_opaque_init(
+    ecs_world_t *world,
+    const ecs_opaque_desc_t *desc)
+{
+    ecs_poly_assert(world, ecs_world_t);
+    ecs_assert(desc != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(desc->type.as_type != 0, ECS_INVALID_PARAMETER, NULL);
+
+    ecs_entity_t t = desc->entity;
+    if (!t) {
+        t = ecs_new_low_id(world);
+    }
+
+    ecs_set_ptr(world, t, EcsOpaque, &desc->type);
 
     return t;
 }

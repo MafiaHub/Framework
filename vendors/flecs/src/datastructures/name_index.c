@@ -1,3 +1,8 @@
+/**
+ * @file datastructures/name_index.c
+ * @brief Data structure for resolving 64bit keys by string (name).
+ */
+
 #include "../private_api.h"
 
 static
@@ -64,8 +69,9 @@ void flecs_name_index_free(
 ecs_hashmap_t* flecs_name_index_copy(
     ecs_hashmap_t *map)
 {
-    ecs_hashmap_t *result = flecs_bdup(map->hashmap_allocator, map);
-    flecs_hashmap_copy(result, result);
+    ecs_hashmap_t *result = flecs_bcalloc(map->hashmap_allocator);
+    result->hashmap_allocator = map->hashmap_allocator;
+    flecs_hashmap_copy(result, map);
     return result;
 }
 

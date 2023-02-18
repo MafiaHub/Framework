@@ -1,3 +1,21 @@
+/**
+ * @file bootstrap.c
+ * @brief Bootstrap entities in the flecs.core namespace.
+ * 
+ * Before the ECS storage can be used, core entities such first need to be 
+ * initialized. For example, components in Flecs are stored as entities in the
+ * ECS storage itself with an EcsComponent component, but before this component
+ * can be stored, the component itself needs to be initialized.
+ * 
+ * The bootstrap code uses lower-level APIs to initialize the data structures.
+ * After bootstrap is completed, regular ECS operations can be used to create
+ * entities and components.
+ * 
+ * The bootstrap file also includes several lifecycle hooks and observers for
+ * builtin features, such as relationship properties and hooks for keeping the
+ * entity name administration in sync with the (Identifier, Name) component.
+ */
+
 #include "private_api.h"
 
 /* -- Identifier Component -- */
@@ -259,7 +277,7 @@ void flecs_register_on_delete(ecs_iter_t *it) {
     flecs_register_id_flag_for_relation(it, EcsOnDelete, 
         ECS_ID_ON_DELETE_FLAG(ECS_PAIR_SECOND(id)),
         EcsIdOnDeleteMask,
-        EcsEntityObservedId);
+        EcsEntityIsId);
 }
 
 static
@@ -268,13 +286,13 @@ void flecs_register_on_delete_object(ecs_iter_t *it) {
     flecs_register_id_flag_for_relation(it, EcsOnDeleteTarget, 
         ECS_ID_ON_DELETE_OBJECT_FLAG(ECS_PAIR_SECOND(id)),
         EcsIdOnDeleteObjectMask,
-        EcsEntityObservedId);  
+        EcsEntityIsId);  
 }
 
 static
-void flecs_register_acyclic(ecs_iter_t *it) {
-    flecs_register_id_flag_for_relation(it, EcsAcyclic, EcsIdAcyclic, 
-        EcsIdAcyclic, 0);
+void flecs_register_traversable(ecs_iter_t *it) {
+    flecs_register_id_flag_for_relation(it, EcsAcyclic, EcsIdTraversable, 
+        EcsIdTraversable, 0);
 }
 
 static
@@ -371,7 +389,7 @@ void flecs_register_symmetric(ecs_iter_t *it) {
         /* Create observer that adds the reverse relationship when R(X, Y) is
          * added, or remove the reverse relationship when R(X, Y) is removed. */
         ecs_observer_init(world, &(ecs_observer_desc_t){
-            .entity = ecs_entity(world, {.add = {ecs_childof(EcsFlecsInternals)}}),
+            .entity = ecs_entity(world, {.add = {ecs_childof(r)}}),
             .filter.terms[0] = { .id = ecs_pair(r, EcsWildcard) },
             .callback = flecs_on_symmetric_add_remove,
             .events = {EcsOnAdd, EcsOnRemove}
@@ -426,13 +444,10 @@ void flecs_on_parent_change(ecs_iter_t *it) {
     ecs_world_t *world = it->world;
     ecs_table_t *other_table = it->other_table, *table = it->table;
 
-    int32_t col = ecs_search(it->real_world, table, 
-        ecs_pair(ecs_id(EcsIdentifier), EcsName), 0);
-    bool has_name = col != -1;
-    bool other_has_name = ecs_search(it->real_world, other_table,
-        ecs_pair(ecs_id(EcsIdentifier), EcsName), 0) != -1;
-
-    if (!has_name && !other_has_name) {
+    EcsIdentifier *names = ecs_table_get_pair(it->real_world, 
+        table, EcsIdentifier, EcsName, it->offset);
+    bool has_name = names != NULL;
+    if (!has_name) {
         /* If tables don't have names, index does not need to be updated */
         return;
     }
@@ -444,6 +459,8 @@ void flecs_on_parent_change(ecs_iter_t *it) {
     ecs_search(it->real_world, other_table,
         ecs_pair(EcsChildOf, EcsWildcard), &from_pair);
 
+    bool other_has_name = ecs_search(it->real_world, other_table,
+        ecs_pair(ecs_id(EcsIdentifier), EcsName), 0) != -1;
     bool to_has_name = has_name, from_has_name = other_has_name;
     if (it->event == EcsOnRemove) {
         if (from_pair != ecs_childof(0)) {
@@ -462,9 +479,6 @@ void flecs_on_parent_change(ecs_iter_t *it) {
         to_has_name = other_has_name;
         from_has_name = has_name;
     }
-
-    /* Get the table column with names */
-    EcsIdentifier *names = ecs_iter_column(it, EcsIdentifier, col);
 
     ecs_hashmap_t *from_index = 0;
     if (from_has_name) {
@@ -487,6 +501,7 @@ void flecs_on_parent_change(ecs_iter_t *it) {
         const char *name_str = name->value;
         if (to_index && name_str) {
             ecs_assert(name->hash != 0, ECS_INTERNAL_ERROR, NULL);
+
             flecs_name_index_ensure(
                 to_index, e, name_str, name->length, name->hash);
             name->index = to_index;
@@ -571,10 +586,10 @@ ecs_table_t* flecs_bootstrap_component_table(
      * can no longer be done after they are in use. */
     ecs_id_record_t *idr = flecs_id_record_ensure(world, EcsChildOf);
     idr->flags |= EcsIdOnDeleteObjectDelete | EcsIdDontInherit |
-        EcsIdAcyclic | EcsIdTag;
+        EcsIdTraversable | EcsIdTag;
     idr = flecs_id_record_ensure(world, ecs_pair(EcsChildOf, EcsWildcard));
     idr->flags |= EcsIdOnDeleteObjectDelete | EcsIdDontInherit |
-        EcsIdAcyclic | EcsIdTag | EcsIdExclusive;
+        EcsIdTraversable | EcsIdTag | EcsIdExclusive;
 
     idr = flecs_id_record_ensure(
         world, ecs_pair(ecs_id(EcsIdentifier), EcsWildcard));
@@ -622,6 +637,7 @@ void flecs_bootstrap_entity(
     ecs_os_strcpy(symbol, "flecs.core.");
     ecs_os_strcat(symbol, name);
     
+    ecs_ensure(world, id);
     ecs_add_pair(world, id, EcsChildOf, parent);
     ecs_set_name(world, id, name);
     ecs_set_symbol(world, id, symbol);
@@ -649,10 +665,16 @@ void flecs_bootstrap(
     ecs_ensure(world, EcsSymbol);
     ecs_ensure(world, EcsAlias);
     ecs_ensure(world, EcsChildOf);
+    ecs_ensure(world, EcsFlecs);
     ecs_ensure(world, EcsFlecsCore);
+    ecs_ensure(world, EcsOnAdd);
+    ecs_ensure(world, EcsOnRemove);
+    ecs_ensure(world, EcsOnSet);
+    ecs_ensure(world, EcsUnSet);
     ecs_ensure(world, EcsOnDelete);
     ecs_ensure(world, EcsPanic);
     ecs_ensure(world, EcsFlag);
+    ecs_ensure(world, EcsIsA);
     ecs_ensure(world, EcsWildcard);
     ecs_ensure(world, EcsAny);
     ecs_ensure(world, EcsTag);
@@ -682,11 +704,8 @@ void flecs_bootstrap(
 
     flecs_type_info_init(world, EcsIterable, { 0 });
 
-    /* Cache often used id records on world */
-    world->idr_wildcard = flecs_id_record_ensure(world, EcsWildcard);
-    world->idr_wildcard_wildcard = flecs_id_record_ensure(world, 
-        ecs_pair(EcsWildcard, EcsWildcard));
-    world->idr_any = flecs_id_record_ensure(world, EcsAny);
+    /* Cache often used id records */
+    flecs_init_id_records(world);
 
     /* Create table for initial components */
     ecs_table_t *table = flecs_bootstrap_component_table(world);
@@ -744,6 +763,13 @@ void flecs_bootstrap(
     ecs_set_name(world, EcsFlecsInternals, "internals");
     ecs_add_id(world, EcsFlecsInternals, EcsModule);
 
+    /* Self check */
+    ecs_record_t *r = flecs_entities_get(world, EcsFlecs);
+    ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(r->table != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(r->row & EcsEntityIsTraversable, ECS_INTERNAL_ERROR, NULL);
+    (void)r;
+
     /* Initialize builtin entities */
     flecs_bootstrap_entity(world, EcsWorld, "World", EcsFlecsCore);
     flecs_bootstrap_entity(world, EcsWildcard, "*", EcsFlecsCore);
@@ -762,6 +788,7 @@ void flecs_bootstrap(
     flecs_bootstrap_tag(world, EcsUnion);
     flecs_bootstrap_tag(world, EcsExclusive);
     flecs_bootstrap_tag(world, EcsAcyclic);
+    flecs_bootstrap_tag(world, EcsTraversable);
     flecs_bootstrap_tag(world, EcsWith);
     flecs_bootstrap_tag(world, EcsOneOf);
 
@@ -783,6 +810,9 @@ void flecs_bootstrap(
     flecs_bootstrap_entity(world, EcsOnRemove, "OnRemove", EcsFlecsCore);
     flecs_bootstrap_entity(world, EcsOnSet, "OnSet", EcsFlecsCore);
     flecs_bootstrap_entity(world, EcsUnSet, "UnSet", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsMonitor, "EcsMonitor", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnTableCreate, "OnTableCreate", EcsFlecsCore);
+    flecs_bootstrap_entity(world, EcsOnTableDelete, "OnTableDelete", EcsFlecsCore);
     flecs_bootstrap_entity(world, EcsOnTableEmpty, "OnTableEmpty", EcsFlecsCore);
     flecs_bootstrap_entity(world, EcsOnTableFill, "OnTableFilled", EcsFlecsCore);
 
@@ -804,12 +834,9 @@ void flecs_bootstrap(
     /* Sync properties of ChildOf and Identifier with bootstrapped flags */
     ecs_add_pair(world, EcsChildOf, EcsOnDeleteTarget, EcsDelete);
     ecs_add_id(world, EcsChildOf, EcsAcyclic);
+    ecs_add_id(world, EcsChildOf, EcsTraversable);
     ecs_add_id(world, EcsChildOf, EcsDontInherit);
     ecs_add_id(world, ecs_id(EcsIdentifier), EcsDontInherit);
-
-    /* The (IsA, *) id record is used often in searches, so cache it */
-    world->idr_isa_wildcard = flecs_id_record_ensure(world, 
-        ecs_pair(EcsIsA, EcsWildcard));
 
     /* Create triggers in internals scope */
     ecs_set_scope(world, EcsFlecsInternals);
@@ -857,11 +884,11 @@ void flecs_bootstrap(
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
         .filter.terms = {
-            { .id = EcsAcyclic, .src.flags = EcsSelf },
+            { .id = EcsTraversable, .src.flags = EcsSelf },
             match_prefab
         },
         .events = {EcsOnAdd, EcsOnRemove},
-        .callback = flecs_register_acyclic
+        .callback = flecs_register_traversable
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
@@ -877,6 +904,7 @@ void flecs_bootstrap(
     });
 
     ecs_observer_init(world, &(ecs_observer_desc_t){
+        .entity = ecs_entity(world, { .name = "RegisterDontInherit" }),
         .filter.terms = {{ .id = EcsDontInherit, .src.flags = EcsSelf }, match_prefab },
         .events = {EcsOnAdd},
         .callback = flecs_register_dont_inherit
@@ -919,17 +947,19 @@ void flecs_bootstrap(
     /* Set scope back to flecs core */
     ecs_set_scope(world, EcsFlecsCore);
 
-    /* Acyclic components */
-    ecs_add_id(world, EcsIsA, EcsAcyclic);
-    ecs_add_id(world, EcsDependsOn, EcsAcyclic);
-    ecs_add_id(world, EcsWith, EcsAcyclic);
+    /* Traversable relationships are always acyclic */
+    ecs_add_pair(world, EcsTraversable, EcsWith, EcsAcyclic);
+
+    /* Transitive relationships are always Traversable */
+    ecs_add_pair(world, EcsTransitive, EcsWith, EcsTraversable);
 
     /* DontInherit components */
-    ecs_add_id(world, EcsDisabled, EcsDontInherit);
     ecs_add_id(world, EcsPrefab, EcsDontInherit);
 
-    /* Transitive relationships are always Acyclic */
-    ecs_add_pair(world, EcsTransitive, EcsWith, EcsAcyclic);
+    /* Acyclic/Traversable components */
+    ecs_add_id(world, EcsIsA, EcsTraversable);
+    ecs_add_id(world, EcsDependsOn, EcsTraversable);
+    ecs_add_id(world, EcsWith, EcsAcyclic);
 
     /* Transitive relationships */
     ecs_add_id(world, EcsIsA, EcsTransitive);

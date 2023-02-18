@@ -1,3 +1,12 @@
+/**
+ * @file addons/cpp/mixins/system/mixin.inl
+ * @brief System module world mixin.
+ */
+
+/** 
+ * \memberof flecs::world
+ * \ingroup cpp_addons_system
+*/
 
 /** Upcast entity to a system.
  * The provided entity must be a system.
@@ -15,3 +24,5 @@ flecs::system system(flecs::entity e) const;
  */
 template <typename... Components, typename... Args>
 flecs::system_builder<Components...> system(Args &&... args) const;
+
+/** @} */

@@ -1,10 +1,18 @@
+/**
+ * @file addons/cpp/mixins/observer/builder_i.hpp
+ * @brief Observer builder interface.
+ */
+
 #pragma once
 
 #include "../filter/builder_i.hpp"
 
 namespace flecs {
 
-// Observer builder interface
+/** Observer builder interface.
+ * 
+ * \ingroup cpp_observers
+ */
 template<typename Base, typename ... Components>
 struct observer_builder_i : filter_builder_i<Base, Components ...> {
     using BaseClass = filter_builder_i<Base, Components ...>;
@@ -41,11 +49,17 @@ struct observer_builder_i : filter_builder_i<Base, Components ...> {
         return *this;
     }
 
-    /** Set system context */
+    /** Set observer context */
     Base& ctx(void *ptr) {
         m_desc->ctx = ptr;
         return *this;
-    }    
+    }
+
+    /** Set observer run callback */
+    Base& run(ecs_iter_action_t action) {
+        m_desc->run = action;
+        return *this;
+    }
 
 protected:
     virtual flecs::world_t* world_v() = 0;

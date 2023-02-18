@@ -1,7 +1,61 @@
+/**
+ * @file json/json.h
+ * @brief Internal functions for JSON addon.
+ */
+
 #include "../../private_api.h"
 
 #ifdef FLECS_JSON
 
+/* Deserialize from JSON */
+typedef enum ecs_json_token_t {
+    JsonObjectOpen,
+    JsonObjectClose,
+    JsonArrayOpen,
+    JsonArrayClose,
+    JsonColon,
+    JsonComma,
+    JsonNumber,
+    JsonString,
+    JsonTrue,
+    JsonFalse,
+    JsonNull,
+    JsonInvalid
+} ecs_json_token_t;
+
+const char* flecs_json_parse(
+    const char *json,
+    ecs_json_token_t *token_kind,
+    char *token);
+
+const char* flecs_json_expect(
+    const char *json,
+    ecs_json_token_t token_kind,
+    char *token,
+    const ecs_from_json_desc_t *desc);
+
+const char* flecs_json_expect_member(
+    const char *json,
+    char *token,
+    const ecs_from_json_desc_t *desc);
+
+const char* flecs_json_expect_member_name(
+    const char *json,
+    char *token,
+    const char *member_name,
+    const ecs_from_json_desc_t *desc);
+
+const char* flecs_json_skip_object(
+    const char *json,
+    char *token,
+    const ecs_from_json_desc_t *desc);
+
+const char* flecs_json_skip_array(
+    const char *json,
+    char *token,
+    const ecs_from_json_desc_t *desc);
+
+/* Serialize to JSON */
 void flecs_json_next(
     ecs_strbuf_t *buf);
 
@@ -32,6 +86,10 @@ void flecs_json_object_pop(
     ecs_strbuf_t *buf);
 
 void flecs_json_string(
+    ecs_strbuf_t *buf,
+    const char *value);
+
+void flecs_json_string_escape(
     ecs_strbuf_t *buf,
     const char *value);
 

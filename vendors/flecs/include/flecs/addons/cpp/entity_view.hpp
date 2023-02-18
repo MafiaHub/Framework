@@ -1,15 +1,29 @@
-#pragma once
-
-namespace flecs
-{
-
-/** Entity view class
+/**
+ * @file addons/cpp/entity_view.hpp
+ * @brief Entity class with only readonly operations.
+ * 
  * This class provides readonly access to entities. Using this class to store 
  * entities in components ensures valid handles, as this class will always store
  * the actual world vs. a stage. The constructors of this class will never 
  * create a new entity.
  *
  * To obtain a mutable handle to the entity, use the "mut" function.
+ */
+
+#pragma once
+
+/**
+ * \ingroup cpp_entities
+ * @{
+ */
+
+namespace flecs
+{
+
+/** Entity view.
+ * Class with read operations for entities. Base for flecs::entity.
+ * 
+ * \ingroup cpp_entities
  */
 struct entity_view : public id {
 
@@ -82,7 +96,7 @@ struct entity_view : public id {
         return flecs::string(path);
     }   
 
-    bool enabled() {
+    bool enabled() const {
         return !ecs_has_id(m_world, m_id, flecs::Disabled);
     }
 
@@ -97,6 +111,15 @@ struct entity_view : public id {
      * @return Returns the entity's table.
      */
     flecs::table table() const;
+
+    /** Get table range for the entity.
+     * Returns a range with the entity's row as offset and count set to 1. If
+     * the entity is not stored in a table, the function returns a range with
+     * count 0.
+     *
+     * @return Returns the entity's table range.
+     */
+    flecs::table_range range() const;
 
     /** Iterate (component) ids of an entity.
      * The function parameter must match the following signature:
@@ -398,6 +421,25 @@ struct entity_view : public id {
     template <typename First, typename Second>
     flecs::entity target_for(flecs::entity_t relationship) const;
 
+    /** Get depth for given relationship.
+     *
+     * @param rel The relationship.
+     * @return The depth.
+     */
+    int32_t depth(flecs::entity_t rel) const {
+        return ecs_get_depth(m_world, m_id, rel);
+    }
+
+    /** Get depth for given relationship.
+     *
+     * @tparam Rel The relationship.
+     * @return The depth.
+     */
+    template<typename Rel>
+    int32_t depth() const {
+        return this->depth(_::cpp_type<Rel>::id(m_world));
+    }
+
     /** Get parent of entity.
      * Short for target(flecs::ChildOf).
      * 
@@ -575,7 +617,7 @@ struct entity_view : public id {
      * @param id The id to test.
      * @return True if enabled, false if not.
      */
-    bool enabled(flecs::id_t id) {
+    bool enabled(flecs::id_t id) const {
         return ecs_is_enabled_id(m_world, m_id, id);
     }
 
@@ -585,7 +627,7 @@ struct entity_view : public id {
      * @return True if enabled, false if not.
      */
     template<typename T>
-    bool enabled() {
+    bool enabled() const {
         return this->enabled(_::cpp_type<T>::id(m_world));
     }
 
@@ -595,7 +637,7 @@ struct entity_view : public id {
      * @param second The second element of the pair.
      * @return True if enabled, false if not.
      */
-    bool enabled(flecs::id_t first, flecs::id_t second) {
+    bool enabled(flecs::id_t first, flecs::id_t second) const {
         return this->enabled(ecs_pair(first, second));
     }
 
@@ -606,7 +648,7 @@ struct entity_view : public id {
      * @return True if enabled, false if not.
      */
     template <typename First>
-    bool enabled(flecs::id_t second) {
+    bool enabled(flecs::id_t second) const {
         return this->enabled(_::cpp_type<First>::id(m_world), second);
     }
 
@@ -617,7 +659,7 @@ struct entity_view : public id {
      * @return True if enabled, false if not.
      */
     template <typename First, typename Second>
-    bool enabled() {
+    bool enabled() const {
         return this->enabled<First>(_::cpp_type<Second>::id(m_world));
     }
 
@@ -675,7 +717,7 @@ struct entity_view : public id {
     flecs::entity mut(const flecs::entity_view& e) const;
 
 #   ifdef FLECS_JSON
-#   include "mixins/json/entity.inl"
+#   include "mixins/json/entity_view.inl"
 #   endif
 #   ifdef FLECS_DOC
 #   include "mixins/doc/entity_view.inl"
@@ -688,3 +730,5 @@ private:
 };
 
 }
+
+/** @} */

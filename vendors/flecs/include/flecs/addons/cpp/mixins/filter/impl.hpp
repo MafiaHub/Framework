@@ -1,3 +1,8 @@
+/**
+ * @file addons/cpp/mixins/filter/impl.hpp
+ * @brief Filter implementation.
+ */
+
 #pragma once
 
 #include "builder.hpp"
@@ -80,6 +85,10 @@ struct filter_base {
         return *this; 
     }
 
+    flecs::entity entity() {
+        return flecs::entity(m_world, ecs_get_entity(m_filter_ptr));
+    }
+
     operator const flecs::filter_t*() const {
         return m_filter_ptr;
     }
@@ -116,7 +125,7 @@ struct filter_base {
     operator filter<>() const;
 
 protected:
-    world_t *m_world;
+    world_t *m_world = nullptr;
     filter_t m_filter = ECS_FILTER_INIT;
     const filter_t *m_filter_ptr;
 };
@@ -141,7 +150,7 @@ public:
     filter(filter&& obj) : filter_base(FLECS_MOV(obj)) { }
 
     filter& operator=(filter&& obj) {
-        filter_base(FLECS_MOV(obj));
+        filter_base::operator=(FLECS_FWD(obj));
         return *this;
     }
 

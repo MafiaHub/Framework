@@ -1,3 +1,8 @@
+/**
+ * @file addons/os_api_impl/posix_impl.inl
+ * @brief Builtin POSIX implementation for OS API.
+ */
+
 #include "pthread.h"
 
 #if defined(__APPLE__) && defined(__MACH__)
@@ -31,6 +36,12 @@ void* posix_thread_join(
     pthread_join(*thr, &arg);
     ecs_os_free(thr);
     return arg;
+}
+
+static
+ecs_os_thread_id_t posix_thread_self(void)
+{
+    return (ecs_os_thread_id_t)pthread_self();
 }
 
 static
@@ -263,6 +274,7 @@ void ecs_set_os_api_impl(void) {
 
     api.thread_new_ = posix_thread_new;
     api.thread_join_ = posix_thread_join;
+    api.thread_self_ = posix_thread_self;
     api.ainc_ = posix_ainc;
     api.adec_ = posix_adec;
     api.lainc_ = posix_lainc;

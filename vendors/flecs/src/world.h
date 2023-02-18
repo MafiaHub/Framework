@@ -1,6 +1,6 @@
 /**
- * @file world.h
- * @brief World utilities.
+ * @file world.c
+ * @brief World-level API.
  */
 
 #ifndef FLECS_WORLD_H
@@ -63,10 +63,6 @@ void flecs_notify_tables(
     ecs_world_t *world,
     ecs_id_t id,
     ecs_table_event_t *event);
-
-void flecs_notify_queries(
-    ecs_world_t *world,
-    ecs_query_event_t *event);
 
 void flecs_register_table(
     ecs_world_t *world,

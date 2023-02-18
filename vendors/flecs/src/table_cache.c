@@ -1,3 +1,19 @@
+/**
+ * @file table_cache.c
+ * @brief Data structure for fast table iteration/lookups.
+ * 
+ * A table cache is a data structure that provides constant time operations for
+ * insertion and removal of tables, and to testing whether a table is registered
+ * with the cache. A table cache also provides functions to iterate the tables
+ * in a cache.
+ * 
+ * The world stores a table cache per (component) id inside the id record 
+ * administration. Cached queries store a table cache with matched tables.
+ * 
+ * A table cache has separate lists for non-empty tables and empty tables. This
+ * improves performance as applications don't waste time iterating empty tables.
+ */
+
 #include "private_api.h"
 
 static
@@ -104,7 +120,7 @@ void ecs_table_cache_insert(
     flecs_table_cache_list_insert(cache, result);
 
     if (table) {
-        ecs_map_set_ptr(&cache->index, table->id, result);
+        ecs_map_insert_ptr(&cache->index, table->id, result);
     }
 
     ecs_assert(empty || cache->tables.first != NULL, 
@@ -118,11 +134,11 @@ void ecs_table_cache_replace(
     const ecs_table_t *table,
     ecs_table_cache_hdr_t *elem)
 {
-    ecs_table_cache_hdr_t **oldptr = ecs_map_get(&cache->index, 
-        ecs_table_cache_hdr_t*, table->id);
-    ecs_assert(oldptr != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_table_cache_hdr_t **r = ecs_map_get_ref(
+        &cache->index, ecs_table_cache_hdr_t, table->id);
+    ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_table_cache_hdr_t *old = *oldptr;
+    ecs_table_cache_hdr_t *old = *r;
     ecs_assert(old != NULL, ECS_INTERNAL_ERROR, NULL);
 
     ecs_table_cache_hdr_t *prev = old->prev, *next = old->next;
@@ -148,7 +164,7 @@ void ecs_table_cache_replace(
         cache->tables.last = elem;
     }
 
-    *oldptr = elem;
+    *r = elem;
     elem->prev = prev;
     elem->next = next;
 }
@@ -159,7 +175,10 @@ void* ecs_table_cache_get(
 {
     ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
     if (table) {
-        return ecs_map_get_ptr(&cache->index, ecs_table_cache_hdr_t*, table->id);
+        if (ecs_map_is_init(&cache->index)) {
+            return ecs_map_get_deref(&cache->index, void**, table->id);
+        }
+        return NULL;
     } else {
         ecs_table_cache_hdr_t *elem = cache->tables.first;
         ecs_assert(!elem || elem->table == NULL, ECS_INTERNAL_ERROR, NULL);
@@ -169,30 +188,17 @@ void* ecs_table_cache_get(
 
 void* ecs_table_cache_remove(
     ecs_table_cache_t *cache,
-    const ecs_table_t *table,
+    uint64_t table_id,
     ecs_table_cache_hdr_t *elem)
 {
     ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
-
-    if (!ecs_map_is_initialized(&cache->index)) {
-        return NULL;
-    }
-
-    if (!elem) {
-        elem = ecs_map_get_ptr(
-            &cache->index, ecs_table_cache_hdr_t*, table->id);
-        if (!elem) {
-            return false;
-        }
-    }
-
+    ecs_assert(table_id != 0, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(elem != NULL, ECS_INTERNAL_ERROR, NULL);
+
     ecs_assert(elem->cache == cache, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(elem->table == table, ECS_INTERNAL_ERROR, NULL);
 
     flecs_table_cache_list_remove(cache, elem);
-    ecs_map_remove(&cache->index, table->id);
+    ecs_map_remove(&cache->index, table_id);
 
     return elem;
 }
@@ -205,8 +211,8 @@ bool ecs_table_cache_set_empty(
     ecs_assert(cache != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_assert(table != NULL, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_table_cache_hdr_t *elem = ecs_map_get_ptr(
-        &cache->index, ecs_table_cache_hdr_t*, table->id);
+    ecs_table_cache_hdr_t *elem = ecs_map_get_deref(&cache->index, 
+        ecs_table_cache_hdr_t, table->id);
     if (!elem) {
         return false;
     }

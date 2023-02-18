@@ -1,3 +1,8 @@
+/**
+ * @file addons/system/system.c
+ * @brief System addon.
+ */
+
 #include "flecs.h"
 
 #ifdef FLECS_SYSTEM
@@ -72,13 +77,23 @@ ecs_entity_t ecs_run_intern(
     ecs_world_t *thread_ctx = world;
     if (stage) {
         thread_ctx = stage->thread_ctx;
+    } else {
+        stage = &world->stages[0];
     }
 
     /* Prepare the query iterator */
     ecs_iter_t pit, wit, qit = ecs_query_iter(thread_ctx, system_data->query);
     ecs_iter_t *it = &qit;
 
-    ecs_defer_begin(thread_ctx);
+    qit.system = system;
+    qit.delta_time = delta_time;
+    qit.delta_system_time = time_elapsed;
+    qit.frame_offset = offset;
+    qit.param = param;
+    qit.ctx = system_data->ctx;
+    qit.binding_ctx = system_data->binding_ctx;
+
+    flecs_defer_begin(world, stage);
 
     if (offset || limit) {
         pit = ecs_page_iter(it, offset, limit);
@@ -89,14 +104,6 @@ ecs_entity_t ecs_run_intern(
         wit = ecs_worker_iter(it, stage_index, stage_count);
         it = &wit;
     }
-
-    qit.system = system;
-    qit.delta_time = delta_time;
-    qit.delta_system_time = time_elapsed;
-    qit.frame_offset = offset;
-    qit.param = param;
-    qit.ctx = system_data->ctx;
-    qit.binding_ctx = system_data->binding_ctx;
 
     ecs_iter_action_t action = system_data->action;
     it->callback = action;
@@ -116,15 +123,16 @@ ecs_entity_t ecs_run_intern(
         }
     } else {
         action(&qit);
+        ecs_iter_fini(&qit);
     }
 
     if (measure_time) {
-        system_data->time_spent += (float)ecs_time_measure(&time_start);
+        system_data->time_spent += (ecs_ftime_t)ecs_time_measure(&time_start);
     }
 
     system_data->invoke_count ++;
 
-    ecs_defer_end(thread_ctx);
+    flecs_defer_end(world, stage);
 
     return it->interrupted_by;
 }
@@ -247,7 +255,7 @@ ecs_entity_t ecs_system_init(
         system->entity = entity;
 
         ecs_query_desc_t query_desc = desc->query;
-        query_desc.entity = entity;
+        query_desc.filter.entity = entity;
 
         ecs_query_t *query = ecs_query_init(world, &query_desc);
         if (!query) {
@@ -256,10 +264,10 @@ ecs_entity_t ecs_system_init(
         }
 
         /* Prevent the system from moving while we're initializing */
-        ecs_defer_begin(world);
+        flecs_defer_begin(world, &world->stages[0]);
 
         system->query = query;
-        system->query_entity = query->entity;
+        system->query_entity = query->filter.entity;
 
         system->run = desc->run;
         system->action = desc->callback;
@@ -273,7 +281,7 @@ ecs_entity_t ecs_system_init(
         system->tick_source = desc->tick_source;
 
         system->multi_threaded = desc->multi_threaded;
-        system->no_staging = desc->no_staging;
+        system->no_readonly = desc->no_readonly;
 
         if (desc->interval != 0 || desc->rate != 0 || desc->tick_source != 0) {
 #ifdef FLECS_TIMER
@@ -318,8 +326,8 @@ ecs_entity_t ecs_system_init(
         if (desc->multi_threaded) {
             system->multi_threaded = desc->multi_threaded;
         }
-        if (desc->no_staging) {
-            system->no_staging = desc->no_staging;
+        if (desc->no_readonly) {
+            system->no_readonly = desc->no_readonly;
         }
     }
 
@@ -340,11 +348,10 @@ void FlecsSystemImport(
     flecs_bootstrap_tag(world, EcsSystem);
     flecs_bootstrap_component(world, EcsTickSource);
 
-    /* Put following tags in flecs.core so they can be looked up
-     * without using the flecs.systems prefix. */
-    ecs_entity_t old_scope = ecs_set_scope(world, EcsFlecsCore);
-    flecs_bootstrap_tag(world, EcsMonitor);
-    ecs_set_scope(world, old_scope);
+    /* Make sure to never inherit system component. This makes sure that any
+     * term created for the System component will default to 'self' traversal,
+     * which improves efficiency of the query. */
+    ecs_add_id(world, EcsSystem, EcsDontInherit);
 }
 
 #endif

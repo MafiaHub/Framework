@@ -1,3 +1,8 @@
+/**
+ * @file addons/cpp/mixins/rule/impl.hpp
+ * @brief Rule implementation.
+ */
+
 #pragma once
 
 #include "builder.hpp"
@@ -33,6 +38,10 @@ struct rule_base {
 
     operator rule_t*() const {
         return m_rule;
+    }
+
+    flecs::entity entity() {
+        return flecs::entity(m_world, ecs_get_entity(m_rule));
     }
 
     /** Free the rule.

@@ -1,3 +1,7 @@
+/**
+ * @file addons/stats.c
+ * @brief Stats addon.
+ */
 
 #include "../private_api.h"
 
@@ -15,10 +19,10 @@
     flecs_gauge_record(m, t, (ecs_float_t)(value))
 
 #define ECS_COUNTER_RECORD(m, t, value)\
-    flecs_counter_record(m, t, (ecs_float_t)(value))
+    flecs_counter_record(m, t, (double)(value))
 
 #define ECS_METRIC_FIRST(stats)\
-    ECS_CAST(ecs_metric_t*, ECS_OFFSET(&stats->first_, ECS_SIZEOF(int32_t)))
+    ECS_CAST(ecs_metric_t*, ECS_OFFSET(&stats->first_, ECS_SIZEOF(int64_t)))
 
 #define ECS_METRIC_LAST(stats)\
     ECS_CAST(ecs_metric_t*, ECS_OFFSET(&stats->last_, -ECS_SIZEOF(ecs_metric_t)))
@@ -49,19 +53,19 @@ void flecs_gauge_record(
 }
 
 static
-ecs_float_t flecs_counter_record(
+double flecs_counter_record(
     ecs_metric_t *m,
     int32_t t,
-    ecs_float_t value)
+    double value)
 {
     int32_t tp = t_prev(t);
-    ecs_float_t prev = m->counter.value[tp];
+    double prev = m->counter.value[tp];
     m->counter.value[t] = value;
-    ecs_float_t gauge_value = value - prev;
+    double gauge_value = value - prev;
     if (gauge_value < 0) {
         gauge_value = 0; /* Counters are monotonically increasing */
     }
-    flecs_gauge_record(m, t, gauge_value);
+    flecs_gauge_record(m, t, (ecs_float_t)gauge_value);
     return gauge_value;
 }
 
@@ -121,7 +125,7 @@ void ecs_metric_reduce(
             dst->gauge.max[t_dst] = src->gauge.max[t];
         }
     }
-    
+
     dst->counter.value[t_dst] = src->counter.value[t_src];
 
 error:
@@ -249,7 +253,7 @@ void ecs_world_stats_get(
 
     int32_t t = s->t = t_next(s->t);
 
-    ecs_ftime_t delta_frame_count = 
+    double delta_frame_count = 
     ECS_COUNTER_RECORD(&s->frame.frame_count, t, world->info.frame_count_total);
     ECS_COUNTER_RECORD(&s->frame.merge_count, t, world->info.merge_count_total);
     ECS_COUNTER_RECORD(&s->frame.rematch_count, t, world->info.rematch_count_total);
@@ -258,7 +262,7 @@ void ecs_world_stats_get(
     ECS_COUNTER_RECORD(&s->frame.observers_ran, t, world->info.observers_ran_frame);
     ECS_COUNTER_RECORD(&s->frame.event_emit_count, t, world->event_id);
 
-    ecs_ftime_t delta_world_time = 
+    double delta_world_time = 
     ECS_COUNTER_RECORD(&s->performance.world_time_raw, t, world->info.world_time_total_raw);
     ECS_COUNTER_RECORD(&s->performance.world_time, t, world->info.world_time_total);
     ECS_COUNTER_RECORD(&s->performance.frame_time, t, world->info.frame_time_total);
@@ -268,7 +272,7 @@ void ecs_world_stats_get(
     ECS_COUNTER_RECORD(&s->performance.rematch_time, t, world->info.rematch_time_total);
     ECS_GAUGE_RECORD(&s->performance.delta_time, t, delta_world_time);
     if (delta_world_time != 0 && delta_frame_count != 0) {
-        ECS_GAUGE_RECORD(&s->performance.fps, t, (ecs_ftime_t)1 / (delta_world_time / (ecs_ftime_t)delta_frame_count));
+        ECS_GAUGE_RECORD(&s->performance.fps, t, (double)1 / (delta_world_time / (double)delta_frame_count));
     } else {
         ECS_GAUGE_RECORD(&s->performance.fps, t, 0);
     }
@@ -281,14 +285,15 @@ void ecs_world_stats_get(
     ECS_GAUGE_RECORD(&s->ids.component_count, t, world->info.component_id_count);
     ECS_GAUGE_RECORD(&s->ids.pair_count, t, world->info.pair_id_count);
     ECS_GAUGE_RECORD(&s->ids.wildcard_count, t, world->info.wildcard_id_count);
-    ECS_GAUGE_RECORD(&s->ids.type_count, t, ecs_sparse_count(world->type_info));
+    ECS_GAUGE_RECORD(&s->ids.type_count, t, ecs_sparse_count(&world->type_info));
     ECS_COUNTER_RECORD(&s->ids.create_count, t, world->info.id_create_total);
     ECS_COUNTER_RECORD(&s->ids.delete_count, t, world->info.id_delete_total);
 
     ECS_GAUGE_RECORD(&s->queries.query_count, t, ecs_count_id(world, EcsQuery));
     ECS_GAUGE_RECORD(&s->queries.observer_count, t, ecs_count_id(world, EcsObserver));
-    ECS_GAUGE_RECORD(&s->queries.system_count, t, ecs_count_id(world, EcsSystem));
-
+    if (ecs_is_alive(world, EcsSystem)) {
+        ECS_GAUGE_RECORD(&s->queries.system_count, t, ecs_count_id(world, EcsSystem));
+    }
     ECS_COUNTER_RECORD(&s->tables.create_count, t, world->info.table_create_total);
     ECS_COUNTER_RECORD(&s->tables.delete_count, t, world->info.table_delete_total);
     ECS_GAUGE_RECORD(&s->tables.count, t, world->info.table_count);
@@ -326,6 +331,34 @@ void ecs_world_stats_get(
     ECS_COUNTER_RECORD(&s->memory.stack_alloc_count, t, ecs_stack_allocator_alloc_count);
     ECS_COUNTER_RECORD(&s->memory.stack_free_count, t, ecs_stack_allocator_free_count);
     ECS_GAUGE_RECORD(&s->memory.stack_outstanding_alloc_count, t, outstanding_allocs);
+
+#ifdef FLECS_REST
+    ECS_COUNTER_RECORD(&s->rest.request_count, t, ecs_rest_request_count);
+    ECS_COUNTER_RECORD(&s->rest.entity_count, t, ecs_rest_entity_count);
+    ECS_COUNTER_RECORD(&s->rest.entity_error_count, t, ecs_rest_entity_error_count);
+    ECS_COUNTER_RECORD(&s->rest.query_count, t, ecs_rest_query_count);
+    ECS_COUNTER_RECORD(&s->rest.query_error_count, t, ecs_rest_query_error_count);
+    ECS_COUNTER_RECORD(&s->rest.query_name_count, t, ecs_rest_query_name_count);
+    ECS_COUNTER_RECORD(&s->rest.query_name_error_count, t, ecs_rest_query_name_error_count);
+    ECS_COUNTER_RECORD(&s->rest.query_name_from_cache_count, t, ecs_rest_query_name_from_cache_count);
+    ECS_COUNTER_RECORD(&s->rest.enable_count, t, ecs_rest_enable_count);
+    ECS_COUNTER_RECORD(&s->rest.enable_error_count, t, ecs_rest_enable_error_count);
+    ECS_COUNTER_RECORD(&s->rest.world_stats_count, t, ecs_rest_world_stats_count);
+    ECS_COUNTER_RECORD(&s->rest.pipeline_stats_count, t, ecs_rest_pipeline_stats_count);
+    ECS_COUNTER_RECORD(&s->rest.stats_error_count, t, ecs_rest_stats_error_count);
+#endif
+
+#ifdef FLECS_HTTP
+    ECS_COUNTER_RECORD(&s->http.request_received_count, t, ecs_http_request_received_count);
+    ECS_COUNTER_RECORD(&s->http.request_invalid_count, t, ecs_http_request_invalid_count);
+    ECS_COUNTER_RECORD(&s->http.request_handled_ok_count, t, ecs_http_request_handled_ok_count);
+    ECS_COUNTER_RECORD(&s->http.request_handled_error_count, t, ecs_http_request_handled_error_count);
+    ECS_COUNTER_RECORD(&s->http.request_not_handled_count, t, ecs_http_request_not_handled_count);
+    ECS_COUNTER_RECORD(&s->http.request_preflight_count, t, ecs_http_request_preflight_count);
+    ECS_COUNTER_RECORD(&s->http.send_ok_count, t, ecs_http_send_ok_count);
+    ECS_COUNTER_RECORD(&s->http.send_error_count, t, ecs_http_send_error_count);
+    ECS_COUNTER_RECORD(&s->http.busy_count, t, ecs_http_busy_count);
+#endif
 
 error:
     return;
@@ -510,10 +543,12 @@ bool ecs_pipeline_stats_get(
     ecs_check(pipeline != 0, ECS_INVALID_PARAMETER, NULL);
 
     const ecs_world_t *world = ecs_get_world(stage);
-    const EcsPipeline *pq = ecs_get(world, pipeline, EcsPipeline);
-    if (!pq) {
+    const EcsPipeline *pqc = ecs_get(world, pipeline, EcsPipeline);
+    if (!pqc) {
         return false;
     }
+    ecs_pipeline_state_t *pq = pqc->state;
+    ecs_assert(pq != NULL, ECS_INTERNAL_ERROR, NULL);
 
     int32_t sys_count = 0, active_sys_count = 0;
 
@@ -533,19 +568,19 @@ bool ecs_pipeline_stats_get(
     }   
 
     /* Also count synchronization points */
-    ecs_vector_t *ops = pq->ops;
-    ecs_pipeline_op_t *op = ecs_vector_first(ops, ecs_pipeline_op_t);
-    ecs_pipeline_op_t *op_last = ecs_vector_last(ops, ecs_pipeline_op_t);
-    int32_t pip_count = active_sys_count + ecs_vector_count(ops);
+    ecs_vec_t *ops = &pq->ops;
+    ecs_pipeline_op_t *op = ecs_vec_first_t(ops, ecs_pipeline_op_t);
+    ecs_pipeline_op_t *op_last = ecs_vec_last_t(ops, ecs_pipeline_op_t);
+    int32_t pip_count = active_sys_count + ecs_vec_count(ops);
 
     if (!sys_count) {
         return false;
     }
 
-    if (ecs_map_is_initialized(&s->system_stats) && !sys_count) {
+    if (ecs_map_is_init(&s->system_stats) && !sys_count) {
         ecs_map_fini(&s->system_stats);
     }
-    ecs_map_init_if(&s->system_stats, ecs_system_stats_t, NULL, sys_count);
+    ecs_map_init_if(&s->system_stats, NULL);
 
     /* Make sure vector is large enough to store all systems & sync points */
     ecs_entity_t *systems = NULL;
@@ -586,10 +621,10 @@ bool ecs_pipeline_stats_get(
     while (ecs_query_next(&it)) {
         int i;
         for (i = 0; i < it.count; i ++) {
-            ecs_system_stats_t *sys_stats = ecs_map_ensure(
-                    &s->system_stats, ecs_system_stats_t, it.entities[i]);
-            sys_stats->query.t = s->t;
-            ecs_system_stats_get(world, it.entities[i], sys_stats);
+            ecs_system_stats_t *stats = ecs_map_ensure_alloc_t(&s->system_stats, 
+                ecs_system_stats_t, it.entities[i]);
+            stats->query.t = s->t;
+            ecs_system_stats_get(world, it.entities[i], stats);
         }
     }
 
@@ -603,6 +638,11 @@ error:
 void ecs_pipeline_stats_fini(
     ecs_pipeline_stats_t *stats)
 {
+    ecs_map_iter_t it = ecs_map_iter(&stats->system_stats);
+    while (ecs_map_next(&it)) {
+        ecs_system_stats_t *elem = ecs_map_ptr(&it);
+        ecs_os_free(elem);
+    }
     ecs_map_fini(&stats->system_stats);
     ecs_vector_free(stats->systems);
 }
@@ -617,14 +657,14 @@ void ecs_pipeline_stats_reduce(
     ecs_entity_t *src_systems = ecs_vector_first(src->systems, ecs_entity_t);
     ecs_os_memcpy_n(dst_systems, src_systems, ecs_entity_t, system_count);
 
-    ecs_map_init_if(&dst->system_stats, ecs_system_stats_t,
-        NULL, ecs_map_count(&src->system_stats));
+    ecs_map_init_if(&dst->system_stats, NULL);
 
     ecs_map_iter_t it = ecs_map_iter(&src->system_stats);
-    ecs_system_stats_t *sys_src, *sys_dst;
-    ecs_entity_t key;
-    while ((sys_src = ecs_map_next(&it, ecs_system_stats_t, &key))) {
-        sys_dst = ecs_map_ensure(&dst->system_stats, ecs_system_stats_t, key);
+    
+    while (ecs_map_next(&it)) {
+        ecs_system_stats_t *sys_src = ecs_map_ptr(&it);
+        ecs_system_stats_t *sys_dst = ecs_map_ensure_alloc_t(&dst->system_stats, 
+            ecs_system_stats_t, ecs_map_key(&it));
         sys_dst->query.t = dst->t;
         ecs_system_stats_reduce(sys_dst, sys_src);
     }
@@ -636,14 +676,12 @@ void ecs_pipeline_stats_reduce_last(
     const ecs_pipeline_stats_t *src,
     int32_t count)
 {
-    ecs_map_init_if(&dst->system_stats, ecs_system_stats_t,
-        NULL, ecs_map_count(&src->system_stats));
-
+    ecs_map_init_if(&dst->system_stats, NULL);
     ecs_map_iter_t it = ecs_map_iter(&src->system_stats);
-    ecs_system_stats_t *sys_src, *sys_dst;
-    ecs_entity_t key;
-    while ((sys_src = ecs_map_next(&it, ecs_system_stats_t, &key))) {
-        sys_dst = ecs_map_ensure(&dst->system_stats, ecs_system_stats_t, key);
+    while (ecs_map_next(&it)) {
+        ecs_system_stats_t *sys_src = ecs_map_ptr(&it);
+        ecs_system_stats_t *sys_dst = ecs_map_ensure_alloc_t(&dst->system_stats, 
+            ecs_system_stats_t, ecs_map_key(&it));
         sys_dst->query.t = dst->t;
         ecs_system_stats_reduce_last(sys_dst, sys_src, count);
     }
@@ -654,9 +692,8 @@ void ecs_pipeline_stats_repeat_last(
     ecs_pipeline_stats_t *stats)
 {
     ecs_map_iter_t it = ecs_map_iter(&stats->system_stats);
-    ecs_system_stats_t *sys;
-    ecs_entity_t key;
-    while ((sys = ecs_map_next(&it, ecs_system_stats_t, &key))) {
+    while (ecs_map_next(&it)) {
+        ecs_system_stats_t *sys = ecs_map_ptr(&it);
         sys->query.t = stats->t;
         ecs_system_stats_repeat_last(sys);
     }
@@ -667,14 +704,13 @@ void ecs_pipeline_stats_copy_last(
     ecs_pipeline_stats_t *dst,
     const ecs_pipeline_stats_t *src)
 {
-    ecs_map_init_if(&dst->system_stats, ecs_system_stats_t, NULL,
-        ecs_map_count(&src->system_stats));
+    ecs_map_init_if(&dst->system_stats, NULL);
 
     ecs_map_iter_t it = ecs_map_iter(&src->system_stats);
-    ecs_system_stats_t *sys_src, *sys_dst;
-    ecs_entity_t key;
-    while ((sys_src = ecs_map_next(&it, ecs_system_stats_t, &key))) {
-        sys_dst = ecs_map_ensure(&dst->system_stats, ecs_system_stats_t, key);
+    while (ecs_map_next(&it)) {
+        ecs_system_stats_t *sys_src = ecs_map_ptr(&it);
+        ecs_system_stats_t *sys_dst = ecs_map_ensure_alloc_t(&dst->system_stats, 
+            ecs_system_stats_t, ecs_map_key(&it));
         sys_dst->query.t = dst->t;
         ecs_system_stats_copy_last(sys_dst, sys_src);
     }

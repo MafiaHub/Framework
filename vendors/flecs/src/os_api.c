@@ -1,3 +1,12 @@
+/**
+ * @file os_api.h
+ * @brief Operating system abstraction API.
+ * 
+ * The OS API implements an overridable interface for implementing functions 
+ * that are operating system specific, in addition to a number of hooks which
+ * allow for customization by the user, like logging.
+ */
+
 #include "private_api.h"
 #include <ctype.h>
 #include <time.h>
@@ -66,6 +75,8 @@ void ecs_os_fini(void) {
 #define HAVE_EXECINFO 0
 #elif !defined(ECS_TARGET_WINDOWS) && !defined(ECS_TARGET_EM) && !defined(ECS_TARGET_ANDROID)
 #define HAVE_EXECINFO 1
+#else
+#define HAVE_EXECINFO 0
 #endif
 
 #if HAVE_EXECINFO
@@ -86,7 +97,7 @@ void flecs_dump_backtrace(
         return;
     }
 
-    for (int j = 3; j < nptrs; j++) {
+    for (int j = 1; j < nptrs; j++) {
         fprintf(stream, "%s\n", strings[j]);
     }
 
@@ -156,7 +167,10 @@ void flecs_log_msg(
         fputs(" ", stream);
     }
 
-    if (level >= 0) {
+    if (level >= 4) {
+        if (use_colors) fputs(ECS_NORMAL, stream);
+        fputs("jrnl", stream);
+    } else if (level >= 0) {
         if (level == 0) {
             if (use_colors) fputs(ECS_MAGENTA, stream);
         } else {
@@ -340,6 +354,12 @@ char* ecs_os_api_strdup(const char *str) {
     }
 }
 
+void ecs_os_strset(char **str, const char *value) {
+    char *old = str[0];
+    str[0] = ecs_os_strdup(value);
+    ecs_os_free(old);
+}
+
 /* Replace dots with underscores */
 static
 char *module_file_base(const char *module, char sep) {
@@ -463,7 +483,8 @@ bool ecs_os_has_threading(void) {
         (ecs_os_api.cond_signal_ != NULL) &&
         (ecs_os_api.cond_broadcast_ != NULL) &&
         (ecs_os_api.thread_new_ != NULL) &&
-        (ecs_os_api.thread_join_ != NULL);   
+        (ecs_os_api.thread_join_ != NULL) &&
+        (ecs_os_api.thread_self_ != NULL);
 }
 
 bool ecs_os_has_time(void) {

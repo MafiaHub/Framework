@@ -1,5 +1,5 @@
 /**
- * @file pecs.h
+ * @file addons/plecs.h
  * @brief Plecs addon.
  *
  * Plecs is a small data definition language for instantiating entities that
@@ -33,6 +33,14 @@
  */
 
 #ifdef FLECS_PLECS
+
+/**
+ * @defgroup c_addons_plecs Plecs
+ * @brief Data definition format for loading entity data.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #ifndef FLECS_PARSER
 #define FLECS_PARSER
@@ -78,5 +86,7 @@ int ecs_plecs_from_file(
 #endif
 
 #endif
+
+/** @} */
 
 #endif

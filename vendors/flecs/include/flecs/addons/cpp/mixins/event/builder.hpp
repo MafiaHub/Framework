@@ -1,10 +1,20 @@
+/**
+ * @file addons/cpp/mixins/event/builder.hpp
+ * @brief Event builder.
+ */
+
 #pragma once
 
 #define ECS_EVENT_DESC_ID_COUNT_MAX (8)
 
 namespace flecs {
 
-// Event builder interface
+/**
+ * \ingroup cpp_addons_event
+ * @{
+ */
+
+/** Event builder interface */
 template <typename Base, typename E>
 struct event_builder_base {
     event_builder_base(flecs::world_t *world, flecs::entity_t event)
@@ -131,5 +141,7 @@ public:
         return *this;
     }
 };
+
+/** @} */
 
 }

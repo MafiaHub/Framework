@@ -1,5 +1,5 @@
 /**
- * @file module.h
+ * @file addons/module.h
  * @brief Module addon.
  *
  * The module addon allows for creating and importing modules. Flecs modules 
@@ -8,6 +8,14 @@
  */
 
 #ifdef FLECS_MODULE
+
+/**
+ * @defgroup c_addons_module Module
+ * @brief Modules organize components, systems and more in reusable units of code.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #ifndef FLECS_MODULE_H
 #define FLECS_MODULE_H
@@ -55,8 +63,8 @@ ecs_entity_t ecs_import_c(
     ecs_module_action_t module,
     const char *module_name_c);
 
-/* Import a module from a library.
- * Similar to ecs_import, except that this operation will attempt to load the 
+/** Import a module from a library.
+ * Similar to ecs_import, except that this operation will attempt to load the
  * module from a dynamic library.
  *
  * A library may contain multiple modules, which is why both a library name and
@@ -79,16 +87,14 @@ ecs_entity_t ecs_import_from_library(
     const char *library_name,
     const char *module_name);
 
-/** Register a new module.
- */
+/** Register a new module. */
 FLECS_API
 ecs_entity_t ecs_module_init(
     ecs_world_t *world,
     const char *c_name,
     const ecs_component_desc_t *desc);
 
-/** Define module
- */
+/** Define module. */
 #define ECS_MODULE_DEFINE(world, id)\
     {\
         ecs_component_desc_t desc = {0};\
@@ -99,7 +105,7 @@ ecs_entity_t ecs_module_init(
 
 #define ECS_MODULE(world, id)\
     ecs_entity_t ecs_id(id) = 0; ECS_MODULE_DEFINE(world, id)\
-    (void)ecs_id(id);\
+    (void)ecs_id(id);
 
 /** Wrapper around ecs_import.
  * This macro provides a convenient way to load a module with the world. It can
@@ -114,5 +120,7 @@ ecs_entity_t ecs_module_init(
 #endif
 
 #endif
+
+/** @} */
 
 #endif

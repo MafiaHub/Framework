@@ -1,11 +1,24 @@
+/**
+ * @file addons/cpp/mixins/term/impl.hpp
+ * @brief Term implementation.
+ */
+
 #pragma once
 
 #include "builder_i.hpp"
 
 namespace flecs {
 
-// Class that describes a term
+/** Class that describes a term.
+ * 
+ * \ingroup cpp_core_filters
+ */
 struct term final : term_builder_i<term> {
+    term()
+        : term_builder_i<term>(&value)
+        , value({})
+        , m_world(nullptr) { value.move = true; }
+
     term(flecs::world_t *world_ptr) 
         : term_builder_i<term>(&value)
         , value({})

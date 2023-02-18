@@ -1,7 +1,6 @@
 /**
  * @file block_allocator.h
- * @brief Allocator that returns memory objects of the same (chunk) size. 
- *        Multiple elements are stored in a single block.
+ * @brief Block allocator.
  */
 
 #ifndef FLECS_BLOCK_ALLOCATOR_H
@@ -29,7 +28,7 @@ typedef struct ecs_block_allocator_t {
     int32_t alloc_count;
 } ecs_block_allocator_t;
 
-FLECS_DBG_API
+FLECS_API
 void flecs_ballocator_init(
     ecs_block_allocator_t *ba,
     ecs_size_t size);
@@ -39,38 +38,43 @@ void flecs_ballocator_init(
 #define flecs_ballocator_init_n(ba, T, count)\
     flecs_ballocator_init(ba, ECS_SIZEOF(T) * count)
 
-FLECS_DBG_API
+FLECS_API
 ecs_block_allocator_t* flecs_ballocator_new(
     ecs_size_t size);
 
-FLECS_DBG_API
+#define flecs_ballocator_new_t(T)\
+    flecs_ballocator_new(ECS_SIZEOF(T))
+#define flecs_ballocator_new_n(T, count)\
+    flecs_ballocator_new(ECS_SIZEOF(T) * count)
+
+FLECS_API
 void flecs_ballocator_fini(
     ecs_block_allocator_t *ba);
 
-FLECS_DBG_API
+FLECS_API
 void flecs_ballocator_free(
     ecs_block_allocator_t *ba);
 
-FLECS_DBG_API
+FLECS_API
 void* flecs_balloc(
     ecs_block_allocator_t *allocator);
 
-FLECS_DBG_API
+FLECS_API
 void* flecs_bcalloc(
     ecs_block_allocator_t *allocator);
 
-FLECS_DBG_API
+FLECS_API
 void flecs_bfree(
     ecs_block_allocator_t *allocator, 
     void *memory);
 
-FLECS_DBG_API
+FLECS_API
 void* flecs_brealloc(
     ecs_block_allocator_t *dst, 
     ecs_block_allocator_t *src, 
     void *memory);
 
-FLECS_DBG_API
+FLECS_API
 void* flecs_bdup(
     ecs_block_allocator_t *ba, 
     void *memory);

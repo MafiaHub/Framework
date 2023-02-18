@@ -1,5 +1,18 @@
+/**
+ * @file addons/cpp/mixins/module/mixin.inl
+ * @brief Module world mixin.
+ */
 
-/** Create a module.
+/** 
+ * \memberof flecs::world
+ * \ingroup cpp_addons_modules
+ * 
+ * @{
+ */
+
+/** Define a module.
+ * This operation is not mandatory, but can be called inside the module ctor to
+ * obtain the entity associated with the module, or override the module name.
  * 
  * @tparam Module module class.
  * @return Module entity.
@@ -14,3 +27,5 @@ flecs::entity module(const char *name = nullptr) const;
  */
 template <typename Module>
 flecs::entity import();
+
+/** @} */

@@ -1,5 +1,5 @@
 /**
- * @file timer.h
+ * @file addons/timer.h
  * @brief Timer module.
  *
  * Timers can be used to trigger actions at periodic or one-shot intervals. They
@@ -7,6 +7,14 @@
  */
 
 #ifdef FLECS_TIMER
+
+/**
+ * @defgroup c_addons_timer Timer
+ * @brief Run systems at a time interval.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 #ifndef FLECS_MODULE
 #define FLECS_MODULE
@@ -23,32 +31,23 @@
 extern "C" {
 #endif
 
-
-////////////////////////////////////////////////////////////////////////////////
-//// Components
-////////////////////////////////////////////////////////////////////////////////
-
 /** Component used for one shot/interval timer functionality */
 typedef struct EcsTimer {
-    ecs_ftime_t timeout;         /* Timer timeout period */
-    ecs_ftime_t time;            /* Incrementing time value */
-    int32_t fired_count;         /* Number of times ticked */
-    bool active;                 /* Is the timer active or not */
-    bool single_shot;            /* Is this a single shot timer */
+    ecs_ftime_t timeout;         /**< Timer timeout period */
+    ecs_ftime_t time;            /**< Incrementing time value */
+    int32_t fired_count;         /**< Number of times ticked */
+    bool active;                 /**< Is the timer active or not */
+    bool single_shot;            /**< Is this a single shot timer */
 } EcsTimer;
 
-/* Apply a rate filter to a tick source */
+/** Apply a rate filter to a tick source */
 typedef struct EcsRateFilter {
-    ecs_entity_t src;            /* Source of the rate filter */
-    int32_t rate;                /* Rate of the rate filter */
-    int32_t tick_count;          /* Number of times the rate filter ticked */
-    ecs_ftime_t time_elapsed;    /* Time elapsed since last tick */
+    ecs_entity_t src;            /**< Source of the rate filter */
+    int32_t rate;                /**< Rate of the rate filter */
+    int32_t tick_count;          /**< Number of times the rate filter ticked */
+    ecs_ftime_t time_elapsed;    /**< Time elapsed since last tick */
 } EcsRateFilter;
 
-
-////////////////////////////////////////////////////////////////////////////////
-//// Timer API
-////////////////////////////////////////////////////////////////////////////////
 
 /** Set timer timeout.
  * This operation executes any systems associated with the timer after the
@@ -239,5 +238,7 @@ void FlecsTimerImport(
 #endif
 
 #endif
+
+/** @} */
 
 #endif

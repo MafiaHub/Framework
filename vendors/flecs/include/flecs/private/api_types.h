@@ -30,37 +30,40 @@ typedef struct ecs_record_t ecs_record_t;
 /** Table data */
 typedef struct ecs_data_t ecs_data_t;
 
-/* Sparse set */
-typedef struct ecs_sparse_t ecs_sparse_t;
-
 /* Switch list */
 typedef struct ecs_switch_t ecs_switch_t;
 
-/* Internal structure to lookup tables for a (component) id */
-typedef struct ecs_id_record_t ecs_id_record_t;
-
 /* Cached query table data */
 typedef struct ecs_query_table_node_t ecs_query_table_node_t;
-
-/* Internal table storage record */
-struct ecs_table_record_t;
-
-/* Allocator type */
-struct ecs_allocator_t;
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Non-opaque types
 ////////////////////////////////////////////////////////////////////////////////
 
 /** Mixin for emitting events to triggers/observers */
+/** All observers for a specific event */
+typedef struct ecs_event_record_t {
+    struct ecs_event_id_record_t *any;
+    struct ecs_event_id_record_t *wildcard;
+    struct ecs_event_id_record_t *wildcard_pair;
+    ecs_map_t event_ids; /* map<id, ecs_event_id_record_t> */
+    ecs_entity_t event;
+} ecs_event_record_t;
+
 struct ecs_observable_t {
-    ecs_sparse_t *events;  /* sparse<event, ecs_event_record_t> */
+    ecs_event_record_t on_add;
+    ecs_event_record_t on_remove;
+    ecs_event_record_t on_set;
+    ecs_event_record_t un_set;
+    ecs_event_record_t on_wildcard;
+    ecs_sparse_t events;  /* sparse<event, ecs_event_record_t> */
 };
 
 /** Record for entity index */
 struct ecs_record_t {
-    ecs_table_t *table;  /* Identifies a type (and table) in world */
-    uint32_t row;        /* Table row of the entity */
+    ecs_id_record_t *idr; /* Id record to (*, entity) for target entities */
+    ecs_table_t *table;   /* Identifies a type (and table) in world */
+    uint32_t row;         /* Table row of the entity */
 };
 
 /** Range in table */
@@ -175,15 +178,6 @@ typedef struct ecs_snapshot_iter_t {
     int32_t index;
 } ecs_snapshot_iter_t;  
 
-/** Type used for iterating ecs_sparse_t */
-typedef struct ecs_sparse_iter_t {
-    ecs_sparse_t *sparse;
-    const uint64_t *ids;
-    ecs_size_t size;
-    int32_t i;
-    int32_t count;
-} ecs_sparse_iter_t;
-
 /** Rule-iterator specific data */
 typedef struct ecs_rule_iter_t {
     const ecs_rule_t *rule;
@@ -231,6 +225,7 @@ typedef struct ecs_iter_private_t {
         ecs_worker_iter_t worker;
     } iter;                       /* Iterator specific data */
 
+    void *entity_iter;            /* Filter applied after matching a table */
     ecs_iter_cache_t cache;       /* Inline arrays to reduce allocations */
 } ecs_iter_private_t;
 

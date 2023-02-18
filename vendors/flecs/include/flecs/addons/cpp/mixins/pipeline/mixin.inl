@@ -1,3 +1,12 @@
+/**
+ * @file addons/cpp/mixins/pipeline/mixin.inl
+ * @brief Pipeline world mixin.
+ */
+
+/**
+ * \memberof flecs::world
+ * \ingroup cpp_pipelines
+ */
 
 /** Create a new pipeline.
  *
@@ -37,29 +46,29 @@ bool progress(ecs_ftime_t delta_time = 0.0) const;
 /** Run pipeline.
  * @see ecs_run_pipeline
  */
-void run_pipeline(const flecs::entity pip, ecs_ftime_t delta_time = 0.0) const;
+void run_pipeline(const flecs::entity_t pip, ecs_ftime_t delta_time = 0.0) const;
 
-/** Set timescale
+/** Set timescale.
  * @see ecs_set_time_scale
  */
 void set_time_scale(ecs_ftime_t mul) const;
 
-/** Get timescale
+/** Get timescale.
  * @see ecs_get_time_scale
  */
 ecs_ftime_t get_time_scale() const;
 
-/** Get tick
+/** Get tick.
  * @return Monotonically increasing frame count.
  */
 int64_t get_tick() const;
 
-/** Set target FPS
+/** Set target FPS.
  * @see ecs_set_target_fps
  */
 void set_target_fps(ecs_ftime_t target_fps) const;
 
-/** Get target FPS
+/** Get target FPS.
  * @return Configured frames per second.
  */
 ecs_ftime_t get_target_fps() const;
@@ -78,3 +87,5 @@ void set_threads(int32_t threads) const;
  * @see ecs_get_stage_count
  */
 int32_t get_threads() const;
+
+/** @} */

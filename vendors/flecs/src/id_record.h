@@ -7,16 +7,32 @@
 #define FLECS_ID_RECORD_H
 
 /* Payload for id cache */
-typedef struct ecs_table_record_t {
+struct ecs_table_record_t {
     ecs_table_cache_hdr_t hdr;  /* Table cache header */
     int32_t column;             /* First column where id occurs in table */
     int32_t count;              /* Number of times id occurs in table */
-} ecs_table_record_t;
+};
 
 /* Linked list of id records */
 typedef struct ecs_id_record_elem_t {
     struct ecs_id_record_t *prev, *next;
 } ecs_id_record_elem_t;
+
+typedef struct ecs_reachable_elem_t {
+    const ecs_table_record_t *tr;
+    ecs_record_t *record;
+    ecs_entity_t src;
+    ecs_id_t id;
+#ifndef NDEBUG
+    ecs_table_t *table;
+#endif
+} ecs_reachable_elem_t;
+
+typedef struct ecs_reachable_cache_t {
+    int32_t generation;
+    int32_t current;
+    ecs_vec_t ids; /* vec<reachable_elem_t> */
+} ecs_reachable_cache_t;
 
 /* Payload for id index which contains all datastructures for an id. */
 struct ecs_id_record_t {
@@ -28,6 +44,14 @@ struct ecs_id_record_t {
 
     /* Refcount */
     int32_t refcount;
+
+    /* Keep alive count. This count must be 0 when the id record is deleted. If
+     * it is not 0, an application attempted to delete an id that was still
+     * queried for. */
+    int32_t keep_alive;
+
+    /* Cache invalidation counter */
+    ecs_reachable_cache_t reachable;
 
     /* Name lookup index (currently only used for ChildOf pairs) */
     ecs_hashmap_t *name_index;
@@ -45,7 +69,7 @@ struct ecs_id_record_t {
      * record is at the head of the list. */
     ecs_id_record_elem_t first;   /* (R, *) */
     ecs_id_record_elem_t second;  /* (*, O) */
-    ecs_id_record_elem_t acyclic; /* (*, O) with only acyclic relationships */
+    ecs_id_record_elem_t trav; /* (*, O) with only traversable relationships */
 };
 
 /* Get id record for id */
@@ -106,6 +130,10 @@ ecs_table_record_t* flecs_table_record_get(
 const ecs_table_record_t* flecs_id_record_get_table(
     const ecs_id_record_t *idr,
     const ecs_table_t *table);
+
+/* Bootstrap cached id records */
+void flecs_init_id_records(
+    ecs_world_t *world);
 
 /* Cleanup all id records in world */
 void flecs_fini_id_records(

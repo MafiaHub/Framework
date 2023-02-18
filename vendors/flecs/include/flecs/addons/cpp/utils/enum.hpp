@@ -1,7 +1,27 @@
+/**
+ * @file addons/cpp/utils/enum.hpp
+ * @brief Compile time enum reflection utilities.
+ * 
+ * Discover at compile time valid enumeration constants for an enumeration type
+ * and their names. This is used to automatically register enum constants.
+ */
+
 #include <string.h>
 
 #define FLECS_ENUM_MAX(T) _::to_constant<T, 128>::value
 #define FLECS_ENUM_MAX_COUNT (FLECS_ENUM_MAX(int) + 1)
+
+#ifndef FLECS_CPP_ENUM_REFLECTION_SUPPORT
+#if !defined(__clang__) && defined(__GNUC__)
+#if __GNUC__ > 7 || (__GNUC__ == 7 && __GNUC_MINOR__ >= 5)
+#define FLECS_CPP_ENUM_REFLECTION_SUPPORT 1
+#else
+#define FLECS_CPP_ENUM_REFLECTION_SUPPORT 0
+#endif
+#else
+#define FLECS_CPP_ENUM_REFLECTION_SUPPORT 1
+#endif
+#endif
 
 namespace flecs {
 
@@ -9,7 +29,12 @@ namespace flecs {
 namespace _ {
 template <typename E, int Value>
 struct to_constant {
+#if defined(__clang__) && __clang_major__ >= 16
+    // https://reviews.llvm.org/D130058, https://reviews.llvm.org/D131307
+    static constexpr E value = __builtin_bit_cast(E, Value);
+#else
     static constexpr E value = static_cast<E>(Value);
+#endif
 };
 
 template <typename E, int Value>
@@ -61,8 +86,8 @@ constexpr size_t enum_type_len() {
  * This function leverages that when a valid value is provided, 
  * __PRETTY_FUNCTION__ contains the enumeration name, whereas if a value is
  * invalid, the string contains a number. */
-#if defined(__clang__)
-#if __clang_major__ < 13 || (defined(__APPLE__) && __clang_minor__ < 1)
+#if defined(ECS_TARGET_CLANG)
+#if ECS_CLANG_VERSION < 13
 template <typename E, E C>
 constexpr bool enum_constant_is_valid() {
     return !(
@@ -78,7 +103,7 @@ constexpr bool enum_constant_is_valid() {
         enum_type_len<E>() + 6 /* ', E C = ' */] != '(');
 }
 #endif
-#elif defined(__GNUC__)
+#elif defined(ECS_TARGET_GNU)
 template <typename E, E C>
 constexpr bool enum_constant_is_valid() {
     return (ECS_FUNC_NAME[ECS_FUNC_NAME_FRONT(constepxr bool, enum_constant_is_valid) +
@@ -138,9 +163,8 @@ struct enum_type {
     }
 
     void init(flecs::world_t *world, flecs::entity_t id) {
-#if !defined(__clang__) && defined(__GNUC__)
-        ecs_assert(__GNUC__ > 7 || (__GNUC__ == 7 && __GNUC_MINOR__ >= 5), 
-            ECS_UNSUPPORTED, "enum component types require gcc 7.5 or higher");
+#if !FLECS_CPP_ENUM_REFLECTION_SUPPORT
+        ecs_abort(ECS_UNSUPPORTED, "enum reflection requires gcc 7.5 or higher")
 #endif
 
         ecs_log_push();

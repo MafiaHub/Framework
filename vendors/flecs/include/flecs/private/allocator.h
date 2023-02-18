@@ -13,27 +13,39 @@ FLECS_DBG_API extern int64_t ecs_block_allocator_free_count;
 FLECS_DBG_API extern int64_t ecs_stack_allocator_alloc_count;
 FLECS_DBG_API extern int64_t ecs_stack_allocator_free_count;
 
-typedef struct ecs_allocator_t {
-    struct ecs_map_t sizes; /* <size, block_allocator_t> */
-} ecs_allocator_t;
+struct ecs_allocator_t {
+    ecs_block_allocator_t chunks;
+    struct ecs_sparse_t sizes; /* <size, block_allocator_t> */
+};
 
+FLECS_API
 void flecs_allocator_init(
     ecs_allocator_t *a);
 
+FLECS_API
 void flecs_allocator_fini(
     ecs_allocator_t *a);
 
+FLECS_API
 ecs_block_allocator_t* flecs_allocator_get(
     ecs_allocator_t *a, 
     ecs_size_t size);
 
+FLECS_API
 char* flecs_strdup(
     ecs_allocator_t *a, 
     const char* str);
 
+FLECS_API
 void flecs_strfree(
     ecs_allocator_t *a, 
     char* str);
+
+FLECS_API
+void* flecs_dup(
+    ecs_allocator_t *a,
+    ecs_size_t size,
+    const void *src);
 
 #define flecs_allocator(obj) (&obj->allocators.dyn)
 
@@ -56,7 +68,6 @@ void flecs_strfree(
 #define flecs_realloc_n(a, T, count_dst, count_src, ptr)\
     flecs_realloc(a, ECS_SIZEOF(T) * (count_dst), ECS_SIZEOF(T) * (count_src), ptr)
 
-#define flecs_dup(a, size, ptr) flecs_bdup(flecs_allocator_get(a, size), ptr)
 #define flecs_dup_n(a, T, count, ptr) flecs_dup(a, ECS_SIZEOF(T) * (count), ptr)
 
 #endif

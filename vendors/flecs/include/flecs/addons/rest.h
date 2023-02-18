@@ -1,5 +1,5 @@
 /**
- * @file rest.h
+ * @file addons/rest.h
  * @brief REST API addon.
  *
  * A small REST API that uses the HTTP server and JSON serializer to provide
@@ -9,6 +9,14 @@
  */
 
 #ifdef FLECS_REST
+
+/**
+ * @defgroup c_addons_rest Rest
+ * @brief REST API for querying and mutating entities.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
 
 /* Used for the HTTP server */
 #ifndef FLECS_HTTP
@@ -39,14 +47,31 @@ extern "C" {
 
 #define ECS_REST_DEFAULT_PORT (27750)
 
-/* Component that instantiates the REST API */
+/** Component that instantiates the REST API */
 FLECS_API extern const ecs_entity_t ecs_id(EcsRest);
 
 typedef struct {
-    uint16_t port;        /* Port of server (optional, default = 27750) */
-    char *ipaddr;         /* Interface address (optional, default = 0.0.0.0) */
+    uint16_t port;      /**< Port of server (optional, default = 27750) */
+    char *ipaddr;       /**< Interface address (optional, default = 0.0.0.0) */
     void *impl;
 } EcsRest;
+
+/* Global statistics */
+extern int64_t ecs_rest_request_count;
+extern int64_t ecs_rest_entity_count;
+extern int64_t ecs_rest_entity_error_count;
+extern int64_t ecs_rest_query_count;
+extern int64_t ecs_rest_query_error_count;
+extern int64_t ecs_rest_query_name_count;
+extern int64_t ecs_rest_query_name_error_count;
+extern int64_t ecs_rest_query_name_from_cache_count;
+extern int64_t ecs_rest_enable_count;
+extern int64_t ecs_rest_enable_error_count;
+extern int64_t ecs_rest_delete_count;
+extern int64_t ecs_rest_delete_error_count;
+extern int64_t ecs_rest_world_stats_count;
+extern int64_t ecs_rest_pipeline_stats_count;
+extern int64_t ecs_rest_stats_error_count;
 
 /* Module import */
 FLECS_API
@@ -58,5 +83,7 @@ void FlecsRestImport(
 #endif
 
 #endif
+
+/** @} */
 
 #endif

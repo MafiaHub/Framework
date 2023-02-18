@@ -1,6 +1,6 @@
 /**
- * @file stack_allocator.h
- * @brief Data structure used for temporary small allocations.
+ * @file datastructures/stack_allocator.h
+ * @brief Stack allocator.
  */
 
 #ifndef FLECS_STACK_ALLOCATOR_H
@@ -32,6 +32,9 @@ void* flecs_stack_alloc(
     ecs_size_t size,
     ecs_size_t align);
 
+#define flecs_stack_alloc_t(stack, T)\
+    flecs_stack_alloc(stack, ECS_SIZEOF(T), ECS_ALIGNOF(T))
+
 #define flecs_stack_alloc_n(stack, T, count)\
     flecs_stack_alloc(stack, ECS_SIZEOF(T) * count, ECS_ALIGNOF(T))
 
@@ -40,12 +43,18 @@ void* flecs_stack_calloc(
     ecs_size_t size,
     ecs_size_t align);
 
+#define flecs_stack_calloc_t(stack, T)\
+    flecs_stack_calloc(stack, ECS_SIZEOF(T), ECS_ALIGNOF(T))
+
 #define flecs_stack_calloc_n(stack, T, count)\
     flecs_stack_calloc(stack, ECS_SIZEOF(T) * count, ECS_ALIGNOF(T))
 
 void flecs_stack_free(
     void *ptr,
     ecs_size_t size);
+
+#define flecs_stack_free_t(ptr, T)\
+    flecs_stack_free(ptr, ECS_SIZEOF(T))
 
 #define flecs_stack_free_n(ptr, T, count)\
     flecs_stack_free(ptr, ECS_SIZEOF(T) * count)

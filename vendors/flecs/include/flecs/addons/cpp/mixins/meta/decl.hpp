@@ -1,7 +1,21 @@
+/**
+ * @file addons/cpp/mixins/meta/decl.hpp
+ * @brief Meta declarations.
+ */
+
 #pragma once
 
 namespace flecs {
 
+/**
+ * @defgroup cpp_addons_meta Meta
+ * @brief Flecs reflection framework.
+ * 
+ * \ingroup cpp_addons
+ * @{
+ */
+
+/* Primitive type aliases */
 using bool_t = ecs_bool_t;
 using char_t = ecs_char_t;
 using u8_t = ecs_u8_t;
@@ -17,12 +31,12 @@ using iptr_t = ecs_iptr_t;
 using f32_t = ecs_f32_t;
 using f64_t = ecs_f64_t;
 
-using type_kind_t = ecs_type_kind_t;
-using primitive_kind_t = ecs_primitive_kind_t;
+/* Embedded type aliases */
 using member_t = ecs_member_t;
 using enum_constant_t = ecs_enum_constant_t;
 using bitmask_constant_t = ecs_bitmask_constant_t;
 
+/* Components */
 using MetaType = EcsMetaType;
 using MetaTypeSerialized = EcsMetaTypeSerialized;
 using Primitive = EcsPrimitive;
@@ -34,6 +48,12 @@ using Array = EcsArray;
 using Vector = EcsVector;
 using Unit = EcsUnit;
 
+/** Base type for bitmasks */
+struct bitmask {
+    uint32_t value;
+};
+
+/* Handles to builtin reflection types */
 static const flecs::entity_t Bool = ecs_id(ecs_bool_t);
 static const flecs::entity_t Char = ecs_id(ecs_char_t);
 static const flecs::entity_t Byte = ecs_id(ecs_byte_t);
@@ -51,118 +71,44 @@ static const flecs::entity_t F32 = ecs_id(ecs_f32_t);
 static const flecs::entity_t F64 = ecs_id(ecs_f64_t);
 static const flecs::entity_t String = ecs_id(ecs_string_t);
 static const flecs::entity_t Entity = ecs_id(ecs_entity_t);
-
 static const flecs::entity_t Constant = EcsConstant;
 static const flecs::entity_t Quantity = EcsQuantity;
 
 namespace meta {
 
-struct cursor {
-    cursor(flecs::world_t *world, flecs::entity_t type_id, void *ptr) {
-        m_cursor = ecs_meta_cursor(world, type_id, ptr);
-    }
+/* Type kinds supported by reflection system */
+using type_kind_t = ecs_type_kind_t;
+static const type_kind_t PrimitiveType = EcsPrimitiveType;
+static const type_kind_t BitmaskType = EcsBitmaskType;
+static const type_kind_t EnumType = EcsEnumType;
+static const type_kind_t StructType = EcsStructType;
+static const type_kind_t ArrayType = EcsArrayType;
+static const type_kind_t VectorType = EcsVectorType;
+static const type_kind_t CustomType = EcsOpaqueType;
+static const type_kind_t TypeKindLast = EcsTypeKindLast;
 
-    int push() {
-        return ecs_meta_push(&m_cursor);
-    }
+/* Primitive type kinds supported by reflection system */
+using primitive_kind_t = ecs_primitive_kind_t;
+static const primitive_kind_t Bool = EcsBool;
+static const primitive_kind_t Char = EcsChar;
+static const primitive_kind_t Byte = EcsByte;
+static const primitive_kind_t U8 = EcsU8;
+static const primitive_kind_t U16 = EcsU16;
+static const primitive_kind_t U32 = EcsU32;
+static const primitive_kind_t U64 = EcsU64;
+static const primitive_kind_t I8 = EcsI8;
+static const primitive_kind_t I16 = EcsI16;
+static const primitive_kind_t I32 = EcsI32;
+static const primitive_kind_t I64 = EcsI64;
+static const primitive_kind_t F32 = EcsF32;
+static const primitive_kind_t F64 = EcsF64;
+static const primitive_kind_t UPtr = EcsUPtr;
+static const primitive_kind_t IPtr = EcsIPtr;
+static const primitive_kind_t String = EcsString;
+static const primitive_kind_t Entity = EcsEntity;
+static const primitive_kind_t PrimitiveKindLast = EcsPrimitiveKindLast;
 
-    int pop() {
-        return ecs_meta_pop(&m_cursor);
-    }
-
-    int next() {
-        return ecs_meta_next(&m_cursor);
-    }
-
-    int member(const char *name) {
-        return ecs_meta_member(&m_cursor, name);
-    }
-
-    int elem(int32_t elem) {
-        return ecs_meta_elem(&m_cursor, elem);
-    }
-
-    bool is_collection() {
-        return ecs_meta_is_collection(&m_cursor);
-    }
-
-    flecs::string_view get_member() const {
-        return flecs::string_view(ecs_meta_get_member(&m_cursor));
-    }
-
-    flecs::entity get_type() const;
-
-    flecs::entity get_unit() const;
-
-    void* get_ptr() {
-        return ecs_meta_get_ptr(&m_cursor);
-    }
-
-    int set_bool(bool value) {
-        return ecs_meta_set_bool(&m_cursor, value);
-    }
-
-    int set_char(char value) {
-        return ecs_meta_set_char(&m_cursor, value);
-    }
-
-    int set_int(int64_t value) {
-        return ecs_meta_set_int(&m_cursor, value);
-    }
-
-    int set_uint(uint64_t value) {
-        return ecs_meta_set_uint(&m_cursor, value);
-    }
-
-    int set_float(double value) {
-        return ecs_meta_set_float(&m_cursor, value);
-    }
-
-    int set_string(const char *value) {
-        return ecs_meta_set_string(&m_cursor, value);
-    }
-
-    int set_string_literal(const char *value) {
-        return ecs_meta_set_string_literal(&m_cursor, value);
-    }
-
-    int set_entity(flecs::entity_t value) {
-        return ecs_meta_set_entity(&m_cursor, value);
-    }
-
-    int set_null() {
-        return ecs_meta_set_null(&m_cursor);
-    }
-
-
-    bool get_bool() const {
-        return ecs_meta_get_bool(&m_cursor);
-    }
-
-    char get_char() const {
-        return ecs_meta_get_char(&m_cursor);
-    }
-
-    int64_t get_int() const {
-        return ecs_meta_get_int(&m_cursor);
-    }
-
-    uint64_t get_uint() const {
-        return ecs_meta_get_uint(&m_cursor);
-    }
-
-    double get_float() const {
-        return ecs_meta_get_float(&m_cursor);
-    }
-
-    const char *get_string() const {
-        return ecs_meta_get_string(&m_cursor);
-    }
-
-    flecs::entity get_entity() const;
-
-    ecs_meta_cursor_t m_cursor;
-};
+/** @} */
 
 namespace _ {
 
@@ -171,3 +117,6 @@ void init(flecs::world& world);
 } // namespace _
 } // namespace meta
 } // namespace flecs
+
+#include "cursor.hpp"
+#include "opaque.hpp"

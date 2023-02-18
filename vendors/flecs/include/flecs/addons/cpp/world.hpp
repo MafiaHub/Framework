@@ -1,12 +1,18 @@
+/**
+ * @file addons/cpp/world.hpp
+ * @brief World class.
+ */
+
+#pragma once
 
 namespace flecs
 {
 
-/** Static helper functions to assign a component value */
+/* Static helper functions to assign a component value */
 
 // set(T&&), T = constructible
 template <typename T, if_t< is_flecs_constructible<T>::value > = 0>
-inline void set(world_t *world, entity_t entity, T&& value, ecs_id_t id) {
+inline void set(world_t *world, flecs::entity_t entity, T&& value, flecs::id_t id) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
 
     T& dst = *static_cast<T*>(ecs_get_mut_id(world, entity, id));
@@ -17,7 +23,7 @@ inline void set(world_t *world, entity_t entity, T&& value, ecs_id_t id) {
 
 // set(const T&), T = constructible
 template <typename T, if_t< is_flecs_constructible<T>::value > = 0>
-inline void set(world_t *world, entity_t entity, const T& value, ecs_id_t id) {
+inline void set(world_t *world, flecs::entity_t entity, const T& value, flecs::id_t id) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
 
     T& dst = *static_cast<T*>(ecs_get_mut_id(world, entity, id));
@@ -28,10 +34,10 @@ inline void set(world_t *world, entity_t entity, const T& value, ecs_id_t id) {
 
 // set(T&&), T = not constructible
 template <typename T, if_not_t< is_flecs_constructible<T>::value > = 0>
-inline void set(world_t *world, entity_t entity, T&& value, ecs_id_t id) {
+inline void set(world_t *world, flecs::entity_t entity, T&& value, flecs::id_t id) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
 
-    T& dst = *static_cast<T*>(ecs_get_mut_id(world, entity, id));
+    T& dst = *static_cast<remove_reference_t<T>*>(ecs_get_mut_id(world, entity, id));
 
     dst = FLECS_MOV(value);
 
@@ -40,7 +46,7 @@ inline void set(world_t *world, entity_t entity, T&& value, ecs_id_t id) {
 
 // set(const T&), T = not constructible
 template <typename T, if_not_t< is_flecs_constructible<T>::value > = 0>
-inline void set(world_t *world, id_t entity, const T& value, id_t id) {
+inline void set(world_t *world, flecs::entity_t entity, const T& value, flecs::id_t id) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
 
     T& dst = *static_cast<T*>(ecs_get_mut_id(world, entity, id));
@@ -53,9 +59,7 @@ inline void set(world_t *world, id_t entity, const T& value, id_t id) {
 template <typename T, typename ... Args, if_t< 
     std::is_constructible<actual_type_t<T>, Args...>::value ||
     std::is_default_constructible<actual_type_t<T>>::value > = 0>
-inline void emplace(world_t *world, id_t entity, Args&&... args) {
-    id_t id = _::cpp_type<T>::id(world);
-
+inline void emplace(world_t *world, flecs::entity_t entity, flecs::id_t id, Args&&... args) {
     ecs_assert(_::cpp_type<T>::size() != 0, ECS_INVALID_PARAMETER, NULL);
     T& dst = *static_cast<T*>(ecs_emplace_id(world, entity, id));
     
@@ -63,11 +67,6 @@ inline void emplace(world_t *world, id_t entity, Args&&... args) {
 
     ecs_modified_id(world, entity, id);    
 }
-
-// emplace for T(flecs::entity, Args...)
-template <typename T, typename ... Args, if_t<
-    std::is_constructible<actual_type_t<T>, flecs::entity, Args...>::value > = 0>
-inline void emplace(world_t *world, id_t entity, Args&&... args);
 
 // set(T&&)
 template <typename T, typename A>
@@ -83,7 +82,29 @@ inline void set(world_t *world, entity_t entity, const A& value) {
     flecs::set(world, entity, value, id);
 }
 
+/** Return id without generation.
+ * 
+ * @see ecs_strip_generation
+ */
+inline flecs::id_t strip_generation(flecs::entity_t e) {
+    return ecs_strip_generation(e);
+}
+
+/** Return entity generation.
+ */
+inline uint32_t get_generation(flecs::entity_t e) {
+    return ECS_GENERATION(e);
+}
+
 struct scoped_world;
+
+/**
+ * @defgroup cpp_world World
+ * @brief World operations.
+ * 
+ * \ingroup cpp_core
+ * @{
+ */
 
 /** The world.
  * The world is the container of all ECS data and systems. If the world is
@@ -177,7 +198,7 @@ struct world {
     /** Signal application should quit.
      * After calling this operation, the next call to progress() returns false.
      */
-    void quit() {
+    void quit() const {
         ecs_quit(m_world);
     }
 
@@ -189,7 +210,7 @@ struct world {
 
     /** Test if quit() has been called.
      */
-    bool should_quit() {
+    bool should_quit() const {
         return ecs_should_quit(m_world);
     }
 
@@ -211,7 +232,7 @@ struct world {
      * @param delta_time Time elapsed since the last frame.
      * @return The provided delta_time, or measured time if 0 was provided.
      */
-    ecs_ftime_t frame_begin(float delta_time = 0) {
+    ecs_ftime_t frame_begin(float delta_time = 0) const {
         return ecs_frame_begin(m_world, delta_time);
     }
 
@@ -221,7 +242,7 @@ struct world {
      *
      * This function should only be ran from the main thread.
      */
-    void frame_end() {
+    void frame_end() const {
         ecs_frame_end(m_world);
     }
 
@@ -243,7 +264,7 @@ struct world {
      *
      * @return Whether world is currently staged.
      */
-    bool readonly_begin() {
+    bool readonly_begin() const {
         return ecs_readonly_begin(m_world);
     }
 
@@ -254,7 +275,7 @@ struct world {
      *
      * This function should only be ran from the main thread.
      */
-    void readonly_end() {
+    void readonly_end() const {
         ecs_readonly_end(m_world);
     }
 
@@ -264,7 +285,7 @@ struct world {
      *
      * This operation is thread safe.
      */
-    bool defer_begin() {
+    bool defer_begin() const {
         return ecs_defer_begin(m_world);
     }
 
@@ -273,13 +294,13 @@ struct world {
      *
      * This operation is thread safe.
      */
-    bool defer_end() {
+    bool defer_end() const {
         return ecs_defer_end(m_world);
     }
 
     /** Test whether deferring is enabled.
      */
-    bool is_deferred() {
+    bool is_deferred() const {
         return ecs_is_deferred(m_world);
     }
 
@@ -348,7 +369,7 @@ struct world {
      *
      * @param automerge Whether to enable or disable automerging.
      */
-    void set_automerge(bool automerge) {
+    void set_automerge(bool automerge) const {
         ecs_set_automerge(m_world, automerge);
     }
 
@@ -360,7 +381,7 @@ struct world {
      *
      * This operation may be called on an already merged stage or world.
      */
-    void merge() {
+    void merge() const {
         ecs_merge(m_world);
     }
 
@@ -499,7 +520,7 @@ struct world {
 
     /** Set search path.
      */
-    flecs::entity_t* set_lookup_path(const flecs::entity_t *search_path) {
+    flecs::entity_t* set_lookup_path(const flecs::entity_t *search_path) const {
         return ecs_set_lookup_path(m_world, search_path);
     }
 
@@ -525,11 +546,12 @@ struct world {
     /** Set singleton component inside a callback.
      */
     template <typename Func, if_t< is_callable<Func>::value > = 0 >
-    void set(const Func& func);
+    void set(const Func& func) const;
 
     template <typename T, typename ... Args>
     void emplace(Args&&... args) const {
-        flecs::emplace<T>(m_world, _::cpp_type<T>::id(m_world), 
+        flecs::id_t component_id = _::cpp_type<T>::id(m_world);
+        flecs::emplace<T>(m_world, component_id, component_id,
             FLECS_FWD(args)...);
     }        
 
@@ -543,6 +565,11 @@ struct world {
     template <typename T>
     void modified() const;
 
+    /** Get ref singleton component.
+     */
+    template <typename T>
+    ref<T> get_ref() const;
+
     /** Get singleton component.
      */
     template <typename T>
@@ -551,7 +578,7 @@ struct world {
     /** Get singleton component inside a callback.
      */
     template <typename Func, if_t< is_callable<Func>::value > = 0 >
-    void get(const Func& func);
+    void get(const Func& func) const;
 
     /** Test if world has singleton component.
      */
@@ -571,7 +598,7 @@ struct world {
     /** Get singleton entity for type.
      */
     template <typename T>
-    flecs::entity singleton();
+    flecs::entity singleton() const;
 
     /** Create alias for component.
      *
@@ -580,21 +607,21 @@ struct world {
      * @return Entity representing the component.
      */
     template <typename T>
-    flecs::entity use(const char *alias = nullptr);
+    flecs::entity use(const char *alias = nullptr) const;
 
     /** Create alias for entity.
      *
      * @param name Name of the entity.
      * @param alias Alias for the entity.
      */
-    flecs::entity use(const char *name, const char *alias = nullptr);    
+    flecs::entity use(const char *name, const char *alias = nullptr) const;    
 
     /** Create alias for entity.
      *
      * @param entity Entity for which to create the alias.
      * @param alias Alias for the entity.
      */
-    void use(flecs::entity entity, const char *alias = nullptr);   
+    void use(flecs::entity entity, const char *alias = nullptr) const;   
 
     /** Count entities matching a component.
      *
@@ -702,10 +729,10 @@ struct world {
     /** Use provided scope for operations ran on returned world.
      * Operations need to be ran in a single statement.
      */
-    flecs::scoped_world scope(id_t parent);
+    flecs::scoped_world scope(id_t parent) const;
 
     template <typename T>
-    flecs::scoped_world scope();
+    flecs::scoped_world scope() const;
 
     /** Delete all entities with specified id. */
     void delete_with(id_t the_id) const {
@@ -822,7 +849,7 @@ struct world {
 #endif
 
     /* Run callback after completing frame */
-    void run_post_frame(ecs_fini_action_t action, void *ctx) {
+    void run_post_frame(ecs_fini_action_t action, void *ctx) const {
         ecs_run_post_frame(m_world, action, ctx);
     }
 
@@ -848,6 +875,9 @@ struct world {
 #   ifdef FLECS_SYSTEM
 #   include "mixins/system/mixin.inl"
 #   endif
+#   ifdef FLECS_TIMER
+#   include "mixins/timer/mixin.inl"
+#   endif
 #   ifdef FLECS_RULES
 #   include "mixins/rule/mixin.inl"
 #   endif
@@ -871,6 +901,9 @@ public:
     bool m_owned;
 };
 
+/** Scoped world.
+ * Utility class used by the world::scope method to create entities in a scope.
+ */
 struct scoped_world : world {
     scoped_world(
         flecs::world_t *w, 
@@ -894,18 +927,6 @@ struct scoped_world : world {
     flecs::entity_t m_prev_scope;
 };
 
-/** Return id without generation.
- * 
- * @see ecs_strip_generation
- */
-inline flecs::id_t strip_generation(flecs::entity_t e) {
-    return ecs_strip_generation(e);
-}
-
-/** Return entity generation.
- */
-inline uint32_t get_generation(flecs::entity_t e) {
-    return ECS_GENERATION(e);
-}
+/** @} */
 
 } // namespace flecs

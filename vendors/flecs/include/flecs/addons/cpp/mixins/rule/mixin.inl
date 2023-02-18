@@ -1,3 +1,12 @@
+/**
+ * @file addons/cpp/mixins/rule/mixin.inl
+ * @brief Rule world mixin.
+ */
+
+/**
+ * \memberof flecs::world
+ * \ingroup cpp_addons_rules
+ */
 
 /** Create a rule.
  * @see ecs_rule_init
@@ -16,3 +25,5 @@ flecs::rule<Comps...> rule(flecs::rule_base& parent, Args &&... args) const;
  */
 template <typename... Comps, typename... Args>
 flecs::rule_builder<Comps...> rule_builder(Args &&... args) const;
+
+/** @} */

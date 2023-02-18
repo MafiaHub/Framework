@@ -1,5 +1,5 @@
 /**
- * @file flecs_cpp.h
+ * @file addons/flecs_cpp.h
  * @brief C++ utility functions
  *
  * This header contains utility functions that are accessible from both C and
@@ -63,6 +63,7 @@ void ecs_cpp_component_validate(
     ecs_world_t *world,
     ecs_entity_t id,
     const char *name,
+    const char *symbol,
     size_t size,
     size_t alignment,
     bool implicit_name);

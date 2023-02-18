@@ -1,5 +1,5 @@
 /**
- * @file json.h
+ * @file addons/json.h
  * @brief JSON parser addon.
  *
  * Parse expression strings into component values. Entity identifiers, 
@@ -17,36 +17,79 @@
 #ifndef FLECS_JSON_H
 #define FLECS_JSON_H
 
+/**
+ * @defgroup c_addons_json Json
+ * @brief Functions for serializing to/from JSON.
+ * 
+ * \ingroup c_addons
+ * @{
+ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Used with ecs_parse_json. */
-typedef struct ecs_parse_json_desc_t {
+/** Used with ecs_ptr_from_json, ecs_entity_from_json. */
+typedef struct ecs_from_json_desc_t {
     const char *name; /* Name of expression (used for logging) */
     const char *expr; /* Full expression (used for logging) */
-} ecs_parse_json_desc_t;
+
+    ecs_entity_t (*lookup_action)(
+        const ecs_world_t*, 
+        const char *value, 
+        void *ctx);
+    void *lookup_ctx;
+} ecs_from_json_desc_t;
 
 /** Parse JSON string into value.
  * This operation parses a JSON expression into the provided pointer. The
  * memory pointed to must be large enough to contain a value of the used type.
  * 
  * @param world The world.
- * @param ptr The pointer to the expression to parse.
  * @param type The type of the expression to parse.
- * @param data_out Pointer to the memory to write to.
+ * @param ptr Pointer to the memory to write to.
+ * @param json The JSON expression to parse.
  * @param desc Configuration parameters for deserializer.
  * @return Pointer to the character after the last one read, or NULL if failed.
  */
 FLECS_API
-const char* ecs_parse_json(
+const char* ecs_ptr_from_json(
     const ecs_world_t *world,
-    const char *ptr,
     ecs_entity_t type,
-    void *data_out,
-    const ecs_parse_json_desc_t *desc);
+    void *ptr,
+    const char *json,
+    const ecs_from_json_desc_t *desc);
 
-/** Serialize value into JSON string.
+/** Parse JSON object with multiple component values into entity. The format
+ * is the same as the one outputted by ecs_entity_to_json, but at the moment
+ * only supports the "ids" and "values" member. 
+ * 
+ * @param world The world.
+ * @param entity The entity to serialize to.
+ * @param json The JSON expression to parse (see entity in JSON format manual).
+ * @param desc Configuration parameters for deserializer.
+ * @return Pointer to the character after the last one read, or NULL if failed.
+ */
+FLECS_API
+const char* ecs_entity_from_json(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    const char *json,
+    const ecs_from_json_desc_t *desc);
+
+/** Parse JSON object with multiple entities into the world. The format is the
+ * same as the one outputted by ecs_world_to_json. 
+ * 
+ * @param world The world.
+ * @param json The JSON expression to parse (see iterator in JSON format manual).
+ */
+FLECS_API
+const char* ecs_world_from_json(
+    ecs_world_t *world,
+    const char *json,
+    const ecs_from_json_desc_t *desc);
+
+/** Serialize array into JSON string.
  * This operation serializes a value of the provided type to a JSON string. The 
  * memory pointed to must be large enough to contain a value of the used type.
  * 
@@ -67,7 +110,7 @@ char* ecs_array_to_json(
     const void *data,
     int32_t count);
 
-/** Serialize value into JSON string buffer.
+/** Serialize array into JSON string buffer.
  * Same as ecs_array_to_json_buf, but serializes to an ecs_strbuf_t instance.
  * 
  * @param world The world.
@@ -146,18 +189,18 @@ int ecs_type_info_to_json_buf(
 
 /** Used with ecs_iter_to_json. */
 typedef struct ecs_entity_to_json_desc_t {
-    bool serialize_path;       /* Serialize full pathname */
-    bool serialize_meta_ids;   /* Serialize 'meta' ids (Name, ChildOf, etc) */
-    bool serialize_label;      /* Serialize doc name */
-    bool serialize_brief;      /* Serialize brief doc description */
-    bool serialize_link;       /* Serialize doc link (URL) */
-    bool serialize_color;      /* Serialize doc color */
-    bool serialize_id_labels;  /* Serialize labels of (component) ids */
-    bool serialize_base;       /* Serialize base components */
-    bool serialize_private;    /* Serialize private components */
-    bool serialize_hidden;     /* Serialize ids hidden by override */
-    bool serialize_values;     /* Serialize component values */
-    bool serialize_type_info;  /* Serialize type info (requires serialize_values) */
+    bool serialize_path;       /**< Serialize full pathname */
+    bool serialize_meta_ids;   /**< Serialize 'meta' ids (Name, ChildOf, etc) */
+    bool serialize_label;      /**< Serialize doc name */
+    bool serialize_brief;      /**< Serialize brief doc description */
+    bool serialize_link;       /**< Serialize doc link (URL) */
+    bool serialize_color;      /**< Serialize doc color */
+    bool serialize_id_labels;  /**< Serialize labels of (component) ids */
+    bool serialize_base;       /**< Serialize base components */
+    bool serialize_private;    /**< Serialize private components */
+    bool serialize_hidden;     /**< Serialize ids hidden by override */
+    bool serialize_values;     /**< Serialize component values */
+    bool serialize_type_info;  /**< Serialize type info (requires serialize_values) */
 } ecs_entity_to_json_desc_t;
 
 #define ECS_ENTITY_TO_JSON_INIT (ecs_entity_to_json_desc_t){true, false,\
@@ -196,20 +239,22 @@ int ecs_entity_to_json_buf(
 
 /** Used with ecs_iter_to_json. */
 typedef struct ecs_iter_to_json_desc_t {
-    bool serialize_term_ids;      /* Include term (query) component ids */
-    bool serialize_ids;           /* Include actual (matched) component ids */
-    bool serialize_sources;       /* Include sources */
-    bool serialize_variables;     /* Include variables */
-    bool serialize_is_set;        /* Include is_set (for optional terms) */
-    bool serialize_values;        /* Include component values */
-    bool serialize_entities;      /* Include entities (for This terms) */
-    bool serialize_entity_labels; /* Include doc name for entities */
-    bool serialize_entity_ids;    /* Include numerical ids for entities */
-    bool serialize_variable_labels; /* Include doc name for variables */
-    bool serialize_variable_ids;  /* Include numerical ids for variables */
-    bool serialize_colors;        /* Include doc color for entities */
-    bool measure_eval_duration;   /* Include evaluation duration */
-    bool serialize_type_info;     /* Include type information */
+    bool serialize_term_ids;        /**< Serialize term (query) component ids */
+    bool serialize_ids;             /**< Serialize actual (matched) component ids */
+    bool serialize_sources;         /**< Serialize sources */
+    bool serialize_variables;       /**< Serialize variables */
+    bool serialize_is_set;          /**< Serialize is_set (for optional terms) */
+    bool serialize_values;          /**< Serialize component values */
+    bool serialize_entities;        /**< Serialize entities (for This terms) */
+    bool serialize_entity_labels;   /**< Serialize doc name for entities */
+    bool serialize_entity_ids;      /**< Serialize numerical ids for entities */
+    bool serialize_entity_names;    /**< Serialize names (not paths) for entities */
+    bool serialize_variable_labels; /**< Serialize doc name for variables */
+    bool serialize_variable_ids;    /**< Serialize numerical ids for variables */
+    bool serialize_colors;          /**< Serialize doc color for entities */
+    bool measure_eval_duration;     /**< Serialize evaluation duration */
+    bool serialize_type_info;       /**< Serialize type information */
+    bool serialize_table;           /**< Serialize entire table vs. matched components */
 } ecs_iter_to_json_desc_t;
 
 #define ECS_ITER_TO_JSON_INIT (ecs_iter_to_json_desc_t){\
@@ -222,11 +267,13 @@ typedef struct ecs_iter_to_json_desc_t {
     .serialize_entities =        true,  \
     .serialize_entity_labels =   false, \
     .serialize_entity_ids =      false, \
+    .serialize_entity_names =    false, \
     .serialize_variable_labels = false, \
     .serialize_variable_ids =    false, \
     .serialize_colors =          false, \
     .measure_eval_duration =     false, \
-    .serialize_type_info =       false  \
+    .serialize_type_info =       false, \
+    .serialize_table =           false  \
 }
 
 /** Serialize iterator into JSON string.
@@ -258,10 +305,51 @@ int ecs_iter_to_json_buf(
     ecs_strbuf_t *buf_out,
     const ecs_iter_to_json_desc_t *desc);
 
+/** Used with ecs_iter_to_json. */
+typedef struct ecs_world_to_json_desc_t {
+    bool serialize_builtin;    /* Exclude flecs modules & contents */
+    bool serialize_modules;    /* Exclude modules & contents */
+} ecs_world_to_json_desc_t;
+
+/** Serialize world into JSON string.
+ * This operation iterates the contents of the world to JSON. The operation is
+ * equivalent to the following code:
+ * 
+ * ecs_filter_t *f = ecs_filter(world, {
+ *   .terms = {{ .id = EcsAny }}
+ * });
+ * 
+ * ecs_iter_t it = ecs_filter_init(world, &f);
+ * ecs_iter_to_json_desc_t desc = { .serialize_table = true };
+ * ecs_iter_to_json(world, iter, &desc);
+ * 
+ * @param world The world to serialize.
+ * @return A JSON string with the serialized iterator data, or NULL if failed.
+ */
+FLECS_API
+char* ecs_world_to_json(
+    ecs_world_t *world,
+    const ecs_world_to_json_desc_t *desc);
+
+/** Serialize world into JSON string buffer.
+ * Same as ecs_world_to_json, but serializes to an ecs_strbuf_t instance.
+ * 
+ * @param world The world to serialize.
+ * @param buf_out The strbuf to append the string to.
+ * @return Zero if success, non-zero if failed.
+ */
+FLECS_API
+int ecs_world_to_json_buf(
+    ecs_world_t *world,
+    ecs_strbuf_t *buf_out,
+    const ecs_world_to_json_desc_t *desc);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif
+
+/** @} */
 
 #endif
