@@ -15,7 +15,7 @@
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init(SDKRegisterCallback cb) {
         // Define the arguments to be passed to the node instance
-        std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--trace-warnings"};
+        std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--no-warnings"};
         std::vector<std::string> exec_args {};
         std::vector<std::string> errors {};
 

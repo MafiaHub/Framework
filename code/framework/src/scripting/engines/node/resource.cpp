@@ -86,6 +86,7 @@ namespace Framework::Scripting::Engines::Node {
         _asyncResource.Reset(_isolate, v8::Object::New(_isolate));
         _asyncContext = node::EmitAsyncInit(_isolate, _asyncResource.Get(_isolate), "Node::Resource");
 
+        // Compile the resource
         Compile(content, entryPointFile.path());
         Run();
 
