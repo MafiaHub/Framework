@@ -42,6 +42,11 @@ namespace Framework::Integrations::Client {
     ClientError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
+        if (opts.gameName.empty() || opts.gameVersion.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Game name and version are required");
+            return ClientError::CLIENT_INVALID_OPTIONS;
+        }
+
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
                 if (_presence->Init(opts.discordAppId) != Framework::External::DiscordError::DISCORD_NONE) {
@@ -203,7 +208,7 @@ namespace Framework::Integrations::Client {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
             ClientHandshake msg;
-            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Utils::Version::rel);
+            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Utils::Version::rel, _opts.gameVersion, _opts.gameName);
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });

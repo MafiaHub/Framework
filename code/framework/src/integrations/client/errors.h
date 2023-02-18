@@ -9,5 +9,5 @@
 #pragma once
 
 namespace Framework::Integrations::Client {
-    enum class ClientError { CLIENT_ENGINES_ERROR, CLIENT_NONE };
+    enum class ClientError { CLIENT_ENGINES_ERROR, CLIENT_INVALID_OPTIONS, CLIENT_NONE };
 }

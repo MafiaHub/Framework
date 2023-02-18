@@ -39,6 +39,10 @@ namespace Framework::Integrations::Client {
         [[maybe_unused]] bool useNetworking = true;
         bool useImGUI                       = false;
 
+        // networked game metadata (required)
+        std::string gameName;
+        std::string gameVersion;
+
         bool initRendererManually = false;
         Graphics::RendererConfiguration rendererOptions = {};
     };

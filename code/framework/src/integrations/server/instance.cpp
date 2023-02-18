@@ -53,6 +53,11 @@ namespace Framework::Integrations::Server {
     ServerError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
+        if (opts.gameName.empty() || opts.gameVersion.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Game name and version are required");
+            return ServerError::SERVER_INVALID_OPTIONS;
+        }
+
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
         options.add_options("", {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
@@ -218,10 +223,30 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
+            if (msg->GetMPClientGame() != _opts.gameName) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
+
             const auto clientVersion = msg->GetClientVersion();
 
             if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
+
+            const auto mpClientVersion = msg->GetMPClientVersion();
+
+            if (!Utils::Version::VersionSatisfies(mpClientVersion.c_str(), _opts.gameVersion.c_str())) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
                 Framework::Networking::Messages::ClientKick kick;
                 kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
                 net->Send(kick, guid);
