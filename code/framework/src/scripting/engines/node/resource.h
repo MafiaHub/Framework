@@ -22,9 +22,12 @@
 #include <cppfs/FileWatcher.h>
 #include <cppfs/fs.h>
 
+#include "logging/logger.h"
+
 #include "../engine.h"
 #include "../resource.h"
 #include "v8_helpers/v8_string.h"
+#include "v8_helpers/v8_try_catch.h"
 
 #include "utils/time.h"
 
@@ -95,7 +98,22 @@ namespace Framework::Scripting::Engines::Node {
             v8::Local<v8::Value> v8_args[arg_count + 1] = {v8pp::to_v8(_isolate, std::forward<Args>(args))...};
 
             for (auto it = _eventHandlers[name].begin(); it != _eventHandlers[name].end(); ++it) {
+                v8::TryCatch tryCatch(_isolate);
+
                 it->Get(_isolate)->Call(_context.Get(_isolate), v8::Undefined(_isolate), arg_count, v8_args);
+
+                if (tryCatch.HasCaught()) {
+                    auto context = _context.Get(_isolate);
+                    v8::Local<v8::Message> message = tryCatch.Message();
+                    v8::Local<v8::Value> exception = tryCatch.Exception();
+                    v8::MaybeLocal<v8::String> maybeSourceLine = message->GetSourceLine(context);
+                    v8::Maybe<int32_t> line                    = message->GetLineNumber(context);
+                    v8::ScriptOrigin origin                    = message->GetScriptOrigin();
+                    Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] exception at {}: {}: {}", name, *v8::String::Utf8Value(_isolate, origin.ResourceName()), line.ToChecked());
+
+                    auto stackTrace = tryCatch.StackTrace(context);
+                    Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Stack trace: {}", *v8::String::Utf8Value(_isolate, stackTrace.ToLocalChecked()));
+                }
             }
         }
     };
