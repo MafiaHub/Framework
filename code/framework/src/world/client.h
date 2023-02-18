@@ -22,7 +22,7 @@
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
         auto __net = reinterpret_cast<Framework::Networking::NetworkClient *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s);                                                                                                                                                             \
+            __net->SendGameRPC<rpc>(s);                                                                                                                                                             \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
@@ -33,7 +33,7 @@
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
         auto __net = reinterpret_cast<Framework::Networking::NetworkClient *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, guid);                                                                                                                                                       \
+            __net->SendGameRPC<rpc>(s, guid);                                                                                                                                                       \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
