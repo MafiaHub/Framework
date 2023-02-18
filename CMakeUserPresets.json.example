@@ -9,7 +9,7 @@
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_TOOLCHAIN_FILE": "",
+                "CMAKE_TOOLCHAIN_FILE": ""
             }
         },
         {
@@ -20,7 +20,7 @@
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_TOOLCHAIN_FILE": "",
+                "CMAKE_TOOLCHAIN_FILE": ""
             }
         },
         {
@@ -31,7 +31,7 @@
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_TOOLCHAIN_FILE": "",
+                "CMAKE_TOOLCHAIN_FILE": ""
             }
         },
         {
@@ -42,7 +42,7 @@
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_TOOLCHAIN_FILE": "",
+                "CMAKE_TOOLCHAIN_FILE": ""
             }
         }
     ]
