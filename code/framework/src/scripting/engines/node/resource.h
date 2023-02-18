@@ -31,6 +31,12 @@
 
 #include "utils/time.h"
 
+#define V8_RESOURCE_LOCK(res)\
+    v8::Locker locker(res->GetIsolate());\
+    v8::Isolate::Scope isolateScope(res->GetIsolate());\
+    v8::HandleScope handleScope(res->GetIsolate());\
+    v8::Context::Scope contextScope(res->GetContext());
+
 namespace Framework::Scripting::Engines::Node {
     using Callback = v8::CopyablePersistentTraits<v8::Function>::CopyablePersistent;
     class Resource: public IResource {
@@ -85,8 +91,21 @@ namespace Framework::Scripting::Engines::Node {
             return _name;
         }
 
+        v8::Isolate *GetIsolate() const {
+            return _isolate;
+        }
+
+        v8::Local<v8::Context> GetContext() const {
+            return _context.Get(_isolate);
+        }
+
         template <typename... Args>
         void InvokeEvent(const std::string name, Args &&...args) {
+            v8::Locker locker(GetIsolate());
+            v8::Isolate::Scope isolateScope(GetIsolate());
+            v8::HandleScope handleScope(GetIsolate());
+            v8::Context::Scope contextScope(GetContext());
+
             const auto eventName = Helpers::MakeString(_isolate, name);
 
             if (_eventHandlers[name].empty()) {

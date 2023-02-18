@@ -171,7 +171,6 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool Resource::LoadPackageFile() {
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Loading '{}'", _path);
         cppfs::FileHandle packageFile = cppfs::fs::open(_path + "/package.json");
         // Is the file valid ?
         if (!packageFile.exists()) {
@@ -208,6 +207,8 @@ namespace Framework::Scripting::Engines::Node {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The package.json is not valid:\n\t{}", err.what());
             return false;
         }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Loading '{}'", _path);
         return true;
     }
 

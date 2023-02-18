@@ -46,6 +46,12 @@ namespace Framework::Scripting {
         bool LoadResource(std::string);
         bool UnloadResource(std::string);
 
+        void ForEachResource(std::function<void(Engines::IResource *)> callback) {
+            for (auto &resource : _resources) {
+                callback(resource.second);
+            }
+        }
+
         template <typename... Args>
         void InvokeEvent(const std::string name, Args &&...args) {
             for (auto &resource : _resources) {
