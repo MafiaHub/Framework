@@ -46,6 +46,10 @@ namespace Framework::Integrations::Scripting {
             return _ent.id();
         }
 
+        flecs::entity GetHandle() const {
+            return _ent;
+        }
+
         std::string GetName() const {
             return _ent.name().c_str();
         }
