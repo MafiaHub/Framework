@@ -160,7 +160,7 @@ if(WIN32)
     target_link_libraries(FrameworkClient DiscordSDK DearImGUI SDL)
 
     set(CLIENT_SHARED_LIBS minhook GalaxySDK SteamSDK udis86)
-    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} RmlCore ${FREETYPE_LIBRARY})
+    target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
 
     link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll sfd)
