@@ -17,7 +17,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_compile_options(/nologo /wd4275 /wd4146 /wd4251 /wd4005 /wd4305 /wd4100)
-    set(CMAKE_CXX_FLAGS_DEBUG "/ZI")
+    set(CMAKE_CXX_FLAGS_DEBUG "/Zi /external:W0")
     set(CMAKE_SHARED_LINKER_FLAGS "/SAFESEH:NO")
     set(CMAKE_EXE_LINKER_FLAGS "/SAFESEH:NO")
 
