@@ -100,7 +100,7 @@ LPSTR WINAPI GetCommandLineA_Stub() {
     if (!gConfig->loadClientManually) {
         Framework::Launcher::Project::InitialiseClientDLL();
     }
-    auto args = Framework::Utils::StringUtils::WideToNormalDirect(gConfig->additionalLaunchArguments);
+    auto args = Framework::Utils::StringUtils::WideToNormal(gConfig->additionalLaunchArguments);
 
     static char buffer[MAX_PATH]={0};
     strcpy_s(buffer, MAX_PATH, GetCommandLineA());
@@ -111,7 +111,7 @@ LPSTR WINAPI GetCommandLineA_Stub() {
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
     if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
+        auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
         return (DWORD)gamePath.size();
@@ -122,7 +122,7 @@ DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nS
 
 DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
     if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        auto gamePath = Framework::Utils::StringUtils::WideToNormalDirect(gImagePath);
+        auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
         return (DWORD)gamePath.size();

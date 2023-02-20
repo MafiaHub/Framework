@@ -153,6 +153,8 @@ namespace Framework::Integrations::Server {
 
     void Instance::InitEndpoints() {
         _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback &cb) {
+            (void)ev_data;
+            (void)c;
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;
