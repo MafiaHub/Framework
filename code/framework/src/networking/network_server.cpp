@@ -14,19 +14,19 @@
 
 namespace Framework::Networking {
     ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
-        SLNet::SocketDescriptor newSocketSd = SLNet::SocketDescriptor(port, host.c_str());
+        SLNet::SocketDescriptor newSocketSd = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
         SLNet::StartupResult result         = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != SLNet::RAKNET_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
             return SERVER_PEER_FAILED;
         }
 
         if (!password.empty()) {
-            _peer->SetIncomingPassword(password.c_str(), password.length());
+            _peer->SetIncomingPassword(password.c_str(), (uint32_t)password.length());
             Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Applying incoming password to networking peer");
         }
 
-        _peer->SetMaximumIncomingConnections(maxPlayers);
+        _peer->SetMaximumIncomingConnections((uint16_t)maxPlayers);
         return SERVER_NONE;
     }
 
