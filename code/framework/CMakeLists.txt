@@ -14,6 +14,7 @@ set(FRAMEWORK_SRC
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/hashing.cpp
+    src/utils/safe_string.cpp
     src/utils/states/machine.cpp
 
     src/external/sentry/wrapper.cpp
