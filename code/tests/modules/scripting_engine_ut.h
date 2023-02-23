@@ -8,63 +8,57 @@
 
 #pragma once
 
+#include "scripting/engines/node/engine.h"
 #include "scripting/module.h"
 
 MODULE(scripting_engine, {
     using namespace Framework::Scripting;
 
-    IT("can allocate and deallocate a valid scripting engine instance", {
-        SKIP();
-        /*Engine *pEngine = new Engine;
+    IT("can allocate and deallocate a valid NodeJS scripting engine instance", {
+        Module *pEngine = new Module;
 
         // Init the engine and make sure everything went fine
-        EQUALS(pEngine->Init(), EngineError::ENGINE_NONE);
-        NEQUALS(pEngine->GetIsolate(), nullptr);
-        NEQUALS(pEngine->GetPlatform(), nullptr);
-        NEQUALS(pEngine->GetResourceManager(), nullptr);
+        EQUALS(pEngine->Init(EngineTypes::ENGINE_NODE, NULL), ModuleError::MODULE_NONE);
+        NEQUALS(pEngine->GetEngine(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
 
         // Shutdown the engine and make sure everything went down
-        EQUALS(pEngine->Shutdown(), EngineError::ENGINE_NONE);
-        EQUALS(pEngine->GetIsolate(), nullptr);
-        EQUALS(pEngine->GetPlatform(), nullptr);
-        EQUALS(pEngine->GetResourceManager(), nullptr);
+        EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
 
-        delete pEngine;*/
+        delete pEngine;
     });
 
     IT("can allocate and deallocate a valid scripting engine instance, then do it again to test re-entry", {
-        SKIP();
-        // todo
-        //        Engine *pEngine = new Engine;
-        //
-        //        // Init the engine and make sure everything went fine
-        //        EQUALS(pEngine->Init(), EngineError::ENGINE_NONE);
-        //        NEQUALS(pEngine->GetIsolate(), nullptr);
-        //        NEQUALS(pEngine->GetPlatform(), nullptr);
-        //        NEQUALS(pEngine->GetResourceManager(), nullptr);
-        //
-        //        // Shutdown the engine and make sure everything went down
-        //        EQUALS(pEngine->Shutdown(), EngineError::ENGINE_NONE);
-        //        EQUALS(pEngine->GetIsolate(), nullptr);
-        //        EQUALS(pEngine->GetPlatform(), nullptr);
-        //        EQUALS(pEngine->GetResourceManager(), nullptr);
-        //
-        //        delete pEngine;
-        //
-        //        // Intentionally duplicated to test engine for re-entry
-        //
-        //        // Init the engine and make sure everything went fine
-        //        EQUALS(pEngine->Init(), EngineError::ENGINE_NONE);
-        //        NEQUALS(pEngine->GetIsolate(), nullptr);
-        //        NEQUALS(pEngine->GetPlatform(), nullptr);
-        //        NEQUALS(pEngine->GetResourceManager(), nullptr);
-        //
-        //        // Shutdown the engine and make sure everything went down
-        //        EQUALS(pEngine->Shutdown(), EngineError::ENGINE_NONE);
-        //        EQUALS(pEngine->GetIsolate(), nullptr);
-        //        EQUALS(pEngine->GetPlatform(), nullptr);
-        //        EQUALS(pEngine->GetResourceManager(), nullptr);
-        //
-        //        delete pEngine;
+        Module *pEngine = new Module;
+
+        // Init the engine and make sure everything went fine
+        EQUALS(pEngine->Init(EngineTypes::ENGINE_NODE, NULL), ModuleError::MODULE_NONE);
+        NEQUALS(pEngine->GetEngine(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
+
+        // Shutdown the engine and make sure everything went down
+        EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
+
+        delete pEngine;
+
+        // Intentionally duplicated to test engine for re-entry
+
+        // Init the engine and make sure everything went fine
+        EQUALS(pEngine->Init(EngineTypes::ENGINE_NODE, NULL), ModuleError::MODULE_NONE);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
+
+        // Shutdown the engine and make sure everything went down
+        EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
+
+        delete pEngine;
     });
 })
