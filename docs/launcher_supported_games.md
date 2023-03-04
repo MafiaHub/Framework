@@ -6,7 +6,8 @@
 * Fallout 3 (1.7.0.4) - works only when run via debugger
 * GTA: San Andreas (Steam + Retail)
 * Cyberpunk 2077 (GOG)
+* * Mafia 2 Classic Steam (require steam CEG bypass)
 
 # Framework launcher unsuported games
 
-* Mafia 2 Classic Steam (tested multiple times and multiple ways, still crashing for unknown reason)
+* None yet
