@@ -22245,6 +22245,19 @@ struct entity : entity_builder<entity>
         ecs_delete(m_world, m_id);
     }
 
+    /** Return entity as entity_view.
+     * This returns an entity_view instance for the entity which is a readonly
+     * version of the entity class.
+     * 
+     * This is similar to a regular upcast, except that this method ensures that
+     * the entity_view instance is instantiated with a world vs. a stage, which
+     * a regular upcast does not guarantee.
+     */
+    flecs::entity_view view() const {
+        return flecs::entity_view(
+            const_cast<flecs::world_t*>(ecs_get_world(m_world)), m_id);
+    }
+
     /** Entity id 0.
      * This function is useful when the API must provide an entity that
      * belongs to a world, but the entity id is 0.
@@ -22470,7 +22483,7 @@ struct each_invoker : public invoker {
 
     using Terms = typename term_ptrs<Components ...>::array;
 
-    template < if_not_t< is_same< void(Func), void(Func)& >::value > = 0>
+    template < if_not_t< is_same< decay_t<Func>, decay_t<Func>& >::value > = 0>
     explicit each_invoker(Func&& func) noexcept 
         : m_func(FLECS_MOV(func)) { }
 
@@ -22630,7 +22643,7 @@ private:
     using Terms = typename term_ptrs<Components ...>::array;
 
 public:
-    template < if_not_t< is_same< void(Func), void(Func)& >::value > = 0>
+    template < if_not_t< is_same< decay_t<Func>, decay_t<Func>& >::value > = 0>
     explicit iter_invoker(Func&& func) noexcept 
         : m_func(FLECS_MOV(func)) { }
 
@@ -23427,7 +23440,6 @@ template <typename T>
 struct cpp_type_impl {
     // Initialize component identifier
     static void init(
-        world_t* world, 
         entity_t entity, 
         bool allow_tag = true) 
     {
@@ -23437,7 +23449,6 @@ struct cpp_type_impl {
 
         // If an identifier was already set, check for consistency
         if (s_id) {
-            ecs_assert(s_name.c_str() != nullptr, ECS_INTERNAL_ERROR, NULL);
             ecs_assert(s_id == entity, ECS_INCONSISTENT_COMPONENT_ID, 
                 type_name<T>());
             ecs_assert(allow_tag == s_allow_tag, ECS_INVALID_PARAMETER, NULL);
@@ -23449,9 +23460,7 @@ struct cpp_type_impl {
 
         // Component wasn't registered yet, set the values. Register component
         // name as the fully qualified flecs path.
-        char *path = ecs_get_fullpath(world, entity);
         s_id = entity;
-        s_name = flecs::string(path);
         s_allow_tag = allow_tag;
         s_size = sizeof(T);
         s_alignment = alignof(T);
@@ -23480,7 +23489,7 @@ struct cpp_type_impl {
         // across more than one binary), or if the id does not exists in the 
         // world (indicating a multi-world application), register it. */
         if (!s_id || (world && !ecs_exists(world, s_id))) {
-            init(world, s_id ? s_id : id, allow_tag);
+            init(s_id ? s_id : id, allow_tag);
 
             ecs_assert(!id || s_id == id, ECS_INTERNAL_ERROR, NULL);
 
@@ -23556,20 +23565,6 @@ struct cpp_type_impl {
         return s_id;
     }
 
-    // Obtain a component name
-    static const char* name(world_t *world = nullptr) {
-        // If no id has been registered yet, do it now.
-        if (!s_id) {
-            id(world);
-        }
-
-        // By now we should have a valid identifier
-        ecs_assert(s_id != 0, ECS_INTERNAL_ERROR, NULL);
-
-        // If the id is set, the name should also have been set
-        return s_name.c_str();
-    }
-
     // Return the size of a component.
     static size_t size() {
         ecs_assert(s_id != 0, ECS_INTERNAL_ERROR, NULL);
@@ -23603,11 +23598,9 @@ struct cpp_type_impl {
         s_size = 0;
         s_alignment = 0;
         s_allow_tag = true;
-        s_name.clear();
     }
 
     static entity_t s_id;
-    static flecs::string s_name;
     static size_t s_size;
     static size_t s_alignment;
     static bool s_allow_tag;
@@ -23616,7 +23609,6 @@ struct cpp_type_impl {
 
 // Global templated variables that hold component identifier and other info
 template <typename T> entity_t      cpp_type_impl<T>::s_id;
-template <typename T> flecs::string cpp_type_impl<T>::s_name;
 template <typename T> size_t        cpp_type_impl<T>::s_size;
 template <typename T> size_t        cpp_type_impl<T>::s_alignment;
 template <typename T> bool          cpp_type_impl<T>::s_allow_tag( true );
@@ -26749,7 +26741,7 @@ flecs::entity import(world& world) {
 
         /* Module is registered with world, initialize static data */
         if (m) {
-            _::cpp_type<T>::init(world, m, false);
+            _::cpp_type<T>::init(m, false);
         
         /* Module is not yet registered, register it now */
         } else {
@@ -27809,7 +27801,7 @@ inline void init(flecs::world& world) {
     // specific types.
 
     if (!flecs::is_same<i32_t, iptr_t>() && !flecs::is_same<i64_t, iptr_t>()) {
-        flecs::_::cpp_type<iptr_t>::init(world, flecs::Iptr, true);
+        flecs::_::cpp_type<iptr_t>::init(flecs::Iptr, true);
         ecs_assert(flecs::type_id<iptr_t>() == flecs::Iptr, 
             ECS_INTERNAL_ERROR, NULL);
         // Remove symbol to prevent validation errors, as it doesn't match with 
@@ -27818,7 +27810,7 @@ inline void init(flecs::world& world) {
     }
 
     if (!flecs::is_same<u32_t, uptr_t>() && !flecs::is_same<u64_t, uptr_t>()) {
-        flecs::_::cpp_type<uptr_t>::init(world, flecs::Uptr, true);
+        flecs::_::cpp_type<uptr_t>::init(flecs::Uptr, true);
         ecs_assert(flecs::type_id<uptr_t>() == flecs::Uptr, 
             ECS_INTERNAL_ERROR, NULL);
         // Remove symbol to prevent validation errors, as it doesn't match with 
