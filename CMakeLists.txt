@@ -9,6 +9,8 @@ if(FW_STANDALONE)
     include(FrameworkSetup)
 endif()
 
+add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
+
 # Load the global headers one by one (a few ones have relative include path, so we are forced to do so)
 include_directories(
     "${PROJECT_SOURCE_DIR}/vendors/mongoose"
@@ -50,5 +52,4 @@ include_directories(
 )
 
 # Include all Framework dependencies
-add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
 add_subdirectory(${PROJECT_SOURCE_DIR}/code)

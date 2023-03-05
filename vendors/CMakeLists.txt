@@ -78,6 +78,7 @@ set(OPTICK_INSTALL_TARGETS CACHE BOOL "" OFF)
 add_subdirectory(optick)
 
 # Build NodeJS
+set(ENABLE_LIB_ONLY CACHE BOOL "" ON)
 add_subdirectory(nodejs)
 
 # Build flecs
