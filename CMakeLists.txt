@@ -50,5 +50,5 @@ include_directories(
 )
 
 # Include all Framework dependencies
-add_subdirectory(${PROJECT_SOURCE_DIR}/code)
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
+add_subdirectory(${PROJECT_SOURCE_DIR}/code)
