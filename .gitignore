@@ -23,8 +23,9 @@
 
 *.vcxproj
 *.vcxproj.filters
-*.cmake
 *.sln
+
+vendors/**.cmake
 
 Bin/
 [Bb]uild/
