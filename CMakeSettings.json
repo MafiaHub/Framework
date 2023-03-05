@@ -12,6 +12,11 @@
             "inheritEnvironments": [ "msvc_x86" ],
             "variables": [
                 {
+                    "name": "FW_STANDALONE",
+                    "value": "true",
+                    "type": "BOOL"
+                },
+                {
                     "name": "BUILD_SHARED_LIBS",
                     "value": "",
                     "type": "BOOL"
@@ -34,6 +39,11 @@
             "ctestCommandArgs": "",
             "inheritEnvironments": [ "msvc_x86" ],
             "variables": [
+                {
+                    "name": "FW_STANDALONE",
+                    "value": "true",
+                    "type": "BOOL"
+                },
                 {
                     "name": "BUILD_SHARED_LIBS",
                     "value": "",
@@ -58,6 +68,11 @@
             "inheritEnvironments": [ "msvc_x86" ],
             "variables": [
                 {
+                    "name": "FW_STANDALONE",
+                    "value": "true",
+                    "type": "BOOL"
+                },
+                {
                     "name": "BUILD_SHARED_LIBS",
                     "value": "",
                     "type": "BOOL"
@@ -80,6 +95,11 @@
             "ctestCommandArgs": "",
             "inheritEnvironments": [ "msvc_x64" ],
             "variables": [
+                {
+                    "name": "FW_STANDALONE",
+                    "value": "true",
+                    "type": "BOOL"
+                },
                 {
                     "name": "BUILD_SHARED_LIBS",
                     "value": "",
@@ -104,6 +124,11 @@
             "inheritEnvironments": [ "msvc_x64" ],
             "variables": [
                 {
+                    "name": "FW_STANDALONE",
+                    "value": "true",
+                    "type": "BOOL"
+                },
+                {
                     "name": "BUILD_SHARED_LIBS",
                     "value": "",
                     "type": "BOOL"
@@ -126,6 +151,11 @@
             "ctestCommandArgs": "",
             "inheritEnvironments": [ "msvc_x64" ],
             "variables": [
+                {
+                    "name": "FW_STANDALONE",
+                    "value": "true",
+                    "type": "BOOL"
+                },
                 {
                     "name": "BUILD_SHARED_LIBS",
                     "value": "",

@@ -8,6 +8,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
+                "FW_STANDALONE": "ON",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_TOOLCHAIN_FILE": ""
             }
@@ -19,6 +20,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
+                "FW_STANDALONE": "ON",
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_TOOLCHAIN_FILE": ""
             }
@@ -30,6 +32,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
+                "FW_STANDALONE": "ON",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_TOOLCHAIN_FILE": ""
             }
@@ -41,6 +44,7 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/builds/${presetName}",
             "cacheVariables": {
+                "FW_STANDALONE": "ON",
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_TOOLCHAIN_FILE": ""
             }
