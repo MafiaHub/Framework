@@ -185,7 +185,6 @@ namespace hook {
         }
     }
 
-#ifdef _M_IX86
     template <typename TRet, typename TFnRet, typename... TArgs>
     inline TRet bind(TFnRet (*func)(TArgs...)) {
         return (TRet) reinterpret_cast<void *&>(func);
@@ -195,7 +194,6 @@ namespace hook {
     inline TRet bind(TFnRet (TClass::*func)(TArgs...)) {
         return (TRet)(void *&)func;
     }
-#endif
 
     template <typename T>
     inline T *getRVA(uintptr_t rva) {

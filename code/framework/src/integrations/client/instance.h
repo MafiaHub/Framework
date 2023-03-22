@@ -92,6 +92,7 @@ namespace Framework::Integrations::Client {
         virtual bool PostInit()    = 0;
         virtual bool PreShutdown() = 0;
         virtual void PostUpdate()  = 0;
+        virtual void PostRender()  = 0;
 
         ClientError RenderInit();
 

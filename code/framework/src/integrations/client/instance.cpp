@@ -199,6 +199,8 @@ namespace Framework::Integrations::Client {
         if (_renderIO) {
             _renderIO->UpdateRenderThread();
         }
+
+        PostRender();
     }
 
     void Instance::InitNetworkingMessages() {
