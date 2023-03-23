@@ -230,7 +230,8 @@ namespace Framework::Launcher {
 
         // Load the destination DLL
         if (!_config.loadClientManually && !LoadLibraryW(_config.destinationDllName.c_str())) {
-            MessageBox(nullptr, "Failed to load core runtime", _config.name.c_str(), MB_ICONERROR);
+            DWORD dwError = GetLastError();
+            MessageBox(nullptr, fmt::format("Failed to load core runtime with error code {}", dwError).c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
