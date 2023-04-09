@@ -59,9 +59,6 @@ add_subdirectory(httplib)
 # Build slikenet
 add_subdirectory(slikenet)
 
-# Build Ultralight
-add_subdirectory(ultralight)
-
 # Build firebase
 add_subdirectory(firebase)
 
@@ -97,6 +94,7 @@ add_subdirectory(sfd)
 # Build OS specific libraries
 if (WIN32)
     # Build other win32 deps
+    add_subdirectory(ultralight)
     add_subdirectory(minhook)
     add_subdirectory(steamworks)
     add_subdirectory(galaxy)
@@ -105,6 +103,7 @@ if (WIN32)
     add_subdirectory(imgui)
     add_subdirectory(sdl2)
     add_subdirectory(discord)
+    add_subdirectory(directxtk)
 
     # Lua
     add_subdirectory(lua-5.2.1)
