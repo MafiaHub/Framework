@@ -48,6 +48,7 @@ include_directories(
     "${PROJECT_SOURCE_DIR}/vendors/StackWalker/Main/StackWalker"
     "${PROJECT_SOURCE_DIR}/vendors/ultralight/include"
     "${PROJECT_SOURCE_DIR}/vendors/directxtk"
+    "${PROJECT_SOURCE_DIR}/vendors/cef"
     "${PROJECT_SOURCE_DIR}/vendors"
     "${PROJECT_SOURCE_DIR}/code/framework/src/"
     "${PROJECT_SOURCE_DIR}/code/framework/"
