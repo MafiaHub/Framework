@@ -14,6 +14,7 @@ set(FRAMEWORK_SRC
     src/utils/command_listener.cpp
     src/utils/command_processor.cpp
     src/utils/hashing.cpp
+    src/utils/path.cpp
     src/utils/safe_string.cpp
     src/utils/states/machine.cpp
 
@@ -171,7 +172,7 @@ if(WIN32)
     if(NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else()
-        target_link_libraries(FrameworkClient Ultralight)
+        target_link_libraries(FrameworkClient)
         target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
     endif()
 endif()
