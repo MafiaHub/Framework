@@ -46,7 +46,7 @@ include_directories(
     "${PROJECT_SOURCE_DIR}/vendors/fu2"
     "${PROJECT_SOURCE_DIR}/vendors/freetype/include"
     "${PROJECT_SOURCE_DIR}/vendors/StackWalker/Main/StackWalker"
-    "${PROJECT_SOURCE_DIR}/vendors/ultralight"
+    "${PROJECT_SOURCE_DIR}/vendors/ultralight/include"
     "${PROJECT_SOURCE_DIR}/vendors/directxtk"
     "${PROJECT_SOURCE_DIR}/vendors"
     "${PROJECT_SOURCE_DIR}/code/framework/src/"
