@@ -47,7 +47,7 @@ namespace Framework::Utils {
         T Get(const std::string &field) {
             if (!_lastError.empty())
                 return {};
-            if constexpr (std::is_same_v<T, std::wstring>) {
+            if constexpr (std::is_same<T, std::wstring>) {
                 return Utils::StringUtils::NormalToWide((*_document)[field]);
             }
             return (*_document)[field];
@@ -59,7 +59,7 @@ namespace Framework::Utils {
                 return {};
 
             try {
-                if constexpr (std::is_same_v<T, std::wstring>) {
+                if constexpr (std::is_same<T, std::wstring>) {
                     return Utils::StringUtils::NormalToWide((*_document)[field]);
                 }
                 return (*_document)[field];
@@ -73,7 +73,7 @@ namespace Framework::Utils {
         void Set(const std::string &field, T value) {
             if (!_lastError.empty())
                 return;
-            if constexpr (std::is_same_v<T, std::wstring>) {
+            if constexpr (std::is_same<T, std::wstring>) {
                 (*_document)[field] = Utils::StringUtils::WideToNormal(value);
                 return;
             }
