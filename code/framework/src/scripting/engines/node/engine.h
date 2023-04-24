@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include <node.h>
 #include <v8.h>
 
@@ -24,6 +26,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
         std::unique_ptr<node::MultiIsolatePlatform> _platform;
         std::string _modName;
+        std::atomic<bool> _isShuttingDown = false;
 
       public:
         EngineError Init(SDKRegisterCallback) override;

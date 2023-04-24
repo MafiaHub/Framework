@@ -100,9 +100,14 @@ namespace Framework::Scripting::Engines::Node {
             return false;
         }
 
+        // Scope the resources
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
+
+        // Scope the context and emit destroy
+        v8::Context::Scope scope(GetContext());
+        node::EmitAsyncDestroy(_isolate, _asyncContext);
 
         // Exit node environment
         node::EmitProcessBeforeExit(_env);

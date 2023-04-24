@@ -33,19 +33,8 @@ namespace Framework::Scripting::Engines::Node {
         v8::V8::InitializePlatform(_platform.get());
         v8::V8::Initialize();
 
-        // Allocate the isolate
-        _isolate = v8::Isolate::Allocate();
-
-        // Register the isolate to the platform
-        _platform->RegisterIsolate(_isolate, uv_default_loop());
-
-        // Initialize the isolate
-        v8::Isolate::CreateParams params;
-        params.array_buffer_allocator = node::CreateArrayBufferAllocator();
-        v8::Isolate::Initialize(_isolate, params);
-
-        // Register the IsWorker data slot
-        _isolate->SetData(v8::Isolate::GetNumberOfDataSlots() - 1, new bool(false));
+        // Allocate and register the isolate
+        _isolate = node::NewIsolate(node::CreateArrayBufferAllocator(), uv_default_loop(), _platform.get());
 
         // Allocate our scopes
         v8::Locker locker(_isolate);
@@ -65,6 +54,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Ye
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Node.JS engine initialized!");
+        _isShuttingDown = false;
         return EngineError::ENGINE_NONE;
     }
 
@@ -76,6 +66,8 @@ namespace Framework::Scripting::Engines::Node {
         if (!_isolate) {
             return EngineError::ENGINE_ISOLATE_NULL;
         }
+
+        _isShuttingDown = true;
 
         v8::SealHandleScope seal(_isolate);
         // Drain the remaining tasks while there are available ones
@@ -104,6 +96,10 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         if (!_isolate) {
+            return;
+        }
+
+        if(_isShuttingDown) {
             return;
         }
 
