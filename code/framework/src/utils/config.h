@@ -8,13 +8,15 @@
 
 #pragma once
 
-#include "utils/string_utils.h"
-
 #include <nlohmann/json.hpp>
 #include <string>
 #include <type_traits>
 
+#include "utils/string_utils.h"
+
 namespace Framework::Utils {
+    typedef std::conditional_t<sizeof(wchar_t) == 2, std::u16string, std::u32string> wstring;
+
     class Config {
       private:
         nlohmann::json *_document;
@@ -47,7 +49,7 @@ namespace Framework::Utils {
         T Get(const std::string &field) {
             if (!_lastError.empty())
                 return {};
-            if constexpr (std::is_same<T, std::wstring>) {
+            if constexpr (std::is_same_v<T, std::wstring>) {
                 return Utils::StringUtils::NormalToWide((*_document)[field]);
             }
             return (*_document)[field];
@@ -59,7 +61,7 @@ namespace Framework::Utils {
                 return {};
 
             try {
-                if constexpr (std::is_same<T, std::wstring>) {
+                if constexpr (std::is_same_v<T, std::wstring>) {
                     return Utils::StringUtils::NormalToWide((*_document)[field]);
                 }
                 return (*_document)[field];
@@ -73,7 +75,7 @@ namespace Framework::Utils {
         void Set(const std::string &field, T value) {
             if (!_lastError.empty())
                 return;
-            if constexpr (std::is_same<T, std::wstring>) {
+            if constexpr (std::is_same_v<T, std::wstring>) {
                 (*_document)[field] = Utils::StringUtils::WideToNormal(value);
                 return;
             }

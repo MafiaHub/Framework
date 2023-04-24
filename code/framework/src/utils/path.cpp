@@ -1,9 +1,13 @@
 #include "safe_win32.h"
-#include <Shlwapi.h>
 #include "path.h"
+
+#ifdef WIN32
+#include <Shlwapi.h>
+#endif
 
 namespace Framework::Utils {
     std::wstring GetAbsolutePathW(const std::wstring &relative) {
+        #ifdef WIN32
         static wchar_t executable_path[MAX_PATH] = {'\0'};
 
         if (executable_path[0] == '\0') {
@@ -19,9 +23,13 @@ namespace Framework::Utils {
         wchar_t final_buf[MAX_PATH] = {'\0'};
         PathCanonicalizeW(final_buf, buf);
         return final_buf;
+        #else
+        return NULL;
+        #endif
     }
 
     std::string GetAbsolutePathA(const std::string &relative) {
+        #ifdef WIN32
         static char executable_path[MAX_PATH] = {'\0'};
 
         if (executable_path[0] == '\0') {
@@ -37,5 +45,8 @@ namespace Framework::Utils {
         char final_buf[MAX_PATH] = {'\0'};
         PathCanonicalizeA(final_buf, buf);
         return final_buf;
+        #else
+        return NULL;
+        #endif
     }
 }
