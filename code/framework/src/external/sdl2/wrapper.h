@@ -11,7 +11,7 @@
 #include "errors.h"
 #include "utils/safe_win32.h"
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 
 namespace Framework::External::SDL2 {
     class Wrapper final {
