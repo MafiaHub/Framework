@@ -131,7 +131,8 @@ namespace Framework::Launcher {
       private:
         static bool EnsureFilesExist(const std::vector<std::string> &);
         static bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
-        bool EnsureGameExecutableIsCompatible();
+        bool EnsureGameExecutableIsCompatible(uint32_t);
+        uint32_t GetGameVersion();
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();

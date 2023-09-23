@@ -310,9 +310,12 @@ namespace Framework::Launcher {
         // Update the game path to include the executable name;
         _gamePath += std::wstring(L"/") + _config.executableName;
 
+        // Acquire the game version
+        auto checksum = GetGameVersion();
+
         // verify game integrity if enabled
         if (_config.verifyGameIntegrity) {
-            if (!EnsureGameExecutableIsCompatible()) {
+            if (!EnsureGameExecutableIsCompatible(checksum)) {
                 MessageBox(nullptr, "Unsupported game version", _config.name.c_str(), MB_ICONERROR);
                 return false;
             }
@@ -792,10 +795,10 @@ namespace Framework::Launcher {
 
             // Retrieve fields and overwrite ProjectConfiguration defaults
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading launcher settings from JSON config file...");
-            _config.classicGamePath    = _fileConfig->GetDefault<std::wstring>("gamePath", _config.classicGamePath);
-            _config.steamAppId         = _fileConfig->GetDefault<AppId_t>("steamAppId", _config.steamAppId);
-            _config.executableName     = _fileConfig->GetDefault<std::wstring>("exeName", _config.executableName);
-            _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("dllName", _config.destinationDllName);
+            _config.classicGamePath    = _fileConfig->GetDefault<std::wstring>("game_path", _config.classicGamePath);
+            _config.steamAppId         = _fileConfig->GetDefault<AppId_t>("steam_app_id", _config.steamAppId);
+            _config.executableName     = _fileConfig->GetDefault<std::wstring>("game_executable_name", _config.executableName);
+            _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("mod_dll_name", _config.destinationDllName);
 
             std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
         }
@@ -809,15 +812,15 @@ namespace Framework::Launcher {
         auto configHandle = cppfs::fs::open(_config.configFileName);
 
         // Retrieve fields from ProjectConfiguration and store data into a persistent config file
-        _fileConfig->Set<std::wstring>("gamePath", _config.classicGamePath);
-        _fileConfig->Set<AppId_t>("steamAppId", _config.steamAppId);
-        _fileConfig->Set<std::wstring>("exeName", _config.executableName);
-        _fileConfig->Set<std::wstring>("dllName", _config.destinationDllName);
+        _fileConfig->Set<std::wstring>("game_path", _config.classicGamePath);
+        _fileConfig->Set<AppId_t>("steam_app_id", _config.steamAppId);
+        _fileConfig->Set<std::wstring>("game_executable_name", _config.executableName);
+        _fileConfig->Set<std::wstring>("mod_dll_name", _config.destinationDllName);
 
         configHandle.writeFile(_fileConfig->ToString());
     }
 
-    bool Project::EnsureGameExecutableIsCompatible() {
+    uint32_t Project::GetGameVersion() {
         if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
             return false;
@@ -834,12 +837,18 @@ namespace Framework::Launcher {
         std::vector<char> data(gameExeSize);
         gameExeHandle.read(data.data(), gameExeSize);
         auto checksum = Utils::Hashing::CalculateCRC32(data.data(), gameExeSize);
+        return checksum;
+    }
 
+    bool Project::EnsureGameExecutableIsCompatible(uint32_t checksum) {
         for (auto &version : _config.supportedGameVersions) {
-            if (checksum == version)
+            if (checksum == version) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Game integrity verified. Mod allowed to launch (Checksum {}, found {})", checksum, version);
                 return true;
+            }
         }
 
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Game integrity failed to verify. Mod not allowed to launch (Checksum {})", checksum);
         return false;
     }
 
