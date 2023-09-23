@@ -599,15 +599,15 @@ namespace Framework::Launcher {
             return false;
         }
 
+        std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
+        gImagePath = _gamePath.c_str();
+        gDllName   = _config.destinationDllName.c_str();
+
         HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) {
             MessageBox(nullptr, "Failed to find executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
-
-        std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
-        gImagePath = _gamePath.c_str();
-        gDllName   = _config.destinationDllName.c_str();
 
         // determine file length
         DWORD dwFileLength = SetFilePointer(hFile, 0, nullptr, FILE_END);
