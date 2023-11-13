@@ -158,8 +158,11 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
         // Load the scripting resources when everything is ready
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Loading all scripting resources...");
-        _scriptingEngine->LoadAllResources();
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Loading scripting gamemode...");
+        if(!_scriptingEngine->LoadGamemode()){
+            return ServerError::SERVER_SCRIPTING_INIT_FAILED;
+        }
+        
         return ServerError::SERVER_NONE;
     }
 

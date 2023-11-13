@@ -12,7 +12,6 @@
 
 #include "../errors.h"
 #include "callback.h"
-#include "resource.h"
 
 namespace Framework::Scripting::Engines {
     class IEngine {
@@ -22,8 +21,8 @@ namespace Framework::Scripting::Engines {
         virtual EngineError Shutdown()                = 0;
         virtual void Update()                         = 0;
 
-        virtual IResource *LoadResource(std::string)   = 0;
-        virtual IResource *UnloadResource(std::string) = 0;
+        virtual bool LoadGamemode(std::string)   = 0;
+        virtual bool UnloadGamemode(std::string) = 0;
 
         virtual void SetProcessArguments(int, char **) = 0;
 

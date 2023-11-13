@@ -14,9 +14,10 @@
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
 
+#include "engine.h"
+
 #include "v8_helpers/v8_string.h"
 
-#include "resource.h"
 #include "scripting/module.h"
 
 namespace Framework::Scripting::Engines::Node {
@@ -45,8 +46,8 @@ namespace Framework::Scripting::Engines::Node {
         // Create a persistent handle to the event callback function
         v8::Persistent<v8::Function> persistentCallback(isolate, eventCallback);
 
-        const auto resource = static_cast<Node::Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
-        resource->_eventHandlers[Helpers::ToString(eventName, isolate)].push_back(persistentCallback);
+        const auto engine = static_cast<Node::Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        engine->_gamemodeEventHandlers[Helpers::ToString(eventName, isolate)].push_back(persistentCallback);
     }
 
     static void Emit(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -65,14 +66,16 @@ namespace Framework::Scripting::Engines::Node {
             return;
         }
 
+        // TODO: check for reserved event names
+
         const auto isolate = info.GetIsolate();
         const auto ctx     = isolate->GetEnteredOrMicrotaskContext();
 
         v8::Local<v8::String> eventName = info[0]->ToString(ctx).ToLocalChecked();
         v8::Local<v8::String> eventData = info[1]->ToString(ctx).ToLocalChecked();
 
-        const auto resource = static_cast<Node::Resource *>(ctx->GetAlignedPointerFromEmbedderData(0));
-        resource->GetModule()->InvokeEvent(Helpers::ToString(eventName, isolate), Helpers::ToString(eventData, isolate));
+        const auto engine = static_cast<Node::Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        engine->InvokeEvent(Helpers::ToString(eventName, isolate), Helpers::ToString(eventData, isolate));
     }
 
     bool SDK::Init(v8::Isolate *isolate, SDKRegisterCallback cb) {

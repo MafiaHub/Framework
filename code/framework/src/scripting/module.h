@@ -14,17 +14,11 @@
 #include "engine_kind.h"
 #include "engines/callback.h"
 #include "engines/engine.h"
-#include "engines/resource.h"
 #include "errors.h"
-
-// TODO find a better way to invoke resource events globally
-#include "engines/node/resource.h"
 
 namespace Framework::Scripting {
     class Module {
       private:
-        std::map<std::string, Engines::IResource *> _resources;
-
         int _processArgsCount;
         char **_processArgs;
         std::string _modName;
@@ -41,29 +35,17 @@ namespace Framework::Scripting {
 
         void Update();
 
-        void LoadAllResources();
-        void UnloadAllResources();
-        bool LoadResource(std::string);
-        bool UnloadResource(std::string);
-
-        void ForEachResource(std::function<void(Engines::IResource *)> callback) {
-            for (auto &resource : _resources) {
-                callback(resource.second);
-            }
-        }
+        bool LoadGamemode();
+        bool UnloadGamemode();
 
         template <typename... Args>
         void InvokeEvent(const std::string name, Args &&...args) {
-            for (auto &resource : _resources) {
-                switch (_engineType) {
-                case EngineTypes::ENGINE_NODE: {
-                    auto *nodeResource = static_cast<Engines::Node::Resource *>(resource.second);
-                    nodeResource->InvokeEvent(name, std::forward<Args>(args)...);
-                    break;
-                }
-                default: break;
-                }
+            if(!_engine){
+                return;
             }
+
+            // TODO: fix me
+            // _engine->InvokeEvent(name, std::forward<Args>(args)...);
         }
 
         Engines::IEngine *GetEngine() const {

@@ -34,7 +34,6 @@ set(FRAMEWORK_SRC
 set(FRAMEWORK_SERVER_SRC
     src/scripting/module.cpp
     src/scripting/engines/node/engine.cpp
-    src/scripting/engines/node/resource.cpp
     src/scripting/engines/node/sdk.cpp
     src/scripting/events.cpp
 

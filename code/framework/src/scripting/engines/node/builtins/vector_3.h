@@ -9,7 +9,6 @@
 #pragma once
 
 #include "../../../keys.h"
-#include "../resource.h"
 
 #include <glm/glm.hpp>
 #include <v8pp/class.hpp>

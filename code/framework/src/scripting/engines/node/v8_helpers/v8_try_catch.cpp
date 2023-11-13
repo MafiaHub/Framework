@@ -8,7 +8,6 @@
 
 #include "v8_try_catch.h"
 
-#include "../resource.h"
 #include <logging/logger.h>
 
 namespace Framework::Scripting::Helpers {
@@ -31,12 +30,6 @@ namespace Framework::Scripting::Helpers {
             return false;
         }
 
-        auto resource = static_cast<Engines::Node::Resource *>(context->GetAlignedPointerFromEmbedderData(0));
-        if (!resource) {
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Failed to acquire resource instance from embedded data");
-            return false;
-        }
-
         v8::TryCatch tryCatch(isolate);
 
         if (!fn()) {
@@ -49,7 +42,7 @@ namespace Framework::Scripting::Helpers {
                 v8::ScriptOrigin origin                    = message->GetScriptOrigin();
 
                 if (!origin.ResourceName()->IsUndefined()) {
-                    Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] exception at {}: {}: {}", resource->GetName(), *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
+                    Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] exception at {}: {}", *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
 
                     if (!maybeSourceLine.IsEmpty()) {
                         v8::Local<v8::String> sourceLine = maybeSourceLine.ToLocalChecked();
@@ -68,7 +61,7 @@ namespace Framework::Scripting::Helpers {
                         *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());*/
                 }
                 else {
-                    Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Exception at {}", resource->GetName());
+                    Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Exception");
                 }
 
                 v8::MaybeLocal<v8::Value> stackTrace = tryCatch.StackTrace(context);

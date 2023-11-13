@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "scripting/engines/resource.h"
 #include "scripting/keys.h"
 
 #include "scripting/engines/node/builtins/quaternion.h"

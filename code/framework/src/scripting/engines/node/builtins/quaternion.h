@@ -9,7 +9,6 @@
 #pragma once
 
 #include "../../../keys.h"
-#include "../resource.h"
 
 #include <glm/ext.hpp>
 #include <glm/ext/matrix_relational.hpp>
