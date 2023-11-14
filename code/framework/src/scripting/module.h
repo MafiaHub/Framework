@@ -14,7 +14,6 @@
 #include "engine_kind.h"
 #include "engines/callback.h"
 #include "engines/engine.h"
-#include "engines/node/engine.h"
 #include "errors.h"
 
 namespace Framework::Scripting {
@@ -38,19 +37,6 @@ namespace Framework::Scripting {
 
         bool LoadGamemode();
         bool UnloadGamemode();
-
-        template <typename... Args>
-        void InvokeEvent(const std::string name, Args &&...args) {
-            if(!_engine){
-                return;
-            }
-
-            switch(_engineType){
-                case EngineTypes::ENGINE_NODE: {
-                    reinterpret_cast<Engines::Node::Engine*>(_engine)->InvokeEvent(name, std::forward<Args>(args)...);
-                } break;
-            }
-        }
 
         Engines::IEngine *GetEngine() const {
             return _engine;

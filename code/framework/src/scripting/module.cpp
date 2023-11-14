@@ -12,6 +12,7 @@
 #include <logging/logger.h>
 #include <regex>
 
+#include "engines/node/engine.h"
 #include "module.h"
 
 #include "core_modules.h"
