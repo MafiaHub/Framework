@@ -75,11 +75,14 @@ namespace Framework::Scripting::Engines::Node {
         EngineError Shutdown() override;
         void Update() override;
 
+        bool PreloadGamemode(std::string) override;
         bool LoadGamemode(std::string) override;
         bool UnloadGamemode(std::string) override;
-        bool CompileGamemode(const std::string &, const std::string &);
-        bool RunGamemode();
-        bool WatchGamemodeChanges();
+
+        bool LoadGamemodePackageFile(std::string);
+        bool CompileGamemodeScript(const std::string &, const std::string &);
+        bool RunGamemodeScript();
+        bool WatchGamemodeChanges(std::string);
 
         template <typename... Args>
         void InvokeEvent(const std::string name, Args &&...args) {
@@ -132,6 +135,10 @@ namespace Framework::Scripting::Engines::Node {
 
         v8::Local<v8::Context> GetContext() const {
             return _context.Get(_isolate);
+        }
+
+        bool IsGamemodeLoaded() const {
+            return _gamemodeLoaded;
         }
 
         void SetProcessArguments(int argc, char **argv) override {}

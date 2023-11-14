@@ -21,6 +21,7 @@ namespace Framework::Scripting::Engines {
         virtual EngineError Shutdown()                = 0;
         virtual void Update()                         = 0;
 
+        virtual bool PreloadGamemode(std::string) = 0;
         virtual bool LoadGamemode(std::string)   = 0;
         virtual bool UnloadGamemode(std::string) = 0;
 

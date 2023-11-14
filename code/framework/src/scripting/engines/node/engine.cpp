@@ -122,13 +122,13 @@ namespace Framework::Scripting::Engines::Node {
             _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
         }
 
-        // Notify the resource
+        // Notify the gamemode, if loaded
         if(_gamemodeLoaded){
             InvokeEvent(Events[EventIDs::RESOURCE_UPDATED]);
         }
     }
 
-    bool Engine::LoadGamemode(std::string mainPath) {
+    bool Engine::LoadGamemodePackageFile(std::string mainPath){
         // If gamemmode is already loaded, don't load it again
         if(_gamemodeLoaded) {
             return false;
@@ -164,9 +164,26 @@ namespace Framework::Scripting::Engines::Node {
                     return false;
                 }
             }
+            return true;
         }
         catch (nlohmann::detail::type_error &err) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode package.json is not valid:\n\t{}", err.what());
+            return false;
+        }
+        return true;
+    }
+
+    bool Engine::PreloadGamemode(std::string mainPath){
+        if(LoadGamemodePackageFile(mainPath)){
+            if(LoadGamemode(mainPath)){
+                return WatchGamemodeChanges(mainPath);
+            }
+        }
+        return false;
+    }
+
+    bool Engine::LoadGamemode(std::string mainPath) {
+        if(_gamemodeLoaded){
             return false;
         }
 
@@ -211,12 +228,12 @@ namespace Framework::Scripting::Engines::Node {
         node::LoadEnvironment(_gamemodeEnvironment, bootstrap_code);
 
         // Compile the gamemode
-        CompileGamemode(content, entryPointFile.path());
-        RunGamemode();
+        CompileGamemodeScript(content, entryPointFile.path());
+        RunGamemodeScript();
 
         // Invoke the gamemode loaded event
         InvokeEvent(Events[EventIDs::RESOURCE_LOADED]);
-
+        
         _gamemodeLoaded = true;
         return true;
     }
@@ -251,7 +268,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::CompileGamemode(const std::string &str, const std::string &path) {
+    bool Engine::CompileGamemodeScript(const std::string &str, const std::string &path) {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
 
@@ -279,7 +296,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::RunGamemode() {
+    bool Engine::RunGamemodeScript() {
         if (_gamemodeScript.IsEmpty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid gamemode script object");
             return false;
@@ -297,25 +314,23 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::WatchGamemodeChanges() {
-       /*cppfs::FileHandle dir = cppfs::fs::open(_path);
+    bool Engine::WatchGamemodeChanges(std::string path) {
+       cppfs::FileHandle dir = cppfs::fs::open(path);
         if (!dir.isDirectory()) {
             return false;
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Watching '{}' changes", dir.path().c_str());
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
-        _watcher.addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' is reloaded due to the file changes", _name);
+        _watcher.addHandler([this, path](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Gamemode is reloaded due to the file changes");
             // Close the resource first, we'll start with a clean slate
-            Shutdown();
-
-            if (LoadPackageFile()) {
-                Init();
+            if(this->IsGamemodeLoaded() && UnloadGamemode(path)){
+                LoadGamemode(path);
             }
         });
 
         _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
-        return true;*/
+        return true;
     }
 } // namespace Framework::Scripting::Engines::Node

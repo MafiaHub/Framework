@@ -80,7 +80,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        return _engine->LoadGamemode("gamemode");
+        return _engine->PreloadGamemode("gamemode");
     }
 
     bool Module::UnloadGamemode(){
