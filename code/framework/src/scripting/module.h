@@ -14,6 +14,7 @@
 #include "engine_kind.h"
 #include "engines/callback.h"
 #include "engines/engine.h"
+#include "engines/node/engine.h"
 #include "errors.h"
 
 namespace Framework::Scripting {
@@ -44,8 +45,11 @@ namespace Framework::Scripting {
                 return;
             }
 
-            // TODO: fix me
-            // _engine->InvokeEvent(name, std::forward<Args>(args)...);
+            switch(_engineType){
+                case EngineTypes::ENGINE_NODE: {
+                    reinterpret_cast<Engines::Node::Engine*>(_engine)->InvokeEvent(name, std::forward<Args>(args)...);
+                } break;
+            }
         }
 
         Engines::IEngine *GetEngine() const {
