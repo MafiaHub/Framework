@@ -33,7 +33,7 @@
 // by hand. See the translator.README.txt file in the tools directory for
 // more information.
 //
-// $hash=e38c41a553d518abcd1b912d32281e99b93c4fd7$
+// $hash=9e8dd2187d592f7556cbee0db3ceab851f9aae13$
 //
 
 #ifndef CEF_INCLUDE_CAPI_VIEWS_CEF_BROWSER_VIEW_DELEGATE_CAPI_H_
@@ -119,7 +119,28 @@ typedef struct _cef_browser_view_delegate_t {
   /// documentation.
   ///
   cef_chrome_toolbar_type_t(CEF_CALLBACK* get_chrome_toolbar_type)(
-      struct _cef_browser_view_delegate_t* self);
+      struct _cef_browser_view_delegate_t* self,
+      struct _cef_browser_view_t* browser_view);
+
+  ///
+  /// Return true (1) to create frameless windows for Document picture-in-
+  /// picture popups. Content in frameless windows should specify draggable
+  /// regions using "-webkit-app-region: drag" CSS.
+  ///
+  int(CEF_CALLBACK* use_frameless_window_for_picture_in_picture)(
+      struct _cef_browser_view_delegate_t* self,
+      struct _cef_browser_view_t* browser_view);
+
+  ///
+  /// Called when |browser_view| receives a gesture command. Return true (1) to
+  /// handle (or disable) a |gesture_command| or false (0) to propagate the
+  /// gesture to the browser for default handling. With the Chrome runtime these
+  /// commands can also be handled via cef_command_handler_t::OnChromeCommand.
+  ///
+  int(CEF_CALLBACK* on_gesture_command)(
+      struct _cef_browser_view_delegate_t* self,
+      struct _cef_browser_view_t* browser_view,
+      cef_gesture_command_t gesture_command);
 } cef_browser_view_delegate_t;
 
 #ifdef __cplusplus

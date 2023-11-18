@@ -33,7 +33,7 @@
 // by hand. See the translator.README.txt file in the tools directory for
 // more information.
 //
-// $hash=7254c050cd7db2ff7d40a1f54c99e941dc592692$
+// $hash=eed525e9abcbf8e8b959067e0056ca470c5210c7$
 //
 
 #ifndef CEF_INCLUDE_CAPI_CEF_BROWSER_CAPI_H_
@@ -167,7 +167,7 @@ typedef struct _cef_browser_t {
   ///
   struct _cef_frame_t*(CEF_CALLBACK* get_frame_byident)(
       struct _cef_browser_t* self,
-      int64 identifier);
+      int64_t identifier);
 
   ///
   /// Returns the frame with the specified name, or NULL if not found.
@@ -185,7 +185,7 @@ typedef struct _cef_browser_t {
   ///
   void(CEF_CALLBACK* get_frame_identifiers)(struct _cef_browser_t* self,
                                             size_t* identifiersCount,
-                                            int64* identifiers);
+                                            int64_t* identifiers);
 
   ///
   /// Returns the names of all existing frames.
@@ -365,16 +365,39 @@ typedef struct _cef_browser_host_t {
       struct _cef_browser_host_t* self);
 
   ///
-  /// Get the current zoom level. The default zoom level is 0.0. This function
-  /// can only be called on the UI thread.
+  /// Returns true (1) if this browser can execute the specified zoom command.
+  /// This function can only be called on the UI thread.
+  ///
+  int(CEF_CALLBACK* can_zoom)(struct _cef_browser_host_t* self,
+                              cef_zoom_command_t command);
+
+  ///
+  /// Execute a zoom command in this browser. If called on the UI thread the
+  /// change will be applied immediately. Otherwise, the change will be applied
+  /// asynchronously on the UI thread.
+  ///
+  void(CEF_CALLBACK* zoom)(struct _cef_browser_host_t* self,
+                           cef_zoom_command_t command);
+
+  ///
+  /// Get the default zoom level. This value will be 0.0 by default but can be
+  /// configured with the Chrome runtime. This function can only be called on
+  /// the UI thread.
+  ///
+  double(CEF_CALLBACK* get_default_zoom_level)(
+      struct _cef_browser_host_t* self);
+
+  ///
+  /// Get the current zoom level. This function can only be called on the UI
+  /// thread.
   ///
   double(CEF_CALLBACK* get_zoom_level)(struct _cef_browser_host_t* self);
 
   ///
   /// Change the zoom level to the specified value. Specify 0.0 to reset the
-  /// zoom level. If called on the UI thread the change will be applied
-  /// immediately. Otherwise, the change will be applied asynchronously on the
-  /// UI thread.
+  /// zoom level to the default. If called on the UI thread the change will be
+  /// applied immediately. Otherwise, the change will be applied asynchronously
+  /// on the UI thread.
   ///
   void(CEF_CALLBACK* set_zoom_level)(struct _cef_browser_host_t* self,
                                      double zoomLevel);
@@ -424,7 +447,7 @@ typedef struct _cef_browser_host_t {
       struct _cef_browser_host_t* self,
       const cef_string_t* image_url,
       int is_favicon,
-      uint32 max_image_size,
+      uint32_t max_image_size,
       int bypass_cache,
       struct _cef_download_image_callback_t* callback);
 
@@ -909,6 +932,48 @@ typedef struct _cef_browser_host_t {
   /// be called on the UI thread.
   ///
   int(CEF_CALLBACK* is_audio_muted)(struct _cef_browser_host_t* self);
+
+  ///
+  /// Returns true (1) if the renderer is currently in browser fullscreen. This
+  /// differs from window fullscreen in that browser fullscreen is entered using
+  /// the JavaScript Fullscreen API and modifies CSS attributes such as the
+  /// ::backdrop pseudo-element and :fullscreen pseudo-structure. This function
+  /// can only be called on the UI thread.
+  ///
+  int(CEF_CALLBACK* is_fullscreen)(struct _cef_browser_host_t* self);
+
+  ///
+  /// Requests the renderer to exit browser fullscreen. In most cases exiting
+  /// window fullscreen should also exit browser fullscreen. With the Alloy
+  /// runtime this function should be called in response to a user action such
+  /// as clicking the green traffic light button on MacOS
+  /// (cef_window_delegate_t::OnWindowFullscreenTransition callback) or pressing
+  /// the "ESC" key (cef_keyboard_handler_t::OnPreKeyEvent callback). With the
+  /// Chrome runtime these standard exit actions are handled internally but
+  /// new/additional user actions can use this function. Set |will_cause_resize|
+  /// to true (1) if exiting browser fullscreen will cause a view resize.
+  ///
+  void(CEF_CALLBACK* exit_fullscreen)(struct _cef_browser_host_t* self,
+                                      int will_cause_resize);
+
+  ///
+  /// Returns true (1) if a Chrome command is supported and enabled. Values for
+  /// |command_id| can be found in the cef_command_ids.h file. This function can
+  /// only be called on the UI thread. Only used with the Chrome runtime.
+  ///
+  int(CEF_CALLBACK* can_execute_chrome_command)(
+      struct _cef_browser_host_t* self,
+      int command_id);
+
+  ///
+  /// Execute a Chrome command. Values for |command_id| can be found in the
+  /// cef_command_ids.h file. |disposition| provides information about the
+  /// intended command target. Only used with the Chrome runtime.
+  ///
+  void(CEF_CALLBACK* execute_chrome_command)(
+      struct _cef_browser_host_t* self,
+      int command_id,
+      cef_window_open_disposition_t disposition);
 } cef_browser_host_t;
 
 ///

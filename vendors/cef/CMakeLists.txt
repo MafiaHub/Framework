@@ -1,6 +1,6 @@
 add_library(CEF STATIC dummy.cpp)
 if(CMAKE_CL_64)
-    target_link_directories(CEF PUBLIC "lib/win_64")
+    target_link_directories(CEF PUBLIC "lib/win_64/Release")
 elseif(WIN32)
     target_link_directories(CEF PUBLIC "lib/win_32")
 elseif(APPLE)

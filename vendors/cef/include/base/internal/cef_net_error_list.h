@@ -767,12 +767,11 @@ NET_ERROR(CONTENT_DECODING_INIT_FAILED, -371)
 // SpdyStream layer.
 NET_ERROR(HTTP2_RST_STREAM_NO_ERROR_RECEIVED, -372)
 
-// The pushed stream claimed by the request is no longer available.
-NET_ERROR(HTTP2_PUSHED_STREAM_NOT_AVAILABLE, -373)
+// Obsolete. HTTP/2 push is removed.
+// NET_ERROR(HTTP2_PUSHED_STREAM_NOT_AVAILABLE, -373)
 
-// A pushed stream was claimed and later reset by the server. When this happens,
-// the request should be retried.
-NET_ERROR(HTTP2_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER, -374)
+// Obsolete. HTTP/2 push is removed.
+// NET_ERROR(HTTP2_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER, -374)
 
 // An HTTP transaction was retried too many times due for authentication or
 // invalid certificates. This may be due to a bug in the net stack that would
@@ -783,12 +782,11 @@ NET_ERROR(TOO_MANY_RETRIES, -375)
 // Received an HTTP/2 frame on a closed stream.
 NET_ERROR(HTTP2_STREAM_CLOSED, -376)
 
-// Client is refusing an HTTP/2 stream.
-NET_ERROR(HTTP2_CLIENT_REFUSED_STREAM, -377)
+// Obsolete. HTTP/2 push is removed.
+// NET_ERROR(HTTP2_CLIENT_REFUSED_STREAM, -377)
 
-// A pushed HTTP/2 stream was claimed by a request based on matching URL and
-// request headers, but the pushed response headers do not match the request.
-NET_ERROR(HTTP2_PUSHED_RESPONSE_DOES_NOT_MATCH, -378)
+// Obsolete. HTTP/2 push is removed.
+// NET_ERROR(HTTP2_PUSHED_RESPONSE_DOES_NOT_MATCH, -378)
 
 // The server returned a non-2xx HTTP response code.
 //
@@ -977,6 +975,9 @@ NET_ERROR(CERT_DATABASE_CHANGED, -714)
 
 // Error -715 was removed (CHANNEL_ID_IMPORT_FAILED)
 
+// The certificate verifier configuration changed in some way.
+NET_ERROR(CERT_VERIFIER_CHANGED, -716)
+
 // DNS error codes.
 
 // DNS resolver received a malformed response.
@@ -1027,3 +1028,8 @@ NET_ERROR(DNS_REQUEST_CANCELLED, -810)
 // The hostname resolution of HTTPS record was expected to be resolved with
 // alpn values of supported protocols, but did not.
 NET_ERROR(DNS_NO_MATCHING_SUPPORTED_ALPN, -811)
+
+// The compression dictionary cannot be loaded.
+NET_ERROR(DICTIONARY_LOAD_FAILED, -812)
+
+// Error -813 was removed (DICTIONARY_ORIGIN_CHECK_FAILED)

@@ -459,13 +459,13 @@ class CefV8Value : public virtual CefBaseRefCounted {
   /// Create a new CefV8Value object of type int.
   ///
   /*--cef()--*/
-  static CefRefPtr<CefV8Value> CreateInt(int32 value);
+  static CefRefPtr<CefV8Value> CreateInt(int32_t value);
 
   ///
   /// Create a new CefV8Value object of type unsigned int.
   ///
   /*--cef()--*/
-  static CefRefPtr<CefV8Value> CreateUInt(uint32 value);
+  static CefRefPtr<CefV8Value> CreateUInt(uint32_t value);
 
   ///
   /// Create a new CefV8Value object of type double.
@@ -520,7 +520,7 @@ class CefV8Value : public virtual CefBaseRefCounted {
   /// or CefV8Accessor callback, or in combination with calling Enter() and
   /// Exit() on a stored CefV8Context reference.
   ///
-  /*--cef()--*/
+  /*--cef(optional_param=buffer)--*/
   static CefRefPtr<CefV8Value> CreateArrayBuffer(
       void* buffer,
       size_t length,
@@ -648,13 +648,13 @@ class CefV8Value : public virtual CefBaseRefCounted {
   /// Return an int value.
   ///
   /*--cef()--*/
-  virtual int32 GetIntValue() = 0;
+  virtual int32_t GetIntValue() = 0;
 
   ///
   /// Return an unsigned int value.
   ///
   /*--cef()--*/
-  virtual uint32 GetUIntValue() = 0;
+  virtual uint32_t GetUIntValue() = 0;
 
   ///
   /// Return a double value.
@@ -865,6 +865,20 @@ class CefV8Value : public virtual CefBaseRefCounted {
   ///
   /*--cef()--*/
   virtual bool NeuterArrayBuffer() = 0;
+
+  ///
+  /// Returns the length (in bytes) of the ArrayBuffer.
+  ///
+  /*--cef()--*/
+  virtual size_t GetArrayBufferByteLength() = 0;
+
+  ///
+  /// Returns a pointer to the beginning of the memory block for this
+  /// ArrayBuffer backing store. The returned pointer is valid as long as the
+  /// CefV8Value is alive.
+  ///
+  /*--cef()--*/
+  virtual void* GetArrayBufferData() = 0;
 
   // FUNCTION METHODS - These methods are only available on functions.
 

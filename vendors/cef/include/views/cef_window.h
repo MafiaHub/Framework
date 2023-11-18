@@ -45,6 +45,8 @@
 #include "include/views/cef_panel.h"
 #include "include/views/cef_window_delegate.h"
 
+class CefBrowserView;
+
 ///
 /// A Window is a top-level Window/widget in the Views hierarchy. By default it
 /// will have a non-client area with title bar, icon and buttons that supports
@@ -67,6 +69,20 @@ class CefWindow : public CefPanel {
   ///
   /*--cef()--*/
   virtual void Show() = 0;
+
+  ///
+  /// Show the Window as a browser modal dialog relative to |browser_view|. A
+  /// parent Window must be returned via CefWindowDelegate::GetParentWindow()
+  /// and |browser_view| must belong to that parent Window. While this Window is
+  /// visible, |browser_view| will be disabled while other controls in the
+  /// parent Window remain enabled. Navigating or destroying the |browser_view|
+  /// will close this Window automatically. Alternately, use Show() and return
+  /// true from CefWindowDelegate::IsWindowModalDialog() for a window modal
+  /// dialog where all controls in the parent Window are disabled.
+  ///
+  /*--cef()--*/
+  virtual void ShowAsBrowserModalDialog(
+      CefRefPtr<CefBrowserView> browser_view) = 0;
 
   ///
   /// Hide the Window.
@@ -149,7 +165,9 @@ class CefWindow : public CefPanel {
   virtual void Restore() = 0;
 
   ///
-  /// Set fullscreen Window state.
+  /// Set fullscreen Window state. The
+  /// CefWindowDelegate::OnWindowFullscreenTransition method will be called
+  /// during the fullscreen transition for notification purposes.
   ///
   /*--cef()--*/
   virtual void SetFullscreen(bool fullscreen) = 0;
@@ -300,7 +318,7 @@ class CefWindow : public CefPanel {
   /// primarily for testing purposes.
   ///
   /*--cef()--*/
-  virtual void SendKeyPress(int key_code, uint32 event_flags) = 0;
+  virtual void SendKeyPress(int key_code, uint32_t event_flags) = 0;
 
   ///
   /// Simulate a mouse move. The mouse cursor will be moved to the specified
@@ -326,16 +344,25 @@ class CefWindow : public CefPanel {
 
   ///
   /// Set the keyboard accelerator for the specified |command_id|. |key_code|
-  /// can be any virtual key or character value.
+  /// can be any virtual key or character value. Required modifier keys are
+  /// specified by |shift_pressed|, |ctrl_pressed| and/or |alt_pressed|.
   /// CefWindowDelegate::OnAccelerator will be called if the keyboard
   /// combination is triggered while this window has focus.
+  ///
+  /// The |high_priority| value will be considered if a child CefBrowserView has
+  /// focus when the keyboard combination is triggered. If |high_priority| is
+  /// true then the key event will not be forwarded to the web content
+  /// (`keydown` event handler) or CefKeyboardHandler first. If |high_priority|
+  /// is false then the behavior will depend on the
+  /// CefBrowserView::SetPreferAccelerators configuration.
   ///
   /*--cef()--*/
   virtual void SetAccelerator(int command_id,
                               int key_code,
                               bool shift_pressed,
                               bool ctrl_pressed,
-                              bool alt_pressed) = 0;
+                              bool alt_pressed,
+                              bool high_priority) = 0;
 
   ///
   /// Remove the keyboard accelerator for the specified |command_id|.
