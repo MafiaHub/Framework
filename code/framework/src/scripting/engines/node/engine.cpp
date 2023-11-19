@@ -124,7 +124,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Notify the gamemode, if loaded
         if(_gamemodeLoaded){
-            InvokeEvent(Events[EventIDs::RESOURCE_UPDATED]);
+            InvokeEvent(Events[EventIDs::GAMEMODE_UPDATED]);
         }
     }
 
@@ -217,7 +217,7 @@ namespace Framework::Scripting::Engines::Node {
         // Create the execution environment
         node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
         _gamemodeData                           = node::CreateIsolateData(_isolate, uv_default_loop(), GetPlatform());
-        std::vector<std::string> argv       = {"mafiahub-resource"};
+        std::vector<std::string> argv       = {"mafiahub-gamemode"};
         _gamemodeEnvironment                                = node::CreateEnvironment(_gamemodeData, context, argv, argv, flags);
 
         // Make sure isolate is linked to our node environment
@@ -232,8 +232,8 @@ namespace Framework::Scripting::Engines::Node {
         RunGamemodeScript();
 
         // Invoke the gamemode loaded event
-        InvokeEvent(Events[EventIDs::RESOURCE_LOADED]);
-        
+        InvokeEvent(Events[EventIDs::GAMEMODE_LOADED]);
+
         _gamemodeLoaded = true;
         return true;
     }
@@ -244,7 +244,7 @@ namespace Framework::Scripting::Engines::Node {
             return false;
         }
 
-        // Scope the resources
+        // Scope the gamemode
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
@@ -324,7 +324,7 @@ namespace Framework::Scripting::Engines::Node {
         _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
         _watcher.addHandler([this, path](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Gamemode is reloaded due to the file changes");
-            // Close the resource first, we'll start with a clean slate
+            // Close the gamemode first, we'll start with a clean slate
             if(this->IsGamemodeLoaded() && UnloadGamemode(path)){
                 LoadGamemode(path);
             }
