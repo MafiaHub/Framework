@@ -62,9 +62,9 @@ namespace Framework::Integrations::Server {
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
         options.allow_unrecognised_options();
         options.add_options("MafiaHub Integrations server", {
-            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, 
+            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))},
             {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
-            {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}, 
+            {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)},
             {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
             {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)},
             {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}
@@ -157,12 +157,12 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
-        // Load the scripting resources when everything is ready
+        // Load the scripting gamemode when everything is ready
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Loading scripting gamemode...");
         if(!_scriptingEngine->LoadGamemode()){
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
-        
+
         return ServerError::SERVER_NONE;
     }
 
