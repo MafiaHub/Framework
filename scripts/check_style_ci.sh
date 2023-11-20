@@ -9,7 +9,7 @@ if [ $CODE -ne 0 ]; then
     cat <<EOF
     {
       "username": "Framework Code Linter",
-      "content": "**Branch:** $(git rev-parse --abbrev-ref HEAD)\n**Commit:** https://github.com/MafiaHub/Framework/commit/$(git rev-parse HEAD)\n**Issues:**\n$RESULT"
+      "content": "**Branch:** $(git rev-parse --abbrev-ref HEAD)\n**Commit:** https://github.com/MafiaHub/Framework/commit/$(git rev-parse HEAD) \n**Issues:**\n$RESULT"
     }
 EOF
   }
