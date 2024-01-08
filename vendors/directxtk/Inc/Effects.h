@@ -9,6 +9,9 @@
 
 #pragma once
 
+#ifndef __DIRECTXTK_EFFECTS_H__
+#define __DIRECTXTK_EFFECTS_H__
+
 #if defined(_XBOX_ONE) && defined(_TITLE)
 #include <d3d11_x.h>
 #else
@@ -563,6 +566,8 @@ namespace DirectX
             SkinnedDGSLEffect(SkinnedDGSLEffect const&) = delete;
             SkinnedDGSLEffect& operator= (SkinnedDGSLEffect const&) = delete;
 
+            ~SkinnedDGSLEffect() override;
+
             // Animation setting.
             void __cdecl SetWeightsPerVertex(int value) override;
             void __cdecl SetBoneTransforms(_In_reads_(count) XMMATRIX const* value, size_t count) override;
@@ -663,6 +668,8 @@ namespace DirectX
 
             SkinnedNormalMapEffect(SkinnedNormalMapEffect const&) = delete;
             SkinnedNormalMapEffect& operator= (SkinnedNormalMapEffect const&) = delete;
+
+            ~SkinnedNormalMapEffect() override;
 
             // Animation settings.
             void __cdecl SetWeightsPerVertex(int value) override;
@@ -769,6 +776,8 @@ namespace DirectX
 
             SkinnedPBREffect(SkinnedPBREffect const&) = delete;
             SkinnedPBREffect& operator= (SkinnedPBREffect const&) = delete;
+
+            ~SkinnedPBREffect() override;
 
             // Animation settings.
             void __cdecl SetWeightsPerVertex(int value) override;
@@ -1027,3 +1036,5 @@ namespace DirectX
         };
     }
 }
+
+#endif // __DIRECTXTK_EFFECTS_H__

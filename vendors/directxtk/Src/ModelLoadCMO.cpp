@@ -299,7 +299,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromCMO(
         if (dataSize < usedSize)
             throw std::runtime_error("End of file");
 
-        auto meshName = reinterpret_cast<const wchar_t*>(meshData + usedSize);
+        auto meshName = reinterpret_cast<const wchar_t*>(static_cast<const void*>(meshData + usedSize));
 
         usedSize += sizeof(wchar_t)*(*nName);
         if (dataSize < usedSize)
@@ -328,7 +328,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromCMO(
             if (dataSize < usedSize)
                 throw std::runtime_error("End of file");
 
-            auto matName = reinterpret_cast<const wchar_t*>(meshData + usedSize);
+            auto matName = reinterpret_cast<const wchar_t*>(static_cast<const void*>(meshData + usedSize));
 
             usedSize += sizeof(wchar_t)*(*nName);
             if (dataSize < usedSize)
@@ -350,7 +350,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromCMO(
             if (dataSize < usedSize)
                 throw std::runtime_error("End of file");
 
-            auto psName = reinterpret_cast<const wchar_t*>(meshData + usedSize);
+            auto psName = reinterpret_cast<const wchar_t*>(static_cast<const void*>(meshData + usedSize));
 
             usedSize += sizeof(wchar_t)*(*nName);
             if (dataSize < usedSize)
@@ -365,7 +365,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromCMO(
                 if (dataSize < usedSize)
                     throw std::runtime_error("End of file");
 
-                auto txtName = reinterpret_cast<const wchar_t*>(meshData + usedSize);
+                auto txtName = reinterpret_cast<const wchar_t*>(static_cast<const void*>(meshData + usedSize));
 
                 usedSize += sizeof(wchar_t)*(*nName);
                 if (dataSize < usedSize)
@@ -598,7 +598,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromCMO(
                 if (dataSize < usedSize)
                     throw std::runtime_error("End of file");
 
-                auto boneName = reinterpret_cast<const wchar_t*>(meshData + usedSize);
+                auto boneName = reinterpret_cast<const wchar_t*>(static_cast<const void*>(meshData + usedSize));
 
                 usedSize += sizeof(wchar_t) * (*nName);
                 if (dataSize < usedSize)
@@ -974,3 +974,22 @@ std::unique_ptr<Model> DirectX::Model::CreateFromCMO(
 
     return model;
 }
+
+
+//--------------------------------------------------------------------------------------
+// Adapters for /Zc:wchar_t- clients
+
+#if defined(_MSC_VER) && !defined(_NATIVE_WCHAR_T_DEFINED)
+
+_Use_decl_annotations_
+std::unique_ptr<Model> Model::CreateFromCMO(
+    ID3D11Device* device,
+    const __wchar_t* szFileName,
+    IEffectFactory& fxFactory,
+    ModelLoaderFlags flags,
+    size_t* animsOffset)
+{
+    return Model::CreateFromCMO(device, reinterpret_cast<const unsigned short*>(szFileName), fxFactory, flags, animsOffset);
+}
+
+#endif
