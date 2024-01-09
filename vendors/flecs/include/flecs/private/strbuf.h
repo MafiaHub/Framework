@@ -12,7 +12,12 @@
 extern "C" {
 #endif
 
+#ifdef __cplusplus
+/* Fixes missing field initializer warning on g++ */
+#define ECS_STRBUF_INIT (ecs_strbuf_t){}
+#else
 #define ECS_STRBUF_INIT (ecs_strbuf_t){0}
+#endif
 #define ECS_STRBUF_ELEMENT_SIZE (511)
 #define ECS_STRBUF_MAX_LIST_DEPTH (32)
 
@@ -113,6 +118,13 @@ bool ecs_strbuf_appendflt(
     ecs_strbuf_t *buffer,
     double v,
     char nan_delim);
+
+/* Append boolean to buffer.
+ * Returns false when max is reached, true when there is still space */
+FLECS_API
+bool ecs_strbuf_appendbool(
+    ecs_strbuf_t *buffer,
+    bool v);
 
 /* Append source buffer to destination buffer.
  * Returns false when max is reached, true when there is still space */

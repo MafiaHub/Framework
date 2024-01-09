@@ -81,13 +81,13 @@ typedef struct ecs_system_desc_t {
     /** Rate at which the system should run */
     int32_t rate;
 
-    /** External tick soutce that determines when system ticks */
+    /** External tick source that determines when system ticks */
     ecs_entity_t tick_source;
 
     /** If true, system will be ran on multiple threads */
     bool multi_threaded;
 
-    /** If true, system will have access to actuall world. Cannot be true at the
+    /** If true, system will have access to the actual world. Cannot be true at the
      * same time as multi_threaded. */
     bool no_readonly;
 } ecs_system_desc_t;
@@ -121,7 +121,7 @@ ecs_entity_t ecs_system_init(
         desc.callback = id_; \
         ecs_id(id_) = ecs_system_init(world, &desc); \
     } \
-    ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, NULL)
 
 /** Declare & define a system.
  * 
@@ -132,7 +132,7 @@ ecs_entity_t ecs_system_init(
     ecs_entity_t ecs_id(id) = 0; ECS_SYSTEM_DEFINE(world, id, phase, __VA_ARGS__);\
     ecs_entity_t id = ecs_id(id);\
     (void)ecs_id(id);\
-    (void)id;
+    (void)id
 
 /** Shorthand for creating a system with ecs_system_init.
  *
@@ -141,7 +141,7 @@ ecs_entity_t ecs_system_init(
  *     .entity = ecs_entity(world, {
  *       .name = "MyEntity",
  *       .add = { ecs_dependson(EcsOnUpdate) }
- *     },
+ *     }),
  *     .query.filter.terms = {
  *       { ecs_id(Position) },
  *       { ecs_id(Velocity) }
@@ -171,7 +171,7 @@ ecs_entity_t ecs_system_init(
  * Any system may interrupt execution by setting the interrupted_by member in
  * the ecs_iter_t value. This is particularly useful for manual systems, where
  * the value of interrupted_by is returned by this operation. This, in
- * cominbation with the param argument lets applications use manual systems
+ * combination with the param argument lets applications use manual systems
  * to lookup entities: once the entity has been found its handle is passed to
  * interrupted_by, which is then subsequently returned.
  *
@@ -259,7 +259,7 @@ ecs_query_t* ecs_system_get_query(
  * @return The context.
  */
 FLECS_API
-void* ecs_get_system_ctx(
+void* ecs_system_get_ctx(
     const ecs_world_t *world,
     ecs_entity_t system);
 
@@ -273,7 +273,7 @@ void* ecs_get_system_ctx(
  * @return The context.
  */
 FLECS_API
-void* ecs_get_system_binding_ctx(
+void* ecs_system_get_binding_ctx(
     const ecs_world_t *world,
     ecs_entity_t system);
 

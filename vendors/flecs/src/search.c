@@ -20,7 +20,7 @@ int32_t flecs_type_search(
 {    
     ecs_table_record_t *tr = ecs_table_cache_get(&idr->cache, table);
     if (tr) {
-        int32_t r = tr->column;
+        int32_t r = tr->index;
         if (tr_out) tr_out[0] = tr;
         if (id_out) {
             if (ECS_PAIR_FIRST(search_id) == EcsUnion) {
@@ -61,7 +61,6 @@ int32_t flecs_type_offset_search(
     return -1;
 }
 
-static
 bool flecs_type_can_inherit_id(
     const ecs_world_t *world,
     const ecs_table_t *table,
@@ -264,6 +263,24 @@ int32_t ecs_search_relation(
     return result;
 }
 
+int32_t flecs_search_w_idr(
+    const ecs_world_t *world,
+    const ecs_table_t *table,
+    ecs_id_t id,
+    ecs_id_t *id_out,
+    ecs_id_record_t *idr)
+{
+    if (!table) return -1;
+
+    ecs_poly_assert(world, ecs_world_t);
+    ecs_assert(id != 0, ECS_INVALID_PARAMETER, NULL);
+    (void)world;
+
+    ecs_type_t type = table->type;
+    ecs_id_t *ids = type.array;
+    return flecs_type_search(table, id, idr, ids, id_out, 0);
+}
+
 int32_t ecs_search(
     const ecs_world_t *world,
     const ecs_table_t *table,
@@ -293,12 +310,11 @@ int32_t ecs_search_offset(
     ecs_id_t *id_out)
 {
     if (!offset) {
+        ecs_poly_assert(world, ecs_world_t);
         return ecs_search(world, table, id, id_out);
     }
 
     if (!table) return -1;
-
-    ecs_poly_assert(world, ecs_world_t);
 
     ecs_type_t type = table->type;
     ecs_id_t *ids = type.array;
@@ -315,12 +331,12 @@ int32_t flecs_relation_depth_walk(
 {
     int32_t result = 0;
 
-    const ecs_table_record_t *tr = flecs_id_record_get_table(idr, table);
+    ecs_table_record_t *tr = flecs_id_record_get_table(idr, table);
     if (!tr) {
         return 0;
     }
 
-    int32_t i = tr->column, end = i + tr->count;
+    int32_t i = tr->index, end = i + tr->count;
     for (; i != end; i ++) {
         ecs_entity_t o = ecs_pair_second(world, table->type.array[i]);
         ecs_assert(o != 0, ECS_INTERNAL_ERROR, NULL);
@@ -349,5 +365,26 @@ int32_t flecs_relation_depth(
     if (!idr) {
         return 0;
     }
-    return flecs_relation_depth_walk(world, idr, table, table);
+
+    int32_t depth_offset = 0;
+    if (table->flags & EcsTableHasTarget) {
+        if (ecs_table_get_type_index(world, table, 
+            ecs_pair_t(EcsTarget, r)) != -1)
+        {
+            ecs_id_t id;
+            int32_t col = ecs_search(world, table, 
+                ecs_pair(EcsFlatten, EcsWildcard), &id);
+            if (col == -1) {
+                return 0;
+            }
+
+            ecs_entity_t did = ecs_pair_second(world, id);
+            ecs_assert(did != 0, ECS_INTERNAL_ERROR, NULL);
+            uint64_t *val = ecs_map_get(&world->store.entity_to_depth, did);
+            ecs_assert(val != NULL, ECS_INTERNAL_ERROR, NULL);
+            depth_offset = flecs_uto(int32_t, val[0]);
+        }
+    }
+
+    return flecs_relation_depth_walk(world, idr, table, table) + depth_offset;
 }

@@ -26,7 +26,7 @@ ecs_entity_t do_import(world& world, const char *symbol) {
     ecs_set_scope(world, scope);
 
     // It should now be possible to lookup the module
-    ecs_entity_t m = ecs_lookup_symbol(world, symbol, true);
+    ecs_entity_t m = ecs_lookup_symbol(world, symbol, true, false);
     ecs_assert(m != 0, ECS_MODULE_UNDEFINED, symbol);
     ecs_assert(m == m_c, ECS_INTERNAL_ERROR, NULL);
 
@@ -39,7 +39,7 @@ template <typename T>
 flecs::entity import(world& world) {
     const char *symbol = _::symbol_name<T>();
 
-    ecs_entity_t m = ecs_lookup_symbol(world, symbol, true);
+    ecs_entity_t m = ecs_lookup_symbol(world, symbol, true, false);
     
     if (!_::cpp_type<T>::registered(world)) {
 
@@ -73,7 +73,7 @@ flecs::entity import(world& world) {
 
 template <typename Module>
 inline flecs::entity world::module(const char *name) const {
-    flecs::id_t result = _::cpp_type<Module>::id(m_world);
+    flecs::id_t result = _::cpp_type<Module>::id(m_world, nullptr, false);
     if (name) {
         ecs_add_path_w_sep(m_world, result, 0, name, "::", "::");
     }

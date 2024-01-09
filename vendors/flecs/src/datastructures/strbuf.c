@@ -97,7 +97,7 @@ int flecs_strbuf_ftoa(
 	int64_t intPart;
     int64_t exp = 0;
 
-    if (isnan(f)) {
+    if (ecs_os_isnan(f)) {
         if (nan_delim) {
             ecs_strbuf_appendch(out, nan_delim);
             ecs_strbuf_appendlit(out, "NaN");
@@ -106,7 +106,7 @@ int flecs_strbuf_ftoa(
             return ecs_strbuf_appendlit(out, "NaN");
         }
     }
-    if (isinf(f)) {
+    if (ecs_os_isinf(f)) {
         if (nan_delim) {
             ecs_strbuf_appendch(out, nan_delim);
             ecs_strbuf_appendlit(out, "Inf");
@@ -199,6 +199,11 @@ int flecs_strbuf_ftoa(
             p1[0] = '.';
             do {
                 char t = (++p1)[0];
+                if (t == '.') {
+                    exp ++;
+                    p1 --;
+                    break;
+                }
                 p1[0] = c;
                 c = t;
                 exp ++;
@@ -244,7 +249,7 @@ void flecs_strbuf_grow(
 static
 void flecs_strbuf_grow_str(
     ecs_strbuf_t *b,
-    char *str,
+    const char *str,
     char *alloc_str,
     int32_t size)
 {
@@ -257,7 +262,7 @@ void flecs_strbuf_grow_str(
     e->super.buffer_embedded = false;
     e->super.pos = size ? size : (int32_t)ecs_os_strlen(str);
     e->super.next = NULL;
-    e->super.buf = str;
+    e->super.buf = ECS_CONST_CAST(char*, str);
     e->alloc_str = alloc_str;
 }
 
@@ -536,6 +541,18 @@ bool ecs_strbuf_appendflt(
     return flecs_strbuf_ftoa(b, flt, 10, nan_delim);
 }
 
+bool ecs_strbuf_appendbool(
+    ecs_strbuf_t *buffer,
+    bool v)
+{
+    ecs_assert(buffer != NULL, ECS_INVALID_PARAMETER, NULL); 
+    if (v) {
+        return ecs_strbuf_appendlit(buffer, "true");
+    } else {
+        return ecs_strbuf_appendlit(buffer, "false");
+    }
+}
+
 bool ecs_strbuf_appendstr_zerocpy(
     ecs_strbuf_t *b,
     char* str)
@@ -567,7 +584,7 @@ bool ecs_strbuf_appendstr_zerocpy_const(
     ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
     /* Removes const modifier, but logic prevents changing / delete string */
     flecs_strbuf_init(b);
-    flecs_strbuf_grow_str(b, (char*)str, NULL, 0);
+    flecs_strbuf_grow_str(b, str, NULL, 0);
     return true;
 }
 
@@ -580,7 +597,7 @@ bool ecs_strbuf_appendstr_zerocpyn_const(
     ecs_assert(str != NULL, ECS_INVALID_PARAMETER, NULL);
     /* Removes const modifier, but logic prevents changing / delete string */
     flecs_strbuf_init(b);
-    flecs_strbuf_grow_str(b, (char*)str, NULL, n);
+    flecs_strbuf_grow_str(b, str, NULL, n);
     return true;
 }
 
@@ -702,8 +719,11 @@ void ecs_strbuf_list_push(
     ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_assert(list_open != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_assert(separator != NULL, ECS_INVALID_PARAMETER, NULL);
-
+    ecs_assert(b->list_sp >= 0, ECS_INVALID_OPERATION, NULL);
     b->list_sp ++;
+    ecs_assert(b->list_sp < ECS_STRBUF_MAX_LIST_DEPTH, 
+        ECS_INVALID_OPERATION, NULL);
+
     b->list_stack[b->list_sp].count = 0;
     b->list_stack[b->list_sp].separator = separator;
 
@@ -723,6 +743,7 @@ void ecs_strbuf_list_pop(
 {
     ecs_assert(b != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_assert(list_close != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(b->list_sp > 0, ECS_INVALID_OPERATION, NULL);
 
     b->list_sp --;
     

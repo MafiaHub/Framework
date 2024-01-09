@@ -177,6 +177,35 @@ FLECS_API
 void ecs_http_server_stop(
     ecs_http_server_t* server);
 
+/** Emulate a request.
+ * The request string must be a valid HTTP request. A minimal example:
+ *   GET /entity/flecs/core/World?label=true HTTP/1.1
+ *
+ * @param srv The server.
+ * @param req The request.
+ * @param len The length of the request (optional).
+ * @return The reply.
+ */
+FLECS_API
+int ecs_http_server_http_request(
+    ecs_http_server_t* srv,
+    const char *req,
+    ecs_size_t len,
+    ecs_http_reply_t *reply_out);
+
+/** Convenience wrapper around ecs_http_server_request. */
+FLECS_API
+int ecs_http_server_request(
+    ecs_http_server_t* srv,
+    const char *method,
+    const char *req,
+    ecs_http_reply_t *reply_out);
+
+/** Get context provided in ecs_http_server_desc_t */
+FLECS_API
+void* ecs_http_server_ctx(
+    ecs_http_server_t* srv);
+
 /** Find header in request. 
  * 
  * @param req The request.

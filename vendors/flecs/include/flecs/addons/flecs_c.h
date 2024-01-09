@@ -43,7 +43,7 @@
         ecs_assert(id_ != 0, ECS_INVALID_PARAMETER, NULL); \
     } \
     (void)id_; \
-    (void)ecs_id(id_);
+    (void)ecs_id(id_)
 
 /** Declare & define an entity.
  *
@@ -53,7 +53,7 @@
 #define ECS_ENTITY(world, id, ...) \
     ecs_entity_t ecs_id(id); \
     ecs_entity_t id = 0; \
-    ECS_ENTITY_DEFINE(world, id, __VA_ARGS__);
+    ECS_ENTITY_DEFINE(world, id, __VA_ARGS__)
 
 /** Forward declare a tag. */
 #define ECS_TAG_DECLARE ECS_DECLARE
@@ -109,8 +109,8 @@
         desc.type.size = ECS_SIZEOF(id_); \
         desc.type.alignment = ECS_ALIGNOF(id_); \
         ecs_id(id_) = ecs_component_init(world, &desc);\
-        ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, NULL);\
-    }
+    }\
+    ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, NULL)
 
 /** Declare & define a component.
  *
@@ -154,7 +154,7 @@
     ECS_OBSERVER_DEFINE(world, id, kind, __VA_ARGS__);\
     ecs_entity_t id = ecs_id(id);\
     (void)ecs_id(id);\
-    (void)id;
+    (void)id
 
 /** Shorthand for creating an entity with ecs_entity_init.
  *
@@ -324,6 +324,9 @@
 #define ecs_emplace(world, entity, T)\
     (ECS_CAST(T*, ecs_emplace_id(world, entity, ecs_id(T))))
 
+#define ecs_emplace_pair(world, entity, First, second)\
+    (ECS_CAST(First*, ecs_emplace_id(world, entity, ecs_pair_t(First, second))))
+
 #define ecs_get(world, entity, T)\
     (ECS_CAST(const T*, ecs_get_id(world, entity, ecs_id(T))))
 
@@ -339,6 +342,9 @@
 
 #define ecs_record_get(world, record, T)\
     (ECS_CAST(const T*, ecs_record_get_id(world, record, ecs_id(T))))
+
+#define ecs_record_has(world, record, T)\
+    (ecs_record_has_id(world, record, ecs_id(T)))
 
 #define ecs_record_get_pair(world, record, First, second)\
     (ECS_CAST(const First*, ecs_record_get_id(world, record, \
@@ -402,6 +408,9 @@
 #define ecs_singleton_get(world, comp)\
     ecs_get(world, ecs_id(comp), comp)
 
+#define ecs_singleton_set_ptr(world, comp, ptr)\
+    ecs_set_ptr(world, ecs_id(comp), comp, ptr)
+
 #define ecs_singleton_set(world, comp, ...)\
     ecs_set(world, ecs_id(comp), comp, __VA_ARGS__)
 
@@ -423,9 +432,6 @@
 
 #define ecs_has_pair(world, entity, first, second)\
     ecs_has_id(world, entity, ecs_pair(first, second))
-
-#define ecs_owns_id(world, entity, id)\
-    (ecs_search(world, ecs_get_table(world, entity), id, 0) != -1)
 
 #define ecs_owns_pair(world, entity, first, second)\
     ecs_owns_id(world, entity, ecs_pair(first, second))

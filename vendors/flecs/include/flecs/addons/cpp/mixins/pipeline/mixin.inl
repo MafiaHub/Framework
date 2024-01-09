@@ -48,30 +48,22 @@ bool progress(ecs_ftime_t delta_time = 0.0) const;
  */
 void run_pipeline(const flecs::entity_t pip, ecs_ftime_t delta_time = 0.0) const;
 
+/** Run pipeline.
+ * @tparam Pipeline Type associated with pipeline.
+ * @see ecs_run_pipeline
+ */
+template <typename Pipeline, if_not_t< is_enum<Pipeline>::value > = 0>
+void run_pipeline(ecs_ftime_t delta_time = 0.0) const;
+
 /** Set timescale.
  * @see ecs_set_time_scale
  */
 void set_time_scale(ecs_ftime_t mul) const;
 
-/** Get timescale.
- * @see ecs_get_time_scale
- */
-ecs_ftime_t get_time_scale() const;
-
-/** Get tick.
- * @return Monotonically increasing frame count.
- */
-int64_t get_tick() const;
-
 /** Set target FPS.
  * @see ecs_set_target_fps
  */
 void set_target_fps(ecs_ftime_t target_fps) const;
-
-/** Get target FPS.
- * @return Configured frames per second.
- */
-ecs_ftime_t get_target_fps() const;
 
 /** Reset simulation clock.
  * @see ecs_reset_clock
@@ -87,5 +79,15 @@ void set_threads(int32_t threads) const;
  * @see ecs_get_stage_count
  */
 int32_t get_threads() const;
+
+/** Set number of task threads.
+ * @see ecs_set_task_threads
+ */
+void set_task_threads(int32_t task_threads) const;
+
+/** Returns true if task thread use has been requested.
+ * @see ecs_using_task_threads
+ */
+bool using_task_threads() const;
 
 /** @} */

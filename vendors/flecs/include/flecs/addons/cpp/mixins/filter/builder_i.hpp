@@ -26,6 +26,11 @@ struct filter_builder_i : term_builder_i<Base> {
         return *this;
     }
 
+    Base& filter_flags(ecs_flags32_t flags) {
+        m_desc->flags |= flags;
+        return *this;
+    }
+
     Base& expr(const char *expr) {
         ecs_check(m_expr_count == 0, ECS_INVALID_OPERATION,
             "filter_builder::expr() called more than once");
@@ -40,17 +45,17 @@ struct filter_builder_i : term_builder_i<Base> {
 
     template <typename ... Args>
     Base& with(Args&&... args) {
-        return this->term(FLECS_FWD(args)...);
+        return this->term(FLECS_FWD(args)...).inout_none();
     }
 
     template <typename T, typename ... Args>
     Base& with(Args&&... args) {
-        return this->term<T>(FLECS_FWD(args)...);
+        return this->term<T>(FLECS_FWD(args)...).inout_none();
     }
 
     template <typename First, typename Second>
     Base& with() {
-        return this->term<First, Second>();
+        return this->term<First, Second>().inout_none();
     }
 
     template <typename ... Args>
@@ -110,6 +115,15 @@ struct filter_builder_i : term_builder_i<Base> {
         return this->term<First, Second>().read();
     }
 
+    /* Scope_open/scope_close shorthand notation. */
+    Base& scope_open() {
+        return this->with(flecs::ScopeOpen).entity(0);
+    }
+
+    Base& scope_close() {
+        return this->with(flecs::ScopeClose).entity(0);
+    }
+
     /* Term notation for more complex query features */
 
     Base& term() {
@@ -119,14 +133,14 @@ struct filter_builder_i : term_builder_i<Base> {
                     "filter_builder::term() called without initializing term");
         }
 
-        if (m_term_index >= ECS_TERM_DESC_CACHE_SIZE) {
-            if (m_term_index == ECS_TERM_DESC_CACHE_SIZE) {
+        if (m_term_index >= FLECS_TERM_DESC_MAX) {
+            if (m_term_index == FLECS_TERM_DESC_MAX) {
                 m_desc->terms_buffer = ecs_os_calloc_n(
                     ecs_term_t, m_term_index + 1);
                 ecs_os_memcpy_n(m_desc->terms_buffer, m_desc->terms, 
                     ecs_term_t, m_term_index);
                 ecs_os_memset_n(m_desc->terms, 0, 
-                    ecs_term_t, ECS_TERM_DESC_CACHE_SIZE);
+                    ecs_term_t, FLECS_TERM_DESC_MAX);
             } else {
                 m_desc->terms_buffer = ecs_os_realloc_n(m_desc->terms_buffer, 
                     ecs_term_t, m_term_index + 1);

@@ -271,23 +271,21 @@ void ecs_world_stats_get(
     ECS_COUNTER_RECORD(&s->performance.merge_time, t, world->info.merge_time_total);
     ECS_COUNTER_RECORD(&s->performance.rematch_time, t, world->info.rematch_time_total);
     ECS_GAUGE_RECORD(&s->performance.delta_time, t, delta_world_time);
-    if (delta_world_time != 0 && delta_frame_count != 0) {
+    if (ECS_NEQZERO(delta_world_time) && ECS_NEQZERO(delta_frame_count)) {
         ECS_GAUGE_RECORD(&s->performance.fps, t, (double)1 / (delta_world_time / (double)delta_frame_count));
     } else {
         ECS_GAUGE_RECORD(&s->performance.fps, t, 0);
     }
 
-    ECS_GAUGE_RECORD(&s->entities.count, t, flecs_sparse_count(ecs_eis(world)));
-    ECS_GAUGE_RECORD(&s->entities.not_alive_count, t, flecs_sparse_not_alive_count(ecs_eis(world)));
+    ECS_GAUGE_RECORD(&s->entities.count, t, flecs_entities_count(world));
+    ECS_GAUGE_RECORD(&s->entities.not_alive_count, t, flecs_entities_not_alive_count(world));
 
-    ECS_GAUGE_RECORD(&s->ids.count, t, world->info.id_count);
-    ECS_GAUGE_RECORD(&s->ids.tag_count, t, world->info.tag_id_count);
-    ECS_GAUGE_RECORD(&s->ids.component_count, t, world->info.component_id_count);
-    ECS_GAUGE_RECORD(&s->ids.pair_count, t, world->info.pair_id_count);
-    ECS_GAUGE_RECORD(&s->ids.wildcard_count, t, world->info.wildcard_id_count);
-    ECS_GAUGE_RECORD(&s->ids.type_count, t, ecs_sparse_count(&world->type_info));
-    ECS_COUNTER_RECORD(&s->ids.create_count, t, world->info.id_create_total);
-    ECS_COUNTER_RECORD(&s->ids.delete_count, t, world->info.id_delete_total);
+    ECS_GAUGE_RECORD(&s->components.tag_count, t, world->info.tag_id_count);
+    ECS_GAUGE_RECORD(&s->components.component_count, t, world->info.component_id_count);
+    ECS_GAUGE_RECORD(&s->components.pair_count, t, world->info.pair_id_count);
+    ECS_GAUGE_RECORD(&s->components.type_count, t, ecs_sparse_count(&world->type_info));
+    ECS_COUNTER_RECORD(&s->components.create_count, t, world->info.id_create_total);
+    ECS_COUNTER_RECORD(&s->components.delete_count, t, world->info.id_delete_total);
 
     ECS_GAUGE_RECORD(&s->queries.query_count, t, ecs_count_id(world, EcsQuery));
     ECS_GAUGE_RECORD(&s->queries.observer_count, t, ecs_count_id(world, EcsObserver));
@@ -298,10 +296,6 @@ void ecs_world_stats_get(
     ECS_COUNTER_RECORD(&s->tables.delete_count, t, world->info.table_delete_total);
     ECS_GAUGE_RECORD(&s->tables.count, t, world->info.table_count);
     ECS_GAUGE_RECORD(&s->tables.empty_count, t, world->info.empty_table_count);
-    ECS_GAUGE_RECORD(&s->tables.tag_only_count, t, world->info.tag_table_count);
-    ECS_GAUGE_RECORD(&s->tables.trivial_only_count, t, world->info.trivial_table_count);
-    ECS_GAUGE_RECORD(&s->tables.storage_count, t, world->info.table_storage_count);
-    ECS_GAUGE_RECORD(&s->tables.record_count, t, world->info.table_record_count);
 
     ECS_COUNTER_RECORD(&s->commands.add_count, t, world->info.cmd.add_count);
     ECS_COUNTER_RECORD(&s->commands.remove_count, t, world->info.cmd.remove_count);
@@ -331,22 +325,6 @@ void ecs_world_stats_get(
     ECS_COUNTER_RECORD(&s->memory.stack_alloc_count, t, ecs_stack_allocator_alloc_count);
     ECS_COUNTER_RECORD(&s->memory.stack_free_count, t, ecs_stack_allocator_free_count);
     ECS_GAUGE_RECORD(&s->memory.stack_outstanding_alloc_count, t, outstanding_allocs);
-
-#ifdef FLECS_REST
-    ECS_COUNTER_RECORD(&s->rest.request_count, t, ecs_rest_request_count);
-    ECS_COUNTER_RECORD(&s->rest.entity_count, t, ecs_rest_entity_count);
-    ECS_COUNTER_RECORD(&s->rest.entity_error_count, t, ecs_rest_entity_error_count);
-    ECS_COUNTER_RECORD(&s->rest.query_count, t, ecs_rest_query_count);
-    ECS_COUNTER_RECORD(&s->rest.query_error_count, t, ecs_rest_query_error_count);
-    ECS_COUNTER_RECORD(&s->rest.query_name_count, t, ecs_rest_query_name_count);
-    ECS_COUNTER_RECORD(&s->rest.query_name_error_count, t, ecs_rest_query_name_error_count);
-    ECS_COUNTER_RECORD(&s->rest.query_name_from_cache_count, t, ecs_rest_query_name_from_cache_count);
-    ECS_COUNTER_RECORD(&s->rest.enable_count, t, ecs_rest_enable_count);
-    ECS_COUNTER_RECORD(&s->rest.enable_error_count, t, ecs_rest_enable_error_count);
-    ECS_COUNTER_RECORD(&s->rest.world_stats_count, t, ecs_rest_world_stats_count);
-    ECS_COUNTER_RECORD(&s->rest.pipeline_stats_count, t, ecs_rest_pipeline_stats_count);
-    ECS_COUNTER_RECORD(&s->rest.stats_error_count, t, ecs_rest_stats_error_count);
-#endif
 
 #ifdef FLECS_HTTP
     ECS_COUNTER_RECORD(&s->http.request_received_count, t, ecs_http_request_received_count);
@@ -480,8 +458,6 @@ bool ecs_system_stats_get(
 
     ECS_COUNTER_RECORD(&s->time_spent, t, ptr->time_spent);
     ECS_COUNTER_RECORD(&s->invoke_count, t, ptr->invoke_count);
-    ECS_GAUGE_RECORD(&s->active, t, !ecs_has_id(world, system, EcsEmpty));
-    ECS_GAUGE_RECORD(&s->enabled, t, !ecs_has_id(world, system, EcsDisabled));
 
     s->task = !(ptr->query->filter.flags & EcsFilterMatchThis);
 
@@ -582,44 +558,67 @@ bool ecs_pipeline_stats_get(
     }
     ecs_map_init_if(&s->system_stats, NULL);
 
-    /* Make sure vector is large enough to store all systems & sync points */
-    ecs_entity_t *systems = NULL;
-    if (pip_count) {
-        ecs_vector_set_count(&s->systems, ecs_entity_t, pip_count);
-        systems = ecs_vector_first(s->systems, ecs_entity_t);
+    if (op) {
+        ecs_entity_t *systems = NULL;
+        if (pip_count) {
+            ecs_vec_init_if_t(&s->systems, ecs_entity_t);
+            ecs_vec_set_count_t(NULL, &s->systems, ecs_entity_t, pip_count);
+            systems = ecs_vec_first_t(&s->systems, ecs_entity_t);
 
-        /* Populate systems vector, keep track of sync points */
-        it = ecs_query_iter(stage, pq->query);
-        
-        int32_t i, i_system = 0, ran_since_merge = 0;
-        while (ecs_query_next(&it)) {
-            if (flecs_id_record_get_table(pq->idr_inactive, it.table) != NULL) {
-                continue;
-            }
+            /* Populate systems vector, keep track of sync points */
+            it = ecs_query_iter(stage, pq->query);
+            
+            int32_t i, i_system = 0, ran_since_merge = 0;
+            while (ecs_query_next(&it)) {
+                if (flecs_id_record_get_table(pq->idr_inactive, it.table) != NULL) {
+                    continue;
+                }
 
-            for (i = 0; i < it.count; i ++) {
-                systems[i_system ++] = it.entities[i];
-                ran_since_merge ++;
-                if (op != op_last && ran_since_merge == op->count) {
-                    ran_since_merge = 0;
-                    op++;
-                    systems[i_system ++] = 0; /* 0 indicates a merge point */
+                for (i = 0; i < it.count; i ++) {
+                    systems[i_system ++] = it.entities[i];
+                    ran_since_merge ++;
+                    if (op != op_last && ran_since_merge == op->count) {
+                        ran_since_merge = 0;
+                        op++;
+                        systems[i_system ++] = 0; /* 0 indicates a merge point */
+                    }
                 }
             }
+
+            systems[i_system ++] = 0; /* Last merge */
+            ecs_assert(pip_count == i_system, ECS_INTERNAL_ERROR, NULL);
+        } else {
+            ecs_vec_fini_t(NULL, &s->systems, ecs_entity_t);
         }
 
-        systems[i_system ++] = 0; /* Last merge */
-        ecs_assert(pip_count == i_system, ECS_INTERNAL_ERROR, NULL);
-    } else {
-        ecs_vector_free(s->systems);
-        s->systems = NULL;
+        /* Get sync point statistics */
+        int32_t i, count = ecs_vec_count(ops);
+        if (count) {
+            ecs_vec_init_if_t(&s->sync_points, ecs_sync_stats_t);
+            ecs_vec_set_min_count_zeromem_t(NULL, &s->sync_points, ecs_sync_stats_t, count);
+            op = ecs_vec_first_t(ops, ecs_pipeline_op_t);
+
+            for (i = 0; i < count; i ++) {
+                ecs_pipeline_op_t *cur = &op[i];
+                ecs_sync_stats_t *el = ecs_vec_get_t(&s->sync_points, 
+                    ecs_sync_stats_t, i);
+
+                ECS_COUNTER_RECORD(&el->time_spent, s->t, cur->time_spent);
+                ECS_COUNTER_RECORD(&el->commands_enqueued, s->t, 
+                    cur->commands_enqueued);
+
+                el->system_count = cur->count;
+                el->multi_threaded = cur->multi_threaded;
+                el->no_readonly = cur->no_readonly;
+            }
+        }
     }
 
     /* Separately populate system stats map from build query, which includes
      * systems that aren't currently active */
     it = ecs_query_iter(stage, pq->query);
     while (ecs_query_next(&it)) {
-        int i;
+        int32_t i;
         for (i = 0; i < it.count; i ++) {
             ecs_system_stats_t *stats = ecs_map_ensure_alloc_t(&s->system_stats, 
                 ecs_system_stats_t, it.entities[i]);
@@ -644,21 +643,37 @@ void ecs_pipeline_stats_fini(
         ecs_os_free(elem);
     }
     ecs_map_fini(&stats->system_stats);
-    ecs_vector_free(stats->systems);
+    ecs_vec_fini_t(NULL, &stats->systems, ecs_entity_t);
+    ecs_vec_fini_t(NULL, &stats->sync_points, ecs_sync_stats_t);
 }
 
 void ecs_pipeline_stats_reduce(
     ecs_pipeline_stats_t *dst,
     const ecs_pipeline_stats_t *src)
 {
-    int32_t system_count = ecs_vector_count(src->systems);
-    ecs_vector_set_count(&dst->systems, ecs_entity_t, system_count);
-    ecs_entity_t *dst_systems = ecs_vector_first(dst->systems, ecs_entity_t);
-    ecs_entity_t *src_systems = ecs_vector_first(src->systems, ecs_entity_t);
+    int32_t system_count = ecs_vec_count(&src->systems);
+    ecs_vec_init_if_t(&dst->systems, ecs_entity_t);
+    ecs_vec_set_count_t(NULL, &dst->systems, ecs_entity_t, system_count);
+    ecs_entity_t *dst_systems = ecs_vec_first_t(&dst->systems, ecs_entity_t);
+    ecs_entity_t *src_systems = ecs_vec_first_t(&src->systems, ecs_entity_t);
     ecs_os_memcpy_n(dst_systems, src_systems, ecs_entity_t, system_count);
 
-    ecs_map_init_if(&dst->system_stats, NULL);
+    int32_t i, sync_count = ecs_vec_count(&src->sync_points);
+    ecs_vec_init_if_t(&dst->sync_points, ecs_sync_stats_t);
+    ecs_vec_set_min_count_zeromem_t(NULL, &dst->sync_points, ecs_sync_stats_t, sync_count);
+    ecs_sync_stats_t *dst_syncs = ecs_vec_first_t(&dst->sync_points, ecs_sync_stats_t);
+    ecs_sync_stats_t *src_syncs = ecs_vec_first_t(&src->sync_points, ecs_sync_stats_t);
+    for (i = 0; i < sync_count; i ++) {
+        ecs_sync_stats_t *dst_el = &dst_syncs[i];
+        ecs_sync_stats_t *src_el = &src_syncs[i];
+        flecs_stats_reduce(ECS_METRIC_FIRST(dst_el), ECS_METRIC_LAST(dst_el),
+            ECS_METRIC_FIRST(src_el), dst->t, src->t);
+        dst_el->system_count = src_el->system_count;
+        dst_el->multi_threaded = src_el->multi_threaded;
+        dst_el->no_readonly = src_el->no_readonly;
+    }
 
+    ecs_map_init_if(&dst->system_stats, NULL);
     ecs_map_iter_t it = ecs_map_iter(&src->system_stats);
     
     while (ecs_map_next(&it)) {
@@ -676,6 +691,20 @@ void ecs_pipeline_stats_reduce_last(
     const ecs_pipeline_stats_t *src,
     int32_t count)
 {
+    int32_t i, sync_count = ecs_vec_count(&src->sync_points);
+    ecs_sync_stats_t *dst_syncs = ecs_vec_first_t(&dst->sync_points, ecs_sync_stats_t);
+    ecs_sync_stats_t *src_syncs = ecs_vec_first_t(&src->sync_points, ecs_sync_stats_t);
+
+    for (i = 0; i < sync_count; i ++) {
+        ecs_sync_stats_t *dst_el = &dst_syncs[i];
+        ecs_sync_stats_t *src_el = &src_syncs[i];
+        flecs_stats_reduce_last(ECS_METRIC_FIRST(dst_el), ECS_METRIC_LAST(dst_el),
+            ECS_METRIC_FIRST(src_el), dst->t, src->t, count);
+        dst_el->system_count = src_el->system_count;
+        dst_el->multi_threaded = src_el->multi_threaded;
+        dst_el->no_readonly = src_el->no_readonly;
+    }
+
     ecs_map_init_if(&dst->system_stats, NULL);
     ecs_map_iter_t it = ecs_map_iter(&src->system_stats);
     while (ecs_map_next(&it)) {
@@ -691,6 +720,15 @@ void ecs_pipeline_stats_reduce_last(
 void ecs_pipeline_stats_repeat_last(
     ecs_pipeline_stats_t *stats)
 {
+    int32_t i, sync_count = ecs_vec_count(&stats->sync_points);
+    ecs_sync_stats_t *syncs = ecs_vec_first_t(&stats->sync_points, ecs_sync_stats_t);
+
+    for (i = 0; i < sync_count; i ++) {
+        ecs_sync_stats_t *el = &syncs[i];
+        flecs_stats_repeat_last(ECS_METRIC_FIRST(el), ECS_METRIC_LAST(el),
+            (stats->t));
+    }
+
     ecs_map_iter_t it = ecs_map_iter(&stats->system_stats);
     while (ecs_map_next(&it)) {
         ecs_system_stats_t *sys = ecs_map_ptr(&it);
@@ -704,6 +742,22 @@ void ecs_pipeline_stats_copy_last(
     ecs_pipeline_stats_t *dst,
     const ecs_pipeline_stats_t *src)
 {
+    int32_t i, sync_count = ecs_vec_count(&src->sync_points);
+    ecs_vec_init_if_t(&dst->sync_points, ecs_sync_stats_t);
+    ecs_vec_set_min_count_zeromem_t(NULL, &dst->sync_points, ecs_sync_stats_t, sync_count);
+    ecs_sync_stats_t *dst_syncs = ecs_vec_first_t(&dst->sync_points, ecs_sync_stats_t);
+    ecs_sync_stats_t *src_syncs = ecs_vec_first_t(&src->sync_points, ecs_sync_stats_t);
+
+    for (i = 0; i < sync_count; i ++) {
+        ecs_sync_stats_t *dst_el = &dst_syncs[i];
+        ecs_sync_stats_t *src_el = &src_syncs[i];
+        flecs_stats_copy_last(ECS_METRIC_FIRST(dst_el), ECS_METRIC_LAST(dst_el),
+            ECS_METRIC_FIRST(src_el), dst->t, t_next(src->t));
+        dst_el->system_count = src_el->system_count;
+        dst_el->multi_threaded = src_el->multi_threaded;
+        dst_el->no_readonly = src_el->no_readonly;
+    }
+
     ecs_map_init_if(&dst->system_stats, NULL);
 
     ecs_map_iter_t it = ecs_map_iter(&src->system_stats);
@@ -743,14 +797,12 @@ void ecs_world_stats_log(
     flecs_counter_print("merge time", t, &s->performance.merge_time);
     flecs_counter_print("simulation time elapsed", t, &s->performance.world_time);
     ecs_trace("");
-    flecs_gauge_print("id count", t, &s->ids.count);
-    flecs_gauge_print("tag id count", t, &s->ids.tag_count);
-    flecs_gauge_print("component id count", t, &s->ids.component_count);
-    flecs_gauge_print("pair id count", t, &s->ids.pair_count);
-    flecs_gauge_print("wildcard id count", t, &s->ids.wildcard_count);
-    flecs_gauge_print("type count", t, &s->ids.type_count);
-    flecs_counter_print("id create count", t, &s->ids.create_count);
-    flecs_counter_print("id delete count", t, &s->ids.delete_count);
+    flecs_gauge_print("tag id count", t, &s->components.tag_count);
+    flecs_gauge_print("component id count", t, &s->components.component_count);
+    flecs_gauge_print("pair id count", t, &s->components.pair_count);
+    flecs_gauge_print("type count", t, &s->components.type_count);
+    flecs_counter_print("id create count", t, &s->components.create_count);
+    flecs_counter_print("id delete count", t, &s->components.delete_count);
     ecs_trace("");
     flecs_gauge_print("alive entity count", t, &s->entities.count);
     flecs_gauge_print("not alive entity count", t, &s->entities.not_alive_count);
@@ -761,10 +813,6 @@ void ecs_world_stats_log(
     ecs_trace("");
     flecs_gauge_print("table count", t, &s->tables.count);
     flecs_gauge_print("empty table count", t, &s->tables.empty_count);
-    flecs_gauge_print("tag table count", t, &s->tables.tag_only_count);
-    flecs_gauge_print("trivial table count", t, &s->tables.trivial_only_count);
-    flecs_gauge_print("table storage count", t, &s->tables.storage_count);
-    flecs_gauge_print("table cache record count", t, &s->tables.record_count);
     flecs_counter_print("table create count", t, &s->tables.create_count);
     flecs_counter_print("table delete count", t, &s->tables.delete_count);
     ecs_trace("");

@@ -1,5 +1,5 @@
 /**
- * @file addons/meta.c
+ * @file addons/meta_c.c
  * @brief C utilities for meta addon.
  */
 
@@ -319,6 +319,10 @@ const char* meta_parse_member(
         goto error;
     }
 
+    if (!ptr[0]) {
+        return ptr;        
+    }
+
     /* Next token is the identifier */
     ptr = parse_c_identifier(ptr, token->name, NULL, ctx);
     if (!ptr) {
@@ -334,7 +338,8 @@ const char* meta_parse_member(
         /* If the [ was separated by a space, it will not be parsed as part of
          * the name */
         if (*ptr == '[') {
-            array_start = (char*)ptr; /* safe, will not be modified */
+            /* safe, will not be modified */
+            array_start = ECS_CONST_CAST(char*, ptr);
         }
     }
 
@@ -467,7 +472,8 @@ ecs_entity_t meta_lookup_array(
         goto error;
     }
 
-    ecs_entity_t element_type = ecs_lookup_symbol(world, params.type.type, true);
+    ecs_entity_t element_type = ecs_lookup_symbol(
+        world, params.type.type, true, true);
     if (!element_type) {
         ecs_meta_error(ctx, params_decl, "unknown element type '%s'",
             params.type.type);
@@ -632,10 +638,13 @@ ecs_entity_t meta_lookup(
         } else if (!ecs_os_strcmp(typename, "ecs_entity_t")) {
             type = ecs_id(ecs_entity_t);
 
+        } else if (!ecs_os_strcmp(typename, "ecs_id_t")) {
+            type = ecs_id(ecs_id_t);
+
         } else if (!ecs_os_strcmp(typename, "char*")) {
             type = ecs_id(ecs_string_t);
         } else {
-            type = ecs_lookup_symbol(world, typename, true);
+            type = ecs_lookup_symbol(world, typename, true, true);
         }
     } else {
         if (!ecs_os_strcmp(typename, "char")) {
@@ -650,7 +659,7 @@ ecs_entity_t meta_lookup(
             typename = "flecs.meta.string";
         }
 
-        type = ecs_lookup_symbol(world, typename, true);
+        type = ecs_lookup_symbol(world, typename, true, true);
     }
 
     if (count != 1) {
@@ -687,7 +696,7 @@ int meta_parse_struct(
     ecs_entity_t old_scope = ecs_set_scope(world, t);
 
     while ((ptr = meta_parse_member(ptr, &token, &ctx)) && ptr[0]) {
-        ecs_entity_t m = ecs_entity_init(world, &(ecs_entity_desc_t){
+        ecs_entity_t m = ecs_entity(world, {
             .name = token.name
         });
 
@@ -723,6 +732,10 @@ int meta_parse_constants(
 
     const char *ptr = desc;
     const char *name = ecs_get_name(world, t);
+    int32_t name_len = ecs_os_strlen(name);
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    const char *name_prefix = info->name_prefix;
+    int32_t name_prefix_len = name_prefix ? ecs_os_strlen(name_prefix) : 0;
 
     meta_parse_ctx_t ctx = {
         .name = name,
@@ -743,7 +756,19 @@ int meta_parse_constants(
             goto error;
         }
 
-        ecs_entity_t c = ecs_entity_init(world, &(ecs_entity_desc_t){
+        if (name_prefix) {
+            if (!ecs_os_strncmp(token.name, name_prefix, name_prefix_len)) {
+                ecs_os_memmove(token.name, token.name + name_prefix_len, 
+                    ecs_os_strlen(token.name) - name_prefix_len + 1);
+            }
+        }
+
+        if (!ecs_os_strncmp(token.name, name, name_len)) {
+            ecs_os_memmove(token.name, token.name + name_len, 
+                ecs_os_strlen(token.name) - name_len + 1);
+        }
+
+        ecs_entity_t c = ecs_entity(world, {
             .name = token.name
         });
 
@@ -807,8 +832,13 @@ int ecs_meta_from_desc(
             goto error;
         }
         break;
-    default:
+    case EcsPrimitiveType:
+    case EcsArrayType:
+    case EcsVectorType:
+    case EcsOpaqueType:
         break;
+    default:
+        ecs_throw(ECS_INTERNAL_ERROR, "invalid type kind");
     }
 
     return 0;

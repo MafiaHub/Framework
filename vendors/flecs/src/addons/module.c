@@ -87,8 +87,8 @@ ecs_entity_t ecs_import_from_library(
 {
     ecs_check(library_name != NULL, ECS_INVALID_PARAMETER, NULL);
 
-    char *import_func = (char*)module_name; /* safe */
-    char *module = (char*)module_name;
+    char *import_func = ECS_CONST_CAST(char*, module_name);
+    char *module = ECS_CONST_CAST(char*, module_name);
 
     if (!ecs_os_has_modules() || !ecs_os_has_dl()) {
         ecs_err(
@@ -203,6 +203,12 @@ ecs_entity_t ecs_module_init(
     if (!e) {
         char *module_path = ecs_module_path_from_c(c_name);
         e = ecs_new_from_fullpath(world, module_path);
+        ecs_set_symbol(world, e, module_path);
+        ecs_os_free(module_path);
+    } else if (!ecs_exists(world, e)) {
+        char *module_path = ecs_module_path_from_c(c_name);
+        ecs_ensure(world, e);
+        ecs_add_fullpath(world, e, module_path);
         ecs_set_symbol(world, e, module_path);
         ecs_os_free(module_path);
     }

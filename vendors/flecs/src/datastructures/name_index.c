@@ -34,11 +34,26 @@ void flecs_name_index_init(
     ecs_hashmap_t *hm,
     ecs_allocator_t *allocator) 
 {
-    _flecs_hashmap_init(hm, 
+    flecs_hashmap_init_(hm, 
         ECS_SIZEOF(ecs_hashed_string_t), ECS_SIZEOF(uint64_t), 
         flecs_name_index_hash, 
         flecs_name_index_compare,
         allocator);
+}
+
+void flecs_name_index_init_if(
+    ecs_hashmap_t *hm,
+    ecs_allocator_t *allocator) 
+{
+    if (!hm->compare) {
+        flecs_name_index_init(hm, allocator);
+    }
+}
+
+bool flecs_name_index_is_init(
+    const ecs_hashmap_t *hm)
+{
+    return hm->compare != NULL;
 }
 
 ecs_hashmap_t* flecs_name_index_new(
@@ -93,7 +108,7 @@ ecs_hashed_string_t flecs_get_hashed_string(
     }
 
     return (ecs_hashed_string_t) {
-        .value = (char*)name,
+        .value = ECS_CONST_CAST(char*, name),
         .length = length,
         .hash = hash
     };
@@ -182,7 +197,7 @@ void flecs_name_index_update_name(
         if (ids[i] == e) {
             ecs_hashed_string_t *key = ecs_vec_get_t(
                 &b->keys, ecs_hashed_string_t, i);
-            key->value = (char*)name;
+            key->value = ECS_CONST_CAST(char*, name);
             ecs_assert(ecs_os_strlen(name) == key->length,
                 ECS_INTERNAL_ERROR, NULL);
             ecs_assert(flecs_hash(name, key->length) == key->hash,

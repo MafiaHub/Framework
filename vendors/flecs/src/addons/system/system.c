@@ -42,8 +42,7 @@ ecs_entity_t ecs_run_intern(
     }
 
     if (tick_source) {
-        const EcsTickSource *tick = ecs_get(
-            world, tick_source, EcsTickSource);
+        const EcsTickSource *tick = ecs_get(world, tick_source, EcsTickSource);
 
         if (tick) {
             time_elapsed = tick->time_elapsed;
@@ -192,7 +191,7 @@ ecs_query_t* ecs_system_get_query(
     }
 }
 
-void* ecs_get_system_ctx(
+void* ecs_system_get_ctx(
     const ecs_world_t *world,
     ecs_entity_t system)
 {
@@ -204,7 +203,7 @@ void* ecs_get_system_ctx(
     }   
 }
 
-void* ecs_get_system_binding_ctx(
+void* ecs_system_get_binding_ctx(
     const ecs_world_t *world,
     ecs_entity_t system)
 {
@@ -228,6 +227,37 @@ void flecs_system_fini(ecs_system_t *sys) {
     }
 
     ecs_poly_free(sys, ecs_system_t);
+}
+
+static
+void flecs_system_init_timer(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    const ecs_system_desc_t *desc)
+{
+    if (ECS_NEQZERO(desc->interval) || ECS_NEQZERO(desc->rate) || 
+        ECS_NEQZERO(desc->tick_source)) 
+    {
+#ifdef FLECS_TIMER
+        if (ECS_NEQZERO(desc->interval)) {
+            ecs_set_interval(world, entity, desc->interval);
+        }
+
+        if (desc->rate) {
+            ecs_entity_t tick_source = desc->tick_source;
+            if (!tick_source) {
+                tick_source = entity;
+            }
+            ecs_set_rate(world, entity, desc->rate, tick_source);
+        } else if (desc->tick_source) {
+            ecs_set_tick_source(world, entity, desc->tick_source);
+        }
+#else
+        (void)world;
+        (void)entity;
+        ecs_abort(ECS_UNSUPPORTED, "timer module not available");
+#endif
+    }
 }
 
 ecs_entity_t ecs_system_init(
@@ -283,21 +313,7 @@ ecs_entity_t ecs_system_init(
         system->multi_threaded = desc->multi_threaded;
         system->no_readonly = desc->no_readonly;
 
-        if (desc->interval != 0 || desc->rate != 0 || desc->tick_source != 0) {
-#ifdef FLECS_TIMER
-            if (desc->interval != 0) {
-                ecs_set_interval(world, entity, desc->interval);
-            }
-
-            if (desc->rate) {
-                ecs_set_rate(world, entity, desc->rate, desc->tick_source);
-            } else if (desc->tick_source) {
-                ecs_set_tick_source(world, entity, desc->tick_source);
-            }
-#else
-            ecs_abort(ECS_UNSUPPORTED, "timer module not available");
-#endif
-        }
+        flecs_system_init_timer(world, entity, desc);
 
         if (ecs_get_name(world, entity)) {
             ecs_trace("#[green]system#[reset] %s created", 
@@ -306,7 +322,8 @@ ecs_entity_t ecs_system_init(
 
         ecs_defer_end(world);            
     } else {
-        ecs_system_t *system = ecs_poly(poly->poly, ecs_system_t);
+        ecs_poly_assert(poly->poly, ecs_system_t);
+        ecs_system_t *system = (ecs_system_t*)poly->poly;
 
         if (desc->run) {
             system->run = desc->run;
@@ -314,11 +331,29 @@ ecs_entity_t ecs_system_init(
         if (desc->callback) {
             system->action = desc->callback;
         }
+
+        if (system->ctx_free) {
+            if (system->ctx && system->ctx != desc->ctx) {
+                system->ctx_free(system->ctx);
+            }
+        }
+        if (system->binding_ctx_free) {
+            if (system->binding_ctx && system->binding_ctx != desc->binding_ctx) {
+                system->binding_ctx_free(system->binding_ctx);
+            }
+        }
+
         if (desc->ctx) {
             system->ctx = desc->ctx;
         }
         if (desc->binding_ctx) {
             system->binding_ctx = desc->binding_ctx;
+        }
+        if (desc->ctx_free) {
+            system->ctx_free = desc->ctx_free;
+        }
+        if (desc->binding_ctx_free) {
+            system->binding_ctx_free = desc->binding_ctx_free;
         }
         if (desc->query.filter.instanced) {
             ECS_BIT_SET(system->query->filter.flags, EcsFilterIsInstanced);
@@ -329,6 +364,8 @@ ecs_entity_t ecs_system_init(
         if (desc->no_readonly) {
             system->no_readonly = desc->no_readonly;
         }
+
+        flecs_system_init_timer(world, entity, desc);
     }
 
     ecs_poly_modified(world, entity, ecs_system_t);

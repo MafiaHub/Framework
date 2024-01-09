@@ -21,6 +21,8 @@ namespace flecs
  */
 template <typename T>
 struct ref {
+    ref() : m_world(nullptr), m_ref{} { }
+
     ref(world_t *world, entity_t entity, flecs::id_t id = 0)
         : m_ref()
     {
@@ -49,6 +51,14 @@ struct ref {
     T* get() {
         return static_cast<T*>(ecs_ref_get_id(
             m_world, &m_ref, this->m_ref.id));
+    }
+
+    T* try_get() {
+        if (!m_world || !m_ref.entity) {
+            return nullptr;
+        }
+
+        return get();
     }
 
     flecs::entity entity() const;

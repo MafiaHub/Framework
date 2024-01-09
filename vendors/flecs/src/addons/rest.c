@@ -7,57 +7,13 @@
 
 #ifdef FLECS_REST
 
-/* Time interval used to determine when to return a result from the cache. Use
- * a short interval so that clients still get realtime data, but multiple 
- * clients requesting for the same data can reuse the same result. */
-#define FLECS_REST_CACHE_TIMEOUT ((ecs_ftime_t)0.5)
-
-typedef struct {
-    char *content;
-    int32_t content_length;
-    ecs_ftime_t time;
-} ecs_rest_cached_t;
+static ECS_TAG_DECLARE(EcsRestPlecs);
 
 typedef struct {
     ecs_world_t *world;
-    ecs_entity_t entity;
     ecs_http_server_t *srv;
-    ecs_map_t reply_cache;
     int32_t rc;
-    ecs_ftime_t time;
 } ecs_rest_ctx_t;
-
-/* Global statistics */
-int64_t ecs_rest_request_count = 0;
-int64_t ecs_rest_entity_count = 0;
-int64_t ecs_rest_entity_error_count = 0;
-int64_t ecs_rest_query_count = 0;
-int64_t ecs_rest_query_error_count = 0;
-int64_t ecs_rest_query_name_count = 0;
-int64_t ecs_rest_query_name_error_count = 0;
-int64_t ecs_rest_query_name_from_cache_count = 0;
-int64_t ecs_rest_enable_count = 0;
-int64_t ecs_rest_enable_error_count = 0;
-int64_t ecs_rest_set_count = 0;
-int64_t ecs_rest_set_error_count = 0;
-int64_t ecs_rest_delete_count = 0;
-int64_t ecs_rest_delete_error_count = 0;
-int64_t ecs_rest_world_stats_count = 0;
-int64_t ecs_rest_pipeline_stats_count = 0;
-int64_t ecs_rest_stats_error_count = 0;
-
-static
-void flecs_rest_free_reply_cache(ecs_map_t *reply_cache) {
-    if (ecs_map_is_init(reply_cache)) {
-        ecs_map_iter_t it = ecs_map_iter(reply_cache);
-        while (ecs_map_next(&it)) {
-            ecs_rest_cached_t *reply = ecs_map_ptr(&it);
-            ecs_os_free(reply->content);
-            ecs_os_free(reply);
-        }
-        ecs_map_fini(reply_cache);
-    }
-}
 
 static ECS_COPY(EcsRest, dst, src, {
     ecs_rest_ctx_t *impl = src->impl;
@@ -82,7 +38,6 @@ static ECS_DTOR(EcsRest, ptr, {
         impl->rc --;
         if (!impl->rc) {
             ecs_http_server_fini(impl->srv);
-            flecs_rest_free_reply_cache(&impl->reply_cache);
             ecs_os_free(impl);
         }
     }
@@ -90,6 +45,7 @@ static ECS_DTOR(EcsRest, ptr, {
 })
 
 static char *rest_last_err;
+static ecs_os_api_log_t rest_prev_log;
 
 static 
 void flecs_rest_capture_log(
@@ -99,6 +55,17 @@ void flecs_rest_capture_log(
     const char *msg)
 {
     (void)file; (void)line;
+
+#ifdef FLECS_DEBUG
+    if (level < 0) {
+        /* Also log to previous log function in debug mode */
+        if (rest_prev_log) {
+            ecs_log_enable_colors(true);
+            rest_prev_log(level, file, line, msg);
+            ecs_log_enable_colors(false);
+        }
+    }
+#endif
 
     if (!rest_last_err && level < 0) {
         rest_last_err = ecs_os_strdup(msg);
@@ -171,12 +138,13 @@ void flecs_rest_string_param(
 {
     const char *value = ecs_http_get_param(req, name);
     if (value) {
-        *value_out = (char*)value;
+        *value_out = ECS_CONST_CAST(char*, value);
     }
 }
 
 static
 void flecs_rest_parse_json_ser_entity_params(
+    ecs_world_t *world,
     ecs_entity_to_json_desc_t *desc,
     const ecs_http_request_t *req)
 {
@@ -185,11 +153,20 @@ void flecs_rest_parse_json_ser_entity_params(
     flecs_rest_bool_param(req, "brief", &desc->serialize_brief);
     flecs_rest_bool_param(req, "link", &desc->serialize_link);
     flecs_rest_bool_param(req, "color", &desc->serialize_color);
+    flecs_rest_bool_param(req, "ids", &desc->serialize_ids);
     flecs_rest_bool_param(req, "id_labels", &desc->serialize_id_labels);
     flecs_rest_bool_param(req, "base", &desc->serialize_base);
     flecs_rest_bool_param(req, "values", &desc->serialize_values);
     flecs_rest_bool_param(req, "private", &desc->serialize_private);
     flecs_rest_bool_param(req, "type_info", &desc->serialize_type_info);
+    flecs_rest_bool_param(req, "matches", &desc->serialize_matches);
+    flecs_rest_bool_param(req, "alerts", &desc->serialize_alerts);
+
+    char *rel = NULL;
+    flecs_rest_string_param(req, "refs", &rel);
+    if (rel) {
+        desc->serialize_refs = ecs_lookup_fullpath(world, rel);
+    }
 }
 
 static
@@ -198,11 +175,14 @@ void flecs_rest_parse_json_ser_iter_params(
     const ecs_http_request_t *req)
 {
     flecs_rest_bool_param(req, "term_ids", &desc->serialize_term_ids);
+    flecs_rest_bool_param(req, "term_labels", &desc->serialize_term_labels);
     flecs_rest_bool_param(req, "ids", &desc->serialize_ids);
+    flecs_rest_bool_param(req, "id_labels", &desc->serialize_id_labels);
     flecs_rest_bool_param(req, "sources", &desc->serialize_sources);
     flecs_rest_bool_param(req, "variables", &desc->serialize_variables);
     flecs_rest_bool_param(req, "is_set", &desc->serialize_is_set);
     flecs_rest_bool_param(req, "values", &desc->serialize_values);
+    flecs_rest_bool_param(req, "private", &desc->serialize_private);
     flecs_rest_bool_param(req, "entities", &desc->serialize_entities);
     flecs_rest_bool_param(req, "entity_labels", &desc->serialize_entity_labels);
     flecs_rest_bool_param(req, "variable_labels", &desc->serialize_variable_labels);
@@ -210,7 +190,7 @@ void flecs_rest_parse_json_ser_iter_params(
     flecs_rest_bool_param(req, "colors", &desc->serialize_colors);
     flecs_rest_bool_param(req, "duration", &desc->measure_eval_duration);
     flecs_rest_bool_param(req, "type_info", &desc->serialize_type_info);
-    flecs_rest_bool_param(req, "serialize_table", &desc->serialize_table);
+    flecs_rest_bool_param(req, "table", &desc->serialize_table);
 }
 
 static
@@ -222,22 +202,23 @@ bool flecs_rest_reply_entity(
     char *path = &req->path[7];
     ecs_dbg_2("rest: request entity '%s'", path);
 
-    ecs_os_linc(&ecs_rest_entity_count);
-
     ecs_entity_t e = ecs_lookup_path_w_sep(
         world, 0, path, "/", NULL, false);
     if (!e) {
         ecs_dbg_2("rest: entity '%s' not found", path);
         flecs_reply_error(reply, "entity '%s' not found", path);
         reply->code = 404;
-        ecs_os_linc(&ecs_rest_entity_error_count);
         return true;
     }
 
     ecs_entity_to_json_desc_t desc = ECS_ENTITY_TO_JSON_INIT;
-    flecs_rest_parse_json_ser_entity_params(&desc, req);
-
-    ecs_entity_to_json_buf(world, e, &reply->body, &desc);
+    flecs_rest_parse_json_ser_entity_params(world, &desc, req);
+    if (ecs_entity_to_json_buf(world, e, &reply->body, &desc) != 0) {
+        ecs_strbuf_reset(&reply->body);
+        reply->code = 500;
+        reply->status = "Internal server error";
+        return true;
+    }
     return true;
 }
 
@@ -248,7 +229,12 @@ bool flecs_rest_reply_world(
     ecs_http_reply_t *reply)
 {
     (void)req;
-    ecs_world_to_json_buf(world, &reply->body, NULL);
+    if (ecs_world_to_json_buf(world, &reply->body, NULL) != 0) {
+        ecs_strbuf_reset(&reply->body);
+        reply->code = 500;
+        reply->status = "Internal server error";
+        return true;
+    }
     return true;
 }
 
@@ -274,11 +260,8 @@ bool flecs_rest_set(
     ecs_http_reply_t *reply,
     const char *path)
 {
-    ecs_os_linc(&ecs_rest_set_count);
-
     ecs_entity_t e;
     if (!(e = flecs_rest_entity_from_path(world, reply, path))) {
-        ecs_os_linc(&ecs_rest_set_error_count);
         return true;
     }
 
@@ -289,7 +272,6 @@ bool flecs_rest_set(
     if (ecs_entity_from_json(world, e, data, &desc) == NULL) {
         flecs_reply_error(reply, "invalid request");
         reply->code = 400;
-        ecs_os_linc(&ecs_rest_set_error_count);
         return true;
     }
     
@@ -302,11 +284,8 @@ bool flecs_rest_delete(
     ecs_http_reply_t *reply,
     const char *path)
 {
-    ecs_os_linc(&ecs_rest_set_count);
-
     ecs_entity_t e;
     if (!(e = flecs_rest_entity_from_path(world, reply, path))) {
-        ecs_os_linc(&ecs_rest_delete_error_count);
         return true;
     }
 
@@ -322,11 +301,8 @@ bool flecs_rest_enable(
     const char *path,
     bool enable)
 {
-    ecs_os_linc(&ecs_rest_enable_count);
-
     ecs_entity_t e;
     if (!(e = flecs_rest_entity_from_path(world, reply, path))) {
-        ecs_os_linc(&ecs_rest_enable_error_count);
         return true;
     }
 
@@ -336,13 +312,72 @@ bool flecs_rest_enable(
 }
 
 static
-void flecs_rest_iter_to_reply(
+bool flecs_rest_script(
+    ecs_world_t *world,
+    const ecs_http_request_t* req,
+    ecs_http_reply_t *reply)
+{
+    (void)world;
+    (void)req;
+    (void)reply;
+#ifdef FLECS_PLECS
+    const char *data = ecs_http_get_param(req, "data");
+    if (!data) {
+        flecs_reply_error(reply, "missing data parameter");
+        return true;
+    }
+
+    bool prev_color = ecs_log_enable_colors(false);
+    rest_prev_log = ecs_os_api.log_;
+    ecs_os_api.log_ = flecs_rest_capture_log;
+
+    ecs_entity_t script = ecs_script(world, {
+        .entity = ecs_entity(world, { .name = "scripts.main" }),
+        .str = data
+    });
+
+    if (!script) {
+        char *err = flecs_rest_get_captured_log();
+        char *escaped_err = ecs_astresc('"', err);
+        flecs_reply_error(reply, escaped_err);
+        reply->code = 400; /* bad request */
+        ecs_os_free(escaped_err);
+        ecs_os_free(err);
+    }
+
+    ecs_os_api.log_ = rest_prev_log;
+    ecs_log_enable_colors(prev_color);
+
+    return true;
+#else
+    return false;
+#endif
+}
+
+static
+void flecs_rest_reply_set_captured_log(
+    ecs_http_reply_t *reply)
+{
+    char *err = flecs_rest_get_captured_log();
+    if (err) {
+        char *escaped_err = ecs_astresc('"', err);
+        flecs_reply_error(reply, escaped_err);
+        reply->code = 400;
+        ecs_os_free(escaped_err);
+        ecs_os_free(err);
+    }
+}
+
+static
+int flecs_rest_iter_to_reply(
     ecs_world_t *world,
     const ecs_http_request_t* req,
     ecs_http_reply_t *reply,
     ecs_iter_t *it)
 {
-    ecs_iter_to_json_desc_t desc = ECS_ITER_TO_JSON_INIT;
+    ecs_iter_to_json_desc_t desc = {0};
+    desc.serialize_entities = true;
+    desc.serialize_variables = true;
     flecs_rest_parse_json_ser_iter_params(&desc, req);
 
     int32_t offset = 0;
@@ -351,66 +386,69 @@ void flecs_rest_iter_to_reply(
     flecs_rest_int_param(req, "offset", &offset);
     flecs_rest_int_param(req, "limit", &limit);
 
+    if (offset < 0 || limit < 0) {
+        flecs_reply_error(reply, "invalid offset/limit parameter");
+        reply->code = 400;
+        return -1;
+    }
+
     ecs_iter_t pit = ecs_page_iter(it, offset, limit);
-    ecs_iter_to_json_buf(world, &pit, &reply->body, &desc);
+    if (ecs_iter_to_json_buf(world, &pit, &reply->body, &desc)) {
+        flecs_rest_reply_set_captured_log(reply);
+        return -1;
+    }
+
+    return 0;
 }
 
 static
 bool flecs_rest_reply_existing_query(
     ecs_world_t *world,
-    ecs_rest_ctx_t *impl,
     const ecs_http_request_t* req,
     ecs_http_reply_t *reply,
     const char *name)
 {
-    ecs_os_linc(&ecs_rest_query_name_count);
-
     ecs_entity_t q = ecs_lookup_fullpath(world, name);
     if (!q) {
         flecs_reply_error(reply, "unresolved identifier '%s'", name);
         reply->code = 404;
-        ecs_os_linc(&ecs_rest_query_name_error_count);
         return true;
     }
 
-    ecs_map_init_if(&impl->reply_cache, NULL);
-    ecs_rest_cached_t *cached = ecs_map_get_deref(&impl->reply_cache, 
-        ecs_rest_cached_t, q);
-    if (cached) {
-        if ((impl->time - cached->time) > FLECS_REST_CACHE_TIMEOUT) {
-            ecs_os_free(cached->content);
-        } else {
-            /* Cache hit */
-            ecs_strbuf_appendstr_zerocpyn_const(
-                &reply->body, cached->content, cached->content_length);
-            ecs_os_linc(&ecs_rest_query_name_from_cache_count);
-            return true;
-        }
-    } else {
-        cached = ecs_map_insert_alloc_t(
-            &impl->reply_cache, ecs_rest_cached_t, q);
-    }
-
-    /* Cache miss */
     const EcsPoly *poly = ecs_get_pair(world, q, EcsPoly, EcsQuery);
     if (!poly) {
         flecs_reply_error(reply, 
             "resolved identifier '%s' is not a query", name);
         reply->code = 400;
-        ecs_os_linc(&ecs_rest_query_name_error_count);
         return true;
     }
 
     ecs_iter_t it;
     ecs_iter_poly(world, poly->poly, &it, NULL);
+
+    ecs_dbg_2("rest: request query '%s'", q);
+    bool prev_color = ecs_log_enable_colors(false);
+    rest_prev_log = ecs_os_api.log_;
+    ecs_os_api.log_ = flecs_rest_capture_log;
+
+    const char *vars = ecs_http_get_param(req, "vars");
+    if (vars) {
+        if (!ecs_poly_is(poly->poly, ecs_rule_t)) {
+            flecs_reply_error(reply, 
+                "variables are only supported for rule queries");
+            reply->code = 400;
+            return true;
+        }
+        if (ecs_rule_parse_vars(poly->poly, &it, vars) == NULL) {
+            flecs_rest_reply_set_captured_log(reply);
+            return true;
+        }
+    }
+
     flecs_rest_iter_to_reply(world, req, reply, &it);
 
-    cached->content_length = ecs_strbuf_written(&reply->body);
-    cached->content = ecs_strbuf_get(&reply->body);
-    ecs_strbuf_reset(&reply->body);
-    ecs_strbuf_appendstr_zerocpyn_const(
-        &reply->body, cached->content, cached->content_length);
-    cached->time = impl->time;
+    ecs_os_api.log_ = rest_prev_log;
+    ecs_log_enable_colors(prev_color);    
 
     return true;
 }
@@ -418,48 +456,38 @@ bool flecs_rest_reply_existing_query(
 static
 bool flecs_rest_reply_query(
     ecs_world_t *world,
-    ecs_rest_ctx_t *impl,
     const ecs_http_request_t* req,
     ecs_http_reply_t *reply)
 {
     const char *q_name = ecs_http_get_param(req, "name");
     if (q_name) {
-        return flecs_rest_reply_existing_query(world, impl, req, reply, q_name);
+        return flecs_rest_reply_existing_query(world, req, reply, q_name);
     }
-
-    ecs_os_linc(&ecs_rest_query_count);
 
     const char *q = ecs_http_get_param(req, "q");
     if (!q) {
         ecs_strbuf_appendlit(&reply->body, "Missing parameter 'q'");
         reply->code = 400; /* bad request */
-        ecs_os_linc(&ecs_rest_query_error_count);
         return true;
     }
 
     ecs_dbg_2("rest: request query '%s'", q);
     bool prev_color = ecs_log_enable_colors(false);
-    ecs_os_api_log_t prev_log_ = ecs_os_api.log_;
+    rest_prev_log = ecs_os_api.log_;
     ecs_os_api.log_ = flecs_rest_capture_log;
 
     ecs_rule_t *r = ecs_rule_init(world, &(ecs_filter_desc_t){
         .expr = q
     });
     if (!r) {
-        char *err = flecs_rest_get_captured_log();
-        char *escaped_err = ecs_astresc('"', err);
-        flecs_reply_error(reply, escaped_err);
-        ecs_os_linc(&ecs_rest_query_error_count);
-        reply->code = 400; /* bad request */
-        ecs_os_free(escaped_err);
-        ecs_os_free(err);
+        flecs_rest_reply_set_captured_log(reply);
     } else {
         ecs_iter_t it = ecs_rule_iter(world, r);
         flecs_rest_iter_to_reply(world, req, reply, &it);
         ecs_rule_fini(r);
     }
 
-    ecs_os_api.log_ = prev_log_;
+    ecs_os_api.log_ = rest_prev_log;
     ecs_log_enable_colors(prev_color);
 
     return true;
@@ -468,7 +496,7 @@ bool flecs_rest_reply_query(
 #ifdef FLECS_MONITOR
 
 static
-void _flecs_rest_array_append(
+void flecs_rest_array_append_(
     ecs_strbuf_t *reply,
     const char *field,
     int32_t field_len,
@@ -491,7 +519,7 @@ void _flecs_rest_array_append(
 }
 
 #define flecs_rest_array_append(reply, field, values, t)\
-    _flecs_rest_array_append(reply, field, sizeof(field) - 1, values, t)
+    flecs_rest_array_append_(reply, field, sizeof(field) - 1, values, t)
 
 static
 void flecs_rest_gauge_append(
@@ -585,21 +613,15 @@ void flecs_world_stats_to_json(
 
     ECS_GAUGE_APPEND(reply, stats, tables.count, "Tables in the world (including empty)");
     ECS_GAUGE_APPEND(reply, stats, tables.empty_count, "Empty tables in the world");
-    ECS_GAUGE_APPEND(reply, stats, tables.tag_only_count, "Tables with only tags");
-    ECS_GAUGE_APPEND(reply, stats, tables.trivial_only_count, "Tables with only trivial types (no hooks)");
-    ECS_GAUGE_APPEND(reply, stats, tables.record_count, "Table records registered with search indices");
-    ECS_GAUGE_APPEND(reply, stats, tables.storage_count, "Component storages for all tables");
     ECS_COUNTER_APPEND(reply, stats, tables.create_count, "Number of new tables created");
     ECS_COUNTER_APPEND(reply, stats, tables.delete_count, "Number of tables deleted");
 
-    ECS_GAUGE_APPEND(reply, stats, ids.count, "Component, tag and pair ids in use");
-    ECS_GAUGE_APPEND(reply, stats, ids.tag_count, "Tag ids in use");
-    ECS_GAUGE_APPEND(reply, stats, ids.component_count, "Component ids in use");
-    ECS_GAUGE_APPEND(reply, stats, ids.pair_count, "Pair ids in use");
-    ECS_GAUGE_APPEND(reply, stats, ids.wildcard_count, "Wildcard ids in use");
-    ECS_GAUGE_APPEND(reply, stats, ids.type_count, "Registered component types");
-    ECS_COUNTER_APPEND(reply, stats, ids.create_count, "Number of new component, tag and pair ids created");
-    ECS_COUNTER_APPEND(reply, stats, ids.delete_count, "Number of component, pair and tag ids deleted");
+    ECS_GAUGE_APPEND(reply, stats, components.tag_count, "Tag ids in use");
+    ECS_GAUGE_APPEND(reply, stats, components.component_count, "Component ids in use");
+    ECS_GAUGE_APPEND(reply, stats, components.pair_count, "Pair ids in use");
+    ECS_GAUGE_APPEND(reply, stats, components.type_count, "Registered component types");
+    ECS_COUNTER_APPEND(reply, stats, components.create_count, "Number of new component, tag and pair ids created");
+    ECS_COUNTER_APPEND(reply, stats, components.delete_count, "Number of component, pair and tag ids deleted");
 
     ECS_GAUGE_APPEND(reply, stats, queries.query_count, "Queries in the world");
     ECS_GAUGE_APPEND(reply, stats, queries.observer_count, "Observers in the world");
@@ -615,20 +637,6 @@ void flecs_world_stats_to_json(
     ECS_COUNTER_APPEND(reply, stats, memory.stack_alloc_count, "Pages allocated by stack allocators");
     ECS_COUNTER_APPEND(reply, stats, memory.stack_free_count, "Pages freed by stack allocators");
     ECS_GAUGE_APPEND(reply, stats, memory.stack_outstanding_alloc_count, "Outstanding page allocations");
-
-    ECS_COUNTER_APPEND(reply, stats, rest.request_count, "Received requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.entity_count, "Received entity/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.entity_error_count, "Failed entity/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.query_count, "Received query/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.query_error_count, "Failed query/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.query_name_count, "Received named query/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.query_name_error_count, "Failed named query/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.query_name_from_cache_count, "Named query/ requests from cache");
-    ECS_COUNTER_APPEND(reply, stats, rest.enable_count, "Received enable/ and disable/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.enable_error_count, "Failed enable/ and disable/ requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.world_stats_count, "Received world stats requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.pipeline_stats_count, "Received pipeline stats requests");
-    ECS_COUNTER_APPEND(reply, stats, rest.stats_error_count, "Failed stats requests");
 
     ECS_COUNTER_APPEND(reply, stats, http.request_received_count, "Received requests");
     ECS_COUNTER_APPEND(reply, stats, http.request_invalid_count, "Received invalid requests");
@@ -672,8 +680,8 @@ void flecs_pipeline_stats_to_json(
 {
     ecs_strbuf_list_push(reply, "[", ",");
 
-    int32_t i, count = ecs_vector_count(stats->stats.systems);
-    ecs_entity_t *ids = ecs_vector_first(stats->stats.systems, ecs_entity_t);
+    int32_t i, count = ecs_vec_count(&stats->stats.systems), sync_cur = 0;
+    ecs_entity_t *ids = ecs_vec_first_t(&stats->stats.systems, ecs_entity_t);
     for (i = 0; i < count; i ++) {
         ecs_entity_t id = ids[i];
         
@@ -686,7 +694,25 @@ void flecs_pipeline_stats_to_json(
         } else {
             /* Sync point */
             ecs_strbuf_list_push(reply, "{", ",");
+            ecs_sync_stats_t *sync_stats = ecs_vec_get_t(
+                &stats->stats.sync_points, ecs_sync_stats_t, sync_cur);
+
+            ecs_strbuf_list_appendlit(reply, "\"system_count\":");
+            ecs_strbuf_appendint(reply, sync_stats->system_count);
+
+            ecs_strbuf_list_appendlit(reply, "\"multi_threaded\":");
+            ecs_strbuf_appendbool(reply, sync_stats->multi_threaded);
+
+            ecs_strbuf_list_appendlit(reply, "\"no_readonly\":");
+            ecs_strbuf_appendbool(reply, sync_stats->no_readonly);
+
+            ECS_GAUGE_APPEND_T(reply, sync_stats, 
+                time_spent, stats->stats.t, "");
+            ECS_GAUGE_APPEND_T(reply, sync_stats, 
+                commands_enqueued, stats->stats.t, "");
+
             ecs_strbuf_list_pop(reply, "}");
+            sync_cur ++;
         }
     }
 
@@ -711,7 +737,6 @@ bool flecs_rest_reply_stats(
         if (!period) {
             flecs_reply_error(reply, "bad request (invalid period string)");
             reply->code = 400;
-            ecs_os_linc(&ecs_rest_stats_error_count);
             return false;
         }
     }
@@ -720,24 +745,19 @@ bool flecs_rest_reply_stats(
         const EcsWorldStats *stats = ecs_get_pair(world, EcsWorld, 
             EcsWorldStats, period);
         flecs_world_stats_to_json(&reply->body, stats);
-        ecs_os_linc(&ecs_rest_world_stats_count);
         return true;
 
     } else if (!ecs_os_strcmp(category, "pipeline")) {
         const EcsPipelineStats *stats = ecs_get_pair(world, EcsWorld, 
             EcsPipelineStats, period);
         flecs_pipeline_stats_to_json(world, &reply->body, stats);
-        ecs_os_linc(&ecs_rest_pipeline_stats_count);
         return true;
 
     } else {
         flecs_reply_error(reply, "bad request (unsupported category)");
         reply->code = 400;
-        ecs_os_linc(&ecs_rest_stats_error_count);
         return false;
     }
-
-    return true;
 }
 #else
 static
@@ -779,17 +799,14 @@ void flecs_rest_reply_table_append_memory(
     int32_t used = 0, allocated = 0;
 
     used += table->data.entities.count * ECS_SIZEOF(ecs_entity_t);
-    used += table->data.records.count * ECS_SIZEOF(ecs_record_t*);
     allocated += table->data.entities.size * ECS_SIZEOF(ecs_entity_t);
-    allocated += table->data.records.size * ECS_SIZEOF(ecs_record_t*);
 
-    int32_t i, storage_count = table->storage_count;
-    ecs_type_info_t **ti = table->type_info;
-    ecs_vec_t *storages = table->data.columns;
+    int32_t i, storage_count = table->column_count;
+    ecs_column_t *columns = table->data.columns;
 
     for (i = 0; i < storage_count; i ++) {
-        used += storages[i].count * ti[i]->size;
-        allocated += storages[i].size * ti[i]->size;
+        used += columns[i].data.count * columns[i].ti->size;
+        allocated += columns[i].data.size * columns[i].ti->size;
     }
 
     ecs_strbuf_list_push(reply, "{", ",");
@@ -812,7 +829,6 @@ void flecs_rest_reply_table_append(
     ecs_strbuf_list_append(reply, "\"count\":%d", ecs_table_count(table));
     ecs_strbuf_list_append(reply, "\"memory\":");
     flecs_rest_reply_table_append_memory(reply, table);
-    ecs_strbuf_list_append(reply, "\"refcount\":%d", table->refcount);
     ecs_strbuf_list_pop(reply, "}");
 }
 
@@ -845,8 +861,6 @@ bool flecs_rest_reply(
     ecs_rest_ctx_t *impl = ctx;
     ecs_world_t *world = impl->world;
 
-    ecs_os_linc(&ecs_rest_request_count);
-
     if (req->path == NULL) {
         ecs_dbg("rest: bad request (missing path)");
         flecs_reply_error(reply, "bad request (missing path)");
@@ -861,7 +875,7 @@ bool flecs_rest_reply(
 
         /* Query endpoint */
         } else if (!ecs_os_strcmp(req->path, "query")) {
-            return flecs_rest_reply_query(world, impl, req, reply);
+            return flecs_rest_reply_query(world, req, reply);
 
         /* World endpoint */
         } else if (!ecs_os_strcmp(req->path, "world")) {
@@ -892,10 +906,47 @@ bool flecs_rest_reply(
         /* Disable endpoint */
         } else if (!ecs_os_strncmp(req->path, "disable/", 8)) {
             return flecs_rest_enable(world, reply, &req->path[8], false);
+
+        /* Script endpoint */
+        } else if (!ecs_os_strncmp(req->path, "script", 6)) {
+            return flecs_rest_script(world, req, reply);
         }
     }
 
     return false;
+}
+
+ecs_http_server_t* ecs_rest_server_init(
+    ecs_world_t *world,
+    const ecs_http_server_desc_t *desc)
+{
+    ecs_rest_ctx_t *srv_ctx = ecs_os_calloc_t(ecs_rest_ctx_t);
+    ecs_http_server_desc_t private_desc = {0};
+    if (desc) {
+        private_desc = *desc;
+    }
+    private_desc.callback = flecs_rest_reply;
+    private_desc.ctx = srv_ctx;
+
+    ecs_http_server_t *srv = ecs_http_server_init(&private_desc);
+    if (!srv) {
+        ecs_os_free(srv_ctx);
+        return NULL;
+    }
+
+    srv_ctx->world = world;
+    srv_ctx->srv = srv;
+    srv_ctx->rc = 1;
+    srv_ctx->srv = srv;
+    return srv;
+}
+
+void ecs_rest_server_fini(
+    ecs_http_server_t *srv)
+{
+    ecs_rest_ctx_t *srv_ctx = ecs_http_server_ctx(srv);
+    ecs_os_free(srv_ctx);
+    ecs_http_server_fini(srv);
 }
 
 static
@@ -908,30 +959,22 @@ void flecs_on_set_rest(ecs_iter_t *it) {
             rest[i].port = ECS_REST_DEFAULT_PORT;
         }
 
-        ecs_rest_ctx_t *srv_ctx = ecs_os_calloc_t(ecs_rest_ctx_t);
-        ecs_http_server_t *srv = ecs_http_server_init(&(ecs_http_server_desc_t){
-            .ipaddr = rest[i].ipaddr,
-            .port = rest[i].port,
-            .callback = flecs_rest_reply,
-            .ctx = srv_ctx
-        });
+        ecs_http_server_t *srv = ecs_rest_server_init(it->real_world,
+            &(ecs_http_server_desc_t){ 
+                .ipaddr = rest[i].ipaddr, 
+                .port = rest[i].port 
+            });
 
         if (!srv) {
             const char *ipaddr = rest[i].ipaddr ? rest[i].ipaddr : "0.0.0.0";
             ecs_err("failed to create REST server on %s:%u", 
                 ipaddr, rest[i].port);
-            ecs_os_free(srv_ctx);
             continue;
         }
 
-        srv_ctx->world = it->world;
-        srv_ctx->entity = it->entities[i];
-        srv_ctx->srv = srv;
-        srv_ctx->rc = 1;
+        rest[i].impl = ecs_http_server_ctx(srv);
 
-        rest[i].impl = srv_ctx;
-
-        ecs_http_server_start(srv_ctx->srv);
+        ecs_http_server_start(srv);
     }
 }
 
@@ -949,7 +992,6 @@ void DequeueRest(ecs_iter_t *it) {
     for(i = 0; i < it->count; i ++) {
         ecs_rest_ctx_t *ctx = rest[i].impl;
         if (ctx) {
-            ctx->time += it->delta_time;
             ecs_http_server_dequeue(ctx->srv, it->delta_time);
         }
     } 
@@ -993,6 +1035,9 @@ void FlecsRestImport(
     ECS_MODULE(world, FlecsRest);
 
     ECS_IMPORT(world, FlecsPipeline);
+#ifdef FLECS_PLECS
+    ECS_IMPORT(world, FlecsScript);
+#endif
 
     ecs_set_name_prefix(world, "Ecs");
 
@@ -1008,6 +1053,11 @@ void FlecsRestImport(
 
     ECS_SYSTEM(world, DequeueRest, EcsPostFrame, EcsRest);
 
+    ecs_system(world, {
+        .entity = ecs_id(DequeueRest),
+        .no_readonly = true
+    });
+
     ecs_observer(world, {
         .filter = { 
             .terms = {{ .id = EcsDisabled, .src.id = ecs_id(FlecsRest) }}
@@ -1015,6 +1065,9 @@ void FlecsRestImport(
         .events = {EcsOnAdd, EcsOnRemove},
         .callback = DisableRest
     });
+
+    ecs_set_name_prefix(world, "EcsRest");
+    ECS_TAG_DEFINE(world, EcsRestPlecs);
 }
 
 #endif

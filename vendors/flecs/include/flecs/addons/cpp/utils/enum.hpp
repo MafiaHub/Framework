@@ -64,16 +64,38 @@ struct enum_last {
 
 namespace _ {
 
-#ifdef ECS_TARGET_MSVC
-#define ECS_SIZE_T_STR "unsigned __int64"
-#elif defined(__clang__)
-#define ECS_SIZE_T_STR "size_t"
+#if INTPTR_MAX == INT64_MAX
+    #ifdef ECS_TARGET_MSVC
+        #if _MSC_VER >= 1930
+            #define ECS_SIZE_T_STR "unsigned __int64"
+        #else
+            #define ECS_SIZE_T_STR "unsigned int"
+        #endif 
+    #elif defined(__clang__)
+        #define ECS_SIZE_T_STR "size_t"
+    #else
+        #ifdef ECS_TARGET_WINDOWS
+            #define ECS_SIZE_T_STR "constexpr size_t; size_t = long long unsigned int"
+        #else
+            #define ECS_SIZE_T_STR "constexpr size_t; size_t = long unsigned int"
+        #endif
+    #endif
 #else
-#ifdef ECS_TARGET_WINDOWS
-#define ECS_SIZE_T_STR "constexpr size_t; size_t = long long unsigned int"
-#else
-#define ECS_SIZE_T_STR "constexpr size_t; size_t = long unsigned int"
-#endif
+    #ifdef ECS_TARGET_MSVC
+        #if _MSC_VER >= 1930
+            #define ECS_SIZE_T_STR "unsigned __int32"
+        #else
+            #define ECS_SIZE_T_STR "unsigned int"
+        #endif 
+    #elif defined(__clang__)
+        #define ECS_SIZE_T_STR "size_t"
+    #else
+        #ifdef ECS_TARGET_WINDOWS
+            #define ECS_SIZE_T_STR "constexpr size_t; size_t = unsigned int"
+        #else
+            #define ECS_SIZE_T_STR "constexpr size_t; size_t = unsigned int"
+        #endif
+    #endif
 #endif
 
 template <typename E>
@@ -131,7 +153,8 @@ static const char* enum_constant_to_name() {
     static const size_t len = ECS_FUNC_TYPE_LEN(const char*, enum_constant_to_name, ECS_FUNC_NAME);
     static char result[len + 1] = {};
     return ecs_cpp_get_constant_name(
-        result, ECS_FUNC_NAME, string::length(ECS_FUNC_NAME));
+        result, ECS_FUNC_NAME, string::length(ECS_FUNC_NAME),
+            ECS_FUNC_NAME_BACK);
 }
 
 /** Enumeration constant data */

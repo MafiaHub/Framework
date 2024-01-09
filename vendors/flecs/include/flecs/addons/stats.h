@@ -53,26 +53,20 @@ typedef struct ecs_world_stats_t {
         ecs_metric_t not_alive_count;     /**< Number of not alive (recyclable) entity ids */
     } entities;
 
-    /* Components and ids */
+    /* Component ids */
     struct {
-        ecs_metric_t count;               /**< Number of ids (excluding wildcards) */
         ecs_metric_t tag_count;           /**< Number of tag ids (ids without data) */
         ecs_metric_t component_count;     /**< Number of components ids (ids with data) */
         ecs_metric_t pair_count;          /**< Number of pair ids */
-        ecs_metric_t wildcard_count;      /**< Number of wildcard ids */
         ecs_metric_t type_count;          /**< Number of registered types */
         ecs_metric_t create_count;        /**< Number of times id has been created */
         ecs_metric_t delete_count;        /**< Number of times id has been deleted */
-    } ids;
+    } components;
 
     /* Tables */
     struct {
         ecs_metric_t count;                /**< Number of tables */
         ecs_metric_t empty_count;          /**< Number of empty tables */
-        ecs_metric_t tag_only_count;       /**< Number of tables with only tags */
-        ecs_metric_t trivial_only_count;   /**< Number of tables with only trivial components */
-        ecs_metric_t record_count;         /**< Number of table cache records */
-        ecs_metric_t storage_count;        /**< Number of table storages */
         ecs_metric_t create_count;         /**< Number of times table has been created */
         ecs_metric_t delete_count;         /**< Number of times table has been deleted */
     } tables;
@@ -139,23 +133,6 @@ typedef struct ecs_world_stats_t {
         ecs_metric_t stack_outstanding_alloc_count; /**< Difference between allocs & frees */
     } memory;
 
-    /* REST statistics */
-    struct {
-        ecs_metric_t request_count;
-        ecs_metric_t entity_count;
-        ecs_metric_t entity_error_count;
-        ecs_metric_t query_count;
-        ecs_metric_t query_error_count;
-        ecs_metric_t query_name_count;
-        ecs_metric_t query_name_error_count;
-        ecs_metric_t query_name_from_cache_count;
-        ecs_metric_t enable_count;
-        ecs_metric_t enable_error_count;
-        ecs_metric_t world_stats_count;
-        ecs_metric_t pipeline_stats_count;
-        ecs_metric_t stats_error_count;
-    } rest;
-
     /* HTTP statistics */
     struct {
         ecs_metric_t request_received_count;
@@ -192,8 +169,6 @@ typedef struct ecs_system_stats_t {
     int64_t first_;
     ecs_metric_t time_spent;       /**< Time spent processing a system */
     ecs_metric_t invoke_count;     /**< Number of times system is invoked */
-    ecs_metric_t active;           /**< Whether system is active (is matched with >0 entities) */
-    ecs_metric_t enabled;          /**< Whether system is enabled */
     int64_t last_;
 
     bool task;                     /**< Is system a task */
@@ -201,11 +176,29 @@ typedef struct ecs_system_stats_t {
     ecs_query_stats_t query;
 } ecs_system_stats_t;
 
+/** Statistics for sync point */
+typedef struct ecs_sync_stats_t {
+    int64_t first_;
+    ecs_metric_t time_spent;
+    ecs_metric_t commands_enqueued;
+    int64_t last_;
+
+    int32_t system_count;
+    bool multi_threaded;
+    bool no_readonly;
+} ecs_sync_stats_t;
+
 /** Statistics for all systems in a pipeline. */
 typedef struct ecs_pipeline_stats_t {
+    /* Allow for initializing struct with {0} */
+    int8_t canary_;
+
     /** Vector with system ids of all systems in the pipeline. The systems are
      * stored in the order they are executed. Merges are represented by a 0. */
-    ecs_vector_t *systems;
+    ecs_vec_t systems;
+    
+    /** Vector with sync point stats */
+    ecs_vec_t sync_points;
 
     /** Map with system statistics. For each system in the systems vector, an
      * entry in the map exists of type ecs_system_stats_t. */

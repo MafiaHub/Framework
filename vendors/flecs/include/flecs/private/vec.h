@@ -6,12 +6,18 @@
 #ifndef FLECS_VEC_H
 #define FLECS_VEC_H
 
+#include "flecs/private/api_defines.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** A component column. */
 typedef struct ecs_vec_t {
     void *array;
     int32_t count;
     int32_t size;
-#ifdef FLECS_DEBUG
+#ifdef FLECS_SANITIZE
     ecs_size_t elem_size;
 #endif
 } ecs_vec_t;
@@ -25,6 +31,14 @@ ecs_vec_t* ecs_vec_init(
 
 #define ecs_vec_init_t(allocator, vec, T, elem_count) \
     ecs_vec_init(allocator, vec, ECS_SIZEOF(T), elem_count)
+
+FLECS_API
+void ecs_vec_init_if(
+    ecs_vec_t *vec,
+    ecs_size_t size);
+
+#define ecs_vec_init_if_t(vec, T) \
+    ecs_vec_init_if(vec, ECS_SIZEOF(T))
 
 FLECS_API
 void ecs_vec_fini(
@@ -73,7 +87,7 @@ void ecs_vec_remove_last(
 FLECS_API
 ecs_vec_t ecs_vec_copy(
     struct ecs_allocator_t *allocator,
-    ecs_vec_t *vec,
+    const ecs_vec_t *vec,
     ecs_size_t size);
 
 #define ecs_vec_copy_t(allocator, vec, T) \
@@ -97,6 +111,36 @@ void ecs_vec_set_size(
 
 #define ecs_vec_set_size_t(allocator, vec, T, elem_count) \
     ecs_vec_set_size(allocator, vec, ECS_SIZEOF(T), elem_count)
+
+FLECS_API
+void ecs_vec_set_min_size(
+    struct ecs_allocator_t *allocator,
+    ecs_vec_t *vec,
+    ecs_size_t size,
+    int32_t elem_count);
+
+#define ecs_vec_set_min_size_t(allocator, vec, T, elem_count) \
+    ecs_vec_set_min_size(allocator, vec, ECS_SIZEOF(T), elem_count)
+
+FLECS_API
+void ecs_vec_set_min_count(
+    struct ecs_allocator_t *allocator,
+    ecs_vec_t *vec,
+    ecs_size_t size,
+    int32_t elem_count);
+
+#define ecs_vec_set_min_count_t(allocator, vec, T, elem_count) \
+    ecs_vec_set_min_count(allocator, vec, ECS_SIZEOF(T), elem_count)
+
+FLECS_API
+void ecs_vec_set_min_count_zeromem(
+    struct ecs_allocator_t *allocator,
+    ecs_vec_t *vec,
+    ecs_size_t size,
+    int32_t elem_count);
+
+#define ecs_vec_set_min_count_zeromem_t(allocator, vec, T, elem_count) \
+    ecs_vec_set_min_count_zeromem(allocator, vec, ECS_SIZEOF(T), elem_count)
 
 FLECS_API
 void ecs_vec_set_count(
@@ -149,5 +193,9 @@ void* ecs_vec_last(
 
 #define ecs_vec_last_t(vec, T) \
     ECS_CAST(T*, ecs_vec_last(vec, ECS_SIZEOF(T)))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif 

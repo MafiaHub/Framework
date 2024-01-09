@@ -63,6 +63,13 @@ struct term_id_builder_i {
         return this->cascade(_::cpp_type<Trav>::id(this->world_v()));
     }
 
+    /* Use with cascade to iterate results in descending (bottom -> top) order */
+    Base& desc() {
+        this->assert_term_id();
+        m_term_id->flags |= flecs::Desc;
+        return *this;
+    }
+
     /* The parent flag is short for up(flecs::ChildOf) */
     Base& parent() {
         this->assert_term_id();
@@ -113,6 +120,13 @@ struct term_id_builder_i {
         this->assert_term_id();
         m_term_id->flags |= flecs::IsVariable;
         m_term_id->name = const_cast<char*>(var_name);
+        return *this;
+    }
+
+    /* Override term id flags */
+    Base& flags(flecs::flags32_t flags) {
+        this->assert_term_id();
+        m_term_id->flags = flags;
         return *this;
     }
 
@@ -380,7 +394,12 @@ struct term_builder_i : term_id_builder_i<Base> {
         }
 
         ecs_assert(sid != 0, ECS_INVALID_PARAMETER, NULL);
-        m_term->src.id = sid;
+
+        if (!ECS_IS_PAIR(sid)) {
+            m_term->src.id = sid;
+        } else {
+            m_term->src.id = ecs_pair_first(world(), sid);
+        }
         return *this;
     }
 

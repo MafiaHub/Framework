@@ -219,11 +219,6 @@ public:
 
     flecs::table_range range() const;
 
-    /** Is current type a module or does it contain module contents? */
-    bool has_module() const {
-        return ecs_table_has_module(m_iter->table);
-    }
-
     /** Access ctx. 
      * ctx contains the context pointer assigned to a system.
      */
@@ -309,7 +304,7 @@ public:
      *
      * @param index The field index.
      */
-    flecs::entity id(int32_t index) const;
+    flecs::id id(int32_t index) const;
 
     /** Obtain pair id matched for field.
      * This operation will fail if the id is not a pair.
@@ -317,6 +312,14 @@ public:
      * @param index The field index.
      */
     flecs::id pair(int32_t index) const;
+
+    /** Obtain column index for field.
+     *
+     * @param index The field index.
+     */    
+    int32_t column_index(int32_t index) const {
+        return ecs_field_column_index(m_iter, index);
+    }
 
     /** Convert current iterator result to string.
      */
@@ -364,6 +367,14 @@ public:
      */
     flecs::untyped_column field(int32_t index) const {
         return get_unchecked_field(index);
+    }
+
+    /** Get readonly access to entity ids.
+     *
+     * @return The entity ids.
+     */
+    flecs::column<const flecs::entity_t> entities() const {
+        return flecs::column<const flecs::entity_t>(m_iter->entities, static_cast<size_t>(m_iter->count), false);
     }
 
     /** Obtain the total number of tables the iterator will iterate over. */

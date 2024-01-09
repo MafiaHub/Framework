@@ -1,5 +1,5 @@
 /**
- * @file os_api.h
+ * @file os_api.c
  * @brief Operating system abstraction API.
  * 
  * The OS API implements an overridable interface for implementing functions 
@@ -17,18 +17,10 @@ static bool ecs_os_api_initialized = false;
 static bool ecs_os_api_initializing = false;
 static int ecs_os_api_init_count = 0;
 
-#ifndef __EMSCRIPTEN__
 ecs_os_api_t ecs_os_api = {
     .flags_ = EcsOsApiHighResolutionTimer | EcsOsApiLogWithColors,
     .log_level_ = -1 /* Disable tracing by default, but log warnings/errors */
 };
-#else
-/* Disable colors by default for emscripten */
-ecs_os_api_t ecs_os_api = {
-    .flags_ = EcsOsApiHighResolutionTimer,
-    .log_level_ = -1 /* Disable tracing by default, but log warnings/errors */
-};
-#endif
 
 int64_t ecs_os_api_malloc_count = 0;
 int64_t ecs_os_api_realloc_count = 0;
@@ -84,7 +76,7 @@ void ecs_os_fini(void) {
 #define ECS_BT_BUF_SIZE 100
 
 void flecs_dump_backtrace(
-    FILE *stream) 
+    void *stream) 
 {
     int nptrs;
     void *buffer[ECS_BT_BUF_SIZE];
@@ -105,7 +97,7 @@ void flecs_dump_backtrace(
 }
 #else
 void flecs_dump_backtrace(
-    FILE *stream)
+    void *stream)
 { 
     (void)stream;
 }
@@ -134,7 +126,7 @@ void flecs_log_msg(
 
     if (deltatime) {
         now = time(NULL);
-        time_t delta = 0;
+        int64_t delta = 0;
         if (ecs_os_api.log_last_timestamp_) {
             delta = now - ecs_os_api.log_last_timestamp_;
         }
@@ -485,6 +477,21 @@ bool ecs_os_has_threading(void) {
         (ecs_os_api.thread_new_ != NULL) &&
         (ecs_os_api.thread_join_ != NULL) &&
         (ecs_os_api.thread_self_ != NULL);
+}
+
+bool ecs_os_has_task_support(void) {
+    return
+        (ecs_os_api.mutex_new_ != NULL) &&
+        (ecs_os_api.mutex_free_ != NULL) &&
+        (ecs_os_api.mutex_lock_ != NULL) &&
+        (ecs_os_api.mutex_unlock_ != NULL) &&
+        (ecs_os_api.cond_new_ != NULL) &&
+        (ecs_os_api.cond_free_ != NULL) &&
+        (ecs_os_api.cond_wait_ != NULL) &&
+        (ecs_os_api.cond_signal_ != NULL) &&
+        (ecs_os_api.cond_broadcast_ != NULL) &&
+        (ecs_os_api.task_new_ != NULL) &&
+        (ecs_os_api.task_join_ != NULL);
 }
 
 bool ecs_os_has_time(void) {

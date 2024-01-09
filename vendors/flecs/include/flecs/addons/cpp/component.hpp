@@ -33,7 +33,8 @@ template <typename T>
 inline static const char* type_name() {
     static const size_t len = ECS_FUNC_TYPE_LEN(const char*, type_name, ECS_FUNC_NAME);
     static char result[len + 1] = {};
-    return ecs_cpp_get_type_name(result, ECS_FUNC_NAME, len);
+    static const size_t front_len = ECS_FUNC_NAME_FRONT(const char*, type_name);
+    return ecs_cpp_get_type_name(result, ECS_FUNC_NAME, len, front_len);
 } 
 #else
 #error "implicit component registration not supported"
@@ -173,7 +174,7 @@ struct cpp_type_impl {
         // If no id has been registered yet for the component (indicating the 
         // component has not yet been registered, or the component is used
         // across more than one binary), or if the id does not exists in the 
-        // world (indicating a multi-world application), register it. */
+        // world (indicating a multi-world application), register it.
         if (!s_id || (world && !ecs_exists(world, s_id))) {
             init(s_id ? s_id : id, allow_tag);
 
@@ -232,7 +233,7 @@ struct cpp_type_impl {
 
             // Register lifecycle callbacks, but only if the component has a
             // size. Components that don't have a size are tags, and tags don't
-            // require construction/destruction/copy/move's. */
+            // require construction/destruction/copy/move's.
             if (size() && !existing) {
                 register_lifecycle_actions<T>(world, s_id);
             }
@@ -333,6 +334,9 @@ struct untyped_component : entity {
 #   ifdef FLECS_META
 #   include "mixins/meta/untyped_component.inl"
 #   endif
+#   ifdef FLECS_METRICS
+#   include "mixins/metrics/untyped_component.inl"
+#   endif
 };
 
 /** Component class.
@@ -424,16 +428,15 @@ struct component : untyped_component {
     /** Register on_add hook. */
     template <typename Func>
     component<T>& on_add(Func&& func) {
-        using Invoker = typename _::each_invoker<
-            typename std::decay<Func>::type, T>;
+        using Delegate = typename _::each_delegate<typename std::decay<Func>::type, T>;
         flecs::type_hooks_t h = get_hooks();
         ecs_assert(h.on_add == nullptr, ECS_INVALID_OPERATION, 
             "on_add hook is already set");
         BindingCtx *ctx = get_binding_ctx(h);
-        h.on_add = Invoker::run_add;
-        ctx->on_add = FLECS_NEW(Invoker)(FLECS_FWD(func));
+        h.on_add = Delegate::run_add;
+        ctx->on_add = FLECS_NEW(Delegate)(FLECS_FWD(func));
         ctx->free_on_add = reinterpret_cast<ecs_ctx_free_t>(
-            _::free_obj<Invoker>);
+            _::free_obj<Delegate>);
         ecs_set_hooks_id(m_world, m_id, &h);
         return *this;
     }
@@ -441,16 +444,16 @@ struct component : untyped_component {
     /** Register on_remove hook. */
     template <typename Func>
     component<T>& on_remove(Func&& func) {
-        using Invoker = typename _::each_invoker<
+        using Delegate = typename _::each_delegate<
             typename std::decay<Func>::type, T>;
         flecs::type_hooks_t h = get_hooks();
         ecs_assert(h.on_remove == nullptr, ECS_INVALID_OPERATION, 
             "on_remove hook is already set");
         BindingCtx *ctx = get_binding_ctx(h);
-        h.on_remove = Invoker::run_remove;
-        ctx->on_remove = FLECS_NEW(Invoker)(FLECS_FWD(func));
+        h.on_remove = Delegate::run_remove;
+        ctx->on_remove = FLECS_NEW(Delegate)(FLECS_FWD(func));
         ctx->free_on_remove = reinterpret_cast<ecs_ctx_free_t>(
-            _::free_obj<Invoker>);
+            _::free_obj<Delegate>);
         ecs_set_hooks_id(m_world, m_id, &h);
         return *this;
     }
@@ -458,16 +461,16 @@ struct component : untyped_component {
     /** Register on_set hook. */
     template <typename Func>
     component<T>& on_set(Func&& func) {
-        using Invoker = typename _::each_invoker<
+        using Delegate = typename _::each_delegate<
             typename std::decay<Func>::type, T>;
         flecs::type_hooks_t h = get_hooks();
         ecs_assert(h.on_set == nullptr, ECS_INVALID_OPERATION, 
             "on_set hook is already set");
         BindingCtx *ctx = get_binding_ctx(h);
-        h.on_set = Invoker::run_set;
-        ctx->on_set = FLECS_NEW(Invoker)(FLECS_FWD(func));
+        h.on_set = Delegate::run_set;
+        ctx->on_set = FLECS_NEW(Delegate)(FLECS_FWD(func));
         ctx->free_on_set = reinterpret_cast<ecs_ctx_free_t>(
-            _::free_obj<Invoker>);
+            _::free_obj<Delegate>);
         ecs_set_hooks_id(m_world, m_id, &h);
         return *this;
     }

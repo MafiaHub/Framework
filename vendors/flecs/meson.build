@@ -8,14 +8,23 @@ endif
 
 flecs_inc = include_directories('include')
 
-flecs_deps = dependency('threads')
+flecs_deps = [
+    dependency('threads')
+]
+
+cc = meson.get_compiler('c')
+
+if host_machine.system() == 'windows'
+    flecs_deps += cc.find_library('ws2_32') # Required for http addon
+endif
 
 flecs_src = files(
+    'src/addons/alerts.c',
     'src/addons/coredoc.c',
     'src/addons/doc.c',
     'src/addons/expr/deserialize.c',
     'src/addons/expr/serialize.c',
-    'src/addons/expr/strutil.c',
+    'src/addons/expr/utils.c',
     'src/addons/expr/vars.c',
     'src/addons/flecs_cpp.c',
     'src/addons/http.c',
@@ -30,6 +39,7 @@ flecs_src = files(
     'src/addons/meta/serialized.c',
     'src/addons/meta/cursor.c',
     'src/addons/meta_c.c',
+    'src/addons/metrics.c',
     'src/addons/module.c',
     'src/addons/monitor.c',
     'src/addons/os_api_impl/os_api_impl.c',
@@ -38,11 +48,17 @@ flecs_src = files(
     'src/addons/pipeline/worker.c',
     'src/addons/plecs.c',
     'src/addons/rest.c',
-    'src/addons/rules.c',
+    'src/addons/rules/api.c',
+    'src/addons/rules/compile.c',
+    'src/addons/rules/engine.c',
+    'src/addons/rules/trav_cache.c',
+    'src/addons/rules/trav_down_cache.c',
+    'src/addons/rules/trav_up_cache.c',
+    'src/addons/rules/trivial_iter.c',
     'src/addons/snapshot.c',
     'src/addons/stats.c',
     'src/addons/system/system.c',
-    'src/addons/timer.c',    
+    'src/addons/timer.c',
     'src/addons/units.c',
     'src/datastructures/allocator.c',
     'src/datastructures/bitset.c',
@@ -52,18 +68,20 @@ flecs_src = files(
     'src/datastructures/map.c',
     'src/datastructures/stack_allocator.c',
     'src/datastructures/name_index.c',
-    'src/datastructures/qsort.c',
     'src/datastructures/sparse.c',
     'src/datastructures/strbuf.c',
     'src/datastructures/switch_list.c',
     'src/datastructures/vec.c',
-    'src/datastructures/vector.c',
+    'src/storage/entity_index.c',
+    'src/storage/id_index.c',
+    'src/storage/table.c',
+    'src/storage/table_cache.c',
+    'src/storage/table_graph.c',
     'src/bootstrap.c',
     'src/entity.c',
     'src/entity_filter.c',
+    'src/entity_name.c',
     'src/filter.c',
-    'src/hierarchy.c',
-    'src/id_record.c',
     'src/iter.c',
     'src/misc.c',
     'src/observable.c',
@@ -72,9 +90,6 @@ flecs_src = files(
     'src/poly.c',
     'src/query.c',
     'src/stage.c',
-    'src/table_cache.c',
-    'src/table_graph.c',
-    'src/table.c',
     'src/search.c',
     'src/value.c',
     'src/world.c',
@@ -99,14 +114,18 @@ flecs_dep = declare_dependency(
     include_directories : flecs_inc
 )
 
-helloworld_inc = include_directories('examples/c/hello_world/include')
+opt_helloworld = get_option('build_example').disable_auto_if(meson.is_subproject())
 
-helloworld_exe = executable('helloworld',
-    'examples/c/hello_world/src/main.c',
-    include_directories : helloworld_inc,
-    implicit_include_directories : false,
-    dependencies : flecs_dep
+if opt_helloworld.allowed()
+    helloworld_inc = include_directories('examples/c/hello_world/include')
+
+    helloworld_exe = executable('helloworld',
+        'examples/c/hello_world/src/main.c',
+        include_directories : helloworld_inc,
+        implicit_include_directories : false,
+        dependencies : flecs_dep
 )
+endif
 
 if meson.version().version_compare('>= 0.54.0')
     meson.override_dependency('flecs', flecs_dep)

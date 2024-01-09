@@ -17,11 +17,12 @@ extern "C" {
 
 #define EcsWorldQuitWorkers           (1u << 0)
 #define EcsWorldReadonly              (1u << 1)
-#define EcsWorldQuit                  (1u << 2)
-#define EcsWorldFini                  (1u << 3)
-#define EcsWorldMeasureFrameTime      (1u << 4)
-#define EcsWorldMeasureSystemTime     (1u << 5)
-#define EcsWorldMultiThreaded         (1u << 6)
+#define EcsWorldInit                  (1u << 2)
+#define EcsWorldQuit                  (1u << 3)
+#define EcsWorldFini                  (1u << 4)
+#define EcsWorldMeasureFrameTime      (1u << 5)
+#define EcsWorldMeasureSystemTime     (1u << 6)
+#define EcsWorldMultiThreaded         (1u << 7)
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,23 +67,30 @@ extern "C" {
 #define EcsIdTag                       (1u << 9)
 #define EcsIdWith                      (1u << 10)
 #define EcsIdUnion                     (1u << 11)
+#define EcsIdAlwaysOverride            (1u << 12)
 
-#define EcsIdHasOnAdd                  (1u << 15) /* Same values as table flags */
-#define EcsIdHasOnRemove               (1u << 16) 
-#define EcsIdHasOnSet                  (1u << 17)
-#define EcsIdHasUnSet                  (1u << 18)
+#define EcsIdHasOnAdd                  (1u << 16) /* Same values as table flags */
+#define EcsIdHasOnRemove               (1u << 17) 
+#define EcsIdHasOnSet                  (1u << 18)
+#define EcsIdHasUnSet                  (1u << 19)
+#define EcsIdHasOnTableFill            (1u << 20)
+#define EcsIdHasOnTableEmpty           (1u << 21)
+#define EcsIdHasOnTableCreate          (1u << 22)
+#define EcsIdHasOnTableDelete          (1u << 23)
 #define EcsIdEventMask\
-    (EcsIdHasOnAdd|EcsIdHasOnRemove|EcsIdHasOnSet|EcsIdHasUnSet)
+    (EcsIdHasOnAdd|EcsIdHasOnRemove|EcsIdHasOnSet|EcsIdHasUnSet|\
+        EcsIdHasOnTableFill|EcsIdHasOnTableEmpty|EcsIdHasOnTableCreate|\
+            EcsIdHasOnTableDelete)
 
-#define EcsIdMarkedForDelete            (1u << 30)
+#define EcsIdMarkedForDelete           (1u << 30)
 
 /* Utilities for converting from flags to delete policies and vice versa */
 #define ECS_ID_ON_DELETE(flags) \
     ((ecs_entity_t[]){0, EcsRemove, EcsDelete, 0, EcsPanic}\
         [((flags) & EcsIdOnDeleteMask)])
-#define ECS_ID_ON_DELETE_OBJECT(flags) ECS_ID_ON_DELETE(flags >> 3)
+#define ECS_ID_ON_DELETE_TARGET(flags) ECS_ID_ON_DELETE(flags >> 3)
 #define ECS_ID_ON_DELETE_FLAG(id) (1u << ((id) - EcsRemove))
-#define ECS_ID_ON_DELETE_OBJECT_FLAG(id) (1u << (3 + ((id) - EcsRemove)))
+#define ECS_ID_ON_DELETE_TARGET_FLAG(id) (1u << (3 + ((id) - EcsRemove)))
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,13 +105,19 @@ extern "C" {
 #define EcsIterEntityOptional          (1u << 5u)  /* Treat terms with entity subject as optional */
 #define EcsIterNoResults               (1u << 6u)  /* Iterator has no results */
 #define EcsIterIgnoreThis              (1u << 7u)  /* Only evaluate non-this terms */
-#define EcsIterMatchVar                (1u << 8u)
+#define EcsIterMatchVar                (1u << 8u)  
+#define EcsIterHasCondSet              (1u << 10u) /* Does iterator have conditionally set fields */
+#define EcsIterProfile                 (1u << 11u) /* Profile iterator performance */
+#define EcsIterTrivialSearch           (1u << 12u) /* Trivial iterator mode */
+#define EcsIterTrivialSearchNoData     (1u << 13u) /* Trivial iterator w/no data */
+#define EcsIterTrivialTest             (1u << 14u) /* Trivial test mode (constrained $this) */
+#define EcsIterTrivialSearchWildcard   (1u << 15u) /* Trivial search with wildcard ids */
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Filter flags (used by ecs_filter_t::flags)
+//// Event flags (used by ecs_event_decs_t::flags)
 ////////////////////////////////////////////////////////////////////////////////
 
-#define EcsEventTableOnly              (1u << 8u)   /* Table event (no data, same as iter flags) */
+#define EcsEventTableOnly              (1u << 4u)   /* Table event (no data, same as iter flags) */
 #define EcsEventNoOnSet                (1u << 16u)  /* Don't emit OnSet/UnSet for inherited ids */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,7 +133,15 @@ extern "C" {
 #define EcsFilterNoData                (1u << 7u)  /* When true, data fields won't be populated */
 #define EcsFilterIsInstanced           (1u << 8u)  /* Is filter instanced (see ecs_filter_desc_t) */
 #define EcsFilterPopulate              (1u << 9u)  /* Populate data, ignore non-matching fields */
-
+#define EcsFilterHasCondSet            (1u << 10u) /* Does filter have conditionally set fields */
+#define EcsFilterUnresolvedByName      (1u << 11u) /* Use by-name matching for unresolved entity identifiers */
+#define EcsFilterHasPred               (1u << 12u) /* Filter has equality predicates */
+#define EcsFilterHasScopes             (1u << 13u) /* Filter has query scopes */
+#define EcsFilterIsTrivial             (1u << 14u) /* Trivial filter */
+#define EcsFilterMatchOnlySelf         (1u << 15u) /* Filter has no up traversal */
+#define EcsFilterHasWildcards          (1u << 16u) /* Filter has no up traversal */
+#define EcsFilterOwnsStorage           (1u << 17u) /* Is ecs_filter_t object owned by filter */
+#define EcsFilterOwnsTermsStorage      (1u << 18u) /* Is terms array owned by filter */
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Table flags (used by ecs_table_t::flags)
@@ -129,23 +151,29 @@ extern "C" {
 #define EcsTableIsPrefab               (1u << 2u)  /* Does the table store prefabs */
 #define EcsTableHasIsA                 (1u << 3u)  /* Does the table have IsA relationship */
 #define EcsTableHasChildOf             (1u << 4u)  /* Does the table type ChildOf relationship */
-#define EcsTableHasPairs               (1u << 5u)  /* Does the table type have pairs */
-#define EcsTableHasModule              (1u << 6u)  /* Does the table have module data */
-#define EcsTableIsDisabled             (1u << 7u)  /* Does the table type has EcsDisabled */
-#define EcsTableHasCtors               (1u << 8u)
-#define EcsTableHasDtors               (1u << 9u)
-#define EcsTableHasCopy                (1u << 10u)
-#define EcsTableHasMove                (1u << 11u)
-#define EcsTableHasUnion               (1u << 12u)
-#define EcsTableHasToggle              (1u << 13u)
-#define EcsTableHasOverrides           (1u << 14u)
+#define EcsTableHasName                (1u << 5u)  /* Does the table type have (Identifier, Name) */
+#define EcsTableHasPairs               (1u << 6u)  /* Does the table type have pairs */
+#define EcsTableHasModule              (1u << 7u)  /* Does the table have module data */
+#define EcsTableIsDisabled             (1u << 8u)  /* Does the table type has EcsDisabled */
+#define EcsTableHasCtors               (1u << 9u)
+#define EcsTableHasDtors               (1u << 10u)
+#define EcsTableHasCopy                (1u << 11u)
+#define EcsTableHasMove                (1u << 12u)
+#define EcsTableHasUnion               (1u << 13u)
+#define EcsTableHasToggle              (1u << 14u)
+#define EcsTableHasOverrides           (1u << 15u)
 
-#define EcsTableHasOnAdd               (1u << 15u) /* Same values as id flags */
-#define EcsTableHasOnRemove            (1u << 16u)
-#define EcsTableHasOnSet               (1u << 17u)
-#define EcsTableHasUnSet               (1u << 18u)
+#define EcsTableHasOnAdd               (1u << 16u) /* Same values as id flags */
+#define EcsTableHasOnRemove            (1u << 17u)
+#define EcsTableHasOnSet               (1u << 18u)
+#define EcsTableHasUnSet               (1u << 19u)
+#define EcsTableHasOnTableFill         (1u << 20u)
+#define EcsTableHasOnTableEmpty        (1u << 21u)
+#define EcsTableHasOnTableCreate       (1u << 22u)
+#define EcsTableHasOnTableDelete       (1u << 23u)
 
-#define EcsTableHasObserved            (1u << 20u)
+#define EcsTableHasTraversable         (1u << 25u)
+#define EcsTableHasTarget              (1u << 26u)
 
 #define EcsTableMarkedForDelete        (1u << 30u)
 
@@ -163,8 +191,10 @@ extern "C" {
 #define EcsQueryHasRefs                (1u << 1u)  /* Does query have references */
 #define EcsQueryIsSubquery             (1u << 2u)  /* Is query a subquery */
 #define EcsQueryIsOrphaned             (1u << 3u)  /* Is subquery orphaned */
-#define EcsQueryHasOutColumns          (1u << 4u)  /* Does query have out columns */
-#define EcsQueryHasMonitor             (1u << 5u)  /* Does query track changes */
+#define EcsQueryHasOutTerms            (1u << 4u)  /* Does query have out terms */
+#define EcsQueryHasNonThisOutTerms     (1u << 5u)  /* Does query have non-this out terms */
+#define EcsQueryHasMonitor             (1u << 6u)  /* Does query track changes */
+#define EcsQueryTrivialIter            (1u << 7u)  /* Does the query require special features to iterate */
 
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -16,19 +16,6 @@
 extern "C" {
 #endif
 
-/** This reserves entity ids for components. Regular entity ids will start after
- * this constant. This affects performance of table traversal, as edges with ids 
- * lower than this constant are looked up in an array, whereas constants higher
- * than this id are looked up in a map. Increasing this value can improve
- * performance at the cost of (significantly) higher memory usage. */
-#ifndef ECS_HI_COMPONENT_ID
-#define ECS_HI_COMPONENT_ID (256) /* Maximum number of components */
-#endif
-
-#ifndef ECS_HI_ID_RECORD_ID
-#define ECS_HI_ID_RECORD_ID (1024)
-#endif
-
 /** This is the largest possible component id. Components for the most part
  * occupy the same id range as entities, however they are not allowed to overlap
  * with (8) bits reserved for id flags. */
@@ -46,7 +33,7 @@ extern "C" {
 ////////////////////////////////////////////////////////////////////////////////
 
 /** This allows passing 0 as type to functions that accept ids */
-#define FLECS__E0 0
+#define FLECS_ID0ID_ 0
 
 FLECS_API
 char* ecs_module_path_from_c(
@@ -74,9 +61,18 @@ char* ecs_asprintf(
     const char *fmt,
     ...);
 
+/* Convert identifier to snake case */
+FLECS_API
+char* flecs_to_snake_case(
+    const char *str);
+
 FLECS_DBG_API
 int32_t flecs_table_observed_count(
     const ecs_table_t *table);
+
+FLECS_DBG_API
+void flecs_dump_backtrace(
+    void *stream);
 
 /** Calculate offset from address */
 #ifdef __cplusplus

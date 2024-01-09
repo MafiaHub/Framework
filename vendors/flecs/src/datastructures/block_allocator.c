@@ -9,7 +9,6 @@
 #include "../private_api.h"
 
 // #ifdef FLECS_SANITIZE
-// #define FLECS_USE_OS_ALLOC
 // #define FLECS_MEMSET_UNINITIALIZED
 // #endif
 
@@ -87,7 +86,8 @@ void flecs_ballocator_fini(
     ecs_assert(ba != NULL, ECS_INTERNAL_ERROR, NULL);
 
 #ifdef FLECS_SANITIZE
-    ecs_assert(ba->alloc_count == 0, ECS_LEAK_DETECTED, NULL);
+    ecs_assert(ba->alloc_count == 0, ECS_LEAK_DETECTED, 
+        "(size = %u)", (uint32_t)ba->data_size);
 #endif
 
     ecs_block_allocator_block_t *block;

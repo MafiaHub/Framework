@@ -20,15 +20,18 @@ const char* flecs_json_token_str(
     case JsonColon: return ":";
     case JsonComma: return ",";
     case JsonNumber: return "number";
+    case JsonLargeInt: return "large integer";
+    case JsonLargeString:
     case JsonString: return "string";
     case JsonTrue: return "true";
     case JsonFalse: return "false";
     case JsonNull: return "null";
     case JsonInvalid: return "invalid";
     default:
-        ecs_abort(ECS_INTERNAL_ERROR, NULL);
+        ecs_throw(ECS_INTERNAL_ERROR, NULL);
     }
-    return "invalid";
+error:
+    return "<<invalid token kind>>";
 }
 
 const char* flecs_json_parse(
@@ -59,6 +62,7 @@ const char* flecs_json_parse(
         token_kind[0] = JsonComma;
         return json + 1;
     } else if (ch == '"') {
+        const char *start = json;
         char *token_ptr = token;
         json ++;
         for (; (ch = json[0]); ) {
@@ -66,6 +70,13 @@ const char* flecs_json_parse(
                 json ++;
                 token_ptr[0] = '\0';
                 break;
+            }
+
+            if (token_ptr - token >= ECS_MAX_TOKEN_SIZE) {
+                /* Token doesn't fit in buffer, signal to app to try again with
+                 * dynamic buffer. */
+                token_kind[0] = JsonLargeString;
+                return start;
             }
 
             json = ecs_chrparse(json, token_ptr ++);
@@ -80,7 +91,17 @@ const char* flecs_json_parse(
         }
     } else if (isdigit(ch) || (ch == '-')) {
         token_kind[0] = JsonNumber;
-        return ecs_parse_digit(json, token);
+        const char *result = ecs_parse_digit(json, token);
+        
+        /* Cheap initial check if parsed token could represent large int */
+        if (result - json > 15) {
+            /* Less cheap secondary check to see if number is integer */
+            if (!strchr(token, '.')) {
+                token_kind[0] = JsonLargeInt;
+            }
+        }
+
+        return result;
     } else if (isalpha(ch)) {
         if (!ecs_os_strncmp(json, "null", 4)) {
             token_kind[0] = JsonNull;
@@ -104,6 +125,33 @@ const char* flecs_json_parse(
     } else {
         token_kind[0] = JsonInvalid;
         return NULL;
+    }
+}
+
+const char* flecs_json_parse_large_string(
+    const char *json,
+    ecs_strbuf_t *buf)
+{
+    if (json[0] != '"') {
+        return NULL; /* can only parse strings */
+    }
+
+    char ch, ch_out;
+    json ++;
+    for (; (ch = json[0]); ) {
+        if (ch == '"') {
+            json ++;
+            break;
+        }
+
+        json = ecs_chrparse(json, &ch_out);
+        ecs_strbuf_appendch(buf, ch_out);
+    }
+
+    if (!ch) {
+        return NULL;
+    } else {
+        return json;
     }
 }
 
@@ -376,8 +424,8 @@ void flecs_json_id(
     ecs_strbuf_appendch(buf, '[');
 
     if (ECS_IS_PAIR(id)) {
-        ecs_entity_t first = ECS_PAIR_FIRST(id);
-        ecs_entity_t second = ECS_PAIR_SECOND(id);
+        ecs_entity_t first = ecs_pair_first(world, id);
+        ecs_entity_t second = ecs_pair_second(world, id);
         ecs_strbuf_appendch(buf, '"');
         ecs_get_path_w_sep_buf(world, 0, first, ".", "", buf);
         ecs_strbuf_appendch(buf, '"');

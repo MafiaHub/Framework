@@ -11,7 +11,7 @@ Flecs is a fast and lightweight Entity Component System that lets you build game
 - Fast and [portable](#language-bindings) zero dependency [C99 API](https://www.flecs.dev/flecs/group__c.html)
 - Modern type-safe [C++11 API](https://www.flecs.dev/flecs/group__cpp.html) that doesn't use STL containers
 - First open source ECS with full support for [Entity Relationships](https://www.flecs.dev/flecs/md_docs_Relationships.html)!
-- Fast native support for [hierarchies](https://www.flecs.dev/flecs/md_docs_Relationships.html#autotoc_md277) and [prefabs](https://www.flecs.dev/flecs/md_docs_Relationships.html#autotoc_md275)
+- Fast native support for [hierarchies](https://www.flecs.dev/flecs/md_docs_Relationships.html#autotoc_md277) and [prefabs](https://www.flecs.dev/flecs/md_docs_Relationships.html#autotoc_md305)
 - Code base that builds in less than 5 seconds
 - Runs [in the browser](https://flecs.dev/city) without modifications with emscripten
 - Cache friendly [archetype/SoA storage](https://ajmmertens.medium.com/building-an-ecs-2-archetypes-and-vectorization-fe21690805f9) that can process millions of entities every frame
@@ -19,12 +19,12 @@ Flecs is a fast and lightweight Entity Component System that lets you build game
 - Automatic component registration that works out of the box across shared libraries/DLLs
 - Write free functions with [queries](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/queries/basics) or run code automatically in [systems](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/systems/pipeline)
 - Run games on multiple CPU cores with a fast lockless scheduler
-- Compiles warning-free on 8 compilers on all major platforms, with [CI](https://github.com/SanderMertens/flecs/actions) running more than 5000 tests
+- Verified on all major compilers and platforms with [CI](https://github.com/SanderMertens/flecs/actions) running more than 6000 tests
 - Integrated [reflection framework](https://www.flecs.dev/flecs/group__c__addons__meta.html) with [JSON serializer](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/reflection/basics_json) and support for [runtime components](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/reflection/runtime_component)
 - [Unit annotations](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/reflection/units) for components
 - Powerful [query language](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/rules) with support for [joins](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/rules/setting_variables) and [inheritance](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/rules/component_inheritance)
 - [Statistics addon](https://www.flecs.dev/flecs/group__c__addons__stats.html) for profiling ECS performance
-- A web-based dashboard ([demo](https://flecs.dev/explorer), [code](https://github.com/flecs-hub/explorer)) for inspecting entities, running ECS queries and monitoring games:
+- A web-based UI for monitoring & controlling your apps ([demo](https://flecs.dev/explorer), [code](https://github.com/flecs-hub/explorer)):
 
 [![Flecs Explorer](docs/img/explorer.png)](https://flecs.dev/explorer)
 
@@ -38,8 +38,16 @@ ECS is a way of organizing code and data that lets you build games that are larg
 
 For more information, check the [ECS FAQ](https://github.com/SanderMertens/ecs-faq)!
 
+## Try it out!
+The [Flecs playground](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js) lets you try Flecs without writing any C/C++ code!
+
+[![Flecs playground](docs/img/playground.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js)
+
+To learn how to use the playground, check the [Flecs Script Tutorial](https://www.flecs.dev/flecs/md_docs_FlecsScriptTutorial.html).
+
 ## Documentation
 - [Quickstart](https://www.flecs.dev/flecs/md_docs_Quickstart.html)
+- [FAQ](https://www.flecs.dev/flecs/md_docs_FAQ.html)
 - [Examples](https://github.com/SanderMertens/flecs/tree/master/examples)
 - [All Documentation](https://www.flecs.dev/flecs/md_docs_Docs.html)
 
@@ -112,29 +120,33 @@ int main(int argc, char *argv[]) {
 ## Projects using Flecs
 If you have a project you'd like to share, let me know on [Discord](https://discord.gg/BEzP5Rgrrp)!
 
+### Tempest Rising
+https://store.steampowered.com/app/1486920/Tempest_Rising/
+[![Tempest Rising](docs/img/projects/tempest_rising.png)](https://store.steampowered.com/app/1486920/Tempest_Rising/)
+
 ### Territory Control
 https://store.steampowered.com/app/690290/Territory_Control_2/
-![image](docs/img/projects/territory_control.png)
-
-### Sol Survivor
-https://nicok.itch.io/sol-survivor-demo
-![image](docs/img/projects/sol_survivor.png)
+[![image](docs/img/projects/territory_control.jpeg)](https://store.steampowered.com/app/690290/Territory_Control_2/)
 
 ### The Forge
 https://github.com/ConfettiFX/The-Forge
-![image](docs/img/projects/the_forge.png)
+[![image](docs/img/projects/the_forge.jpg)](https://github.com/ConfettiFX/The-Forge)
+
+### Sol Survivor
+https://nicok.itch.io/sol-survivor-demo
+[![image](docs/img/projects/sol_survivor.png)](https://nicok.itch.io/sol-survivor-demo)
 
 ### Equilibrium Engine
 https://github.com/clibequilibrium/EquilibriumEngine
-![image](docs/img/projects/equilibrium_engine.png)
+[![image](docs/img/projects/equilibrium_engine.png)](https://github.com/clibequilibrium/EquilibriumEngine)
 
 ### Gravitas
 https://thepunkcollective.itch.io/gravitas
-![image](docs/img/projects/gravitas.png)
+[![image](docs/img/projects/gravitas.png)](https://thepunkcollective.itch.io/gravitas)
 
 ### After Sun
 https://github.com/foxnne/aftersun
-![image](docs/img/projects/after_sun.png)
+[![image](docs/img/projects/after_sun.png)](https://github.com/foxnne/aftersun)
 
 ### Tower defense (open source demo)
 https://www.flecs.dev/tower_defense/etc ([repository](https://github.com/SanderMertens/tower_defense))
@@ -150,9 +162,7 @@ https://www.flecs.dev/city ([repository](https://github.com/flecs-hub/city))
 - [Unreal Minimum Viable Flecs Project](https://github.com/PreyK/Unreal-Minimum-Viable-Flecs)
 - [Bgfx/Imgui module](https://github.com/flecs-hub/flecs-systems-bgfx/tree/bgfx_imgui)
 - [Tower defense example](https://gist.github.com/oldmanauz/b4ced44737bf9d248233538fa06a989e)
-- [Flecs + UE4 is magic](https://jtferson.github.io/blog/flecs_and_unreal/)
-- [Quickstart with Flecs in UE4](https://jtferson.github.io/blog/quickstart_with_flecs_in_unreal_part_1/) 
-- [Automatic component registration in UE4](https://jtferson.github.io/blog/automatic_flecs_component_registration_in_unreal/)
+- [Unreal + Flecs example](https://github.com/PreyK/Unreal-Minimum-Viable-Flecs)
 - [Building a space battle with Flecs in UE4](https://twitter.com/ajmmertens/status/1361070033334456320) 
 - [Flecs + SDL + Web ASM example](https://github.com/HeatXD/flecs_web_demo) ([live demo](https://heatxd.github.io/flecs_web_demo/))
 - [Flecs + Raylib example](https://github.com/Lexxicon/FlecsRaylib)
@@ -184,7 +194,16 @@ Module      | Description
 
 ## Language bindings
 The following language bindings have been developed with Flecs! Note that these are projects built and maintained by helpful community members, and may not always be up to date with the latest commit from master!
-- [Lua](https://github.com/flecs-hub/flecs-lua)
-- [Zig #1](https://github.com/foxnne/zig-flecs) [#2](https://github.com/prime31/zig-flecs)
-- [C# #1](https://github.com/flecs-hub/flecs-cs) [#2](https://git.mcft.net/copygirl/gaemstone.ECS)
-- [Rust](https://github.com/jazzay/flecs-rs)
+- C#:
+  - [flecs-hub/flecs-cs](https://github.com/flecs-hub/flecs-cs)
+  - [BeanCheeseBurrito/Flecs.NET](https://github.com/BeanCheeseBurrito/Flecs.NET)
+- Rust:
+  - [flecs-rs](https://github.com/jazzay/flecs-rs)
+  - [flecs-polyglot](https://github.com/flecs-hub/flecs-polyglot)
+- Zig: 
+  - [michal-z/zig-gamedev](https://github.com/michal-z/zig-gamedev/tree/main/libs/zflecs)
+  - [foxnne/zig-flecs](https://github.com/foxnne/zig-flecs)
+  - [prime31/zig-flecs](https://github.com/prime31/zig-flecs)
+- Lua:
+  - [sro5h/flecs-luajit](https://github.com/sro5h/flecs-luajit)
+  - [flecs-hub/flecs-lua](https://github.com/flecs-hub/flecs-lua)

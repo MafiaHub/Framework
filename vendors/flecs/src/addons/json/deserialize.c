@@ -44,7 +44,8 @@ const char* ecs_ptr_from_json(
     const ecs_from_json_desc_t *desc)
 {
     ecs_json_token_t token_kind = 0;
-    char token[ECS_MAX_TOKEN_SIZE], t_lah[ECS_MAX_TOKEN_SIZE];
+    char token_buffer[ECS_MAX_TOKEN_SIZE], t_lah[ECS_MAX_TOKEN_SIZE];
+    char *token = token_buffer;
     int depth = 0;
 
     const char *name = NULL;
@@ -63,6 +64,17 @@ const char* ecs_ptr_from_json(
     }
 
     while ((json = flecs_json_parse(json, &token_kind, token))) {
+        if (token_kind == JsonLargeString) {
+            ecs_strbuf_t large_token = ECS_STRBUF_INIT;
+            json = flecs_json_parse_large_string(json, &large_token);
+            if (!json) {
+                break;
+            }
+
+            token = ecs_strbuf_get(&large_token);
+            token_kind = JsonString;
+        }
+
         if (token_kind == JsonObjectOpen) {
             depth ++;
             if (ecs_meta_push(&cur) != 0) {
@@ -132,6 +144,11 @@ const char* ecs_ptr_from_json(
             if (ecs_meta_set_float(&cur, number) != 0) {
                 goto error;
             }
+        } else if (token_kind == JsonLargeInt) {
+            int64_t number = flecs_ito(int64_t, atoll(token));
+            if (ecs_meta_set_int(&cur, number) != 0) {
+                goto error;
+            }
         } else if (token_kind == JsonNull) {
             if (ecs_meta_set_null(&cur) != 0) {
                 goto error;
@@ -146,6 +163,11 @@ const char* ecs_ptr_from_json(
             }
         } else {
             goto error;
+        }
+
+        if (token != token_buffer) {
+            ecs_os_free(token);
+            token = token_buffer;
         }
 
         if (!depth) {
@@ -382,7 +404,7 @@ ecs_entity_t flecs_json_new_id(
     ecs_entity_t ser_id)
 {
     /* Try to honor low id requirements */
-    if (ser_id < ECS_HI_COMPONENT_ID) {
+    if (ser_id < FLECS_HI_COMPONENT_ID) {
         return ecs_new_low_id(world);
     } else {
         return ecs_new_id(world);
@@ -392,10 +414,19 @@ ecs_entity_t flecs_json_new_id(
 static
 ecs_entity_t flecs_json_lookup(
     ecs_world_t *world,
+    ecs_entity_t parent,
     const char *name,
     const ecs_from_json_desc_t *desc)
 {
-    return desc->lookup_action(world, name, desc->lookup_ctx);
+    ecs_entity_t scope = 0;
+    if (parent) {
+        scope = ecs_set_scope(world, parent);
+    }
+    ecs_entity_t result = desc->lookup_action(world, name, desc->lookup_ctx);
+    if (parent) {
+        ecs_set_scope(world, scope);
+    }
+    return result;
 }
 
 static
@@ -501,7 +532,7 @@ ecs_table_t* flecs_json_parse_table(
             goto error;
         }
 
-        ecs_entity_t first = flecs_json_lookup(world, token, desc);
+        ecs_entity_t first = flecs_json_lookup(world, 0, token, desc);
         if (!first) {
             goto error;
         }
@@ -513,7 +544,7 @@ ecs_table_t* flecs_json_parse_table(
                 goto error;
             }
 
-            ecs_entity_t second = flecs_json_lookup(world, token, desc);
+            ecs_entity_t second = flecs_json_lookup(world, 0, token, desc);
             if (!second) {
                 goto error;
             }
@@ -559,6 +590,7 @@ int flecs_json_parse_entities(
     ecs_world_t *world,
     ecs_allocator_t *a,
     ecs_table_t *table,
+    ecs_entity_t parent,
     const char *json,
     char *token,
     ecs_vec_t *records,
@@ -569,12 +601,17 @@ int flecs_json_parse_entities(
     ecs_vec_clear(records);
 
     do {
-        json = flecs_json_expect(json, JsonString, name_token, desc);
+        json = flecs_json_parse(json, &token_kind, name_token);
         if (!json) {
             goto error;
         }
+        if ((token_kind != JsonNumber) && (token_kind != JsonString)) {
+            ecs_parser_error(desc->name, desc->expr, json - desc->expr, 
+                "expected number or string");
+            goto error;
+        }
 
-        ecs_entity_t e = flecs_json_lookup(world, name_token, desc);
+        ecs_entity_t e = flecs_json_lookup(world, parent, name_token, desc);
         ecs_record_t *r = flecs_entities_try(world, e);
         ecs_assert(r != NULL, ECS_INTERNAL_ERROR, NULL);
 
@@ -621,38 +658,38 @@ static
 const char* flecs_json_parse_column(
     ecs_world_t *world,
     ecs_table_t *table,
-    int32_t column,
+    int32_t index,
     const char *json,
     char *token,
     ecs_vec_t *records,
     const ecs_from_json_desc_t *desc)
 {
-    if (!table->storage_table) {
+    if (!table->column_count) {
         ecs_parser_error(desc->name, desc->expr, json - desc->expr, 
             "table has no components");
         goto error;
     }
 
-    if (column >= table->type.count) {
+    if (index >= table->type.count) {
         ecs_parser_error(desc->name, desc->expr, json - desc->expr, 
             "more value arrays than component columns in table");
         goto error;
     }
 
-    int32_t data_column = table->storage_map[column];
+    int32_t data_column = table->column_map[index];
     if (data_column == -1) {
         char *table_str = ecs_table_str(world, table);
         ecs_parser_error(desc->name, desc->expr, json - desc->expr, 
             "values provided for tag at column %d of table [%s]",   
-                column, table_str);
+                index, table_str);
 
         ecs_os_free(table_str);
         goto error;
     }
 
     ecs_json_token_t token_kind = 0;
-    ecs_vec_t *data = &table->data.columns[data_column];
-    ecs_type_info_t *ti = table->type_info[data_column];
+    ecs_column_t *column = &table->data.columns[data_column];
+    ecs_type_info_t *ti = column->ti;
     ecs_size_t size = ti->size;
     ecs_entity_t type = ti->component;
     ecs_record_t **record_array = ecs_vec_first_t(records, ecs_record_t*);
@@ -661,11 +698,8 @@ const char* flecs_json_parse_column(
     do {
         ecs_record_t *r = record_array[entity];
         int32_t row = ECS_RECORD_TO_ROW(r->row);
-        ecs_assert(ecs_vec_get_t(
-            &table->data.records, ecs_record_t*, row)[0] == r,
-                ECS_INTERNAL_ERROR, NULL);
 
-        void *ptr = ecs_vec_get(data, size, row);
+        void *ptr = ecs_vec_get(&column->data, size, row);
         ecs_assert(ptr != NULL, ECS_INTERNAL_ERROR, NULL);
 
         json = ecs_ptr_from_json(world, type, ptr, json, desc);
@@ -812,8 +846,33 @@ const char* flecs_json_parse_result(
         goto error;
     }
 
-    json = flecs_json_expect_member_name(json, token, "entities", desc);
+    json = flecs_json_expect_member(json, token, desc);
     if (!json) {
+        goto error;
+    }
+
+    ecs_entity_t parent = 0;
+    if (!ecs_os_strcmp(token, "parent")) {
+        json = flecs_json_expect(json, JsonString, token, desc);
+        if (!json) {
+            goto error;
+        }
+        parent = ecs_lookup_fullpath(world, token);
+
+        json = flecs_json_expect(json, JsonComma, token, desc);
+        if (!json) {
+            goto error;
+        }
+
+        json = flecs_json_expect_member(json, token, desc);
+        if (!json) {
+            goto error;
+        }
+    }
+
+    if (ecs_os_strcmp(token, "entities")) {
+        ecs_parser_error(desc->name, desc->expr, json - desc->expr, 
+            "expected 'entities'");
         goto error;
     }
 
@@ -855,7 +914,7 @@ const char* flecs_json_parse_result(
     }
 
     /* Add entities to table */
-    if (flecs_json_parse_entities(world, a, table, 
+    if (flecs_json_parse_entities(world, a, table, parent,
         entities, token, records, desc)) 
     {
         goto error;

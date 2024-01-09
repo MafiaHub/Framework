@@ -19,6 +19,9 @@
 #ifndef FLECS_PARSER_H
 #define FLECS_PARSER_H
 
+/** Maximum number of extra arguments in term expression */
+#define ECS_PARSER_MAX_ARGS (16)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,6 +45,13 @@ const char* ecs_parse_ws(
 FLECS_API
 const char* ecs_parse_ws_eol(
     const char *ptr);
+
+/** Utility function to parse an identifier */
+const char* ecs_parse_identifier(
+    const char *name,
+    const char *expr,
+    const char *ptr,
+    char *token_out);
 
 /** Parse digit.
  * This function will parse until the first non-digit character is found. The
@@ -98,6 +108,7 @@ const char* ecs_parse_token(
  * @param expr The expression to parse (optional, improves error logs)
  * @param ptr The pointer to the current term (must be in expr).
  * @param term_out Out parameter for the term.
+ * @param extra_args Out array for extra args, must be of size ECS_PARSER_MAX_ARGS.
  * @return pointer to next term if successful, NULL if failed.
  */
 FLECS_API
@@ -106,7 +117,8 @@ char* ecs_parse_term(
     const char *name,
     const char *expr,
     const char *ptr,
-    ecs_term_t *term_out);
+    ecs_term_t *term_out,
+    ecs_term_id_t *extra_args);
 
 #ifdef __cplusplus
 }

@@ -41,7 +41,7 @@ typedef struct ecs_expr_value_t {
 
 typedef struct ecs_value_stack_t {
     ecs_expr_value_t values[EXPR_MAX_STACK_SIZE];
-    ecs_stack_cursor_t cursor;
+    ecs_stack_cursor_t *cursor;
     ecs_stack_t *stack;
     ecs_stage_t *stage;
     int32_t count;
@@ -149,8 +149,29 @@ const char *ecs_parse_expr_token(
     const char *ptr,
     char *token)
 {
-    const char *start = ptr;
     char *token_ptr = token;
+
+    if (ptr[0] == '/') {
+        char ch;
+        if (ptr[1] == '/') {
+            // Single line comment
+            for (ptr = &ptr[2]; (ch = ptr[0]) && (ch != '\n'); ptr ++) {}
+            token[0] = 0;
+            return ecs_parse_ws_eol(ptr);
+        } else if (ptr[1] == '*') {
+            // Multi line comment
+            for (ptr = &ptr[2]; (ch = ptr[0]); ptr ++) {
+                if (ch == '*' && ptr[1] == '/') {
+                    token[0] = 0;
+                    return ecs_parse_ws_eol(ptr + 2);
+                }
+            }
+
+            ecs_parser_error(name, expr, ptr - expr, 
+                "missing */ for multiline comment");
+            return NULL;
+        }
+    }
 
     ecs_expr_oper_t op;
     if (ptr[0] == '(') {
@@ -167,12 +188,11 @@ const char *ecs_parse_expr_token(
 
     while ((ptr = ecs_parse_token(name, expr, ptr, token_ptr, 0))) {
         if (ptr[0] == '|' && ptr[1] != '|') {
-            token_ptr = &token_ptr[ptr - start];
+            token_ptr = &token_ptr[ecs_os_strlen(token_ptr)];
             token_ptr[0] = '|';
             token_ptr[1] = '\0';
             token_ptr ++;
             ptr ++;
-            start = ptr;
         } else {
             break;
         }
@@ -233,10 +253,100 @@ bool flecs_parse_is_float(
     return false;
 }
 
+/* Attempt to resolve variable dotexpression to value (foo.bar) */
+static
+ecs_value_t flecs_dotresolve_var(
+    ecs_world_t *world,
+    ecs_vars_t *vars,
+    char *token)
+{
+    char *dot = strchr(token, '.');
+    if (!dot) {
+        return (ecs_value_t){ .type = ecs_id(ecs_entity_t) };
+    }
+
+    dot[0] = '\0';
+
+    const ecs_expr_var_t *var = ecs_vars_lookup(vars, token);
+    if (!var) {
+        return (ecs_value_t){0};
+    }
+
+    ecs_meta_cursor_t cur = ecs_meta_cursor(
+        world, var->value.type, var->value.ptr);
+    ecs_meta_push(&cur);
+    if (ecs_meta_dotmember(&cur, dot + 1) != 0) {
+        return (ecs_value_t){0};
+    }
+
+    return (ecs_value_t){ 
+        .ptr = ecs_meta_get_ptr(&cur),
+        .type = ecs_meta_get_type(&cur)
+    };
+}
+
+static
+int flecs_meta_call(
+    ecs_world_t *world,
+    ecs_value_stack_t *stack,
+    const char *name,
+    const char *expr,
+    const char *ptr,
+    ecs_meta_cursor_t *cur, 
+    const char *function) 
+{
+    ecs_entity_t type = ecs_meta_get_type(cur);
+    void *value_ptr = ecs_meta_get_ptr(cur);
+
+    if (!ecs_os_strcmp(function, "parent")) {
+        if (type != ecs_id(ecs_entity_t)) {
+            ecs_parser_error(name, expr, ptr - expr, 
+                "parent() can only be called on entity");
+            return -1;
+        }
+
+        *(ecs_entity_t*)value_ptr = ecs_get_parent(
+            world, *(ecs_entity_t*)value_ptr);
+    } else if (!ecs_os_strcmp(function, "name")) {
+        if (type != ecs_id(ecs_entity_t)) {
+            ecs_parser_error(name, expr, ptr - expr, 
+                "name() can only be called on entity");
+            return -1;
+        }
+
+        char **result = flecs_expr_value_new(stack, ecs_id(ecs_string_t));
+        *result = ecs_os_strdup(ecs_get_name(world, *(ecs_entity_t*)value_ptr));
+        *cur = ecs_meta_cursor(world, ecs_id(ecs_string_t), result);
+    } else if (!ecs_os_strcmp(function, "doc_name")) {
+#ifdef FLECS_DOC
+        if (type != ecs_id(ecs_entity_t)) {
+            ecs_parser_error(name, expr, ptr - expr, 
+                "name() can only be called on entity");
+            return -1;
+        }
+
+        char **result = flecs_expr_value_new(stack, ecs_id(ecs_string_t));
+        *result = ecs_os_strdup(ecs_doc_get_name(world, *(ecs_entity_t*)value_ptr));
+        *cur = ecs_meta_cursor(world, ecs_id(ecs_string_t), result);
+#else
+        ecs_parser_error(name, expr, ptr - expr, 
+            "doc_name() is not available without FLECS_DOC addon");
+        return -1;
+#endif
+    } else {
+        ecs_parser_error(name, expr, ptr - expr, 
+            "unknown function '%s'", function);
+        return -1;
+    }
+
+    return 0;
+}
+
 /* Determine the type of an expression from the first character(s). This allows
  * us to initialize a storage for a type if none was provided. */
 static
 ecs_entity_t flecs_parse_discover_type(
+    ecs_world_t *world,
     const char *name,
     const char *expr,
     const char *ptr,
@@ -284,8 +394,24 @@ ecs_entity_t flecs_parse_discover_type(
         if (ecs_parse_expr_token(name, expr, &ptr[1], token) == NULL) {
             return 0;
         }
+
         const ecs_expr_var_t *var = ecs_vars_lookup(desc->vars, token);
         if (!var) {
+            ecs_size_t len = ecs_os_strlen(token);
+            if (ptr[len + 1] == '(') {
+                while ((len > 0) && (token[len] != '.')) {
+                    len --;
+                }
+                if (token[len] == '.') {
+                    token[len] = '\0';
+                }
+            }
+
+            ecs_value_t v = flecs_dotresolve_var(world, desc->vars, token);
+            if (v.type) {
+                return v.type;
+            }
+
             ecs_parser_error(name, expr, ptr - expr, 
                 "unresolved variable '%s'", token);
             return 0;
@@ -359,8 +485,11 @@ ecs_entity_t flecs_largest_type(
     case EcsIPtr:   return ecs_id(ecs_i64_t);
     case EcsString: return ecs_id(ecs_string_t);
     case EcsEntity: return ecs_id(ecs_entity_t);
-    default: ecs_abort(ECS_INTERNAL_ERROR, NULL);
+    case EcsId:     return ecs_id(ecs_id_t);
+    default: ecs_throw(ECS_INTERNAL_ERROR, NULL);
     }
+error:
+    return 0;
 }
 
 /** Test if a normalized type can promote to another type in an expression */
@@ -405,8 +534,12 @@ bool flecs_oper_valid_for_type(
     case EcsShiftLeft:
     case EcsShiftRight:
         return (type == ecs_id(ecs_u64_t));
-    default: 
+    case EcsExprOperUnknown:
+    case EcsLeftParen:
+    case EcsMin:
         return false;
+    default: 
+        ecs_abort(ECS_INTERNAL_ERROR, NULL);
     }
 }
 
@@ -474,9 +607,23 @@ bool flecs_expr_op_is_equality(
     case EcsCondLt:
     case EcsCondLtEq:
         return true;
-    default:
+    case EcsCondAnd:
+    case EcsCondOr:
+    case EcsShiftLeft:
+    case EcsShiftRight:
+    case EcsAdd:
+    case EcsSub:
+    case EcsMul:
+    case EcsDiv:
+    case EcsExprOperUnknown:
+    case EcsLeftParen:
+    case EcsMin:
         return false;
+    default:
+        ecs_throw(ECS_INTERNAL_ERROR, "invalid operator");
     }
+error:
+    return false;
 }
 
 static
@@ -512,16 +659,30 @@ ecs_entity_t flecs_binary_expr_type(
          * should not be casted to bool */
         result_type = ecs_id(ecs_bool_t);
         break;
-    default:
+    case EcsShiftLeft:
+    case EcsShiftRight:
+    case EcsAdd:
+    case EcsSub:
+    case EcsMul:
+    case EcsExprOperUnknown:
+    case EcsLeftParen:
+    case EcsMin:
         break;
+    default:
+        ecs_throw(ECS_INTERNAL_ERROR, "invalid operator");
     }
 
     /* Result type for arithmetic operators is determined by operands */
     const EcsPrimitive *ltype_ptr = ecs_get(world, lvalue->type, EcsPrimitive);
     const EcsPrimitive *rtype_ptr = ecs_get(world, rvalue->type, EcsPrimitive);
     if (!ltype_ptr || !rtype_ptr) {
+        char *lname = ecs_get_fullpath(world, lvalue->type);
+        char *rname = ecs_get_fullpath(world, rvalue->type);
         ecs_parser_error(name, expr, ptr - expr, 
-            "invalid non-primitive type in binary expression");
+            "invalid non-primitive type in binary expression (%s, %s)",
+                lname, rname);
+        ecs_os_free(lname);
+        ecs_os_free(rname);
         return 0;
     }
 
@@ -558,6 +719,8 @@ done:
 
     *operand_type_out = operand_type;
     return result_type;
+error:
+    return 0;
 }
 
 /* Macro's to let the compiler do the operations & conversion work for us */
@@ -574,6 +737,24 @@ done:
         ECS_BINARY_OP_T(left, right, result, op, ecs_i64_t, ecs_i64_t);\
     } else if (left->type == ecs_id(ecs_f64_t)) { \
         ECS_BINARY_OP_T(left, right, result, op, ecs_f64_t, ecs_f64_t);\
+    } else {\
+        ecs_abort(ECS_INTERNAL_ERROR, "unexpected type in binary expression");\
+    }
+
+#define ECS_BINARY_COND_EQ_OP(left, right, result, op)\
+    if (left->type == ecs_id(ecs_u64_t)) { \
+        ECS_BINARY_OP_T(left, right, result, op, ecs_bool_t, ecs_u64_t);\
+    } else if (left->type == ecs_id(ecs_i64_t)) { \
+        ECS_BINARY_OP_T(left, right, result, op, ecs_bool_t, ecs_i64_t);\
+    } else if (left->type == ecs_id(ecs_f64_t)) { \
+        ecs_parser_error(name, expr, ptr - expr, "unsupported operator for floating point");\
+        return -1;\
+    } else if (left->type == ecs_id(ecs_u8_t)) { \
+        ECS_BINARY_OP_T(left, right, result, op, ecs_bool_t, ecs_u8_t);\
+    } else if (left->type == ecs_id(ecs_char_t)) { \
+        ECS_BINARY_OP_T(left, right, result, op, ecs_bool_t, ecs_char_t);\
+    } else if (left->type == ecs_id(ecs_bool_t)) { \
+        ECS_BINARY_OP_T(left, right, result, op, ecs_bool_t, ecs_bool_t);\
     } else {\
         ecs_abort(ECS_INTERNAL_ERROR, "unexpected type in binary expression");\
     }
@@ -625,12 +806,12 @@ int flecs_binary_expr_do(
     ecs_entity_t operand_type, type = flecs_binary_expr_type(
         world, name, expr, ptr, lvalue, rvalue, op, &operand_type);
     if (!type) {
-        return -1;
+        goto error;
     }
 
     if (!flecs_oper_valid_for_type(type, op)) {
         ecs_parser_error(name, expr, ptr - expr, "invalid operator for type");
-        return -1;
+        goto error;
     }
 
     flecs_value_cast(world, stack, lvalue, operand_type);
@@ -658,10 +839,10 @@ int flecs_binary_expr_do(
         ECS_BINARY_OP(lvalue, rvalue, storage, /);
         break;
     case EcsCondEq:
-        ECS_BINARY_COND_OP(lvalue, rvalue, storage, ==);
+        ECS_BINARY_COND_EQ_OP(lvalue, rvalue, storage, ==);
         break;
     case EcsCondNeq:
-        ECS_BINARY_COND_OP(lvalue, rvalue, storage, !=);
+        ECS_BINARY_COND_EQ_OP(lvalue, rvalue, storage, !=);
         break;
     case EcsCondGt:
         ECS_BINARY_COND_OP(lvalue, rvalue, storage, >);
@@ -687,9 +868,13 @@ int flecs_binary_expr_do(
     case EcsShiftRight:
         ECS_BINARY_UINT_OP(lvalue, rvalue, storage, >>);
         break;
-    default:
+    case EcsExprOperUnknown:
+    case EcsLeftParen:
+    case EcsMin:
         ecs_parser_error(name, expr, ptr - expr, "unsupported operator");
-        return -1;
+        goto error;
+    default:
+        ecs_throw(ECS_INTERNAL_ERROR, NULL);
     }
 
     if (storage->ptr != result->ptr) {
@@ -703,6 +888,8 @@ int flecs_binary_expr_do(
     }
 
     return 0;
+error:
+    return -1;
 }
 
 static
@@ -766,6 +953,85 @@ const char* flecs_binary_expr_parse(
 }
 
 static
+const char* flecs_funccall_parse(
+    ecs_world_t *world,
+    ecs_value_stack_t *stack,
+    const char *name,
+    const char *expr,
+    const char *ptr,
+    char *token,
+    ecs_meta_cursor_t *cur,
+    ecs_value_t *value,
+    bool isvar,
+    const ecs_parse_expr_desc_t *desc)
+{
+    char *sep = strrchr(token, '.');
+    if (!sep) {
+        ecs_parser_error(name, expr, ptr - expr, 
+            "missing object for function call '%s'", token);
+        return NULL;
+    }
+
+    sep[0] = '\0';
+    const char *function = sep + 1;
+
+    if (!isvar) {
+        if (ecs_meta_set_string(cur, token) != 0) {
+            goto error;
+        }
+    } else {
+        const ecs_expr_var_t *var = ecs_vars_lookup(desc->vars, token);
+        ecs_meta_set_value(cur, &var->value);
+    }
+
+    do {
+        if (!function[0]) {
+            ecs_parser_error(name, expr, ptr - expr, 
+                "missing function name for function call '%s'", token);
+            return NULL;
+        }
+
+        if (flecs_meta_call(world, stack, name, expr, ptr, cur, 
+            function) != 0) 
+        {
+            goto error;
+        }
+
+        ecs_entity_t type = ecs_meta_get_type(cur);
+        value->ptr = ecs_meta_get_ptr(cur);
+        value->type = type;
+
+        ptr += 2;
+        if (ptr[0] != '.') {
+            break;
+        }
+
+        ptr ++;
+        char *paren = strchr(ptr, '(');
+        if (!paren) {
+            break;
+        }
+
+        ecs_size_t len = flecs_ito(int32_t, paren - ptr);
+        if (len >= ECS_MAX_TOKEN_SIZE) {
+            ecs_parser_error(name, expr, ptr - expr, 
+                "token exceeds maximum token size");
+            goto error;
+        }
+
+        ecs_os_strncpy(token, ptr, len);
+        token[len] = '\0';
+        function = token;
+
+        ptr = paren;
+    } while (true);
+
+    return ptr;
+error:
+    return NULL;
+}
+
+static
 const char* flecs_parse_expr(
     ecs_world_t *world,
     ecs_value_stack_t *stack,
@@ -781,6 +1047,7 @@ const char* flecs_parse_expr(
     ecs_meta_cursor_t cur = {0};
     const char *name = desc ? desc->name : NULL;
     const char *expr = desc ? desc->expr : NULL;
+    token[0] = '\0';
     expr = expr ? expr : ptr;
 
     ptr = ecs_parse_ws_eol(ptr);
@@ -796,7 +1063,7 @@ const char* flecs_parse_expr(
      * will be initialized by a nested expression */
     if (ptr[0] != '(') {
         ecs_entity_t type = flecs_parse_discover_type(
-            name, expr, ptr, value->type, desc);
+            world, name, expr, ptr, value->type, desc);
         if (!type) {
             return NULL;
         }
@@ -824,6 +1091,11 @@ const char* flecs_parse_expr(
         bool is_lvalue = false;
         bool newline = false;
 
+        if (!token[0]) {
+            /* Comment */
+            continue;
+        }
+
         if (!ecs_os_strcmp(token, "(")) {
             ecs_value_t temp_result, *out;
             if (!depth) {
@@ -841,7 +1113,7 @@ const char* flecs_parse_expr(
                     "missing closing parenthesis");
                 return NULL;
             }
-            ptr = ecs_parse_ws_eol(ptr + 1);
+            ptr = ecs_parse_ws(ptr + 1);
             is_lvalue = true;
 
         } else if (!ecs_os_strcmp(token, "{")) {
@@ -883,7 +1155,7 @@ const char* flecs_parse_expr(
             }
 
             if (!ecs_meta_is_collection(&cur)) {
-                ecs_parser_error(name, expr, ptr - expr, "expected '{'");
+                ecs_parser_error(name, expr, ptr - expr, "unexpected '['");
                 return NULL;
             }
         }
@@ -950,18 +1222,43 @@ const char* flecs_parse_expr(
                 return NULL;
             }
 
-            const ecs_expr_var_t *var = ecs_vars_lookup(desc->vars, &token[1]);
-            if (!var) {
-                ecs_parser_error(name, expr, ptr - expr, 
-                    "unresolved variable '%s'", token);
-                return NULL;
+            if (!token[1]) {
+                /* Empty name means default to assigned member */
+                const char *member = ecs_meta_get_member(&cur);
+                if (!member) {
+                    ecs_parser_error(name, expr, ptr - expr, 
+                        "invalid default variable outside member assignment");
+                    return NULL;
+                }
+                ecs_os_strcpy(&token[1], member);
             }
 
-            ecs_meta_set_value(&cur, &var->value);
+            const ecs_expr_var_t *var = ecs_vars_lookup(desc->vars, &token[1]);
+            if (!var) {
+                if (ptr[0] == '(') {
+                    /* Function */
+                    ptr = flecs_funccall_parse(world, stack, name, expr, ptr, 
+                        &token[1], &cur, &result, true, desc);
+                    if (!ptr) {
+                        goto error;
+                    }
+                } else {
+                    ecs_value_t v = flecs_dotresolve_var(world, desc->vars, &token[1]);
+                    if (!v.ptr) {
+                        ecs_parser_error(name, expr, ptr - expr, 
+                            "unresolved variable '%s'", token);
+                        return NULL;
+                    } else {
+                        ecs_meta_set_value(&cur, &v);
+                    }
+                }
+            } else {
+                ecs_meta_set_value(&cur, &var->value);
+            }
             is_lvalue = true;
 
         } else {
-            const char *tptr = ecs_parse_ws_eol(ptr);
+            const char *tptr = ecs_parse_ws(ptr);
             for (; ptr != tptr; ptr ++) {
                 if (ptr[0] == '\n') {
                     newline = true;
@@ -971,7 +1268,14 @@ const char* flecs_parse_expr(
             if (ptr[0] == ':') {
                 /* Member assignment */
                 ptr ++;
-                if (ecs_meta_member(&cur, token) != 0) {
+                if (ecs_meta_dotmember(&cur, token) != 0) {
+                    goto error;
+                }
+            } else if (ptr[0] == '(') {
+                /* Function */
+                ptr = flecs_funccall_parse(world, stack, name, expr, ptr, 
+                    token, &cur, &result, false, desc);
+                if (!ptr) {
                     goto error;
                 }
             } else {
@@ -1109,7 +1413,7 @@ const char* ecs_parse_expr(
         ecs_assert(ti->hooks.dtor != NULL, ECS_INTERNAL_ERROR, NULL);
         ti->hooks.dtor(stack.values[i].ptr, 1, ti);
     }
-    flecs_stack_restore_cursor(stack.stack, &stack.cursor);
+    flecs_stack_restore_cursor(stack.stack, stack.cursor);
 
     return ptr;
 }
