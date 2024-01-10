@@ -38,11 +38,20 @@
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
+namespace Framework::Scripting::Engines::Node {
+    class Engine;
+}
+
 namespace Framework::World {
     class Engine {
+      private:
+        friend class Framework::Scripting::Engines::Node::Engine;
+        void PurgeAllGameModeEntities();
+
       protected:
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
+        flecs::query<Modules::Base::RemovedOnGameModeReload> _findAllGameModeEntities;
         std::unique_ptr<flecs::world> _world;
         Networking::NetworkPeer *_networkPeer = nullptr;
 

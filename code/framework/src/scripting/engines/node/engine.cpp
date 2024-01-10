@@ -12,6 +12,10 @@
 #include "engine.h"
 #include "../../events.h"
 
+#include "core_modules.h"
+
+#include "world/server.h"
+
 static const char bootstrap_code[] = R"(
 const publicRequire = require("module").createRequire(process.cwd() + "/gamemode/");
 globalThis.require = publicRequire;
@@ -273,6 +277,10 @@ namespace Framework::Scripting::Engines::Node {
 
         // Invoke the gamemode loaded event
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
+
+        const auto worldEngine = CoreModules::GetWorldEngine();
+        if (worldEngine)
+            worldEngine->PurgeAllGameModeEntities();
 
         // Stop node environment
         node::Stop(_gamemodeEnvironment);

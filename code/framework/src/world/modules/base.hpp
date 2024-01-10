@@ -45,6 +45,10 @@ namespace Framework::World::Modules {
             [[maybe_unused]] uint8_t _unused;
         };
 
+        struct RemovedOnGameModeReload {
+            [[maybe_unused]] uint8_t _unused;
+        };
+
         struct ServerID {
             flecs::entity_t id;
         };
@@ -114,6 +118,7 @@ namespace Framework::World::Modules {
             auto _streamable = world.component<Streamable>();
             auto _streamer   = world.component<Streamer>();
 
+            world.component<RemovedOnGameModeReload>();
             world.component<PendingRemoval>();
             world.component<ServerID>();
 

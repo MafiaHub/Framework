@@ -62,4 +62,13 @@ namespace Framework::World {
     flecs::entity Engine::WrapEntity(flecs::entity_t serverID) const {
         return flecs::entity(_world->get_world(), serverID);
     }
+
+    void Engine::PurgeAllGameModeEntities() {
+        _world->defer_begin();
+        _findAllGameModeEntities.each([this](flecs::entity e, Modules::Base::RemovedOnGameModeReload &rhs) {
+            if (e.is_alive())
+                e.add<Modules::Base::PendingRemoval>();
+        });
+        _world->defer_end();
+    }
 } // namespace Framework::World
