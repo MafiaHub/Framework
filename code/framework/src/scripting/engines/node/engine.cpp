@@ -93,7 +93,6 @@ namespace Framework::Scripting::Engines::Node {
             },
             &platform_finished);
         _platform->UnregisterIsolate(_isolate);
-        _isolate->Dispose();
         
         // Wait until the platform has cleaned up all relevant resources.
         {
@@ -101,12 +100,9 @@ namespace Framework::Scripting::Engines::Node {
             v8::Isolate::Scope isolate_scope(_isolate);
             while (!platform_finished) uv_run(&uv_loop, UV_RUN_ONCE);
             uv_loop_close(&uv_loop);
-
-            // Release memory
-            node::FreeEnvironment(_gamemodeEnvironment);
-            node::FreeIsolateData(_gamemodeData);
         }
 
+        _isolate->Dispose();
         _isolate = nullptr;
 
         // Release node and v8 engines
@@ -304,10 +300,13 @@ namespace Framework::Scripting::Engines::Node {
                 // Exit node environment
                 node::EmitProcessExit(_gamemodeEnvironment);
             }
+            
+            // Release memory
+            node::FreeIsolateData(_gamemodeData);
+            node::FreeEnvironment(_gamemodeEnvironment);
         }
 
-        node::Stop(_gamemodeEnvironment);
-
+        _gamemodeEventHandlers.clear();
         _gamemodeLoaded = false;
         return true;
     }
