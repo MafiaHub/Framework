@@ -363,12 +363,13 @@ namespace Framework::Integrations::Server {
             _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
         }
         else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(0));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     void Instance::Run() {
         while (_alive) {
             Update();
+            std::this_thread::yield();
         }
     }
 
