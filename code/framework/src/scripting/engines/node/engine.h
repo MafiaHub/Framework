@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <node.h>
+#include <uv.h>
 #include <v8.h>
 
 #include <cppfs/FileHandle.h>
@@ -24,14 +25,14 @@
 
 #include "../callback.h"
 #include "../engine.h"
+#include "sdk.h"
 #include "v8_helpers/v8_string.h"
 #include "v8_helpers/v8_try_catch.h"
-#include "sdk.h"
 
-#define V8_RESOURCE_LOCK(engine)\
-    v8::Locker locker(engine->GetIsolate());\
-    v8::Isolate::Scope isolateScope(engine->GetIsolate());\
-    v8::HandleScope handleScope(engine->GetIsolate());\
+#define V8_RESOURCE_LOCK(engine)                                                                                                                                                                                                                                                       \
+    v8::Locker locker(engine->GetIsolate());                                                                                                                                                                                                                                           \
+    v8::Isolate::Scope isolateScope(engine->GetIsolate());                                                                                                                                                                                                                             \
+    v8::HandleScope handleScope(engine->GetIsolate());                                                                                                                                                                                                                                 \
     v8::Context::Scope contextScope(engine->GetContext());
 
 namespace Framework::Scripting::Engines::Node {
@@ -48,25 +49,29 @@ namespace Framework::Scripting::Engines::Node {
         SDK *_sdk = nullptr;
 
         // Global
-        cppfs::FileWatcher _watcher;
+        cppfs::FileWatcher *_watcher;
         Utils::Time::TimePoint _nextFileWatchUpdate;
         int32_t _fileWatchUpdatePeriod = 1000;
 
         // Global engine
+        static inline bool _wasNodeAlreadyInited = false;
         v8::Isolate *_isolate;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
-        static inline std::unique_ptr<node::MultiIsolatePlatform> _platform;
+        std::unique_ptr<node::MultiIsolatePlatform> _platform;
         v8::Persistent<v8::Context> _context;
         std::string _modName;
         std::atomic<bool> _isShuttingDown = false;
+        uv_loop_t uv_loop;
 
         // Gamemode
-        std::atomic<bool> _gamemodeLoaded = false;
+        std::atomic<bool> _gamemodeLoaded  = false;
+        std::string _gamemodePath;
         GamemodeMetadata _gamemodeMetadata = {};
         v8::Persistent<v8::Script> _gamemodeScript;
-        node::IsolateData *_gamemodeData = nullptr;
-        node::Environment *_gamemodeEnvironment      = nullptr;
-        
+        node::IsolateData *_gamemodeData        = nullptr;
+        node::Environment *_gamemodeEnvironment = nullptr;
+        bool _shouldReloadWatcher               = false;
+
       public:
         std::map<std::string, std::vector<Callback>> _gamemodeEventHandlers;
 
@@ -85,19 +90,19 @@ namespace Framework::Scripting::Engines::Node {
         bool WatchGamemodeChanges(std::string);
 
         template <typename... Args>
-        void InvokeEvent(const std::string name, Args ...args) {
+        void InvokeEvent(const std::string name, Args... args) {
             v8::Locker locker(GetIsolate());
             v8::Isolate::Scope isolateScope(GetIsolate());
             v8::HandleScope handleScope(GetIsolate());
             v8::Context::Scope contextScope(_context.Get(_isolate));
 
-            //const auto eventName = Helpers::MakeString(_isolate, name);
+            // const auto eventName = Helpers::MakeString(_isolate, name);
 
             if (_gamemodeEventHandlers[name].empty()) {
                 return;
             }
 
-            constexpr int const arg_count = sizeof...(Args);
+            constexpr int const arg_count                           = sizeof...(Args);
             v8::Local<v8::Value> v8_args[arg_count ? arg_count : 1] = {v8pp::to_v8(_isolate, std::forward<Args>(args))...};
 
             for (auto it = _gamemodeEventHandlers[name].begin(); it != _gamemodeEventHandlers[name].end(); ++it) {
@@ -106,9 +111,9 @@ namespace Framework::Scripting::Engines::Node {
                 it->Get(_isolate)->Call(_context.Get(_isolate), v8::Undefined(_isolate), arg_count, v8_args);
 
                 if (tryCatch.HasCaught()) {
-                    auto context = _context.Get(_isolate);
-                    v8::Local<v8::Message> message = tryCatch.Message();
-                    v8::Local<v8::Value> exception = tryCatch.Exception();
+                    auto context                               = _context.Get(_isolate);
+                    v8::Local<v8::Message> message             = tryCatch.Message();
+                    v8::Local<v8::Value> exception             = tryCatch.Exception();
                     v8::MaybeLocal<v8::String> maybeSourceLine = message->GetSourceLine(context);
                     v8::Maybe<int32_t> line                    = message->GetLineNumber(context);
                     v8::ScriptOrigin origin                    = message->GetScriptOrigin();

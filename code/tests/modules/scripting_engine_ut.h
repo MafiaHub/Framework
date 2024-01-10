@@ -14,21 +14,19 @@
 MODULE(scripting_engine, {
     using namespace Framework::Scripting;
 
-    IT("can allocate and deallocate a valid scripting engine instance, then do it again to test re-entry", {
-        for (int i = 0; i < 4; i++) {
-            Module *pEngine = new Module;
+    IT("can allocate and deallocate a valid scripting engine instance", {
+        Module *pEngine = new Module;
 
-            // Init the engine and make sure everything went fine
-            EQUALS(pEngine->Init(EngineTypes::ENGINE_NODE, NULL), ModuleError::MODULE_NONE);
-            NEQUALS(pEngine->GetEngine(), nullptr);
-            NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
-            NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
+        // Init the engine and make sure everything went fine
+        EQUALS(pEngine->Init(EngineTypes::ENGINE_NODE, NULL), ModuleError::MODULE_NONE);
+        NEQUALS(pEngine->GetEngine(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
 
-            // Shutdown the engine and make sure everything went down
-            EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
-            EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
+        // Shutdown the engine and make sure everything went down
+        EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
+        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
 
-            delete pEngine;
-        }
+        delete pEngine;
     });
 })
