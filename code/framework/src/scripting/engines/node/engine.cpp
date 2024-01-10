@@ -57,7 +57,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Initialize our SDK and bind to the global object template
         _sdk = new SDK;
-        _sdk->Init(_isolate, cb);
+        _sdk->Init(this, _isolate, cb);
         global->Set(v8pp::to_v8(_isolate, "sdk"), _sdk->GetObjectTemplate());
 
         // Reset and save the global object template pointer

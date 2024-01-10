@@ -78,7 +78,7 @@ namespace Framework::Scripting::Engines::Node {
         engine->InvokeEvent(Helpers::ToString(eventName, isolate), Helpers::ToString(eventData, isolate));
     }
 
-    bool SDK::Init(v8::Isolate *isolate, SDKRegisterCallback cb) {
+    bool SDK::Init(Engine *engine, v8::Isolate *isolate, SDKRegisterCallback cb) {
         _module  = new v8pp::module(isolate);
         _isolate = isolate;
 
@@ -93,7 +93,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Always bind the mod-side in last
         if (cb) {
-            cb(Framework::Scripting::Engines::SDKRegisterWrapper(this, ENGINE_NODE));
+            cb(Framework::Scripting::Engines::SDKRegisterWrapper(engine, this, ENGINE_NODE));
         }
 
         return true;

@@ -96,8 +96,6 @@ namespace Framework::Scripting::Engines::Node {
             v8::HandleScope handleScope(GetIsolate());
             v8::Context::Scope contextScope(_context.Get(_isolate));
 
-            // const auto eventName = Helpers::MakeString(_isolate, name);
-
             if (_gamemodeEventHandlers[name].empty()) {
                 return;
             }

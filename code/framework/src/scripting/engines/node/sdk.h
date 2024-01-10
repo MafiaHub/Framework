@@ -12,6 +12,7 @@
 #include <v8pp/class.hpp>
 #include <v8pp/module.hpp>
 
+#include "engine.h"
 #include "../callback.h"
 
 namespace Framework::Scripting::Engines::Node {
@@ -21,7 +22,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::Isolate *_isolate;
 
       public:
-        bool Init(v8::Isolate *, SDKRegisterCallback = nullptr);
+        bool Init(Engine *, v8::Isolate *, SDKRegisterCallback = nullptr);
 
         v8pp::module *GetModule() const {
             return _module;

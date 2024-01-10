@@ -13,6 +13,7 @@
 
 namespace Framework::Scripting::Engines::Node {
     class SDK;
+    class Engine;
 }
 
 namespace Framework::Scripting::Engines {
@@ -20,9 +21,10 @@ namespace Framework::Scripting::Engines {
       private:
         Framework::Scripting::EngineTypes _kind = ENGINE_NODE;
         void *_sdk                              = nullptr;
+        void *_engine                           = nullptr;
 
       public:
-        SDKRegisterWrapper(void *sdk, Framework::Scripting::EngineTypes kind): _sdk(sdk), _kind(kind) {}
+        SDKRegisterWrapper(void *engine, void *sdk, Framework::Scripting::EngineTypes kind): _engine(engine), _sdk(sdk), _kind(kind) {}
 
         Framework::Scripting::EngineTypes GetKind() const {
             return _kind;
@@ -30,6 +32,10 @@ namespace Framework::Scripting::Engines {
 
         Framework::Scripting::Engines::Node::SDK *GetNodeSDK() {
             return reinterpret_cast<Framework::Scripting::Engines::Node::SDK *>(_sdk);
+        }
+
+        Framework::Scripting::Engines::Node::Engine *GetNodeEngine() {
+            return reinterpret_cast<Framework::Scripting::Engines::Node::Engine *>(_engine);
         }
     };
     using SDKRegisterCallback = fu2::function<void(SDKRegisterWrapper)>;
