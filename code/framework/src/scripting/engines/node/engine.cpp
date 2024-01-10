@@ -271,6 +271,9 @@ namespace Framework::Scripting::Engines::Node {
             return false;
         }
 
+        // Invoke the gamemode loaded event
+        InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
+
         // Stop node environment
         node::Stop(_gamemodeEnvironment);
 
