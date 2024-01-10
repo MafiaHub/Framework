@@ -35,6 +35,7 @@ MODULE(scripting_engine, {
 
         // Init the engine and make sure everything went fine
         EQUALS(pEngine->Init(EngineTypes::ENGINE_NODE, NULL), ModuleError::MODULE_NONE);
+        NEQUALS(pEngine->GetEngine(), nullptr);
         NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
         NEQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
 

@@ -40,6 +40,10 @@ namespace Framework::Utils {
             return _value;
         }
 
+        inline const T& RefValue() const {
+            return _value;
+        }
+
         inline void Clear() {
             _value    = T {};
             _hasValue = false;

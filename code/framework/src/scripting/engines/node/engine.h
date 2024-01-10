@@ -85,21 +85,20 @@ namespace Framework::Scripting::Engines::Node {
         bool WatchGamemodeChanges(std::string);
 
         template <typename... Args>
-        void InvokeEvent(const std::string name, Args &&...args) {
+        void InvokeEvent(const std::string name, Args ...args) {
             v8::Locker locker(GetIsolate());
             v8::Isolate::Scope isolateScope(GetIsolate());
             v8::HandleScope handleScope(GetIsolate());
             v8::Context::Scope contextScope(_context.Get(_isolate));
 
-            const auto eventName = Helpers::MakeString(_isolate, name);
+            //const auto eventName = Helpers::MakeString(_isolate, name);
 
             if (_gamemodeEventHandlers[name].empty()) {
                 return;
             }
 
-            int const arg_count = sizeof...(Args);
-            // +1 to allocate array for arg_count == 0
-            v8::Local<v8::Value> v8_args[arg_count + 1] = {v8pp::to_v8(_isolate, std::forward<Args>(args))...};
+            constexpr int const arg_count = sizeof...(Args);
+            v8::Local<v8::Value> v8_args[arg_count ? arg_count : 1] = {v8pp::to_v8(_isolate, std::forward<Args>(args))...};
 
             for (auto it = _gamemodeEventHandlers[name].begin(); it != _gamemodeEventHandlers[name].end(); ++it) {
                 v8::TryCatch tryCatch(_isolate);
