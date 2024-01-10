@@ -20,13 +20,16 @@ require("vm").runInThisContext(process.argv[1]);
 
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init(SDKRegisterCallback cb) {
+        if (_wasNodeAlreadyInited) {
+            return EngineError::ENGINE_NODE_INIT_FAILED;
+        }
         // Define the arguments to be passed to the node instance
         std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--no-warnings"};
         std::vector<std::string> exec_args {};
         std::vector<std::string> errors {};
 
         // Initialize the node with the provided arguments
-        int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
+        int initCode   = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
         if (initCode != 0) {
             for (std::string &error : errors) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error);
@@ -36,11 +39,13 @@ namespace Framework::Scripting::Engines::Node {
 
         // Initialize the platform
         _platform = node::MultiIsolatePlatform::Create(4);
-        v8::V8::InitializePlatform(_platform.get());
+        v8::V8::InitializePlatform(Engine::_platform.get());
         v8::V8::Initialize();
 
+        uv_loop_init(&uv_loop);
+
         // Allocate and register the isolate
-        _isolate = node::NewIsolate(node::CreateArrayBufferAllocator(), uv_default_loop(), _platform.get());
+        _isolate = node::NewIsolate(node::CreateArrayBufferAllocator(), &uv_loop, _platform.get());
 
         // Allocate our scopes
         v8::Locker locker(_isolate);
@@ -58,13 +63,17 @@ namespace Framework::Scripting::Engines::Node {
         // Reset and save the global object template pointer
         _globalObjectTemplate.Reset(_isolate, global);
 
-        // Ye
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Node.JS engine initialized!");
         _isShuttingDown = false;
+        _wasNodeAlreadyInited = true;
         return EngineError::ENGINE_NONE;
     }
 
     EngineError Engine::Shutdown() {
+        if (!_wasNodeAlreadyInited) {
+            return EngineError::ENGINE_NODE_SHUTDOWN_FAILED;
+        }
+
         if (!_platform) {
             return EngineError::ENGINE_PLATFORM_NULL;
         }
@@ -75,23 +84,31 @@ namespace Framework::Scripting::Engines::Node {
 
         _isShuttingDown = true;
 
-        v8::SealHandleScope seal(_isolate);
-        // Drain the remaining tasks while there are available ones
-        do {
-            uv_run(uv_default_loop(), UV_RUN_DEFAULT);
-            _platform->DrainTasks(_isolate);
-        } while (uv_loop_alive(uv_default_loop()));
-
-        // Unregister the isolate from the platform
-        _platform->UnregisterIsolate(_isolate);
-
         // Release the isolate
+        bool platform_finished = false;
+        _platform->AddIsolateFinishedCallback(
+            _isolate,
+            [](void *data) {
+                *static_cast<bool *>(data) = true;
+            },
+            &platform_finished);
+        _platform->UnregisterIsolate(_isolate);
+        
+        // Wait until the platform has cleaned up all relevant resources.
+        {
+            v8::Locker locker(_isolate);
+            v8::Isolate::Scope isolate_scope(_isolate);
+            while (!platform_finished) uv_run(&uv_loop, UV_RUN_ONCE);
+            uv_loop_close(&uv_loop);
+        }
+
         _isolate->Dispose();
+        _isolate = nullptr;
 
         // Release node and v8 engines
-        node::FreePlatform(_platform.release());
         v8::V8::Dispose();
-        v8::V8::ShutdownPlatform();
+        v8::V8::DisposePlatform();
+        node::FreePlatform(_platform.release());
 
         return EngineError::ENGINE_NONE;
     }
@@ -110,21 +127,29 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Update the base scripting layer
-        v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::SealHandleScope seal(_isolate);
-        _platform->DrainTasks(_isolate);
+        {
+            v8::Locker locker(_isolate);
+            v8::Isolate::Scope isolateScope(_isolate);
+            v8::SealHandleScope seal(_isolate);
+            _platform->DrainTasks(_isolate);
 
-        // Update the file watcher
-        if (!_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
-            // Process the file changes watcher
-            _watcher.watch(0);
-            _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
+            // Notify the gamemode, if loaded
+            if (_gamemodeLoaded) {
+                InvokeEvent(Events[EventIDs::GAMEMODE_UPDATED]);
+            }
         }
 
-        // Notify the gamemode, if loaded
-        if(_gamemodeLoaded){
-            InvokeEvent(Events[EventIDs::GAMEMODE_UPDATED]);
+        // Update the file watcher
+        if (_watcher && !_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
+            // Process the file changes watcher
+            _watcher->watch(0);
+            _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
+
+            if (_shouldReloadWatcher) {
+                _shouldReloadWatcher = false;
+                delete _watcher;
+                PreloadGamemode(_gamemodePath);
+            }
         }
     }
 
@@ -151,6 +176,8 @@ namespace Framework::Scripting::Engines::Node {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The gamemode package.json is empty");
             return false;
         }
+
+        _gamemodePath = mainPath;
 
         auto root = nlohmann::json::parse(packageFileContent);
         try {
@@ -216,9 +243,9 @@ namespace Framework::Scripting::Engines::Node {
 
         // Create the execution environment
         node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
-        _gamemodeData                           = node::CreateIsolateData(_isolate, uv_default_loop(), GetPlatform());
+        _gamemodeData                       = node::CreateIsolateData(_isolate, &uv_loop, GetPlatform());
         std::vector<std::string> argv       = {"mafiahub-gamemode"};
-        _gamemodeEnvironment                                = node::CreateEnvironment(_gamemodeData, context, argv, argv, flags);
+        _gamemodeEnvironment                = node::CreateEnvironment(_gamemodeData, context, argv, argv, flags);
 
         // Make sure isolate is linked to our node environment
         node::IsolateSettings is;
@@ -240,30 +267,46 @@ namespace Framework::Scripting::Engines::Node {
 
     bool Engine::UnloadGamemode(std::string mainPath) {
         // If gamemode is not loaded, don't unload it
-        if(!_gamemodeLoaded) {
+        if (!_gamemodeLoaded) {
             return false;
         }
-
-        // Scope the gamemode
-        v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::HandleScope handleScope(_isolate);
-        v8::Context::Scope scope(GetContext());
-
-        // Exit node environment
-        node::EmitProcessBeforeExit(_gamemodeEnvironment);
-        node::EmitProcessExit(_gamemodeEnvironment);
-
-        // Unregister the SDK
-        // TODO: fix me
 
         // Stop node environment
         node::Stop(_gamemodeEnvironment);
 
-        // Release memory
-        node::FreeEnvironment(_gamemodeEnvironment);
-        node::FreeIsolateData(_gamemodeData);
+        {
+            // Scope the gamemode
+            v8::Locker locker(_isolate);
+            v8::Isolate::Scope isolate_scope(_isolate);
+            {
+                v8::SealHandleScope seal(_isolate);
 
+                bool more = false;
+                // Drain the remaining tasks while there are available ones
+                do {
+                    uv_run(&uv_loop, UV_RUN_DEFAULT);
+                    _platform->DrainTasks(_isolate);
+
+                    more = uv_loop_alive(&uv_loop);
+                    if (more)
+                        continue;
+
+                    if (node::EmitProcessBeforeExit(_gamemodeEnvironment).IsNothing())
+                        break;
+
+                    more = uv_loop_alive(&uv_loop);
+                } while (more);
+
+                // Exit node environment
+                node::EmitProcessExit(_gamemodeEnvironment);
+            }
+            
+            // Release memory
+            node::FreeIsolateData(_gamemodeData);
+            node::FreeEnvironment(_gamemodeEnvironment);
+        }
+
+        _gamemodeEventHandlers.clear();
         _gamemodeLoaded = false;
         return true;
     }
@@ -320,13 +363,18 @@ namespace Framework::Scripting::Engines::Node {
             return false;
         }
 
+        _watcher = new cppfs::FileWatcher;
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Watching '{}' changes", dir.path().c_str());
-        _watcher.add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
-        _watcher.addHandler([this, path](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
+        _watcher->add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
+        _watcher->addHandler([this, path](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
+            if (_shouldReloadWatcher)
+                return;
+
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Gamemode is reloaded due to the file changes");
             // Close the gamemode first, we'll start with a clean slate
             if(this->IsGamemodeLoaded() && UnloadGamemode(path)){
-                LoadGamemode(path);
+                _shouldReloadWatcher = true;
             }
         });
 
