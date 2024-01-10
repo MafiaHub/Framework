@@ -26,7 +26,6 @@ MODULE(scripting_engine, {
         // Shutdown the engine and make sure everything went down
         EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
         EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
-        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
 
         delete pEngine;
 
@@ -42,7 +41,6 @@ MODULE(scripting_engine, {
         // Shutdown the engine and make sure everything went down
         EQUALS(pEngine->Shutdown(), ModuleError::MODULE_NONE);
         EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetIsolate(), nullptr);
-        EQUALS(reinterpret_cast<Engines::Node::Engine *>(pEngine->GetEngine())->GetPlatform(), nullptr);
 
         delete pEngine;
     });

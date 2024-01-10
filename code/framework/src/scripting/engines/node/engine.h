@@ -55,7 +55,7 @@ namespace Framework::Scripting::Engines::Node {
         // Global engine
         v8::Isolate *_isolate;
         v8::Persistent<v8::ObjectTemplate> _globalObjectTemplate;
-        std::unique_ptr<node::MultiIsolatePlatform> _platform;
+        static inline std::unique_ptr<node::MultiIsolatePlatform> _platform;
         v8::Persistent<v8::Context> _context;
         std::string _modName;
         std::atomic<bool> _isShuttingDown = false;

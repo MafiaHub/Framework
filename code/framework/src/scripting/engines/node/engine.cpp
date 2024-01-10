@@ -26,18 +26,23 @@ namespace Framework::Scripting::Engines::Node {
         std::vector<std::string> errors {};
 
         // Initialize the node with the provided arguments
-        int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
-        if (initCode != 0) {
-            for (std::string &error : errors) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error);
+        static bool init_node_once = false;
+        if (!init_node_once) {
+            // from node.js code: Make sure InitializeNodeWithArgs() is called only once.
+            init_node_once = true;
+            int initCode   = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
+            if (initCode != 0) {
+                for (std::string &error : errors) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error);
+                }
+                return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;
             }
-            return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;
-        }
 
-        // Initialize the platform
-        _platform = node::MultiIsolatePlatform::Create(4);
-        v8::V8::InitializePlatform(_platform.get());
-        v8::V8::Initialize();
+            // Initialize the platform
+            _platform = node::MultiIsolatePlatform::Create(4);
+            v8::V8::InitializePlatform(Engine::_platform.get());
+            v8::V8::Initialize();
+        }
 
         // Allocate and register the isolate
         _isolate = node::NewIsolate(node::CreateArrayBufferAllocator(), uv_default_loop(), _platform.get());
@@ -75,23 +80,30 @@ namespace Framework::Scripting::Engines::Node {
 
         _isShuttingDown = true;
 
-        v8::SealHandleScope seal(_isolate);
-        // Drain the remaining tasks while there are available ones
-        do {
-            uv_run(uv_default_loop(), UV_RUN_DEFAULT);
-            _platform->DrainTasks(_isolate);
-        } while (uv_loop_alive(uv_default_loop()));
+        {
+            v8::SealHandleScope seal(_isolate);
+            // Drain the remaining tasks while there are available ones
+            do {
+                uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+                _platform->DrainTasks(_isolate);
+            } while (uv_loop_alive(uv_default_loop()));
 
-        // Unregister the isolate from the platform
-        _platform->UnregisterIsolate(_isolate);
+            // Unregister the isolate from the platform
+            _platform->UnregisterIsolate(_isolate);
+        }
 
         // Release the isolate
         _isolate->Dispose();
+        _isolate = nullptr;
+
 
         // Release node and v8 engines
-        node::FreePlatform(_platform.release());
+        // We don't, V8 keeps internal states in memory so the next time we try to init the platform we hit an assert.
+        #if 0
         v8::V8::Dispose();
-        v8::V8::ShutdownPlatform();
+        v8::V8::DisposePlatform();
+        node::FreePlatform(_platform.release());
+        #endif
 
         return EngineError::ENGINE_NONE;
     }
