@@ -12,19 +12,19 @@
 #define BIT_FLD(pos) (1U << (pos))
 
 // Set the bit specified by 'val' in 'var'
-#define BIT_SET(var, val) ((var) |= (val))
+#define BIT_SET(var, val) (((uint64_t)var) |= ((uint64_t)val))
 
 // Clear the bit specified by 'val' in 'var'
-#define BIT_CLR(var, val) ((var) &= ~(val))
+#define BIT_CLR(var, val) (((uint64_t)var) &= ~((uint64_t)val))
 
 // Check if the bit specified by 'val' in 'var' is set
-#define BIT_HAS(var, val) ((var) & (val))
+#define BIT_HAS(var, val) (((uint64_t)var) & ((uint64_t)val))
 
 // Perform bitwise NOT on 'var'
-#define BIT_NOT(var) (~(var))
+#define BIT_NOT(var) (~((uint64_t)var))
 
 // Perform bitwise XOR between 'var' and 'mask'
-#define BIT_XOR(var, mask) ((var) ^= (mask))
+#define BIT_XOR(var, mask) (((uint64_t)var) ^= ((uint64_t)mask))
 
 // Perform bitwise AND between 'var' and 'mask'
-#define BIT_AND(var, mask) ((var) &= (mask))
+#define BIT_AND(var, mask) (((uint64_t)var) &= ((uint64_t)mask))
