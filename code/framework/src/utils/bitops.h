@@ -17,8 +17,8 @@
 // Clear the bit at position 'pos' in 'var'
 #define BIT_CLR(var, pos) ((var) &= ~BIT_FLD(pos))
 
-// Check if the bit at position 'pos' in 'var' is set
-#define BIT_HAS(var, pos) ((var)&BIT_FLD(pos))
+// Check if the bit specified by 'val' in 'var' is set
+#define BIT_HAS(var, val) ((var) & (val))
 
 // Perform bitwise NOT on 'var'
 #define BIT_NOT(var) (~(var))
