@@ -100,24 +100,25 @@ namespace Framework::Integrations::Scripting {
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
-        Framework::Scripting::Engines::Node::Builtins::Vector3 GetPosition() const {
+        v8::Local<v8::Object> GetPosition() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return Framework::Scripting::Engines::Node::Builtins::Vector3(tr->pos.x, tr->pos.y, tr->pos.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->pos.x, tr->pos.y, tr->pos.z);
         }
 
-        Framework::Scripting::Engines::Node::Builtins::Quaternion GetRotation() const {
+        v8::Local<v8::Object> GetRotation() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return Framework::Scripting::Engines::Node::Builtins::Quaternion(tr->rot.w, tr->rot.x, tr->rot.y, tr->rot.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Quaternion>::create_object(v8::Isolate::GetCurrent(), tr->rot.w, tr->rot.x, tr->rot.y, tr->rot.z);
         }
 
-        Framework::Scripting::Engines::Node::Builtins::Vector3 GetVelocity() const {
+        v8::Local<v8::Object> GetVelocity() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return Framework::Scripting::Engines::Node::Builtins::Vector3(tr->vel.x, tr->vel.y, tr->vel.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->vel.x, tr->vel.y, tr->vel.z);
         }
 
-        Framework::Scripting::Engines::Node::Builtins::Vector3 GetScale() const {
+        v8::Local<v8::Object> GetScale() const {
             const auto fr = _ent.get<Framework::World::Modules::Base::Frame>();
-            return Framework::Scripting::Engines::Node::Builtins::Vector3(fr->scale.x, fr->scale.y, fr->scale.z);
+            const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), fr->scale.x, fr->scale.y, fr->scale.z);
         }
 
         std::string GetModelName() const {
