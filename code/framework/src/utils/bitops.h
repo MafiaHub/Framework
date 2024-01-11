@@ -11,11 +11,11 @@
 // Define a flag at given position 'pos' in enum
 #define BIT_FLD(pos) (1U << (pos))
 
-// Set the bit at position 'pos' in 'var'
-#define BIT_SET(var, pos) ((var) |= BIT_FLD(pos))
+// Set the bit specified by 'val' in 'var'
+#define BIT_SET(var, val) ((var) |= (val))
 
-// Clear the bit at position 'pos' in 'var'
-#define BIT_CLR(var, pos) ((var) &= ~BIT_FLD(pos))
+// Clear the bit specified by 'val' in 'var'
+#define BIT_CLR(var, val) ((var) &= ~(val))
 
 // Check if the bit specified by 'val' in 'var' is set
 #define BIT_HAS(var, val) ((var) & (val))
