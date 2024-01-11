@@ -23,9 +23,6 @@
 // Perform bitwise NOT on 'var'
 #define BIT_NOT(var) (~(var))
 
-// Perform bitwise OR between 'var' and 'mask'
-#define BIT_OR(var, mask) ((var) |= (mask))
-
 // Perform bitwise XOR between 'var' and 'mask'
 #define BIT_XOR(var, mask) ((var) ^= (mask))
 
