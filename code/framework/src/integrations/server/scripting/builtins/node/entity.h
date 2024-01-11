@@ -117,7 +117,6 @@ namespace Framework::Integrations::Scripting {
 
         v8::Local<v8::Object> GetScale() const {
             const auto fr = _ent.get<Framework::World::Modules::Base::Frame>();
-            const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
             return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), fr->scale.x, fr->scale.y, fr->scale.z);
         }
 
