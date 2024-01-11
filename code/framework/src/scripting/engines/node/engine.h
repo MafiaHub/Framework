@@ -118,7 +118,8 @@ namespace Framework::Scripting::Engines::Node {
                     Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] exception at {}: {}: {}", name, *v8::String::Utf8Value(_isolate, origin.ResourceName()), line.ToChecked());
 
                     auto stackTrace = tryCatch.StackTrace(context);
-                    Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Stack trace: {}", *v8::String::Utf8Value(_isolate, stackTrace.ToLocalChecked()));
+                    if (!stackTrace.IsEmpty())
+                        Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] Stack trace: {}", *v8::String::Utf8Value(_isolate, stackTrace.ToLocalChecked()));
                 }
             }
         }
