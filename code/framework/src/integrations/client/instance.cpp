@@ -9,6 +9,7 @@
 #include "instance.h"
 
 #include <networking/messages/client_connection_finalized.h>
+#include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_kick.h>
 
@@ -227,6 +228,10 @@ namespace Framework::Integrations::Client {
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
             }
+
+            // Notify server we are ready to obtain player data
+            Framework::Networking::Messages::ClientInitPlayer initPlayer {};
+            net->Send(initPlayer, SLNet::UNASSIGNED_RAKNET_GUID);
         });
         net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](SLNet::RakNetGUID guid, ClientKick *msg) {
             std::string reason = "Unknown.";

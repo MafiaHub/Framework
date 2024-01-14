@@ -11,6 +11,7 @@
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
+#include "networking/messages/client_initialise_player.h"
 #include "networking/messages/client_handshake.h"
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
@@ -285,9 +286,6 @@ namespace Framework::Integrations::Server {
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
 
-            if (_onPlayerConnectCallback)
-                _onPlayerConnectCallback(newPlayer, guid.g);
-
             // Send the connection finalized packet
             Framework::Networking::Messages::ClientConnectionFinalized answer;
             answer.FromParameters(_opts.tickInterval, newPlayer.id());
@@ -308,6 +306,12 @@ namespace Framework::Integrations::Server {
             }
 
             net->GetPeer()->CloseConnection(guid, true);
+        });
+
+        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
+            auto e = _worldEngine->GetEntityByGUID(guid.g);
+            if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
+                _onPlayerConnectCallback(e, guid.g);
         });
 
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());

@@ -30,6 +30,7 @@ namespace Framework::Networking::Messages {
         GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID,
         GAME_CONNECTION_FINALIZED,
         GAME_CONNECTION_KICKED,
+        GAME_INIT_PLAYER,
 
         // Game sync entity streamer messages
         GAME_SYNC_ENTITY_SPAWN,
