@@ -170,7 +170,7 @@ namespace Framework::Integrations::Scripting {
             return st->updateInterval;
         }
 
-        void Destruct() {
+        void Destroy() {
             Framework::World::ServerEngine::RemoveEntity(_ent);
         }
 
@@ -183,7 +183,7 @@ namespace Framework::Integrations::Scripting {
             cls.property("id", &Entity::GetID);
             cls.property("name", &Entity::GetName);
             cls.function("toString", &Entity::ToString);
-            cls.function("destruct", &Entity::Destruct);
+            cls.function("destroy", &Entity::Destroy);
             cls.function("getNickname", &Entity::GetNickname);
 
             cls.function("setPosition", &Entity::SetPosition);
