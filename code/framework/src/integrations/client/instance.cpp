@@ -52,9 +52,10 @@ namespace Framework::Integrations::Client {
             if (_presence && opts.discordAppId > 0) {
                 if (_presence->Init(opts.discordAppId) != Framework::External::DiscordError::DISCORD_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
-                    return ClientError::CLIENT_ENGINES_ERROR;
                 }
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
+                }
             }
         }
 
