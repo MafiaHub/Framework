@@ -1,0 +1,503 @@
+2023-07-21 | Update README, embed fallback font on macOS to ensure functionality within App Sandbox. [208d653]
+
+
+2023-07-19 | Update 1.3.0 release notes and README. [1cb7e85]
+
+
+2023-07-18 | Various changes for 1.3.0 release: [c909371]
+
+             - Fix issue drawing gradients with CPU renderer.
+
+             - Update samples and README.
+
+             - Make logging more verbose when creating Renderer and Views.
+
+             - Add context-menu support to Inspector (thanks p0358!)
+
+             - Add support for running off the main thread on macOS (thanks osener!)
+
+             - Fix compilation bug when CMAKE_CXX_FLAGS is empty (thanks 19h!)
+
+2023-07-05 | Various changes for final 1.3.0 release: [125b333]
+
+             - Fix issue drawing radial gradients.
+
+             - Add WebKitVersionString() to query corresponding WebKit version.
+
+             - Update default user-agent to match WebKit / Safari version string.
+
+             - Remove limit on gradient stops (was capped at 12).
+
+             - Fix bug with truncating OS file paths on Windows.
+
+             - Update mimalloc to 2.1.1.
+
+             - Update CA certificate bundle (latest Mozilla).
+
+             - Disable video/audio by default.
+
+             - Update C-API to match C++ API.
+
+             - Re-enable MSAA on Linux (AppCore).
+
+2023-06-16 | Update third-party licensing notices. [e57039f]
+
+
+2022-12-09 | Various updates: [59796cc]
+
+              * Add support for dashed strokes to CPU renderer.
+
+              * Improve glyph rendering of vertically rotated text.
+
+              * Fix issue drawing glyphs with complex transformations.
+
+              * Add support for SVG stroke-dasharray property.
+
+              * Fix issue displaying certain box-shadows, allow box-shadows on native controls.
+
+              * Make single-line text inputs ignore line-height (matches Chrome CSS behavior).
+
+              * Fix issue with dropdown menus not painting.
+
+              * Update user-agent with proper Safari version string so Polymer works properly.
+
+              * Fix crash when loading certain Data URIs.
+
+              * Fix Unicode display issue when calling Window::SetTitle() on Windows.
+
+2022-08-31 | Various updates: [3e70dc7]
+
+              * Add support for remote inspector, overhaul inspector API.
+
+              * Fix issue with button height calculation in root stylesheet.
+
+              * Enable window.performance API
+
+              * Fix C API issue, allow ulPlatformSet___() calls to be performed at any point during
+             runtime.
+
+2022-06-10 | Improve text rendering, fix bugs. [eb77230]
+
+             Font hinting and rendering has been improved, especially at small pixel sizes.
+             FontHinting::Smooth now works as intended (hinting is only performed on horizontal
+             features, matches macOS-type rendering). There's also a new FontHinting::None option if
+             you wish to disable hinting completely.
+
+             Fix crash when Config::bitmap_alignment is 0.
+
+             Add support for Gamepad input.
+
+             LoadListener::OnFailLoading will now be fired when a non-200 HTTP status code is
+             encountered, this can be used to display custom error pages for 404s and other codes.
+
+             Fix bug with LoadListener::OnBeginLoading not passing the correct URL that is being
+             loaded into the frame.
+
+2022-04-19 | Buffer, FileSystem, FontLoader, and C-API changes, various fixes. [36726f7]
+
+             The Buffer API has been modified to support memory-mapped files via user-defined
+             destructor callbacks. This allows us to reduce runtime memory usage and improve
+             performance.
+
+             The FileSystem and FontLoader API has been modified to take advantage of the new Buffer
+             API changes.
+
+             The C API has been updated to support the latest C++ API.
+
+             Add new WindowListener events to AppCore API to allow users to provide custom-handling
+             of mouse, keyboard, and scroll events.
+
+             Fix rendering issue in the CPU renderer on macOS/Linux incorrectly drawing certain
+             geometry with RGBA instead of BGRA.
+
+             Fix a crash on YouTube homepage (JavaScriptCore null pointer deref)
+
+             Fix memory leak in FileURLLoader.
+
+             Modify WebCore's run loop scheduler behavior to always service all pending tasks to
+             avoid large backlogs when under heavy load.
+
+             The FileSystem an
+
+2022-02-17 | Fix several rendering bugs (path strokes, alpha blending) in CPU renderer. Fix ref-counting issue with JSString. [32decc7]
+
+
+2022-02-15 | Fix various crashes, add Bitmap::LockPixelsSafe() and LockedPixels<>. [15aac24]
+
+
+2022-01-10 | Add Config::bitmap_alignment so users can customize the alignment of the resulting Bitmap painted by the CPU renderer when the default BitmapSurfaceFactory is used. [6928662]
+
+
+2022-01-06 | Unify API to use RefPtr<> (instead of Ref<>) and String (instead of String16) everywhere. Fix various crashes, significantly improve performance and responsiveness while displaying pages with heavy JavaScript. [2613b40]
+
+
+2021-10-01 | Add Bitmap::ConvertToStraightAlpha, make Bitmap::WritePNG automatically convert to proper alpha and RGBA order. Fix crash in TextCodecICU, fix crash with https://linkedin.com/authwall, fix issue with audio/video not working with file:// URLs, fix issue with GStreamer dylibs having wrong install path on macOS, update CA certificate store to latest copy from Mozilla to resolve issue with Let's Encrypt certs. [d8690a8]
+
+
+2021-09-01 | Fix dependency issues on Linux and Windows, add Linux audio support (pulse), fix crash when drawing box shadows with CPU renderer, significantly improve performance of CPU renderer, significantly improve JavaScript and layout performance (mimalloc enabled across all platforms), fix various rendering issues in CPU renderer. [fe99484]
+
+
+2021-07-15 | Fix bug in last commit (SDK packager install script copied resources to resources/resources) [b8daecd]
+
+
+2021-07-15 | Landing latest changes for the 1.3 branch which notably includes HTML5 video/audio support, faster page loads, and various graphics and stability improvements among others. You should beware that Config::resources_path is now gone and the library will now load icudt67l.dat and cacert.pem from the FileSystem loader, eg. /assets/resources/icudt67l.dat. Failure to load these resources will now trigger a fatal assertion to help developers detect these issues. [73a67cd]
+
+
+2021-03-10 | Fix repaint bug on Windows (thanks for the report Dark Empath!) [5011dbf]
+
+
+2021-03-10 | Merging in new 1.3 branch changes (API breaking changes!), adds multi-window support (see Sample 9) and allows each View to have their own DPI scale among other changes (see ViewConfig). Shader code and GPU driver implementations have also undergone some changes-- we no longer blend in linear gamma space, all fonts are now composited in sRGB with a custom alpha-correction ramp. [705f20a]
+
+
+2020-12-16 | Fix build error on macOS when copying resources to bundle in standalone SDK build. [adcae14]
+
+
+2020-12-15 | Improve anti-aliased font rendering in CPU renderer (improved alpha-correction when compositing brighter-colored fonts). [ce24902]
+
+
+2020-12-04 | Fix image scaling issue in CPU renderer. Fix memory growth issue with large, shortly-lived images. [29d845f]
+
+
+2020-11-18 | Fix issue with CPU renderer not clearing alpha channel when displaying pages with transparent backgrounds. Fix memory leak in frame loader. Fix issue with mouse cursor not being set properly on mouse enter on Windows. [248b91b]
+
+
+2020-10-28 | Update Web Browser sample, display error description when a network error is encountered while loading. [5350360]
+
+
+2020-10-28 | Rename Browser as 'Sample 8 - Web Browser' [982539f]
+
+
+2020-10-27 | Update README [d2f141e]
+
+
+2020-10-27 | Update README [9f8e052]
+
+
+2020-10-27 | Update README and logo. [5cc61dc]
+
+
+2020-10-27 | Enable HTML5 IndexedDB. Closes #281. [c864ad5]
+
+
+2020-09-25 | Fix bug with Bitmap::WritePNG ignoring internal row bytes configuration. [d1b1648]
+
+
+2020-09-24 | *API Breaking Change*: ulCreateView and Renderer::CreateView have a new parameter, 'force_cpu_renderer' that allow you to force a View render to an offscreen Surface even when the GPU renderer is enabled in the Config. (Needed for issue #271) [7bca39b]
+
+
+2020-09-23 | Merge branch 'master' of https://github.com/ultralight-ux/Ultralight [8e54998]
+
+
+2020-09-23 | Disable UWP build. [f7407d1]
+
+
+2020-09-23 | Fix cURL compression issue (now supports deflate, gzip, brotli), remove ICU dynamic libs, switch to ICU data archive (reduces size by 20MB), reduce binary size, remove SSE 4.1/4.2 requirement on macos/linux, improve CPU renderer performance. [3d6e652]
+
+
+2020-08-28 | Update README.md [330cab3]
+
+
+2020-08-21 | Fix issue when painting glyphs with complex transforms with the GPU renderer. (closes #274) [bc829f4]
+
+
+2020-08-20 | Extend JavaScriptCore C API: JSClassDefinition now supports optional version 1000 with extended class information in callback signatures (thanks Janrupf!) [715c641]
+
+
+2020-08-18 | Fix issue in C API: crash in ulEvaluateScript with non-null exception string. [dafa753]
+
+
+2020-08-12 | Update third-party license notices. [7594196]
+
+
+2020-08-11 | Update header documentation, fix missing define in <JavaScriptCore/JSRetainPtr.h> [51f6aea]
+
+
+2020-08-10 | Update Sample 7, clean up code and add more in-comment documentation. [6cbd5a0]
+
+
+2020-08-10 | Update Sample 7 for macOS compatibility. [f36771a]
+
+
+2020-08-10 | Added Sample 7 (OpenGL integration), renamed Tutorials to 'Samples'. [1504797]
+
+
+2020-08-10 | Hide verbose log messages for hidden utility Views (cluttering up log needlessly). [3cbddb8]
+
+
+2020-08-09 | Fix issue in C API (ulApplyProjection wasn't applying projection, lol) [e6659a3]
+
+
+2020-08-07 | Updated C API, made it easier to port GPUDriver-related structs to other languages by limiting custom byte alignment to vertex declarations. [daec3db]
+
+
+2020-08-06 | Update C API, ensure all callback names end in 'Callback' [8f4fa26]
+
+
+2020-08-05 | Bump scroll timer up to 90 FPS in Browser sample for smoother experience. [e007039]
+
+
+2020-08-05 | Update 1.2.0 Release Notes [49dab1a]
+
+
+2020-08-05 | Fix issue when using C API with AppCore on Windows with CPU fallback enabled (we use a custom DIB SurfaceFactory in this case, we need to make sure we don't override it in C API wrapper) [d8c1175]
+
+
+2020-08-04 | Fix build error with C API (uint32_t -> unsigned int) [4f7a921]
+
+
+2020-08-04 | Merge pull request #231 from lkingsford/master [d2de2b0]
+
+             Fix license link in README
+2020-08-04 | Update README [e21c944]
+
+
+2020-08-04 | Expose GPUDriver and Clipboard to C API [8fa5513]
+
+
+2020-08-01 | Fix Tutorial 6 on macOS (default file system in AppCore expects resources to be in Resources/assets/) [b3dcbc0]
+
+
+2020-07-28 | Update README. [e3a0f8a]
+
+
+2020-07-28 | Fix crash on Linux when trying to create MSAA FBOs (commonly encountered when trying to run on a Linux VM). [e1983c8]
+
+
+2020-07-22 | Update C API: expose FileSystem and Logger, add ulCreateOverlayWithView, update BitmapFormat, update docs. Also make App::Create() respect existing platform defines (won't override file system, font loader, or logger if one is already defined). [0ea6317]
+
+
+2020-07-21 | Expose missing View focus management methods to C API. [8533f20]
+
+
+2020-07-21 | Fix bug in WebCore causing wrong thread stack boundaries to be reported on Windows (fixes issue when running Ultralight with JNI from an externally-created thread, thanks Janrupf!) [d36d9dc]
+
+
+2020-07-14 | Extend LoadListener API, add Window::native_handle, update C API, fix iframe bug. [dedfc6c]
+
+             LoadListener now dispatches events for all frames (not just main frame).
+
+             Add ability to get native window handle in AppCore (Window::native_window())
+
+             Fix iframe flickering bug during scroll/repaint.
+
+             Fix repaint bug in AppCore after overlay hide/show/move when CPU renderer active.
+
+             Update C API and samples for new API additions.
+
+             Closes #268. Closes #267.
+
+2020-07-11 | Update samples for new API. Update Browser sample to support child views (eg, target='_blank' URLs), and make the omnibox gracefully detect valid URLs, fixup URLs, and perform search when applicable in manner similar to other browser. [1a2a3a5]
+
+
+2020-07-11 | Replace View::js_context with View::LockJSContext (users should acquire the JSContext to lock the execution state for the current thread to avoid race conditions when web workers are active). In the same vein of thread safety, View::EvaluateScript now returns a string instead of raw JSValue and also takes an optional out-param to store exceptions in, if any. [ca1c3b5]
+
+
+2020-07-09 | Improve HTML Canvas API support. [2f3a8ed]
+
+             Fix issues with clearRect(), rotate(), clip(), arc(), linear gradients, radial
+             gradients, and add pixel-snapping when compositing to View.
+
+             Should now support most samples at: https://www.chartjs.org/samples/latest/
+
+2020-07-07 | Add two new params to View::LoadHTML (for spoofing request URL), add ViewListener::OnCreateChildView, LoadListener::onFailLoading, and LoadListener::OnWindowObjectReady. Closes #266. Closes #187. Closes #154. [4ffa257]
+
+
+2020-07-03 | Implement support for native dropdowns (select), progress bars, and sliders (range). [3073b0e]
+
+
+2020-06-30 | Re-enable pattern gradient fills, add support for Canvas painting. Improve box shadows and semi-transparent font glyph compositing in CPU renderer. Fix bug with rounded rects clipping paths (bottom radii were swapped). [42dcb06]
+
+
+2020-06-29 | Add CAPI alternative example for Tutorial 1 (see main_capi.cpp) [a5b05f0]
+
+
+2020-06-29 | Update C API to include new Surface API and Config options. Also expose default FontLoader, FileSystem, and Logger to C API from AppCore. [50d849c]
+
+
+2020-06-27 | Update Tutorial 1, add extra documentation for Config::resource_path, file system, and add log message handling. [0a9198b]
+
+
+2020-06-26 | Update Tutorial 1 documentation. [c3ade21]
+
+
+2020-06-26 | Update Tutorial 1 to use the new CPU renderer / Surface API. [31d03cb]
+
+
+2020-06-26 | Enable new CPU renderer (pure-CPU, SSE2 accelerated backend), uses even less memory than GPU backend and is much more convenient for integrating into games. Supports painting directly to a user-supplied pixel buffer, see the Surface and SurfaceFactory API. [90b9b57]
+
+
+2020-06-03 | Fix heap corruption issue due to mismatched inter-module interfaces, fix several UWP port issues preventing Windows Store certification. [24bd440]
+
+
+2020-06-01 | Fix several core issues in the UWP port. [6541d16]
+
+
+2020-05-29 | Generate SDK for UWP, update links in README. Remove debug bins. [d6de68a]
+
+
+2020-05-27 | Fix Linux build errors, update dependencies. [6ed1a4e]
+
+
+2020-05-26 | Update build scripts for macOS/Linux [8c76d8e]
+
+
+2020-05-26 | Update buildbot script. [0a50e8b]
+
+
+2020-05-26 | Update buildbot script and README, remove link to 32-bit bins. [fac19bc]
+
+
+2020-05-26 | Update to latest 1.2 branch-- major engine update, now current with latest WebKit. Tweak samples for new API (Tutorial 1 is disabled until new bitmap() API is available). [d9914ba]
+
+
+2020-01-17 | Fix license link in README [6ae71a2]
+
+
+2020-01-05 | Update logo. [be41d8a]
+
+
+2020-01-05 | Fix painting issue with focus rings. [8714b60]
+
+
+2019-12-17 | Update GPUDriver documentation. [0aca776]
+
+
+2019-12-14 | Strip macOS shared libs when creating release SDK package (removes ~10MB of debug symbols) [09a3d2e]
+
+
+2019-12-14 | Update README [8db0588]
+
+
+2019-12-13 | Update README, add new logo and build status badge [652cd35]
+
+
+2019-12-11 | Update README [8972637]
+
+
+2019-12-11 | Update Tutorial 2 [afa2aec]
+
+
+2019-12-11 | Fixed some macOS/Metal driver issues on older MacBook Pros, lowered repaint timer to 60Hz. [67e3403]
+
+
+2019-12-10 | Update release notes. [9b3b88b]
+
+
+2019-12-10 | Bump version string to 1.1.0 [8eba3cf]
+
+
+2019-12-07 | Update Browser sample. [f2ca461]
+
+
+2019-12-07 | Enable MSAA on macOS/Retina, make sure drawable is cleared after flipping to avoid flash of red in backbuffer. [c069d69]
+
+
+2019-12-06 | Make overlays defocus properly after mouse clicks on other overlays. [df46618]
+
+
+2019-12-06 | Update Browser sample. [ae45adf]
+
+
+2019-12-04 | Fix crash in View::set_needs_paint, update JSHelpers documentation and add set_context methods. [bd462d3]
+
+
+2019-12-04 | Add Tutorial 6 (Intro to C API), tweak other samples [d8a9bf3]
+
+
+2019-12-02 | Search executable path for shared libs on Linux. [e9c30fc]
+
+
+2019-12-02 | Tweaked styles in Tutorial 4 [315df41]
+
+
+2019-12-01 | Add support for simple CSS text shadows (no blurs yet). Update samples (new Tutorial 4 and Tutorial 5). [12f2bdf]
+
+
+2019-11-21 | Update Tutorial 2 (use native OS fonts to match platform look-and-feel) [c97a9eb]
+
+
+2019-11-21 | Update Tutorial 2 (more documentation, also designed a simple to-do list app mockup) [b34b91b]
+
+
+2019-11-21 | Update Tutorial 1 (more documentation and fancier gradients!) [c757e2b]
+
+
+2019-11-21 | Fix issue when using default offscreen GL GPUDriver with scaled DPI (View::bitmap was being clipped to unscaled resolution) [b1d134f]
+
+
+2019-11-15 | Fix scrolling issue when multiple scroll containers are on page. (closes #191) [c89e5c9]
+
+
+2019-11-15 | Add radial gradient support. Add native themed drawing for buttons, radio buttons, and checkboxes. Fix issue drawing stroked paths (mitered joins not handled correctly). Fix issue drawing complex box borders. Fix compositing issue with transparent gradients. Fix rendering issues with fractional DPI scaling (closes #185). Downgrade metal version for wider macOS compatibility (closes #180). [2a237bd]
+
+
+2019-11-07 | Rewrote macOS/Metal driver and CAMetalLayer implementation. Much faster and smoother now, especially during resize. Takes better advantage of discrete GPU hardware via triple-buffering. Also fixed DPI issue when window and monitor have different backingScaleFactors. [ab9922f]
+
+
+2019-10-16 | Fix missing inspector assets in Browser sample on macOS [d724e7f]
+
+
+2019-10-14 | Make all rounded rects (except hairline strokes) use MSAA path rendering for more accurate anti-aliasing. Also fix issue where SVG paths were clipped incorrectly when CSS opacity was applied. [946f78c]
+
+
+2019-10-08 | Fix repaint issues on Windows (window not repainting when dragged offscreen then dragged back). Fix crash when overlay is resized to zero width/height. Fix issue where WindowFlags were not being interpreted correctly and added fixed padding to content area. [0d4de33]
+
+
+2019-10-08 | Merge branch 'master' of https://github.com/ultralight-ux/Ultralight [2eddb30]
+
+
+2019-10-08 | Implement live resize on Windows and macOS, fix black bar resizing issue when compositor layers are active. fixes #176. fixes #177. [44e542c]
+
+
+2019-10-07 | Update README.md [0343d8c]
+
+             Closes #150
+2019-10-07 | Re-enable fast allocator strategy for path tesselator, fixed crash issues on x64 platform [326d28d]
+
+
+2019-10-07 | Temporarily disable tesselator's fast allocator to mitigate crash on Windows x64 platform. [077cdcc]
+
+
+2019-10-07 | Merging 1.1 branch into master. Adds significant rendering, performance, and memory-usage improvements and fixes several critical crash bugs. Several more fixes and updates are coming before final 1.1 release. [a62b4a8]
+
+
+2019-06-03 | Enabled bmalloc (WebKit's native slab allocator, should give slight performance improvement. Also fixed link error when using standalone SDK on Windows. [4f91a4a]
+
+
+2019-05-21 | Moved deps dir to CMAKE_CURRENT_BINARY_DIR so we don't pollute non-build directories. [7a80403]
+
+
+2019-05-21 | Fix crash in MemoryPool when allocating more elements than the BlockSize. (UltralightCore @ 4f6930f) [c341ea7]
+
+
+2019-05-21 | Adding explicit 16px font size to root element in default stylsheet to match Chrome desktop behavior (also explicit transparent background color). (WebCore @ ac8a715) [93902db]
+
+
+2019-05-17 | Fixed rendering issue in path stroke tessellator, added support for stroked SVG rects. [6124acf]
+
+
+2019-05-15 | Rewrote tessellator for stroked paths, now handles degenerate collinear cases more gracefully. Fixes #118 [8a74816]
+
+
+2019-05-15 | Fix crash when clicking on select elements (dropdowns), please note select elements are only stubbed out for now and will not display. Need to provide a Platform API for users to display floating popup menus. Fixes #121. [c371f66]
+
+
+2019-05-14 | Fixed link error on Linux: undefined reference to ultralight::CreatePlatformFontLoader(), updated README [0d58e08]
+
+
+2019-05-10 | Updating README with instructions to download latest SDK. [46aabe8]
+
+
+2019-05-10 | Updating Jenkinsfile (working on continous delivery). [2ccf477]
+
+
+2019-05-10 | Updating packager scripts. [44f23c5]
+
+
+2019-05-09 | Added inspector support to the Browser sample, updated deps. [d80a9a5]
+
+
+2019-05-07 | Updating UltralightCore revision, fixes #119 [7e9cf3a]
+
+
+2019-04-26 | Pruned repo history to get rid of 200MB of stale binaries. Repo has now been restructured to pull binaries in from S3 buckets during CMake build. [fbe253b]

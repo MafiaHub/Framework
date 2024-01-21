@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>ACE in Action</title>
+<style type="text/css" media="screen">
+    #editor { 
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        font-size: 13px;
+    }
+    .ace-dracula .ace_marker-layer .ace_active-line {background: #44475a;}
+    .ace-dracula .ace_marker-layer .ace_selection {background: #64599a}
+    .ace-dracula .ace_gutter-active-line {background-color: #44475a;}
+</style>
+</head>
+<body>
+
+<div id="editor">
+</div>
+    
+<script src="ace-1.4.12-src-min-noconflict/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="ace-1.4.12-src-min-noconflict/ext-language_tools.js" type="text/javascript" charset="utf-8"></script>
+<script>
+
+    var editor = ace.edit("editor");
+    var html = `<!DOCTYPE html>
+<html>
+<head>
+    <style type="text/css">
+        html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            color: white;
+            font-family: -apple-system, 'Segoe UI', 'Roboto', 'Ubuntu', 'Arial', sans-serif;
+            background: linear-gradient(45deg, #4e95ff, #6032e4, #c478ff);
+            height: 100%;
+        }
+
+        div {
+            width: 350px;
+            text-align: center;
+            border-radius: 5px;
+            background: rgba(0, 10, 30, 0.1);
+            border: 1px solid rgba(0, 10, 30, 0.5);
+        }
+
+        html, div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        h1 {
+            padding: 1em;
+            font-size: 24px;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>Hello Ultralight!</h1>
+    </div>
+</body>
+</html>
+`
+    editor.setTheme("ace/theme/dracula");
+    editor.setValue(html);
+    editor.session.setMode("ace/mode/html");
+    editor.setOptions({
+      showPrintMargin: false,
+      showInvisibles: true,
+      enableLiveAutocompletion: true,
+      enableSnippets: true
+    });
+    editor.clearSelection();
+    editor.getSession().on('change', function() {
+      var content = editor.getSession().getValue();
+      UpdateEditor(content);
+    });
+</script>
+</body>
+</html>

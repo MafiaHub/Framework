@@ -104,6 +104,7 @@ if (WIN32)
     add_subdirectory(discord)
     add_subdirectory(directxtk)
     add_subdirectory(cef)
+    add_subdirectory(ultralight)
 
     # Lua
     add_subdirectory(lua-5.2.1)
