@@ -182,32 +182,30 @@ namespace Framework::Integrations::Scripting {
             v8pp::class_<Entity> cls(isolate);
             cls.property("id", &Entity::GetID);
             cls.property("name", &Entity::GetName);
-            cls.function("toString", &Entity::ToString);
+            cls.property("nickname", &Entity::GetNickname);
+
             cls.function("destroy", &Entity::Destroy);
-            cls.function("getNickname", &Entity::GetNickname);
-
-            cls.function("setPosition", &Entity::SetPosition);
-            cls.function("setRotation", &Entity::SetRotation);
-            cls.function("setVelocity", &Entity::SetVelocity);
-            cls.function("setScale", &Entity::SetScale);
-            cls.function("setModelName", &Entity::SetModelName);
-            cls.function("setModelHash", &Entity::SetModelHash);
-
+            cls.function("getAlwaysVisible", &Entity::IsAlwaysVisible);
+            cls.function("getModelHash", &Entity::GetModelHash);
+            cls.function("getModelName", &Entity::GetModelName);
             cls.function("getPosition", &Entity::GetPosition);
             cls.function("getRotation", &Entity::GetRotation);
-            cls.function("getVelocity", &Entity::GetVelocity);
-            cls.function("getModelName", &Entity::GetModelName);
-            cls.function("getModelHash", &Entity::GetModelHash);
             cls.function("getScale", &Entity::GetScale);
-
-            cls.function("setVisible", &Entity::SetVisible);
-            cls.function("setAlwaysVisible", &Entity::SetAlwaysVisible);
-            cls.function("setVirtualWorld", &Entity::SetVirtualWorld);
-            cls.function("setUpdateInterval", &Entity::SetUpdateInterval);
-            cls.function("getVisible", &Entity::IsVisible);
-            cls.function("getAlwaysVisible", &Entity::IsAlwaysVisible);
-            cls.function("getVirtualWorld", &Entity::GetVirtualWorld);
             cls.function("getUpdateInterval", &Entity::GetUpdateInterval);
+            cls.function("getVelocity", &Entity::GetVelocity);
+            cls.function("getVirtualWorld", &Entity::GetVirtualWorld);
+            cls.function("getVisible", &Entity::IsVisible);
+            cls.function("setAlwaysVisible", &Entity::SetAlwaysVisible);
+            cls.function("setModelHash", &Entity::SetModelHash);
+            cls.function("setModelName", &Entity::SetModelName);
+            cls.function("setPosition", &Entity::SetPosition);
+            cls.function("setRotation", &Entity::SetRotation);
+            cls.function("setScale", &Entity::SetScale);
+            cls.function("setUpdateInterval", &Entity::SetUpdateInterval);
+            cls.function("setVelocity", &Entity::SetVelocity);
+            cls.function("setVirtualWorld", &Entity::SetVirtualWorld);
+            cls.function("setVisible", &Entity::SetVisible);
+            cls.function("toString", &Entity::ToString);
 
             rootModule->class_("Entity", cls);
         }
