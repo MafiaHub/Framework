@@ -79,6 +79,7 @@ namespace Framework::Integrations::Server {
     class Instance {
       private:
         bool _alive;
+        bool _shuttingDown;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 
         InstanceOptions _opts;

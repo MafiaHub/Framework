@@ -215,6 +215,7 @@ namespace Framework::Scripting::Engines::Node {
 
     bool Engine::LoadGamemode(std::string mainPath) {
         if(_gamemodeLoaded){
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode is already loaded");
             return false;
         }
 
