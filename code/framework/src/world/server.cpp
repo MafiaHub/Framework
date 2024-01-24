@@ -64,6 +64,12 @@ namespace Framework::World {
             const auto dist = glm::distance(lhsTr.pos, rhsTr.pos);
             auto isVisible  = dist < streamer.range;
 
+            // If we made it this far and the entity is streaming range check exempt
+            // we override isVisible state to True.
+            if (streamer.rangeExemptEntities.find(e.id()) != streamer.rangeExemptEntities.end()) {
+                isVisible = true;
+            }
+
             // Allow user to provide additional rules for visibility.
             if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
                 isVisible = isVisible && rhsS.isVisibleProc(streamerEntity, e);
@@ -113,6 +119,13 @@ namespace Framework::World {
 
                 streamable.owner = closestOwnerGUID;
             }
+        });
+
+        // Set up a system to collect stream range exempt entities.
+        _world->system<Modules::Base::Streamer>("CollectRangeExemptEntities").kind(flecs::PostUpdate).interval(tickInterval * 4.0f).each([this](flecs::entity e, Modules::Base::Streamer &streamer) {
+            streamer.rangeExemptEntities.clear();
+            if (streamer.collectRangeExemptEntitiesProc)
+                streamer.collectRangeExemptEntitiesProc(e, streamer);
         });
 
         // Set up a system to stream entities to clients.

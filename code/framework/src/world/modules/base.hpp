@@ -13,6 +13,7 @@
 #include <glm/ext.hpp>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace Framework::Networking {
     class NetworkPeer;
@@ -111,6 +112,7 @@ namespace Framework::World::Modules {
         };
 
         struct Streamer {
+            using CollectRangeExemptEntities = fu2::function<void(flecs::entity e, Streamer &streamer)>;
             struct StreamData {
                 double lastUpdate = 0.0;
             };
@@ -118,6 +120,8 @@ namespace Framework::World::Modules {
             uint64_t guid = (uint64_t)-1;
             std::string nickname;
             std::unordered_map<flecs::entity_t, StreamData> entities;
+            std::unordered_set<flecs::entity_t> rangeExemptEntities;
+            CollectRangeExemptEntities collectRangeExemptEntitiesProc;
         };
 
         explicit Base(flecs::world &world) {
