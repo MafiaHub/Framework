@@ -25,7 +25,7 @@ This codebase provides a suite of tools and libraries to simplify the developmen
 * **ECS**: Backed by a robust ECS framework that simplifies entity management and world streaming, it is also easily extensible.
 * **Scripting**: The **Node.js** scripting layer provides an easy way to create and manage game modes used on game servers.
 * **Logging**: It is always vital to log actions and errors, so the framework provides a simple way.
-* **GUI**: It provides a simple way to create and manage GUI elements using the **Chromium Embedded Framework** library.
+* **GUI**: It provides a simple way to create and manage GUI elements using the **Ultralight** library.
 * **Sentry**: The framework provides a simple way to report errors and exceptions to the **Sentry** service.
 * **Firebase**: It easily stores and retrieves data from the **Firebase** service. Including stats, player data, and more.
 * **Externals**: Contains wrappers for various libraries and services used within the framework.

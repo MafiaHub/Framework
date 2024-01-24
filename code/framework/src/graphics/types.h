@@ -11,7 +11,7 @@
 namespace Framework::Graphics {
     enum class RendererBackend { BACKEND_D3D_9, BACKEND_D3D_11, BACKEND_D3D_12 };
 
-    enum class RendererAPI { CEF, IMGUI, ULTRALIGHT };
+    enum class RendererAPI { IMGUI, ULTRALIGHT };
 
     enum class PlatformBackend { PLATFORM_WIN32, PLATFORM_SDL2 };
 
