@@ -272,50 +272,51 @@ namespace Framework::Scripting::Engines::Node {
     bool Engine::UnloadGamemode(std::string mainPath) {
         // If gamemode is not loaded, don't unload it
         if (!_gamemodeLoaded) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode is not loaded");
             return false;
         }
 
-        // Invoke the gamemode loaded event
+        // Invoke the gamemode unloading event
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
 
+        // Purge all gamemode entities
         const auto worldEngine = CoreModules::GetWorldEngine();
-        if (worldEngine)
+        if (worldEngine){
             worldEngine->PurgeAllGameModeEntities();
+        }
 
         // Stop node environment
         node::Stop(_gamemodeEnvironment);
 
+        // Scope the gamemode
+        v8::Locker locker(_isolate);
+        v8::Isolate::Scope isolate_scope(_isolate);
         {
-            // Scope the gamemode
-            v8::Locker locker(_isolate);
-            v8::Isolate::Scope isolate_scope(_isolate);
-            {
-                v8::SealHandleScope seal(_isolate);
+            v8::SealHandleScope seal(_isolate);
 
-                bool more = false;
-                // Drain the remaining tasks while there are available ones
-                do {
-                    uv_run(&uv_loop, UV_RUN_DEFAULT);
-                    _platform->DrainTasks(_isolate);
+            bool more = false;
+            // Drain the remaining tasks while there are available ones
+            do {
+                uv_run(&uv_loop, UV_RUN_DEFAULT);
+                _platform->DrainTasks(_isolate);
 
-                    more = uv_loop_alive(&uv_loop);
-                    if (more)
-                        continue;
+                more = uv_loop_alive(&uv_loop);
+                if (more)
+                    continue;
 
-                    if (node::EmitProcessBeforeExit(_gamemodeEnvironment).IsNothing())
-                        break;
+                if (node::EmitProcessBeforeExit(_gamemodeEnvironment).IsNothing())
+                    break;
 
-                    more = uv_loop_alive(&uv_loop);
-                } while (more);
+                more = uv_loop_alive(&uv_loop);
+            } while (more);
 
-                // Exit node environment
-                node::EmitProcessExit(_gamemodeEnvironment);
-            }
-            
-            // Release memory
-            node::FreeIsolateData(_gamemodeData);
-            node::FreeEnvironment(_gamemodeEnvironment);
+            // Exit node environment
+            node::EmitProcessExit(_gamemodeEnvironment);
         }
+        
+        // Release memory
+        node::FreeIsolateData(_gamemodeData);
+        node::FreeEnvironment(_gamemodeEnvironment);
 
         _gamemodeEventHandlers.clear();
         _gamemodeLoaded = false;
