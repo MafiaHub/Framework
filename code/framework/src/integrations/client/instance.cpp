@@ -13,6 +13,8 @@
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_kick.h>
 
+#include <world/game_rpc/set_transform.h>
+
 #include "../shared/modules/mod.hpp"
 
 #include <logging/logger.h>
@@ -246,6 +248,18 @@ namespace Framework::Integrations::Client {
             default: break;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
+        });
+        net->RegisterGameRPC<Framework::World::RPC::SetTransform>([this](SLNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
+            if (!msg->Valid()) {
+                return;
+            }
+            const auto e = GetWorldEngine()->GetEntityByServerID(msg->GetServerID());
+            if (!e.is_alive()) {
+                return;
+            }
+
+            auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
+            *tr = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             _worldEngine->OnDisconnect();

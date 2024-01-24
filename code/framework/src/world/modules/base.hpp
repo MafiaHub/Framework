@@ -30,9 +30,21 @@ namespace Framework::World {
 namespace Framework::World::Modules {
     struct Base {
         struct Transform {
+          private:
+            uint16_t genID = 0;
+
+          public:
             glm::vec3 pos {};
             glm::vec3 vel {};
             glm::quat rot = glm::identity<glm::quat>();
+
+            void IncrementGeneration() {
+                ++genID;
+            }
+
+            bool ValidateGeneration(const Transform& tr) {
+                return genID == tr.genID;
+            }
         };
 
         struct Frame {

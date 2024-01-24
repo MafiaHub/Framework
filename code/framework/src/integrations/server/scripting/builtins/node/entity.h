@@ -67,18 +67,21 @@ namespace Framework::Integrations::Scripting {
         void SetPosition(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->pos = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
+            tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
         }
 
         void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->rot = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
+            tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
         }
 
         void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
             auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->vel = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
+            tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
         }
 

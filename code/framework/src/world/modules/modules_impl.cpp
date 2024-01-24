@@ -110,7 +110,11 @@ namespace Framework::World::Modules {
             }
 
             auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+            const auto incomingTr = msg->GetTransform();
+
+            if (tr->ValidateGeneration(incomingTr)) {
+                *tr = incomingTr;
+            }
         });
     }
 
