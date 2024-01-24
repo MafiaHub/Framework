@@ -142,7 +142,6 @@ namespace Framework::Integrations::Server {
 
         // Initialize mod subsystems
         PostInit();
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Mod subsystems initialized");
 
         // Init the signals handlers if enabled
         if (_opts.enableSignals) {
@@ -151,24 +150,23 @@ namespace Framework::Integrations::Server {
         }
 
         _alive = true;
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", _opts.bindName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
         // Load the scripting gamemode when everything is ready
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Loading scripting gamemode...");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Loading scripting gamemode...");
         if(!_scriptingEngine->LoadGamemode()){
-            return ServerError::SERVER_SCRIPTING_INIT_FAILED;
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Failed to load the scripting gamemode. Starting without gamemode.");
         }
 
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         return ServerError::SERVER_NONE;
     }
 
     void Instance::InitEndpoints() {
-        _webServer->RegisterRequest("/networking/status", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback &cb) {
+        _webServer->RegisterRequest("/", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback &cb) {
             (void)ev_data;
             (void)c;
             nlohmann::json root;
@@ -182,7 +180,7 @@ namespace Framework::Integrations::Server {
             cb(200, root.dump(4));
         });
 
-        Logging::GetLogger(FRAMEWORK_INNER_HTTP)->info("All core endpoints have been registered!");
+        Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
     }
 
     void Instance::InitModules() {
@@ -192,14 +190,14 @@ namespace Framework::Integrations::Server {
             world->import <Integrations::Shared::Modules::Mod>();
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Core ecs modules have been imported!");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Core ecs modules have been imported!");
     }
 
     bool Instance::LoadConfigFromJSON() {
         auto configHandle = cppfs::fs::open(_opts.modConfigFile);
 
         if (!configHandle.exists()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("JSON config file is not present, skipping load...");
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("JSON config file is not present, skipping load...");
             return true;
         }
 
@@ -316,7 +314,7 @@ namespace Framework::Integrations::Server {
 
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Game sync networking messages registered");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
     }
 
     ServerError Instance::Shutdown() {
@@ -382,7 +380,7 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Received shutdown signal. In progress...");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received shutdown signal. In progress...");
 
         PreShutdown();
         Shutdown();
@@ -395,10 +393,10 @@ namespace Framework::Integrations::Server {
             Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
         } break;
         }
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Native bindings are set up!");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Native bindings are set up!");
 
         // mod-specific builtins
         ModuleRegister(sdk);
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Mod bindings are set up!");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Mod bindings are set up!");
     }
 } // namespace Framework::Integrations::Server

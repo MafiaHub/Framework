@@ -76,7 +76,7 @@ namespace Framework::Scripting {
     bool Module::LoadGamemode(){
         cppfs::FileHandle dir = cppfs::fs::open("gamemode");
         if (!dir.exists() || !dir.isDirectory()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to find the gamemode directory");
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to find the gamemode directory");
             return false;
         }
 

@@ -89,7 +89,6 @@ namespace Framework::HTTP {
     void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) {
         if (strlen(path) > 0 && callback) {
             _registeredRequestCallback.insert({path, callback});
-            Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Registered request callback for path: {}", path);
         }
     }
 
