@@ -27,7 +27,7 @@ jobs:
             buildDir: '${{ github.workspace }}/build/'
         strategy:
             matrix:
-                os: [ macos-10.15, windows-2019, ubuntu-18.04 ]
+                os: [ windows-2019 ]
             fail-fast: false
         runs-on: ${{ matrix.os }}
         needs: prep
