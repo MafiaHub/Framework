@@ -34,7 +34,7 @@
 #include "core_modules.h"
 
 namespace Framework::Integrations::Server {
-    Instance::Instance(): _alive(false) {
+    Instance::Instance(): _alive(false), _shuttingDown(false) {
         OPTICK_START_CAPTURE();
         _networkingEngine = std::make_shared<Networking::Engine>();
         _webServer        = std::make_shared<HTTP::Webserver>();
@@ -131,6 +131,12 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
+        // Init the signals handlers if enabled
+        if (_opts.enableSignals) {
+            sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
+            sig_attach(SIGTERM, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
+        }
+
         // Register the default endpoints
         InitEndpoints();
 
@@ -143,25 +149,18 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
 
-        // Init the signals handlers if enabled
-        if (_opts.enableSignals) {
-            sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
-            sig_attach(SIGTERM, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
-        }
+        // Load the gamemode
+        _scriptingEngine->LoadGamemode();
 
-        _alive = true;
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", _opts.bindName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
-
-        // Load the scripting gamemode when everything is ready
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Loading scripting gamemode...");
-        if(!_scriptingEngine->LoadGamemode()){
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Failed to load the scripting gamemode. Starting without gamemode.");
-        }
-
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+
+        _alive = true;
+        _shuttingDown = false;
         return ServerError::SERVER_NONE;
     }
 
@@ -318,6 +317,12 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Shutdown() {
+        if(_shuttingDown){
+            return ServerError::SERVER_NONE;
+        }
+
+        _shuttingDown = true;
+
         if (_networkingEngine) {
             _networkingEngine->Shutdown();
         }
@@ -376,6 +381,10 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
+        if(!_alive || _shuttingDown){
+            return;
+        }
+
         if (signal.context != sig_ctx_sys()) {
             return;
         }
@@ -388,15 +397,13 @@ namespace Framework::Integrations::Server {
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
         switch (sdk.GetKind()) {
-        case Framework::Scripting::EngineTypes::ENGINE_NODE: {
-            auto nodeSDK = sdk.GetNodeSDK();
-            Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
-        } break;
+            case Framework::Scripting::EngineTypes::ENGINE_NODE: {
+                auto nodeSDK = sdk.GetNodeSDK();
+                Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
+            } break;
         }
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Native bindings are set up!");
 
         // mod-specific builtins
         ModuleRegister(sdk);
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Mod bindings are set up!");
     }
 } // namespace Framework::Integrations::Server

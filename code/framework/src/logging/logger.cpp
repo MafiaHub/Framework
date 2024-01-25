@@ -23,7 +23,7 @@ namespace Framework::Logging {
         spdlog::init_thread_pool(10000, 4); // queue with 10K items and 4 backing threads.
     }
 
-    std::shared_ptr<spdlog::logger> Logger::Get(const char *logName) {
+    std::shared_ptr<spdlog::logger> Logger::Get(const char *logName, bool async) {
         // Handle pause mode logs
         if (_loggingPaused) {
             constexpr auto suppressedLogger = "_suppressed_logger";
@@ -36,10 +36,12 @@ namespace Framework::Logging {
             return dummyLogger;
         }
 
+        // If the logger already exists, return it
         if (auto logger = spdlog::get(logName)) {
             return logger;
         }
 
+        // Build the different sinks
         auto consoleLogger = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         consoleLogger->set_level(spdlog::level::debug);
         consoleLogger->set_pattern("[%H:%M:%S] [%^%l%$] [%n] %v");
@@ -52,15 +54,25 @@ namespace Framework::Logging {
             ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(_maxRingBufferSize);
             ringbuffer_sink->set_level(spdlog::level::debug);
         }
-
         std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink};
-        auto spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+
+        // Create our logging instance
+        std::shared_ptr<spdlog::logger> spdLogger;
+
+        // Create the logger depending on the type we want
+        if(async){
+            spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+        } else {
+            spdLogger = std::make_shared<spdlog::logger>(logName, sinks.begin(), sinks.end());
+        }
+
         spdLogger->set_level(spdlog::level::trace);
 
         try {
             spdlog::register_logger(spdLogger);
         }
         catch (std::exception &ex) {
+            return nullptr;
         }
 
         _loggers.emplace(logName, spdLogger);
@@ -76,7 +88,7 @@ namespace Framework::Logging {
         return _instance;
     }
 
-    std::shared_ptr<spdlog::logger> GetLogger(const char *name) {
-        return GetInstance()->Get(name);
+    std::shared_ptr<spdlog::logger> GetLogger(const char *name, bool async) {
+        return GetInstance()->Get(name, async);
     }
 } // namespace Framework::Logging
