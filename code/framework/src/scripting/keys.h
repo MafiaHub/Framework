@@ -12,6 +12,8 @@
 
 namespace Framework::Scripting {
     enum Keys {
+        KEY_RGB,
+        KEY_RGBA,
         KEY_VECTOR_2,
         KEY_VECTOR_3,
         KEY_QUATERNION,
@@ -24,6 +26,8 @@ namespace Framework::Scripting {
 
     inline std::string GetKeyName(Keys k) {
         constexpr const char *keys[] = {
+            "RGB",
+            "RGBA",
             "Vector2",
             "Vector3",
             "Quaternion",
