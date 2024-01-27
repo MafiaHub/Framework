@@ -133,11 +133,11 @@ namespace Framework::Integrations::Server {
         }
 
         if (_opts.bindPublicServer && !_masterlist->SetupServer(_opts.bindSecretKey)) {
-            Logging::GetLogger("masterlist")->error("Failed to setup masterlist server: Push key is empty");
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to setup masterlist server: Push key is empty");
             return ServerError::SERVER_MASTERLIST_INIT_FAILED;
         }
         else if (!_opts.bindPublicServer) {
-            Logging::GetLogger("masterlist")->warn("Server will not be announced to masterlist server");
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
         // Init the signals handlers if enabled

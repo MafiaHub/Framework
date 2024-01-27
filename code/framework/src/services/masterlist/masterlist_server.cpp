@@ -45,11 +45,11 @@ namespace Framework::Services {
         // TODO:  Failed to ping masterlist server: 400 {"message":["max_players must be a number conforming to the specified constraints","current_players must be a number conforming to the specified constraints"],"error":"Bad Request","statusCode":400}
         const auto res = _client->Post("/rcon/ping", params);
         if (!res) {
-            Logging::GetLogger("masterlist")->error("Failed to ping masterlist server: {}", res.error());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {}", res.error());
             return false;
         }
         if (res->status != 200 && res->status != 201) {
-            Logging::GetLogger("masterlist")->error("Failed to ping masterlist server: {} {}", res->status, res->body);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {} {}", res->status, res->body);
             return false;
         }
         return true;
