@@ -44,7 +44,7 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
-        _masterlist       = std::make_unique<Services::MasterlistServer>();
+        _masterlist       = std::make_unique<Services::MasterlistConnector>();
     }
 
     Instance::~Instance() {
@@ -132,7 +132,7 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
-        if (_opts.bindPublicServer && !_masterlist->SetupServer(_opts.bindSecretKey)) {
+        if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to setup masterlist server: Push key is empty");
             return ServerError::SERVER_MASTERLIST_INIT_FAILED;
         }
