@@ -17,6 +17,7 @@
 #include "networking/engine.h"
 #include "scripting/engines/callback.h"
 #include "scripting/server.h"
+#include "services/masterlist/masterlist_server.h"
 #include "utils/config.h"
 #include "world/server.h"
 
@@ -49,7 +50,7 @@ namespace Framework::Integrations::Server {
         std::string bindMapName;
         int32_t bindPort;
         std::string bindPassword;
-        bool bindPublicServer = false;
+        bool bindPublicServer = true;
 
         std::string webBindHost;
         int32_t webBindPort;
@@ -90,6 +91,7 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::shared_ptr<World::ServerEngine> _worldEngine;
+        std::shared_ptr<Services::MasterlistServer> _masterlist;
 
         void InitEndpoints();
         void InitModules();

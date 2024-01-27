@@ -44,6 +44,7 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
+        _masterlist       = std::make_unique<Services::MasterlistServer>();
     }
 
     Instance::~Instance() {
@@ -129,6 +130,11 @@ namespace Framework::Integrations::Server {
         if (_opts.firebaseEnabled && _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) != External::Firebase::FirebaseError::FIREBASE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the firebase wrapper");
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
+        }
+
+        if (_opts.bindPublicServer && !_masterlist->SetupServer(_opts.bindSecretKey)) {
+            Logging::GetLogger("masterlist")->error("Failed to setup masterlist server: Push key is empty");
+            return ServerError::SERVER_MASTERLIST_INIT_FAILED;
         }
 
         // Init the signals handlers if enabled
@@ -363,6 +369,15 @@ namespace Framework::Integrations::Server {
 
             if (_worldEngine) {
                 _worldEngine->Update();
+            }
+
+            if (_masterlist->IsInitialized()) {
+                Services::ServerInfo info {};
+                info.gameMode = _scriptingEngine->GetEngine()->GetGameModeName();
+                info.version = _opts.modVersion;
+                info.maxPlayers = _opts.maxPlayers;
+                info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                _masterlist->Ping(info);
             }
 
             PostUpdate();
