@@ -44,7 +44,6 @@ namespace Framework::Integrations::Server {
         std::string gameName;
         std::string gameVersion;
 
-        std::string bindName;
         std::string bindHost;
         std::string bindSecretKey;
         std::string bindMapName;

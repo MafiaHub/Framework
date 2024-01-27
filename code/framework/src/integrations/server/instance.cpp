@@ -161,7 +161,6 @@ namespace Framework::Integrations::Server {
         // Load the gamemode
         _scriptingEngine->LoadGamemode();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", _opts.bindName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
@@ -222,7 +221,6 @@ namespace Framework::Integrations::Server {
 
             // Retrieve fields and overwrite InstanceOptions defaults
             _opts.bindHost      = _fileConfig->Get<std::string>("host");
-            _opts.bindName      = _fileConfig->Get<std::string>("name");
             _opts.bindPort      = _fileConfig->Get<int>("port");
             _opts.bindMapName   = _fileConfig->Get<std::string>("map");
             _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
