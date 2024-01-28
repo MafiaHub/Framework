@@ -44,19 +44,19 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             return _data.a;
         }
 
-        float GetRelR() const {
+        float GetFloatR() const {
             return static_cast<float>(_data.r) / 255.0f;
         }
 
-        float GetRelG() const {
+        float GetFloatG() const {
             return static_cast<float>(_data.g) / 255.0f;
         }
 
-        float GetRelB() const {
+        float GetFloatB() const {
             return static_cast<float>(_data.b) / 255.0f;
         }
 
-        float GetRelA() const {
+        float GetFloatA() const {
             return static_cast<float>(_data.a) / 255.0f;
         }
 
