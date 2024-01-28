@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include "scripting/keys.h"
-
 #include "scripting/engines/node/builtins/quaternion.h"
 #include "scripting/engines/node/builtins/vector_3.h"
 
