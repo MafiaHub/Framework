@@ -18,12 +18,12 @@
 
 namespace Framework::Scripting::Engines::Node::Builtins {
     class ColorRGB {
-      private:
-        glm::ivec3 _data;
+      protected:
+        glm::ivec4 _data;
 
       public:
         ColorRGB(int r, int g, int b) {
-            _data = {r, g, b};
+            _data = {r, g, b, 255};
         }
 
         int GetR() const {
@@ -61,22 +61,22 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void Add(int r, int g, int b) {
-            glm::ivec3 newVec(r, g, b);
+            glm::ivec4 newVec(r, g, b, 255);
             _data += newVec;
         }
 
         void Sub(int r, int g, int b) {
-            glm::ivec3 newVec(r, g, b);
+            glm::ivec4 newVec(r, g, b, 255);
             _data -= newVec;
         }
 
         void Mul(int r, int g, int b) {
-            glm::ivec3 newVec(r, g, b);
+            glm::ivec4 newVec(r, g, b, 255);
             _data *= newVec;
         }
 
         void Div(int r, int g, int b) {
-            glm::ivec3 newVec(r, g, b);
+            glm::ivec4 newVec(r, g, b, 255);
             _data /= newVec;
         }
 

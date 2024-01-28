@@ -16,42 +16,17 @@
 #include <list>
 #include <sstream>
 
+#include "color_rgb.h"
+
 namespace Framework::Scripting::Engines::Node::Builtins {
-    class ColorRGBA {
-      private:
-        glm::ivec4 _data;
-
+    class ColorRGBA: public ColorRGB {
       public:
-        ColorRGBA(int r, int g, int b, int a) {
-            _data = {r, g, b, a};
-        }
-
-        int GetR() const {
-            return _data.r;
-        }
-
-        int GetG() const {
-            return _data.g;
-        }
-
-        int GetB() const {
-            return _data.b;
+        ColorRGBA(int r, int g, int b, int a): ColorRGB(r, g, b) {
+            _data.a = a;
         }
 
         int GetA() const {
             return _data.a;
-        }
-
-        float GetFloatR() const {
-            return static_cast<float>(_data.r) / 255.0f;
-        }
-
-        float GetFloatG() const {
-            return static_cast<float>(_data.g) / 255.0f;
-        }
-
-        float GetFloatB() const {
-            return static_cast<float>(_data.b) / 255.0f;
         }
 
         float GetFloatA() const {
@@ -98,10 +73,8 @@ namespace Framework::Scripting::Engines::Node::Builtins {
             }
 
             v8pp::class_<ColorRGBA> cls(isolate);
+            cls.inherit<ColorRGB>();
             cls.ctor<int, int, int, int>();
-            cls.property("r", &ColorRGBA::GetR);
-            cls.property("g", &ColorRGBA::GetG);
-            cls.property("b", &ColorRGBA::GetB);
             cls.property("a", &ColorRGBA::GetA);
             cls.function("toString", &ColorRGBA::ToString);
             cls.function("toArray", &ColorRGBA::ToArray);
