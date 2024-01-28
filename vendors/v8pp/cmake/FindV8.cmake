@@ -28,7 +28,7 @@ if(WIN32)
 	find_file(V8_LIBPLATFORMDLL v8_libplatform.dll ${V8_NUGET_BIN_DIR})
 
 	file(GLOB V8_BINARIES ${V8_NUGET_BIN_DIR}/*)
-	message(STATUS "Copy ${V8_BINARIES} to the project output dir ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+	# message(STATUS "Copy ${V8_BINARIES} to the project output dir ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 	file(COPY ${V8_BINARIES} DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 else()
 endif()
