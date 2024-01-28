@@ -10,6 +10,8 @@
 
 #include <string>
 
+#include "builtins/color_rgb.h"
+#include "builtins/color_rgba.h"
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
@@ -87,6 +89,8 @@ namespace Framework::Scripting::Engines::Node {
         _module->function("emit", &Emit);
 
         // Bind the builtins
+        Builtins::ColorRGB::Register(isolate, _module);
+        Builtins::ColorRGBA::Register(isolate, _module);
         Builtins::Quaternion::Register(isolate, _module);
         Builtins::Vector3::Register(isolate, _module);
         Builtins::Vector2::Register(isolate, _module);
