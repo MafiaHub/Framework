@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include "../../../keys.h"
-
 #include <glm/glm.hpp>
 #include <v8pp/class.hpp>
 #include <v8pp/module.hpp>
