@@ -44,6 +44,7 @@ namespace Framework::Integrations::Server {
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
+        _masterlist       = std::make_unique<Services::MasterlistConnector>();
     }
 
     Instance::~Instance() {
@@ -131,6 +132,13 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
+        if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to setup masterlist server: Push key is empty");
+        }
+        else if (!_opts.bindPublicServer) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
+        }
+
         // Init the signals handlers if enabled
         if (_opts.enableSignals) {
             sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
@@ -152,7 +160,6 @@ namespace Framework::Integrations::Server {
         // Load the gamemode
         _scriptingEngine->LoadGamemode();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Name:\t{}", _opts.bindName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
@@ -213,7 +220,6 @@ namespace Framework::Integrations::Server {
 
             // Retrieve fields and overwrite InstanceOptions defaults
             _opts.bindHost      = _fileConfig->Get<std::string>("host");
-            _opts.bindName      = _fileConfig->Get<std::string>("name");
             _opts.bindPort      = _fileConfig->Get<int>("port");
             _opts.bindMapName   = _fileConfig->Get<std::string>("map");
             _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
@@ -363,6 +369,15 @@ namespace Framework::Integrations::Server {
 
             if (_worldEngine) {
                 _worldEngine->Update();
+            }
+
+            if (_masterlist->IsInitialized()) {
+                Services::ServerInfo info {};
+                info.gameMode = _scriptingEngine->GetEngine()->GetGameModeName();
+                info.version = _opts.modVersion;
+                info.maxPlayers = _opts.maxPlayers;
+                info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
+                _masterlist->Ping(info);
             }
 
             PostUpdate();

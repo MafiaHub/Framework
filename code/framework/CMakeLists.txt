@@ -29,6 +29,8 @@ set(FRAMEWORK_SRC
 
     src/networking/network_peer.cpp
     src/networking/errors.cpp
+
+    src/services/masterlist.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC

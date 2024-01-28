@@ -154,6 +154,10 @@ namespace Framework::Scripting::Engines::Node {
             return _modName;
         }
 
+        std::string GetGameModeName() const {
+            return _gamemodeMetadata.name;
+        }
+
       protected:
         SDK *GetSDK() const {
             return _sdk;
