@@ -19,12 +19,12 @@
 namespace Framework::Scripting {
     class Module {
       private:
-        int _processArgsCount;
-        char **_processArgs;
+        int _processArgsCount = 0;
+        char **_processArgs = nullptr;
         std::string _modName;
 
         Engines::IEngine *_engine = nullptr;
-        EngineTypes _engineType;
+        EngineTypes _engineType = EngineTypes::ENGINE_NODE;
 
       public:
         Module()  = default;

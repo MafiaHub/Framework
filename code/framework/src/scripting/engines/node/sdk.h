@@ -18,8 +18,8 @@
 namespace Framework::Scripting::Engines::Node {
     class SDK {
       private:
-        v8pp::module *_module;
-        v8::Isolate *_isolate;
+        v8pp::module *_module = nullptr;
+        v8::Isolate *_isolate = nullptr;
 
       public:
         bool Init(Engine *, v8::Isolate *, SDKRegisterCallback = nullptr);
