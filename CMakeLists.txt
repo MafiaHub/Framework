@@ -17,7 +17,6 @@ add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
 
 # Load the global headers one by one (a few ones have relative include path, so we are forced to do so)
 include_directories(
-    "${PROJECT_SOURCE_DIR}/vendors/mongoose"
     "${PROJECT_SOURCE_DIR}/vendors/nodejs/include"
     "${PROJECT_SOURCE_DIR}/vendors/glm"
     "${PROJECT_SOURCE_DIR}/vendors/minhook/include"

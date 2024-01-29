@@ -35,7 +35,6 @@ This codebase also depends on the following third-party libraries:
     discord         - https://discord.com/developers/docs/legal
     httplib         - https://github.com/yhirose/cpp-httplib/blob/master/LICENSE
     nlohmann-json   - https://github.com/nlohmann/json/blob/develop/LICENSE.MIT
-    mongoose        - https://github.com/cesanta/mongoose/blob/master/LICENSE
     nodejs          - https://github.com/nodejs/node/blob/master/LICENSE
     openssl         - https://www.openssl.org/source/license.html
     slikenet        - https://github.com/SLikeSoft/SLikeNet/blob/master/license.txt
