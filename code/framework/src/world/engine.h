@@ -65,6 +65,7 @@ namespace Framework::World {
         flecs::entity GetEntityByGUID(uint64_t guid) const;
         flecs::entity WrapEntity(flecs::entity_t serverID) const;
         static bool IsEntityOwner(flecs::entity e, uint64_t guid);
+        void WakeEntity(flecs::entity e);
 
         flecs::world *GetWorld() {
             return _world.get();

@@ -128,6 +128,47 @@ namespace Framework::World {
                 streamer.collectRangeExemptEntitiesProc(e, streamer);
         });
 
+        _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator").interval(3.0f).iter([](flecs::iter &it, Modules::Base::TickRateRegulator *tr, Modules::Base::Transform *t, Modules::Base::Streamable *s) {
+            for (auto i : it) {
+                bool decreaseRate       = false;
+                constexpr float EPSILON = 0.01f;
+
+                // Check if generation ID has changed
+                if (t[i].GetGeneration() != tr[i].lastGenID) {
+                    decreaseRate = true;
+                }
+
+                // Check if position has changed
+                if (glm::abs(t[i].pos.x - tr[i].pos.x) < EPSILON && glm::abs(t[i].pos.y - tr[i].pos.y) < EPSILON && glm::abs(t[i].pos.z - tr[i].pos.z) < EPSILON) {
+                    decreaseRate = true;
+                }
+
+                // Check if rotation quaternion has changed
+                if (glm::abs(t[i].rot.x - tr[i].rot.x) < EPSILON && glm::abs(t[i].rot.y - tr[i].rot.y) < EPSILON && glm::abs(t[i].rot.z - tr[i].rot.z) < EPSILON && glm::abs(t[i].rot.w - tr[i].rot.w) < EPSILON) {
+                    decreaseRate = true;
+                }
+
+                // Check if velocity has changed
+                if (glm::abs(t[i].vel.x - tr[i].vel.x) < EPSILON && glm::abs(t[i].vel.y - tr[i].vel.y) < EPSILON && glm::abs(t[i].vel.z - tr[i].vel.z) < EPSILON) {
+                    decreaseRate = true;
+                }
+
+                // Update all values
+                tr[i].lastGenID = t[i].GetGeneration();
+                tr[i].pos       = t[i].pos;
+                tr[i].rot       = t[i].rot;
+                tr[i].vel       = t[i].vel;
+
+                // Decrease tick rate if needed
+                if (decreaseRate) {
+                    s[i].updateInterval += 5.0f;
+                }
+                else {
+                    s[i].updateInterval = s[i].defaultUpdateInterval;
+                }
+            }
+        });
+
         // Set up a system to stream entities to clients.
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
             .kind(flecs::PostUpdate)
