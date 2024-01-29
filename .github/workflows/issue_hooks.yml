@@ -6,8 +6,16 @@ on:
       - opened
 
 jobs:
-  add-to-project:
+  add-issue:
     name: Add issue to project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/orgs/MafiaHub/projects/1
+          github-token: ${{ secrets.ISSUE_PAT }}
+  add-pr:
+    name: Add pull request to project
     runs-on: ubuntu-latest
     steps:
       - uses: actions/add-to-project@v0.5.0
