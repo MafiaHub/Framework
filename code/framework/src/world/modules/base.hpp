@@ -39,6 +39,10 @@ namespace Framework::World::Modules {
             glm::vec3 vel {};
             glm::quat rot = glm::identity<glm::quat>();
 
+            uint16_t GetGeneration() const {
+                return genID;
+            }
+
             void IncrementGeneration() {
                 ++genID;
             }
@@ -46,6 +50,10 @@ namespace Framework::World::Modules {
             bool ValidateGeneration(const Transform& tr) {
                 return genID == tr.genID;
             }
+        };
+
+        struct TickRateRegulator : public Transform {
+            uint16_t lastGenID = 0;
         };
 
         struct Frame {
@@ -74,7 +82,8 @@ namespace Framework::World::Modules {
             int virtualWorld      = 0;
             bool isVisible        = true;
             bool alwaysVisible    = false;
-            double updateInterval = (1000.0 / 60.0); // 16.1667~ ms interval
+            double defaultUpdateInterval = (1000.0 / 60.0); // 16.1667~ ms interval
+            double updateInterval = defaultUpdateInterval;
             uint64_t owner        = 0;
 
             AssignOwnerProc assignOwnerProc;
@@ -137,6 +146,7 @@ namespace Framework::World::Modules {
             world.component<RemovedOnGameModeReload>();
             world.component<PendingRemoval>();
             world.component<ServerID>();
+            world.component<TickRateRegulator>();
 
 // Windows bind metadata
 #ifdef _WIN32

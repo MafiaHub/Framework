@@ -45,6 +45,16 @@ namespace Framework::World {
         return (es->owner == guid);
     }
 
+    void Engine::WakeEntity(flecs::entity e) {
+        if (!e.get<Framework::World::Modules::Base::TickRateRegulator>()) {
+            return;
+        }
+        auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
+        tr->lastGenID--;
+        auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        es->updateInterval = es->defaultUpdateInterval;
+    }
+
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {

@@ -67,6 +67,7 @@ namespace Framework::Integrations::Scripting {
             tr->pos = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+            CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
         void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) {
@@ -74,6 +75,7 @@ namespace Framework::Integrations::Scripting {
             tr->rot = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
             tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+            CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
         void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
@@ -81,6 +83,7 @@ namespace Framework::Integrations::Scripting {
             tr->vel = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+            CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
         void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {

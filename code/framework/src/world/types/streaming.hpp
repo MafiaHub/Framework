@@ -20,6 +20,8 @@ namespace Framework::World::Archetypes {
 
             auto streamable   = e.get_mut<Framework::World::Modules::Base::Streamable>();
             streamable->owner = guid;
+         
+            e.add<Framework::World::Modules::Base::TickRateRegulator>();
         }
 
       public:
