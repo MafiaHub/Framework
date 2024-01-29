@@ -130,26 +130,26 @@ namespace Framework::World {
 
         _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator").interval(3.0f).iter([](flecs::iter &it, Modules::Base::TickRateRegulator *tr, Modules::Base::Transform *t, Modules::Base::Streamable *s) {
             for (auto i : it) {
-                bool decreaseRate       = false;
+                bool decreaseRate       = true;
                 constexpr float EPSILON = 0.01f;
 
-                // Check if generation ID has changed
-                if (t[i].GetGeneration() != tr[i].lastGenID) {
-                    decreaseRate = true;
-                }
-
                 // Check if position has changed
-                if (glm::abs(t[i].pos.x - tr[i].pos.x) < EPSILON && glm::abs(t[i].pos.y - tr[i].pos.y) < EPSILON && glm::abs(t[i].pos.z - tr[i].pos.z) < EPSILON) {
-                    decreaseRate = true;
+                if (glm::abs(t[i].pos.x - tr[i].pos.x) > EPSILON || glm::abs(t[i].pos.y - tr[i].pos.y) > EPSILON || glm::abs(t[i].pos.z - tr[i].pos.z) > EPSILON) {
+                    decreaseRate = false;
                 }
 
                 // Check if rotation quaternion has changed
-                if (glm::abs(t[i].rot.x - tr[i].rot.x) < EPSILON && glm::abs(t[i].rot.y - tr[i].rot.y) < EPSILON && glm::abs(t[i].rot.z - tr[i].rot.z) < EPSILON && glm::abs(t[i].rot.w - tr[i].rot.w) < EPSILON) {
-                    decreaseRate = true;
+                if (glm::abs(t[i].rot.x - tr[i].rot.x) > EPSILON || glm::abs(t[i].rot.y - tr[i].rot.y) > EPSILON || glm::abs(t[i].rot.z - tr[i].rot.z) > EPSILON || glm::abs(t[i].rot.w - tr[i].rot.w) > EPSILON) {
+                    decreaseRate = false;
                 }
 
                 // Check if velocity has changed
-                if (glm::abs(t[i].vel.x - tr[i].vel.x) < EPSILON && glm::abs(t[i].vel.y - tr[i].vel.y) < EPSILON && glm::abs(t[i].vel.z - tr[i].vel.z) < EPSILON) {
+                if (glm::abs(t[i].vel.x - tr[i].vel.x) > EPSILON || glm::abs(t[i].vel.y - tr[i].vel.y) > EPSILON || glm::abs(t[i].vel.z - tr[i].vel.z) > EPSILON) {
+                    decreaseRate = false;
+                }
+
+                // Check if generation ID has changed
+                if (t[i].GetGeneration() != tr[i].lastGenID) {
                     decreaseRate = true;
                 }
 
