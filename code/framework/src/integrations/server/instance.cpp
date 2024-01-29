@@ -11,8 +11,8 @@
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
-#include "networking/messages/client_initialise_player.h"
 #include "networking/messages/client_handshake.h"
+#include "networking/messages/client_initialise_player.h"
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
@@ -63,20 +63,16 @@ namespace Framework::Integrations::Server {
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
         options.allow_unrecognised_options();
-        options.add_options("MafiaHub Integrations server", {
-            {"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))},
-            {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
-            {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)},
-            {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
-            {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)},
-            {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}
-        });
+        options.add_options("MafiaHub Integrations server",
+            {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
+                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
 
         // Try to parse and return if anything wrong happened
         auto result = options.parse(_opts.argc, _opts.argv);
 
         // If help was specified, just print the help and exit
-        if(result.count("help")){
+        if (result.count("help")) {
             std::cout << options.help() << std::endl;
             exit(0);
         }
@@ -166,15 +162,13 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
-        _alive = true;
+        _alive        = true;
         _shuttingDown = false;
         return ServerError::SERVER_NONE;
     }
 
     void Instance::InitEndpoints() {
-        _webServer->RegisterRequest("/", [this](struct mg_connection *c, void *ev_data, const Framework::HTTP::ResponseCallback &cb) {
-            (void)ev_data;
-            (void)c;
+        _webServer->RegisterRequest("/", [this](const httplib::Request &req, httplib::Response &res) {
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;
@@ -183,7 +177,8 @@ namespace Framework::Integrations::Server {
             root["port"]              = _opts.bindPort;
             root["password_required"] = !_opts.bindPassword.empty();
             root["max_players"]       = _opts.maxPlayers;
-            cb(200, root.dump(4));
+            res.body                  = root.dump(4);
+            res.status                = 200;
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
@@ -323,7 +318,7 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Shutdown() {
-        if(_shuttingDown){
+        if (_shuttingDown) {
             return ServerError::SERVER_NONE;
         }
 
@@ -373,9 +368,9 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
-                info.gameMode = _scriptingEngine->GetEngine()->GetGameModeName();
-                info.version = _opts.modVersion;
-                info.maxPlayers = _opts.maxPlayers;
+                info.gameMode       = _scriptingEngine->GetEngine()->GetGameModeName();
+                info.version        = _opts.modVersion;
+                info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
                 _masterlist->Ping(info);
             }
@@ -396,7 +391,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
-        if(!_alive || _shuttingDown){
+        if (!_alive || _shuttingDown) {
             return;
         }
 
@@ -412,10 +407,10 @@ namespace Framework::Integrations::Server {
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
         switch (sdk.GetKind()) {
-            case Framework::Scripting::EngineTypes::ENGINE_NODE: {
-                auto nodeSDK = sdk.GetNodeSDK();
-                Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
-            } break;
+        case Framework::Scripting::EngineTypes::ENGINE_NODE: {
+            auto nodeSDK = sdk.GetNodeSDK();
+            Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
+        } break;
         }
 
         // mod-specific builtins
