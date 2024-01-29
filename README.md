@@ -1,5 +1,5 @@
 <div align="center">
-   <a href="https://github.com/MafiaHub/Framework"><img src="https://private-user-images.githubusercontent.com/9026786/300302951-43e839f2-f207-47bf-aa59-72371e8403ba.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MDY0ODY0OTgsIm5iZiI6MTcwNjQ4NjE5OCwicGF0aCI6Ii85MDI2Nzg2LzMwMDMwMjk1MS00M2U4MzlmMi1mMjA3LTQ3YmYtYWE1OS03MjM3MWU4NDAzYmEucG5nP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI0MDEyOCUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNDAxMjhUMjM1NjM4WiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9MTkzMmIwMzQ3YjBhMGJiYzBkZTFmMDVlNmMzZDdhMDZhZjZjMWQ1Nzc5Yzg5ZjQ1MzQzN2M1ZjA4ZjVmMjQxZiZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QmYWN0b3JfaWQ9MCZrZXlfaWQ9MCZyZXBvX2lkPTAifQ.MvXEneZhY5L-JgEeEOdnxYAbQyvjT9T43gizkPyOJuQ" alt="MafiaHub" /></a>
+   <a href="https://github.com/MafiaHub/Framework"><img src="https://github.com/MafiaHub/Framework/assets/9026786/43e839f2-f207-47bf-aa59-72371e8403ba" alt="MafiaHub" /></a>
 </div>
 
 <div align="center">
