@@ -35,6 +35,9 @@ namespace Framework::External::ImGUI::Widgets {
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
         std::shared_ptr<Framework::Input::IInput> _input;
         std::vector<MenuBarProc> _menuBarDrawers;
+        std::vector<std::string> _history;
+        std::string _tempInputText;
+        int _historyPos = -1;
         spdlog::logger *_logger;
         static void FormatLog(std::string log);
         void SendCommand(const std::string &command);

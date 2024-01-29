@@ -158,10 +158,42 @@ namespace Framework::External::ImGUI::Widgets {
                     ImGui::SetKeyboardFocusHere(-1);
                     _focusOnInput = true;
                 }
+                else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory && data->EventKey == ImGuiKey_UpArrow) {
+                    if (_history.empty())
+                        return 0;
+                    if (_historyPos == -1) {
+                        _tempInputText = data->Buf;
+                    }
+                    else if (_historyPos + 1 == _history.size()) {
+                        return 0;
+                    }
+                    ++_historyPos;
+                    data->DeleteChars(0, data->BufTextLen);
+                    data->InsertChars(0, _history.at(_historyPos).c_str());
+
+                    ImGui::SetKeyboardFocusHere(-1);
+                    _focusOnInput = true;
+                }
+                else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory && data->EventKey == ImGuiKey_DownArrow) {
+                    if (_historyPos > 0) {
+                        --_historyPos;
+                        data->DeleteChars(0, data->BufTextLen);
+                        data->InsertChars(0, _history.at(_historyPos).c_str());
+                    }
+                    else if (!_tempInputText.empty()) {
+                        _historyPos = -1;
+                        data->DeleteChars(0, data->BufTextLen);
+                        data->InsertChars(0, _tempInputText.c_str());
+                        _tempInputText = "";
+                    }
+
+                    ImGui::SetKeyboardFocusHere(-1);
+                    _focusOnInput = true;
+                }
                 return 0;
             };
 
-            auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize;
+            auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_CallbackHistory;
 
             if (!_consoleControl) {
                 // Block input if console is unfocused
@@ -180,6 +212,8 @@ namespace Framework::External::ImGUI::Widgets {
             }
 
             if (wasInputProcessed && !_updateInputText) {
+                _history.emplace(_history.begin(), consoleText);
+                _historyPos = -1;
                 SendCommand(consoleText);
                 consoleText[0] = '\0';
                 ImGui::SetKeyboardFocusHere(-1);
