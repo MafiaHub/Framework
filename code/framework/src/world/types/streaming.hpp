@@ -20,6 +20,7 @@ namespace Framework::World::Archetypes {
 
             auto streamable   = e.get_mut<Framework::World::Modules::Base::Streamable>();
             streamable->owner = guid;
+            streamable->defaultUpdateInterval = CoreModules::GetTickRate();
          
             e.add<Framework::World::Modules::Base::TickRateRegulator>();
         }

@@ -60,6 +60,8 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_INVALID_OPTIONS;
         }
 
+        CoreModules::SetTickRate(opts.tickInterval);
+
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
         options.allow_unrecognised_options();

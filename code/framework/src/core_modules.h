@@ -48,6 +48,10 @@ namespace Framework {
             _scriptingModule = module;
         }
 
+        static void SetTickRate(double tickRate) {
+            _tickRate = tickRate;
+        }
+
         // Singleton getters
         static Framework::Networking::NetworkPeer *GetNetworkPeer() {
             return _networkPeer;
@@ -61,9 +65,14 @@ namespace Framework {
             return _scriptingModule;
         }
 
+        static double GetTickRate() {
+            return _tickRate;
+        }
+
       private:
         static inline Framework::Networking::NetworkPeer *_networkPeer {};
         static inline Framework::World::Engine *_engine {};
         static inline Framework::Scripting::Module *_scriptingModule {};
+        static inline double _tickRate { 1000 / 60.0f };
     };
 }; // namespace Framework
