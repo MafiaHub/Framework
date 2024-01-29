@@ -31,10 +31,6 @@ else ()
     endif ()
 endif ()
 
-
-# Build mongoose
-add_subdirectory(mongoose)
-
 # Build semver
 add_subdirectory(semver)
 
