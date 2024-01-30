@@ -10,38 +10,14 @@
 #include <Ultralight/String.h>
 #include <Ultralight/RefPtr.h>
 #include <Ultralight/Geometry.h>
+#include <Ultralight/Buffer.h>
+#include <Ultralight/ConsoleMessage.h>
+#include <Ultralight/NetworkRequest.h>
 
 namespace ultralight {
 
 class View;
 
-///
-/// MessageSource types, @see ViewListener::OnAddConsoleMessage
-///
-enum MessageSource {
-  kMessageSource_XML = 0,
-  kMessageSource_JS,
-  kMessageSource_Network,
-  kMessageSource_ConsoleAPI,
-  kMessageSource_Storage,
-  kMessageSource_AppCache,
-  kMessageSource_Rendering,
-  kMessageSource_CSS,
-  kMessageSource_Security,
-  kMessageSource_ContentBlocker,
-  kMessageSource_Other,
-};
-
-///
-/// MessageLevel types, @see ViewListener::OnAddConsoleMessage
-///
-enum MessageLevel {
-  kMessageLevel_Log = 1,
-  kMessageLevel_Warning = 2,
-  kMessageLevel_Error = 3,
-  kMessageLevel_Debug = 4,
-  kMessageLevel_Info = 5,
-};
 
 ///
 /// Cursor types, @see ViewListener::OnChangeCursor
@@ -125,9 +101,8 @@ class UExport ViewListener {
   ///
   /// Called when a message is added to the console (useful for errors / debug)
   ///
-  virtual void OnAddConsoleMessage(ultralight::View* caller, MessageSource source,
-                                   MessageLevel level, const String& message, uint32_t line_number,
-                                   uint32_t column_number, const String& source_id) { }
+  virtual void OnAddConsoleMessage(ultralight::View* caller,
+                                   const ultralight::ConsoleMessage& message) { }
 
   ///
   /// Called when the page wants to create a new child View.
@@ -269,6 +244,88 @@ class UExport LoadListener {
   /// Called when the session history (back/forward state) is modified.
   ///
   virtual void OnUpdateHistory(ultralight::View* caller) { }
+};
+
+///
+/// A unique identifier representing an active download.
+/// 
+typedef uint32_t DownloadId;
+
+///
+/// @brief  Interface for Download-related events
+///
+/// @note   For more info @see View::set_download_listener
+///
+class UExport DownloadListener {
+ public:
+  virtual ~DownloadListener() {}
+
+  ///
+  /// Called when the View wants to generate a unique download id.
+  /// 
+  /// You should generally return an integer (starting at 0) that is incremented with each call
+  /// to this callback.
+  ///
+  virtual DownloadId NextDownloadId(ultralight::View* caller) = 0;
+
+  ///
+  /// Called when the View wants to start downloading a resource from the network.
+  /// 
+  /// You should return true to allow the download, or false to block the download.
+  /// 
+  virtual bool OnRequestDownload(ultralight::View* caller, DownloadId id, const String& url) = 0;
+
+  ///
+  /// Called when the View begins downloading a resource from the network.
+  /// 
+  /// The View will not actually write any data to disk, you should open a file for writing
+  /// yourself and handle the OnReceiveDataForDownload callback below.
+  /// 
+  virtual void OnBeginDownload(ultralight::View* caller, DownloadId id, const String& url,
+                               const String& filename, int64_t expected_content_length)  = 0;
+
+  ///
+  /// Called when the View receives data for a certain download from the network.
+  /// 
+  /// This may be called multiple times for each active download as data is streamed in.
+  /// 
+  /// You should write the data to the associated file in this callback.
+  /// 
+  virtual void OnReceiveDataForDownload(ultralight::View* caller, DownloadId id,
+                                        RefPtr<Buffer> data) = 0;
+
+  ///
+  /// Called when the View finishes downloading a resource from the network.
+  /// 
+  /// You should close the associated file in this callback.
+  /// 
+  virtual void OnFinishDownload(ultralight::View* caller, DownloadId id) = 0;
+
+  ///
+  /// Called when the View fails downloading a resource from the network.
+  ///
+  /// You should close the associated file and delete it from disk in this callback.
+  /// 
+  virtual void OnFailDownload(ultralight::View* caller, DownloadId id) = 0;
+};
+
+///
+/// @brief  Interface for Network-related events
+///
+/// @note   For more info @see View::set_network_listener
+///
+class UExport NetworkListener {
+ public:
+  virtual ~NetworkListener() { }
+
+  ///
+  /// Called when the View is about to begin a network request.
+  /// 
+  /// You can use this to block or modify network requests before they are sent.
+  /// 
+  /// Return true to allow the request, return false to block it.
+  /// 
+  virtual bool OnNetworkRequest(ultralight::View* caller, NetworkRequest& request) = 0;
 };
 
 } // namespace ultralight

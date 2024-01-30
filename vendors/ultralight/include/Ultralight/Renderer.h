@@ -153,6 +153,8 @@ class UExport Renderer : public RefCounted {
   ///
   /// @param  session  The session to store local data in. Pass a nullptr to use the default
   ///                  session.
+  /// 
+  /// @param display_id  The display to associate with this view, @see Renderer::RefreshDisplay.
   ///
   /// @return  Returns a ref-pointer to a new View instance.
   ///
@@ -168,11 +170,17 @@ class UExport Renderer : public RefCounted {
   virtual void Update() = 0;
 
   ///
-  /// Render all active views to their respective surfaces and render targets.
+  /// Notify the renderer that a display has refreshed (you should call this after vsync).
+  /// 
+  /// This updates animations, smooth scroll, and window.requestAnimationFrame() for all Views
+  /// matching the display id.
+  /// 
+  virtual void RefreshDisplay(uint32_t display_id) = 0;
+
   ///
-  /// You should call this once per frame (usually in synchrony with the monitor's refresh rate).
+  /// Render all active views to their respective render-targets/surfaces.
   ///
-  /// @note  Views are only rendered if they actually need rendering.
+  /// @note  Views are only repainted if they actually need painting.
   ///
   virtual void Render() = 0;
 

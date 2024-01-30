@@ -52,6 +52,23 @@ enum class UExport FontHinting : uint8_t {
   None,
 };
 
+enum class UExport EffectQuality : uint8_t {
+  ///
+  /// Fastest effect quality-- uses the lowest quality effects (half-resolution, fewer passes, etc.)
+  /// 
+  Low,
+
+  ///
+  /// Default effect quality-- strikes a good balance between quality and performance.
+  /// 
+  Medium,
+
+  ///
+  /// Highest effect quality-- favors quality over performance.
+  /// 
+  High,
+};
+
 ///
 /// Global config for Ultralight.
 ///
@@ -241,6 +258,11 @@ struct UExport Config {
   /// slight cost to performance.
   ///
   uint32_t bitmap_alignment = 16;
+
+  ///
+  /// The quality of effects (blurs, CSS filters, SVG filters, etc.) to use when rendering.
+  /// 
+  EffectQuality effect_quality = EffectQuality::Medium;
 };
 
 } // namespace ultralight
