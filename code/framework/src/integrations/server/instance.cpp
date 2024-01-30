@@ -55,8 +55,7 @@ namespace Framework::Integrations::Server {
     ServerError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
-        if (opts.gameName.empty() || opts.gameVersion.empty())
-        {
+        if (opts.gameName.empty() || opts.gameVersion.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Game name and version are required");
             return ServerError::SERVER_INVALID_OPTIONS;
         }
@@ -84,8 +83,7 @@ namespace Framework::Integrations::Server {
         auto result = options.parse(_opts.argc, _opts.argv);
 
         // If help was specified, just print the help and exit
-        if (result.count("help"))
-        {
+        if (result.count("help")) {
             std::cout << options.help() << std::endl;
             exit(0);
         }
@@ -94,8 +92,7 @@ namespace Framework::Integrations::Server {
         _opts.modConfigFile = result["config"].as<std::string>();
 
         // Load JSON config if present
-        if (!LoadConfigFromJSON())
-        {
+        if (!LoadConfigFromJSON()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to parse JSON config file");
             return ServerError::SERVER_CONFIG_PARSE_ERROR;
         }
@@ -108,23 +105,20 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
-        if (!_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir))
-        {
+        if (!_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
 
         // Initialize our networking engine
-        if (!_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword))
-        {
+        if (!_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }
 
         // Initialize the world
         if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) !=
-            World::EngineError::ENGINE_NONE)
-        {
+            World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
@@ -137,32 +131,26 @@ namespace Framework::Integrations::Server {
         _scriptingEngine->SetProcessArguments(opts.argc, opts.argv);
         _scriptingEngine->SetModName(opts.modName);
         if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE, sdkCallback) !=
-            Framework::Scripting::ModuleError::MODULE_NONE)
-        {
+            Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
         if (_opts.firebaseEnabled &&
             _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) !=
-                External::Firebase::FirebaseError::FIREBASE_NONE)
-        {
+                External::Firebase::FirebaseError::FIREBASE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the firebase wrapper");
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
-        if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey))
-        {
+        if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to contact masterlist server: Push key is empty");
-        }
-        else if (!_opts.bindPublicServer)
-        {
+        } else if (!_opts.bindPublicServer) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
         // Init the signals handlers if enabled
-        if (_opts.enableSignals)
-        {
+        if (_opts.enableSignals) {
             sig_attach(SIGINT, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
             sig_attach(SIGTERM, sig_slot(this, &Instance::OnSignal), sig_ctx_sys());
         }
@@ -211,8 +199,7 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitModules() {
-        if (_worldEngine)
-        {
+        if (_worldEngine) {
             auto world = _worldEngine->GetWorld();
 
             world->import <Integrations::Shared::Modules::Mod>();
@@ -224,21 +211,18 @@ namespace Framework::Integrations::Server {
     bool Instance::LoadConfigFromJSON() {
         auto configHandle = cppfs::fs::open(_opts.modConfigFile);
 
-        if (!configHandle.exists())
-        {
+        if (!configHandle.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("JSON config file is not present, skipping load...");
             return true;
         }
 
         auto configData = configHandle.readFile();
 
-        try
-        {
+        try {
             // Parse our config data first
             _fileConfig->Parse(configData);
 
-            if (!_fileConfig->IsParsed())
-            {
+            if (!_fileConfig->IsParsed()) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)
                     ->critical("JSON config load has failed: {}", _fileConfig->GetLastError());
                 return false;
@@ -250,9 +234,7 @@ namespace Framework::Integrations::Server {
             _opts.bindMapName = _fileConfig->Get<std::string>("map");
             _opts.maxPlayers = _fileConfig->Get<int>("maxplayers");
             _opts.bindSecretKey = _fileConfig->Get<std::string>("server-token");
-        }
-        catch (const std::exception &ex)
-        {
+        } catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config has missing fields: {}", ex.what());
             return false;
         }
@@ -269,16 +251,14 @@ namespace Framework::Integrations::Server {
                     ->debug("Received handshake message for player {}", msg->GetPlayerName());
 
                 // Make sure handshake payload was correctly formatted
-                if (!msg->Valid())
-                {
+                if (!msg->Valid()) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)
                         ->error("Handshake payload was invalid, force-disconnecting peer");
                     net->GetPeer()->CloseConnection(guid, true);
                     return;
                 }
 
-                if (msg->GetMPClientGame() != _opts.gameName)
-                {
+                if (msg->GetMPClientGame() != _opts.gameName) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)
                         ->error("Client has invalid game, force-disconnecting peer");
                     Framework::Networking::Messages::ClientKick kick;
@@ -290,8 +270,7 @@ namespace Framework::Integrations::Server {
 
                 const auto clientVersion = msg->GetClientVersion();
 
-                if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel))
-                {
+                if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)
                         ->error("Client has invalid version, force-disconnecting peer");
                     Framework::Networking::Messages::ClientKick kick;
@@ -303,8 +282,7 @@ namespace Framework::Integrations::Server {
 
                 const auto mpClientVersion = msg->GetMPClientVersion();
 
-                if (!Utils::Version::VersionSatisfies(mpClientVersion.c_str(), _opts.gameVersion.c_str()))
-                {
+                if (!Utils::Version::VersionSatisfies(mpClientVersion.c_str(), _opts.gameVersion.c_str())) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)
                         ->error("Client has invalid game version, force-disconnecting peer");
                     Framework::Networking::Messages::ClientKick kick;
@@ -319,8 +297,7 @@ namespace Framework::Integrations::Server {
                 _streamingFactory->SetupServer(newPlayer, guid.g);
 
                 auto nickname = msg->GetPlayerName();
-                if (nickname.size() > 64)
-                {
+                if (nickname.size() > 64) {
                     nickname = nickname.substr(0, 64);
                 }
 
@@ -341,8 +318,7 @@ namespace Framework::Integrations::Server {
 
             auto e = _worldEngine->GetEntityByGUID(guid.g);
 
-            if (e.is_valid())
-            {
+            if (e.is_valid()) {
                 if (_onPlayerDisconnectCallback)
                     _onPlayerDisconnectCallback(e, guid.g);
 
@@ -365,30 +341,25 @@ namespace Framework::Integrations::Server {
     }
 
     ServerError Instance::Shutdown() {
-        if (_shuttingDown)
-        {
+        if (_shuttingDown) {
             return ServerError::SERVER_NONE;
         }
 
         _shuttingDown = true;
 
-        if (_networkingEngine)
-        {
+        if (_networkingEngine) {
             _networkingEngine->Shutdown();
         }
 
-        if (_scriptingEngine)
-        {
+        if (_scriptingEngine) {
             _scriptingEngine->Shutdown();
         }
 
-        if (_webServer)
-        {
+        if (_webServer) {
             _webServer->Shutdown();
         }
 
-        if (_worldEngine)
-        {
+        if (_worldEngine) {
             _worldEngine->Shutdown();
         }
 
@@ -404,26 +375,21 @@ namespace Framework::Integrations::Server {
 
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
-        if (_nextTick <= start)
-        {
+        if (_nextTick <= start) {
             OPTICK_EVENT();
-            if (_networkingEngine)
-            {
+            if (_networkingEngine) {
                 _networkingEngine->Update();
             }
 
-            if (_scriptingEngine)
-            {
+            if (_scriptingEngine) {
                 _scriptingEngine->Update();
             }
 
-            if (_worldEngine)
-            {
+            if (_worldEngine) {
                 _worldEngine->Update();
             }
 
-            if (_masterlist->IsInitialized())
-            {
+            if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info{};
                 info.gameMode = _scriptingEngine->GetEngine()->GetGameModeName();
                 info.version = _opts.modVersion;
@@ -436,28 +402,23 @@ namespace Framework::Integrations::Server {
 
             _nextTick = std::chrono::high_resolution_clock::now() +
                         std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
-        }
-        else
-        {
+        } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     void Instance::Run() {
-        while (_alive)
-        {
+        while (_alive) {
             Update();
             std::this_thread::yield();
         }
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
-        if (!_alive || _shuttingDown)
-        {
+        if (!_alive || _shuttingDown) {
             return;
         }
 
-        if (signal.context != sig_ctx_sys())
-        {
+        if (signal.context != sig_ctx_sys()) {
             return;
         }
 
@@ -468,13 +429,11 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
-        switch (sdk.GetKind())
-        {
+        switch (sdk.GetKind()) {
         case Framework::Scripting::EngineTypes::ENGINE_NODE: {
             auto nodeSDK = sdk.GetNodeSDK();
             Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
-        }
-        break;
+        } break;
         }
 
         // mod-specific builtins

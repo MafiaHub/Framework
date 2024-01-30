@@ -45,41 +45,31 @@ namespace Framework::Integrations::Client {
     ClientError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
-        if (opts.gameName.empty() || opts.gameVersion.empty())
-        {
+        if (opts.gameName.empty() || opts.gameVersion.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Game name and version are required");
             return ClientError::CLIENT_INVALID_OPTIONS;
         }
 
-        if (opts.usePresence)
-        {
-            if (_presence && opts.discordAppId > 0)
-            {
-                if (_presence->Init(opts.discordAppId) != Framework::External::DiscordError::DISCORD_NONE)
-                {
+        if (opts.usePresence) {
+            if (_presence && opts.discordAppId > 0) {
+                if (_presence->Init(opts.discordAppId) != Framework::External::DiscordError::DISCORD_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
-                }
-                else
-                {
+                } else {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
                 }
             }
         }
 
-        if (_networkingEngine)
-        {
-            if (!_networkingEngine->Init())
-            {
+        if (_networkingEngine) {
+            if (!_networkingEngine->Init()) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Networking engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
         }
 
-        if (_worldEngine)
-        {
-            if (_worldEngine->Init() != Framework::World::EngineError::ENGINE_NONE)
-            {
+        if (_worldEngine) {
+            if (_worldEngine->Init() != Framework::World::EngineError::ENGINE_NONE) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
@@ -94,10 +84,8 @@ namespace Framework::Integrations::Client {
         PostInit();
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
 
-        if (!opts.initRendererManually)
-        {
-            if (RenderInit() != ClientError::CLIENT_NONE)
-            {
+        if (!opts.initRendererManually) {
+            if (RenderInit() != ClientError::CLIENT_NONE) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Rendering subsystems failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
@@ -109,26 +97,21 @@ namespace Framework::Integrations::Client {
     }
 
     ClientError Instance::RenderInit() {
-        if (_renderInitialized)
-        {
+        if (_renderInitialized) {
             return ClientError::CLIENT_NONE;
         }
 
         // Init the render device
-        if (_opts.useRenderer)
-        {
-            if (_renderer)
-            {
-                if (_renderer->Init(_opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE)
-                {
+        if (_opts.useRenderer) {
+            if (_renderer) {
+                if (_renderer->Init(_opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Renderer failed to initialize");
                     return ClientError::CLIENT_ENGINES_ERROR;
                 }
 
                 _renderer->SetWindow(_opts.rendererOptions.windowHandle);
 
-                switch (_opts.rendererOptions.backend)
-                {
+                switch (_opts.rendererOptions.backend) {
                 case Graphics::RendererBackend::BACKEND_D3D_9:
                     _renderer->GetD3D9Backend()->Init(_opts.rendererOptions.d3d9.device, nullptr, nullptr, nullptr);
                     break;
@@ -139,8 +122,7 @@ namespace Framework::Integrations::Client {
                 case Graphics::RendererBackend::BACKEND_D3D_12: {
                     auto const &ctx = _opts.rendererOptions.d3d12;
                     _renderer->GetD3D12Backend()->Init(ctx.device, nullptr, ctx.swapchain, ctx.commandQueue);
-                }
-                break;
+                } break;
                 default:
                     Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented");
                     break;
@@ -149,16 +131,14 @@ namespace Framework::Integrations::Client {
             }
         }
 
-        if (_opts.useImGUI)
-        {
+        if (_opts.useImGUI) {
             // Init the ImGui internal instance
             External::ImGUI::Config imguiConfig;
             imguiConfig.renderBackend = _opts.rendererOptions.backend;
             imguiConfig.windowBackend = _opts.rendererOptions.platform;
             imguiConfig.renderer = _renderer.get();
             imguiConfig.windowHandle = _renderer->GetWindow();
-            if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE)
-            {
+            if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
                 Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init");
             }
         }
@@ -170,28 +150,23 @@ namespace Framework::Integrations::Client {
     ClientError Instance::Shutdown() {
         PreShutdown();
 
-        if (_renderer && _renderer->IsInitialized())
-        {
+        if (_renderer && _renderer->IsInitialized()) {
             _renderer->Shutdown();
         }
 
-        if (_presence && _presence->IsInitialized())
-        {
+        if (_presence && _presence->IsInitialized()) {
             _presence->Shutdown();
         }
 
-        if (_networkingEngine)
-        {
+        if (_networkingEngine) {
             _networkingEngine->Shutdown();
         }
 
-        if (_imguiApp && _imguiApp->IsInitialized())
-        {
+        if (_imguiApp && _imguiApp->IsInitialized()) {
             _imguiApp->Shutdown();
         }
 
-        if (_worldEngine)
-        {
+        if (_worldEngine) {
             _worldEngine->Shutdown();
         }
 
@@ -202,28 +177,23 @@ namespace Framework::Integrations::Client {
 
     void Instance::Update() {
         OPTICK_EVENT();
-        if (_presence && _presence->IsInitialized())
-        {
+        if (_presence && _presence->IsInitialized()) {
             _presence->Update();
         }
 
-        if (_networkingEngine)
-        {
+        if (_networkingEngine) {
             _networkingEngine->Update();
         }
 
-        if (_worldEngine)
-        {
+        if (_worldEngine) {
             _worldEngine->Update();
         }
 
-        if (_imguiApp && _imguiApp->IsInitialized())
-        {
+        if (_imguiApp && _imguiApp->IsInitialized()) {
             _imguiApp->Update();
         }
 
-        if (_renderIO)
-        {
+        if (_renderIO) {
             _renderIO->UpdateMainThread();
         }
 
@@ -232,13 +202,11 @@ namespace Framework::Integrations::Client {
 
     void Instance::Render() {
         OPTICK_EVENT();
-        if (_renderer && _renderer->IsInitialized())
-        {
+        if (_renderer && _renderer->IsInitialized()) {
             _renderer->Update();
         }
 
-        if (_renderIO)
-        {
+        if (_renderIO) {
             _renderIO->UpdateRenderThread();
         }
 
@@ -269,8 +237,7 @@ namespace Framework::Integrations::Client {
                 GetPlayerFactory()->SetupClient(newPlayer, guid.g);
 
                 // Notify mod-level that network integration whole process succeeded
-                if (_onConnectionFinalized)
-                {
+                if (_onConnectionFinalized) {
                     _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
                 }
 
@@ -282,8 +249,7 @@ namespace Framework::Integrations::Client {
             GameMessages::GAME_CONNECTION_KICKED, [](SLNet::RakNetGUID guid, ClientKick *msg) {
                 std::string reason = "Unknown.";
 
-                switch (msg->GetDisconnectionReason())
-                {
+                switch (msg->GetDisconnectionReason()) {
                 case Framework::Networking::Messages::DisconnectionReason::BANNED:
                     reason = "You are banned.";
                     break;
@@ -306,13 +272,11 @@ namespace Framework::Integrations::Client {
             });
         net->RegisterGameRPC<Framework::World::RPC::SetTransform>(
             [this](SLNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
-                if (!msg->Valid())
-                {
+                if (!msg->Valid()) {
                     return;
                 }
                 const auto e = GetWorldEngine()->GetEntityByServerID(msg->GetServerID());
-                if (!e.is_alive())
-                {
+                if (!e.is_alive()) {
                     return;
                 }
 
@@ -323,8 +287,7 @@ namespace Framework::Integrations::Client {
             _worldEngine->OnDisconnect();
 
             // Notify mod-level that network integration got closed
-            if (_onConnectionClosed)
-            {
+            if (_onConnectionClosed) {
                 _onConnectionClosed();
             }
         });

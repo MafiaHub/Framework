@@ -65,8 +65,7 @@ namespace hook {
 
                 mfPtr.raw.ptr = m_functionAddress;
 
-                if constexpr (sizeof(mfPtr.raw.ptr) != sizeof(mfPtr.fn))
-                {
+                if constexpr (sizeof(mfPtr.raw.ptr) != sizeof(mfPtr.fn)) {
                     static_assert(sizeof(mfPtr.raw) == sizeof(mfPtr.fn), "more than just an adjustor");
 
                     mfPtr.raw.off = 0;

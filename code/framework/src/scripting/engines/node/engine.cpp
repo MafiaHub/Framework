@@ -24,8 +24,7 @@ require("vm").runInThisContext(process.argv[1]);
 
 namespace Framework::Scripting::Engines::Node {
     EngineError Engine::Init(SDKRegisterCallback cb) {
-        if (_wasNodeAlreadyInited)
-        {
+        if (_wasNodeAlreadyInited) {
             return EngineError::ENGINE_NODE_INIT_FAILED;
         }
         // Define the arguments to be passed to the node instance
@@ -36,10 +35,8 @@ namespace Framework::Scripting::Engines::Node {
 
         // Initialize the node with the provided arguments
         int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
-        if (initCode != 0)
-        {
-            for (std::string &error : errors)
-            {
+        if (initCode != 0) {
+            for (std::string &error : errors) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error);
             }
             return Framework::Scripting::EngineError::ENGINE_NODE_INIT_FAILED;
@@ -78,18 +75,15 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     EngineError Engine::Shutdown() {
-        if (!_wasNodeAlreadyInited)
-        {
+        if (!_wasNodeAlreadyInited) {
             return EngineError::ENGINE_NODE_SHUTDOWN_FAILED;
         }
 
-        if (!_platform)
-        {
+        if (!_platform) {
             return EngineError::ENGINE_PLATFORM_NULL;
         }
 
-        if (!_isolate)
-        {
+        if (!_isolate) {
             return EngineError::ENGINE_ISOLATE_NULL;
         }
 
@@ -122,18 +116,15 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     void Engine::Update() {
-        if (!_platform)
-        {
+        if (!_platform) {
             return;
         }
 
-        if (!_isolate)
-        {
+        if (!_isolate) {
             return;
         }
 
-        if (_isShuttingDown)
-        {
+        if (_isShuttingDown) {
             return;
         }
 
@@ -145,21 +136,19 @@ namespace Framework::Scripting::Engines::Node {
             _platform->DrainTasks(_isolate);
 
             // Notify the gamemode, if loaded
-            if (_gamemodeLoaded)
-            {
+            if (_gamemodeLoaded) {
                 InvokeEvent(Events[EventIDs::GAMEMODE_UPDATED]);
             }
         }
 
         // Update the file watcher
-        if (_watcher && !_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0)
-        {
+        if (_watcher && !_isShuttingDown &&
+            Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
             // Process the file changes watcher
             _watcher->watch(0);
             _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
 
-            if (_shouldReloadWatcher)
-            {
+            if (_shouldReloadWatcher) {
                 _shouldReloadWatcher = false;
                 delete _watcher;
                 PreloadGamemode(_gamemodePath);
@@ -169,28 +158,24 @@ namespace Framework::Scripting::Engines::Node {
 
     bool Engine::LoadGamemodePackageFile(std::string mainPath) {
         // If gamemmode is already loaded, don't load it again
-        if (_gamemodeLoaded)
-        {
+        if (_gamemodeLoaded) {
             return false;
         }
 
         // Check the package.json file exists
         cppfs::FileHandle packageFile = cppfs::fs::open(mainPath + "/package.json");
-        if (!packageFile.exists())
-        {
+        if (!packageFile.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The gamemode package.json file does not exists");
             return false;
         }
-        if (!packageFile.isFile())
-        {
+        if (!packageFile.isFile()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The gamemode package.json entry is not a file");
             return false;
         }
 
         // Load the package.json file
         std::string packageFileContent = packageFile.readFile();
-        if (packageFileContent.empty())
-        {
+        if (packageFileContent.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The gamemode package.json is empty");
             return false;
         }
@@ -198,25 +183,20 @@ namespace Framework::Scripting::Engines::Node {
         _gamemodePath = mainPath;
 
         auto root = nlohmann::json::parse(packageFileContent);
-        try
-        {
+        try {
             _gamemodeMetadata.name = root["name"].get<std::string>();
             _gamemodeMetadata.version = root["version"].get<std::string>();
             _gamemodeMetadata.entrypoint = root["main"].get<std::string>();
 
-            if (root.contains("mod"))
-            {
-                if (GetModName() != root["mod"].get<std::string>())
-                {
+            if (root.contains("mod")) {
+                if (GetModName() != root["mod"].get<std::string>()) {
                     Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                         ->debug("The gamemode defined mod is not for this mod");
                     return false;
                 }
             }
             return true;
-        }
-        catch (nlohmann::detail::type_error &err)
-        {
+        } catch (nlohmann::detail::type_error &err) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                 ->error("The gamemode package.json is not valid:\n\t{}", err.what());
             return false;
@@ -225,10 +205,8 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool Engine::PreloadGamemode(std::string mainPath) {
-        if (LoadGamemodePackageFile(mainPath))
-        {
-            if (LoadGamemode(mainPath))
-            {
+        if (LoadGamemodePackageFile(mainPath)) {
+            if (LoadGamemode(mainPath)) {
                 return WatchGamemodeChanges(mainPath);
             }
         }
@@ -236,16 +214,14 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool Engine::LoadGamemode(std::string mainPath) {
-        if (_gamemodeLoaded)
-        {
+        if (_gamemodeLoaded) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode is already loaded");
             return false;
         }
 
         // Make sure the specified entrypoint is valid
         cppfs::FileHandle entryPointFile = cppfs::fs::open(mainPath + "/" + _gamemodeMetadata.entrypoint);
-        if (!entryPointFile.exists() || !entryPointFile.isFile())
-        {
+        if (!entryPointFile.exists() || !entryPointFile.isFile()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                 ->debug("The specified entrypoint '{}' from '{}' is not a file", _gamemodeMetadata.entrypoint,
                         _gamemodeMetadata.name);
@@ -254,8 +230,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Read the entrypoint file content
         std::string content = entryPointFile.readFile();
-        if (content.empty())
-        {
+        if (content.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                 ->debug("The specified entrypoint file '{}' from '{}' is empty", _gamemodeMetadata.entrypoint,
                         _gamemodeMetadata.name);
@@ -302,8 +277,7 @@ namespace Framework::Scripting::Engines::Node {
 
     bool Engine::UnloadGamemode(std::string mainPath) {
         // If gamemode is not loaded, don't unload it
-        if (!_gamemodeLoaded)
-        {
+        if (!_gamemodeLoaded) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode is not loaded");
             return false;
         }
@@ -313,8 +287,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Purge all gamemode entities
         const auto worldEngine = CoreModules::GetWorldEngine();
-        if (worldEngine)
-        {
+        if (worldEngine) {
             worldEngine->PurgeAllGameModeEntities();
         }
 
@@ -329,8 +302,7 @@ namespace Framework::Scripting::Engines::Node {
 
             bool more = false;
             // Drain the remaining tasks while there are available ones
-            do
-            {
+            do {
                 uv_run(&uv_loop, UV_RUN_DEFAULT);
                 _platform->DrainTasks(_isolate);
 
@@ -367,12 +339,9 @@ namespace Framework::Scripting::Engines::Node {
 
             const auto source = Helpers::MakeString(_isolate, str).ToLocalChecked();
             v8::MaybeLocal<v8::Script> script;
-            if (path.empty())
-            {
+            if (path.empty()) {
                 script = v8::Script::Compile(context, source);
-            }
-            else
-            {
+            } else {
                 auto originValue = Helpers::MakeString(_isolate, path).ToLocalChecked();
                 v8::ScriptOrigin scriptOrigin(_isolate, originValue);
 
@@ -388,8 +357,7 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool Engine::RunGamemodeScript() {
-        if (_gamemodeScript.IsEmpty())
-        {
+        if (_gamemodeScript.IsEmpty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid gamemode script object");
             return false;
         }
@@ -408,8 +376,7 @@ namespace Framework::Scripting::Engines::Node {
 
     bool Engine::WatchGamemodeChanges(std::string path) {
         cppfs::FileHandle dir = cppfs::fs::open(path);
-        if (!dir.isDirectory())
-        {
+        if (!dir.isDirectory()) {
             return false;
         }
 
@@ -424,8 +391,7 @@ namespace Framework::Scripting::Engines::Node {
 
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Gamemode is reloaded due to the file changes");
             // Close the gamemode first, we'll start with a clean slate
-            if (this->IsGamemodeLoaded() && UnloadGamemode(path))
-            {
+            if (this->IsGamemodeLoaded() && UnloadGamemode(path)) {
                 _shouldReloadWatcher = true;
             }
         });

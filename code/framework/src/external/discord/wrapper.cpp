@@ -13,8 +13,7 @@
 namespace Framework::External::Discord {
     DiscordError Wrapper::Init(int64_t id) {
         auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
-        if (result != discord::Result::Ok)
-        {
+        if (result != discord::Result::Ok) {
             return DiscordError::DISCORD_CORE_CREATE_FAILED;
         }
 
@@ -30,8 +29,7 @@ namespace Framework::External::Discord {
     }
 
     DiscordError Wrapper::Shutdown() {
-        if (!_instance)
-        {
+        if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
@@ -42,8 +40,7 @@ namespace Framework::External::Discord {
     }
 
     DiscordError Wrapper::Update() {
-        if (!_instance)
-        {
+        if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
@@ -55,8 +52,7 @@ namespace Framework::External::Discord {
                                       discord::ActivityType activity, std::string const &largeImage,
                                       std::string const &largeText, std::string const &smallImage,
                                       std::string const &smallText) {
-        if (!_instance)
-        {
+        if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
@@ -71,14 +67,14 @@ namespace Framework::External::Discord {
         act.SetState(state.c_str());
         act.SetType(activity);
         _instance->ActivityManager().UpdateActivity(act, [](discord::Result res) {
-            if (res != discord::Result::Ok)
-            {
+            if (res != discord::Result::Ok) {
                 Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to update activity");
             }
         });
 
         return DiscordError::DISCORD_NONE;
     }
+
     DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details,
                                       discord::ActivityType activity) {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
@@ -87,11 +83,9 @@ namespace Framework::External::Discord {
     void Wrapper::SignInWithDiscord(DiscordLoginProc const &proc) {
         _instance->ApplicationManager().GetOAuth2Token(
             [proc](discord::Result result, discord::OAuth2Token const &tokenData) {
-                if (result == discord::Result::Ok)
-                {
+                if (result == discord::Result::Ok) {
                     proc(tokenData.GetAccessToken());
-                }
-                else
+                } else
                     proc("");
             });
     }

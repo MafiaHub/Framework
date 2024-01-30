@@ -34,13 +34,11 @@ namespace Framework::External::Firebase {
         });
 
         // Since it's an async initializer, we got to wait for it to complete
-        while (initializer.InitializeLastResult().status() != firebase::kFutureStatusComplete)
-        {
+        while (initializer.InitializeLastResult().status() != firebase::kFutureStatusComplete) {
         }
 
         // Was everything correctly initialized?
-        if (initializer.InitializeLastResult().error() != 0)
-        {
+        if (initializer.InitializeLastResult().error() != 0) {
             Logging::GetInstance()
                 ->Get(FRAMEWORK_INNER_INTEGRATIONS)
                 ->debug("[Firebase] FAILED TO INITIALIZE: {}", initializer.InitializeLastResult().error_message());
@@ -62,15 +60,11 @@ namespace Framework::External::Firebase {
     FirebaseError Wrapper::SignInWithCustomToken(const std::string &token) const {
         auto auth = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInWithCustomToken(token.c_str());
-        while (result.status() != firebase::kFutureStatusComplete)
-        {
+        while (result.status() != firebase::kFutureStatusComplete) {
         };
-        if (result.error() == firebase::auth::kAuthErrorNone)
-        {
+        if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        }
-        else
-        {
+        } else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
@@ -79,15 +73,11 @@ namespace Framework::External::Firebase {
         auto auth = GetAuth();
         firebase::Future<firebase::auth::User *> result =
             auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());
-        while (result.status() != firebase::kFutureStatusComplete)
-        {
+        while (result.status() != firebase::kFutureStatusComplete) {
         };
-        if (result.error() == firebase::auth::kAuthErrorNone)
-        {
+        if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        }
-        else
-        {
+        } else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
@@ -96,15 +86,11 @@ namespace Framework::External::Firebase {
         auto auth = GetAuth();
         firebase::Future<firebase::auth::User *> result =
             auth->CreateUserWithEmailAndPassword(email.c_str(), password.c_str());
-        while (result.status() != firebase::kFutureStatusComplete)
-        {
+        while (result.status() != firebase::kFutureStatusComplete) {
         };
-        if (result.error() == firebase::auth::kAuthErrorNone)
-        {
+        if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        }
-        else
-        {
+        } else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
@@ -112,15 +98,11 @@ namespace Framework::External::Firebase {
     FirebaseError Wrapper::SignInAnonymously() const {
         auto auth = GetAuth();
         firebase::Future<firebase::auth::User *> result = auth->SignInAnonymously();
-        while (result.status() != firebase::kFutureStatusComplete)
-        {
+        while (result.status() != firebase::kFutureStatusComplete) {
         };
-        if (result.error() == firebase::auth::kAuthErrorNone)
-        {
+        if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
-        }
-        else
-        {
+        } else {
             return FirebaseError::FIREBASE_AUTH_FAILED;
         }
     }
@@ -149,8 +131,7 @@ namespace Framework::External::Firebase {
 
     void Wrapper::OnAuthStateChanged(firebase::auth::Auth *auth) {
         _user = auth->current_user();
-        if (!_user)
-        {
+        if (!_user) {
             firebase::analytics::SetUserId(nullptr);
             Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Firebase] AuthStateChanged: user null");
             return;

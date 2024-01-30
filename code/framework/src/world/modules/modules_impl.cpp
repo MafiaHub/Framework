@@ -18,10 +18,8 @@
 
 #define CALL_CUSTOM_PROC(kind)                                                                                         \
     const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();                                      \
-    if (streamable != nullptr)                                                                                         \
-    {                                                                                                                  \
-        if (streamable->modEvents.kind != nullptr)                                                                     \
-        {                                                                                                              \
+    if (streamable != nullptr) {                                                                                       \
+        if (streamable->modEvents.kind != nullptr) {                                                                   \
             streamable->modEvents.kind(peer, guid, e);                                                                 \
         }                                                                                                              \
     }
@@ -86,8 +84,7 @@ namespace Framework::World::Modules {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto sid = e.get<Framework::World::Modules::Base::ServerID>();
-            if (tr && sid)
-            {
+            if (tr && sid) {
                 entityUpdate.FromParameters(*tr, 0);
                 entityUpdate.SetServerID(sid->id);
             }
@@ -101,28 +98,24 @@ namespace Framework::World::Modules {
         using namespace Framework::Networking::Messages;
         net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE,
                                                    [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-                                                       if (!msg->Valid())
-                                                       {
+                                                       if (!msg->Valid()) {
                                                            return;
                                                        }
 
                                                        const auto e = worldEngine->WrapEntity(msg->GetServerID());
 
-                                                       if (!e.is_alive())
-                                                       {
+                                                       if (!e.is_alive()) {
                                                            return;
                                                        }
 
-                                                       if (!worldEngine->IsEntityOwner(e, guid.g))
-                                                       {
+                                                       if (!worldEngine->IsEntityOwner(e, guid.g)) {
                                                            return;
                                                        }
 
                                                        auto tr = e.get_mut<World::Modules::Base::Transform>();
                                                        const auto incomingTr = msg->GetTransform();
 
-                                                       if (tr->ValidateGeneration(incomingTr))
-                                                       {
+                                                       if (tr->ValidateGeneration(incomingTr)) {
                                                            *tr = incomingTr;
                                                        }
                                                    });
@@ -135,12 +128,10 @@ namespace Framework::World::Modules {
         net->RegisterMessage<GameSyncEntitySpawn>(
             GameMessages::GAME_SYNC_ENTITY_SPAWN,
             [worldEngine, streamingFactory](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
-                if (!msg->Valid())
-                {
+                if (!msg->Valid()) {
                     return;
                 }
-                if (worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive())
-                {
+                if (worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
                     return;
                 }
                 const auto e = worldEngine->CreateEntity(msg->GetServerID());
@@ -151,15 +142,13 @@ namespace Framework::World::Modules {
             });
         net->RegisterMessage<GameSyncEntityDespawn>(
             GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
-                if (!msg->Valid())
-                {
+                if (!msg->Valid()) {
                     return;
                 }
 
                 const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
 
-                if (!e.is_alive())
-                {
+                if (!e.is_alive()) {
                     return;
                 }
 
@@ -167,15 +156,13 @@ namespace Framework::World::Modules {
             });
         net->RegisterMessage<GameSyncEntityUpdate>(
             GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-                if (!msg->Valid())
-                {
+                if (!msg->Valid()) {
                     return;
                 }
 
                 const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
 
-                if (!e.is_alive())
-                {
+                if (!e.is_alive()) {
                     return;
                 }
 
@@ -187,16 +174,14 @@ namespace Framework::World::Modules {
             });
         net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE,
                                                    [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-                                                       if (!msg->Valid())
-                                                       {
+                                                       if (!msg->Valid()) {
                                                            return;
                                                        }
 
                                                        const auto e =
                                                            worldEngine->GetEntityByServerID(msg->GetServerID());
 
-                                                       if (!e.is_alive())
-                                                       {
+                                                       if (!e.is_alive()) {
                                                            return;
                                                        }
                                                        auto es = e.get_mut<World::Modules::Base::Streamable>();
@@ -205,15 +190,13 @@ namespace Framework::World::Modules {
         net->RegisterMessage<GameSyncEntitySelfUpdate>(
             GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE,
             [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
-                if (!msg->Valid())
-                {
+                if (!msg->Valid()) {
                     return;
                 }
 
                 const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
 
-                if (!e.is_alive())
-                {
+                if (!e.is_alive()) {
                     return;
                 }
 

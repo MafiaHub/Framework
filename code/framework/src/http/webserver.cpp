@@ -22,8 +22,7 @@ namespace Framework::HTTP {
 
         auto address = (host.empty() ? "0.0.0.0" : host);
 
-        if (!serveDir.empty())
-        {
+        if (!serveDir.empty()) {
             _server->set_mount_point("/", serveDir.c_str());
         }
 
@@ -37,12 +36,11 @@ namespace Framework::HTTP {
         _server->set_exception_handler([](const auto &req, auto &res, std::exception_ptr ep) {
             auto fmt = "<h1>Error 500</h1><p>%s</p>";
             char buf[BUFSIZ];
-            try
-            { std::rethrow_exception(ep); }
-            catch (std::exception &e)
-            { snprintf(buf, sizeof(buf), fmt, e.what()); }
-            catch (...)
-            { // See the following NOTE
+            try {
+                std::rethrow_exception(ep);
+            } catch (std::exception &e) {
+                snprintf(buf, sizeof(buf), fmt, e.what());
+            } catch (...) { // See the following NOTE
                 snprintf(buf, sizeof(buf), fmt, "Unknown Exception");
             }
             res.set_content(buf, "text/html");
@@ -66,8 +64,7 @@ namespace Framework::HTTP {
     }
 
     void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) {
-        if (strlen(path) > 0 && callback)
-        {
+        if (strlen(path) > 0 && callback) {
             _server->Get(path, callback);
         }
     }

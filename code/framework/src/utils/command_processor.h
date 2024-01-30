@@ -43,8 +43,7 @@ namespace Framework::Utils {
 
         inline std::vector<std::string> GetCommandNames() const {
             std::vector<std::string> names;
-            for (auto &cmd : _commands)
-            {
+            for (auto &cmd : _commands) {
                 names.push_back(cmd.first);
             }
             return names;

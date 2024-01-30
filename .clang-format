@@ -10,8 +10,8 @@ AlignConsecutiveAssignments:
   AlignCompound: false
   PadOperators: true
 AlignConsecutiveBitFields:
-  Enabled: false
-  AcrossEmptyLines: false
+  Enabled: true
+  AcrossEmptyLines: true
   AcrossComments: false
   AlignCompound: false
   PadOperators: false
@@ -27,11 +27,6 @@ AlignConsecutiveMacros:
   AcrossComments: false
   AlignCompound: false
   PadOperators: false
-AlignConsecutiveShortCaseStatements:
-  Enabled: false
-  AcrossEmptyLines: false
-  AcrossComments: false
-  AlignCaseColons: false
 AlignEscapedNewlines: Right
 AlignOperands: Align
 AlignTrailingComments:
@@ -58,33 +53,31 @@ BitFieldColonSpacing: Both
 BraceWrapping:
   AfterCaseLabel: false
   AfterClass: false
-  AfterControlStatement: Always
+  AfterControlStatement: false
   AfterEnum: false
   AfterFunction: false
   AfterNamespace: false
-  AfterObjCDeclaration: true
+  AfterObjCDeclaration: false
   AfterStruct: false
   AfterUnion: false
-  AfterExternBlock: true
-  BeforeCatch: true
-  BeforeElse: true
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
   BeforeLambdaBody: false
   BeforeWhile: false
   IndentBraces: false
-  SplitEmptyFunction: true
-  SplitEmptyRecord: true
-  SplitEmptyNamespace: true
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
 BreakAfterAttributes: Never
 BreakAfterJavaFieldAnnotations: false
-BreakArrays: true
+BreakArrays: false
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Custom
 BreakBeforeConceptDeclarations: Always
 BreakBeforeInlineASMColon: OnlyMultiline
-BreakBeforeTernaryOperators: true
-BreakConstructorInitializers: BeforeColon
-BreakInheritanceList: BeforeColon
-BreakStringLiterals: true
+BreakBeforeTernaryOperators: false
+BreakStringLiterals: false
 ColumnLimit: 120
 CommentPragmas: "^ IWYU pragma:"
 CompactNamespaces: false
@@ -188,7 +181,6 @@ SpaceBeforeCaseColon: false
 SpaceBeforeCpp11BracedList: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
-SpaceBeforeJsonColon: false
 SpaceBeforeParens: ControlStatements
 SpaceBeforeParensOptions:
   AfterControlStatements: true

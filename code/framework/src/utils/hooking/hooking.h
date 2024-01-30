@@ -44,16 +44,14 @@ namespace hook {
 
     // adjusts the address passed to the base as set above
     template <typename T> inline void adjust_base(T &address) {
-        if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000)
-        {
+        if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000) {
             *(uintptr_t *)&address += baseAddressDifference;
         }
     }
 
     // returns the adjusted address to the stated base
     template <typename T> inline uintptr_t get_adjusted(T address) {
-        if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000)
-        {
+        if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000) {
             return (uintptr_t)address + baseAddressDifference;
         }
 
@@ -64,8 +62,7 @@ namespace hook {
     template <typename T> inline uintptr_t get_unadjusted(T address) {
 #ifdef _M_AMD64
         if ((uintptr_t)address >= hook::get_adjusted(0x140000000) &&
-            (uintptr_t)address <= hook::get_adjusted(0x146000000))
-        {
+            (uintptr_t)address <= hook::get_adjusted(0x146000000)) {
             return (uintptr_t)address - baseAddressDifference;
         }
 #endif
@@ -174,12 +171,9 @@ namespace hook {
     }
 
     template <typename AddressType> inline void return_function(AddressType address, uint16_t stackSize = 0) {
-        if (stackSize == 0)
-        {
+        if (stackSize == 0) {
             put<uint8_t>(address, 0xC3);
-        }
-        else
-        {
+        } else {
             put<uint8_t>(address, 0xC2);
             put<uint16_t>((uintptr_t)address + 1, stackSize);
         }
@@ -207,8 +201,7 @@ namespace hook {
         }
 
         template <> inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, int ordinal) {
-            if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry))
-            {
+            if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                 return IMAGE_ORDINAL(*nameTableEntry) == ordinal;
             }
 
@@ -216,8 +209,7 @@ namespace hook {
         }
 
         template <> inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, const char *ordinal) {
-            if (!IMAGE_SNAP_BY_ORDINAL(*nameTableEntry))
-            {
+            if (!IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                 auto import = getRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
 
                 return !_stricmp(import->Name, ordinal);
@@ -238,29 +230,24 @@ namespace hook {
         IMAGE_IMPORT_DESCRIPTOR *descriptor = getRVA<IMAGE_IMPORT_DESCRIPTOR>(
             ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
 
-        while (descriptor->Name)
-        {
+        while (descriptor->Name) {
             const char *name = getRVA<char>(descriptor->Name);
 
-            if (_stricmp(name, moduleName))
-            {
+            if (_stricmp(name, moduleName)) {
                 descriptor++;
 
                 continue;
             }
 
-            if (descriptor->OriginalFirstThunk == 0)
-            {
+            if (descriptor->OriginalFirstThunk == 0) {
                 return nullptr;
             }
 
             auto nameTableEntry = getRVA<uintptr_t>(descriptor->OriginalFirstThunk);
             auto addressTableEntry = getRVA<uintptr_t>(descriptor->FirstThunk);
 
-            while (*nameTableEntry)
-            {
-                if (iat_matches_ordinal(nameTableEntry, ordinal))
-                {
+            while (*nameTableEntry) {
+                if (iat_matches_ordinal(nameTableEntry, ordinal)) {
                     T origEntry = (T)*addressTableEntry;
 
                     DWORD oldProtect;
@@ -556,8 +543,7 @@ namespace hook {
 
         member_cast cast;
 
-        if (sizeof(cast.function) != sizeof(cast.ptr))
-        {
+        if (sizeof(cast.function) != sizeof(cast.ptr)) {
             return get_member_old(function);
         }
 
@@ -637,8 +623,7 @@ namespace hook {
 
       public:
         inject_call(uintptr_t address) {
-            if (*(uint8_t *)address != 0xE8)
-            {
+            if (*(uint8_t *)address != 0xE8) {
                 __debugbreak();
                 // "inject_call attempted on something that was not a call. Are you sure you have a compatible version
                 // of the game executable? You might need to try poking the guru."
@@ -742,8 +727,7 @@ namespace hook {
 
         member_cast cast;
 
-        if (sizeof(cast.function) != sizeof(cast.ptr))
-        {
+        if (sizeof(cast.function) != sizeof(cast.ptr)) {
             return get_member_old(function);
         }
 

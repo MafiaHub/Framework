@@ -25,8 +25,7 @@
 namespace Framework::Scripting::Engines::Node {
     static void On(const v8::FunctionCallbackInfo<v8::Value> &info) {
         // Ensure that the method was called with exactly two arguments
-        if (info.Length() != 2)
-        {
+        if (info.Length() != 2) {
             v8::Isolate *isolate = info.GetIsolate();
             isolate->ThrowException(
                 v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Wrong number of arguments").ToLocalChecked()));
@@ -34,8 +33,7 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Ensure that the first argument is a string and the second is a function
-        if (!info[0]->IsString() || !info[1]->IsFunction())
-        {
+        if (!info[0]->IsString() || !info[1]->IsFunction()) {
             // Throw an error if the argument types are incorrect
             v8::Isolate *isolate = info.GetIsolate();
             isolate->ThrowException(v8::Exception::Error(
@@ -59,8 +57,7 @@ namespace Framework::Scripting::Engines::Node {
 
     static void Emit(const v8::FunctionCallbackInfo<v8::Value> &info) {
         // Ensure that the method was called with exactly two arguments
-        if (info.Length() != 2)
-        {
+        if (info.Length() != 2) {
             v8::Isolate *isolate = info.GetIsolate();
             isolate->ThrowException(
                 v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Wrong number of arguments").ToLocalChecked()));
@@ -68,8 +65,7 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Ensure that both arguments are strings
-        if (!info[0]->IsString() || !info[1]->IsString())
-        {
+        if (!info[0]->IsString() || !info[1]->IsString()) {
             // Throw an error if the argument types are incorrect
             v8::Isolate *isolate = info.GetIsolate();
             isolate->ThrowException(v8::Exception::Error(
@@ -106,8 +102,7 @@ namespace Framework::Scripting::Engines::Node {
         Builtins::Vector2::Register(isolate, _module);
 
         // Always bind the mod-side in last
-        if (cb)
-        {
+        if (cb) {
             cb(Framework::Scripting::Engines::SDKRegisterWrapper(engine, this, ENGINE_NODE));
         }
 

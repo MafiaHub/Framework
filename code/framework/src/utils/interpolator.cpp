@@ -73,8 +73,7 @@ glm::vec3 Framework::Utils::Interpolator::Position::UpdateTargetValue(const glm:
 
     // NOTE: snap value to target pos if below threshold (useful when entity stands, no need to run calculations during
     // that time)
-    if (glm::distance(newPos, _end) <= _snapThreshold)
-    {
+    if (glm::distance(newPos, _end) <= _snapThreshold) {
         _finishTime = TimePoint::max();
         newPos = _end;
     }

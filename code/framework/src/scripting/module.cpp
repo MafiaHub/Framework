@@ -20,12 +20,10 @@
 namespace Framework::Scripting {
     ModuleError Module::Init(EngineTypes engineType, Engines::SDKRegisterCallback cb) {
         // Initialize the engine based on the desired type
-        switch (engineType)
-        {
+        switch (engineType) {
         case ENGINE_NODE: {
             _engine = new Engines::Node::Engine;
-        }
-        break;
+        } break;
 
         case ENGINE_LUA:
             break;
@@ -40,8 +38,7 @@ namespace Framework::Scripting {
 
         _engineType = engineType;
         _engine->SetProcessArguments(_processArgsCount, _processArgs);
-        if (_engine->Init(cb) != EngineError::ENGINE_NONE)
-        {
+        if (_engine->Init(cb) != EngineError::ENGINE_NONE) {
             delete _engine;
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
         }
@@ -53,15 +50,13 @@ namespace Framework::Scripting {
     }
 
     ModuleError Module::Shutdown() {
-        if (!_engine)
-        {
+        if (!_engine) {
             return ModuleError::MODULE_ENGINE_NULL;
         }
 
         // Unload the gamemode if it's loaded, it can fail but it's not critical since we are shutdowning
         // So we just log out, then it's obvious for everyone
-        if (!UnloadGamemode())
-        {
+        if (!UnloadGamemode()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to unload the gamemode");
         }
 
@@ -73,8 +68,7 @@ namespace Framework::Scripting {
     }
 
     void Module::Update() {
-        if (!_engine)
-        {
+        if (!_engine) {
             return;
         }
 
@@ -83,8 +77,7 @@ namespace Framework::Scripting {
 
     bool Module::LoadGamemode() {
         cppfs::FileHandle dir = cppfs::fs::open("gamemode");
-        if (!dir.exists() || !dir.isDirectory())
-        {
+        if (!dir.exists() || !dir.isDirectory()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to find the gamemode directory");
             return false;
         }

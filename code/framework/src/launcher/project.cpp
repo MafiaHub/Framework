@@ -27,10 +27,9 @@
 #include <utils/hooking/jitasm.h>
 
 // Enforce discrete GPU on mobile units.
-extern "C"
-{
-    __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
-    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 
 // linker config for sections
@@ -68,8 +67,8 @@ static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     if (result == EXCEPTION_CONTINUE_EXECUTION)
         return result;
     else if (result != EXCEPTION_EXECUTE_HANDLER)
-        return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION
-                                                                                        : EXCEPTION_CONTINUE_SEARCH;
+        return (exceptionInfo->ExceptionRecord->ExceptionCode == STATUS_INVALID_HANDLE) ? EXCEPTION_CONTINUE_EXECUTION :
+                                                                                          EXCEPTION_CONTINUE_SEARCH;
     return result;
 }
 
@@ -86,8 +85,7 @@ void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
 }
 
 LPWSTR WINAPI GetCommandLineW_Stub() {
-    if (!gConfig->loadClientManually)
-    {
+    if (!gConfig->loadClientManually) {
         Framework::Launcher::Project::InitialiseClientDLL();
     }
 
@@ -99,8 +97,7 @@ LPWSTR WINAPI GetCommandLineW_Stub() {
 }
 
 LPSTR WINAPI GetCommandLineA_Stub() {
-    if (!gConfig->loadClientManually)
-    {
+    if (!gConfig->loadClientManually) {
         Framework::Launcher::Project::InitialiseClientDLL();
     }
     auto args = Framework::Utils::StringUtils::WideToNormal(gConfig->additionalLaunchArguments);
@@ -113,8 +110,7 @@ LPSTR WINAPI GetCommandLineA_Stub() {
 }
 
 DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr))
-    {
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
         auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
@@ -125,8 +121,7 @@ DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nS
 }
 
 DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr))
-    {
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
         auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
         strcpy_s(lpFilename, nSize, gamePath.c_str());
 
@@ -137,8 +132,7 @@ DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR l
 }
 
 DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr))
-    {
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
         wcscpy_s(lpFilename, nSize, gImagePath);
 
         return (DWORD)wcslen(gImagePath);
@@ -148,8 +142,7 @@ DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD n
 }
 
 DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr))
-    {
+    if (!hModule || hModule == GetModuleHandle(nullptr)) {
         wcscpy_s(lpFilename, nSize, gImagePath);
 
         return (DWORD)wcslen(gImagePath);
@@ -159,8 +152,7 @@ DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR 
 }
 
 HMODULE WINAPI GetModuleHandleW_Hook(LPWSTR lpModuleName) {
-    if (lpModuleName == nullptr)
-    {
+    if (lpModuleName == nullptr) {
         return (HMODULE)GetModuleHandle(nullptr);
     }
 
@@ -168,8 +160,7 @@ HMODULE WINAPI GetModuleHandleW_Hook(LPWSTR lpModuleName) {
 }
 
 HMODULE WINAPI GetModuleHandleA_Hook(LPSTR lpModuleName) {
-    if (lpModuleName == nullptr)
-    {
+    if (lpModuleName == nullptr) {
         return (HMODULE)GetModuleHandle(nullptr);
     }
 
@@ -177,8 +168,7 @@ HMODULE WINAPI GetModuleHandleA_Hook(LPSTR lpModuleName) {
 }
 
 BOOL WINAPI GetModuleHandleExW_Hook(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule) {
-    if (lpModuleName == nullptr)
-    {
+    if (lpModuleName == nullptr) {
         *phModule = (HMODULE)GetModuleHandle(nullptr);
         return TRUE;
     }
@@ -187,8 +177,7 @@ BOOL WINAPI GetModuleHandleExW_Hook(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE
 }
 
 BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *phModule) {
-    if (lpModuleName == nullptr)
-    {
+    if (lpModuleName == nullptr) {
         *phModule = (HMODULE)GetModuleHandle(nullptr);
         return TRUE;
     }
@@ -216,47 +205,37 @@ namespace Framework::Launcher {
     }
 
     bool Project::Launch() {
-        if (_config.allocateDeveloperConsole)
-        {
+        if (_config.allocateDeveloperConsole) {
             AllocateDeveloperConsole();
         }
 
-        if (!_config.disablePersistentConfig)
-        {
-            if (!LoadJSONConfig())
-            {
+        if (!_config.disablePersistentConfig) {
+            if (!LoadJSONConfig()) {
                 MessageBox(nullptr, "Failed to load JSON launcher config", _config.name.c_str(), MB_ICONERROR);
                 return false;
             }
         }
 
         // Run platform-dependent platform checks and init steps
-        if (_config.platform == ProjectPlatform::STEAM)
-        {
-            if (!RunInnerSteamChecks())
-            {
+        if (_config.platform == ProjectPlatform::STEAM) {
+            if (!RunInnerSteamChecks()) {
                 return false;
             }
-        }
-        else
-        {
-            if (!RunInnerClassicChecks())
-            {
+        } else {
+            if (!RunInnerClassicChecks()) {
                 return false;
             }
         }
 
         // Load the destination DLL
-        if (!_config.loadClientManually && !LoadLibraryW(_config.destinationDllName.c_str()))
-        {
+        if (!_config.loadClientManually && !LoadLibraryW(_config.destinationDllName.c_str())) {
             DWORD dwError = GetLastError();
             MessageBox(nullptr, fmt::format("Failed to load core runtime with error code {}", dwError).c_str(),
                        _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
-        if (!_config.disablePersistentConfig)
-        {
+        if (!_config.disablePersistentConfig) {
             SaveJSONConfig();
         }
 
@@ -265,16 +244,14 @@ namespace Framework::Launcher {
             (decltype(&AddDllDirectory))GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "AddDllDirectory");
         auto setDefaultDllDirectories = (decltype(&SetDefaultDllDirectories))GetProcAddress(
             GetModuleHandleW(L"kernel32.dll"), "SetDefaultDllDirectories");
-        if (addDllDirectory && setDefaultDllDirectories)
-        {
+        if (addDllDirectory && setDefaultDllDirectories) {
             setDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
 
             // first search in game root dir
             addDllDirectory(_gamePath.c_str());
 
             // add any custom search paths from the mod
-            for (auto &path : _config.additionalSearchPaths)
-            {
+            for (auto &path : _config.additionalSearchPaths) {
                 addDllDirectory((_gamePath + L"\\" + path).c_str());
             }
 
@@ -282,8 +259,7 @@ namespace Framework::Launcher {
             addDllDirectory(gProjectDllPath);
             addDllDirectory((std::wstring(gProjectDllPath) + L"\\bin").c_str());
 
-            if (_config.useAlternativeWorkDir)
-            {
+            if (_config.useAlternativeWorkDir) {
                 _gamePath += L"/" + _config.alternativeWorkDir;
                 addDllDirectory(_gamePath.c_str());
             }
@@ -292,15 +268,13 @@ namespace Framework::Launcher {
         }
 
         // Load TLS dummy so the game can use thread-local storage
-        if (!(tlsDll = LoadLibraryW(L"FrameworkLoaderData.dll")))
-        {
+        if (!(tlsDll = LoadLibraryW(L"FrameworkLoaderData.dll"))) {
             MessageBox(nullptr, "Failed to load a vital framework component", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // Load the steam runtime only if required
-        if (_config.platform == ProjectPlatform::STEAM)
-        {
+        if (_config.platform == ProjectPlatform::STEAM) {
             HMODULE steamDll{};
 
 #ifdef _M_IX86
@@ -309,8 +283,7 @@ namespace Framework::Launcher {
             steamDll = LoadLibraryW(L"fw_steam_api64.dll");
 #endif
 
-            if (!steamDll)
-            {
+            if (!steamDll) {
                 MessageBox(nullptr, "Failed to inject the steam runtime DLL in the running process",
                            _config.name.c_str(), MB_ICONERROR);
                 return false;
@@ -319,13 +292,11 @@ namespace Framework::Launcher {
 
         // Use real scaling
         auto shcore = LoadLibraryW(L"shcore.dll");
-        if (shcore)
-        {
+        if (shcore) {
             auto SetProcessDpiAwareness =
                 (decltype(&::SetProcessDpiAwareness))GetProcAddress(shcore, "SetProcessDpiAwareness");
 
-            if (SetProcessDpiAwareness)
-            {
+            if (SetProcessDpiAwareness) {
                 SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
             }
         }
@@ -347,10 +318,8 @@ namespace Framework::Launcher {
         auto checksum = GetGameVersion();
 
         // verify game integrity if enabled
-        if (_config.verifyGameIntegrity)
-        {
-            if (!EnsureGameExecutableIsCompatible(checksum))
-            {
+        if (_config.verifyGameIntegrity) {
+            if (!EnsureGameExecutableIsCompatible(checksum)) {
                 MessageBox(nullptr, "Unsupported game version", _config.name.c_str(), MB_ICONERROR);
                 return false;
             }
@@ -360,16 +329,11 @@ namespace Framework::Launcher {
             ->info("Loading game {}", Utils::StringUtils::WideToNormal(_gamePath));
 
         // Run with type depending
-        if (_config.launchType == ProjectLaunchType::PE_LOADING)
-        {
+        if (_config.launchType == ProjectLaunchType::PE_LOADING) {
             return RunWithPELoading();
-        }
-        else if (_config.launchType == ProjectLaunchType::DLL_INJECTION)
-        {
+        } else if (_config.launchType == ProjectLaunchType::DLL_INJECTION) {
             return RunWithDLLInjection();
-        }
-        else
-        {
+        } else {
             return false;
         }
     }
@@ -379,16 +343,14 @@ namespace Framework::Launcher {
         const wchar_t *child_part = L"-steamchild:";
         wchar_t *cmd_match = wcsstr(GetCommandLineW(), child_part);
 
-        if (cmd_match)
-        {
+        if (cmd_match) {
             int master_pid = _wtoi(&cmd_match[wcslen(child_part)]);
 
             // open a handle to the parent process with SYNCHRONIZE rights
             auto handle = OpenProcess(SYNCHRONIZE, FALSE, master_pid);
 
             // if we opened the process...
-            if (handle != INVALID_HANDLE_VALUE)
-            {
+            if (handle != INVALID_HANDLE_VALUE) {
                 // ... wait for it to exit and close the handle afterwards
                 WaitForSingleObject(handle, INFINITE);
 
@@ -400,8 +362,7 @@ namespace Framework::Launcher {
 
         // Make sure we have our required files
         const std::vector<std::string> requiredFiles = {"fw_steam_api64.dll", "fw_steam_api.dll"};
-        if (!EnsureAtLeastOneFileExists(requiredFiles))
-        {
+        if (!EnsureAtLeastOneFileExists(requiredFiles)) {
             return false;
         }
 
@@ -411,8 +372,7 @@ namespace Framework::Launcher {
 
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
-        if (initResult != External::Steam::SteamError::STEAM_NONE)
-        {
+        if (initResult != External::Steam::SteamError::STEAM_NONE) {
             MessageBox(
                 nullptr,
                 fmt::format(
@@ -425,8 +385,7 @@ namespace Framework::Launcher {
 
         // Make sure steam has the game inside the library
         ISteamApps *steamApps = _steamWrapper->GetContext()->SteamApps();
-        if (!steamApps->BIsAppInstalled(_config.steamAppId))
-        {
+        if (!steamApps->BIsAppInstalled(_config.steamAppId)) {
             MessageBox(nullptr, "The destination game is not installed", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
@@ -453,14 +412,12 @@ namespace Framework::Launcher {
 
     bool Project::RunInnerClassicChecks() {
         cppfs::FileHandle handle = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath));
-        if (!handle.isDirectory() && !_config.promptForGameExe)
-        {
+        if (!handle.isDirectory() && !_config.promptForGameExe) {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
-        if (!handle.isDirectory())
-        {
+        if (!handle.isDirectory()) {
             const auto exePath = Utils::StringUtils::WideToNormal(gProjectDllPath);
 
             sfd_Options sfd = {};
@@ -471,15 +428,13 @@ namespace Framework::Launcher {
             sfd.title = _config.promptTitle.c_str();
 
             char const *path = sfd_open_dialog(&sfd);
-            if (path)
-            {
+            if (path) {
                 // Reset working directory
                 SetCurrentDirectoryW(gProjectDllPath);
 
                 handle = cppfs::fs::open(path);
 
-                if (!handle.isFile())
-                {
+                if (!handle.isFile()) {
                     MessageBoxA(nullptr,
                                 ("Cannot find a game executable by given path:\n" + std::string(path) +
                                  "\n\n Please check your path and try again!")
@@ -498,8 +453,7 @@ namespace Framework::Launcher {
                 if (_config.promptSelectionFunctor)
                     _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
 
-                if (_config.preferSteam)
-                {
+                if (_config.preferSteam) {
 #ifdef _M_IX86
                     auto steamDllName = "/steam_api.dll";
 #else
@@ -508,17 +462,14 @@ namespace Framework::Launcher {
                     auto steamDll =
                         cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
 
-                    if (steamDll.exists())
-                    {
+                    if (steamDll.exists()) {
                         Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)
                             ->info("Steam dll found in the game directory, switching to steam platform");
                         _config.platform = ProjectPlatform::STEAM;
                         return RunInnerSteamChecks();
                     }
                 }
-            }
-            else
-            {
+            } else {
                 ExitProcess(0);
             }
         }
@@ -542,59 +493,43 @@ namespace Framework::Launcher {
         BOOL bWriteSuccess =
             WriteProcessMemory(hProcess, pRemoteLibraryPath, (void *)szLibraryPath, sLibraryPathLen, &sBytesWritten);
 
-        if (!bWriteSuccess || sBytesWritten != sLibraryPathLen)
-        {
+        if (!bWriteSuccess || sBytesWritten != sLibraryPathLen) {
             result = INJECT_LIBRARY_RESULT_WRITE_FAILED;
-        }
-        else
-        {
+        } else {
             // Get the handle of Kernel32.dll
             HMODULE hKernel32 = GetModuleHandle("kernel32.dll");
-            if (hKernel32 == NULL)
-            {
+            if (hKernel32 == NULL) {
                 result = INJECT_LIBRARY_GET_MODULE_HANDLE_FAILED;
-            }
-            else
-            {
+            } else {
                 // Get the address of the LoadLibraryA function from Kernel32.dll
                 FARPROC pfnLoadLibraryW = GetProcAddress(hKernel32, "LoadLibraryW");
-                if (pfnLoadLibraryW == NULL)
-                {
+                if (pfnLoadLibraryW == NULL) {
                     result = INJECT_LIBRARY_GET_PROC_ADDRESS_FAILED;
-                }
-                else
-                {
+                } else {
                     // Create a thread inside the target process to load our library
                     HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pfnLoadLibraryW,
                                                         pRemoteLibraryPath, 0, NULL);
 
-                    if (hThread)
-                    {
+                    if (hThread) {
                         // Wait for the created thread to end
                         WaitForSingleObject(hThread, INFINITE);
 
                         DWORD dwExitCode = 0;
-                        if (GetExitCodeThread(hThread, &dwExitCode))
-                        {
+                        if (GetExitCodeThread(hThread, &dwExitCode)) {
                             // Should never happen as we wait for the thread to be finished.
                             assert(dwExitCode != STILL_ACTIVE);
-                        }
-                        else
-                        {
+                        } else {
                             result = INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
                         }
 
                         // In case LoadLibrary returns handle equal to zero there was some problem.
-                        if (dwExitCode == 0)
-                        {
+                        if (dwExitCode == 0) {
                             result = INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
                         }
 
                         // Close our thread handle
                         CloseHandle(hThread);
-                    }
-                    else
-                    {
+                    } else {
                         // Thread creation failed
                         result = INJECT_LIBRARY_THREAD_CREATION_FAILED;
                     }
@@ -611,8 +546,7 @@ namespace Framework::Launcher {
         // Open our target process
         HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 
-        if (!hProcess)
-        {
+        if (!hProcess) {
             // Failed to open the process
             return INJECT_LIBRARY_OPEN_PROCESS_FAIL;
         }
@@ -627,8 +561,7 @@ namespace Framework::Launcher {
 
     bool Project::RunWithDLLInjection() {
         // Method cannot be called directly
-        if (_gamePath.empty())
-        {
+        if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
@@ -637,8 +570,7 @@ namespace Framework::Launcher {
         std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
 
         // Append the optional additional arguments
-        if (_config.additionalLaunchArguments.length() > 0)
-        {
+        if (_config.additionalLaunchArguments.length() > 0) {
             _gamePath = _gamePath + L" " + _config.additionalLaunchArguments;
         }
 
@@ -655,8 +587,7 @@ namespace Framework::Launcher {
 
         // Create the game process and suspend it
         if (!CreateProcessW(NULL, (LPWSTR)_gamePath.c_str(), NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, gProjectDllPath,
-                            &siStartupInfo, &piProcessInfo))
-        {
+                            &siStartupInfo, &piProcessInfo)) {
             MessageBoxA(nullptr, "Failed to start game binary, cannot launch", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
@@ -667,8 +598,7 @@ namespace Framework::Launcher {
             InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
 
         // Was it successfull?
-        if (moduleInjectResult != INJECT_LIBRARY_RESULT_OK)
-        {
+        if (moduleInjectResult != INJECT_LIBRARY_RESULT_OK) {
             MessageBoxA(nullptr, "Failed to inject module into game process", _config.name.c_str(), MB_ICONERROR);
 
             TerminateProcess(piProcessInfo.hProcess, 0);
@@ -683,8 +613,7 @@ namespace Framework::Launcher {
 
     bool Project::RunWithPELoading() {
         // Method cannot be called directly
-        if (_gamePath.empty())
-        {
+        if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
@@ -695,32 +624,28 @@ namespace Framework::Launcher {
 
         HANDLE hFile =
             CreateFileW(_gamePath.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE)
-        {
+        if (hFile == INVALID_HANDLE_VALUE) {
             MessageBox(nullptr, "Failed to find executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // determine file length
         DWORD dwFileLength = SetFilePointer(hFile, 0, nullptr, FILE_END);
-        if (dwFileLength == INVALID_SET_FILE_POINTER)
-        {
+        if (dwFileLength == INVALID_SET_FILE_POINTER) {
             CloseHandle(hFile);
             MessageBox(nullptr, "Could not inquire executable image size", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         HANDLE hMapping = CreateFileMappingW(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
-        if (hMapping == INVALID_HANDLE_VALUE)
-        {
+        if (hMapping == INVALID_HANDLE_VALUE) {
             CloseHandle(hFile);
             MessageBox(nullptr, "Could not map executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         auto *data = (uint8_t *)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
-        if (!data)
-        {
+        if (!data) {
             CloseHandle(hMapping);
             CloseHandle(hFile);
             MessageBox(nullptr, "Could not map view of executable image", _config.name.c_str(), MB_ICONERROR);
@@ -736,79 +661,62 @@ namespace Framework::Launcher {
         Loaders::ExecutableLoader loader(data);
         loader.SetLoadLimit(_config.loadLimit);
         loader.SetLibraryLoader([this](const char *library) -> HMODULE {
-            if (_libraryLoader)
-            {
+            if (_libraryLoader) {
                 auto mod = _libraryLoader(library);
-                if (mod)
-                {
+                if (mod) {
                     return mod;
                 }
             }
             auto mod = LoadLibraryA(library);
-            if (mod == nullptr)
-            {
+            if (mod == nullptr) {
                 mod = (HMODULE)INVALID_HANDLE_VALUE;
             }
             return mod;
         });
         loader.SetFunctionResolver([this](HMODULE hmod, const char *exportFn) -> LPVOID {
-            if (_functionResolver)
-            {
+            if (_functionResolver) {
                 auto ret = _functionResolver(hmod, exportFn);
-                if (ret)
-                {
+                if (ret) {
                     return ret;
                 }
             }
 
             const auto exportName = std::string(exportFn);
 
-            if (!_config.loadClientManually && exportName == "GetStartupInfoW")
-            {
+            if (!_config.loadClientManually && exportName == "GetStartupInfoW") {
                 return reinterpret_cast<LPVOID>(GetStartupInfoW_Stub);
             }
-            if (!_config.loadClientManually && exportName == "GetStartupInfoA")
-            {
+            if (!_config.loadClientManually && exportName == "GetStartupInfoA") {
                 return reinterpret_cast<LPVOID>(GetStartupInfoA_Stub);
             }
-            if (exportName == "GetCommandLineW")
-            {
+            if (exportName == "GetCommandLineW") {
                 return reinterpret_cast<LPVOID>(GetCommandLineW_Stub);
             }
-            if (exportName == "GetCommandLineA")
-            {
+            if (exportName == "GetCommandLineA") {
                 return reinterpret_cast<LPVOID>(GetCommandLineA_Stub);
             }
-            if (exportName == "GetModuleFileNameA")
-            {
+            if (exportName == "GetModuleFileNameA") {
                 return reinterpret_cast<LPVOID>(GetModuleFileNameA_Hook);
             }
-            if (exportName == "GetModuleFileNameExA")
-            {
+            if (exportName == "GetModuleFileNameExA") {
                 return reinterpret_cast<LPVOID>(GetModuleFileNameExA_Hook);
             }
-            if (exportName == "GetModuleFileNameW")
-            {
+            if (exportName == "GetModuleFileNameW") {
                 return reinterpret_cast<LPVOID>(GetModuleFileNameW_Hook);
             }
-            if (exportName == "GetModuleFileNameExW")
-            {
+            if (exportName == "GetModuleFileNameExW") {
                 return reinterpret_cast<LPVOID>(GetModuleFileNameExW_Hook);
             }
-            if (exportName == "GetModuleHandleA")
-            {
+            if (exportName == "GetModuleHandleA") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleA_Hook);
             }
-            if (exportName == "GetModuleHandleExA")
-            {
+            if (exportName == "GetModuleHandleExA") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleExA_Hook);
             }
-            if (exportName == "GetModuleHandleW")
-            {
+            if (exportName == "GetModuleHandleW") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleW_Hook);
             }
-            if (exportName == "GetModuleHandleExW")
-            {
+            if (exportName == "GetModuleHandleExW") {
                 return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
@@ -841,13 +749,11 @@ namespace Framework::Launcher {
 
     void Project::InvokeEntryPoint(void (*entryPoint)()) {
         // SEH call to prevent STATUS_INVALID_HANDLE
-        __try
-        {
+        __try {
             // and call the entry point
             entryPoint();
+        } __except (HandleVariant(GetExceptionInformation())) {
         }
-        __except (HandleVariant(GetExceptionInformation()))
-        {}
     }
 
     void Project::AllocateDeveloperConsole() const {
@@ -861,11 +767,9 @@ namespace Framework::Launcher {
     }
 
     bool Project::EnsureFilesExist(const std::vector<std::string> &files) {
-        for (const auto &file : files)
-        {
+        for (const auto &file : files) {
             cppfs::FileHandle fh = cppfs::fs::open(file);
-            if (!fh.exists() || !fh.isFile())
-            {
+            if (!fh.exists() || !fh.isFile()) {
                 MessageBox(nullptr, std::string("The file " + file + "is not present in the current directory").c_str(),
                            "Framework", MB_ICONERROR);
                 return false;
@@ -875,11 +779,9 @@ namespace Framework::Launcher {
     }
 
     bool Project::EnsureAtLeastOneFileExists(const std::vector<std::string> &files) {
-        for (const auto &file : files)
-        {
+        for (const auto &file : files) {
             cppfs::FileHandle fh = cppfs::fs::open(file);
-            if (fh.exists() && fh.isFile())
-            {
+            if (fh.exists() && fh.isFile()) {
                 return true;
             }
         }
@@ -887,14 +789,12 @@ namespace Framework::Launcher {
     }
 
     bool Project::LoadJSONConfig() {
-        if (!_config.overrideConfigFileName)
-        {
+        if (!_config.overrideConfigFileName) {
             _config.configFileName = fmt::format("{}_launcher.json", _config.name);
         }
         auto configHandle = cppfs::fs::open(_config.configFileName);
 
-        if (!configHandle.exists())
-        {
+        if (!configHandle.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)
                 ->info("JSON config file is not present, generating new instance...");
             _fileConfig->Parse("{}");
@@ -903,13 +803,11 @@ namespace Framework::Launcher {
 
         auto configData = configHandle.readFile();
 
-        try
-        {
+        try {
             // Parse our config data first
             _fileConfig->Parse(configData);
 
-            if (!_fileConfig->IsParsed())
-            {
+            if (!_fileConfig->IsParsed()) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)
                     ->critical("JSON config load has failed: {}", _fileConfig->GetLastError());
                 return false;
@@ -925,9 +823,9 @@ namespace Framework::Launcher {
                 _fileConfig->GetDefault<std::wstring>("mod_dll_name", _config.destinationDllName);
 
             std::replace(_config.classicGamePath.begin(), _config.classicGamePath.end(), '\\', '/');
+        } catch (const std::exception &ex) {
+            return false;
         }
-        catch (const std::exception &ex)
-        { return false; }
         return true;
     }
 
@@ -944,16 +842,14 @@ namespace Framework::Launcher {
     }
 
     uint32_t Project::GetGameVersion() {
-        if (_gamePath.empty())
-        {
+        if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         auto gameExeHandle =
             std::ifstream(Utils::StringUtils::WideToNormal(_gamePath), std::ios::binary | std::ios::ate);
-        if (!gameExeHandle.good())
-        {
+        if (!gameExeHandle.good()) {
             MessageBoxA(nullptr, "Failed to find the game executable", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
@@ -967,10 +863,8 @@ namespace Framework::Launcher {
     }
 
     bool Project::EnsureGameExecutableIsCompatible(uint32_t checksum) {
-        for (auto &version : _config.supportedGameVersions)
-        {
-            if (checksum == version)
-            {
+        for (auto &version : _config.supportedGameVersions) {
+            if (checksum == version) {
                 Framework::Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)
                     ->info("Game integrity verified. Mod allowed to launch (Checksum {}, found {})", checksum, version);
                 return true;
@@ -985,19 +879,14 @@ namespace Framework::Launcher {
     void Project::InitialiseClientDLL() {
         static bool init = false;
 
-        if (!init)
-        {
+        if (!init) {
             auto mod = LoadLibraryW(gDllName);
 
-            if (mod)
-            {
+            if (mod) {
                 auto initFunc = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
-                if (initFunc)
-                {
+                if (initFunc) {
                     initFunc(gProjectDllPath);
-                }
-                else
-                {
+                } else {
                     MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
                     ExitProcess(1);
                 }

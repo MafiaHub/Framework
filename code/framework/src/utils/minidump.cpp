@@ -48,12 +48,10 @@ namespace Framework::Utils {
     };
 
     LONG WINAPI MiniDump::ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo) {
-        if (!isCaptureEnabled)
-        {
+        if (!isCaptureEnabled) {
             return EXCEPTION_EXECUTE_HANDLER;
         }
-        if (exceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT)
-        {
+        if (exceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT) {
             return EXCEPTION_CONTINUE_EXECUTION;
         }
 

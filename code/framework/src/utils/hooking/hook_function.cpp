@@ -17,8 +17,7 @@ void HookFunctionBase::Register() {
 }
 
 void HookFunctionBase::RunAll() {
-    for (auto func = g_hookFunctions; func; func = func->m_next)
-    {
+    for (auto func = g_hookFunctions; func; func = func->m_next) {
         func->Run();
     }
 }
@@ -31,10 +30,8 @@ void RuntimeHookFunction::Register() {
 }
 
 void RuntimeHookFunction::Run(const char *key) {
-    for (auto func = g_runtimeHookFunctions; func; func = func->m_next)
-    {
-        if (func->m_key == key)
-        {
+    for (auto func = g_runtimeHookFunctions; func; func = func->m_next) {
+        if (func->m_key == key) {
             func->m_function();
         }
     }

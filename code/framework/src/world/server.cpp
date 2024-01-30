@@ -16,8 +16,7 @@ namespace Framework::World {
     EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval) {
         const auto status = Engine::Init(networkPeer);
 
-        if (status != EngineError::ENGINE_NONE)
-        {
+        if (status != EngineError::ENGINE_NONE) {
             return status;
         }
 
@@ -42,8 +41,7 @@ namespace Framework::World {
                 return false;
 
             // Allow user to override visibility rules completely.
-            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE)
-            {
+            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE) {
                 return rhsS.isVisibleProc(streamerEntity, e);
             }
 
@@ -61,8 +59,7 @@ namespace Framework::World {
 
             // Let user replace the distance check.
             if (rhsS.isVisibleProc &&
-                rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION)
-            {
+                rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
                 return rhsS.isVisibleProc(streamerEntity, e);
             }
 
@@ -72,14 +69,12 @@ namespace Framework::World {
 
             // If we made it this far and the entity is streaming range check exempt
             // we override isVisible state to True.
-            if (streamer.rangeExemptEntities.find(e.id()) != streamer.rangeExemptEntities.end())
-            {
+            if (streamer.rangeExemptEntities.find(e.id()) != streamer.rangeExemptEntities.end()) {
                 isVisible = true;
             }
 
             // Allow user to provide additional rules for visibility.
-            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD)
-            {
+            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
                 isVisible = isVisible && rhsS.isVisibleProc(streamerEntity, e);
             }
 
@@ -94,8 +89,7 @@ namespace Framework::World {
                 // Remove the entity from all streamers.
                 _findAllStreamerEntities.each(
                     [this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                        if (rhsS.entities.find(e) != rhsS.entities.end())
-                        {
+                        if (rhsS.entities.find(e) != rhsS.entities.end()) {
                             rhsS.entities.erase(e);
 
                             // Ensure we despawn the entity from the client.
@@ -113,12 +107,9 @@ namespace Framework::World {
             .interval(tickInterval * 4.0f)
             .each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
                 // Let user provide custom ownership assignment.
-                if (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable))
-                {
+                if (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable)) {
                     /* no op */
-                }
-                else
-                {
+                } else {
                     // Assign the entity to the closest streamer.
                     uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
                     float closestDist = std::numeric_limits<float>::max();
@@ -127,11 +118,9 @@ namespace Framework::World {
                         const auto rhsTr = rhsE.get<Modules::Base::Transform>();
                         const auto rhsRs = rhsE.get<Modules::Base::Streamable>();
                         const auto canBeOwner = _isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
-                        if (canBeOwner)
-                        {
+                        if (canBeOwner) {
                             const auto dist = glm::distance(tr.pos, rhsTr->pos);
-                            if (dist < closestDist)
-                            {
+                            if (dist < closestDist) {
                                 closestDist = dist;
                                 closestOwnerGUID = rhsS.guid;
                             }
@@ -158,35 +147,30 @@ namespace Framework::World {
             .interval(3.0f)
             .iter([](flecs::iter &it, Modules::Base::TickRateRegulator *tr, Modules::Base::Transform *t,
                      Modules::Base::Streamable *s) {
-                for (auto i : it)
-                {
+                for (auto i : it) {
                     bool decreaseRate = true;
                     constexpr float EPSILON = 0.01f;
 
                     // Check if position has changed
                     if (glm::abs(t[i].pos.x - tr[i].pos.x) > EPSILON || glm::abs(t[i].pos.y - tr[i].pos.y) > EPSILON ||
-                        glm::abs(t[i].pos.z - tr[i].pos.z) > EPSILON)
-                    {
+                        glm::abs(t[i].pos.z - tr[i].pos.z) > EPSILON) {
                         decreaseRate = false;
                     }
 
                     // Check if rotation quaternion has changed
                     if (glm::abs(t[i].rot.x - tr[i].rot.x) > EPSILON || glm::abs(t[i].rot.y - tr[i].rot.y) > EPSILON ||
-                        glm::abs(t[i].rot.z - tr[i].rot.z) > EPSILON || glm::abs(t[i].rot.w - tr[i].rot.w) > EPSILON)
-                    {
+                        glm::abs(t[i].rot.z - tr[i].rot.z) > EPSILON || glm::abs(t[i].rot.w - tr[i].rot.w) > EPSILON) {
                         decreaseRate = false;
                     }
 
                     // Check if velocity has changed
                     if (glm::abs(t[i].vel.x - tr[i].vel.x) > EPSILON || glm::abs(t[i].vel.y - tr[i].vel.y) > EPSILON ||
-                        glm::abs(t[i].vel.z - tr[i].vel.z) > EPSILON)
-                    {
+                        glm::abs(t[i].vel.z - tr[i].vel.z) > EPSILON) {
                         decreaseRate = false;
                     }
 
                     // Check if generation ID has changed
-                    if (t[i].GetGeneration() != tr[i].lastGenID)
-                    {
+                    if (t[i].GetGeneration() != tr[i].lastGenID) {
                         decreaseRate = true;
                     }
 
@@ -197,12 +181,9 @@ namespace Framework::World {
                     tr[i].vel = t[i].vel;
 
                     // Decrease tick rate if needed
-                    if (decreaseRate)
-                    {
+                    if (decreaseRate) {
                         s[i].updateInterval += 5.0f;
-                    }
-                    else
-                    {
+                    } else {
                         s[i].updateInterval = s[i].defaultUpdateInterval;
                     }
                 }
@@ -214,8 +195,7 @@ namespace Framework::World {
             .interval(tickInterval)
             .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamer *s,
                          Modules::Base::Streamable *rs) {
-                for (size_t i = 0; i < it.count(); i++)
-                {
+                for (size_t i = 0; i < it.count(); i++) {
                     OPTICK_EVENT();
 
                     // Skip streamer entities we plan to remove.
@@ -230,8 +210,7 @@ namespace Framework::World {
                                 return;
 
                             // Let streamer send an update to self if an event is assigned.
-                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc)
-                            {
+                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc) {
                                 rs[i].GetBaseEvents().selfUpdateProc(_networkPeer, s[i].guid, e);
                                 return;
                             }
@@ -242,36 +221,29 @@ namespace Framework::World {
                             const auto map_it = s[i].entities.find(id);
 
                             // Entity is already known to this streamer.
-                            if (map_it != s[i].entities.end())
-                            {
+                            if (map_it != s[i].entities.end()) {
                                 // If we can't stream an entity anymore, despawn it
-                                if (!canSend)
-                                {
+                                if (!canSend) {
                                     s[i].entities.erase(map_it);
                                     if (otherS.GetBaseEvents().despawnProc)
                                         otherS.GetBaseEvents().despawnProc(_networkPeer, s[i].guid, e);
                                 }
 
                                 // otherwise we do regular updates
-                                else if (rs[i].owner != otherS.owner)
-                                {
+                                else if (rs[i].owner != otherS.owner) {
                                     auto &data = map_it->second;
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate >
-                                        otherS.updateInterval)
-                                    {
+                                        otherS.updateInterval) {
                                         if (otherS.GetBaseEvents().updateProc)
                                             otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }
-                                }
-                                else
-                                {
+                                } else {
                                     auto &data = map_it->second;
 
                                     // If the entity is owned by this streamer, we send a full update.
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate >
-                                        otherS.updateInterval)
-                                    {
+                                        otherS.updateInterval) {
                                         if (otherS.GetBaseEvents().ownerUpdateProc)
                                             otherS.GetBaseEvents().ownerUpdateProc(_networkPeer, s[i].guid, e);
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
@@ -280,10 +252,8 @@ namespace Framework::World {
                             }
 
                             // this is a new entity, spawn it unless user says otherwise
-                            else if (canSend && otherS.GetBaseEvents().spawnProc)
-                            {
-                                if (otherS.GetBaseEvents().spawnProc(_networkPeer, s[i].guid, e))
-                                {
+                            else if (canSend && otherS.GetBaseEvents().spawnProc) {
+                                if (otherS.GetBaseEvents().spawnProc(_networkPeer, s[i].guid, e)) {
                                     Modules::Base::Streamer::StreamData data;
                                     data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     s[i].entities[id] = data;
@@ -306,20 +276,16 @@ namespace Framework::World {
     }
 
     flecs::entity ServerEngine::CreateEntity(const std::string &name) {
-        if (name.empty())
-        {
+        if (name.empty()) {
             return _world->entity();
-        }
-        else
-        {
+        } else {
             return _world->entity(name.c_str());
         }
     }
 
     void ServerEngine::SetOwner(flecs::entity e, uint64_t guid) {
         auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
-        if (!es)
-        {
+        if (!es) {
             return;
         }
         es->owner = guid;
@@ -327,8 +293,7 @@ namespace Framework::World {
 
     flecs::entity ServerEngine::GetOwner(flecs::entity e) const {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-        if (!es)
-        {
+        if (!es) {
             return flecs::entity::null();
         }
         return GetEntityByGUID(es->owner);
@@ -337,8 +302,7 @@ namespace Framework::World {
     std::vector<flecs::entity> ServerEngine::FindVisibleStreamers(flecs::entity e) const {
         std::vector<flecs::entity> streamers;
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-        if (!es)
-        {
+        if (!es) {
             return {};
         }
         _findAllStreamerEntities.each([this, e, &streamers, es](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
@@ -346,8 +310,7 @@ namespace Framework::World {
             const auto rhsST = rhsE.get<Modules::Base::Streamable>();
             const auto lhsTr = e.get<Modules::Base::Transform>();
 
-            if (_isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsST, *lhsTr, *es))
-            {
+            if (_isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsST, *lhsTr, *es)) {
                 streamers.push_back(rhsE);
             }
         });
@@ -355,8 +318,7 @@ namespace Framework::World {
     }
 
     void ServerEngine::RemoveEntity(flecs::entity e) {
-        if (e.is_alive())
-        {
+        if (e.is_alive()) {
             e.add<Modules::Base::PendingRemoval>();
         }
     }

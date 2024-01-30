@@ -183,8 +183,7 @@ namespace Framework::Integrations::Scripting {
         }
 
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
-            if (!rootModule)
-            {
+            if (!rootModule) {
                 return;
             }
 

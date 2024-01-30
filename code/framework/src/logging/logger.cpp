@@ -25,11 +25,9 @@ namespace Framework::Logging {
 
     std::shared_ptr<spdlog::logger> Logger::Get(const char *logName, bool async) {
         // Handle pause mode logs
-        if (_loggingPaused)
-        {
+        if (_loggingPaused) {
             constexpr auto suppressedLogger = "_suppressed_logger";
-            if (auto logger = spdlog::get(suppressedLogger))
-            {
+            if (auto logger = spdlog::get(suppressedLogger)) {
                 return logger;
             }
 
@@ -39,8 +37,7 @@ namespace Framework::Logging {
         }
 
         // If the logger already exists, return it
-        if (auto logger = spdlog::get(logName))
-        {
+        if (auto logger = spdlog::get(logName)) {
             return logger;
         }
 
@@ -54,8 +51,7 @@ namespace Framework::Logging {
             std::make_shared<spdlog::sinks::rotating_file_sink_mt>(fileLogName, _maxFileSize, _maxFileCount);
         fileLogger->set_level(spdlog::level::trace);
 
-        if (!ringbuffer_sink)
-        {
+        if (!ringbuffer_sink) {
             ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(_maxRingBufferSize);
             ringbuffer_sink->set_level(spdlog::level::debug);
         }
@@ -65,22 +61,20 @@ namespace Framework::Logging {
         std::shared_ptr<spdlog::logger> spdLogger;
 
         // Create the logger depending on the type we want
-        if (async)
-        {
+        if (async) {
             spdLogger = std::make_shared<spdlog::async_logger>(
                 logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
-        }
-        else
-        {
+        } else {
             spdLogger = std::make_shared<spdlog::logger>(logName, sinks.begin(), sinks.end());
         }
 
         spdLogger->set_level(spdlog::level::trace);
 
-        try
-        { spdlog::register_logger(spdLogger); }
-        catch (std::exception &ex)
-        { return nullptr; }
+        try {
+            spdlog::register_logger(spdLogger);
+        } catch (std::exception &ex) {
+            return nullptr;
+        }
 
         _loggers.emplace(logName, spdLogger);
 
@@ -89,8 +83,7 @@ namespace Framework::Logging {
 
     Logger *GetInstance() {
         static Logger *_instance = nullptr;
-        if (_instance == nullptr)
-        {
+        if (_instance == nullptr) {
             _instance = new Logger();
         }
         return _instance;

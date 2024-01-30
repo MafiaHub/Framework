@@ -59,19 +59,14 @@ namespace Framework::Utils {
 
         // BitStream support for serialization
         void Serialize(SLNet::BitStream *bs, bool write) {
-            if (write)
-            {
+            if (write) {
                 bs->Write(_hasValue);
-                if (_hasValue)
-                {
+                if (_hasValue) {
                     bs->Write(_value);
                 }
-            }
-            else
-            {
+            } else {
                 bs->Read(_hasValue);
-                if (_hasValue)
-                {
+                if (_hasValue) {
                     bs->Read(_value);
                 }
             }

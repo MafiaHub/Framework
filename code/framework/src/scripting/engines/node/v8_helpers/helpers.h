@@ -51,8 +51,7 @@ namespace Framework::Scripting::Helpers {
         fn->SetName(name);
 
         v8::Maybe<bool> res = exports->Set(ctx, name, fn);
-        if (!res.ToChecked())
-        {
+        if (!res.ToChecked()) {
             return;
         }
     }
@@ -178,8 +177,7 @@ namespace Framework::Scripting::Helpers {
     }
     template <class T> inline v8::Local<v8::Array> JSValue(std::vector<T> &arr) {
         auto jsArr = v8::Array::New(v8::Isolate::GetCurrent(), arr.size());
-        for (int i = 0; i < arr.size(); i++)
-        {
+        for (int i = 0; i < arr.size(); i++) {
             jsArr->Set(v8::Isolate::GetCurrent()->GetEnteredOrMicrotaskContext(), i, JSValue(arr[i]));
         }
         return jsArr;
@@ -219,8 +217,7 @@ namespace Framework::Scripting::Helpers {
 #define V8_DEFINE_STACK() Helpers::ArgumentStack stack(info)
 
 #define V8_VALIDATE_CTOR_CALL()                                                                                        \
-    if (!info.IsConstructCall())                                                                                       \
-    {                                                                                                                  \
+    if (!info.IsConstructCall()) {                                                                                     \
         Helpers::Throw(isolate, "Function cannot be called without new keyword");                                      \
         return;                                                                                                        \
     }

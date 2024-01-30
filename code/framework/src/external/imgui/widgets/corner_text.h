@@ -41,8 +41,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         const auto windowName = fmt::format("Overlay #{}", corner);
 
-        if (ImGui::Begin(windowName.c_str(), nullptr, window_flags))
-        {
+        if (ImGui::Begin(windowName.c_str(), nullptr, window_flags)) {
             if (shadow)
                 ImGui::PushFontShadow(0xFF000000);
             ImGui::Text("%s", text.c_str());

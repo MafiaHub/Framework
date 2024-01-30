@@ -145,12 +145,9 @@ namespace Framework::Utils {
         _debugTime = std::chrono::milliseconds(debugTime);
     }
     template <typename T> Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() {
-        if (_debugEnabled)
-        {
+        if (_debugEnabled) {
             return _startTime + _debugTime;
-        }
-        else
-        {
+        } else {
             return std::chrono::high_resolution_clock::now();
         }
     }

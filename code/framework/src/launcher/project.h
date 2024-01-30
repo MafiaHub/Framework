@@ -154,8 +154,7 @@ namespace Framework::Launcher {
         bool RunWithDLLInjection();
 
         const char *InjectLibraryResultToString(const DLLInjectionResults result) {
-            switch (result)
-            {
+            switch (result) {
             case INJECT_LIBRARY_RESULT_OK:
                 return "Ok";
             case INJECT_LIBRARY_RESULT_WRITE_FAILED:

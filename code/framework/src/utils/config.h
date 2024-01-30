@@ -48,8 +48,7 @@ namespace Framework::Utils {
         template <typename T> T Get(const std::string &field) {
             if (!_lastError.empty())
                 return {};
-            if constexpr (std::is_same_v<T, std::wstring>)
-            {
+            if constexpr (std::is_same_v<T, std::wstring>) {
                 return Utils::StringUtils::NormalToWide((*_document)[field]);
             }
             return (*_document)[field];
@@ -59,23 +58,20 @@ namespace Framework::Utils {
             if (!_lastError.empty())
                 return {};
 
-            try
-            {
-                if constexpr (std::is_same_v<T, std::wstring>)
-                {
+            try {
+                if constexpr (std::is_same_v<T, std::wstring>) {
                     return Utils::StringUtils::NormalToWide((*_document)[field]);
                 }
                 return (*_document)[field];
+            } catch (const std::exception &) {
+                return defaultValue;
             }
-            catch (const std::exception &)
-            { return defaultValue; }
         }
 
         template <typename T> void Set(const std::string &field, T value) {
             if (!_lastError.empty())
                 return;
-            if constexpr (std::is_same_v<T, std::wstring>)
-            {
+            if constexpr (std::is_same_v<T, std::wstring>) {
                 (*_document)[field] = Utils::StringUtils::WideToNormal(value);
                 return;
             }

@@ -18,8 +18,7 @@ namespace Framework::Utils {
 #ifdef WIN32
         static wchar_t executable_path[MAX_PATH] = {'\0'};
 
-        if (executable_path[0] == '\0')
-        {
+        if (executable_path[0] == '\0') {
             wchar_t buf[MAX_PATH];
             GetModuleFileNameW(nullptr, buf, MAX_PATH);
             _wsplitpath(buf, &executable_path[0], &executable_path[_MAX_DRIVE - 1], nullptr, nullptr);
@@ -41,8 +40,7 @@ namespace Framework::Utils {
 #ifdef WIN32
         static char executable_path[MAX_PATH] = {'\0'};
 
-        if (executable_path[0] == '\0')
-        {
+        if (executable_path[0] == '\0') {
             char buf[MAX_PATH];
             GetModuleFileNameA(nullptr, buf, MAX_PATH);
             _splitpath(buf, &executable_path[0], &executable_path[_MAX_DRIVE - 1], nullptr, nullptr);

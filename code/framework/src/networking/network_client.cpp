@@ -21,8 +21,7 @@ namespace Framework::Networking {
     ClientError NetworkClient::Init() {
         SLNet::SocketDescriptor sd{};
         SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
-        if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED)
-        {
+        if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
                 ->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
             return CLIENT_PEER_FAILED;
@@ -31,8 +30,7 @@ namespace Framework::Networking {
     }
 
     ClientError NetworkClient::Shutdown() {
-        if (!_peer)
-        {
+        if (!_peer) {
             return CLIENT_PEER_NULL;
         }
         _registeredMessageCallbacks.clear();
@@ -43,29 +41,25 @@ namespace Framework::Networking {
     }
 
     ClientError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
-        if (_state != DISCONNECTED)
-        {
+        if (_state != DISCONNECTED) {
             Logging::GetInstance()
                 ->Get(FRAMEWORK_INNER_NETWORKING)
                 ->debug("Cannot connect an already connected instance");
             return CLIENT_ALREADY_CONNECTED;
         }
 
-        if (!_peer)
-        {
+        if (!_peer) {
             return CLIENT_PEER_NULL;
         }
 
-        if (!_peer->IsActive())
-        {
+        if (!_peer->IsActive()) {
             Init();
         }
 
         _state = CONNECTING;
 
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
-        if (result != SLNet::CONNECTION_ATTEMPT_STARTED)
-        {
+        if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
                 ->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             _state = DISCONNECTED;
@@ -76,13 +70,11 @@ namespace Framework::Networking {
     }
 
     ClientError NetworkClient::Disconnect() {
-        if (!_peer)
-        {
+        if (!_peer) {
             return CLIENT_PEER_NULL;
         }
 
-        if (_state == DISCONNECTED)
-        {
+        if (_state == DISCONNECTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Cannot disconnect, we are already disconnected.");
             return CLIENT_NONE;
         }
@@ -90,8 +82,7 @@ namespace Framework::Networking {
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
 
-        if (_onPlayerDisconnectedCallback)
-        {
+        if (_onPlayerDisconnectedCallback) {
             _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
         }
         _state = DISCONNECTED;
@@ -100,8 +91,7 @@ namespace Framework::Networking {
     }
 
     void NetworkClient::Update() {
-        if (_state != CONNECTING && _state != CONNECTED)
-        {
+        if (_state != CONNECTING && _state != CONNECTED) {
             return;
         }
 
@@ -109,11 +99,9 @@ namespace Framework::Networking {
     }
 
     bool NetworkClient::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
-        switch (packetID)
-        {
+        switch (packetID) {
         case ID_CONNECTION_REQUEST_ACCEPTED: {
-            if (_onPlayerConnectedCallback)
-            {
+            if (_onPlayerConnectedCallback) {
                 _onPlayerConnectedCallback(_packet);
             }
             _state = CONNECTED;
@@ -121,8 +109,7 @@ namespace Framework::Networking {
         };
 
         case ID_NO_FREE_INCOMING_CONNECTIONS: {
-            if (_onPlayerDisconnectedCallback)
-            {
+            if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::NO_FREE_SLOT);
             }
             _state = DISCONNECTED;
@@ -130,8 +117,7 @@ namespace Framework::Networking {
         };
 
         case ID_DISCONNECTION_NOTIFICATION: {
-            if (_onPlayerDisconnectedCallback)
-            {
+            if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
             }
             _state = DISCONNECTED;
@@ -139,8 +125,7 @@ namespace Framework::Networking {
         };
 
         case ID_CONNECTION_LOST: {
-            if (_onPlayerDisconnectedCallback)
-            {
+            if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::LOST);
             }
             _state = DISCONNECTED;
@@ -148,8 +133,7 @@ namespace Framework::Networking {
         };
 
         case ID_CONNECTION_ATTEMPT_FAILED: {
-            if (_onPlayerDisconnectedCallback)
-            {
+            if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::FAILED);
             }
             _state = DISCONNECTED;
@@ -157,8 +141,7 @@ namespace Framework::Networking {
         };
 
         case ID_INVALID_PASSWORD: {
-            if (_onPlayerDisconnectedCallback)
-            {
+            if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::INVALID_PASSWORD);
             }
             _state = DISCONNECTED;
@@ -166,8 +149,7 @@ namespace Framework::Networking {
         };
 
         case ID_CONNECTION_BANNED: {
-            if (_onPlayerDisconnectedCallback)
-            {
+            if (_onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::BANNED);
             }
             _state = DISCONNECTED;
@@ -178,8 +160,7 @@ namespace Framework::Networking {
     }
 
     int NetworkClient::GetPing() {
-        if (!_peer || _state != CONNECTED)
-        {
+        if (!_peer || _state != CONNECTED) {
             return 0;
         }
 

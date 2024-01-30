@@ -39,16 +39,14 @@ namespace Framework::World {
 
     bool Engine::IsEntityOwner(flecs::entity e, uint64_t guid) {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-        if (!es)
-        {
+        if (!es) {
             return false;
         }
         return (es->owner == guid);
     }
 
     void Engine::WakeEntity(flecs::entity e) {
-        if (!e.get<Framework::World::Modules::Base::TickRateRegulator>())
-        {
+        if (!e.get<Framework::World::Modules::Base::TickRateRegulator>()) {
             return;
         }
         auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
@@ -60,10 +58,8 @@ namespace Framework::World {
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {
-            for (auto i : it)
-            {
-                if (s[i].guid == guid)
-                {
+            for (auto i : it) {
+                if (s[i].guid == guid) {
                     ourEntity = it.entity(i);
                     return;
                 }

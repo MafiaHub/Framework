@@ -329,8 +329,8 @@ namespace jitasm {
 
     /// Register identifier
     struct RegID {
-        unsigned type : 4; // RegType
-        unsigned id : 28;  ///< PhysicalRegID or symbolic register id
+        unsigned type : 4;  // RegType
+        unsigned id   : 28; ///< PhysicalRegID or symbolic register id
 
         bool operator==(const RegID &rhs) const {
             return type == rhs.type && id == rhs.id;
@@ -420,7 +420,7 @@ namespace jitasm {
                     RegID index_;
                     sint64 scale_;
                     sint64 disp_;
-                    uint8 base_size_ : 4;  // OpdSize
+                    uint8 base_size_  : 4; // OpdSize
                     uint8 index_size_ : 4; // OpdSize
                 };
                 // IMM
@@ -525,21 +525,17 @@ namespace jitasm {
             }
 
             bool operator==(const Opd &rhs) const {
-                if ((opdtype_ & O_TYPE_TYPE_MASK) != (rhs.opdtype_ & O_TYPE_TYPE_MASK) || opdsize_ != rhs.opdsize_)
-                {
+                if ((opdtype_ & O_TYPE_TYPE_MASK) != (rhs.opdtype_ & O_TYPE_TYPE_MASK) || opdsize_ != rhs.opdsize_) {
                     return false;
                 }
-                if (IsReg())
-                {
+                if (IsReg()) {
                     return reg_ == rhs.reg_ && reg_assignable_ == rhs.reg_assignable_;
                 }
-                if (IsMem())
-                {
+                if (IsMem()) {
                     return base_ == rhs.base_ && index_ == rhs.index_ && scale_ == rhs.scale_ && disp_ == rhs.disp_ &&
                            base_size_ == rhs.base_size_ && index_size_ == rhs.index_size_;
                 }
-                if (IsImm())
-                {
+                if (IsImm()) {
                     return imm_ == rhs.imm_;
                 }
                 return true;
@@ -2093,10 +2089,8 @@ namespace jitasm {
 
         void put_bytes(void *p, size_t n) {
             uint8 *pb = (uint8 *)p;
-            while (n--)
-            {
-                if (pbuff_)
-                {
+            while (n--) {
+                if (pbuff_) {
                     if (size_ == buffsize_)
                         JITASM_ASSERT(0);
                     pbuff_[size_] = *pb++;
@@ -2119,18 +2113,15 @@ namespace jitasm {
 
         uint8 GetWRXB(int w, const detail::Opd &reg, const detail::Opd &r_m) {
             uint8 wrxb = w ? 8 : 0;
-            if (reg.IsReg())
-            {
+            if (reg.IsReg()) {
                 if (!reg.GetReg().IsInvalid() && reg.GetReg().id >= R8)
                     wrxb |= 4;
             }
-            if (r_m.IsReg())
-            {
+            if (r_m.IsReg()) {
                 if (r_m.GetReg().id >= R8)
                     wrxb |= 1;
             }
-            if (r_m.IsMem())
-            {
+            if (r_m.IsMem()) {
                 if (!r_m.GetIndex().IsInvalid() && r_m.GetIndex().id >= R8)
                     wrxb |= 2;
                 if (!r_m.GetBase().IsInvalid() && r_m.GetBase().id >= R8)
@@ -2140,8 +2131,7 @@ namespace jitasm {
         }
 
         void EncodePrefixes(uint32 flag, const detail::Opd &reg, const detail::Opd &r_m, const detail::Opd &vex) {
-            if (flag & (E_VEX | E_XOP))
-            {
+            if (flag & (E_VEX | E_XOP)) {
                 // Encode VEX prefix
 #ifdef JITASM64
                 if (r_m.IsMem() && r_m.GetAddressBaseSize() != O_SIZE_64)
@@ -2151,30 +2141,22 @@ namespace jitasm {
                 uint8 mmmmm = (flag & E_VEX_MMMMM_MASK) >> E_VEX_MMMMM_SHIFT;
                 uint8 pp = static_cast<uint8>((flag & E_VEX_PP_MASK) >> E_VEX_PP_SHIFT);
                 uint8 wrxb = GetWRXB(flag & E_VEX_W, reg, r_m);
-                if (flag & E_XOP)
-                {
+                if (flag & E_XOP) {
                     db(0x8F);
                     db((~wrxb & 7) << 5 | mmmmm);
                     db((wrxb & 8) << 4 | vvvv << 3 | (flag & E_VEX_L ? 4 : 0) | pp);
-                }
-                else if (wrxb & 0xB || (flag & E_VEX_MMMMM_MASK) == E_VEX_0F38 ||
-                         (flag & E_VEX_MMMMM_MASK) == E_VEX_0F3A)
-                {
+                } else if (wrxb & 0xB || (flag & E_VEX_MMMMM_MASK) == E_VEX_0F38 ||
+                           (flag & E_VEX_MMMMM_MASK) == E_VEX_0F3A) {
                     db(0xC4);
                     db((~wrxb & 7) << 5 | mmmmm);
                     db((wrxb & 8) << 4 | vvvv << 3 | (flag & E_VEX_L ? 4 : 0) | pp);
-                }
-                else
-                {
+                } else {
                     db(0xC5);
                     db((~wrxb & 4) << 5 | vvvv << 3 | (flag & E_VEX_L ? 4 : 0) | pp);
                 }
-            }
-            else
-            {
+            } else {
                 uint8 wrxb = GetWRXB(flag & E_REXW_PREFIX, reg, r_m);
-                if (wrxb)
-                {
+                if (wrxb) {
                     // Encode REX prefix
                     JITASM_ASSERT(!reg.IsReg() || reg.GetSize() != O_SIZE_8 || reg.GetReg().id < AH ||
                                   reg.GetReg().id >= R8B); // AH, BH, CH, or DH may not be used with REX.
@@ -2198,9 +2180,7 @@ namespace jitasm {
                         db(0xF3);
 
                     db(0x40 | wrxb);
-                }
-                else
-                {
+                } else {
                     if (flag & E_MANDATORY_PREFIX_66)
                         db(0x66);
                     else if (flag & E_MANDATORY_PREFIX_F2)
@@ -2223,12 +2203,9 @@ namespace jitasm {
         void EncodeModRM(uint8 reg, const detail::Opd &r_m) {
             reg &= 0x7;
 
-            if (r_m.IsReg())
-            {
+            if (r_m.IsReg()) {
                 db(0xC0 | (reg << 3) | (r_m.GetReg().id & 0x7));
-            }
-            else if (r_m.IsMem())
-            {
+            } else if (r_m.IsMem()) {
                 JITASM_ASSERT(r_m.GetBase().type == R_TYPE_GP &&
                               (r_m.GetIndex().type == R_TYPE_GP || r_m.GetIndex().type == R_TYPE_XMM ||
                                r_m.GetIndex().type == R_TYPE_YMM));
@@ -2239,8 +2216,7 @@ namespace jitasm {
                 if (index != INVALID)
                     index &= 0x7;
 
-                if (base == INVALID && index == INVALID)
-                {
+                if (base == INVALID && index == INVALID) {
 #ifdef JITASM64
                     db(reg << 3 | 4);
                     db(0x25);
@@ -2248,14 +2224,11 @@ namespace jitasm {
                     db(reg << 3 | 5);
 #endif
                     dd(r_m.GetDisp());
-                }
-                else
-                {
+                } else {
                     JITASM_ASSERT(base != ESP || index != ESP);
                     JITASM_ASSERT(index != ESP || r_m.GetScale() == 0);
 
-                    if (index == ESP)
-                    {
+                    if (index == ESP) {
                         index = base;
                         base = ESP;
                     }
@@ -2274,8 +2247,7 @@ namespace jitasm {
                     db(mod << 6 | reg << 3 | (sib ? 4 : base));
 
                     // SIB
-                    if (sib)
-                    {
+                    if (sib) {
                         uint8 ss = 0;
                         if (r_m.GetScale() == 0)
                             ss = 0;
@@ -2287,20 +2259,13 @@ namespace jitasm {
                             ss = 3;
                         else
                             JITASM_ASSERT(0);
-                        if (index != INVALID && base != INVALID)
-                        {
+                        if (index != INVALID && base != INVALID) {
                             db(ss << 6 | index << 3 | base);
-                        }
-                        else if (base != INVALID)
-                        {
+                        } else if (base != INVALID) {
                             db(ss << 6 | 4 << 3 | base);
-                        }
-                        else if (index != INVALID)
-                        {
+                        } else if (index != INVALID) {
                             db(ss << 6 | index << 3 | 5);
-                        }
-                        else
-                        {
+                        } else {
                             JITASM_ASSERT(0);
                         }
                     }
@@ -2313,9 +2278,7 @@ namespace jitasm {
                     if (mod == 2)
                         dd(r_m.GetDisp());
                 }
-            }
-            else
-            {
+            } else {
                 JITASM_ASSERT(0);
             }
         }
@@ -2357,13 +2320,11 @@ namespace jitasm {
             JITASM_ASSERT(!(opd4.IsReg() && opd4.GetReg().IsSymbolic()));
 
             // +rb, +rw, +rd, +ro
-            if (opd1.IsReg() && (opd2.IsNone() || opd2.IsImm()))
-            {
+            if (opd1.IsReg() && (opd2.IsNone() || opd2.IsImm())) {
                 opcode += opd1.GetReg().id & 0x7;
             }
 
-            if ((opd1.IsImm() || opd1.IsReg()) && (opd2.IsReg() || opd2.IsMem()))
-            { // ModR/M
+            if ((opd1.IsImm() || opd1.IsReg()) && (opd2.IsReg() || opd2.IsMem())) { // ModR/M
                 const detail::Opd &reg = opd1;
                 const detail::Opd &r_m = opd2;
                 const detail::Opd &vex = opd3;
@@ -2372,13 +2333,10 @@ namespace jitasm {
                 EncodeModRM((uint8)(reg.IsImm() ? reg.GetImm() : reg.GetReg().id), r_m);
 
                 // /is4
-                if (opd4.IsReg())
-                {
+                if (opd4.IsReg()) {
                     EncodeImm(Imm8(static_cast<uint8>(opd4.GetReg().id << 4)));
                 }
-            }
-            else
-            {
+            } else {
                 const detail::Opd &reg = detail::Opd();
                 const detail::Opd &r_m = opd1.IsReg() ? opd1 : detail::Opd();
                 const detail::Opd &vex = detail::Opd();
@@ -2401,25 +2359,19 @@ namespace jitasm {
             const detail::Opd &imm = instr.GetOpd(2);
             JITASM_ASSERT(instr.GetOpd(0).IsImm() && reg.IsReg() && imm.IsImm());
 
-            if (reg.GetReg().id == EAX && (reg.GetSize() == O_SIZE_8 || !detail::IsInt8(imm.GetImm())))
-            {
+            if (reg.GetReg().id == EAX && (reg.GetSize() == O_SIZE_8 || !detail::IsInt8(imm.GetImm()))) {
                 opcode |= (reg.GetSize() == O_SIZE_8 ? 0 : 1);
                 Encode(Instr(instr.GetID(), opcode, instr.encoding_flag_, reg, imm));
-            }
-            else
-            {
+            } else {
                 Encode(instr);
             }
         }
 
         void EncodeJMP(const Instr &instr) {
             const detail::Opd &imm = instr.GetOpd(0);
-            if (instr.GetID() == I_JMP)
-            {
+            if (instr.GetID() == I_JMP) {
                 Encode(Instr(instr.GetID(), imm.GetSize() == O_SIZE_8 ? 0xEB : 0xE9, instr.encoding_flag_, imm));
-            }
-            else if (instr.GetID() == I_JCC)
-            {
+            } else if (instr.GetID() == I_JCC) {
 #ifndef JITASM64
                 uint32 tttn = instr.opcode_;
                 if (tttn == JCC_CXZ)
@@ -2439,13 +2391,9 @@ namespace jitasm {
                     Encode(Instr(instr.GetID(), (imm.GetSize() == O_SIZE_8 ? 0x70 : 0x0F80) | tttn,
                                  instr.encoding_flag_, imm));
 #endif
-            }
-            else if (instr.GetID() == I_LOOP)
-            {
+            } else if (instr.GetID() == I_LOOP) {
                 Encode(Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, imm));
-            }
-            else
-            {
+            } else {
                 JITASM_ASSERT(0);
             }
         }
@@ -2456,13 +2404,10 @@ namespace jitasm {
             const detail::Opd &mem = instr.GetOpd(1);
             JITASM_ASSERT(reg.IsReg() && mem.IsMem());
 
-            if (reg.GetReg().id == EAX && mem.GetBase().IsInvalid() && mem.GetIndex().IsInvalid())
-            {
+            if (reg.GetReg().id == EAX && mem.GetBase().IsInvalid() && mem.GetIndex().IsInvalid()) {
                 uint32 opcode = 0xA0 | (~instr.opcode_ & 0x2) | (instr.opcode_ & 1);
                 Encode(Instr(instr.GetID(), opcode, instr.encoding_flag_, Imm32((sint32)mem.GetDisp())));
-            }
-            else
-            {
+            } else {
                 Encode(instr);
             }
 #else
@@ -2475,13 +2420,10 @@ namespace jitasm {
             const detail::Opd &imm = instr.GetOpd(2);
             JITASM_ASSERT(instr.GetOpd(0).IsImm() && reg.IsReg() && imm.IsImm());
 
-            if (reg.GetReg().id == EAX)
-            {
+            if (reg.GetReg().id == EAX) {
                 uint32 opcode = 0xA8 | (reg.GetSize() == O_SIZE_8 ? 0 : 1);
                 Encode(Instr(instr.GetID(), opcode, instr.encoding_flag_, reg, imm));
-            }
-            else
-            {
+            } else {
                 Encode(instr);
             }
         }
@@ -2491,25 +2433,18 @@ namespace jitasm {
             const detail::Opd &src = instr.GetOpd(1);
             JITASM_ASSERT(dst.IsReg() && src.IsReg());
 
-            if (dst.GetReg().id == EAX)
-            {
+            if (dst.GetReg().id == EAX) {
                 Encode(Instr(instr.GetID(), 0x90, instr.encoding_flag_, src));
-            }
-            else if (src.GetReg().id == EAX)
-            {
+            } else if (src.GetReg().id == EAX) {
                 Encode(Instr(instr.GetID(), 0x90, instr.encoding_flag_, dst));
-            }
-            else
-            {
+            } else {
                 Encode(instr);
             }
         }
 
         void Assemble(const Instr &instr) {
-            if (instr.encoding_flag_ & E_SPECIAL)
-            {
-                switch (instr.GetID())
-                {
+            if (instr.encoding_flag_ & E_SPECIAL) {
+                switch (instr.GetID()) {
                 case I_ADD:
                     EncodeALU(instr, 0x04);
                     break;
@@ -2556,9 +2491,7 @@ namespace jitasm {
                     JITASM_ASSERT(0);
                     break;
                 }
-            }
-            else
-            {
+            } else {
                 Encode(instr);
             }
         }
@@ -2691,8 +2624,7 @@ namespace jitasm {
             }
 
             bool Reset(size_t codesize) {
-                if (pbuff_)
-                {
+                if (pbuff_) {
 #if defined(JITASM_WIN)
                     ::VirtualFree(pbuff_, 0, MEM_RELEASE);
 #else
@@ -2702,12 +2634,10 @@ namespace jitasm {
                     codesize_ = 0;
                     buffsize_ = 0;
                 }
-                if (codesize)
-                {
+                if (codesize) {
 #if defined(JITASM_WIN)
                     void *pbuff = ::VirtualAlloc(NULL, codesize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-                    if (!pbuff)
-                    {
+                    if (!pbuff) {
                         JITASM_ASSERT(0);
                         return false;
                     }
@@ -2719,8 +2649,7 @@ namespace jitasm {
                     size_t buffsize = (codesize + pagesize - 1) / pagesize * pagesize;
                     void *pbuff =
                         mmap(NULL, buffsize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
-                    if (!pbuff)
-                    {
+                    if (!pbuff) {
                         JITASM_ASSERT(0);
                         return false;
                     }
@@ -2922,16 +2851,11 @@ namespace jitasm {
         void DeclareResultReg(const detail::Opd &var) {
             JITASM_ASSERT(var.IsReg());
             // The result register is passed as register constraint of the var.
-            if (var.IsGpReg())
-            {
+            if (var.IsGpReg()) {
                 AppendInstr(I_COMPILER_DECLARE_RESULT_REG, 0, E_SPECIAL, Dummy(R(var), zax));
-            }
-            else if (var.IsMmxReg())
-            {
+            } else if (var.IsMmxReg()) {
                 AppendInstr(I_COMPILER_DECLARE_RESULT_REG, 0, E_SPECIAL, Dummy(R(var), mm0));
-            }
-            else if (var.IsXmmReg())
-            {
+            } else if (var.IsXmmReg()) {
                 AppendInstr(I_COMPILER_DECLARE_RESULT_REG, 0, E_SPECIAL, Dummy(R(var), xmm0));
             }
         }
@@ -2959,11 +2883,9 @@ namespace jitasm {
         // TODO: Return an error when there is no destination.
         void ResolveJump() {
             // Replace label indexes with instruncion numbers.
-            for (InstrList::iterator it = instrs_.begin(); it != instrs_.end(); ++it)
-            {
+            for (InstrList::iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
                 Instr &instr = *it;
-                if (IsJump(instr.GetID()))
-                {
+                if (IsJump(instr.GetID())) {
                     instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8(0x7F),
                                   Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
                 }
@@ -2973,30 +2895,24 @@ namespace jitasm {
             std::vector<int> offsets;
             offsets.reserve(instrs_.size() + 1);
             bool retry;
-            do
-            {
+            do {
                 offsets.clear();
                 offsets.push_back(0);
                 Backend pre;
-                for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it)
-                {
+                for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
                     pre.Assemble(*it);
                     offsets.push_back((int)pre.GetSize());
                 }
 
                 retry = false;
-                for (size_t i = 0; i < instrs_.size(); i++)
-                {
+                for (size_t i = 0; i < instrs_.size(); i++) {
                     Instr &instr = instrs_[i];
-                    if (IsJump(instr.GetID()))
-                    {
+                    if (IsJump(instr.GetID())) {
                         size_t d = (size_t)instr.GetOpd(1).GetImm();
                         int rel = (int)offsets[d] - offsets[i + 1];
                         OpdSize size = instr.GetOpd(0).GetSize();
-                        if (size == O_SIZE_8)
-                        {
-                            if (!detail::IsInt8(rel))
-                            {
+                        if (size == O_SIZE_8) {
+                            if (!detail::IsInt8(rel)) {
                                 // jrcxz, jcxz, jecxz, loop, loope, loopne are only for short jump
                                 uint32 tttn = instr.opcode_;
                                 if (instr.GetID() == I_JCC && (tttn == JCC_CXZ || tttn == JCC_ECXZ || tttn == JCC_RCXZ))
@@ -3009,9 +2925,7 @@ namespace jitasm {
                                               Imm64(instr.GetOpd(1).GetImm()));
                                 retry = true;
                             }
-                        }
-                        else if (size == O_SIZE_32)
-                        {
+                        } else if (size == O_SIZE_32) {
                             JITASM_ASSERT(
                                 detail::IsInt32(rel)); // There is no jump instruction larger than immediate 32.
                         }
@@ -3020,21 +2934,16 @@ namespace jitasm {
             } while (retry);
 
             // Resolve immediates
-            for (size_t i = 0; i < instrs_.size(); i++)
-            {
+            for (size_t i = 0; i < instrs_.size(); i++) {
                 Instr &instr = instrs_[i];
-                if (IsJump(instr.GetID()))
-                {
+                if (IsJump(instr.GetID())) {
                     size_t d = (size_t)instr.GetOpd(1).GetImm();
                     int rel = (int)offsets[d] - offsets[i + 1];
                     OpdSize size = instr.GetOpd(0).GetSize();
-                    if (size == O_SIZE_8)
-                    {
+                    if (size == O_SIZE_8) {
                         JITASM_ASSERT(detail::IsInt8(rel));
                         instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8((uint8)rel));
-                    }
-                    else if (size == O_SIZE_32)
-                    {
+                    } else if (size == O_SIZE_32) {
                         JITASM_ASSERT(detail::IsInt32(rel));
                         instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm32((uint32)rel));
                     }
@@ -3056,15 +2965,13 @@ namespace jitasm {
             compiler::Compile(*this);
 
             // Resolve jump instructions
-            if (!labels_.empty())
-            {
+            if (!labels_.empty()) {
                 ResolveJump();
             }
 
             // Count total size of machine code
             Backend pre;
-            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it)
-            {
+            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
                 pre.Assemble(*it);
             }
             size_t codesize = pre.GetSize();
@@ -3072,8 +2979,7 @@ namespace jitasm {
             // Write machine code to the buffer
             codebuff_.Reset(codesize);
             Backend backend(codebuff_.GetPointer(), codebuff_.GetBufferSize());
-            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it)
-            {
+            for (InstrList::const_iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
                 backend.Assemble(*it);
             }
 
@@ -3084,8 +2990,7 @@ namespace jitasm {
 
         /// Get assembled code
         void *GetCode() {
-            if (!assembled_)
-            {
+            if (!assembled_) {
                 Assemble();
             }
             return codebuff_.GetPointer();
@@ -3123,10 +3028,8 @@ namespace jitasm {
         }
 
         size_t GetLabelID(const std::string &label_name) {
-            for (size_t i = 0; i < labels_.size(); i++)
-            {
-                if (labels_[i].name == label_name)
-                {
+            for (size_t i = 0; i < labels_.size(); i++) {
+                if (labels_[i].name == label_name) {
                     return i;
                 }
             }
@@ -4804,9 +4707,9 @@ namespace jitasm {
             AppendInstr(I_MOV, 0x8B, E_REXW_PREFIX, W(dst), R(src));
         }
         void mov(const Reg64 &dst, const Imm64 &imm) {
-            detail::IsInt32(imm.GetImm())
-                ? AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), Imm32((sint32)imm.GetImm()))
-                : AppendInstr(I_MOV, 0xB8, E_REXW_PREFIX, W(dst), imm);
+            detail::IsInt32(imm.GetImm()) ?
+                AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), Imm32((sint32)imm.GetImm())) :
+                AppendInstr(I_MOV, 0xB8, E_REXW_PREFIX, W(dst), imm);
         }
         void mov(const Mem64 &dst, const Imm32 &imm) {
             AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), imm);
@@ -5230,12 +5133,12 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD2, 0, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD2, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5244,12 +5147,12 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD2, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD2, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5258,12 +5161,12 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD2, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD2, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5272,12 +5175,12 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD2, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
         }
         void rcl(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_RCL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), Dummy(R(shift), cl));
@@ -5286,12 +5189,12 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5300,12 +5203,12 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5314,12 +5217,12 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5328,12 +5231,12 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
         }
         void rcl(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_RCL, 0xD3, 0, Imm8(2), RW(dst), Dummy(R(shift), cl));
@@ -5342,12 +5245,12 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD3, 0, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD3, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5356,12 +5259,12 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD3, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD3, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5370,12 +5273,12 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD3, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD3, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5384,12 +5287,12 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD3, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
         }
 #ifdef JITASM64
         void rcl(const Reg64 &dst, const Reg8 &shift) {
@@ -5399,12 +5302,12 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD3, E_REXW_PREFIX, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst))
-                                : AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst)) :
+                                  AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD3, E_REXW_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5413,12 +5316,12 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD3, E_REXW_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst))
-                                : AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst)) :
+                                  AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD3, E_REXW_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5427,12 +5330,12 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD3, E_REXW_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst))
-                                : AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst)) :
+                                  AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD3, E_REXW_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5441,12 +5344,12 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD3, E_REXW_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst))
-                                : AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst)) :
+                                  AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
         }
 #endif
         void rdmsr() {
@@ -5486,12 +5389,12 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD2, 0, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD2, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5500,12 +5403,12 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD2, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD2, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5514,12 +5417,12 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD2, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
         }
         void sal(const Reg16 &dst, const Reg8 &shift) {
             shl(dst, shift);
@@ -5540,12 +5443,12 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5554,12 +5457,12 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5568,12 +5471,12 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
         }
         void sal(const Reg32 &dst, const Reg8 &shift) {
             shl(dst, shift);
@@ -5594,12 +5497,12 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD3, 0, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD3, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5608,12 +5511,12 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD3, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD3, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5622,12 +5525,12 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD3, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
         }
 #ifdef JITASM64
         void sal(const Reg64 &dst, const Reg8 &shift) {
@@ -5649,12 +5552,12 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD3, E_REXW_PREFIX, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst))
-                                : AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst)) :
+                                  AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD3, E_REXW_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5663,12 +5566,12 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD3, E_REXW_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst))
-                                : AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst)) :
+                                  AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD3, E_REXW_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5677,12 +5580,12 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD3, E_REXW_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst))
-                                : AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst)) :
+                                  AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
         }
 #endif
         void sbb(const Reg8 &dst, const Imm8 &imm) {
@@ -14327,15 +14230,13 @@ namespace jitasm {
 
             bool is_equal(const BitVector &rhs) const {
                 const size_t min_size = size() < rhs.size() ? size() : rhs.size();
-                for (size_t i = 0; i < min_size; ++i)
-                {
+                for (size_t i = 0; i < min_size; ++i) {
                     if (at(i) != rhs[i])
                         return false;
                 }
 
                 const BitVector &larger = size() < rhs.size() ? rhs : *this;
-                for (size_t i = min_size; i < larger.size(); ++i)
-                {
+                for (size_t i = min_size; i < larger.size(); ++i) {
                     if (larger[i] != 0)
                         return false;
                 }
@@ -14345,8 +14246,7 @@ namespace jitasm {
 
             size_t count_bit() const {
                 size_t count = 0;
-                for (size_t i = 0; i < size(); ++i)
-                {
+                for (size_t i = 0; i < size(); ++i) {
                     count += detail::Count1Bits(at(i));
                 }
                 return count;
@@ -14354,11 +14254,9 @@ namespace jitasm {
 
             void get_bit_indexes(std::vector<size_t> &indexes) const {
                 indexes.clear();
-                for (size_t i = 0; i < size(); ++i)
-                {
+                for (size_t i = 0; i < size(); ++i) {
                     uint32 m = at(i);
-                    while (m != 0)
-                    {
+                    while (m != 0) {
                         uint32 index = detail::bit_scan_forward(m);
                         indexes.push_back(static_cast<uint32>(i * 32) + index);
                         m &= ~(1 << index);
@@ -14367,11 +14265,9 @@ namespace jitasm {
             }
 
             template <class Fn> void query_bit_indexes(Fn &fn) const {
-                for (size_t i = 0; i < size(); ++i)
-                {
+                for (size_t i = 0; i < size(); ++i) {
                     uint32 m = at(i);
-                    while (m != 0)
-                    {
+                    while (m != 0) {
                         uint32 index = detail::bit_scan_forward(m);
                         fn(i * 32 + index);
                         m &= ~(1 << index);
@@ -14382,16 +14278,14 @@ namespace jitasm {
             void set_union(const BitVector &rhs) {
                 if (size() < rhs.size())
                     resize(rhs.size());
-                for (size_t i = 0; i < rhs.size(); ++i)
-                {
+                for (size_t i = 0; i < rhs.size(); ++i) {
                     at(i) |= rhs[i];
                 }
             }
 
             void set_subtract(const BitVector &rhs) {
                 const size_t min_size = size() < rhs.size() ? size() : rhs.size();
-                for (size_t i = 0; i < min_size; ++i)
-                {
+                for (size_t i = 0; i < min_size; ++i) {
                     at(i) &= ~rhs[i];
                 }
             }
@@ -14439,8 +14333,7 @@ namespace jitasm {
 
         /// Register family
         inline size_t GetRegFamily(RegType type) {
-            switch (type)
-            {
+            switch (type) {
             case R_TYPE_GP:
                 return 0;
             case R_TYPE_MMX:
@@ -14472,39 +14365,24 @@ namespace jitasm {
             const static std::string s_gp_reg_name[] = {"eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"};
 #endif
             std::string name;
-            if (type == R_TYPE_GP)
-            {
+            if (type == R_TYPE_GP) {
                 return s_gp_reg_name[reg_idx];
-            }
-            else if (type == R_TYPE_MMX)
-            {
+            } else if (type == R_TYPE_MMX) {
                 name.assign("mm");
-            }
-            else if (type == R_TYPE_XMM)
-            {
+            } else if (type == R_TYPE_XMM) {
                 name.assign("xmm");
-            }
-            else if (type == R_TYPE_YMM)
-            {
+            } else if (type == R_TYPE_YMM) {
                 name.assign("ymm");
-            }
-            else if (type == R_TYPE_SYMBOLIC_GP)
-            {
+            } else if (type == R_TYPE_SYMBOLIC_GP) {
                 name.assign("gpsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
-            }
-            else if (type == R_TYPE_SYMBOLIC_MMX)
-            {
+            } else if (type == R_TYPE_SYMBOLIC_MMX) {
                 name.assign("mmsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
-            }
-            else if (type == R_TYPE_SYMBOLIC_XMM)
-            {
+            } else if (type == R_TYPE_SYMBOLIC_XMM) {
                 name.assign("xmmsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
-            }
-            else if (type == R_TYPE_SYMBOLIC_YMM)
-            {
+            } else if (type == R_TYPE_SYMBOLIC_YMM) {
                 name.assign("ymmsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
             }
@@ -14514,7 +14392,7 @@ namespace jitasm {
 
         /// Variable attribute
         struct VarAttribute {
-            unsigned size : 7;  // OpdSize
+            unsigned size  : 7; // OpdSize
             unsigned spill : 1; // bool
             Addr stack_slot;
             VarAttribute() : size(0), spill(0 /*false*/), stack_slot(RegID::Invalid(), 0) {
@@ -14542,13 +14420,11 @@ namespace jitasm {
             /// Update variable size
             void UpdateVarSize(RegType reg_type, int var, OpdSize size) {
                 const size_t reg_family = GetRegFamily(reg_type);
-                if (static_cast<size_t>(var) >= attributes_[reg_family].size())
-                {
+                if (static_cast<size_t>(var) >= attributes_[reg_family].size()) {
                     attributes_[reg_family].resize(var + 1);
                 }
 
-                if (attributes_[reg_family][var].size < static_cast<unsigned>(size))
-                {
+                if (attributes_[reg_family][var].size < static_cast<unsigned>(size)) {
                     attributes_[reg_family][var].size = static_cast<unsigned>(size);
                 }
             }
@@ -14561,8 +14437,7 @@ namespace jitasm {
             /// Set stack slot for spill register
             void SetSpillSlot(RegType reg_type, int var, const Addr &stack_slot) {
                 const size_t reg_family = GetRegFamily(reg_type);
-                if (static_cast<size_t>(var) >= attributes_[reg_family].size())
-                {
+                if (static_cast<size_t>(var) >= attributes_[reg_family].size()) {
                     attributes_[reg_family].resize(var + 1);
                 }
                 attributes_[reg_family][var].stack_slot = stack_slot;
@@ -14571,39 +14446,31 @@ namespace jitasm {
             /// Allocate stack of spill slots
             void AllocSpillSlots(detail::StackManager &stack_manager) {
                 // YMM
-                for (size_t i = 0; i < attributes_[2].size(); ++i)
-                {
+                for (size_t i = 0; i < attributes_[2].size(); ++i) {
                     if (attributes_[2][i].spill && attributes_[2][i].size == O_SIZE_256 &&
-                        attributes_[2][i].stack_slot.reg_.IsInvalid())
-                    {
+                        attributes_[2][i].stack_slot.reg_.IsInvalid()) {
                         attributes_[2][i].stack_slot = stack_manager.Alloc(256 / 8, 16);
                     }
                 }
 
                 // XMM
-                for (size_t i = 0; i < attributes_[2].size(); ++i)
-                {
+                for (size_t i = 0; i < attributes_[2].size(); ++i) {
                     if (attributes_[2][i].spill && attributes_[2][i].size == O_SIZE_128 &&
-                        attributes_[2][i].stack_slot.reg_.IsInvalid())
-                    {
+                        attributes_[2][i].stack_slot.reg_.IsInvalid()) {
                         attributes_[2][i].stack_slot = stack_manager.Alloc(128 / 8, 16);
                     }
                 }
 
                 // MMX
-                for (size_t i = 0; i < attributes_[1].size(); ++i)
-                {
-                    if (attributes_[1][i].spill && attributes_[1][i].stack_slot.reg_.IsInvalid())
-                    {
+                for (size_t i = 0; i < attributes_[1].size(); ++i) {
+                    if (attributes_[1][i].spill && attributes_[1][i].stack_slot.reg_.IsInvalid()) {
                         attributes_[1][i].stack_slot = stack_manager.Alloc(64 / 8, 8);
                     }
                 }
 
                 // GP
-                for (size_t i = 0; i < attributes_[0].size(); ++i)
-                {
-                    if (attributes_[0][i].spill && attributes_[0][i].stack_slot.reg_.IsInvalid())
-                    {
+                for (size_t i = 0; i < attributes_[0].size(); ++i) {
+                    if (attributes_[0][i].spill && attributes_[0][i].stack_slot.reg_.IsInvalid()) {
 #ifdef JITASM64
                         attributes_[0][i].stack_slot = stack_manager.Alloc(64 / 8, 8);
 #else
@@ -14625,8 +14492,7 @@ namespace jitasm {
             }
 
             bool operator<(const RegUsePoint &rhs) const {
-                if (instr_idx == rhs.instr_idx)
-                {
+                if (instr_idx == rhs.instr_idx) {
                     // R < RW < W
                     const int lhs_type = (type & O_TYPE_READ ? -1 : 0) + (type & O_TYPE_WRITE ? 1 : 0);
                     const int rhs_type = (rhs.type & O_TYPE_READ ? -1 : 0) + (rhs.type & O_TYPE_WRITE ? 1 : 0);
@@ -14659,8 +14525,7 @@ namespace jitasm {
 
                 void UpdateUse(size_t var, RegUsePointRange &range, const Interval *next_interval) {
                     // step range
-                    while (!range.empty() && range.first->instr_idx < instr_idx_offset)
-                    {
+                    while (!range.empty() && range.first->instr_idx < instr_idx_offset) {
                         ++range.first;
                     }
 
@@ -14672,29 +14537,20 @@ namespace jitasm {
 
                 void Dump(bool dump_assigned_reg) const {
                     std::vector<char> liveness_str;
-                    for (size_t v = 0; v < liveness.size_bit(); ++v)
-                    {
-                        if (liveness.get_bit(v))
-                        {
+                    for (size_t v = 0; v < liveness.size_bit(); ++v) {
+                        if (liveness.get_bit(v)) {
                             const bool used = use.get_bit(v);
                             char c;
-                            if (spill.get_bit(v))
-                            {
+                            if (spill.get_bit(v)) {
                                 c = used ? 'S' : 's';
-                            }
-                            else if (dump_assigned_reg)
-                            {
+                            } else if (dump_assigned_reg) {
                                 int reg = assignment_table[v];
                                 c = static_cast<char>(reg < 0xA ? '0' + reg : 'A' + reg);
-                            }
-                            else
-                            {
+                            } else {
                                 c = used ? 'R' : 'r';
                             }
                             liveness_str.push_back(c);
-                        }
-                        else
-                        {
+                        } else {
                             liveness_str.push_back('.');
                         }
                     }
@@ -14722,37 +14578,31 @@ namespace jitasm {
             /// Add register use point
             void AddUsePoint(size_t instr_idx, const RegID &reg, OpdType opd_type, OpdSize opd_size,
                              uint32 reg_assignable) {
-                if (use_points.size() <= static_cast<size_t>(reg.id))
-                {
+                if (use_points.size() <= static_cast<size_t>(reg.id)) {
                     use_points.resize(reg.id + 1);
                 }
 
                 // add read attribute when writing to 8/16bit register because it is partial write
-                if ((opd_type & O_TYPE_WRITE) && (opd_size == O_SIZE_8 || opd_size == O_SIZE_16))
-                {
+                if ((opd_type & O_TYPE_WRITE) && (opd_size == O_SIZE_8 || opd_size == O_SIZE_16)) {
                     opd_type = static_cast<OpdType>(static_cast<int>(opd_type) | O_TYPE_READ);
                 }
 
                 RegUsePoint use_point(instr_idx, opd_type, reg_assignable);
                 std::vector<RegUsePoint>::reverse_iterator it = use_points[reg.id].rbegin();
-                while (it != use_points[reg.id].rend() && use_point < *it)
-                {
+                while (it != use_points[reg.id].rend() && use_point < *it) {
                     ++it;
                 }
                 use_points[reg.id].insert(it.base(), use_point);
             }
 
             void GetSpillCost(int freq, std::vector<int> &spill_cost) const {
-                if (spill_cost.size() < use_points.size())
-                {
+                if (spill_cost.size() < use_points.size()) {
                     spill_cost.resize(use_points.size()); // expand
                 }
-                for (size_t i = 0; i < use_points.size(); ++i)
-                {
+                for (size_t i = 0; i < use_points.size(); ++i) {
                     int cost = 0;
                     for (std::vector<RegUsePoint>::const_iterator it = use_points[i].begin(); it != use_points[i].end();
-                         ++it)
-                    {
+                         ++it) {
                         if (it->type & O_TYPE_READ)
                             cost += SpillCost_Read;
                         if (it->type & O_TYPE_WRITE)
@@ -14766,8 +14616,7 @@ namespace jitasm {
                 // initialize use_points ranges
                 std::vector<RegUsePointRange> use_points_ranges;
                 use_points_ranges.reserve(use_points.size());
-                for (size_t i = 0; i < use_points.size(); ++i)
-                {
+                for (size_t i = 0; i < use_points.size(); ++i) {
                     use_points_ranges.push_back(RegUsePointRange(use_points[i]));
                 }
 
@@ -14780,58 +14629,42 @@ namespace jitasm {
                     live_in.size_bit() < use_points.size() ? use_points.size() : live_in.size_bit();
                 size_t instr_idx = 0;
                 size_t end_count;
-                do
-                {
+                do {
                     BitVector liveness = live_in;
                     BitVector stack_vars;
                     end_count = 0;
                     reg_assignables.clear();
                     size_t min_instr_idx = (size_t)-1;
-                    for (size_t i = 0; i < use_points_ranges.size(); ++i)
-                    {
-                        if (use_points_ranges[i].empty())
-                        {
+                    for (size_t i = 0; i < use_points_ranges.size(); ++i) {
+                        if (use_points_ranges[i].empty()) {
                             liveness.set_bit(i, live_out.get_bit(i));
                             ++end_count;
-                        }
-                        else
-                        {
-                            if (use_points_ranges[i].first->instr_idx < min_instr_idx)
-                            {
+                        } else {
+                            if (use_points_ranges[i].first->instr_idx < min_instr_idx) {
                                 min_instr_idx = use_points_ranges[i].first->instr_idx;
                             }
 
-                            if (use_points_ranges[i].first->instr_idx == instr_idx)
-                            {
+                            if (use_points_ranges[i].first->instr_idx == instr_idx) {
                                 for (; !use_points_ranges[i].empty() &&
                                        use_points_ranges[i].first->instr_idx == instr_idx;
-                                     ++use_points_ranges[i].first)
-                                {
+                                     ++use_points_ranges[i].first) {
                                     // Check the constraints of register allocation
-                                    if (use_points_ranges[i].first->reg_assignable != 0xFFFFFFFF)
-                                    {
+                                    if (use_points_ranges[i].first->reg_assignable != 0xFFFFFFFF) {
                                         reg_assignables.resize(num_of_variables, 0xFFFFFFFF);
                                         reg_assignables[i] &= use_points_ranges[i].first->reg_assignable;
                                     }
 
                                     // Check the stack variable
-                                    if (use_points_ranges[i].first->type & O_TYPE_MEM)
-                                    {
+                                    if (use_points_ranges[i].first->type & O_TYPE_MEM) {
                                         stack_vars.set_bit(i, true);
                                     }
                                 }
                                 liveness.set_bit(i, true);
-                            }
-                            else if (use_points_ranges[i].first->type & O_TYPE_READ)
-                            {
+                            } else if (use_points_ranges[i].first->type & O_TYPE_READ) {
                                 liveness.set_bit(i, true);
-                            }
-                            else if (use_points_ranges[i].first->type & O_TYPE_WRITE)
-                            {
+                            } else if (use_points_ranges[i].first->type & O_TYPE_WRITE) {
                                 liveness.set_bit(i, false);
-                            }
-                            else
-                            {
+                            } else {
                                 JITASM_ASSERT(0);
                             }
                         }
@@ -14842,8 +14675,7 @@ namespace jitasm {
                     // - Current or last instruction has any constraints of register allocation.
                     // - Last instruction is I_COMPILER_DECLARE_STACK_ARG
                     if (!reg_assignables.empty() || last_reg_constraints || last_stack_vars || !last_liveness ||
-                        !last_liveness->is_equal(liveness))
-                    {
+                        !last_liveness->is_equal(liveness)) {
                         intervals.push_back(Interval(instr_idx, liveness, stack_vars, reg_assignables));
                         last_liveness = &intervals.back().liveness;
                     }
@@ -14854,11 +14686,9 @@ namespace jitasm {
                 } while (end_count < use_points_ranges.size());
 
                 // check use
-                for (size_t v = 0; v < use_points.size(); ++v)
-                {
+                for (size_t v = 0; v < use_points.size(); ++v) {
                     RegUsePointRange range(use_points[v]);
-                    for (size_t i = 0; i < intervals.size(); ++i)
-                    {
+                    for (size_t i = 0; i < intervals.size(); ++i) {
                         const Interval *next_interval = i + 1 < intervals.size() ? &intervals[i + 1] : NULL;
                         intervals[i].UpdateUse(v, range, next_interval);
                     }
@@ -14872,11 +14702,9 @@ namespace jitasm {
                 it->instr_idx_offset = instr_idx;
 
                 // update use
-                for (size_t v = 0; v < use_points.size(); ++v)
-                {
+                for (size_t v = 0; v < use_points.size(); ++v) {
                     RegUsePointRange range(use_points[v]);
-                    for (size_t i = interval_idx; i < interval_idx + 2; ++i)
-                    {
+                    for (size_t i = interval_idx; i < interval_idx + 2; ++i) {
                         const Interval *next_interval = i + 1 < intervals.size() ? &intervals[i + 1] : NULL;
                         intervals[i].UpdateUse(v, range, next_interval);
                     }
@@ -14901,61 +14729,48 @@ namespace jitasm {
                 // initialize use_points ranges
                 std::vector<RegUsePointRange> interval_use_points;
                 interval_use_points.reserve(use_points.size());
-                for (size_t i = 0; i < use_points.size(); ++i)
-                {
+                for (size_t i = 0; i < use_points.size(); ++i) {
                     interval_use_points.push_back(RegUsePointRange(use_points[i]));
                 }
 
                 std::vector<size_t> live_vars;
                 std::vector<int> cur_spill_cost;
-                for (size_t interval_idx = 0; interval_idx < intervals.size(); ++interval_idx)
-                {
+                for (size_t interval_idx = 0; interval_idx < intervals.size(); ++interval_idx) {
                     const Interval *prior_interval = interval_idx > 0 ? &intervals[interval_idx - 1] : last_interval;
                     Interval *cur_interval = &intervals[interval_idx];
 
-                    if (cur_interval->liveness.count_bit() > available_reg_count)
-                    {
+                    if (cur_interval->liveness.count_bit() > available_reg_count) {
                         cur_interval->liveness.get_bit_indexes(live_vars);
 
                         const size_t max_var = live_vars.back();
-                        if (var_attrs.size() < max_var + 1)
-                        {
+                        if (var_attrs.size() < max_var + 1) {
                             var_attrs.resize(max_var + 1); // expand var_attrs
                         }
 
                         cur_spill_cost.resize(max_var + 1);
-                        for (size_t i = 0; i < live_vars.size(); ++i)
-                        {
+                        for (size_t i = 0; i < live_vars.size(); ++i) {
                             const size_t var = live_vars[i];
 
                             // step interval_use_points
-                            if (var < interval_use_points.size())
-                            {
+                            if (var < interval_use_points.size()) {
                                 while (!interval_use_points[var].empty() &&
-                                       interval_use_points[var].first->instr_idx < cur_interval->instr_idx_offset)
-                                {
+                                       interval_use_points[var].first->instr_idx < cur_interval->instr_idx_offset) {
                                     ++interval_use_points[var].first;
                                 }
                             }
 
                             // calculate spill cost of this interval
-                            if (cur_interval->use.get_bit(var) && (interval_use_points[var].first->type & O_TYPE_MEM))
-                            {
+                            if (cur_interval->use.get_bit(var) && (interval_use_points[var].first->type & O_TYPE_MEM)) {
                                 // special low spill cost if this variable on stack (function arguemnt)
                                 cur_spill_cost[var] = -1;
-                            }
-                            else if (cur_interval->use.get_bit(var) &&
-                                     interval_use_points[var].first->instr_idx == cur_interval->instr_idx_offset)
-                            {
+                            } else if (cur_interval->use.get_bit(var) &&
+                                       interval_use_points[var].first->instr_idx == cur_interval->instr_idx_offset) {
                                 // special high spill cost if this variable is used at first instruction of this
                                 // interval because it must not be spilled.
                                 cur_spill_cost[var] = 0x7FFFFFFF;
-                            }
-                            else
-                            {
+                            } else {
                                 cur_spill_cost[var] = total_spill_cost[var];
-                                if (prior_interval && !prior_interval->spill.get_bit(var))
-                                {
+                                if (prior_interval && !prior_interval->spill.get_bit(var)) {
                                     cur_spill_cost[var] += (SpillCost_Read + SpillCost_Write) * freq;
                                 }
                             }
@@ -14968,36 +14783,28 @@ namespace jitasm {
                         // Split interval if spilled variable is used in this interval.
                         // Find first instruction index using the spilled variable.
                         size_t split_interval_instr = (size_t)-1;
-                        for (size_t i = 0; i < live_vars.size(); ++i)
-                        {
+                        for (size_t i = 0; i < live_vars.size(); ++i) {
                             const size_t var = live_vars[i];
                             const bool stack_var = (cur_spill_cost[var] < 0); // It may be function argument on stack
                             const bool spill = (i + available_reg_count < live_vars.size() || stack_var);
                             cur_interval->spill.set_bit(var, spill);
-                            if (spill)
-                            {
+                            if (spill) {
                                 var_attrs[var].spill = 1;
                             }
-                            if (stack_var)
-                            {
+                            if (stack_var) {
                                 // Split at next of using stack variable
-                                if (interval_use_points[var].first->instr_idx + 1 < split_interval_instr)
-                                {
+                                if (interval_use_points[var].first->instr_idx + 1 < split_interval_instr) {
                                     split_interval_instr = interval_use_points[var].first->instr_idx + 1;
                                 }
-                            }
-                            else if (spill && cur_interval->use.get_bit(var))
-                            {
+                            } else if (spill && cur_interval->use.get_bit(var)) {
                                 // Split if spilled variable is used in this interval.
-                                if (interval_use_points[var].first->instr_idx < split_interval_instr)
-                                {
+                                if (interval_use_points[var].first->instr_idx < split_interval_instr) {
                                     split_interval_instr = interval_use_points[var].first->instr_idx;
                                 }
                             }
                         }
 
-                        if (split_interval_instr != (size_t)-1)
-                        {
+                        if (split_interval_instr != (size_t)-1) {
                             SplitInterval(split_interval_instr, interval_idx);
                         }
                     }
@@ -15019,26 +14826,22 @@ namespace jitasm {
                     // is there any register constraints or not
                     const bool lhs_has_constraints = has_constraints(lhs);
                     const bool rhs_has_constraints = has_constraints(rhs);
-                    if (lhs_has_constraints != rhs_has_constraints)
-                    {
+                    if (lhs_has_constraints != rhs_has_constraints) {
                         return lhs_has_constraints;
                     }
 
-                    if (lhs_has_constraints)
-                    {
+                    if (lhs_has_constraints) {
                         // is the register which has constraints used in this interval or not
                         const bool lhs_used = interval->use.get_bit(lhs);
                         const bool rhs_used = interval->use.get_bit(rhs);
-                        if (lhs_used != rhs_used)
-                        {
+                        if (lhs_used != rhs_used) {
                             return lhs_used;
                         }
 
                         // compare number of assignable registers
                         const uint32 lhs_num_of_assignable = num_of_assignable(lhs);
                         const uint32 rhs_num_of_assignable = num_of_assignable(rhs);
-                        if (lhs_num_of_assignable != rhs_num_of_assignable)
-                        {
+                        if (lhs_num_of_assignable != rhs_num_of_assignable) {
                             return lhs_num_of_assignable < rhs_num_of_assignable;
                         }
                     }
@@ -15046,20 +14849,17 @@ namespace jitasm {
                     // physical register or symbolic register
                     const int lhs_sym_reg = (lhs < NUM_OF_PHYSICAL_REG ? 0 : 1);
                     const int rhs_sym_reg = (rhs < NUM_OF_PHYSICAL_REG ? 0 : 1);
-                    if (lhs_sym_reg != rhs_sym_reg)
-                    {
+                    if (lhs_sym_reg != rhs_sym_reg) {
                         return lhs_sym_reg < rhs_sym_reg;
                     }
 
-                    if (prior_interval)
-                    {
+                    if (prior_interval) {
                         // is the variable assigned register in prior interval or not
                         const bool lhs_prior_reg =
                             !prior_interval->spill.get_bit(lhs) && prior_interval->liveness.get_bit(lhs);
                         const bool rhs_prior_reg =
                             !prior_interval->spill.get_bit(rhs) && prior_interval->liveness.get_bit(rhs);
-                        if (lhs_prior_reg != rhs_prior_reg)
-                        {
+                        if (lhs_prior_reg != rhs_prior_reg) {
                             return lhs_prior_reg;
                         }
                     }
@@ -15078,27 +14878,23 @@ namespace jitasm {
             uint32 AssignRegister(uint32 available_reg, const Interval *last_interval) {
                 uint32 used_reg = 0;
                 std::vector<size_t> live_vars;
-                for (size_t interval_idx = 0; interval_idx < intervals.size(); ++interval_idx)
-                {
+                for (size_t interval_idx = 0; interval_idx < intervals.size(); ++interval_idx) {
                     const Interval *prior_interval = interval_idx > 0 ? &intervals[interval_idx - 1] : last_interval;
                     Interval *cur_interval = &intervals[interval_idx];
 
                     // enum variables to assign register
                     live_vars.clear();
-                    for (size_t i = 0; i < cur_interval->liveness.size(); ++i)
-                    {
+                    for (size_t i = 0; i < cur_interval->liveness.size(); ++i) {
                         uint32 s = i < cur_interval->spill.size() ? cur_interval->spill[i] : 0;
                         uint32 l = cur_interval->liveness[i] & ~s;
-                        while (l != 0)
-                        {
+                        while (l != 0) {
                             uint32 index = detail::bit_scan_forward(l);
                             live_vars.push_back(static_cast<uint32>(i * 32) + index);
                             l &= ~(1 << index);
                         }
                     }
 
-                    if (!live_vars.empty())
-                    {
+                    if (!live_vars.empty()) {
                         cur_interval->assignment_table.resize(live_vars.back() + 1, -1);
 
                         // sort into assignment order
@@ -15108,71 +14904,52 @@ namespace jitasm {
                     // Assign register
                     uint32 cur_avail = available_reg;
                     const size_t num_of_live_vars = live_vars.size();
-                    for (size_t i = 0; i < live_vars.size(); ++i)
-                    {
+                    for (size_t i = 0; i < live_vars.size(); ++i) {
                         const size_t var = live_vars[i];
                         const bool first_try = (i < num_of_live_vars); // Try to assign for the first time
-                        const uint32 reg_assignable = first_try && var < cur_interval->reg_assignables.size()
-                                                          ? cur_interval->reg_assignables[var]
-                                                          : 0xFFFFFFFF; // Ignore constraint if it is retried
+                        const uint32 reg_assignable = first_try && var < cur_interval->reg_assignables.size() ?
+                                                          cur_interval->reg_assignables[var] :
+                                                          0xFFFFFFFF; // Ignore constraint if it is retried
                         JITASM_ASSERT((cur_avail & reg_assignable) != 0);
                         int assigned_reg = -1;
-                        if (var < NUM_OF_PHYSICAL_REG && first_try)
-                        {
+                        if (var < NUM_OF_PHYSICAL_REG && first_try) {
                             // Physical register
-                            if (cur_avail & reg_assignable & (1 << var))
-                            {
+                            if (cur_avail & reg_assignable & (1 << var)) {
                                 assigned_reg = static_cast<int>(var);
-                            }
-                            else if (((1 << var) & available_reg) && !cur_interval->use.get_bit(var))
-                            {
+                            } else if (((1 << var) & available_reg) && !cur_interval->use.get_bit(var)) {
                                 // Try to assign another physical register if it is not used in this interval. But
                                 // assign later.
                                 live_vars.push_back(var);
-                            }
-                            else if (reg_assignable != 0xFFFFFFFF && (cur_avail & reg_assignable) &&
-                                     cur_interval->use.get_bit(var))
-                            {
+                            } else if (reg_assignable != 0xFFFFFFFF && (cur_avail & reg_assignable) &&
+                                       cur_interval->use.get_bit(var)) {
                                 // This physical register violates the register constraint.
                                 // Assign another physical register which satisfy the constraint.
                                 assigned_reg = detail::bit_scan_forward(cur_avail & reg_assignable);
-                            }
-                            else
-                            {
+                            } else {
                                 // This may be out of assignment register (ESP, EBP and so on...)
                                 JITASM_ASSERT(((1 << var) & available_reg) == 0); // false assignment!?
                                 assigned_reg = static_cast<int>(var);
                             }
-                        }
-                        else
-                        {
+                        } else {
                             // Symbolic register or retried physical register
-                            const int last_assigned = prior_interval && var < prior_interval->assignment_table.size()
-                                                          ? prior_interval->assignment_table[var]
-                                                          : -1;
-                            if (last_assigned != -1 && (cur_avail & reg_assignable & (1 << last_assigned)))
-                            {
+                            const int last_assigned = prior_interval && var < prior_interval->assignment_table.size() ?
+                                                          prior_interval->assignment_table[var] :
+                                                          -1;
+                            if (last_assigned != -1 && (cur_avail & reg_assignable & (1 << last_assigned))) {
                                 // select last assigned register
                                 assigned_reg = last_assigned;
-                            }
-                            else if (cur_avail & reg_assignable)
-                            {
+                            } else if (cur_avail & reg_assignable) {
                                 assigned_reg = detail::bit_scan_forward(cur_avail & reg_assignable);
-                            }
-                            else if (reg_assignable != 0xFFFFFFFF && !cur_interval->use.get_bit(var))
-                            {
+                            } else if (reg_assignable != 0xFFFFFFFF && !cur_interval->use.get_bit(var)) {
                                 // Try to assign register ignoring constraint if it is not used in this interval. But
                                 // assign later.
                                 live_vars.push_back(var);
-                            }
-                            else
-                            {
+                            } else {
                                 JITASM_ASSERT(0);
                             }
                         }
 
-                        if (assigned_reg >= 0)
-                        {
+                        if (assigned_reg >= 0) {
                             cur_interval->assignment_table[var] = assigned_reg;
                             cur_avail &= ~(1 << assigned_reg);
                         }
@@ -15187,8 +14964,7 @@ namespace jitasm {
             void DumpIntervals(size_t block_id, bool dump_assigned_reg) const {
                 avoid_unused_warn(block_id);
                 JITASM_TRACE("---- Block%d ----\n", block_id);
-                for (size_t i = 0; i < intervals.size(); ++i)
-                {
+                for (size_t i = 0; i < intervals.size(); ++i) {
                     intervals[i].Dump(dump_assigned_reg);
                 }
             }
@@ -15221,8 +14997,7 @@ namespace jitasm {
             /// Remove predecessor
             void RemovePredecessor(BasicBlock *block) {
                 std::vector<BasicBlock *>::iterator it = std::find(predecessor.begin(), predecessor.end(), block);
-                if (it != predecessor.end())
-                {
+                if (it != predecessor.end()) {
                     predecessor.erase(it);
                 }
             }
@@ -15230,8 +15005,7 @@ namespace jitasm {
             /// Replace predecessor
             bool ReplacePredecessor(BasicBlock *old_pred, BasicBlock *new_pred) {
                 std::vector<BasicBlock *>::iterator it = std::find(predecessor.begin(), predecessor.end(), old_pred);
-                if (it != predecessor.end())
-                {
+                if (it != predecessor.end()) {
                     *it = new_pred;
                     return true;
                 }
@@ -15240,8 +15014,7 @@ namespace jitasm {
 
             /// Check if the specified block is dominator of this block
             bool IsDominated(BasicBlock *block) const {
-                if (block == this)
-                {
+                if (block == this) {
                     return true;
                 }
                 return immediate_dominator ? immediate_dominator->IsDominated(block) : false;
@@ -15321,23 +15094,19 @@ namespace jitasm {
                 best_.resize(num_of_nodes);
                 std::vector<std::vector<size_t>> bucket(num_of_nodes);
                 std::vector<size_t> dom(num_of_nodes);
-                for (size_t i = 0; i < num_of_nodes; ++i)
-                {
+                for (size_t i = 0; i < num_of_nodes; ++i) {
                     sdom_[i] = i;
                     best_[i] = i;
                 }
 
-                for (size_t w = num_of_nodes - 1; w > 0; --w)
-                {
+                for (size_t w = num_of_nodes - 1; w > 0; --w) {
                     BasicBlock *wb = depth_first_blocks[w];
                     size_t p = wb->dfs_parent->depth;
 
                     // Compute the semidominator
                     for (std::vector<BasicBlock *>::iterator v = wb->predecessor.begin(); v != wb->predecessor.end();
-                         ++v)
-                    {
-                        if ((*v)->depth != (size_t)-1)
-                        { // skip out of DFS tree
+                         ++v) {
+                        if ((*v)->depth != (size_t)-1) { // skip out of DFS tree
                             size_t u = Eval((*v)->depth);
                             if (sdom_[u] < sdom_[w])
                                 sdom_[w] = sdom_[u];
@@ -15347,8 +15116,7 @@ namespace jitasm {
                     Link(p, w);
 
                     // Implicity compute immediate dominator
-                    for (std::vector<size_t>::iterator v = bucket[p].begin(); v != bucket[p].end(); ++v)
-                    {
+                    for (std::vector<size_t>::iterator v = bucket[p].begin(); v != bucket[p].end(); ++v) {
                         size_t u = Eval(*v);
                         dom[*v] = sdom_[u] < sdom_[*v] ? u : p;
                     }
@@ -15356,8 +15124,7 @@ namespace jitasm {
                 }
 
                 // Explicity compute immediate dominator
-                for (size_t w = 1; w < num_of_nodes; ++w)
-                {
+                for (size_t w = 1; w < num_of_nodes; ++w) {
                     if (dom[w] != sdom_[w])
                         dom[w] = dom[dom[w]];
                     depth_first_blocks[w]->immediate_dominator = depth_first_blocks[dom[w]];
@@ -15377,11 +15144,9 @@ namespace jitasm {
 
             void MakeDepthFirstBlocks(BasicBlock *block) {
                 block->depth = 0; // mark "visited"
-                for (size_t i = 0; i < 2; ++i)
-                {
+                for (size_t i = 0; i < 2; ++i) {
                     BasicBlock *s = block->successor[i];
-                    if (s && s->depth != 0)
-                    {
+                    if (s && s->depth != 0) {
                         s->dfs_parent = block;
                         MakeDepthFirstBlocks(s);
                     }
@@ -15406,15 +15171,11 @@ namespace jitasm {
 
                 // Identify backedges
                 std::vector<std::pair<size_t, size_t>> backedges;
-                for (size_t i = 0; i < depth_first_blocks_.size(); ++i)
-                {
+                for (size_t i = 0; i < depth_first_blocks_.size(); ++i) {
                     BasicBlock *block = depth_first_blocks_[i];
-                    for (size_t j = 0; j < 2; ++j)
-                    {
-                        if (block->successor[j] && block->depth >= block->successor[j]->depth)
-                        { // retreating edge
-                            if (block->IsDominated(block->successor[j]))
-                            {
+                    for (size_t j = 0; j < 2; ++j) {
+                        if (block->successor[j] && block->depth >= block->successor[j]->depth) { // retreating edge
+                            if (block->IsDominated(block->successor[j])) {
                                 backedges.push_back(std::make_pair(block->depth, block->successor[j]->depth));
                             }
                         }
@@ -15423,18 +15184,13 @@ namespace jitasm {
 
                 // Merge loops with the same loop header
                 std::sort(backedges.begin(), backedges.end(), sort_backedge());
-                if (backedges.size() >= 2)
-                {
+                if (backedges.size() >= 2) {
                     std::vector<std::pair<size_t, size_t>>::iterator it = backedges.begin() + 1;
-                    while (it != backedges.end())
-                    {
-                        if (detail::prior(it)->second == it->second)
-                        {
+                    while (it != backedges.end()) {
+                        if (detail::prior(it)->second == it->second) {
                             // erase backedge of smaller loop
                             it = backedges.erase(it);
-                        }
-                        else
-                        {
+                        } else {
                             ++it;
                         }
                     }
@@ -15442,10 +15198,8 @@ namespace jitasm {
 
                 // Set loop depth
                 for (std::vector<std::pair<size_t, size_t>>::iterator it = backedges.begin(); it != backedges.end();
-                     ++it)
-                {
-                    for (size_t i = it->second; i <= it->first; ++i)
-                    {
+                     ++it) {
+                    for (size_t i = it->second; i <= it->first; ++i) {
                         depth_first_blocks_[i]->loop_depth++;
                     }
                 }
@@ -15456,8 +15210,7 @@ namespace jitasm {
                 blocks_.resize(num_of_instructions > 0 ? 2 : 1);
                 BasicBlock *enter_block = new BasicBlock(0, num_of_instructions);
                 blocks_[0] = enter_block;
-                if (num_of_instructions > 0)
-                {
+                if (num_of_instructions > 0) {
                     // exit block
                     BasicBlock *exit_block = new BasicBlock(num_of_instructions, num_of_instructions);
                     blocks_[1] = exit_block;
@@ -15510,8 +15263,7 @@ namespace jitasm {
             }
 
             void clear() {
-                for (BlockList::iterator it = blocks_.begin(); it != blocks_.end(); ++it)
-                {
+                for (BlockList::iterator it = blocks_.begin(); it != blocks_.end(); ++it) {
                     delete *it;
                 }
                 blocks_.clear();
@@ -15540,17 +15292,13 @@ namespace jitasm {
             void DumpDot() const {
                 JITASM_TRACE("digraph CFG {\n");
                 JITASM_TRACE("\tnode[shape=box];\n");
-                for (BlockList::const_iterator it = blocks_.begin(); it != blocks_.end(); ++it)
-                {
+                for (BlockList::const_iterator it = blocks_.begin(); it != blocks_.end(); ++it) {
                     BasicBlock *block = *it;
                     std::string live_in = "live in:";
                     std::string live_out = "live out:";
-                    for (size_t reg_family = 0; reg_family < 3; ++reg_family)
-                    {
-                        for (size_t i = 0; i < block->lifetime[reg_family].live_in.size_bit(); ++i)
-                        {
-                            if (block->lifetime[reg_family].live_in.get_bit(i))
-                            {
+                    for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
+                        for (size_t i = 0; i < block->lifetime[reg_family].live_in.size_bit(); ++i) {
+                            if (block->lifetime[reg_family].live_in.get_bit(i)) {
                                 live_in.append(" ");
                                 live_in.append(GetRegName(
                                     static_cast<RegType>(reg_family +
@@ -15558,10 +15306,8 @@ namespace jitasm {
                                     i));
                             }
                         }
-                        for (size_t i = 0; i < block->lifetime[reg_family].live_out.size_bit(); ++i)
-                        {
-                            if (block->lifetime[reg_family].live_out.get_bit(i))
-                            {
+                        for (size_t i = 0; i < block->lifetime[reg_family].live_out.size_bit(); ++i) {
+                            if (block->lifetime[reg_family].live_out.get_bit(i)) {
                                 live_out.append(" ");
                                 live_out.append(GetRegName(
                                     static_cast<RegType>(reg_family +
@@ -15596,53 +15342,42 @@ namespace jitasm {
             void Build(const Frontend &f) {
                 initialize(f.instrs_.size());
                 size_t block_idx = 0;
-                for (size_t instr_idx = 0; instr_idx < f.instrs_.size(); ++instr_idx)
-                {
+                for (size_t instr_idx = 0; instr_idx < f.instrs_.size(); ++instr_idx) {
                     InstrID instr_id = f.instrs_[instr_idx].GetID();
-                    if (Frontend::IsJump(instr_id) || instr_id == I_RET || instr_id == I_IRET)
-                    {
-                        while (blocks_[block_idx]->instr_end <= instr_idx)
-                        {
+                    if (Frontend::IsJump(instr_id) || instr_id == I_RET || instr_id == I_IRET) {
+                        while (blocks_[block_idx]->instr_end <= instr_idx) {
                             ++block_idx;
                         }
                         BasicBlock *cur_block = blocks_[block_idx];
                         JITASM_ASSERT(block_idx == std::distance(blocks_.begin(), get_block(instr_idx)));
 
                         // Jump instruction always terminate basic block
-                        if (instr_idx + 1 < cur_block->instr_end)
-                        {
+                        if (instr_idx + 1 < cur_block->instr_end) {
                             // Split basic block
                             split(blocks_.begin() + block_idx, instr_idx + 1);
                         }
 
                         // Set successors of current block
-                        if (instr_id == I_RET || instr_id == I_IRET)
-                        {
+                        if (instr_id == I_RET || instr_id == I_IRET) {
                             if (cur_block->successor[0])
                                 cur_block->successor[0]->RemovePredecessor(cur_block);
                             cur_block->successor[0] = *get_exit_block();
                             (*get_exit_block())->predecessor.push_back(cur_block);
-                        }
-                        else
-                        {
+                        } else {
                             const size_t jump_to = f.GetJumpTo(f.instrs_[instr_idx]); // jump target instruction index
                             BasicBlock *jump_target = *split(get_block(jump_to), jump_to);
 
                             // Update cur_block if split cur_block
-                            if (jump_target->instr_begin <= instr_idx && instr_idx < jump_target->instr_end)
-                            {
+                            if (jump_target->instr_begin <= instr_idx && instr_idx < jump_target->instr_end) {
                                 cur_block = jump_target;
                             }
 
-                            if (instr_id == I_JMP)
-                            {
+                            if (instr_id == I_JMP) {
                                 if (cur_block->successor[0])
                                     cur_block->successor[0]->RemovePredecessor(cur_block);
                                 cur_block->successor[0] = jump_target;
                                 jump_target->predecessor.push_back(cur_block);
-                            }
-                            else
-                            {
+                            } else {
                                 JITASM_ASSERT(instr_id == I_JCC || instr_id == I_LOOP);
                                 if (cur_block->successor[1])
                                     cur_block->successor[1]->RemovePredecessor(cur_block);
@@ -15657,8 +15392,7 @@ namespace jitasm {
                 MakeDepthFirstBlocks(*get_block(0));
 
                 // Numbering depth
-                for (size_t i = 0; i < depth_first_blocks_.size(); ++i)
-                {
+                for (size_t i = 0; i < depth_first_blocks_.size(); ++i) {
                     depth_first_blocks_[i]->depth = i;
                 }
 
@@ -15673,8 +15407,7 @@ namespace jitasm {
 
                 enter_block->depth = 0;
                 depth_first_blocks_.push_back(enter_block);
-                if (exit_block)
-                {
+                if (exit_block) {
                     exit_block->depth = 1;
                     exit_block->dfs_parent = enter_block;
                     exit_block->immediate_dominator = enter_block;
@@ -15703,8 +15436,7 @@ namespace jitasm {
                 }
                 int GetNormalizedID(int id) {
                     std::map<int, int>::iterator it = id_map_.find(id);
-                    if (it != id_map_.end())
-                    {
+                    if (it != id_map_.end()) {
                         return it->second;
                     }
                     int new_id = next_id_++;
@@ -15717,64 +15449,49 @@ namespace jitasm {
             need_reg_alloc[0] = need_reg_alloc[1] = need_reg_alloc[2] = false;
             bool compile_process = false;
 
-            for (Frontend::InstrList::iterator it = instrs.begin(); it != instrs.end(); ++it)
-            {
+            for (Frontend::InstrList::iterator it = instrs.begin(); it != instrs.end(); ++it) {
                 const InstrID instr_id = it->GetID();
                 if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG ||
                     instr_id == I_COMPILER_DECLARE_RESULT_REG || instr_id == I_COMPILER_PROLOG ||
-                    instr_id == I_COMPILER_EPILOG)
-                {
+                    instr_id == I_COMPILER_EPILOG) {
                     compile_process = true;
                 }
 
-                for (size_t i = 0; i < Instr::MAX_OPERAND_COUNT; ++i)
-                {
+                for (size_t i = 0; i < Instr::MAX_OPERAND_COUNT; ++i) {
                     detail::Opd &opd = it->GetOpd(i);
-                    if (opd.IsReg() && !opd.IsFpuReg())
-                    {
+                    if (opd.IsReg() && !opd.IsFpuReg()) {
                         const RegID &reg = opd.GetReg();
                         const size_t reg_family = GetRegFamily(reg.GetType());
-                        if (reg.IsSymbolic())
-                        {
+                        if (reg.IsSymbolic()) {
                             opd.reg_.id = reg_id_map[reg_family].GetNormalizedID(reg.id);
-                        }
-                        else
-                        {
-                            if (opd.IsWrite())
-                            {
+                        } else {
+                            if (opd.IsWrite()) {
                                 // This physical register is modified
                                 modified_physical_reg[reg_family] |= (1 << reg.id);
                             }
 
-                            if ((opd.reg_assignable_ & (1 << reg.id)) == 0)
-                            {
+                            if ((opd.reg_assignable_ & (1 << reg.id)) == 0) {
                                 // Specified physical register does not fit the instruction.
                                 // Let's try to assign optimal physical register by register allocation.
                                 need_reg_alloc[reg_family] = true;
                             }
                         }
-                    }
-                    else if (opd.IsMem())
-                    {
+                    } else if (opd.IsMem()) {
                         const RegID &base = opd.GetBase();
-                        if (base.IsSymbolic())
-                        {
+                        if (base.IsSymbolic()) {
                             opd.base_.id = reg_id_map[0].GetNormalizedID(base.id);
                         }
 
                         const RegID &index = opd.GetIndex();
-                        if (index.IsSymbolic())
-                        {
+                        if (index.IsSymbolic()) {
                             opd.index_.id = reg_id_map[GetRegFamily(index.GetType())].GetNormalizedID(index.id);
                         }
                     }
                 }
             }
 
-            for (size_t i = 0; i < 3; ++i)
-            {
-                if (!need_reg_alloc[i] && reg_id_map[i].next_id_ > NUM_OF_PHYSICAL_REG)
-                {
+            for (size_t i = 0; i < 3; ++i) {
+                if (!need_reg_alloc[i] && reg_id_map[i].next_id_ > NUM_OF_PHYSICAL_REG) {
                     need_reg_alloc[i] = true;
                 }
             }
@@ -15791,15 +15508,13 @@ namespace jitasm {
                 id == I_PANDN || id == I_PSUBB || id == I_PSUBW || id == I_PSUBD || id == I_PSUBQ || id == I_PSUBSB ||
                 id == I_PSUBSW || id == I_PSUBUSB || id == I_PSUBUSW || id == I_PCMPEQB || id == I_PCMPEQW ||
                 id == I_PCMPEQD || id == I_PCMPEQQ || id == I_PCMPGTB || id == I_PCMPGTW || id == I_PCMPGTD ||
-                id == I_PCMPGTQ)
-            {
+                id == I_PCMPGTQ) {
                 // source and destination operands are the same register.
                 // 8bit or 16bit register cannot break dependence.
                 const detail::Opd &opd0 = instr.GetOpd(0);
                 const detail::Opd &opd1 = instr.GetOpd(1);
                 const OpdSize opdsize = opd0.GetSize();
-                if (opd0 == opd1 && opd0.IsReg() && opdsize != O_SIZE_8 && opdsize != O_SIZE_16)
-                {
+                if (opd0 == opd1 && opd0.IsReg() && opdsize != O_SIZE_8 && opdsize != O_SIZE_16) {
                     return true;
                 }
             }
@@ -15811,36 +15526,29 @@ namespace jitasm {
             std::vector<BasicBlock *> update_target;
             update_target.reserve(cfg.size());
 
-            for (ControlFlowGraph::BlockList::iterator it = cfg.begin(); it != cfg.end(); ++it)
-            {
+            for (ControlFlowGraph::BlockList::iterator it = cfg.begin(); it != cfg.end(); ++it) {
                 BasicBlock *block = *it;
                 // Scanning instructions of basic block and make register lifetime table
-                for (size_t i = block->instr_begin; i != block->instr_end; ++i)
-                {
+                for (size_t i = block->instr_begin; i != block->instr_end; ++i) {
                     const size_t instr_offset = i - block->instr_begin;
                     const Instr &instr = f.instrs_[i];
-                    if (instr.GetID() == I_COMPILER_DECLARE_REG_ARG)
-                    {
+                    if (instr.GetID() == I_COMPILER_DECLARE_REG_ARG) {
                         // Declare function argument on register
                         const detail::Opd &opd0 = instr.GetOpd(0);
                         const RegID &reg = opd0.GetReg();
                         // Avoid passing operand size 8 or 16 to AddUsePoint
                         // because they are treated as partial access register and cause miss assignment of register.
                         OpdSize opd_size = opd0.GetSize();
-                        if (opd_size == O_SIZE_8 || opd_size == O_SIZE_16)
-                        {
+                        if (opd_size == O_SIZE_8 || opd_size == O_SIZE_16) {
                             opd_size = O_SIZE_32;
                         }
                         const detail::Opd &opd1 = instr.GetOpd(1);
                         block->GetLifetime(reg.GetType())
                             .AddUsePoint(instr_offset, reg, opd0.GetType(), opd_size, opd0.reg_assignable_);
-                        if (opd1.IsMem())
-                        {
+                        if (opd1.IsMem()) {
                             var_manager.SetSpillSlot(reg.GetType(), reg.id, Addr(opd1.GetBase(), opd1.GetDisp()));
                         }
-                    }
-                    else if (instr.GetID() == I_COMPILER_DECLARE_STACK_ARG)
-                    {
+                    } else if (instr.GetID() == I_COMPILER_DECLARE_STACK_ARG) {
                         // Declare function argument on stack
                         // The register variable starts "spill" state by O_TYPE_MEM of AddUsePoint
                         const detail::Opd &opd0 = instr.GetOpd(0); // Register variable.
@@ -15848,8 +15556,7 @@ namespace jitasm {
                         // Avoid passing operand size 8 or 16 to AddUsePoint
                         // because they are treated as partial access register and cause miss assignment of register.
                         OpdSize opd_size = opd0.GetSize();
-                        if (opd_size == O_SIZE_8 || opd_size == O_SIZE_16)
-                        {
+                        if (opd_size == O_SIZE_8 || opd_size == O_SIZE_16) {
                             opd_size = O_SIZE_32;
                         }
                         const detail::Opd &opd1 = instr.GetOpd(1); // Argument
@@ -15857,17 +15564,13 @@ namespace jitasm {
                             .AddUsePoint(instr_offset, reg, static_cast<OpdType>(O_TYPE_MEM | O_TYPE_WRITE), opd_size,
                                          opd0.reg_assignable_);
                         var_manager.SetSpillSlot(reg.GetType(), reg.id, Addr(opd1.GetBase(), opd1.GetDisp()));
-                    }
-                    else if (instr.GetID() == I_COMPILER_DECLARE_RESULT_REG)
-                    {
+                    } else if (instr.GetID() == I_COMPILER_DECLARE_RESULT_REG) {
                         // Declare function result on register
                         const detail::Opd &opd0 = instr.GetOpd(0);
                         const RegID &reg = opd0.GetReg();
                         block->GetLifetime(reg.GetType())
                             .AddUsePoint(instr_offset, reg, opd0.GetType(), opd0.GetSize(), opd0.reg_assignable_);
-                    }
-                    else if (IsBreakDependenceInstr(instr))
-                    {
+                    } else if (IsBreakDependenceInstr(instr)) {
                         // Add only 1 use point if the instruction that break register dependence
                         const detail::Opd &opd = instr.GetOpd(0);
                         const RegID &reg = opd.GetReg();
@@ -15875,9 +15578,7 @@ namespace jitasm {
                             .AddUsePoint(instr_offset, reg, static_cast<OpdType>(O_TYPE_REG | O_TYPE_WRITE),
                                          opd.GetSize(), opd.reg_assignable_);
                         var_manager.UpdateVarSize(reg.GetType(), reg.id, opd.GetSize());
-                    }
-                    else if (instr.GetID() == I_PUSHAD || instr.GetID() == I_POPAD)
-                    {
+                    } else if (instr.GetID() == I_PUSHAD || instr.GetID() == I_POPAD) {
                         // Add use point of pushad/popad
                         const OpdType type =
                             static_cast<OpdType>(O_TYPE_REG | (instr.GetID() == I_PUSHAD ? O_TYPE_READ : O_TYPE_WRITE));
@@ -15898,49 +15599,38 @@ namespace jitasm {
                         block->GetLifetime(R_TYPE_GP).AddUsePoint(
                             instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESP),
                             static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ | O_TYPE_WRITE), O_SIZE_32, 0xFFFFFFFF);
-                    }
-                    else if (instr.GetID() == I_VZEROALL || instr.GetID() == I_VZEROUPPER)
-                    {
+                    } else if (instr.GetID() == I_VZEROALL || instr.GetID() == I_VZEROUPPER) {
                         // Add use point of vzeroall/vzeroupper
                         const OpdType type = static_cast<OpdType>(
                             O_TYPE_REG | (instr.GetID() == I_VZEROALL ? O_TYPE_WRITE : O_TYPE_READ | O_TYPE_WRITE));
-                        for (int j = 0; j < NUM_OF_PHYSICAL_REG; ++j)
-                        {
+                        for (int j = 0; j < NUM_OF_PHYSICAL_REG; ++j) {
                             block->GetLifetime(R_TYPE_YMM)
                                 .AddUsePoint(
                                     instr_offset,
                                     RegID::CreatePhysicalRegID(R_TYPE_YMM, static_cast<PhysicalRegID>(YMM0 + j)), type,
                                     O_SIZE_256, 0xFFFFFFFF);
                         }
-                    }
-                    else
-                    {
+                    } else {
                         // Add each use point of all operands
-                        for (size_t j = 0; j < Instr::MAX_OPERAND_COUNT; ++j)
-                        {
+                        for (size_t j = 0; j < Instr::MAX_OPERAND_COUNT; ++j) {
                             const detail::Opd &opd = instr.GetOpd(j);
-                            if (opd.IsGpReg() || opd.IsMmxReg() || opd.IsXmmReg() || opd.IsYmmReg())
-                            {
+                            if (opd.IsGpReg() || opd.IsMmxReg() || opd.IsXmmReg() || opd.IsYmmReg()) {
                                 // Register operand
                                 const RegID &reg = opd.GetReg();
                                 block->GetLifetime(reg.GetType())
                                     .AddUsePoint(instr_offset, reg, opd.GetType(), opd.GetSize(), opd.reg_assignable_);
                                 var_manager.UpdateVarSize(reg.GetType(), reg.id, opd.GetSize());
-                            }
-                            else if (opd.IsMem())
-                            {
+                            } else if (opd.IsMem()) {
                                 // Memory operand
                                 const RegID &base = opd.GetBase();
-                                if (!base.IsInvalid())
-                                {
+                                if (!base.IsInvalid()) {
                                     block->GetLifetime(R_TYPE_GP).AddUsePoint(
                                         instr_offset, base, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ),
                                         opd.GetAddressBaseSize(), 0xFFFFFFFF);
                                     var_manager.UpdateVarSize(R_TYPE_GP, base.id, opd.GetAddressBaseSize());
                                 }
                                 const RegID &index = opd.GetIndex();
-                                if (!index.IsInvalid())
-                                {
+                                if (!index.IsInvalid()) {
                                     block->GetLifetime(index.GetType())
                                         .AddUsePoint(instr_offset, index,
                                                      static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ),
@@ -15953,21 +15643,15 @@ namespace jitasm {
                 }
 
                 // Make GEN and KILL set
-                for (size_t reg_family = 0; reg_family < 3; ++reg_family)
-                {
+                for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
                     Lifetime &lifetime = block->lifetime[reg_family];
                     const size_t num_of_used_reg = lifetime.use_points.size();
-                    for (size_t i = 0; i < num_of_used_reg; ++i)
-                    {
-                        if (!lifetime.use_points[i].empty())
-                        {
+                    for (size_t i = 0; i < num_of_used_reg; ++i) {
+                        if (!lifetime.use_points[i].empty()) {
                             OpdType type = lifetime.use_points[i][0].type;
-                            if (type & O_TYPE_READ)
-                            {
+                            if (type & O_TYPE_READ) {
                                 lifetime.gen.set_bit(i, true); // GEN
-                            }
-                            else
-                            {
+                            } else {
                                 JITASM_ASSERT(type & O_TYPE_WRITE);
                                 lifetime.kill.set_bit(i, true); // KILL
                             }
@@ -15978,20 +15662,15 @@ namespace jitasm {
                 update_target.push_back(block);
             }
 
-            while (!update_target.empty())
-            {
+            while (!update_target.empty()) {
                 BasicBlock *block = update_target.back();
                 update_target.pop_back();
-                for (size_t reg_family = 0; reg_family < 3; ++reg_family)
-                {
+                for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
                     Lifetime &lifetime = block->lifetime[reg_family];
-                    if (lifetime.dirty_live_out)
-                    {
+                    if (lifetime.dirty_live_out) {
                         // live_out is the union of the live_in of the successors
-                        for (size_t i = 0; i < 2; ++i)
-                        {
-                            if (block->successor[i])
-                            {
+                        for (size_t i = 0; i < 2; ++i) {
+                            if (block->successor[i]) {
                                 lifetime.live_out.set_union(block->successor[i]->lifetime[reg_family].live_in);
                             }
                         }
@@ -16002,12 +15681,10 @@ namespace jitasm {
                         new_live_in.set_subtract(lifetime.kill);
                         new_live_in.set_union(lifetime.gen);
 
-                        if (!lifetime.live_in.is_equal(new_live_in))
-                        {
+                        if (!lifetime.live_in.is_equal(new_live_in)) {
                             lifetime.live_in.swap(new_live_in);
 
-                            for (size_t i = 0; i < block->predecessor.size(); ++i)
-                            {
+                            for (size_t i = 0; i < block->predecessor.size(); ++i) {
                                 block->predecessor[i]->lifetime[reg_family].dirty_live_out = true;
                                 update_target.push_back(block->predecessor[i]);
                             }
@@ -16030,8 +15707,7 @@ namespace jitasm {
             const uint32 available_reg_count = detail::Count1Bits(available_reg);
 
             std::vector<int> total_spill_cost;
-            for (ControlFlowGraph::BlockList::iterator block = cfg.begin(); block != cfg.end(); ++block)
-            {
+            for (ControlFlowGraph::BlockList::iterator block = cfg.begin(); block != cfg.end(); ++block) {
                 (*block)->lifetime[reg_family].BuildIntervals();
                 (*block)->lifetime[reg_family].GetSpillCost((*block)->GetFrequency(), total_spill_cost);
             }
@@ -16039,8 +15715,7 @@ namespace jitasm {
             uint32 used_reg = 0;
             const Lifetime::Interval *last_interval = NULL;
             size_t last_loop_depth = 0;
-            for (ControlFlowGraph::BlockList::iterator block = cfg.dfs_begin(); block != cfg.dfs_end(); ++block)
-            {
+            for (ControlFlowGraph::BlockList::iterator block = cfg.dfs_begin(); block != cfg.dfs_end(); ++block) {
                 Lifetime &lifetime = (*block)->lifetime[reg_family];
                 const size_t loop_depth = (*block)->loop_depth;
 
@@ -16054,8 +15729,7 @@ namespace jitasm {
 #ifdef JITASM_DEBUG_DUMP
                 lifetime.DumpIntervals((*block)->depth, true);
 #endif
-                if (!lifetime.intervals.empty())
-                {
+                if (!lifetime.intervals.empty()) {
                     last_interval = &lifetime.intervals.back();
                     last_loop_depth = loop_depth;
                 }
@@ -16125,67 +15799,47 @@ namespace jitasm {
             }
 
             void Move(PhysicalRegID dst_reg, PhysicalRegID src_reg, OpdSize size) {
-                if (size == O_SIZE_128)
-                {
+                if (size == O_SIZE_128) {
                     f_->movaps(XmmReg(dst_reg), XmmReg(src_reg));
-                }
-                else if (size == O_SIZE_256)
-                {
+                } else if (size == O_SIZE_256) {
                     f_->vmovaps(YmmReg(dst_reg), YmmReg(src_reg));
-                }
-                else
-                {
+                } else {
                     JITASM_ASSERT(0);
                 }
             }
 
             void Swap(PhysicalRegID reg1, PhysicalRegID reg2, OpdSize size) {
-                if (size == O_SIZE_128)
-                {
+                if (size == O_SIZE_128) {
                     f_->xorps(XmmReg(reg1), XmmReg(reg2));
                     f_->xorps(XmmReg(reg2), XmmReg(reg1));
                     f_->xorps(XmmReg(reg1), XmmReg(reg2));
-                }
-                else if (size == O_SIZE_256)
-                {
+                } else if (size == O_SIZE_256) {
                     f_->vxorps(YmmReg(reg1), YmmReg(reg1), YmmReg(reg2));
                     f_->vxorps(YmmReg(reg2), YmmReg(reg1), YmmReg(reg2));
                     f_->vxorps(YmmReg(reg1), YmmReg(reg1), YmmReg(reg2));
-                }
-                else
-                {
+                } else {
                     JITASM_ASSERT(0);
                 }
             }
 
             void Load(PhysicalRegID dst_reg, int var) {
                 const OpdSize size = var_manager_->GetVarSize(2, var);
-                if (size == O_SIZE_128)
-                {
+                if (size == O_SIZE_128) {
                     f_->movaps(XmmReg(dst_reg), f_->xmmword_ptr[var_manager_->GetSpillSlot(2, var)]);
-                }
-                else if (size == O_SIZE_256)
-                {
+                } else if (size == O_SIZE_256) {
                     f_->vmovaps(YmmReg(dst_reg), f_->ymmword_ptr[var_manager_->GetSpillSlot(2, var)]);
-                }
-                else
-                {
+                } else {
                     JITASM_ASSERT(0);
                 }
             }
 
             void Store(int var, PhysicalRegID src_reg) {
                 const OpdSize size = var_manager_->GetVarSize(2, var);
-                if (size == O_SIZE_128)
-                {
+                if (size == O_SIZE_128) {
                     f_->movaps(f_->xmmword_ptr[var_manager_->GetSpillSlot(2, var)], XmmReg(src_reg));
-                }
-                else if (size == O_SIZE_256)
-                {
+                } else if (size == O_SIZE_256) {
                     f_->vmovaps(f_->ymmword_ptr[var_manager_->GetSpillSlot(2, var)], YmmReg(src_reg));
-                }
-                else
-                {
+                } else {
                     JITASM_ASSERT(0);
                 }
             }
@@ -16210,10 +15864,8 @@ namespace jitasm {
 
             /// Is v in scc_?
             bool IsInsideSCC(int v) const {
-                for (size_t i = 0; i < scc_.size(); ++i)
-                {
-                    if (scc_[i] == v)
-                    {
+                for (size_t i = 0; i < scc_.size(); ++i) {
+                    if (scc_[i] == v) {
                         return true;
                     }
                 }
@@ -16226,37 +15878,28 @@ namespace jitasm {
                 ++index;
                 scc_.push_back(v);
                 const int w = successors_[v];
-                if (w != -1)
-                {
-                    if (nodes_[w].index == -1)
-                    {
+                if (w != -1) {
+                    if (nodes_[w].index == -1) {
                         // successor w has not been visited yet
                         Find(w, fn);
-                        if (nodes_[w].lowlink < nodes_[v].lowlink)
-                        {
+                        if (nodes_[w].lowlink < nodes_[v].lowlink) {
                             nodes_[v].lowlink = nodes_[w].lowlink;
                         }
-                    }
-                    else if (IsInsideSCC(w))
-                    {
+                    } else if (IsInsideSCC(w)) {
                         // successor w is in scc_
-                        if (nodes_[w].index < nodes_[v].lowlink)
-                        {
+                        if (nodes_[w].index < nodes_[v].lowlink) {
                             nodes_[v].lowlink = nodes_[w].index;
                         }
                     }
                 }
-                if (nodes_[v].lowlink == nodes_[v].index && !scc_.empty())
-                {
+                if (nodes_[v].lowlink == nodes_[v].index && !scc_.empty()) {
                     // v is the root of scc_
                     size_t i = 0;
-                    while (scc_[i] != v)
-                    {
+                    while (scc_[i] != v) {
                         ++i;
                     }
                     fn(&scc_[i], scc_.size() - i);
-                    while (i < scc_.size())
-                    {
+                    while (i < scc_.size()) {
                         scc_.pop_back();
                     }
                 }
@@ -16267,10 +15910,8 @@ namespace jitasm {
             }
 
             template <class Fn> void operator()(Fn fn) {
-                for (int v = 0; v < NUM_OF_PHYSICAL_REG; ++v)
-                {
-                    if (successors_[v] != -1 && nodes_[v].index == -1)
-                    {
+                for (int v = 0; v < NUM_OF_PHYSICAL_REG; ++v) {
+                    if (successors_[v] != -1 && nodes_[v].index == -1) {
                         Find(v, fn);
                     }
                 }
@@ -16288,41 +15929,30 @@ namespace jitasm {
             Operations(const Lifetime::Interval *first, const Lifetime::Interval *second,
                        const std::vector<VarAttribute> *vattrs)
                 : interval(first, second), var_attrs(vattrs) {
-                for (size_t i = 0; i < NUM_OF_PHYSICAL_REG; ++i)
-                {
+                for (size_t i = 0; i < NUM_OF_PHYSICAL_REG; ++i) {
                     move[i] = load[i] = store[i] = -1;
                 }
             }
 
             void operator()(size_t var) {
-                if (interval.second->liveness.get_bit(var))
-                {
+                if (interval.second->liveness.get_bit(var)) {
                     const bool first_spill = interval.first->spill.get_bit(var);
                     const bool second_spill = interval.second->spill.get_bit(var);
-                    if (!first_spill)
-                    {
+                    if (!first_spill) {
                         const int first_reg = interval.first->assignment_table[var];
-                        if (!second_spill)
-                        {
+                        if (!second_spill) {
                             // register -> register
                             move[first_reg] = interval.second->assignment_table[var];
                             size[first_reg] = static_cast<OpdSize>(var_attrs->at(var).size);
-                        }
-                        else
-                        {
+                        } else {
                             // register -> stack
                             store[first_reg] = static_cast<int>(var);
                         }
-                    }
-                    else
-                    {
-                        if (!second_spill)
-                        {
+                    } else {
+                        if (!second_spill) {
                             // stack -> register
                             load[interval.second->assignment_table[var]] = static_cast<int>(var);
-                        }
-                        else
-                        {
+                        } else {
                             // stack -> stack
                             // do nothing
                         }
@@ -16339,19 +15969,15 @@ namespace jitasm {
                 : moves_(moves), sizes_(sizes), reg_operator_(reg_operator) {
             }
             void operator()(const int *scc, size_t count) {
-                if (count > 1)
-                {
-                    for (size_t i = 0; i < count - 1; ++i)
-                    {
+                if (count > 1) {
+                    for (size_t i = 0; i < count - 1; ++i) {
                         const int r = scc[i];
                         JITASM_ASSERT(r != moves_[r] && moves_[r] != -1);
                         reg_operator_->Swap(static_cast<PhysicalRegID>(moves_[r]), static_cast<PhysicalRegID>(r),
                                             sizes_[r]);
                         JITASM_TRACE("Swap%d %d <-> %d\n", sizes_[r], moves_[r], r);
                     }
-                }
-                else if (moves_[scc[0]] != scc[0] && moves_[scc[0]] != -1)
-                {
+                } else if (moves_[scc[0]] != scc[0] && moves_[scc[0]] != -1) {
                     const int r = scc[0];
                     reg_operator_->Move(static_cast<PhysicalRegID>(moves_[r]), static_cast<PhysicalRegID>(r),
                                         sizes_[r]);
@@ -16378,10 +16004,8 @@ namespace jitasm {
             first_interval.liveness.query_bit_indexes(ops);
 
             // Store instructions
-            for (size_t r = 0; r < NUM_OF_PHYSICAL_REG; ++r)
-            {
-                if (ops.store[r] != -1)
-                {
+            for (size_t r = 0; r < NUM_OF_PHYSICAL_REG; ++r) {
+                if (ops.store[r] != -1) {
                     reg_operator.Store(ops.store[r], static_cast<PhysicalRegID>(r));
                     JITASM_TRACE("Store %d (physical reg %d)\n", ops.store[r], r);
                 }
@@ -16392,10 +16016,8 @@ namespace jitasm {
             scc_finder(MoveGenerator<RegOp>(ops.move, ops.size, &reg_operator));
 
             // Load instructions
-            for (size_t r = 0; r < NUM_OF_PHYSICAL_REG; ++r)
-            {
-                if (ops.load[r] != -1)
-                {
+            for (size_t r = 0; r < NUM_OF_PHYSICAL_REG; ++r) {
+                if (ops.load[r] != -1) {
                     reg_operator.Load(static_cast<PhysicalRegID>(r), ops.load[r]);
                     JITASM_TRACE("Load %d (physical reg %d)\n", ops.load[r], r);
                 }
@@ -16409,22 +16031,19 @@ namespace jitasm {
         /// Generate inter-block instructions
         inline void GenerateInterBlockInstr(const BasicBlock *first_block, const BasicBlock *second_block, Frontend &f,
                                             const VariableManager &var_manager) {
-            if (!first_block->lifetime[0].intervals.empty() && !second_block->lifetime[0].intervals.empty())
-            {
+            if (!first_block->lifetime[0].intervals.empty() && !second_block->lifetime[0].intervals.empty()) {
                 JITASM_TRACE("---- General purpose register ----\n");
                 GenerateInterIntervalInstr(first_block->lifetime[0].intervals.back(),
                                            second_block->lifetime[0].intervals.front(), var_manager.GetAttributes(0),
                                            GpRegOperator(&f, &var_manager));
             }
-            if (!first_block->lifetime[1].intervals.empty() && !second_block->lifetime[1].intervals.empty())
-            {
+            if (!first_block->lifetime[1].intervals.empty() && !second_block->lifetime[1].intervals.empty()) {
                 JITASM_TRACE("---- MMX register ----\n");
                 GenerateInterIntervalInstr(first_block->lifetime[1].intervals.back(),
                                            second_block->lifetime[1].intervals.front(), var_manager.GetAttributes(1),
                                            MmxRegOperator(&f, &var_manager));
             }
-            if (!first_block->lifetime[2].intervals.empty() && !second_block->lifetime[2].intervals.empty())
-            {
+            if (!first_block->lifetime[2].intervals.empty() && !second_block->lifetime[2].intervals.empty()) {
                 JITASM_TRACE("---- XMM/YMM register ----\n");
                 GenerateInterIntervalInstr(first_block->lifetime[2].intervals.back(),
                                            second_block->lifetime[2].intervals.front(), var_manager.GetAttributes(2),
@@ -16444,8 +16063,7 @@ namespace jitasm {
 
             // Save general-purpose registers
             size_t num_of_preserved_gp_reg = 0;
-            for (uint32 reg_mask = preserved_reg[0]; reg_mask != 0; ++num_of_preserved_gp_reg)
-            {
+            for (uint32 reg_mask = preserved_reg[0]; reg_mask != 0; ++num_of_preserved_gp_reg) {
                 uint32 reg_id = detail::bit_scan_forward(reg_mask);
                 f.push(Reg(static_cast<PhysicalRegID>(reg_id)));
                 reg_mask &= ~(1 << reg_id);
@@ -16453,22 +16071,17 @@ namespace jitasm {
 
 #ifdef JITASM64
             // Stack base
-            if (stack_size > 0)
-            {
-                if (num_of_preserved_gp_reg & 1)
-                {
+            if (stack_size > 0) {
+                if (num_of_preserved_gp_reg & 1) {
                     // Copy with alignment
                     f.lea(f.rbx, f.ptr[f.rsp - 8]);
                     stack_size += 8; // padding for keep alignment
-                }
-                else
-                {
+                } else {
                     f.mov(f.rbx, f.rsp);
                 }
             }
 #else
-            if (stack_size > 0)
-            {
+            if (stack_size > 0) {
                 // Align stack pointer
                 f.and (f.esp, 0xFFFFFFF0);
 
@@ -16478,16 +16091,14 @@ namespace jitasm {
 #endif
 
             // Move stack pointer
-            if (stack_size > 0)
-            {
+            if (stack_size > 0) {
                 f.sub(f.zsp, static_cast<uint32>(stack_size));
             }
 
 #ifdef JITASM64
             // Save xmm registers
             uint32 xmm_reg_mask = preserved_reg[2];
-            for (size_t i = 0; xmm_reg_mask != 0; ++i)
-            {
+            for (size_t i = 0; xmm_reg_mask != 0; ++i) {
                 uint32 reg_id = detail::bit_scan_forward(xmm_reg_mask);
                 f.movaps(f.xmmword_ptr[preserved_reg_stack + 16 * i], XmmReg(static_cast<PhysicalRegID>(reg_id)));
                 xmm_reg_mask &= ~(1 << reg_id);
@@ -16506,41 +16117,35 @@ namespace jitasm {
             // Restore xmm registers
             // Push the register id and index by saved order
             FixedArray<uint32, 16> regs;
-            for (uint32 reg_mask = preserved_reg[2]; reg_mask != 0;)
-            {
+            for (uint32 reg_mask = preserved_reg[2]; reg_mask != 0;) {
                 uint32 reg_id = detail::bit_scan_forward(reg_mask);
                 regs.push_back(reg_id);
                 reg_mask &= ~(1 << reg_id);
             }
 
             // Insert restore instruction by inverse order
-            while (!regs.empty())
-            {
+            while (!regs.empty()) {
                 f.movaps(XmmReg(static_cast<PhysicalRegID>(regs.back())),
                          f.xmmword_ptr[preserved_reg_stack + 16 * (regs.size() - 1)]);
                 regs.pop_back();
             }
 
             // Move stack pointer
-            if (stack_size > 0)
-            {
-                if (num_of_preserved_gp_reg & 1)
-                {
+            if (stack_size > 0) {
+                if (num_of_preserved_gp_reg & 1) {
                     stack_size += 8; // padding for keep alignment
                 }
                 f.add(f.zsp, static_cast<uint32>(stack_size));
             }
 #else
             // Move stack pointer
-            if (stack_size > 0)
-            {
+            if (stack_size > 0) {
                 f.lea(f.zsp, f.ptr[f.zbp - num_of_preserved_gp_reg * 4]);
             }
 #endif
 
             // Restore general-purpose registers
-            for (uint32 reg_mask = preserved_reg[0]; reg_mask != 0;)
-            {
+            for (uint32 reg_mask = preserved_reg[0]; reg_mask != 0;) {
                 uint32 reg_id = detail::bit_scan_reverse(reg_mask);
                 f.pop(Reg(static_cast<PhysicalRegID>(reg_id)));
                 reg_mask &= ~(1 << reg_id);
@@ -16573,8 +16178,7 @@ namespace jitasm {
             // Prepare instruction number ordered labels for adjusting label position
             std::vector<OrderedLabel> orderd_labels; // instruction number order
             orderd_labels.reserve(f.labels_.size());
-            for (size_t i = 0; i < f.labels_.size(); ++i)
-            {
+            for (size_t i = 0; i < f.labels_.size(); ++i) {
                 orderd_labels.push_back(OrderedLabel(i, f.labels_[i].instr_number));
             }
             std::sort(orderd_labels.begin(), orderd_labels.end());
@@ -16586,18 +16190,15 @@ namespace jitasm {
             org_instrs.swap(f.instrs_);
             f.instrs_.reserve(org_instrs.size());
 
-            for (ControlFlowGraph::BlockList::const_iterator it = cfg.begin(); it != cfg.end(); ++it)
-            {
+            for (ControlFlowGraph::BlockList::const_iterator it = cfg.begin(); it != cfg.end(); ++it) {
                 const BasicBlock *block = *it;
                 JITASM_TRACE("\n==== Block%d ====\n", block->depth);
-                if (block->depth == (size_t)-1)
-                {
+                if (block->depth == (size_t)-1) {
                     // Eliminate unreachable code block
                     JITASM_TRACE("Unreachable block!\n");
 
                     // Invalidate labels in this block
-                    while (cur_label != orderd_labels.end() && cur_label->instr_idx < block->instr_end)
-                    {
+                    while (cur_label != orderd_labels.end() && cur_label->instr_idx < block->instr_end) {
                         f.labels_[cur_label->id].instr_number = (size_t)-1;
                         ++cur_label;
                     }
@@ -16607,37 +16208,32 @@ namespace jitasm {
 
                 // Initialize interval_range
                 detail::ConstRange<std::vector<Lifetime::Interval>> interval_range[3];
-                for (size_t reg_family = 0; reg_family < 3; ++reg_family)
-                {
+                for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
                     interval_range[reg_family].first = block->lifetime[reg_family].intervals.begin();
                     interval_range[reg_family].second = block->lifetime[reg_family].intervals.end();
                 }
 
                 const size_t instr_size = block->instr_end - block->instr_begin;
-                for (size_t instr_offset = 0; instr_offset < instr_size; ++instr_offset)
-                {
+                for (size_t instr_offset = 0; instr_offset < instr_size; ++instr_offset) {
                     const size_t org_instr_index = block->instr_begin + instr_offset;
 
                     // Step each intervals and insert inter-interval instructions
                     if (interval_range[0].size() > 1 &&
-                        detail::next(interval_range[0].first)->instr_idx_offset == instr_offset)
-                    {
+                        detail::next(interval_range[0].first)->instr_idx_offset == instr_offset) {
                         JITASM_TRACE("---- General purpose register ----\n");
                         const Lifetime::Interval &first_interval = *interval_range[0].first;
                         GenerateInterIntervalInstr(first_interval, *++interval_range[0].first,
                                                    var_manager.GetAttributes(0), GpRegOperator(&f, &var_manager));
                     }
                     if (interval_range[1].size() > 1 &&
-                        detail::next(interval_range[1].first)->instr_idx_offset == instr_offset)
-                    {
+                        detail::next(interval_range[1].first)->instr_idx_offset == instr_offset) {
                         JITASM_TRACE("---- MMX register ----\n");
                         const Lifetime::Interval &first_interval = *interval_range[1].first;
                         GenerateInterIntervalInstr(first_interval, *++interval_range[1].first,
                                                    var_manager.GetAttributes(1), MmxRegOperator(&f, &var_manager));
                     }
                     if (interval_range[2].size() > 1 &&
-                        detail::next(interval_range[2].first)->instr_idx_offset == instr_offset)
-                    {
+                        detail::next(interval_range[2].first)->instr_idx_offset == instr_offset) {
                         JITASM_TRACE("---- XMM/YMM register ----\n");
                         const Lifetime::Interval &first_interval = *interval_range[2].first;
                         GenerateInterIntervalInstr(first_interval, *++interval_range[2].first,
@@ -16647,54 +16243,39 @@ namespace jitasm {
                     const size_t cur_instr_index = f.instrs_.size();
                     const InstrID instr_id = org_instrs[org_instr_index].GetID();
                     if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG ||
-                        instr_id == I_COMPILER_DECLARE_RESULT_REG)
-                    {
+                        instr_id == I_COMPILER_DECLARE_RESULT_REG) {
                         // No actual machine code
-                    }
-                    else if (instr_id == I_COMPILER_PROLOG)
-                    {
+                    } else if (instr_id == I_COMPILER_PROLOG) {
                         // Generate function prolog
                         GenerateProlog(f, preserved_reg, preserved_reg_stack);
-                    }
-                    else if (instr_id == I_COMPILER_EPILOG)
-                    {
+                    } else if (instr_id == I_COMPILER_EPILOG) {
                         // Generate function epilog
                         GenerateEpilog(f, preserved_reg, preserved_reg_stack);
-                    }
-                    else
-                    {
+                    } else {
                         // Copy instruction
                         f.instrs_.push_back(org_instrs[org_instr_index]);
                         Instr &instr = f.instrs_.back();
 
                         // Replace symbolic register to physical register
-                        for (size_t i = 0; i < Instr::MAX_OPERAND_COUNT; ++i)
-                        {
+                        for (size_t i = 0; i < Instr::MAX_OPERAND_COUNT; ++i) {
                             detail::Opd &opd = instr.GetOpd(i);
-                            if (opd.IsReg())
-                            {
-                                if (opd.reg_.IsSymbolic())
-                                {
+                            if (opd.IsReg()) {
+                                if (opd.reg_.IsSymbolic()) {
                                     opd.reg_.type = static_cast<RegType>(opd.reg_.type - R_TYPE_SYMBOLIC_GP);
                                     opd.reg_.id = interval_range[GetRegFamily(opd.reg_.GetType())]
                                                       .first->assignment_table[opd.reg_.id];
                                 }
-                            }
-                            else if (opd.IsMem())
-                            {
-                                if (opd.base_.IsSymbolic())
-                                {
+                            } else if (opd.IsMem()) {
+                                if (opd.base_.IsSymbolic()) {
                                     opd.base_.type = R_TYPE_GP;
                                     opd.base_.id = interval_range[0].first->assignment_table[opd.base_.id];
                                 }
-                                if (opd.index_.IsSymbolic())
-                                {
+                                if (opd.index_.IsSymbolic()) {
                                     if (opd.index_.type == R_TYPE_SYMBOLIC_GP)
                                         opd.index_.type = R_TYPE_GP;
                                     else if (opd.index_.type == R_TYPE_SYMBOLIC_XMM)
                                         opd.index_.type = R_TYPE_XMM;
-                                    else
-                                    {
+                                    else {
                                         JITASM_ASSERT(opd.index_.type == R_TYPE_SYMBOLIC_YMM);
                                         opd.index_.type = R_TYPE_YMM;
                                     }
@@ -16706,8 +16287,7 @@ namespace jitasm {
                     }
 
                     // Adjust label position
-                    while (cur_label != orderd_labels.end() && cur_label->instr_idx == org_instr_index)
-                    {
+                    while (cur_label != orderd_labels.end() && cur_label->instr_idx == org_instr_index) {
                         f.labels_[cur_label->id].instr_number += cur_instr_index - org_instr_index;
                         ++cur_label;
                     }
@@ -16715,14 +16295,12 @@ namespace jitasm {
 
                 // Generate inter-block instructions
                 JITASM_ASSERT(!(!block->successor[0] && block->successor[1]));
-                if (block->successor[0] && !block->successor[1])
-                {
+                if (block->successor[0] && !block->successor[1]) {
                     // 1 successor
 
                     // Remove last instruction if it is jump
                     Instr jump_instr(I_NOP, 0, 0);
-                    if (Frontend::IsJump(f.instrs_.back().GetID()))
-                    {
+                    if (Frontend::IsJump(f.instrs_.back().GetID())) {
                         jump_instr = f.instrs_.back();
                         f.instrs_.pop_back();
                     }
@@ -16731,13 +16309,10 @@ namespace jitasm {
                     GenerateInterBlockInstr(block, block->successor[0], f, var_manager);
 
                     // Add last instruction if it is jump
-                    if (Frontend::IsJump(jump_instr.GetID()))
-                    {
+                    if (Frontend::IsJump(jump_instr.GetID())) {
                         f.instrs_.push_back(jump_instr);
                     }
-                }
-                else if (block->successor[0] && block->successor[1])
-                {
+                } else if (block->successor[0] && block->successor[1]) {
                     // 2 successors
                     JITASM_ASSERT(Frontend::IsJump(f.instrs_.back().GetID()) &&
                                   f.instrs_.back().GetOpd(0).IsImm()); // the last instruction must be jump
@@ -16755,8 +16330,7 @@ namespace jitasm {
                     JITASM_TRACE("==== Edge to Block%d\n", block->successor[0]->depth);
                     GenerateInterBlockInstr(block, block->successor[0], f, var_manager);
 
-                    if (!temp_instrs.empty())
-                    {
+                    if (!temp_instrs.empty()) {
                         // Insert inter-block instructions between current block and successor 1 and change jump flow
 
                         // Jump to successor0
@@ -16804,8 +16378,7 @@ namespace jitasm {
 
             uint32 used_physical_reg[3];
             bool need_reg_alloc[3];
-            if (!PrepareCompile(f.instrs_, used_physical_reg, need_reg_alloc))
-            {
+            if (!PrepareCompile(f.instrs_, used_physical_reg, need_reg_alloc)) {
                 // No compile process
                 return;
             }
@@ -16813,8 +16386,7 @@ namespace jitasm {
             VariableManager var_manager;
             ControlFlowGraph cfg;
 
-            if (need_reg_alloc[0] || need_reg_alloc[1] || need_reg_alloc[2])
-            {
+            if (need_reg_alloc[0] || need_reg_alloc[1] || need_reg_alloc[2]) {
                 // Register allocation process
 
                 // Build CFG including loop detection
@@ -16824,17 +16396,13 @@ namespace jitasm {
                 LiveVariableAnalysis(f, cfg, var_manager);
 
                 // Linear scan register allocation
-                for (size_t reg_family = 0; reg_family < 3; ++reg_family)
-                {
-                    if (need_reg_alloc[reg_family])
-                    {
+                for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
+                    if (need_reg_alloc[reg_family]) {
                         used_physical_reg[reg_family] = LinearScanRegisterAlloc(
                             cfg, reg_family, available_reg[reg_family], var_manager.GetAttributes(reg_family));
                     }
                 }
-            }
-            else
-            {
+            } else {
                 // No register allocation
                 // Build dummy CFG
                 cfg.BuildDummy(f);
@@ -16851,8 +16419,7 @@ namespace jitasm {
 
             // Reserve stack for saving xmm register
             Addr preserved_reg_stack(RegID::Invalid(), 0);
-            if (preserved_reg[2] != 0)
-            {
+            if (preserved_reg[2] != 0) {
                 // For saving xmm registers
                 preserved_reg_stack = f.stack_manager_.Alloc(detail::Count1Bits(preserved_reg[2]) * 16, 16);
             }
@@ -16862,8 +16429,7 @@ namespace jitasm {
 
             // ebx(rbx) does not include in used_physical_reg
             // because ebx(rbx) is going to be modified in prolog.
-            if (f.stack_manager_.GetSize() > 0)
-            {
+            if (f.stack_manager_.GetSize() > 0) {
                 preserved_reg[0] |= (1 << EBX);
             }
 
@@ -17392,37 +16958,28 @@ namespace jitasm {
                     // for Win64
 #else
                 // for x64 Linux
-                if (NextArgTraits::flag & ARG_IN_REG)
-                {
+                if (NextArgTraits::flag & ARG_IN_REG) {
                     const PhysicalRegID gp_regs[] = {RDI, RSI, RDX, RCX, R8, R9};
                     next_arg_info.reg_id = next_arg_info.index_gp < 6 ? gp_regs[next_arg_info.index_gp] : INVALID;
                 }
-                if (CurArgTraits::flag & ARG_IN_REG)
-                {
-                    if (reg_id == INVALID)
-                    {
+                if (CurArgTraits::flag & ARG_IN_REG) {
+                    if (reg_id == INVALID) {
                         // This register argument is passed on stack
                         next_arg_info.addr = next_arg_info.addr + 8;
                     }
                 }
 
                 // __m128/__m128d/__m128i
-                if (NextArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT))
-                {
-                    if (next_arg_info.index_xmm < 8)
-                    {
+                if (NextArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT)) {
+                    if (next_arg_info.index_xmm < 8) {
                         next_arg_info.reg_id =
                             static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_xmm);
-                    }
-                    else
-                    {
+                    } else {
                         next_arg_info.reg_id = INVALID;
                     }
                 }
-                if (CurArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT))
-                {
-                    if (reg_id == INVALID)
-                    {
+                if (CurArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT)) {
+                    if (reg_id == INVALID) {
                         // This __m128/__m128d/__m128i argument is passed on stack
                         next_arg_info.addr = next_arg_info.addr + 16;
                     }
@@ -17432,44 +16989,32 @@ namespace jitasm {
                 // for x86 Win/Linux
 
                 // __m64
-                if (NextArgTraits::flag & ARG_IN_MMX)
-                {
-                    if (next_arg_info.index_mmx < 3)
-                    {
+                if (NextArgTraits::flag & ARG_IN_MMX) {
+                    if (next_arg_info.index_mmx < 3) {
                         next_arg_info.reg_id =
                             static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_mmx);
-                    }
-                    else
-                    {
+                    } else {
                         next_arg_info.reg_id = INVALID;
                     }
                 }
-                if (CurArgTraits::flag & ARG_IN_MMX)
-                {
-                    if (reg_id == INVALID)
-                    {
+                if (CurArgTraits::flag & ARG_IN_MMX) {
+                    if (reg_id == INVALID) {
                         // This __m64 argument is passed on stack
                         next_arg_info.addr = next_arg_info.addr + 8;
                     }
                 }
 
                 // __m128/__m128d/__m128i
-                if (NextArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT))
-                {
-                    if (next_arg_info.index_xmm < 3)
-                    {
+                if (NextArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT)) {
+                    if (next_arg_info.index_xmm < 3) {
                         next_arg_info.reg_id =
                             static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_xmm);
-                    }
-                    else
-                    {
+                    } else {
                         next_arg_info.reg_id = INVALID;
                     }
                 }
-                if (CurArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT))
-                {
-                    if (reg_id == INVALID)
-                    {
+                if (CurArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT)) {
+                    if (reg_id == INVALID) {
                         // This __m128/__m128d/__m128i argument is passed on stack
                         next_arg_info.addr = next_arg_info.addr + 16;
                     }
@@ -17502,13 +17047,10 @@ namespace jitasm {
         struct ResultDest {
             Reg ptr;
             ResultDest(Frontend &f, const ArgInfo &dest) {
-                if (dest.reg_id != INVALID)
-                {
+                if (dest.reg_id != INVALID) {
                     // result pointer on register
                     f.DeclareRegArg(ptr, Reg(dest.reg_id), !dest.addr.reg_.IsInvalid() ? f.ptr[dest.addr] : Opd());
-                }
-                else if (!dest.addr.reg_.IsInvalid())
-                {
+                } else if (!dest.addr.reg_.IsInvalid()) {
                     // result pointer on stack
                     f.DeclareStackArg(ptr, f.ptr[dest.addr]);
                 }
@@ -17527,8 +17069,7 @@ namespace jitasm {
             ResultT(const MemT<OpdR> &val) : val_(val) {
             }
             void StoreResult(Frontend &f, const ResultDest &dst) {
-                if (val_.IsMem())
-                {
+                if (val_.IsMem()) {
                     f.lea(f.zsi, static_cast<MemT<OpdR> &>(val_));
                     f.mov(f.zcx, Size);
                     f.rep_movsb(dst.ptr, f.zsi, f.zcx);
@@ -17558,23 +17099,15 @@ namespace jitasm {
             ResultT(uint8 imm) : val_(Imm8(imm)) {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
-                if (val_.IsGpReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsGpReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != AL)
-                    {
+                    } else if (val_.GetReg().id != AL) {
                         f.mov(f.al, static_cast<Reg8 &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.mov(f.al, static_cast<Mem8 &>(val_));
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     f.mov(f.al, static_cast<Imm8 &>(val_));
                 }
             }
@@ -17593,23 +17126,15 @@ namespace jitasm {
             ResultT(uint16 imm) : val_(Imm16(imm)) {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
-                if (val_.IsGpReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsGpReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != AX)
-                    {
+                    } else if (val_.GetReg().id != AX) {
                         f.mov(f.ax, static_cast<Reg16 &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.mov(f.ax, static_cast<Mem16 &>(val_));
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     f.mov(f.ax, static_cast<Imm16 &>(val_));
                 }
             }
@@ -17628,23 +17153,15 @@ namespace jitasm {
             ResultT(uint32 imm) : val_(Imm32(imm)) {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
-                if (val_.IsGpReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsGpReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != EAX)
-                    {
+                    } else if (val_.GetReg().id != EAX) {
                         f.mov(f.eax, static_cast<Reg32 &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.mov(f.eax, static_cast<Mem32 &>(val_));
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     f.mov(f.eax, static_cast<Imm32 &>(val_));
                 }
             }
@@ -17664,32 +17181,21 @@ namespace jitasm {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #ifdef JITASM64
-                if (val_.IsGpReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsGpReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != RAX)
-                    {
+                    } else if (val_.GetReg().id != RAX) {
                         f.mov(f.rax, static_cast<Reg64 &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.mov(f.rax, static_cast<Mem64 &>(val_));
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     f.mov(f.rax, static_cast<Imm64 &>(val_));
-                }
-                else if (val_.IsMmxReg())
-                {
+                } else if (val_.IsMmxReg()) {
                     f.movq(f.rax, static_cast<MmxReg &>(val_));
                 }
 #else
-                if (val_.IsMem())
-                {
+                if (val_.IsMem()) {
                     // from memory
                     Mem32 lo(val_.GetAddressBaseSize(), val_.GetBase(), val_.GetIndex(), val_.GetScale(),
                              val_.GetDisp());
@@ -17697,9 +17203,7 @@ namespace jitasm {
                              val_.GetDisp() + 4);
                     f.mov(f.eax, lo);
                     f.mov(f.edx, hi);
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     // from immediate
                     f.mov(f.eax, static_cast<sint32>(val_.GetImm()));
                     f.mov(f.edx, static_cast<sint32>(val_.GetImm() >> 32));
@@ -17726,57 +17230,39 @@ namespace jitasm {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #ifdef JITASM64
-                if (val_.IsFpuReg())
-                {
+                if (val_.IsFpuReg()) {
                     // from FPU register
                     f.fstp(f.real4_ptr[f.rsp - 4]);
                     f.movss(f.xmm0, f.dword_ptr[f.rsp - 4]);
-                }
-                else if (val_.IsMem() && val_.GetSize() == O_SIZE_32)
-                {
+                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_32) {
                     // from memory
                     f.movss(f.xmm0, static_cast<Mem32 &>(val_));
-                }
-                else if (val_.IsXmmReg())
-                {
+                } else if (val_.IsXmmReg()) {
                     // from XMM register
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != XMM0)
-                    {
+                    } else if (val_.GetReg().id != XMM0) {
                         f.movss(f.xmm0, static_cast<XmmReg &>(val_));
                     }
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     // from float immediate
                     f.mov(f.dword_ptr[f.rsp - 4], static_cast<Imm32 &>(val_));
                     f.movss(f.xmm0, f.dword_ptr[f.rsp - 4]);
                 }
 #else
-                if (val_.IsFpuReg())
-                {
+                if (val_.IsFpuReg()) {
                     // from FPU register
-                    if (val_.GetReg().id != ST0)
-                    {
+                    if (val_.GetReg().id != ST0) {
                         f.fld(static_cast<FpuReg &>(val_));
                     }
-                }
-                else if (val_.IsMem() && val_.GetSize() == O_SIZE_32)
-                {
+                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_32) {
                     // from memory
                     f.fld(static_cast<Mem32 &>(val_));
-                }
-                else if (val_.IsXmmReg())
-                {
+                } else if (val_.IsXmmReg()) {
                     // from XMM register
                     f.movss(f.dword_ptr[f.esp - 4], static_cast<XmmReg &>(val_));
                     f.fld(f.real4_ptr[f.esp - 4]);
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     // from float immediate
                     f.mov(f.dword_ptr[f.esp - 4], static_cast<Imm32 &>(val_));
                     f.fld(f.real4_ptr[f.esp - 4]);
@@ -17804,58 +17290,40 @@ namespace jitasm {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #ifdef JITASM64
-                if (val_.IsFpuReg())
-                {
+                if (val_.IsFpuReg()) {
                     // from FPU register
                     f.fstp(f.real8_ptr[f.rsp - 8]);
                     f.movsd(f.xmm0, f.qword_ptr[f.rsp - 8]);
-                }
-                else if (val_.IsMem() && val_.GetSize() == O_SIZE_64)
-                {
+                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_64) {
                     // from memory
                     f.movsd(f.xmm0, static_cast<Mem64 &>(val_));
-                }
-                else if (val_.IsXmmReg())
-                {
+                } else if (val_.IsXmmReg()) {
                     // from XMM register
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != XMM0)
-                    {
+                    } else if (val_.GetReg().id != XMM0) {
                         f.movsd(f.xmm0, static_cast<XmmReg &>(val_));
                     }
-                }
-                else if (val_.IsImm())
-                {
+                } else if (val_.IsImm()) {
                     // from float immediate
                     f.mov(f.dword_ptr[f.rsp - 8], *reinterpret_cast<uint32 *>(&imm_));
                     f.mov(f.dword_ptr[f.rsp - 4], *(reinterpret_cast<uint32 *>(&imm_) + 1));
                     f.movsd(f.xmm0, f.qword_ptr[f.rsp - 8]);
                 }
 #else
-                if (val_.IsFpuReg())
-                {
+                if (val_.IsFpuReg()) {
                     // from FPU register
-                    if (val_.GetReg().id != ST0)
-                    {
+                    if (val_.GetReg().id != ST0) {
                         f.fld(static_cast<FpuReg &>(val_));
                     }
-                }
-                else if (val_.IsMem() && val_.GetSize() == O_SIZE_64)
-                {
+                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_64) {
                     // from memory
                     f.fld(static_cast<Mem64 &>(val_));
-                }
-                else if (val_.IsXmmReg())
-                {
+                } else if (val_.IsXmmReg()) {
                     // from XMM register
                     f.movsd(f.qword_ptr[f.esp - 8], static_cast<XmmReg &>(val_));
                     f.fld(f.real8_ptr[f.esp - 8]);
-                }
-                else if (val_.IsImm())
-                { // val_ is immediate 0
+                } else if (val_.IsImm()) { // val_ is immediate 0
                     // from double immediate
                     f.mov(f.dword_ptr[f.esp - 8], *reinterpret_cast<uint32 *>(&imm_));
                     f.mov(f.dword_ptr[f.esp - 4], *(reinterpret_cast<uint32 *>(&imm_) + 1));
@@ -17880,28 +17348,19 @@ namespace jitasm {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #if defined(JITASM64) && !defined(JITASM_WIN)
-                if (val_.IsMmxReg())
-                {
+                if (val_.IsMmxReg()) {
                     f.movq2dq(f.xmm0, static_cast<const MmxReg &>(val_));
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.movq(f.xmm0, static_cast<const Mem64 &>(val_));
                 }
 #else
-                if (val_.IsMmxReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsMmxReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != MM0)
-                    {
+                    } else if (val_.GetReg().id != MM0) {
                         f.movq(f.mm0, static_cast<const MmxReg &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.movq(f.mm0, static_cast<const Mem64 &>(val_));
                 }
 #endif
@@ -17923,19 +17382,13 @@ namespace jitasm {
             ResultT(const Mem128 &mem) : val_(mem) {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
-                if (val_.IsXmmReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsXmmReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != XMM0)
-                    {
+                    } else if (val_.GetReg().id != XMM0) {
                         f.movaps(f.xmm0, static_cast<const XmmReg &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.movaps(f.xmm0, static_cast<const Mem128 &>(val_));
                 }
             }
@@ -17956,19 +17409,13 @@ namespace jitasm {
             ResultT(const Mem128 &mem) : val_(mem) {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
-                if (val_.IsXmmReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsXmmReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != XMM0)
-                    {
+                    } else if (val_.GetReg().id != XMM0) {
                         f.movapd(f.xmm0, static_cast<const XmmReg &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.movapd(f.xmm0, static_cast<const Mem128 &>(val_));
                 }
             }
@@ -17987,19 +17434,13 @@ namespace jitasm {
             ResultT(const Mem128 &mem) : val_(mem) {
             }
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
-                if (val_.IsXmmReg())
-                {
-                    if (val_.GetReg().IsSymbolic())
-                    {
+                if (val_.IsXmmReg()) {
+                    if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    }
-                    else if (val_.GetReg().id != XMM0)
-                    {
+                    } else if (val_.GetReg().id != XMM0) {
                         f.movdqa(f.xmm0, static_cast<const XmmReg &>(val_));
                     }
-                }
-                else if (val_.IsMem())
-                {
+                } else if (val_.IsMem()) {
                     f.movdqa(f.xmm0, static_cast<const Mem128 &>(val_));
                 }
             }
@@ -18018,8 +17459,7 @@ namespace jitasm {
 #endif
 
             template <class R> ArgInfo ResultInfo() {
-                if (ResultT<R>::ArgR)
-                {
+                if (ResultT<R>::ArgR) {
 #ifdef JITASM64
                     return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, RBP), SIZE_OF_GP_REG * 2), RCX,
                                    ARG_IN_REG | ARG_TYPE_PTR);
@@ -18027,9 +17467,7 @@ namespace jitasm {
                     return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * 2), INVALID,
                                    ARG_IN_STACK | ARG_TYPE_PTR);
 #endif
-                }
-                else
-                {
+                } else {
                     return ArgInfo(Addr(RegID::Invalid(), 0), INVALID, 0);
                 }
             }
@@ -18087,12 +17525,9 @@ namespace jitasm {
                 Addr addr_;
 #ifdef JITASM64
                 Arg(Frontend &f, const ArgInfo &arg_info) : addr_(Reg()) {
-                    if (arg_info.reg_id != INVALID)
-                    {
+                    if (arg_info.reg_id != INVALID) {
                         f.DeclareRegArg(Reg(addr_.reg_), Reg(arg_info.reg_id), f.ptr[arg_info.addr]);
-                    }
-                    else
-                    {
+                    } else {
                         f.DeclareStackArg(Reg(addr_.reg_), f.ptr[arg_info.addr]);
                     }
                 }
@@ -18115,8 +17550,7 @@ namespace jitasm {
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         f_->movzx(Reg64(arg_info_.reg_id), Reg8(arg_info_.reg_id));
                         f_->mov(f_->qword_ptr[arg_info_.addr], Reg64(arg_info_.reg_id));
                     }
@@ -18125,12 +17559,9 @@ namespace jitasm {
                 }
                 operator Reg8() {
                     Reg8 reg;
-                    if (arg_info_.reg_id == INVALID)
-                    {
+                    if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->byte_ptr[arg_info_.addr]); // argument on stack
-                    }
-                    else
-                    {
+                    } else {
                         f_->DeclareRegArg(reg, Reg8(arg_info_.reg_id),
                                           f_->byte_ptr[arg_info_.addr]); // argument on register
                     }
@@ -18148,8 +17579,7 @@ namespace jitasm {
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         f_->movzx(Reg64(arg_info_.reg_id), Reg16(arg_info_.reg_id));
                         f_->mov(f_->qword_ptr[arg_info_.addr], Reg64(arg_info_.reg_id));
                     }
@@ -18158,12 +17588,9 @@ namespace jitasm {
                 }
                 operator Reg16() {
                     Reg16 reg;
-                    if (arg_info_.reg_id == INVALID)
-                    {
+                    if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->word_ptr[arg_info_.addr]); // argument on stack
-                    }
-                    else
-                    {
+                    } else {
                         f_->DeclareRegArg(reg, Reg16(arg_info_.reg_id),
                                           f_->word_ptr[arg_info_.addr]); // argument on register
                     }
@@ -18181,8 +17608,7 @@ namespace jitasm {
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         f_->mov(f_->qword_ptr[arg_info_.addr], Reg64(arg_info_.reg_id));
                     }
 #endif
@@ -18190,12 +17616,9 @@ namespace jitasm {
                 }
                 operator Reg32() {
                     Reg32 reg;
-                    if (arg_info_.reg_id == INVALID)
-                    {
+                    if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->dword_ptr[arg_info_.addr]); // argument on stack
-                    }
-                    else
-                    {
+                    } else {
                         f_->DeclareRegArg(reg, Reg32(arg_info_.reg_id),
                                           f_->dword_ptr[arg_info_.addr]); // argument on register
                     }
@@ -18213,20 +17636,16 @@ namespace jitasm {
                 }
                 operator Addr() {
                     // Dump to shadow space when x64 argument on register
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         f_->mov(f_->qword_ptr[arg_info_.addr], Reg64(arg_info_.reg_id));
                     }
                     return arg_info_.addr;
                 }
                 operator Reg64() {
                     Reg64 reg;
-                    if (arg_info_.reg_id == INVALID)
-                    {
+                    if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]); // argument on stack
-                    }
-                    else
-                    {
+                    } else {
                         f_->DeclareRegArg(reg, Reg64(arg_info_.reg_id),
                                           f_->qword_ptr[arg_info_.addr]); // argument on register
                     }
@@ -18245,8 +17664,7 @@ namespace jitasm {
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         f_->movss(f_->dword_ptr[arg_info_.addr], XmmReg(arg_info_.reg_id));
                     }
 #endif
@@ -18254,12 +17672,9 @@ namespace jitasm {
                 }
                 operator XmmReg() {
                     XmmReg reg;
-                    if (arg_info_.reg_id == INVALID)
-                    {
+                    if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->dword_ptr[arg_info_.addr]); // argument on stack
-                    }
-                    else
-                    {
+                    } else {
                         f_->DeclareRegArg(reg, XmmReg(arg_info_.reg_id)); // argument on register
                     }
                     return reg;
@@ -18276,8 +17691,7 @@ namespace jitasm {
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         f_->movsd(f_->qword_ptr[arg_info_.addr], XmmReg(arg_info_.reg_id));
                     }
 #endif
@@ -18285,12 +17699,9 @@ namespace jitasm {
                 }
                 operator XmmReg() {
                     XmmReg reg;
-                    if (arg_info_.reg_id == INVALID)
-                    {
+                    if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]); // argument on stack
-                    }
-                    else
-                    {
+                    } else {
                         f_->DeclareRegArg(reg, XmmReg(arg_info_.reg_id)); // argument on register
                     }
                     return reg;
@@ -18306,11 +17717,9 @@ namespace jitasm {
                 Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
                 }
                 operator Addr() {
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         // Passed by mmx register
-                        if (arg_info_.flag & ARG_IN_REG)
-                        {
+                        if (arg_info_.flag & ARG_IN_REG) {
                             // Win64
 #ifdef JITASM64
                             // Dump to shadow space when Win64 argument on register
@@ -18319,59 +17728,45 @@ namespace jitasm {
                             f_->mov(f_->qword_ptr[arg_info_.addr], arg);
 #endif
                             return arg_info_.addr;
-                        }
-                        else if (arg_info_.flag & ARG_IN_XMM_INT)
-                        {
+                        } else if (arg_info_.flag & ARG_IN_XMM_INT) {
                             // x64 Linux
                             XmmReg arg;
                             f_->DeclareRegArg(arg, XmmReg(arg_info_.reg_id));
                             Addr addr = f_->stack_manager_.Alloc(8, 8);
                             f_->movq(f_->qword_ptr[addr], arg);
                             return addr;
-                        }
-                        else
-                        {
+                        } else {
                             MmxReg arg;
                             f_->DeclareRegArg(arg, MmxReg(arg_info_.reg_id));
                             Addr addr = f_->stack_manager_.Alloc(8, 8);
                             f_->movq(f_->qword_ptr[addr], arg);
                             return addr;
                         }
-                    }
-                    else
-                    {
+                    } else {
                         // Passed by stack
                         return arg_info_.addr;
                     }
                 }
                 operator MmxReg() {
                     MmxReg reg;
-                    if (arg_info_.reg_id != INVALID)
-                    {
+                    if (arg_info_.reg_id != INVALID) {
                         // Passed by register
-                        if (arg_info_.flag & ARG_IN_REG)
-                        {
+                        if (arg_info_.flag & ARG_IN_REG) {
                             // Win64
 #ifdef JITASM64
                             Reg64 arg;
                             f_->DeclareRegArg(arg, Reg64(arg_info_.reg_id));
                             f_->movq(reg, arg);
 #endif
-                        }
-                        else if (arg_info_.flag & ARG_IN_XMM_INT)
-                        {
+                        } else if (arg_info_.flag & ARG_IN_XMM_INT) {
                             // x64 Linux
                             XmmReg arg;
                             f_->DeclareRegArg(arg, XmmReg(arg_info_.reg_id));
                             f_->movdq2q(reg, arg);
-                        }
-                        else
-                        {
+                        } else {
                             f_->DeclareRegArg(reg, MmxReg(arg_info_.reg_id));
                         }
-                    }
-                    else
-                    {
+                    } else {
                         // Passed by stack
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]);
                     }
@@ -18389,55 +17784,39 @@ namespace jitasm {
                 Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
                 }
                 operator Addr() {
-                    if (arg_info_.flag & ARG_TYPE_PTR)
-                    {
+                    if (arg_info_.flag & ARG_TYPE_PTR) {
                         Reg ptr;
-                        if (arg_info_.reg_id != INVALID)
-                        {
+                        if (arg_info_.reg_id != INVALID) {
                             f_->DeclareRegArg(ptr, Reg(arg_info_.reg_id)); // argument on register
-                        }
-                        else
-                        {
+                        } else {
                             f_->mov(ptr, f_->ptr[arg_info_.addr]);
                         }
                         return ptr;
-                    }
-                    else if (arg_info_.reg_id != INVALID)
-                    {
+                    } else if (arg_info_.reg_id != INVALID) {
                         Addr addr = f_->stack_manager_.Alloc(16, 16);
                         f_->movdqa(f_->xmmword_ptr[addr], XmmReg(arg_info_.reg_id));
                         return addr;
-                    }
-                    else
-                    {
+                    } else {
                         return arg_info_.addr;
                     }
                 }
                 operator XmmReg() {
                     XmmReg reg;
-                    if (arg_info_.flag & ARG_TYPE_PTR)
-                    {
+                    if (arg_info_.flag & ARG_TYPE_PTR) {
                         // Passed by pointer
-                        if (arg_info_.reg_id != INVALID)
-                        {
+                        if (arg_info_.reg_id != INVALID) {
                             // argument pointer on register
                             f_->movdqa(reg, f_->xmmword_ptr[Reg(arg_info_.reg_id)]);
-                        }
-                        else
-                        {
+                        } else {
                             // argument pointer on stack
                             Reg ptr;
                             f_->mov(ptr, f_->ptr[arg_info_.addr]);
                             f_->movdqa(reg, f_->xmmword_ptr[ptr]);
                         }
-                    }
-                    else if (arg_info_.reg_id != INVALID)
-                    {
+                    } else if (arg_info_.reg_id != INVALID) {
                         // Passed by xmm register
                         f_->DeclareRegArg(reg, XmmReg(arg_info_.reg_id));
-                    }
-                    else
-                    {
+                    } else {
                         // Passed by stack
                         f_->DeclareStackArg(reg, f_->xmmword_ptr[arg_info_.addr]);
                     }

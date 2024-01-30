@@ -26,22 +26,19 @@ namespace Framework::External::Sentry {
 
         // Setup the breakpad path
         cppfs::FileHandle breakpadFile = cppfs::fs::open(path + "/" + handlerName);
-        if (!breakpadFile.exists())
-        {
+        if (!breakpadFile.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to locate the crashpad handler");
             return SentryError::SENTRY_BREAKPAD_NOT_FOUND;
         }
 
         cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
         auto result = cacheDirectory.createDirectory();
-        if (!result)
-        {
+        if (!result) {
             return SentryError::SENTRY_CACHE_DIRECTORY_CREATION_FAILED;
         }
 
         sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
-        if (sentry_init(opts) > 0)
-        {
+        if (sentry_init(opts) > 0) {
             return SentryError::SENTRY_INIT_FAILED;
         }
         _valid = true;
@@ -49,8 +46,7 @@ namespace Framework::External::Sentry {
     }
 
     SentryError Wrapper::Shutdown() const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_close();
@@ -58,8 +54,7 @@ namespace Framework::External::Sentry {
     }
 
     SentryError Wrapper::SetGameInformation(const GameInformation &infos) const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_value_t game = sentry_value_new_object();
@@ -70,8 +65,7 @@ namespace Framework::External::Sentry {
     }
 
     SentryError Wrapper::SetScreenInformation(const ScreenInformation &infos) const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_value_t screen = sentry_value_new_object();
@@ -83,8 +77,7 @@ namespace Framework::External::Sentry {
     }
 
     SentryError Wrapper::SetSystemInformation(const SystemInformation &infos) const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_value_t system = sentry_value_new_object();
@@ -92,8 +85,7 @@ namespace Framework::External::Sentry {
         sentry_value_set_by_key(system, "cpuProcessors", sentry_value_new_int32(infos._cpuProcessorsCount));
 
         // OS
-        if (!infos._osVersion.empty())
-        {
+        if (!infos._osVersion.empty()) {
             sentry_value_set_by_key(system, "osVersion", sentry_value_new_string(infos._osVersion.c_str()));
             sentry_value_set_by_key(system, "osMajorVersion", sentry_value_new_int32(infos._osMajorVersion));
             sentry_value_set_by_key(system, "osMinorVersion", sentry_value_new_int32(infos._osMinorVersion));
@@ -105,21 +97,17 @@ namespace Framework::External::Sentry {
     }
 
     SentryError Wrapper::SetUserInformation(const UserInformation &infos) const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_value_t user = sentry_value_new_object();
-        if (!infos._userId.empty())
-        {
+        if (!infos._userId.empty()) {
             sentry_value_set_by_key(user, "id", sentry_value_new_string(infos._userId.c_str()));
         }
-        if (!infos._fullName.empty())
-        {
+        if (!infos._fullName.empty()) {
             sentry_value_set_by_key(user, "fullName", sentry_value_new_string(infos._fullName.c_str()));
         }
-        if (!infos._name.empty())
-        {
+        if (!infos._name.empty()) {
             sentry_value_set_by_key(user, "name", sentry_value_new_string(infos._name.c_str()));
         }
         sentry_set_user(user);
@@ -127,8 +115,7 @@ namespace Framework::External::Sentry {
     }
 
     SentryError Wrapper::CaptureEventException(const std::string &type, const std::string &message) const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_value_t exc = sentry_value_new_object();
@@ -142,8 +129,7 @@ namespace Framework::External::Sentry {
 
     SentryError Wrapper::CaptureEventMessage(int32_t level, const std::string &logger,
                                              const std::string &payload) const {
-        if (!_valid)
-        {
+        if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
         sentry_capture_event(

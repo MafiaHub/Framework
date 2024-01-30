@@ -17,8 +17,7 @@ namespace Framework::Graphics {
         _context = context;
         // #1 get device from swapchain (maybe different device)
         ID3D12Device *pD3DDevice;
-        if (FAILED(swapChain->GetDevice(__uuidof(ID3D12Device), (void **)&pD3DDevice)))
-        {
+        if (FAILED(swapChain->GetDevice(__uuidof(ID3D12Device), (void **)&pD3DDevice))) {
             return false;
         }
 
@@ -42,8 +41,7 @@ namespace Framework::Graphics {
             desc.NumDescriptors = _frameBufferCount;
             desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
-            if (pD3DDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&_srvHeap)) != S_OK)
-            {
+            if (pD3DDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&_srvHeap)) != S_OK) {
                 return false;
             }
         }
@@ -56,16 +54,14 @@ namespace Framework::Graphics {
             desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
             desc.NodeMask = 1;
 
-            if (pD3DDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&_rtvHeap)) != S_OK)
-            {
+            if (pD3DDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&_rtvHeap)) != S_OK) {
                 return false;
             }
 
             const auto rtvDescriptorSize = pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
             D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
 
-            for (UINT i = 0; i < _frameBufferCount; i++)
-            {
+            for (UINT i = 0; i < _frameBufferCount; i++) {
                 _frameContext[i]._mainRenderTargetDescriptor = rtvHandle;
                 swapChain->GetBuffer(i, IID_PPV_ARGS(&_frameContext[i]._mainRenderTargetResource));
                 pD3DDevice->CreateRenderTargetView(_frameContext[i]._mainRenderTargetResource, nullptr, rtvHandle);
@@ -75,24 +71,20 @@ namespace Framework::Graphics {
 
         {
             ID3D12CommandAllocator *allocator{nullptr};
-            if (pD3DDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)) != S_OK)
-            {
+            if (pD3DDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)) != S_OK) {
                 return false;
             }
 
-            for (size_t i = 0; i < _frameBufferCount; i++)
-            {
+            for (size_t i = 0; i < _frameBufferCount; i++) {
                 if (pD3DDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                       IID_PPV_ARGS(&_frameContext[i]._commandAllocator)) != S_OK)
-                {
+                                                       IID_PPV_ARGS(&_frameContext[i]._commandAllocator)) != S_OK) {
                     return false;
                 }
             }
 
             if (pD3DDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, _frameContext[0]._commandAllocator,
                                               NULL, IID_PPV_ARGS(&_commandList)) != S_OK ||
-                _commandList->Close() != S_OK)
-            {
+                _commandList->Close() != S_OK) {
                 return false;
             }
         }
@@ -106,8 +98,7 @@ namespace Framework::Graphics {
         _rtvHeap->Release();
         _srvHeap->Release();
         _commandList->Release();
-        for (auto &frameContext : _frameContext)
-        {
+        for (auto &frameContext : _frameContext) {
             frameContext._commandAllocator->Release();
             frameContext._mainRenderTargetResource->Release();
         }

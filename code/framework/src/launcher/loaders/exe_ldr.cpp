@@ -35,22 +35,19 @@ namespace Framework::Launcher::Loaders {
 
         auto descriptor = GetTargetRVA<IMAGE_IMPORT_DESCRIPTOR>(importDirectory->VirtualAddress);
 
-        while (descriptor->Name)
-        {
+        while (descriptor->Name) {
             const char *name = GetTargetRVA<char>(descriptor->Name);
 
             HMODULE module = ResolveLibrary(name);
 
-            if (!module)
-            {
+            if (!module) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)
                     ->error("Could not load dependent module {}. Error code was {}.", name, GetLastError());
                 exit(0);
             }
 
             // "don't load"
-            if (reinterpret_cast<uintptr_t>(module) == 0xFFFFFFFF)
-            {
+            if (reinterpret_cast<uintptr_t>(module) == 0xFFFFFFFF) {
                 descriptor++;
                 continue;
             }
@@ -59,35 +56,29 @@ namespace Framework::Launcher::Loaders {
             auto addressTableEntry = GetTargetRVA<uintptr_t>(descriptor->FirstThunk);
 
             // GameShield (Payne) uses FirstThunk for original name addresses
-            if (!descriptor->OriginalFirstThunk)
-            {
+            if (!descriptor->OriginalFirstThunk) {
                 nameTableEntry = GetTargetRVA<uintptr_t>(descriptor->FirstThunk);
             }
 
-            while (*nameTableEntry)
-            {
+            while (*nameTableEntry) {
                 FARPROC function;
                 const char *functionName;
 
                 // is this an ordinal-only import?
-                if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry))
-                {
+                if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                     uint64_t ordinalId = IMAGE_ORDINAL(*nameTableEntry);
                     function = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
                     static char _backingFunctionNameBuf[4096];
                     ::snprintf(_backingFunctionNameBuf, 4096, "#%lld", ordinalId);
                     functionName = _backingFunctionNameBuf;
-                }
-                else
-                {
+                } else {
                     auto import = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
 
                     function = (FARPROC)_functionResolver(module, import->Name);
                     functionName = import->Name;
                 }
 
-                if (!function)
-                {
+                if (!function) {
                     char pathName[MAX_PATH];
                     GetModuleFileNameA(module, pathName, sizeof(pathName));
 
@@ -108,26 +99,22 @@ namespace Framework::Launcher::Loaders {
 
     void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
         void *targetAddress = GetTargetRVA<uint8_t>(section->VirtualAddress);
-        if (!targetAddress)
-        {
+        if (!targetAddress) {
             return;
         }
 
         // Check if the target address is within the allowed bounds
-        if ((uintptr_t)targetAddress >= (_loadLimit + hook::baseAddressDifference))
-        {
+        if ((uintptr_t)targetAddress >= (_loadLimit + hook::baseAddressDifference)) {
             return;
         }
 
         // Check if the section has any data to be copied
-        if (section->SizeOfRawData == 0)
-        {
+        if (section->SizeOfRawData == 0) {
             return;
         }
 
         const void *sourceAddress = _origBinary + section->PointerToRawData;
-        if (!sourceAddress)
-        {
+        if (!sourceAddress) {
             return;
         }
 
@@ -139,70 +126,46 @@ namespace Framework::Launcher::Loaders {
 
         // Change the protection attributes of the target address
         DWORD oldProtect;
-        if (!VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect))
-        {
+        if (!VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
             return;
         }
 
         DWORD protection = 0;
-        if (section->Characteristics & IMAGE_SCN_MEM_NOT_CACHED)
-        {
+        if (section->Characteristics & IMAGE_SCN_MEM_NOT_CACHED) {
             protection |= PAGE_NOCACHE;
         }
 
-        if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE)
-        {
-            if (section->Characteristics & IMAGE_SCN_MEM_READ)
-            {
-                if (section->Characteristics & IMAGE_SCN_MEM_WRITE)
-                {
+        if (section->Characteristics & IMAGE_SCN_MEM_EXECUTE) {
+            if (section->Characteristics & IMAGE_SCN_MEM_READ) {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
                     protection |= PAGE_EXECUTE_READWRITE;
-                }
-                else
-                {
+                } else {
                     protection |= PAGE_EXECUTE_READ;
                 }
-            }
-            else
-            {
-                if (section->Characteristics & IMAGE_SCN_MEM_WRITE)
-                {
+            } else {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
                     protection |= PAGE_EXECUTE_WRITECOPY;
-                }
-                else
-                {
+                } else {
                     protection |= PAGE_EXECUTE;
                 }
             }
-        }
-        else
-        {
-            if (section->Characteristics & IMAGE_SCN_MEM_READ)
-            {
-                if (section->Characteristics & IMAGE_SCN_MEM_WRITE)
-                {
+        } else {
+            if (section->Characteristics & IMAGE_SCN_MEM_READ) {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
                     protection |= PAGE_READWRITE;
-                }
-                else
-                {
+                } else {
                     protection |= PAGE_READONLY;
                 }
-            }
-            else
-            {
-                if (section->Characteristics & IMAGE_SCN_MEM_WRITE)
-                {
+            } else {
+                if (section->Characteristics & IMAGE_SCN_MEM_WRITE) {
                     protection |= PAGE_WRITECOPY;
-                }
-                else
-                {
+                } else {
                     protection |= PAGE_NOACCESS;
                 }
             }
         }
 
-        if (protection)
-        {
+        if (protection) {
             _targetProtections.push_back({targetAddress, section->Misc.VirtualSize, protection});
         }
     }
@@ -210,16 +173,14 @@ namespace Framework::Launcher::Loaders {
     void ExecutableLoader::LoadSections(IMAGE_NT_HEADERS *ntHeader) {
         IMAGE_SECTION_HEADER *section = IMAGE_FIRST_SECTION(ntHeader);
 
-        for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++)
-        {
+        for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
             LoadSection(section);
             section++;
         }
     }
 
     void ExecutableLoader::Protect() {
-        for (const auto &protection : _targetProtections)
-        {
+        for (const auto &protection : _targetProtections) {
             DWORD op;
             VirtualProtect(std::get<0>(protection), std::get<1>(protection), std::get<2>(protection), &op);
         }
@@ -233,8 +194,7 @@ namespace Framework::Launcher::Loaders {
         RUNTIME_FUNCTION *functionList = GetTargetRVA<RUNTIME_FUNCTION>(exceptionDirectory->VirtualAddress);
         DWORD entryCount = exceptionDirectory->Size / sizeof(RUNTIME_FUNCTION);
 
-        if (HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll"))
-        {
+        if (HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll")) {
             auto sehMapper =
                 (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(_module, ((char *)_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
@@ -246,8 +206,7 @@ namespace Framework::Launcher::Loaders {
 
         IMAGE_DOS_HEADER *header = (IMAGE_DOS_HEADER *)_origBinary;
 
-        if (header->e_magic != IMAGE_DOS_SIGNATURE)
-        {
+        if (header->e_magic != IMAGE_DOS_SIGNATURE) {
             return;
         }
 
@@ -280,15 +239,13 @@ namespace Framework::Launcher::Loaders {
         LoadExceptionTable(ntHeader);
 #endif
 
-        if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size)
-        {
+        if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size) {
             const IMAGE_TLS_DIRECTORY *targetTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(
                 sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
             const IMAGE_TLS_DIRECTORY *sourceTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(
                 ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 
-            if (sourceTls->AddressOfIndex)
-            {
+            if (sourceTls->AddressOfIndex) {
                 *(DWORD *)(sourceTls->AddressOfIndex) = 0;
             }
 
@@ -298,8 +255,7 @@ namespace Framework::Launcher::Loaders {
             LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
 #endif
 
-            if (sourceTls->StartAddressOfRawData && tlsInit != nullptr)
-            {
+            if (sourceTls->StartAddressOfRawData && tlsInit != nullptr) {
                 DWORD oldProtect;
 
                 VirtualProtect(tlsInit, sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData,
@@ -310,8 +266,7 @@ namespace Framework::Launcher::Loaders {
                        sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
             }
 
-            if (sourceTls->AddressOfIndex)
-            {
+            if (sourceTls->AddressOfIndex) {
                 hook::put(sourceTls->AddressOfIndex, tlsIndex);
             }
         }
@@ -342,23 +297,19 @@ namespace Framework::Launcher::Loaders {
 
         intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - reinterpret_cast<intptr_t>(GetModuleHandle(NULL));
 
-        if (relocOffset == 0)
-        {
+        if (relocOffset == 0) {
             return true;
         }
 
         // loop
-        while (true)
-        {
+        while (true) {
             // are we past the size?
-            if (relocation >= endRelocation)
-            {
+            if (relocation >= endRelocation) {
                 break;
             }
 
             // is this an empty block?
-            if (relocation->SizeOfBlock == 0)
-            {
+            if (relocation->SizeOfBlock == 0) {
                 break;
             }
 
@@ -366,8 +317,7 @@ namespace Framework::Launcher::Loaders {
             size_t numRelocations = (relocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
             uint16_t *relocStart = reinterpret_cast<uint16_t *>(relocation + 1);
 
-            for (size_t i = 0; i < numRelocations; i++)
-            {
+            for (size_t i = 0; i < numRelocations; i++) {
                 uint16_t type = relocStart[i] >> 12;
                 uint32_t rva = (relocStart[i] & 0xFFF) + relocation->VirtualAddress;
 
@@ -375,16 +325,11 @@ namespace Framework::Launcher::Loaders {
                 DWORD oldProtect;
                 VirtualProtect(addr, 4, PAGE_EXECUTE_READWRITE, &oldProtect);
 
-                if (type == IMAGE_REL_BASED_HIGHLOW)
-                {
+                if (type == IMAGE_REL_BASED_HIGHLOW) {
                     *reinterpret_cast<int32_t *>(addr) += relocOffset;
-                }
-                else if (type == IMAGE_REL_BASED_DIR64)
-                {
+                } else if (type == IMAGE_REL_BASED_DIR64) {
                     *reinterpret_cast<int64_t *>(addr) += relocOffset;
-                }
-                else if (type != IMAGE_REL_BASED_ABSOLUTE)
-                {
+                } else if (type != IMAGE_REL_BASED_ABSOLUTE) {
                     return false;
                 }
 

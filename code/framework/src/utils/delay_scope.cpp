@@ -17,8 +17,7 @@ namespace Framework::Utils {
         const auto now = std::chrono::high_resolution_clock::now();
         const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - _created);
 
-        if (milliseconds.count() >= _delay)
-        {
+        if (milliseconds.count() >= _delay) {
             if (_callback != nullptr)
                 _callback();
 
@@ -31,14 +30,10 @@ namespace Framework::Utils {
     void DelayScope::Update() {
         std::vector<DelayScope *> pendingDelays;
 
-        for (auto handler : activeHandlers)
-        {
-            if (handler != nullptr && !handler->FireWhenReady())
-            {
+        for (auto handler : activeHandlers) {
+            if (handler != nullptr && !handler->FireWhenReady()) {
                 pendingDelays.push_back(handler);
-            }
-            else
-            {
+            } else {
                 delete handler;
             }
         }

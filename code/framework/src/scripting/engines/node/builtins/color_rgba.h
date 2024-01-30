@@ -69,8 +69,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
-            if (!rootModule)
-            {
+            if (!rootModule) {
                 return;
             }
 

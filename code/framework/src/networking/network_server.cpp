@@ -17,15 +17,13 @@ namespace Framework::Networking {
                                     const std::string &password) {
         SLNet::SocketDescriptor newSocketSd = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
         SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
-        if (result != SLNet::RAKNET_STARTED)
-        {
+        if (result != SLNet::RAKNET_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
                 ->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
             return SERVER_PEER_FAILED;
         }
 
-        if (!password.empty())
-        {
+        if (!password.empty()) {
             _peer->SetIncomingPassword(password.c_str(), (uint32_t)password.length());
             Logging::GetInstance()
                 ->Get(FRAMEWORK_INNER_NETWORKING)
@@ -37,14 +35,12 @@ namespace Framework::Networking {
     }
 
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
-        switch (packetID)
-        {
+        switch (packetID) {
         case ID_NEW_INCOMING_CONNECTION: {
             Framework::Logging::GetInstance()
                 ->Get(FRAMEWORK_INNER_NETWORKING)
                 ->debug("Incoming connection request {}", packet->guid.ToString());
-            if (_onPlayerConnectCallback)
-            {
+            if (_onPlayerConnectCallback) {
                 _onPlayerConnectCallback(packet);
             }
             return true;
@@ -54,8 +50,7 @@ namespace Framework::Networking {
             Framework::Logging::GetInstance()
                 ->Get(FRAMEWORK_INNER_NETWORKING)
                 ->debug("Disconnection from {}", packet->guid.ToString());
-            if (_onPlayerDisconnectCallback)
-            {
+            if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
             }
             return true;
@@ -64,8 +59,7 @@ namespace Framework::Networking {
             Framework::Logging::GetInstance()
                 ->Get(FRAMEWORK_INNER_NETWORKING)
                 ->debug("Connection lost for {}", packet->guid.ToString());
-            if (_onPlayerDisconnectCallback)
-            {
+            if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::LOST);
             }
             return true;
@@ -77,8 +71,7 @@ namespace Framework::Networking {
     }
 
     ServerError NetworkServer::Shutdown() {
-        if (!_peer)
-        {
+        if (!_peer) {
             return SERVER_PEER_NULL;
         }
 
@@ -96,22 +89,18 @@ namespace Framework::Networking {
                                             PacketReliability reliability) {
         const auto ent = world->WrapEntity(ent_id);
 
-        if (!ent.is_alive())
-        {
+        if (!ent.is_alive()) {
             return false;
         }
 
         const auto streamers = world->FindVisibleStreamers(ent);
 
-        for (const auto &streamer_ent : streamers)
-        {
+        for (const auto &streamer_ent : streamers) {
             const auto streamer = streamer_ent.get<World::Modules::Base::Streamer>();
-            if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g)
-            {
+            if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g) {
                 continue;
             }
-            if (streamer->guid == excludeGUID.g)
-            {
+            if (streamer->guid == excludeGUID.g) {
                 continue;
             }
             _peer->Send(&bs, priority, reliability, 0, SLNet::RakNetGUID(streamer->guid), false);

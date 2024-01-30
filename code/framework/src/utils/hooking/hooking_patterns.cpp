@@ -19,8 +19,7 @@
 
 static void Citizen_PatternSaveHint(uint64_t hash, uintptr_t hint) {
     auto hints = std::ofstream("fw_hints.dat", std::ios::app | std::ios::binary);
-    if (hints.good())
-    {
+    if (hints.good()) {
         hints.write((char *)&hash, sizeof(hash));
         hints.write((char *)&hint, sizeof(hint));
     }
@@ -33,8 +32,7 @@ static void Citizen_PatternSaveHint(uint64_t hash, uintptr_t hint) {
 template <std::uint64_t FnvPrime, std::uint64_t OffsetBasis> struct basic_fnv_1 {
     std::uint64_t operator()(std::string_view text) const {
         std::uint64_t hash = OffsetBasis;
-        for (auto it : text)
-        {
+        for (auto it : text) {
             hash *= FnvPrime;
             hash ^= it;
         }
@@ -54,13 +52,10 @@ namespace hook {
     inline std::multimap<uint64_t, uintptr_t> &GetHints() {
         static std::multimap<uint64_t, uintptr_t> hints;
         static int init = false;
-        if (!init)
-        {
+        if (!init) {
             auto hintsFile = std::ifstream("fw_hints.dat", std::ios::binary);
-            if (hintsFile.good())
-            {
-                while (!hintsFile.eof())
-                {
+            if (hintsFile.good()) {
+                while (!hintsFile.eof()) {
                     uint64_t hash;
                     uintptr_t hint;
                     hintsFile.read((char *)&hash, sizeof(hash));
@@ -85,28 +80,19 @@ namespace hook {
             return uint8_t(ch - '0');
         };
 
-        for (auto ch : pattern)
-        {
-            if (ch == ' ')
-            {
+        for (auto ch : pattern) {
+            if (ch == ' ') {
                 continue;
-            }
-            else if (ch == '?')
-            {
+            } else if (ch == '?') {
                 data.push_back(0);
                 mask.push_back('?');
-            }
-            else if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f'))
-            {
+            } else if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
                 uint8_t thisDigit = tol(ch);
 
-                if (!tempFlag)
-                {
+                if (!tempFlag) {
                     tempDigit = thisDigit << 4;
                     tempFlag = true;
-                }
-                else
-                {
+                } else {
                     tempDigit |= thisDigit;
                     tempFlag = false;
 
@@ -156,19 +142,16 @@ namespace hook {
 
 #if PATTERNS_USE_HINTS
         // if there's hints, try those first
-        if (m_module == GetModuleHandle(nullptr))
-        {
+        if (m_module == GetModuleHandle(nullptr)) {
             auto range = GetHints().equal_range(m_hash);
 
-            if (range.first != range.second)
-            {
+            if (range.first != range.second) {
                 std::for_each(range.first, range.second, [&](const std::pair<uint64_t, uintptr_t> &hint) {
                     ConsiderMatch(hook::get_adjusted(hint.second));
                 });
 
                 // if the hints succeeded, we don't need to do anything more
-                if (!m_matches.empty())
-                {
+                if (!m_matches.empty()) {
                     m_matched = true;
                     return;
                 }
@@ -178,14 +161,13 @@ namespace hook {
     }
 
     void pattern::EnsureMatches(uint32_t maxCount) {
-        if (m_matched)
-        {
+        if (m_matched) {
             return;
         }
 
         // scan the executable for code
-        executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd)
-                                                                          : executable_meta(m_module);
+        executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd) :
+                                                                            executable_meta(m_module);
 
         auto matchSuccess = [&](uintptr_t address) {
 #if PATTERNS_USE_HINTS
@@ -208,33 +190,27 @@ namespace hook {
         std::fill(std::begin(Last), std::end(Last),
                   lastWild == std::string::npos ? -1 : static_cast<ptrdiff_t>(lastWild));
 
-        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(maskSize); ++i)
-        {
-            if (Last[pattern[i]] < i)
-            {
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(maskSize); ++i) {
+            if (Last[pattern[i]] < i) {
                 Last[pattern[i]] = i;
             }
         }
 
-        for (uintptr_t i = executable.begin(), end = executable.end() - maskSize; i <= end;)
-        {
+        for (uintptr_t i = executable.begin(), end = executable.end() - maskSize; i <= end;) {
             uint8_t *ptr = reinterpret_cast<uint8_t *>(i);
             ptrdiff_t j = maskSize - 1;
 
             while ((j >= 0) && (mask[j] == '?' || pattern[j] == ptr[j]))
                 j--;
 
-            if (j < 0)
-            {
+            if (j < 0) {
                 m_matches.emplace_back(ptr);
 
-                if (matchSuccess(i))
-                {
+                if (matchSuccess(i)) {
                     break;
                 }
                 i++;
-            }
-            else
+            } else
                 i += std::max((ptrdiff_t)1, j - Last[ptr[j]]);
         }
 
@@ -247,15 +223,12 @@ namespace hook {
 
         char *ptr = reinterpret_cast<char *>(offset);
 
-        for (size_t i = 0, j = m_mask.size(); i < j; i++)
-        {
-            if (mask[i] == '?')
-            {
+        for (size_t i = 0, j = m_mask.size(); i < j; i++) {
+            if (mask[i] == '?') {
                 continue;
             }
 
-            if (pattern[i] != ptr[i])
-            {
+            if (pattern[i] != ptr[i]) {
                 return false;
             }
         }
@@ -269,10 +242,8 @@ namespace hook {
     void pattern::hint(uint64_t hash, uintptr_t address) {
         auto range = GetHints().equal_range(hash);
 
-        for (auto it = range.first; it != range.second; it++)
-        {
-            if (it->second == address)
-            {
+        for (auto it = range.first; it != range.second; it++) {
+            if (it->second == address) {
                 return;
             }
         }

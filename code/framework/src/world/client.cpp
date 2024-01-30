@@ -17,8 +17,7 @@ namespace Framework::World {
     EngineError ClientEngine::Init() {
         const auto status = Engine::Init(nullptr); // assigned by OnConnect
 
-        if (status != EngineError::ENGINE_NONE)
-        {
+        if (status != EngineError::ENGINE_NONE) {
             return status;
         }
 
@@ -39,10 +38,8 @@ namespace Framework::World {
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
         flecs::entity ent = {};
         _queryGetEntityByServerID.iter([&ent, id](flecs::iter it, Modules::Base::ServerID *rhs) {
-            for (size_t i = 0; i < it.count(); i++)
-            {
-                if (id == rhs[i].id)
-                {
+            for (size_t i = 0; i < it.count(); i++) {
+                if (id == rhs[i].id) {
                     ent = it.entity(i);
                     return;
                 }
@@ -52,8 +49,7 @@ namespace Framework::World {
     }
 
     flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) {
-        if (!entity.is_alive())
-        {
+        if (!entity.is_alive()) {
             return 0;
         }
 
@@ -80,13 +76,11 @@ namespace Framework::World {
                     OPTICK_EVENT();
                     const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
-                    for (size_t i = 0; i < it.count(); i++)
-                    {
+                    for (size_t i = 0; i < it.count(); i++) {
                         const auto &es = &rs[i];
 
                         if (es->GetBaseEvents().updateProc &&
-                            Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g))
-                        {
+                            Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
                             es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g,
                                                            it.entity(i));
                         }
@@ -98,8 +92,7 @@ namespace Framework::World {
     }
 
     void ClientEngine::OnDisconnect() {
-        if (_streamEntities.is_alive())
-        {
+        if (_streamEntities.is_alive()) {
             _streamEntities.destruct();
         }
 
@@ -108,12 +101,9 @@ namespace Framework::World {
             (void)tr;
             (void)s;
 
-            for (size_t i = 0; i < it.count(); i++)
-            {
-                if (_onEntityDestroyCallback)
-                {
-                    if (!_onEntityDestroyCallback(it.entity(i)))
-                    {
+            for (size_t i = 0; i < it.count(); i++) {
+                if (_onEntityDestroyCallback) {
+                    if (!_onEntityDestroyCallback(it.entity(i))) {
                         continue;
                     }
                 }
@@ -127,26 +117,22 @@ namespace Framework::World {
     }
     void ClientEngine::InitRPCs(Networking::NetworkPeer *net) {
         net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
-            if (!msg->Valid())
-            {
+            if (!msg->Valid()) {
                 return;
             }
             const auto e = GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive())
-            {
+            if (!e.is_alive()) {
                 return;
             }
             auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr = msg->GetTransform();
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
-            if (!msg->Valid())
-            {
+            if (!msg->Valid()) {
                 return;
             }
             const auto e = GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive())
-            {
+            if (!e.is_alive()) {
                 return;
             }
             auto fr = e.get_mut<World::Modules::Base::Frame>();

@@ -22,25 +22,21 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace Framework::External::ImGUI {
     Error Wrapper::Init(Config &config) {
-        if (isContextInitialized)
-        {
+        if (isContextInitialized) {
             return Error::IMGUI_NONE;
         }
 
         _config = config;
 
-        if (!_config.renderer)
-        {
+        if (!_config.renderer) {
             return Error::IMGUI_RENDERER_NOT_SET;
         }
 
-        if (!_config.windowHandle && _config.windowBackend == Framework::Graphics::PlatformBackend::PLATFORM_WIN32)
-        {
+        if (!_config.windowHandle && _config.windowBackend == Framework::Graphics::PlatformBackend::PLATFORM_WIN32) {
             return Error::IMGUI_WINDOW_NOT_SET;
         }
 
-        if (!_config.sdlWindow && _config.windowBackend == Framework::Graphics::PlatformBackend::PLATFORM_SDL2)
-        {
+        if (!_config.sdlWindow && _config.windowBackend == Framework::Graphics::PlatformBackend::PLATFORM_SDL2) {
             return Error::IMGUI_WINDOW_NOT_SET;
         }
 
@@ -52,37 +48,30 @@ namespace Framework::External::ImGUI {
 
         ImGui::StyleColorsDark();
 
-        switch (_config.renderBackend)
-        {
+        switch (_config.renderBackend) {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_Init(_config.renderer->GetD3D9Backend()->GetDevice());
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             const auto renderBackend = _config.renderer->GetD3D11Backend();
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
-        }
-        break;
+        } break;
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             const auto renderBackend = _config.renderer->GetD3D12Backend();
             ImGui_ImplDX12_Init(renderBackend->GetDevice(), renderBackend->NumFramesInFlight(),
                                 DXGI_FORMAT_R8G8B8A8_UNORM, renderBackend->GetSRVHeap(),
                                 renderBackend->GetSRVHeap()->GetCPUDescriptorHandleForHeapStart(),
                                 renderBackend->GetSRVHeap()->GetGPUDescriptorHandleForHeapStart());
-        }
-        break;
+        } break;
         }
 
-        switch (_config.windowBackend)
-        {
+        switch (_config.windowBackend) {
         case Framework::Graphics::PlatformBackend::PLATFORM_WIN32: {
             ImGui_ImplWin32_Init(_config.windowHandle);
-        }
-        break;
+        } break;
         case Framework::Graphics::PlatformBackend::PLATFORM_SDL2: {
             ImGui_ImplSDL2_InitForD3D(_config.sdlWindow);
-        }
-        break;
+        } break;
         }
 
         _initialized = isContextInitialized = true;
@@ -90,37 +79,29 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::Shutdown() {
-        if (!isContextInitialized)
-        {
+        if (!isContextInitialized) {
             return Error::IMGUI_NONE;
         }
 
-        switch (_config.renderBackend)
-        {
+        switch (_config.renderBackend) {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_Shutdown();
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_Shutdown();
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
             ImGui_ImplDX12_Shutdown();
-        }
-        break;
+        } break;
         }
 
-        switch (_config.windowBackend)
-        {
+        switch (_config.windowBackend) {
         case Framework::Graphics::PlatformBackend::PLATFORM_WIN32: {
             ImGui_ImplWin32_Shutdown();
-        }
-        break;
+        } break;
         case Framework::Graphics::PlatformBackend::PLATFORM_SDL2: {
             ImGui_ImplSDL2_Shutdown();
-        }
-        break;
+        } break;
         }
 
         ImGui::DestroyContext();
@@ -133,39 +114,31 @@ namespace Framework::External::ImGUI {
         std::lock_guard _lock(_renderMtx);
         OPTICK_EVENT();
 
-        switch (_config.renderBackend)
-        {
+        switch (_config.renderBackend) {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_NewFrame();
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_NewFrame();
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
             ImGui_ImplDX12_NewFrame();
-        }
-        break;
+        } break;
         }
 
-        switch (_config.windowBackend)
-        {
+        switch (_config.windowBackend) {
         case Framework::Graphics::PlatformBackend::PLATFORM_WIN32: {
             ImGui_ImplWin32_NewFrame();
-        }
-        break;
+        } break;
         case Framework::Graphics::PlatformBackend::PLATFORM_SDL2: {
             ImGui_ImplSDL2_NewFrame();
-        }
-        break;
+        } break;
         }
 
         ImGui::NewFrame();
 
         // process all widgets
-        while (!_renderQueue.empty())
-        {
+        while (!_renderQueue.empty()) {
             const auto &proc = _renderQueue.front();
             proc();
             _renderQueue.pop();
@@ -179,8 +152,7 @@ namespace Framework::External::ImGUI {
     Error Wrapper::Render() {
         std::lock_guard _lock(_renderMtx);
 
-        if (!isContextInitialized)
-        {
+        if (!isContextInitialized) {
             return Error::IMGUI_NOT_INITIALIZED;
         }
 
@@ -188,55 +160,43 @@ namespace Framework::External::ImGUI {
         if (!drawData)
             return Error::IMGUI_NONE;
 
-        switch (_config.renderBackend)
-        {
+        switch (_config.renderBackend) {
         case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_RenderDrawData(drawData);
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_RenderDrawData(drawData);
-        }
-        break;
+        } break;
         case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
             // TODO(DavoSK): pass second argument here
             const auto renderBackend = _config.renderer->GetD3D12Backend();
             ImGui_ImplDX12_RenderDrawData(drawData, renderBackend->GetGraphicsCommandList());
-        }
-        break;
+        } break;
         }
 
         return Error::IMGUI_NONE;
     }
 
     InputState Wrapper::ProcessEvent(const SDL_Event *event) const {
-        if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_SDL2)
-        {
+        if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_SDL2) {
             return InputState::ERROR_MISMATCH;
         }
 
-        if (ImGui_ImplSDL2_ProcessEvent(event))
-        {
+        if (ImGui_ImplSDL2_ProcessEvent(event)) {
             return InputState::BLOCK;
-        }
-        else
-        {
+        } else {
             return InputState::PASS;
         }
     }
 
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
-        if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_WIN32)
-        {
+        if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_WIN32) {
             return InputState::ERROR_MISMATCH;
         }
 
-        if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
-        {
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return InputState::BLOCK;
-        }
-        else
-        {
+        } else {
             return InputState::PASS;
         }
     }

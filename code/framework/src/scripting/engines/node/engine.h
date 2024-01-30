@@ -95,8 +95,7 @@ namespace Framework::Scripting::Engines::Node {
             v8::HandleScope handleScope(GetIsolate());
             v8::Context::Scope contextScope(_context.Get(_isolate));
 
-            if (_gamemodeEventHandlers[name].empty())
-            {
+            if (_gamemodeEventHandlers[name].empty()) {
                 return;
             }
 
@@ -104,14 +103,12 @@ namespace Framework::Scripting::Engines::Node {
             v8::Local<v8::Value> v8_args[arg_count ? arg_count : 1] = {
                 v8pp::to_v8(_isolate, std::forward<Args>(args))...};
 
-            for (auto it = _gamemodeEventHandlers[name].begin(); it != _gamemodeEventHandlers[name].end(); ++it)
-            {
+            for (auto it = _gamemodeEventHandlers[name].begin(); it != _gamemodeEventHandlers[name].end(); ++it) {
                 v8::TryCatch tryCatch(_isolate);
 
                 it->Get(_isolate)->Call(_context.Get(_isolate), v8::Undefined(_isolate), arg_count, v8_args);
 
-                if (tryCatch.HasCaught())
-                {
+                if (tryCatch.HasCaught()) {
                     auto context = _context.Get(_isolate);
                     v8::Local<v8::Message> message = tryCatch.Message();
                     v8::Local<v8::Value> exception = tryCatch.Exception();

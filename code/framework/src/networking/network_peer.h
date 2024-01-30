@@ -41,8 +41,7 @@ namespace Framework::Networking {
 
         template <typename T>
         void RegisterMessage(uint8_t message, fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
-            if (callback == nullptr)
-            {
+            if (callback == nullptr) {
                 return;
             }
 
@@ -52,12 +51,9 @@ namespace Framework::Networking {
                 msg.SetPacket(p);
                 msg.Serialize(&bs, false);
                 msg.Serialize2(&bs, false);
-                if (msg.Valid2())
-                {
+                if (msg.Valid2()) {
                     callback(p->guid, &msg);
-                }
-                else
-                {
+                } else {
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
                         ->debug("Message {} has failed to pass Valid2() check, skipping!", message);
                 }
@@ -67,8 +63,7 @@ namespace Framework::Networking {
         template <typename T> void RegisterRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
-            if (callback == nullptr)
-            {
+            if (callback == nullptr) {
                 return;
             }
 
@@ -84,8 +79,7 @@ namespace Framework::Networking {
         template <typename T> void RegisterGameRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
-            if (callback == nullptr)
-            {
+            if (callback == nullptr) {
                 return;
             }
 
@@ -95,12 +89,9 @@ namespace Framework::Networking {
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
                 rpc.Serialize2(&bs, false);
-                if (rpc.Valid2())
-                {
+                if (rpc.Valid2()) {
                     callback(p->guid, &rpc);
-                }
-                else
-                {
+                } else {
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
                         ->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());
                 }
@@ -116,8 +107,7 @@ namespace Framework::Networking {
             rpc.Serialize(&bs, true);
             assert(!rpc.IsGameRPC() && "Game RPCs cannot be sent via SendRPC()");
 
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0)
-            {
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
                 return false;
             }
             return true;

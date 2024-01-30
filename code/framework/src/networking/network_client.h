@@ -65,8 +65,7 @@ namespace Framework::Networking {
             rpc.Serialize(&bs, true);
             rpc.Serialize2(&bs, true);
 
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0)
-            {
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
                 return false;
             }
             return true;
