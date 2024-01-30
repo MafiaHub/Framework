@@ -36,15 +36,15 @@ namespace Framework {
         }
 
         // Singleton setters
-        static void SetNetworkPeer(Framework::Networking::NetworkPeer *peer) {
+        static void SetNetworkPeer(Networking::NetworkPeer *peer) {
             _networkPeer = peer;
         }
 
-        static void SetWorldEngine(Framework::World::Engine *engine) {
+        static void SetWorldEngine(World::Engine *engine) {
             _engine = engine;
         }
 
-        static void SetScriptingModule(Framework::Scripting::Module *module) {
+        static void SetScriptingModule(Scripting::Module *module) {
             _scriptingModule = module;
         }
 
@@ -53,15 +53,15 @@ namespace Framework {
         }
 
         // Singleton getters
-        static Framework::Networking::NetworkPeer *GetNetworkPeer() {
+        static Networking::NetworkPeer *GetNetworkPeer() {
             return _networkPeer;
         }
 
-        static Framework::World::Engine *GetWorldEngine() {
+        static World::Engine *GetWorldEngine() {
             return _engine;
         }
 
-        static Framework::Scripting::Module *GetScriptingModule() {
+        static Scripting::Module *GetScriptingModule() {
             return _scriptingModule;
         }
 
@@ -70,9 +70,9 @@ namespace Framework {
         }
 
       private:
-        static inline Framework::Networking::NetworkPeer *_networkPeer {};
-        static inline Framework::World::Engine *_engine {};
-        static inline Framework::Scripting::Module *_scriptingModule {};
+        static inline Networking::NetworkPeer *_networkPeer {};
+        static inline World::Engine *_engine {};
+        static inline Scripting::Module *_scriptingModule {};
         static inline double _tickRate {1000 / 60.0f};
     };
 }; // namespace Framework
