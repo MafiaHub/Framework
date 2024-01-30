@@ -23,7 +23,7 @@ namespace hook {
             }
         };
 
-        class StubInitFunction : public HookFunctionBase {
+        class StubInitFunction: public HookFunctionBase {
           private:
             void *(*m_function)();
 
@@ -32,7 +32,7 @@ namespace hook {
           public:
             StubInitFunction(function_stub_base *stub, void *(*function)()) {
                 m_function = function;
-                m_stub = stub;
+                m_stub     = stub;
             }
 
             virtual void Run() {
@@ -40,13 +40,13 @@ namespace hook {
             }
         };
 
-        template <typename TRet, typename TClass, typename... Args> class thiscall_stub_ : public function_stub_base {
+        template <typename TRet, typename TClass, typename... Args>
+        class thiscall_stub_: public function_stub_base {
           private:
             StubInitFunction m_hookFunction;
 
           public:
-            thiscall_stub_(void *(*getter)()) : m_hookFunction(this, getter) {
-            }
+            thiscall_stub_(void *(*getter)()): m_hookFunction(this, getter) {}
 
             inline TRet operator()(TClass klass, Args... args) {
                 struct EmptyClass {};
@@ -75,13 +75,13 @@ namespace hook {
             }
         };
 
-        template <typename TRet, typename... Args> class cdecl_stub_ : public function_stub_base {
+        template <typename TRet, typename... Args>
+        class cdecl_stub_: public function_stub_base {
           private:
             StubInitFunction m_hookFunction;
 
           public:
-            cdecl_stub_(void *(*getter)()) : m_hookFunction(this, getter) {
-            }
+            cdecl_stub_(void *(*getter)()): m_hookFunction(this, getter) {}
 
             inline TRet operator()(Args... args) {
                 return reinterpret_cast<TRet(__cdecl *)(Args...)>(m_functionAddress)(args...);
@@ -89,21 +89,21 @@ namespace hook {
         };
     } // namespace details
 
-    template <typename TRet> class thiscall_stub {};
+    template <typename TRet>
+    class thiscall_stub {};
 
     template <typename TRet, typename... Args>
-    class thiscall_stub<TRet(Args...)> : public details::thiscall_stub_<TRet, Args...> {
+    class thiscall_stub<TRet(Args...)>: public details::thiscall_stub_<TRet, Args...> {
       public:
-        thiscall_stub(void *(*getter)()) : details::thiscall_stub_<TRet, Args...>(getter) {
-        }
+        thiscall_stub(void *(*getter)()): details::thiscall_stub_<TRet, Args...>(getter) {}
     };
 
-    template <typename TRet> class cdecl_stub {};
+    template <typename TRet>
+    class cdecl_stub {};
 
     template <typename TRet, typename... Args>
-    class cdecl_stub<TRet(Args...)> : public details::cdecl_stub_<TRet, Args...> {
+    class cdecl_stub<TRet(Args...)>: public details::cdecl_stub_<TRet, Args...> {
       public:
-        cdecl_stub(void *(*getter)()) : details::cdecl_stub_<TRet, Args...>(getter) {
-        }
+        cdecl_stub(void *(*getter)()): details::cdecl_stub_<TRet, Args...>(getter) {}
     };
 } // namespace hook

@@ -22,7 +22,7 @@ namespace Framework::Networking {
     class NetworkPeer {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
-        SLNet::Packet *_packet = nullptr;
+        SLNet::Packet *_packet         = nullptr;
         std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
@@ -31,11 +31,9 @@ namespace Framework::Networking {
         NetworkPeer();
         ~NetworkPeer();
 
-        bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID,
-                  PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
+        bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 
-        bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY,
-                  PacketReliability reliability = RELIABLE_ORDERED);
+        bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 
         void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
 
@@ -53,14 +51,15 @@ namespace Framework::Networking {
                 msg.Serialize2(&bs, false);
                 if (msg.Valid2()) {
                     callback(p->guid, &msg);
-                } else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                        ->debug("Message {} has failed to pass Valid2() check, skipping!", message);
+                }
+                else {
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid2() check, skipping!", message);
                 }
             };
         }
 
-        template <typename T> void RegisterRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
+        template <typename T>
+        void RegisterRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {
@@ -76,7 +75,8 @@ namespace Framework::Networking {
             });
         }
 
-        template <typename T> void RegisterGameRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
+        template <typename T>
+        void RegisterGameRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {
@@ -91,16 +91,15 @@ namespace Framework::Networking {
                 rpc.Serialize2(&bs, false);
                 if (rpc.Valid2()) {
                     callback(p->guid, &rpc);
-                } else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                        ->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());
+                }
+                else {
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());
                 }
             });
         }
 
         template <typename T>
-        bool SendRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID,
-                     PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        bool SendRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             SLNet::BitStream bs;
             bs.Write(Messages::INTERNAL_RPC);
             bs.Write(rpc.GetHashName());

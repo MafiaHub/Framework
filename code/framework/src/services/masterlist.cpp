@@ -18,14 +18,11 @@ namespace Framework::Services {
         if (pushKey.empty()) {
             return false;
         }
-        _client->set_default_headers({
-            {"X-API-KEY",    pushKey           },
-            {"Content-Type", "application/json"}
-        });
+        _client->set_default_headers({{"X-API-KEY", pushKey}, {"Content-Type", "application/json"}});
 
         _isInitialized = true;
-        _pingThread = std::thread(&MasterlistConnector::PingThread, this);
-        _lastPingAt = Utils::Time::GetTimePoint();
+        _pingThread    = std::thread(&MasterlistConnector::PingThread, this);
+        _lastPingAt    = Utils::Time::GetTimePoint();
         return true;
     }
     bool MasterlistConnector::Shutdown() {
@@ -49,10 +46,10 @@ namespace Framework::Services {
             _lastPingAt = Utils::Time::GetTimePoint();
 
             // Build the payload
-            httplib::Params params{
-                {"gamemode",        _storedInfo.gameMode                      },
-                {"version",         _storedInfo.version                       },
-                {"max_players",     std::to_string(_storedInfo.maxPlayers)    },
+            httplib::Params params {
+                {"gamemode", _storedInfo.gameMode},
+                {"version", _storedInfo.version},
+                {"max_players", std::to_string(_storedInfo.maxPlayers)},
                 {"current_players", std::to_string(_storedInfo.currentPlayers)},
             };
 
@@ -63,8 +60,7 @@ namespace Framework::Services {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {}", res.error());
             }
             if (res->status != 200 && res->status != 201) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                    ->error("Failed to ping masterlist server: {} {}", res->status, res->body);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {} {}", res->status, res->body);
             }
         }
     }

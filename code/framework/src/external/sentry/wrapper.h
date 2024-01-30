@@ -21,12 +21,12 @@ namespace Framework::External::Sentry {
         std::string _osVersion;
         int _osMajorVersion = -1;
         int _osMinorVersion = -1;
-        int _osBuildNumber = -1;
+        int _osBuildNumber  = -1;
     };
 
     struct ScreenInformation {
-        int _width = 0;
-        int _height = 0;
+        int _width       = 0;
+        int _height      = 0;
         bool _fullscreen = false;
     };
 

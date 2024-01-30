@@ -19,9 +19,7 @@ namespace Framework::External::Discord {
 
         _instance->UserManager().OnCurrentUserUpdate.Connect([this]() {
             _instance->UserManager().GetCurrentUser(&_user);
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_INTEGRATIONS)
-                ->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
         });
 
         _initialized = true;
@@ -48,15 +46,12 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details,
-                                      discord::ActivityType activity, std::string const &largeImage,
-                                      std::string const &largeText, std::string const &smallImage,
-                                      std::string const &smallText) {
+    DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity, std::string const &largeImage, std::string const &largeText, std::string const &smallImage, std::string const &smallText) {
         if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
-        discord::Activity act{};
+        discord::Activity act {};
         auto assets = act.GetAssets();
         assets.SetLargeImage(largeImage.c_str());
         assets.SetLargeText(largeText.c_str());
@@ -75,19 +70,18 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details,
-                                      discord::ActivityType activity) {
+    DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity) {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
     void Wrapper::SignInWithDiscord(DiscordLoginProc const &proc) {
-        _instance->ApplicationManager().GetOAuth2Token(
-            [proc](discord::Result result, discord::OAuth2Token const &tokenData) {
-                if (result == discord::Result::Ok) {
-                    proc(tokenData.GetAccessToken());
-                } else
-                    proc("");
-            });
+        _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, discord::OAuth2Token const &tokenData) {
+            if (result == discord::Result::Ok) {
+                proc(tokenData.GetAccessToken());
+            }
+            else
+                proc("");
+        });
     }
 
     discord::UserManager &Wrapper::GetUserManager() {

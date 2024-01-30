@@ -12,7 +12,7 @@
 #include "world/modules/base.hpp"
 
 namespace Framework::World::RPC {
-    class SetFrame final : public Networking::RPC::IGameRPC<SetFrame> {
+    class SetFrame final: public Networking::RPC::IGameRPC<SetFrame> {
       private:
         World::Modules::Base::Frame _frame;
 

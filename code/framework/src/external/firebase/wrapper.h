@@ -20,9 +20,9 @@
 #include <string>
 
 namespace Framework::External::Firebase {
-    class Wrapper final : public firebase::auth::AuthStateListener {
+    class Wrapper final: public firebase::auth::AuthStateListener {
       private:
-        firebase::App *_app = nullptr;
+        firebase::App *_app         = nullptr;
         firebase::auth::User *_user = nullptr;
 
         bool _valid = false;

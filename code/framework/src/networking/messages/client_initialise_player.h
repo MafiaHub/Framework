@@ -15,14 +15,13 @@
 #include <flecs/flecs.h>
 
 namespace Framework::Networking::Messages {
-    class ClientInitPlayer final : public IMessage {
+    class ClientInitPlayer final: public IMessage {
       public:
         uint8_t GetMessageID() const override {
             return GAME_INIT_PLAYER;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
-        }
+        void Serialize(SLNet::BitStream *bs, bool write) override {}
 
         bool Valid() const override {
             return true;

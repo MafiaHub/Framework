@@ -30,8 +30,8 @@ namespace Framework {
     class CoreModules final {
       public:
         static void Reset() {
-            _networkPeer = nullptr;
-            _engine = nullptr;
+            _networkPeer     = nullptr;
+            _engine          = nullptr;
             _scriptingModule = nullptr;
         }
 
@@ -70,9 +70,9 @@ namespace Framework {
         }
 
       private:
-        static inline Framework::Networking::NetworkPeer *_networkPeer{};
-        static inline Framework::World::Engine *_engine{};
-        static inline Framework::Scripting::Module *_scriptingModule{};
-        static inline double _tickRate{1000 / 60.0f};
+        static inline Framework::Networking::NetworkPeer *_networkPeer {};
+        static inline Framework::World::Engine *_engine {};
+        static inline Framework::Scripting::Module *_scriptingModule {};
+        static inline double _tickRate {1000 / 60.0f};
     };
 }; // namespace Framework

@@ -34,28 +34,28 @@ namespace Framework::Utils {
             }
 
             try {
-                cxxopts::ParseResult result =
-                    _commands[command].options->parse(static_cast<int>(vArgs.size()), vArgs.data());
+                cxxopts::ParseResult result = _commands[command].options->parse(static_cast<int>(vArgs.size()), vArgs.data());
 
                 if (result.count("help")) {
                     // auto help
                     error = {CommandProcessorError::ERROR_NONE_PRINT_HELP, _commands[command].options->help()};
-                } else {
+                }
+                else {
                     _commands[command].proc(result);
                 }
-            } catch (const std::exception &e) {
+            }
+            catch (const std::exception &e) {
                 error = {CommandProcessorError::ERROR_INTERNAL, e.what()};
             }
-        } else {
+        }
+        else {
             return {CommandProcessorError::ERROR_CMD_UNKNOWN, input};
         }
 
         return error;
     }
 
-    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(
-        const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc,
-        const std::string &desc) {
+    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc) {
         if (name.empty()) {
             return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
         }
@@ -73,7 +73,8 @@ namespace Framework::Utils {
             cmd->add_option("", {"h,help", "Print usage"});
 
             _commands[name] = {std::move(cmd), proc};
-        } catch (const std::exception &e) {
+        }
+        catch (const std::exception &e) {
             return {CommandProcessorError::ERROR_INTERNAL, e.what()};
         }
 

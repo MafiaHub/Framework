@@ -17,10 +17,10 @@
 
 namespace Framework::External::Steam {
     struct AuthTicket {
-        EResult _status = k_EResultPending;
+        EResult _status     = k_EResultPending;
         HAuthTicket _handle = 0;
-        char _buffer[1024] = {0};
-        size_t _size = 0;
+        char _buffer[1024]  = {0};
+        size_t _size        = 0;
 
         bool IsPending() const {
             return _status == k_EResultPending;

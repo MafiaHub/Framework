@@ -16,12 +16,12 @@ namespace Framework::World {
     EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
         CoreModules::SetWorldEngine(this);
         _networkPeer = networkPeer;
-        _world = std::make_unique<flecs::world>();
+        _world       = std::make_unique<flecs::world>();
 
         // Register a base module
         _world->import <Modules::Base>();
 
-        _allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
+        _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
 
         return EngineError::ENGINE_NONE;
@@ -51,7 +51,7 @@ namespace Framework::World {
         }
         auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
         tr->lastGenID--;
-        auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        auto es            = e.get_mut<Framework::World::Modules::Base::Streamable>();
         es->updateInterval = es->defaultUpdateInterval;
     }
 

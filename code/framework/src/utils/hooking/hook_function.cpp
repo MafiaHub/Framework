@@ -12,7 +12,7 @@
 static HookFunctionBase *g_hookFunctions;
 
 void HookFunctionBase::Register() {
-    m_next = g_hookFunctions;
+    m_next          = g_hookFunctions;
     g_hookFunctions = this;
 }
 
@@ -25,7 +25,7 @@ void HookFunctionBase::RunAll() {
 static RuntimeHookFunction *g_runtimeHookFunctions;
 
 void RuntimeHookFunction::Register() {
-    m_next = g_runtimeHookFunctions;
+    m_next                 = g_runtimeHookFunctions;
     g_runtimeHookFunctions = this;
 }
 

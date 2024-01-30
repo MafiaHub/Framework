@@ -20,9 +20,11 @@ namespace Framework::Graphics {
 
         if (_config.backend == RendererBackend::BACKEND_D3D_11) {
             _d3d11Backend = new D3D11Backend;
-        } else if (_config.backend == RendererBackend::BACKEND_D3D_9) {
+        }
+        else if (_config.backend == RendererBackend::BACKEND_D3D_9) {
             _d3d9Backend = new D3D9Backend;
-        } else if (_config.backend == RendererBackend::BACKEND_D3D_12) {
+        }
+        else if (_config.backend == RendererBackend::BACKEND_D3D_12) {
             _d3d12Backend = new D3D12Backend;
         }
 
@@ -37,9 +39,11 @@ namespace Framework::Graphics {
 
         if (_d3d11Backend) {
             _d3d11Backend->Shutdown();
-        } else if (_d3d9Backend) {
+        }
+        else if (_d3d9Backend) {
             _d3d9Backend->Shutdown();
-        } else if (_d3d12Backend) {
+        }
+        else if (_d3d12Backend) {
             _d3d12Backend->Shutdown();
         }
 
@@ -51,9 +55,11 @@ namespace Framework::Graphics {
         OPTICK_EVENT();
         if (_d3d11Backend) {
             _d3d11Backend->Update();
-        } else if (_d3d9Backend) {
+        }
+        else if (_d3d9Backend) {
             _d3d9Backend->Update();
-        } else if (_d3d12Backend) {
+        }
+        else if (_d3d12Backend) {
             _d3d12Backend->Update();
         }
     }

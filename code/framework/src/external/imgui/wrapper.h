@@ -37,8 +37,8 @@ namespace Framework::External::ImGUI {
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
-        SDL_Window *sdlWindow = nullptr;
-        HWND windowHandle = nullptr;
+        SDL_Window *sdlWindow        = nullptr;
+        HWND windowHandle            = nullptr;
     };
 
     class Wrapper final {

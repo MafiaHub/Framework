@@ -28,7 +28,7 @@
 namespace Framework::Integrations::Scripting {
     class Entity {
       protected:
-        flecs::entity _ent{};
+        flecs::entity _ent {};
 
       public:
         Entity(flecs::entity_t ent) {
@@ -87,45 +87,41 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
-            auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+            auto fr   = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->scale = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         void SetModelName(std::string name) {
-            auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+            auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelName = name;
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         void SetModelHash(uint64_t hash) {
-            auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+            auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelHash = hash;
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
         v8::Local<v8::Object> GetPosition() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(
-                v8::Isolate::GetCurrent(), tr->pos.x, tr->pos.y, tr->pos.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->pos.x, tr->pos.y, tr->pos.z);
         }
 
         v8::Local<v8::Object> GetRotation() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Quaternion>::create_object(
-                v8::Isolate::GetCurrent(), tr->rot.w, tr->rot.x, tr->rot.y, tr->rot.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Quaternion>::create_object(v8::Isolate::GetCurrent(), tr->rot.w, tr->rot.x, tr->rot.y, tr->rot.z);
         }
 
         v8::Local<v8::Object> GetVelocity() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(
-                v8::Isolate::GetCurrent(), tr->vel.x, tr->vel.y, tr->vel.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->vel.x, tr->vel.y, tr->vel.z);
         }
 
         v8::Local<v8::Object> GetScale() const {
             const auto fr = _ent.get<Framework::World::Modules::Base::Frame>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(
-                v8::Isolate::GetCurrent(), fr->scale.x, fr->scale.y, fr->scale.z);
+            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), fr->scale.x, fr->scale.y, fr->scale.z);
         }
 
         std::string GetModelName() const {
@@ -139,12 +135,12 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetVisible(bool visible) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st       = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->isVisible = visible;
         }
 
         void SetAlwaysVisible(bool visible) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st           = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->alwaysVisible = visible;
         }
 
@@ -159,7 +155,7 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetVirtualWorld(int virtualWorld) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st          = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->virtualWorld = virtualWorld;
         }
 
@@ -169,7 +165,7 @@ namespace Framework::Integrations::Scripting {
         }
 
         void SetUpdateInterval(double interval) {
-            auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto st            = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->updateInterval = interval;
         }
 

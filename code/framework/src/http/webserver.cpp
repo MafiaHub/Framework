@@ -17,7 +17,7 @@ namespace Framework::HTTP {
     }
 
     bool Webserver::Init(const std::string &host, int32_t port, const std::string &serveDir) {
-        _running = true;
+        _running  = true;
         _serveDir = serveDir;
 
         auto address = (host.empty() ? "0.0.0.0" : host);
@@ -38,16 +38,20 @@ namespace Framework::HTTP {
             char buf[BUFSIZ];
             try {
                 std::rethrow_exception(ep);
-            } catch (std::exception &e) {
+            }
+            catch (std::exception &e) {
                 snprintf(buf, sizeof(buf), fmt, e.what());
-            } catch (...) { // See the following NOTE
+            }
+            catch (...) { // See the following NOTE
                 snprintf(buf, sizeof(buf), fmt, "Unknown Exception");
             }
             res.set_content(buf, "text/html");
             res.status = 500;
         });
 
-        _webThread = std::thread([&]() { _server->listen(address, port); });
+        _webThread = std::thread([&]() {
+            _server->listen(address, port);
+        });
 
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Listening on {}", address.c_str());
 

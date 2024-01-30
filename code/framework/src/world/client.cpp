@@ -61,31 +61,25 @@ namespace Framework::World {
         const auto e = _world->entity();
 
         auto sid = e.get_mut<Modules::Base::ServerID>();
-        sid->id = serverID;
+        sid->id  = serverID;
         return e;
     }
 
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
         _networkPeer = peer;
 
-        _streamEntities =
-            _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities")
-                .kind(flecs::PostUpdate)
-                .interval(tickInterval)
-                .iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
-                    OPTICK_EVENT();
-                    const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
+        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
+            OPTICK_EVENT();
+            const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
-                    for (size_t i = 0; i < it.count(); i++) {
-                        const auto &es = &rs[i];
+            for (size_t i = 0; i < it.count(); i++) {
+                const auto &es = &rs[i];
 
-                        if (es->GetBaseEvents().updateProc &&
-                            Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
-                            es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g,
-                                                           it.entity(i));
-                        }
-                    }
-                });
+                if (es->GetBaseEvents().updateProc && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
+                    es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                }
+            }
+        });
 
         // Register built-in RPCs
         InitRPCs(peer);
@@ -125,7 +119,7 @@ namespace Framework::World {
                 return;
             }
             auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr = msg->GetTransform();
+            *tr     = msg->GetTransform();
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
             if (!msg->Valid()) {
@@ -136,7 +130,7 @@ namespace Framework::World {
                 return;
             }
             auto fr = e.get_mut<World::Modules::Base::Frame>();
-            *fr = msg->GetFrame();
+            *fr     = msg->GetFrame();
         });
     }
 

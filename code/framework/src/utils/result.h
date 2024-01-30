@@ -11,14 +11,14 @@
 #include <cstdint>
 
 namespace Framework::Utils {
-    template <typename ResultType, typename ErrorType = uint32_t> class Result {
+    template <typename ResultType, typename ErrorType = uint32_t>
+    class Result {
       private:
-        ResultType _message{};
-        ErrorType _errorCode{};
+        ResultType _message {};
+        ErrorType _errorCode {};
 
       public:
-        Result(ErrorType error, const ResultType &message = {}) : _errorCode(error), _message(message) {
-        } // NOLINT(google-explicit-constructor)
+        Result(ErrorType error, const ResultType &message = {}): _errorCode(error), _message(message) {} // NOLINT(google-explicit-constructor)
 
         inline ErrorType GetError() const {
             return _errorCode;

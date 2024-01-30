@@ -58,10 +58,8 @@ namespace Framework::External::ImGUI {
         } break;
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             const auto renderBackend = _config.renderer->GetD3D12Backend();
-            ImGui_ImplDX12_Init(renderBackend->GetDevice(), renderBackend->NumFramesInFlight(),
-                                DXGI_FORMAT_R8G8B8A8_UNORM, renderBackend->GetSRVHeap(),
-                                renderBackend->GetSRVHeap()->GetCPUDescriptorHandleForHeapStart(),
-                                renderBackend->GetSRVHeap()->GetGPUDescriptorHandleForHeapStart());
+            ImGui_ImplDX12_Init(renderBackend->GetDevice(), renderBackend->NumFramesInFlight(), DXGI_FORMAT_R8G8B8A8_UNORM, renderBackend->GetSRVHeap(), renderBackend->GetSRVHeap()->GetCPUDescriptorHandleForHeapStart(),
+                renderBackend->GetSRVHeap()->GetGPUDescriptorHandleForHeapStart());
         } break;
         }
 
@@ -184,7 +182,8 @@ namespace Framework::External::ImGUI {
 
         if (ImGui_ImplSDL2_ProcessEvent(event)) {
             return InputState::BLOCK;
-        } else {
+        }
+        else {
             return InputState::PASS;
         }
     }
@@ -196,13 +195,14 @@ namespace Framework::External::ImGUI {
 
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return InputState::BLOCK;
-        } else {
+        }
+        else {
             return InputState::PASS;
         }
     }
 
     void Wrapper::ShowCursor(bool show) {
-        ImGuiIO &io = ImGui::GetIO();
+        ImGuiIO &io        = ImGui::GetIO();
         io.MouseDrawCursor = show;
     }
 

@@ -11,19 +11,17 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    NetworkClient::NetworkClient() : NetworkPeer(), _state(PeerState::DISCONNECTED) {
-    }
+    NetworkClient::NetworkClient(): NetworkPeer(), _state(PeerState::DISCONNECTED) {}
 
     NetworkClient::~NetworkClient() {
         Shutdown();
     }
 
     ClientError NetworkClient::Init() {
-        SLNet::SocketDescriptor sd{};
+        SLNet::SocketDescriptor sd {};
         SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                ->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
             return CLIENT_PEER_FAILED;
         }
         return CLIENT_NONE;
@@ -42,9 +40,7 @@ namespace Framework::Networking {
 
     ClientError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
         if (_state != DISCONNECTED) {
-            Logging::GetInstance()
-                ->Get(FRAMEWORK_INNER_NETWORKING)
-                ->debug("Cannot connect an already connected instance");
+            Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
             return CLIENT_ALREADY_CONNECTED;
         }
 
@@ -60,8 +56,7 @@ namespace Framework::Networking {
 
         SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
-                ->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             _state = DISCONNECTED;
             return CLIENT_CONNECT_FAILED;
         }

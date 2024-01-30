@@ -81,7 +81,8 @@ static void *FindCallFromAddress(void *methodPtr, ud_mnemonic_code mnemonic = UD
                     if (breakOnFirst) {
                         break;
                     }
-                } else {
+                }
+                else {
                     // return an empty pointer
                     retval = nullptr;
                     break;
@@ -134,7 +135,7 @@ static void *RtlpxLookupFunctionTableOverrideDownLevel(void *exceptionAddress, P
     if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd) {
         if (addressNum != 0) {
             *imageBase = g_overriddenTable.ImageBase;
-            *length = g_overriddenTable.Size;
+            *length    = g_overriddenTable.Size;
 
             retval = (void *)g_overriddenTable.TableAddress;
         }
@@ -158,19 +159,17 @@ static PVOID RtlImageDirectoryEntryToDataStub(HMODULE hModule, BOOL a2, WORD dir
     return g_origRtlImageDirectoryEntryToData(hModule, a2, directory, size);
 }
 
-extern "C" void __declspec(dllexport)
-    CoreRT_SetupSEHHandler(void *moduleBase, void *moduleEnd, PRUNTIME_FUNCTION runtimeFunctions, DWORD entryCount) {
+extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, void *moduleEnd, PRUNTIME_FUNCTION runtimeFunctions, DWORD entryCount) {
     // store passed data
     g_overrideStart = (DWORD64)moduleBase;
-    g_overrideEnd = (DWORD64)moduleEnd;
+    g_overrideEnd   = (DWORD64)moduleEnd;
 
-    g_overriddenTable.ImageBase = g_overrideStart;
+    g_overriddenTable.ImageBase    = g_overrideStart;
     g_overriddenTable.TableAddress = (DWORD64)runtimeFunctions;
-    g_overriddenTable.Size = entryCount * sizeof(RUNTIME_FUNCTION);
+    g_overriddenTable.Size         = entryCount * sizeof(RUNTIME_FUNCTION);
 
     if (IsWindows8Point1OrGreater()) {
-        auto ZwQueryVirtualMemory = (NTSTATUS(NTAPI *)(HANDLE, PVOID, INT, PVOID, SIZE_T, PSIZE_T))GetProcAddress(
-            GetModuleHandle("ntdll.dll"), "NtQueryVirtualMemory");
+        auto ZwQueryVirtualMemory = (NTSTATUS(NTAPI *)(HANDLE, PVOID, INT, PVOID, SIZE_T, PSIZE_T))GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryVirtualMemory");
 
         struct {
             DWORD64 field0;
@@ -179,8 +178,7 @@ extern "C" void __declspec(dllexport)
             DWORD64 field10;
         } queryResult;
 
-        ZwQueryVirtualMemory(GetCurrentProcess(), GetModuleHandle(nullptr), 6, &queryResult, sizeof(queryResult),
-                             nullptr);
+        ZwQueryVirtualMemory(GetCurrentProcess(), GetModuleHandle(nullptr), 6, &queryResult, sizeof(queryResult), nullptr);
 
         g_overriddenTable.ImageSize = queryResult.imageSize;
     }
@@ -191,7 +189,7 @@ extern "C" void __declspec(dllexport)
     if (baseAddress) {
         void *internalAddress = FindCallFromAddress(baseAddress);
 
-        void *patchFunction = RtlpxLookupFunctionTableOverride;
+        void *patchFunction  = RtlpxLookupFunctionTableOverride;
         void **patchOriginal = (void **)&g_originalLookup;
 
         // if we couldn't _reliably_ find it, error out
@@ -223,12 +221,12 @@ extern "C" void __declspec(dllexport)
         DisableToolHelpScope scope;
         MH_CreateHook(internalAddress, patchFunction, patchOriginal);
         MH_EnableHook(MH_ALL_HOOKS);
-    } else {
+    }
+    else {
         // trace("Not running on Windows - no RtlLookupFunctionTable. Is this some fake OS?\n");
 
         DisableToolHelpScope scope;
-        MH_CreateHookApi(L"ntdll.dll", "RtlImageDirectoryEntryToData", RtlImageDirectoryEntryToDataStub,
-                         (void **)&g_origRtlImageDirectoryEntryToData);
+        MH_CreateHookApi(L"ntdll.dll", "RtlImageDirectoryEntryToData", RtlImageDirectoryEntryToDataStub, (void **)&g_origRtlImageDirectoryEntryToData);
         MH_EnableHook(MH_ALL_HOOKS);
     }
 }
@@ -257,7 +255,7 @@ static BOOLEAN RtlDispatchExceptionStub(EXCEPTION_RECORD *record, CONTEXT *conte
             // AddCrashometry("exception_override", "true");
 
             EXCEPTION_POINTERS ptrs;
-            ptrs.ContextRecord = context;
+            ptrs.ContextRecord   = context;
             ptrs.ExceptionRecord = record;
 
             if (g_exceptionHandler) {

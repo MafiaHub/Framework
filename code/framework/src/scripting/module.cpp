@@ -25,14 +25,11 @@ namespace Framework::Scripting {
             _engine = new Engines::Node::Engine;
         } break;
 
-        case ENGINE_LUA:
-            break;
+        case ENGINE_LUA: break;
 
-        case ENGINE_SQUIRREL:
-            break;
+        case ENGINE_SQUIRREL: break;
 
-        default:
-            break;
+        default: break;
         }
         _engine->SetModName(_modName);
 

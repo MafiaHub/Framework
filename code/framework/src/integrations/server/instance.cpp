@@ -34,17 +34,17 @@
 #include "core_modules.h"
 
 namespace Framework::Integrations::Server {
-    Instance::Instance() : _alive(false), _shuttingDown(false) {
+    Instance::Instance(): _alive(false), _shuttingDown(false) {
         OPTICK_START_CAPTURE();
         _networkingEngine = std::make_shared<Networking::Engine>();
-        _webServer = std::make_shared<HTTP::Webserver>();
-        _fileConfig = std::make_unique<Utils::Config>();
-        _firebaseWrapper = std::make_unique<External::Firebase::Wrapper>();
-        _worldEngine = std::make_shared<World::ServerEngine>();
-        _scriptingEngine = std::make_shared<Scripting::ServerEngine>(_worldEngine);
-        _playerFactory = std::make_shared<World::Archetypes::PlayerFactory>();
+        _webServer        = std::make_shared<HTTP::Webserver>();
+        _fileConfig       = std::make_unique<Utils::Config>();
+        _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
+        _worldEngine      = std::make_shared<World::ServerEngine>();
+        _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
+        _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
-        _masterlist = std::make_unique<Services::MasterlistConnector>();
+        _masterlist       = std::make_unique<Services::MasterlistConnector>();
     }
 
     Instance::~Instance() {
@@ -65,19 +65,10 @@ namespace Framework::Integrations::Server {
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
         options.allow_unrecognised_options();
-        options.add_options(
-            "MafiaHub Integrations server",
-            {
-                {"p,port",    "Networking port to bind",
-                 cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))                                },
-                {"h,host",    "Networking host to bind",  cxxopts::value<std::string>()->default_value(_opts.bindHost)   },
-                {"c,config",  "JSON config file to read",
-                 cxxopts::value<std::string>()->default_value(_opts.modConfigFile)                                       },
-                {"P,apiport", "HTTP API port to bind",
-                 cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))                             },
-                {"H,apihost", "HTTP API host to bind",    cxxopts::value<std::string>()->default_value(_opts.webBindHost)},
-                {"help",      "Prints this help message", cxxopts::value<bool>()->default_value("false")                 }
-        });
+        options.add_options("MafiaHub Integrations server",
+            {{"p,port", "Networking port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.bindPort))}, {"h,host", "Networking host to bind", cxxopts::value<std::string>()->default_value(_opts.bindHost)},
+                {"c,config", "JSON config file to read", cxxopts::value<std::string>()->default_value(_opts.modConfigFile)}, {"P,apiport", "HTTP API port to bind", cxxopts::value<int32_t>()->default_value(std::to_string(_opts.webBindPort))},
+                {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
 
         // Try to parse and return if anything wrong happened
         auto result = options.parse(_opts.argc, _opts.argv);
@@ -117,8 +108,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize the world
-        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) !=
-            World::EngineError::ENGINE_NONE) {
+        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
@@ -130,22 +120,20 @@ namespace Framework::Integrations::Server {
         // Initialize the scripting engine
         _scriptingEngine->SetProcessArguments(opts.argc, opts.argv);
         _scriptingEngine->SetModName(opts.modName);
-        if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE, sdkCallback) !=
-            Framework::Scripting::ModuleError::MODULE_NONE) {
+        if (_scriptingEngine->Init(Framework::Scripting::EngineTypes::ENGINE_NODE, sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
-        if (_opts.firebaseEnabled &&
-            _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) !=
-                External::Firebase::FirebaseError::FIREBASE_NONE) {
+        if (_opts.firebaseEnabled && _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) != External::Firebase::FirebaseError::FIREBASE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the firebase wrapper");
             return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
         if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to contact masterlist server: Push key is empty");
-        } else if (!_opts.bindPublicServer) {
+        }
+        else if (!_opts.bindPublicServer) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
@@ -176,7 +164,7 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
-        _alive = true;
+        _alive        = true;
         _shuttingDown = false;
         return ServerError::SERVER_NONE;
     }
@@ -184,15 +172,15 @@ namespace Framework::Integrations::Server {
     void Instance::InitEndpoints() {
         _webServer->RegisterRequest("/", [this](const httplib::Request &req, httplib::Response &res) {
             nlohmann::json root;
-            root["mod_name"] = _opts.modName;
-            root["mod_slug"] = _opts.modSlug;
-            root["mod_version"] = _opts.modVersion;
-            root["host"] = _opts.bindHost;
-            root["port"] = _opts.bindPort;
+            root["mod_name"]          = _opts.modName;
+            root["mod_slug"]          = _opts.modSlug;
+            root["mod_version"]       = _opts.modVersion;
+            root["host"]              = _opts.bindHost;
+            root["port"]              = _opts.bindPort;
             root["password_required"] = !_opts.bindPassword.empty();
-            root["max_players"] = _opts.maxPlayers;
-            res.body = root.dump(4);
-            res.status = 200;
+            root["max_players"]       = _opts.maxPlayers;
+            res.body                  = root.dump(4);
+            res.status                = 200;
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
@@ -223,18 +211,18 @@ namespace Framework::Integrations::Server {
             _fileConfig->Parse(configData);
 
             if (!_fileConfig->IsParsed()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                    ->critical("JSON config load has failed: {}", _fileConfig->GetLastError());
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config load has failed: {}", _fileConfig->GetLastError());
                 return false;
             }
 
             // Retrieve fields and overwrite InstanceOptions defaults
-            _opts.bindHost = _fileConfig->Get<std::string>("host");
-            _opts.bindPort = _fileConfig->Get<int>("port");
-            _opts.bindMapName = _fileConfig->Get<std::string>("map");
-            _opts.maxPlayers = _fileConfig->Get<int>("maxplayers");
+            _opts.bindHost      = _fileConfig->Get<std::string>("host");
+            _opts.bindPort      = _fileConfig->Get<int>("port");
+            _opts.bindMapName   = _fileConfig->Get<std::string>("map");
+            _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
             _opts.bindSecretKey = _fileConfig->Get<std::string>("server-token");
-        } catch (const std::exception &ex) {
+        }
+        catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config has missing fields: {}", ex.what());
             return false;
         }
@@ -244,73 +232,65 @@ namespace Framework::Integrations::Server {
     void Instance::InitNetworkingMessages() {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
-        net->RegisterMessage<ClientHandshake>(
-            Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE,
-            [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                    ->debug("Received handshake message for player {}", msg->GetPlayerName());
+        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
 
-                // Make sure handshake payload was correctly formatted
-                if (!msg->Valid()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                        ->error("Handshake payload was invalid, force-disconnecting peer");
-                    net->GetPeer()->CloseConnection(guid, true);
-                    return;
-                }
+            // Make sure handshake payload was correctly formatted
+            if (!msg->Valid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
 
-                if (msg->GetMPClientGame() != _opts.gameName) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                        ->error("Client has invalid game, force-disconnecting peer");
-                    Framework::Networking::Messages::ClientKick kick;
-                    kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                    net->Send(kick, guid);
-                    net->GetPeer()->CloseConnection(guid, true);
-                    return;
-                }
+            if (msg->GetMPClientGame() != _opts.gameName) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
 
-                const auto clientVersion = msg->GetClientVersion();
+            const auto clientVersion = msg->GetClientVersion();
 
-                if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                        ->error("Client has invalid version, force-disconnecting peer");
-                    Framework::Networking::Messages::ClientKick kick;
-                    kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                    net->Send(kick, guid);
-                    net->GetPeer()->CloseConnection(guid, true);
-                    return;
-                }
+            if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
 
-                const auto mpClientVersion = msg->GetMPClientVersion();
+            const auto mpClientVersion = msg->GetMPClientVersion();
 
-                if (!Utils::Version::VersionSatisfies(mpClientVersion.c_str(), _opts.gameVersion.c_str())) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                        ->error("Client has invalid game version, force-disconnecting peer");
-                    Framework::Networking::Messages::ClientKick kick;
-                    kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                    net->Send(kick, guid);
-                    net->GetPeer()->CloseConnection(guid, true);
-                    return;
-                }
+            if (!Utils::Version::VersionSatisfies(mpClientVersion.c_str(), _opts.gameVersion.c_str())) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
 
-                // Create player entity and add on world
-                const auto newPlayer = _worldEngine->CreateEntity();
-                _streamingFactory->SetupServer(newPlayer, guid.g);
+            // Create player entity and add on world
+            const auto newPlayer = _worldEngine->CreateEntity();
+            _streamingFactory->SetupServer(newPlayer, guid.g);
 
-                auto nickname = msg->GetPlayerName();
-                if (nickname.size() > 64) {
-                    nickname = nickname.substr(0, 64);
-                }
+            auto nickname = msg->GetPlayerName();
+            if (nickname.size() > 64) {
+                nickname = nickname.substr(0, 64);
+            }
 
-                _playerFactory->SetupServer(newPlayer, guid.g, nickname);
+            _playerFactory->SetupServer(newPlayer, guid.g, nickname);
 
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)
-                    ->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
 
-                // Send the connection finalized packet
-                Framework::Networking::Messages::ClientConnectionFinalized answer;
-                answer.FromParameters(_opts.tickInterval, newPlayer.id());
-                net->Send(answer, guid);
-            });
+            // Send the connection finalized packet
+            Framework::Networking::Messages::ClientConnectionFinalized answer;
+            answer.FromParameters(_opts.tickInterval, newPlayer.id());
+            net->Send(answer, guid);
+        });
 
         net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
             const auto guid = packet->guid;
@@ -328,12 +308,11 @@ namespace Framework::Integrations::Server {
             net->GetPeer()->CloseConnection(guid, true);
         });
 
-        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER,
-                                               [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
-                                                   auto e = _worldEngine->GetEntityByGUID(guid.g);
-                                                   if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
-                                                       _onPlayerConnectCallback(e, guid.g);
-                                               });
+        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
+            auto e = _worldEngine->GetEntityByGUID(guid.g);
+            if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
+                _onPlayerConnectCallback(e, guid.g);
+        });
 
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
@@ -390,19 +369,19 @@ namespace Framework::Integrations::Server {
             }
 
             if (_masterlist->IsInitialized()) {
-                Services::ServerInfo info{};
-                info.gameMode = _scriptingEngine->GetEngine()->GetGameModeName();
-                info.version = _opts.modVersion;
-                info.maxPlayers = _opts.maxPlayers;
+                Services::ServerInfo info {};
+                info.gameMode       = _scriptingEngine->GetEngine()->GetGameModeName();
+                info.version        = _opts.modVersion;
+                info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
                 _masterlist->Ping(info);
             }
 
             PostUpdate();
 
-            _nextTick = std::chrono::high_resolution_clock::now() +
-                        std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
-        } else {
+            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
+        }
+        else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }

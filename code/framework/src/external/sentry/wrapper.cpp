@@ -32,7 +32,7 @@ namespace Framework::External::Sentry {
         }
 
         cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
-        auto result = cacheDirectory.createDirectory();
+        auto result                      = cacheDirectory.createDirectory();
         if (!result) {
             return SentryError::SENTRY_CACHE_DIRECTORY_CREATION_FAILED;
         }
@@ -127,13 +127,11 @@ namespace Framework::External::Sentry {
         return SentryError::SENTRY_NONE;
     }
 
-    SentryError Wrapper::CaptureEventMessage(int32_t level, const std::string &logger,
-                                             const std::string &payload) const {
+    SentryError Wrapper::CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
-        sentry_capture_event(
-            sentry_value_new_message_event(static_cast<sentry_level_e>(level), logger.c_str(), payload.c_str()));
+        sentry_capture_event(sentry_value_new_message_event(static_cast<sentry_level_e>(level), logger.c_str(), payload.c_str()));
         return SentryError::SENTRY_NONE;
     }
 } // namespace Framework::External::Sentry

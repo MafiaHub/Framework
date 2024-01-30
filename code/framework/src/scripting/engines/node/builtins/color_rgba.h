@@ -19,9 +19,9 @@
 #include "color_rgb.h"
 
 namespace Framework::Scripting::Engines::Node::Builtins {
-    class ColorRGBA : public ColorRGB {
+    class ColorRGBA: public ColorRGB {
       public:
-        ColorRGBA(int r, int g, int b, int a) : ColorRGB(r, g, b) {
+        ColorRGBA(int r, int g, int b, int a): ColorRGB(r, g, b) {
             _data.a = a;
         }
 
@@ -64,8 +64,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         static ColorRGBA FromVec4(const glm::vec4 &vec) {
-            return ColorRGBA(static_cast<int>(vec.r * 255.0f), static_cast<int>(vec.g * 255.0f),
-                             static_cast<int>(vec.b * 255.0f), static_cast<int>(vec.a * 255.0f));
+            return ColorRGBA(static_cast<int>(vec.r * 255.0f), static_cast<int>(vec.g * 255.0f), static_cast<int>(vec.b * 255.0f), static_cast<int>(vec.a * 255.0f));
         }
 
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {

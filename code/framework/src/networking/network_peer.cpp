@@ -37,8 +37,7 @@ namespace Framework::Networking {
         CoreModules::SetNetworkPeer(nullptr);
     }
 
-    bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority,
-                           PacketReliability reliability) {
+    bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) {
         if (!_peer) {
             return false;
         }
@@ -55,8 +54,7 @@ namespace Framework::Networking {
         return true;
     }
 
-    bool NetworkPeer::Send(Messages::IMessage &msg, uint64_t guid, PacketPriority priority,
-                           PacketReliability reliability) {
+    bool NetworkPeer::Send(Messages::IMessage &msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
         return Send(msg, SLNet::RakNetGUID(guid), priority, reliability);
     }
 
@@ -76,7 +74,7 @@ namespace Framework::Networking {
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
-            int offset = 0;
+            int offset       = 0;
             SLNet::TimeMS TS = 0;
             if (_packet->data[0] == ID_TIMESTAMP) {
                 SLNet::BitStream timestamp(_packet->data + 1, sizeof(SLNet::TimeMS) + 1, false);
@@ -89,7 +87,8 @@ namespace Framework::Networking {
             if (!HandlePacket(packetID, _packet)) {
                 if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
                     _registeredMessageCallbacks[packetID](_packet);
-                } else {
+                }
+                else {
                     Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
                     if (_onUnknownPacketCallback) {
                         _onUnknownPacketCallback(_packet);

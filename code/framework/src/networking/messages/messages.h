@@ -16,7 +16,7 @@
 #include "utils/optional.h"
 
 namespace Framework::Networking::Messages {
-    using PacketCallback = fu2::function<void(SLNet::Packet *) const>;
+    using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
     using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, uint32_t reason) const>;
 
     enum DisconnectionReason {
@@ -63,7 +63,7 @@ namespace Framework::Networking::Messages {
      */
     class IMessage {
       private:
-        SLNet::Packet *packet{};
+        SLNet::Packet *packet {};
 
       public:
         virtual uint8_t GetMessageID() const = 0;
@@ -75,7 +75,7 @@ namespace Framework::Networking::Messages {
          * @param bs
          * @param write
          */
-        virtual void Serialize2(SLNet::BitStream *bs, bool write){};
+        virtual void Serialize2(SLNet::BitStream *bs, bool write) {};
 
         virtual bool Valid() const = 0;
 

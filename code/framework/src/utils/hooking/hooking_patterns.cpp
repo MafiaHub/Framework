@@ -29,7 +29,8 @@ static void Citizen_PatternSaveHint(uint64_t hash, uintptr_t hint) {
 #if PATTERNS_USE_HINTS
 
 // from boost someplace
-template <std::uint64_t FnvPrime, std::uint64_t OffsetBasis> struct basic_fnv_1 {
+template <std::uint64_t FnvPrime, std::uint64_t OffsetBasis>
+struct basic_fnv_1 {
     std::uint64_t operator()(std::string_view text) const {
         std::uint64_t hash = OffsetBasis;
         for (auto it : text) {
@@ -41,7 +42,7 @@ template <std::uint64_t FnvPrime, std::uint64_t OffsetBasis> struct basic_fnv_1 
     }
 };
 
-const std::uint64_t fnv_prime = 1099511628211u;
+const std::uint64_t fnv_prime        = 1099511628211u;
 const std::uint64_t fnv_offset_basis = 14695981039346656037u;
 
 typedef basic_fnv_1<fnv_prime, fnv_offset_basis> fnv_1;
@@ -70,7 +71,7 @@ namespace hook {
 
     static void TransformPattern(std::string_view pattern, std::string &data, std::string &mask) {
         uint8_t tempDigit = 0;
-        bool tempFlag = false;
+        bool tempFlag     = false;
 
         auto tol = [](char ch) -> uint8_t {
             if (ch >= 'A' && ch <= 'F')
@@ -83,16 +84,19 @@ namespace hook {
         for (auto ch : pattern) {
             if (ch == ' ') {
                 continue;
-            } else if (ch == '?') {
+            }
+            else if (ch == '?') {
                 data.push_back(0);
                 mask.push_back('?');
-            } else if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
+            }
+            else if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
                 uint8_t thisDigit = tol(ch);
 
                 if (!tempFlag) {
                     tempDigit = thisDigit << 4;
-                    tempFlag = true;
-                } else {
+                    tempFlag  = true;
+                }
+                else {
                     tempDigit |= thisDigit;
                     tempFlag = false;
 
@@ -109,19 +113,19 @@ namespace hook {
         uintptr_t m_end;
 
       public:
-        template <typename TReturn, typename TOffset> TReturn *getRVA(TOffset rva) {
+        template <typename TReturn, typename TOffset>
+        TReturn *getRVA(TOffset rva) {
             return (TReturn *)(m_begin + rva);
         }
 
-        explicit executable_meta(void *module) : m_begin((uintptr_t)module) {
+        explicit executable_meta(void *module): m_begin((uintptr_t)module) {
             PIMAGE_DOS_HEADER dosHeader = getRVA<IMAGE_DOS_HEADER>(0);
-            PIMAGE_NT_HEADERS ntHeader = getRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
+            PIMAGE_NT_HEADERS ntHeader  = getRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
 
             m_end = m_begin + ntHeader->OptionalHeader.SizeOfImage;
         }
 
-        executable_meta(uintptr_t begin, uintptr_t end) : m_begin(begin), m_end(end) {
-        }
+        executable_meta(uintptr_t begin, uintptr_t end): m_begin(begin), m_end(end) {}
 
         inline uintptr_t begin() const {
             return m_begin;
@@ -166,8 +170,7 @@ namespace hook {
         }
 
         // scan the executable for code
-        executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd) :
-                                                                            executable_meta(m_module);
+        executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd) : executable_meta(m_module);
 
         auto matchSuccess = [&](uintptr_t address) {
 #if PATTERNS_USE_HINTS
@@ -181,14 +184,13 @@ namespace hook {
         };
 
         const uint8_t *pattern = reinterpret_cast<const uint8_t *>(m_bytes.c_str());
-        const char *mask = m_mask.c_str();
-        size_t maskSize = m_mask.size();
-        size_t lastWild = m_mask.find_last_of('?');
+        const char *mask       = m_mask.c_str();
+        size_t maskSize        = m_mask.size();
+        size_t lastWild        = m_mask.find_last_of('?');
 
         ptrdiff_t Last[256];
 
-        std::fill(std::begin(Last), std::end(Last),
-                  lastWild == std::string::npos ? -1 : static_cast<ptrdiff_t>(lastWild));
+        std::fill(std::begin(Last), std::end(Last), lastWild == std::string::npos ? -1 : static_cast<ptrdiff_t>(lastWild));
 
         for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(maskSize); ++i) {
             if (Last[pattern[i]] < i) {
@@ -198,10 +200,9 @@ namespace hook {
 
         for (uintptr_t i = executable.begin(), end = executable.end() - maskSize; i <= end;) {
             uint8_t *ptr = reinterpret_cast<uint8_t *>(i);
-            ptrdiff_t j = maskSize - 1;
+            ptrdiff_t j  = maskSize - 1;
 
-            while ((j >= 0) && (mask[j] == '?' || pattern[j] == ptr[j]))
-                j--;
+            while ((j >= 0) && (mask[j] == '?' || pattern[j] == ptr[j])) j--;
 
             if (j < 0) {
                 m_matches.emplace_back(ptr);
@@ -210,7 +211,8 @@ namespace hook {
                     break;
                 }
                 i++;
-            } else
+            }
+            else
                 i += std::max((ptrdiff_t)1, j - Last[ptr[j]]);
         }
 
@@ -219,7 +221,7 @@ namespace hook {
 
     bool pattern::ConsiderMatch(uintptr_t offset) {
         const char *pattern = m_bytes.c_str();
-        const char *mask = m_mask.c_str();
+        const char *mask    = m_mask.c_str();
 
         char *ptr = reinterpret_cast<char *>(offset);
 

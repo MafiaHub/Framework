@@ -30,7 +30,7 @@ class HookFunctionBase {
     void Register();
 };
 
-class InitFunction : public HookFunctionBase {
+class InitFunction: public HookFunctionBase {
   private:
     void (*m_function)();
 
@@ -44,7 +44,7 @@ class InitFunction : public HookFunctionBase {
     }
 };
 
-class HookFunction : public HookFunctionBase {
+class HookFunction: public HookFunctionBase {
   private:
     void (*m_function)();
 
@@ -67,7 +67,7 @@ class RuntimeHookFunction {
 
   public:
     RuntimeHookFunction(const char *key, void (*function)()) {
-        m_key = key;
+        m_key      = key;
         m_function = function;
 
         Register();

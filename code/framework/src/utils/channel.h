@@ -13,7 +13,8 @@
 #include <queue>
 
 namespace Framework::Utils {
-    template <typename ProcT = fu2::function<void() const>> class Channel {
+    template <typename ProcT = fu2::function<void() const>>
+    class Channel {
       public:
         using Proc = ProcT;
 

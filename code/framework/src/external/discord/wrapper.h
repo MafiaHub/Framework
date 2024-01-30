@@ -18,12 +18,12 @@ namespace Framework::External::Discord {
     class Wrapper final {
       private:
         bool _initialized = false;
-        discord::User _user{};
-        discord::Core *_instance{};
+        discord::User _user {};
+        discord::Core *_instance {};
 
       public:
         using DiscordLoginProc = fu2::function<void(std::string const &token) const>;
-        Wrapper() = default;
+        Wrapper()              = default;
         DiscordError Init(int64_t id);
         DiscordError Shutdown();
 
@@ -32,9 +32,7 @@ namespace Framework::External::Discord {
         }
 
         DiscordError Update();
-        DiscordError SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity,
-                                 std::string const &largeImage, std::string const &largeText,
-                                 std::string const &smallImage, std::string const &smallText);
+        DiscordError SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity, std::string const &largeImage, std::string const &largeText, std::string const &smallImage, std::string const &smallText);
         DiscordError SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity);
 
         void SignInWithDiscord(DiscordLoginProc const &proc);

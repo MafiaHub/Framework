@@ -45,7 +45,8 @@ namespace Framework::Utils {
 
         virtual const char *GetDefaultConfig();
 
-        template <typename T> T Get(const std::string &field) {
+        template <typename T>
+        T Get(const std::string &field) {
             if (!_lastError.empty())
                 return {};
             if constexpr (std::is_same_v<T, std::wstring>) {
@@ -54,7 +55,8 @@ namespace Framework::Utils {
             return (*_document)[field];
         }
 
-        template <typename T> T GetDefault(const std::string &field, T defaultValue) {
+        template <typename T>
+        T GetDefault(const std::string &field, T defaultValue) {
             if (!_lastError.empty())
                 return {};
 
@@ -63,12 +65,14 @@ namespace Framework::Utils {
                     return Utils::StringUtils::NormalToWide((*_document)[field]);
                 }
                 return (*_document)[field];
-            } catch (const std::exception &) {
+            }
+            catch (const std::exception &) {
                 return defaultValue;
             }
         }
 
-        template <typename T> void Set(const std::string &field, T value) {
+        template <typename T>
+        void Set(const std::string &field, T value) {
             if (!_lastError.empty())
                 return;
             if constexpr (std::is_same_v<T, std::wstring>) {

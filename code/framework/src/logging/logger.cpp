@@ -47,24 +47,23 @@ namespace Framework::Logging {
         consoleLogger->set_pattern("[%H:%M:%S] [%^%l%$] [%n] %v");
 
         const auto fileLogName = _logFolder + "/" + _logName + ".log";
-        auto fileLogger =
-            std::make_shared<spdlog::sinks::rotating_file_sink_mt>(fileLogName, _maxFileSize, _maxFileCount);
+        auto fileLogger        = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(fileLogName, _maxFileSize, _maxFileCount);
         fileLogger->set_level(spdlog::level::trace);
 
         if (!ringbuffer_sink) {
             ringbuffer_sink = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(_maxRingBufferSize);
             ringbuffer_sink->set_level(spdlog::level::debug);
         }
-        std::vector<spdlog::sink_ptr> sinks{consoleLogger, fileLogger, ringbuffer_sink};
+        std::vector<spdlog::sink_ptr> sinks {consoleLogger, fileLogger, ringbuffer_sink};
 
         // Create our logging instance
         std::shared_ptr<spdlog::logger> spdLogger;
 
         // Create the logger depending on the type we want
         if (async) {
-            spdLogger = std::make_shared<spdlog::async_logger>(
-                logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
-        } else {
+            spdLogger = std::make_shared<spdlog::async_logger>(logName, sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+        }
+        else {
             spdLogger = std::make_shared<spdlog::logger>(logName, sinks.begin(), sinks.end());
         }
 
@@ -72,7 +71,8 @@ namespace Framework::Logging {
 
         try {
             spdlog::register_logger(spdLogger);
-        } catch (std::exception &ex) {
+        }
+        catch (std::exception &ex) {
             return nullptr;
         }
 

@@ -15,9 +15,9 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntityUpdate final : public GameSyncMessage {
+    class GameSyncEntityUpdate final: public GameSyncMessage {
       private:
-        World::Modules::Base::Transform _transform{};
+        World::Modules::Base::Transform _transform {};
         uint64_t _owner = SLNet::UNASSIGNED_RAKNET_GUID.g;
 
       public:
@@ -27,7 +27,7 @@ namespace Framework::Networking::Messages {
 
         void FromParameters(World::Modules::Base::Transform tr, uint64_t owner) {
             _transform = tr;
-            _owner = owner;
+            _owner     = owner;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

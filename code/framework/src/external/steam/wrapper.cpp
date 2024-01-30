@@ -28,7 +28,7 @@ namespace Framework::External::Steam {
         }
 
         CSteamAPIContext *ctx = new CSteamAPIContext();
-        _ctx = ctx;
+        _ctx                  = ctx;
 
         if (!_ctx) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to create steam api context");

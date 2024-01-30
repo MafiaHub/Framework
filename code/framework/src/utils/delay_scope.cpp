@@ -9,12 +9,12 @@
 #include "delay_scope.h"
 
 namespace Framework::Utils {
-    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback) : _delay(delay), _callback(callback) {
+    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback): _delay(delay), _callback(callback) {
         _created = std::chrono::high_resolution_clock::now();
     }
 
     bool DelayScope::FireWhenReady() {
-        const auto now = std::chrono::high_resolution_clock::now();
+        const auto now          = std::chrono::high_resolution_clock::now();
         const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - _created);
 
         if (milliseconds.count() >= _delay) {
@@ -33,7 +33,8 @@ namespace Framework::Utils {
         for (auto handler : activeHandlers) {
             if (handler != nullptr && !handler->FireWhenReady()) {
                 pendingDelays.push_back(handler);
-            } else {
+            }
+            else {
                 delete handler;
             }
         }

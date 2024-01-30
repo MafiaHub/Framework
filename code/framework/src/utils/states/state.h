@@ -14,14 +14,14 @@ namespace Framework::Utils::States {
     class Machine;
     class IState {
       public:
-        IState() = default;
+        IState()          = default;
         virtual ~IState() = default;
 
         virtual const char *GetName() const = 0;
-        virtual int32_t GetId() const = 0;
+        virtual int32_t GetId() const       = 0;
 
-        virtual bool OnEnter(Machine *) = 0;
+        virtual bool OnEnter(Machine *)  = 0;
         virtual bool OnUpdate(Machine *) = 0;
-        virtual bool OnExit(Machine *) = 0;
+        virtual bool OnExit(Machine *)   = 0;
     };
 } // namespace Framework::Utils::States

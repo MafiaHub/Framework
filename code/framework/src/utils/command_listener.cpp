@@ -14,7 +14,7 @@
 
 namespace Framework::Utils {
     CommandListener::CommandListener() {
-        _running = true;
+        _running       = true;
         _currentThread = std::make_shared<std::thread>([this]() {
             while (_running) {
                 std::string commandString;

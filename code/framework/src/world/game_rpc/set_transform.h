@@ -12,7 +12,7 @@
 #include "world/modules/base.hpp"
 
 namespace Framework::World::RPC {
-    class SetTransform final : public Networking::RPC::IGameRPC<SetTransform> {
+    class SetTransform final: public Networking::RPC::IGameRPC<SetTransform> {
       private:
         World::Modules::Base::Transform _transform;
 

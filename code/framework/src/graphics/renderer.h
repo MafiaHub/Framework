@@ -31,8 +31,8 @@ namespace Framework::Graphics {
         } d3d11;
 
         struct {
-            ID3D12Device *device = nullptr;
-            IDXGISwapChain3 *swapchain = nullptr;
+            ID3D12Device *device             = nullptr;
+            IDXGISwapChain3 *swapchain       = nullptr;
             ID3D12CommandQueue *commandQueue = nullptr;
             // todo
         } d3d12;
@@ -40,15 +40,15 @@ namespace Framework::Graphics {
 
     class Renderer {
       private:
-        RendererConfiguration _config{};
-        RendererState _state = RendererState::STATE_NOT_INITIALIZED;
+        RendererConfiguration _config {};
+        RendererState _state     = RendererState::STATE_NOT_INITIALIZED;
         RendererBackend _backend = RendererBackend::BACKEND_D3D_11;
 
-        HWND _window{};
+        HWND _window {};
 
-        D3D9Backend *_d3d9Backend{};
-        D3D11Backend *_d3d11Backend{};
-        D3D12Backend *_d3d12Backend{};
+        D3D9Backend *_d3d9Backend {};
+        D3D11Backend *_d3d11Backend {};
+        D3D12Backend *_d3d12Backend {};
 
         bool _initialized = false;
 

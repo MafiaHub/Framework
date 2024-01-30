@@ -17,35 +17,26 @@
 
 namespace Framework::Scripting::Helpers {
     inline void Throw(v8::Isolate *isolate, const std::string &msg) {
-        isolate->ThrowException(v8::Exception::Error(
-            v8::String::NewFromUtf8(isolate, msg.data(), v8::NewStringType::kNormal, msg.size()).ToLocalChecked()));
+        isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, msg.data(), v8::NewStringType::kNormal, msg.size()).ToLocalChecked()));
     }
 
-    inline void SetStaticMethod(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name,
-                                v8::FunctionCallback callback) {
+    inline void SetStaticMethod(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::FunctionCallback callback) {
         tpl->Set(isolate, name, v8::FunctionTemplate::New(isolate, callback));
     }
 
-    inline void SetAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name,
-                            v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
-        tpl->PrototypeTemplate()->SetAccessor(
-            v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter,
-            v8::Local<v8::Value>(), v8::AccessControl::DEFAULT,
+    inline void SetAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
+        tpl->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::Local<v8::Value>(), v8::AccessControl::DEFAULT,
             setter != nullptr ? v8::PropertyAttribute::None : v8::PropertyAttribute::ReadOnly);
     }
 
-    inline void SetStaticAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name,
-                                  v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
-        tpl->SetNativeDataProperty(
-            v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter);
+    inline void SetStaticAccessor(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::AccessorGetterCallback getter, v8::AccessorSetterCallback setter = nullptr) {
+        tpl->SetNativeDataProperty(v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter);
     }
 
-    inline void RegisterFunc(v8::Local<v8::Context> ctx, v8::Local<v8::Object> exports, const std::string &_name,
-                             v8::FunctionCallback cb, void *data = nullptr) {
+    inline void RegisterFunc(v8::Local<v8::Context> ctx, v8::Local<v8::Object> exports, const std::string &_name, v8::FunctionCallback cb, void *data = nullptr) {
         v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-        v8::Local<v8::String> name =
-            v8::String::NewFromUtf8(isolate, _name.data(), v8::NewStringType::kNormal, _name.size()).ToLocalChecked();
+        v8::Local<v8::String> name = v8::String::NewFromUtf8(isolate, _name.data(), v8::NewStringType::kNormal, _name.size()).ToLocalChecked();
 
         v8::Local<v8::Function> fn = v8::Function::New(ctx, cb, v8::External::New(isolate, data)).ToLocalChecked();
         fn->SetName(name);
@@ -55,53 +46,37 @@ namespace Framework::Scripting::Helpers {
             return;
         }
     }
-    inline void RegisterProperty(v8::Local<v8::Context> ctx, v8::Local<v8::Object> exports, const std::string &_name,
-                                 v8::AccessorNameGetterCallback getter, v8::AccessorNameSetterCallback setter = nullptr,
-                                 void *data = nullptr) {
+    inline void RegisterProperty(v8::Local<v8::Context> ctx, v8::Local<v8::Object> exports, const std::string &_name, v8::AccessorNameGetterCallback getter, v8::AccessorNameSetterCallback setter = nullptr, void *data = nullptr) {
         v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-        exports->SetNativeDataProperty(
-            ctx, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kInternalized).ToLocalChecked(),
-            getter, setter, v8::External::New(isolate, data));
+        exports->SetNativeDataProperty(ctx, v8::String::NewFromUtf8(isolate, _name.c_str(), v8::NewStringType::kInternalized).ToLocalChecked(), getter, setter, v8::External::New(isolate, data));
     }
 
-    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val,
-                                  const char *name, v8::Local<v8::Value> value,
-                                  v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
-        val->DefineOwnProperty(
-            ctx, v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), value,
-            attributes);
+    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, const char *name, v8::Local<v8::Value> value, v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
+        val->DefineOwnProperty(ctx, v8::String::NewFromUtf8(isolate, name, v8::NewStringType::kInternalized).ToLocalChecked(), value, attributes);
     }
 
-    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val,
-                                  v8::Local<v8::String> name, v8::Local<v8::Value> value,
-                                  v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
+    inline void DefineOwnProperty(v8::Isolate *isolate, v8::Local<v8::Context> ctx, v8::Local<v8::Object> val, v8::Local<v8::String> name, v8::Local<v8::Value> value, v8::PropertyAttribute attributes = v8::PropertyAttribute::None) {
         val->DefineOwnProperty(ctx, name, value, attributes);
     }
 
-    inline void SetMethod(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name,
-                          v8::FunctionCallback callback) {
+    inline void SetMethod(v8::Isolate *isolate, v8::Local<v8::FunctionTemplate> tpl, const char *name, v8::FunctionCallback callback) {
         tpl->PrototypeTemplate()->Set(isolate, name, v8::FunctionTemplate::New(isolate, callback));
     }
 
     inline v8::Local<v8::Value> Get(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, const char *name) {
-        return obj
-            ->Get(ctx,
-                  v8::String::NewFromUtf8(ctx->GetIsolate(), name, v8::NewStringType::kInternalized).ToLocalChecked())
-            .ToLocalChecked();
+        return obj->Get(ctx, v8::String::NewFromUtf8(ctx->GetIsolate(), name, v8::NewStringType::kInternalized).ToLocalChecked()).ToLocalChecked();
     }
 
     inline v8::Local<v8::Value> Get(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, v8::Local<v8::Name> name) {
         return obj->Get(ctx, name).ToLocalChecked();
     }
 
-    inline void Set(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, v8::Local<v8::Name> name,
-                    v8::Local<v8::Value> value) {
+    inline void Set(v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj, v8::Local<v8::Name> name, v8::Local<v8::Value> value) {
         obj->Set(ctx, name, value);
     }
 
-    inline void Set(v8::Local<v8::Context> ctx, v8::Isolate *isolate, v8::Local<v8::Object> obj, const char *name,
-                    v8::Local<v8::Value> value) {
+    inline void Set(v8::Local<v8::Context> ctx, v8::Isolate *isolate, v8::Local<v8::Object> obj, const char *name, v8::Local<v8::Value> value) {
         Set(ctx, obj, Helpers::MakeString(isolate, name).ToLocalChecked(), value);
     }
 
@@ -115,7 +90,7 @@ namespace Framework::Scripting::Helpers {
 
     inline bool SafeToBoolean(v8::Local<v8::Value> val, v8::Local<v8::Context> ctx, bool &out) {
         v8::Local maybeVal = val->ToBoolean(ctx->GetIsolate());
-        out = maybeVal->Value();
+        out                = maybeVal->Value();
         return true;
     }
 
@@ -147,9 +122,7 @@ namespace Framework::Scripting::Helpers {
         return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), val).ToLocalChecked();
     }
     inline v8::Local<v8::String> JSValue(const std::string &val) {
-        return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), val.c_str(), v8::NewStringType::kNormal,
-                                       (int)val.size())
-            .ToLocalChecked();
+        return v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), val.c_str(), v8::NewStringType::kNormal, (int)val.size()).ToLocalChecked();
     }
     inline v8::Local<v8::String> JSValue(const uint16_t *val) {
         return v8::String::NewFromTwoByte(v8::Isolate::GetCurrent(), val).ToLocalChecked();
@@ -175,7 +148,8 @@ namespace Framework::Scripting::Helpers {
     inline v8::Local<v8::BigInt> JSValue(uint64_t val) {
         return v8::BigInt::NewFromUnsigned(v8::Isolate::GetCurrent(), val);
     }
-    template <class T> inline v8::Local<v8::Array> JSValue(std::vector<T> &arr) {
+    template <class T>
+    inline v8::Local<v8::Array> JSValue(std::vector<T> &arr) {
         auto jsArr = v8::Array::New(v8::Isolate::GetCurrent(), arr.size());
         for (int i = 0; i < arr.size(); i++) {
             jsArr->Set(v8::Isolate::GetCurrent()->GetEnteredOrMicrotaskContext(), i, JSValue(arr[i]));
@@ -197,15 +171,15 @@ namespace Framework::Scripting::Helpers {
 
 #define V8_GET_ISOLATE() v8::Isolate *isolate = info.GetIsolate()
 #define V8_GET_CONTEXT() v8::Local<v8::Context> ctx = isolate->GetEnteredOrMicrotaskContext()
-#define V8_GET_ISOLATE_CONTEXT()                                                                                       \
-    V8_GET_ISOLATE();                                                                                                  \
+#define V8_GET_ISOLATE_CONTEXT()                                                                                                                                                                                                                                                       \
+    V8_GET_ISOLATE();                                                                                                                                                                                                                                                                  \
     V8_GET_CONTEXT()
 
 #define V8_GET_RESOURCE() auto resource = static_cast<Resource *>(ctx->GetAlignedPointerFromEmbedderData(0))
 
-#define V8_GET_SUITE()                                                                                                 \
-    V8_GET_ISOLATE();                                                                                                  \
-    V8_GET_CONTEXT();                                                                                                  \
+#define V8_GET_SUITE()                                                                                                                                                                                                                                                                 \
+    V8_GET_ISOLATE();                                                                                                                                                                                                                                                                  \
+    V8_GET_CONTEXT();                                                                                                                                                                                                                                                                  \
     V8_GET_RESOURCE()
 
 #define V8_RETURN(ret) info.GetReturnValue().Set(ret)
@@ -216,20 +190,19 @@ namespace Framework::Scripting::Helpers {
 
 #define V8_DEFINE_STACK() Helpers::ArgumentStack stack(info)
 
-#define V8_VALIDATE_CTOR_CALL()                                                                                        \
-    if (!info.IsConstructCall()) {                                                                                     \
-        Helpers::Throw(isolate, "Function cannot be called without new keyword");                                      \
-        return;                                                                                                        \
+#define V8_VALIDATE_CTOR_CALL()                                                                                                                                                                                                                                                        \
+    if (!info.IsConstructCall()) {                                                                                                                                                                                                                                                     \
+        Helpers::Throw(isolate, "Function cannot be called without new keyword");                                                                                                                                                                                                      \
+        return;                                                                                                                                                                                                                                                                        \
     }
 
 #define V8_MODULE_CB [](v8::Local<v8::Context> ctx, v8::Local<v8::Object> obj)
-#define V8_CLASS_CB [](v8::Local<v8::FunctionTemplate> tpl)
+#define V8_CLASS_CB  [](v8::Local<v8::FunctionTemplate> tpl)
 #define V8_METHOD_CB [](const v8::FunctionCallbackInfo<v8::Value> &info)
 
 #define V8_EVENT_ARGS std::vector<v8::Local<v8::Value>>
-#define V8_EVENT_CB [=](v8::Isolate * isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
+#define V8_EVENT_CB   [=](v8::Isolate * isolate, v8::Local<v8::Context> ctx) -> std::vector<v8::Local<v8::Value>>
 
-#define V8_DEF_PROP(param, value)                                                                                      \
-    Helpers::DefineOwnProperty(isolate, ctx, _this, param, value, v8::PropertyAttribute::ReadOnly);
+#define V8_DEF_PROP(param, value) Helpers::DefineOwnProperty(isolate, ctx, _this, param, value, v8::PropertyAttribute::ReadOnly);
 
 #define V8_RES_GETROOT(res) (res->GetSDK()->GetRootModule())

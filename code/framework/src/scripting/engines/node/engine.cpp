@@ -28,10 +28,9 @@ namespace Framework::Scripting::Engines::Node {
             return EngineError::ENGINE_NODE_INIT_FAILED;
         }
         // Define the arguments to be passed to the node instance
-        std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node",
-                                         "--no-warnings"};
-        std::vector<std::string> exec_args{};
-        std::vector<std::string> errors{};
+        std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--no-warnings"};
+        std::vector<std::string> exec_args {};
+        std::vector<std::string> errors {};
 
         // Initialize the node with the provided arguments
         int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
@@ -69,7 +68,7 @@ namespace Framework::Scripting::Engines::Node {
         _globalObjectTemplate.Reset(_isolate, global);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Node.JS engine initialized!");
-        _isShuttingDown = false;
+        _isShuttingDown       = false;
         _wasNodeAlreadyInited = true;
         return EngineError::ENGINE_NONE;
     }
@@ -92,15 +91,18 @@ namespace Framework::Scripting::Engines::Node {
         // Release the isolate
         bool platform_finished = false;
         _platform->AddIsolateFinishedCallback(
-            _isolate, [](void *data) { *static_cast<bool *>(data) = true; }, &platform_finished);
+            _isolate,
+            [](void *data) {
+                *static_cast<bool *>(data) = true;
+            },
+            &platform_finished);
         _platform->UnregisterIsolate(_isolate);
 
         // Wait until the platform has cleaned up all relevant resources.
         {
             v8::Locker locker(_isolate);
             v8::Isolate::Scope isolate_scope(_isolate);
-            while (!platform_finished)
-                uv_run(&uv_loop, UV_RUN_ONCE);
+            while (!platform_finished) uv_run(&uv_loop, UV_RUN_ONCE);
             uv_loop_close(&uv_loop);
         }
 
@@ -142,8 +144,7 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Update the file watcher
-        if (_watcher && !_isShuttingDown &&
-            Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
+        if (_watcher && !_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
             // Process the file changes watcher
             _watcher->watch(0);
             _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
@@ -184,21 +185,20 @@ namespace Framework::Scripting::Engines::Node {
 
         auto root = nlohmann::json::parse(packageFileContent);
         try {
-            _gamemodeMetadata.name = root["name"].get<std::string>();
-            _gamemodeMetadata.version = root["version"].get<std::string>();
+            _gamemodeMetadata.name       = root["name"].get<std::string>();
+            _gamemodeMetadata.version    = root["version"].get<std::string>();
             _gamemodeMetadata.entrypoint = root["main"].get<std::string>();
 
             if (root.contains("mod")) {
                 if (GetModName() != root["mod"].get<std::string>()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                        ->debug("The gamemode defined mod is not for this mod");
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The gamemode defined mod is not for this mod");
                     return false;
                 }
             }
             return true;
-        } catch (nlohmann::detail::type_error &err) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                ->error("The gamemode package.json is not valid:\n\t{}", err.what());
+        }
+        catch (nlohmann::detail::type_error &err) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode package.json is not valid:\n\t{}", err.what());
             return false;
         }
         return true;
@@ -222,18 +222,14 @@ namespace Framework::Scripting::Engines::Node {
         // Make sure the specified entrypoint is valid
         cppfs::FileHandle entryPointFile = cppfs::fs::open(mainPath + "/" + _gamemodeMetadata.entrypoint);
         if (!entryPointFile.exists() || !entryPointFile.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                ->debug("The specified entrypoint '{}' from '{}' is not a file", _gamemodeMetadata.entrypoint,
-                        _gamemodeMetadata.name);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint '{}' from '{}' is not a file", _gamemodeMetadata.entrypoint, _gamemodeMetadata.name);
             return false;
         }
 
         // Read the entrypoint file content
         std::string content = entryPointFile.readFile();
         if (content.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
-                ->debug("The specified entrypoint file '{}' from '{}' is empty", _gamemodeMetadata.entrypoint,
-                        _gamemodeMetadata.name);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file '{}' from '{}' is empty", _gamemodeMetadata.entrypoint, _gamemodeMetadata.name);
             return false;
         }
 
@@ -251,11 +247,10 @@ namespace Framework::Scripting::Engines::Node {
         _context.Reset(_isolate, context);
 
         // Create the execution environment
-        node::EnvironmentFlags::Flags flags =
-            (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
-        _gamemodeData = node::CreateIsolateData(_isolate, &uv_loop, GetPlatform());
-        std::vector<std::string> argv = {"mafiahub-gamemode"};
-        _gamemodeEnvironment = node::CreateEnvironment(_gamemodeData, context, argv, argv, flags);
+        node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
+        _gamemodeData                       = node::CreateIsolateData(_isolate, &uv_loop, GetPlatform());
+        std::vector<std::string> argv       = {"mafiahub-gamemode"};
+        _gamemodeEnvironment                = node::CreateEnvironment(_gamemodeData, context, argv, argv, flags);
 
         // Make sure isolate is linked to our node environment
         node::IsolateSettings is;
@@ -341,7 +336,8 @@ namespace Framework::Scripting::Engines::Node {
             v8::MaybeLocal<v8::Script> script;
             if (path.empty()) {
                 script = v8::Script::Compile(context, source);
-            } else {
+            }
+            else {
                 auto originValue = Helpers::MakeString(_isolate, path).ToLocalChecked();
                 v8::ScriptOrigin scriptOrigin(_isolate, originValue);
 
@@ -383,8 +379,7 @@ namespace Framework::Scripting::Engines::Node {
         _watcher = new cppfs::FileWatcher;
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Watching '{}' changes", dir.path().c_str());
-        _watcher->add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged,
-                      cppfs::Recursive);
+        _watcher->add(dir, cppfs::FileCreated | cppfs::FileRemoved | cppfs::FileModified | cppfs::FileAttrChanged, cppfs::Recursive);
         _watcher->addHandler([this, path](cppfs::FileHandle &fh, cppfs::FileEvent ev) {
             if (_shouldReloadWatcher)
                 return;

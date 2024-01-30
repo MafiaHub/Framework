@@ -20,14 +20,14 @@ namespace Framework::Scripting {
     class Module {
       private:
         int _processArgsCount = 0;
-        char **_processArgs = nullptr;
+        char **_processArgs   = nullptr;
         std::string _modName;
 
         Engines::IEngine *_engine = nullptr;
-        EngineTypes _engineType = EngineTypes::ENGINE_NODE;
+        EngineTypes _engineType   = EngineTypes::ENGINE_NODE;
 
       public:
-        Module() = default;
+        Module()  = default;
         ~Module() = default;
 
         ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
@@ -48,7 +48,7 @@ namespace Framework::Scripting {
 
         void SetProcessArguments(int argc, char **argv) {
             _processArgsCount = argc;
-            _processArgs = argv;
+            _processArgs      = argv;
         }
 
         void SetModName(std::string name) {

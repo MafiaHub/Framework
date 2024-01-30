@@ -27,8 +27,7 @@ namespace Framework::Scripting::Engines::Node {
         // Ensure that the method was called with exactly two arguments
         if (info.Length() != 2) {
             v8::Isolate *isolate = info.GetIsolate();
-            isolate->ThrowException(
-                v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Wrong number of arguments").ToLocalChecked()));
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Wrong number of arguments").ToLocalChecked()));
             return;
         }
 
@@ -36,16 +35,14 @@ namespace Framework::Scripting::Engines::Node {
         if (!info[0]->IsString() || !info[1]->IsFunction()) {
             // Throw an error if the argument types are incorrect
             v8::Isolate *isolate = info.GetIsolate();
-            isolate->ThrowException(v8::Exception::Error(
-                v8::String::NewFromUtf8(isolate, "Invalid argument types: must be string and function")
-                    .ToLocalChecked()));
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Invalid argument types: must be string and function").ToLocalChecked()));
             return;
         }
 
         const auto isolate = info.GetIsolate();
-        const auto ctx = isolate->GetEnteredOrMicrotaskContext();
+        const auto ctx     = isolate->GetEnteredOrMicrotaskContext();
 
-        v8::Local<v8::String> eventName = info[0]->ToString(ctx).ToLocalChecked();
+        v8::Local<v8::String> eventName       = info[0]->ToString(ctx).ToLocalChecked();
         v8::Local<v8::Function> eventCallback = info[1].As<v8::Function>();
 
         // Create a persistent handle to the event callback function
@@ -59,8 +56,7 @@ namespace Framework::Scripting::Engines::Node {
         // Ensure that the method was called with exactly two arguments
         if (info.Length() != 2) {
             v8::Isolate *isolate = info.GetIsolate();
-            isolate->ThrowException(
-                v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Wrong number of arguments").ToLocalChecked()));
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Wrong number of arguments").ToLocalChecked()));
             return;
         }
 
@@ -68,16 +64,14 @@ namespace Framework::Scripting::Engines::Node {
         if (!info[0]->IsString() || !info[1]->IsString()) {
             // Throw an error if the argument types are incorrect
             v8::Isolate *isolate = info.GetIsolate();
-            isolate->ThrowException(v8::Exception::Error(
-                v8::String::NewFromUtf8(isolate, "Invalid argument types: must be string and string")
-                    .ToLocalChecked()));
+            isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "Invalid argument types: must be string and string").ToLocalChecked()));
             return;
         }
 
         // TODO: check for reserved event names
 
         const auto isolate = info.GetIsolate();
-        const auto ctx = isolate->GetEnteredOrMicrotaskContext();
+        const auto ctx     = isolate->GetEnteredOrMicrotaskContext();
 
         v8::Local<v8::String> eventName = info[0]->ToString(ctx).ToLocalChecked();
         v8::Local<v8::String> eventData = info[1]->ToString(ctx).ToLocalChecked();
@@ -87,7 +81,7 @@ namespace Framework::Scripting::Engines::Node {
     }
 
     bool SDK::Init(Engine *engine, v8::Isolate *isolate, SDKRegisterCallback cb) {
-        _module = new v8pp::module(isolate);
+        _module  = new v8pp::module(isolate);
         _isolate = isolate;
 
         // Bind the module handler

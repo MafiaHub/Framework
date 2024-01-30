@@ -43,14 +43,16 @@ namespace hook {
     }
 
     // adjusts the address passed to the base as set above
-    template <typename T> inline void adjust_base(T &address) {
+    template <typename T>
+    inline void adjust_base(T &address) {
         if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000) {
             *(uintptr_t *)&address += baseAddressDifference;
         }
     }
 
     // returns the adjusted address to the stated base
-    template <typename T> inline uintptr_t get_adjusted(T address) {
+    template <typename T>
+    inline uintptr_t get_adjusted(T address) {
         if ((uintptr_t)address >= 0x140000000 && (uintptr_t)address <= 0x146000000) {
             return (uintptr_t)address + baseAddressDifference;
         }
@@ -59,10 +61,10 @@ namespace hook {
     }
 
     // returns the adjusted address to the stated base
-    template <typename T> inline uintptr_t get_unadjusted(T address) {
+    template <typename T>
+    inline uintptr_t get_unadjusted(T address) {
 #ifdef _M_AMD64
-        if ((uintptr_t)address >= hook::get_adjusted(0x140000000) &&
-            (uintptr_t)address <= hook::get_adjusted(0x146000000)) {
+        if ((uintptr_t)address >= hook::get_adjusted(0x140000000) && (uintptr_t)address <= hook::get_adjusted(0x146000000)) {
             return (uintptr_t)address - baseAddressDifference;
         }
 #endif
@@ -71,15 +73,14 @@ namespace hook {
     }
 
     // gets the current executable TLS offset
-    template <typename T = char *> T get_tls() {
+    template <typename T = char *>
+    T get_tls() {
         // ah, the irony in using TLS to get TLS
         static auto tlsIndex = ([]() {
-            auto base = (char *)GetModuleHandle(NULL);
+            auto base       = (char *)GetModuleHandle(NULL);
             auto moduleBase = (PIMAGE_DOS_HEADER)base;
-            auto ntBase = (PIMAGE_NT_HEADERS)(base + moduleBase->e_lfanew);
-            auto tlsBase =
-                (PIMAGE_TLS_DIRECTORY)(base +
-                                       ntBase->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+            auto ntBase     = (PIMAGE_NT_HEADERS)(base + moduleBase->e_lfanew);
+            auto tlsBase    = (PIMAGE_TLS_DIRECTORY)(base + ntBase->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 
             return reinterpret_cast<uint32_t *>(tlsBase->AddressOfIndex);
         })();
@@ -94,8 +95,8 @@ namespace hook {
     }
 
     struct pass {
-        template <typename... T> pass(T...) {
-        }
+        template <typename... T>
+        pass(T...) {}
     };
 
 #ifdef JITASM_H
@@ -127,7 +128,8 @@ namespace hook {
 #pragma endregion
 #endif
 
-    template <typename ValueType, typename AddressType> inline void put(AddressType address, ValueType value) {
+    template <typename ValueType, typename AddressType>
+    inline void put(AddressType address, ValueType value) {
         adjust_base(address);
 
         DWORD oldProtect;
@@ -138,7 +140,8 @@ namespace hook {
         VirtualProtect((void *)address, sizeof(value), oldProtect, &oldProtect);
     }
 
-    template <typename ValueType, typename AddressType> inline void putVP(AddressType address, ValueType value) {
+    template <typename ValueType, typename AddressType>
+    inline void putVP(AddressType address, ValueType value) {
         adjust_base(address);
 
         DWORD oldProtect;
@@ -159,7 +162,8 @@ namespace hook {
         return reinterpret_cast<TRet(__thiscall *)(TArgs...)>(address)(args...);
     }
 
-    template <typename AddressType> inline void nop(AddressType address, size_t length) {
+    template <typename AddressType>
+    inline void nop(AddressType address, size_t length) {
         adjust_base(address);
 
         DWORD oldProtect;
@@ -170,16 +174,19 @@ namespace hook {
         VirtualProtect((void *)address, length, oldProtect, &oldProtect);
     }
 
-    template <typename AddressType> inline void return_function(AddressType address, uint16_t stackSize = 0) {
+    template <typename AddressType>
+    inline void return_function(AddressType address, uint16_t stackSize = 0) {
         if (stackSize == 0) {
             put<uint8_t>(address, 0xC3);
-        } else {
+        }
+        else {
             put<uint8_t>(address, 0xC2);
             put<uint16_t>((uintptr_t)address + 1, stackSize);
         }
     }
 
-    template <typename TRet, typename TFnRet, typename... TArgs> inline TRet bind(TFnRet (*func)(TArgs...)) {
+    template <typename TRet, typename TFnRet, typename... TArgs>
+    inline TRet bind(TFnRet (*func)(TArgs...)) {
         return (TRet) reinterpret_cast<void *&>(func);
     }
 
@@ -188,7 +195,8 @@ namespace hook {
         return (TRet)(void *&)func;
     }
 
-    template <typename T> inline T *getRVA(uintptr_t rva) {
+    template <typename T>
+    inline T *getRVA(uintptr_t rva) {
 #ifdef _M_IX86
         return (T *)(baseAddressDifference + 0x400000 + rva);
 #elif defined(_M_AMD64)
@@ -197,10 +205,11 @@ namespace hook {
     }
 
     namespace {
-        template <typename TOrdinal> inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, TOrdinal ordinal) {
-        }
+        template <typename TOrdinal>
+        inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, TOrdinal ordinal) {}
 
-        template <> inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, int ordinal) {
+        template <>
+        inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, int ordinal) {
             if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                 return IMAGE_ORDINAL(*nameTableEntry) == ordinal;
             }
@@ -208,7 +217,8 @@ namespace hook {
             return false;
         }
 
-        template <> inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, const char *ordinal) {
+        template <>
+        inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, const char *ordinal) {
             if (!IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                 auto import = getRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
 
@@ -219,7 +229,8 @@ namespace hook {
         }
     } // namespace
 
-    template <typename T, typename TOrdinal> T iat(const char *moduleName, T function, TOrdinal ordinal) {
+    template <typename T, typename TOrdinal>
+    T iat(const char *moduleName, T function, TOrdinal ordinal) {
 #ifdef _M_IX86
         IMAGE_DOS_HEADER *imageHeader = (IMAGE_DOS_HEADER *)(baseAddressDifference + 0x400000);
 #elif defined(_M_AMD64)
@@ -227,8 +238,7 @@ namespace hook {
 #endif
         IMAGE_NT_HEADERS *ntHeader = getRVA<IMAGE_NT_HEADERS>(imageHeader->e_lfanew);
 
-        IMAGE_IMPORT_DESCRIPTOR *descriptor = getRVA<IMAGE_IMPORT_DESCRIPTOR>(
-            ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+        IMAGE_IMPORT_DESCRIPTOR *descriptor = getRVA<IMAGE_IMPORT_DESCRIPTOR>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
 
         while (descriptor->Name) {
             const char *name = getRVA<char>(descriptor->Name);
@@ -243,7 +253,7 @@ namespace hook {
                 return nullptr;
             }
 
-            auto nameTableEntry = getRVA<uintptr_t>(descriptor->OriginalFirstThunk);
+            auto nameTableEntry    = getRVA<uintptr_t>(descriptor->OriginalFirstThunk);
             auto addressTableEntry = getRVA<uintptr_t>(descriptor->FirstThunk);
 
             while (*nameTableEntry) {
@@ -381,7 +391,7 @@ namespace hook {
     };
 
 #ifdef JITASM_H
-    struct inject_hook_frontend : jitasm::Frontend {
+    struct inject_hook_frontend: jitasm::Frontend {
       private:
         inject_hook *m_hook;
 
@@ -440,13 +450,13 @@ namespace hook {
         }
     };
 
-#define DEFINE_INJECT_HOOK(hookName, hookAddress)                                                                      \
-    class _zz_inject_hook_##hookName : public hook::inject_hook {                                                      \
-      public:                                                                                                          \
-        _zz_inject_hook_##hookName(uint32_t address) : hook::inject_hook(address){};                                   \
-        ReturnType run();                                                                                              \
-    };                                                                                                                 \
-    static _zz_inject_hook_##hookName hookName(hookAddress);                                                           \
+#define DEFINE_INJECT_HOOK(hookName, hookAddress)                                                                                                                                                                                                                                      \
+    class _zz_inject_hook_##hookName: public hook::inject_hook {                                                                                                                                                                                                                       \
+      public:                                                                                                                                                                                                                                                                          \
+        _zz_inject_hook_##hookName(uint32_t address): hook::inject_hook(address) {};                                                                                                                                                                                                   \
+        ReturnType run();                                                                                                                                                                                                                                                              \
+    };                                                                                                                                                                                                                                                                                 \
+    static _zz_inject_hook_##hookName hookName(hookAddress);                                                                                                                                                                                                                           \
     _zz_inject_hook_##hookName::ReturnType _zz_inject_hook_##hookName::run()
 #endif
 
@@ -503,24 +513,28 @@ namespace hook {
             };
 #endif
 
-    template <typename T, typename AT> inline void jump(AT address, T func) {
+    template <typename T, typename AT>
+    inline void jump(AT address, T func) {
         put<uint8_t>(address, 0xE9);
         put<int>((uintptr_t)address + 1, (intptr_t)func - (intptr_t)get_adjusted(address) - 5);
     }
 
-    template <typename T, typename AT> inline void call(AT address, T func) {
+    template <typename T, typename AT>
+    inline void call(AT address, T func) {
         put<uint8_t>(address, 0xE8);
         put<int>((uintptr_t)address + 1, (intptr_t)func - (intptr_t)get_adjusted(address) - 5);
     }
 
-    template <typename T> inline T get_call(T address) {
+    template <typename T>
+    inline T get_call(T address) {
         intptr_t target = *(uintptr_t *)(get_adjusted(address) + 1);
         target += (get_adjusted(address) + 5);
 
         return (T)target;
     }
 
-    template <typename TTarget, typename T> inline void set_call(TTarget *target, T address) {
+    template <typename TTarget, typename T>
+    inline void set_call(TTarget *target, T address) {
         *(T *)target = get_call(address);
     }
 
@@ -528,11 +542,13 @@ namespace hook {
         return (uintptr_t)function;
     }
 
-    template <typename T> inline uintptr_t get_member_old(T function) {
+    template <typename T>
+    inline uintptr_t get_member_old(T function) {
         return ((uintptr_t(*)(T))get_member_internal)(function);
     }
 
-    template <typename TClass, typename TMember> inline uintptr_t get_member(TMember TClass::*function) {
+    template <typename TClass, typename TMember>
+    inline uintptr_t get_member(TMember TClass::*function) {
         union member_cast {
             TMember TClass::*function;
             struct {
@@ -553,12 +569,14 @@ namespace hook {
     }
 
     namespace vp {
-        template <typename T, typename AT> inline void jump(AT address, T func) {
+        template <typename T, typename AT>
+        inline void jump(AT address, T func) {
             putVP<uint8_t>(address, 0xE9);
             putVP<int>((uintptr_t)address + 1, (intptr_t)func - (intptr_t)get_adjusted(address) - 5);
         }
 
-        template <typename T, typename AT> inline void call(AT address, T func) {
+        template <typename T, typename AT>
+        inline void call(AT address, T func) {
             putVP<uint8_t>(address, 0xE8);
             putVP<int>((uintptr_t)address + 1, (intptr_t)func - (intptr_t)get_adjusted(address) - 5);
         }
@@ -566,20 +584,20 @@ namespace hook {
 
 #ifdef JITASM_H
 #pragma region inject call : call stub
-    template <typename R, typename... Args> struct CallStub : jitasm::function<void, CallStub<R, Args...>> {
+    template <typename R, typename... Args>
+    struct CallStub: jitasm::function<void, CallStub<R, Args...>> {
       private:
         void *m_target;
 
       public:
-        CallStub(void *target) : m_target(target) {
-        }
+        CallStub(void *target): m_target(target) {}
 
         void main() {
             uint32_t stackOffset = 0;
-            uint32_t argOffset = sizeof(uintptr_t) * 2; // as frame pointers are also kept here
-            uint32_t argCleanup = 0;
+            uint32_t argOffset   = sizeof(uintptr_t) * 2; // as frame pointers are also kept here
+            uint32_t argCleanup  = 0;
 
-            pass{(
+            pass {(
                 [&] {
                     int size = std::min(sizeof(Args), sizeof(uintptr_t));
 
@@ -590,7 +608,7 @@ namespace hook {
             // as this is the end, and the last argument isn't past the end
             argOffset -= 4;
 
-            pass{(
+            pass {(
                 [&] {
                     mov(eax, dword_ptr[esp + stackOffset + argOffset]);
                     push(eax);
@@ -613,7 +631,8 @@ namespace hook {
 #endif
 
 #pragma region inject call
-    template <typename R, typename... Args> class inject_call {
+    template <typename R, typename... Args>
+    class inject_call {
       private:
         R (*m_origAddress)(Args...);
 
@@ -662,7 +681,8 @@ namespace hook {
 
     void *AllocateStubMemory(size_t size);
 
-    template <typename T> struct get_func_ptr {
+    template <typename T>
+    struct get_func_ptr {
         static void *get(T func) {
             return (void *)func;
         }
@@ -676,11 +696,13 @@ namespace hook {
         put<int>((uintptr_t)address + 1, (intptr_t)funcStub - (intptr_t)get_adjusted(address) - 5);
     }
 
-    template <typename T, typename AT> inline void jump(AT address, T func) {
+    template <typename T, typename AT>
+    inline void jump(AT address, T func) {
         jump_reg<0>(address, func);
     }
 
-    template <typename T, typename AT> inline void jump_rcx(AT address, T func) {
+    template <typename T, typename AT>
+    inline void jump_rcx(AT address, T func) {
         jump_reg<1>(address, func);
     }
 
@@ -692,22 +714,26 @@ namespace hook {
         put<int>((uintptr_t)address + 1, (intptr_t)funcStub - (intptr_t)get_adjusted(address) - 5);
     }
 
-    template <typename T, typename AT> inline void call(AT address, T func) {
+    template <typename T, typename AT>
+    inline void call(AT address, T func) {
         call_reg<0>(address, func);
     }
 
-    template <typename T, typename AT> inline void call_rcx(AT address, T func) {
+    template <typename T, typename AT>
+    inline void call_rcx(AT address, T func) {
         call_reg<1>(address, func);
     }
 
-    template <typename T> inline T get_call(T address) {
+    template <typename T>
+    inline T get_call(T address) {
         intptr_t target = *(int32_t *)(get_adjusted(address) + 1);
         target += (get_adjusted(address) + 5);
 
         return (T)target;
     }
 
-    template <typename TTarget, typename T> inline void set_call(TTarget *target, T address) {
+    template <typename TTarget, typename T>
+    inline void set_call(TTarget *target, T address) {
         *(T *)target = get_call(address);
     }
 
@@ -715,11 +741,13 @@ namespace hook {
         return *(uintptr_t *)function;
     }
 
-    template <typename T> inline uintptr_t get_member_old(T function) {
+    template <typename T>
+    inline uintptr_t get_member_old(T function) {
         return ((uintptr_t(*)(T))get_member_internal)(function);
     }
 
-    template <typename TClass, typename TMember> inline uintptr_t get_member(TMember TClass::*function) {
+    template <typename TClass, typename TMember>
+    inline uintptr_t get_member(TMember TClass::*function) {
         union member_cast {
             TMember TClass::*function;
             void *ptr;
@@ -736,14 +764,16 @@ namespace hook {
         return (uintptr_t)cast.ptr;
     }
 
-    template <typename TClass, typename TMember> struct get_func_ptr<TMember TClass::*> {
+    template <typename TClass, typename TMember>
+    struct get_func_ptr<TMember TClass::*> {
         static void *get(TMember TClass::*function) {
             return (void *)get_member(function);
         }
     };
 #endif
 
-    template <typename T, typename TAddr> inline T get_address(TAddr address) {
+    template <typename T, typename TAddr>
+    inline T get_address(TAddr address) {
         intptr_t target = *(int32_t *)(get_adjusted(address));
         target += (get_adjusted(address) + 4);
 

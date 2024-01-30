@@ -19,10 +19,7 @@
 #include <sstream>
 
 namespace Framework::External::ImGUI::Widgets {
-    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor,
-                     std::shared_ptr<Framework::Input::IInput> input)
-        : _commandProcessor(commandProcessor), _input(input), _logger(Framework::Logging::GetLogger("Console").get()) {
-    }
+    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor, std::shared_ptr<Framework::Input::IInput> input): _commandProcessor(commandProcessor), _input(input), _logger(Framework::Logging::GetLogger("Console").get()) {}
 
     void Console::Toggle() {
         if (_isOpen)
@@ -34,7 +31,7 @@ namespace Framework::External::ImGUI::Widgets {
     bool Console::Close() {
         LockControls(false);
 
-        _isOpen = false;
+        _isOpen         = false;
         _consoleControl = false;
 
         return true;
@@ -52,7 +49,8 @@ namespace Framework::External::ImGUI::Widgets {
                 // take back controls
                 LockControls(true);
                 _consoleControl = true;
-            } else {
+            }
+            else {
                 _consoleControl = false;
                 // controls back to game
                 LockControls(false);
@@ -67,7 +65,8 @@ namespace Framework::External::ImGUI::Widgets {
             if (colors) {
                 ImGui::SetNextWindowBgAlpha(colors[ImGuiCol_WindowBg].w);
             }
-        } else {
+        }
+        else {
             ImGui::SetNextWindowBgAlpha(_consoleUnfocusedAlpha);
             ImGui::PushFontShadow(0xFF000000);
         }
@@ -76,7 +75,8 @@ namespace Framework::External::ImGUI::Widgets {
 
         if (_consoleControl) {
             windowFlags |= ImGuiWindowFlags_MenuBar;
-        } else {
+        }
+        else {
             windowFlags |= ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
         }
 
@@ -133,10 +133,8 @@ namespace Framework::External::ImGUI::Widgets {
         }
 
         const float reservedHeightMultiline = (_consoleControl && _isMultiline) ? 30.0f : 0.0f;
-        const float reservedHeightFocus = _consoleControl ? 20.0f : 0.0f;
-        const float reservedHeight = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() +
-                                     reservedHeightFocus /* extra space for more items */ +
-                                     reservedHeightMultiline /* for multiline input */;
+        const float reservedHeightFocus     = _consoleControl ? 20.0f : 0.0f;
+        const float reservedHeight          = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing() + reservedHeightFocus /* extra space for more items */ + reservedHeightMultiline /* for multiline input */;
         ImGui::BeginChild("ScrollingRegion", ImVec2(0, -reservedHeight), false, ImGuiWindowFlags_HorizontalScrollbar);
         if (ringBuffer != nullptr) {
             std::vector<std::string> log_message = ringBuffer->last_formatted();
@@ -152,21 +150,21 @@ namespace Framework::External::ImGUI::Widgets {
             ImGui::Separator();
 
             static char consoleText[512] = "";
-            auto inputEditCallback = [&](ImGuiInputTextCallbackData *data) {
-                if ((_updateInputText || data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) &&
-                    !_autocompleteWord.empty()) {
+            auto inputEditCallback       = [&](ImGuiInputTextCallbackData *data) {
+                if ((_updateInputText || data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) && !_autocompleteWord.empty()) {
                     data->DeleteChars(0, data->BufTextLen);
                     data->InsertChars(0, _autocompleteWord.c_str());
 
                     ImGui::SetKeyboardFocusHere(-1);
                     _focusOnInput = true;
-                } else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory &&
-                           data->EventKey == ImGuiKey_UpArrow) {
+                }
+                else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory && data->EventKey == ImGuiKey_UpArrow) {
                     if (_history.empty())
                         return 0;
                     if (_historyPos == -1) {
                         _tempInputText = data->Buf;
-                    } else if (_historyPos + 1 == _history.size()) {
+                    }
+                    else if (_historyPos + 1 == _history.size()) {
                         return 0;
                     }
                     ++_historyPos;
@@ -175,13 +173,14 @@ namespace Framework::External::ImGUI::Widgets {
 
                     ImGui::SetKeyboardFocusHere(-1);
                     _focusOnInput = true;
-                } else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory &&
-                           data->EventKey == ImGuiKey_DownArrow) {
+                }
+                else if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory && data->EventKey == ImGuiKey_DownArrow) {
                     if (_historyPos > 0) {
                         --_historyPos;
                         data->DeleteChars(0, data->BufTextLen);
                         data->InsertChars(0, _history.at(_historyPos).c_str());
-                    } else if (!_tempInputText.empty()) {
+                    }
+                    else if (!_tempInputText.empty()) {
                         _historyPos = -1;
                         data->DeleteChars(0, data->BufTextLen);
                         data->InsertChars(0, _tempInputText.c_str());
@@ -194,23 +193,22 @@ namespace Framework::External::ImGUI::Widgets {
                 return 0;
             };
 
-            auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion |
-                         ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_CallbackHistory;
+            auto flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_CallbackHistory;
 
             if (!_consoleControl) {
                 // Block input if console is unfocused
                 flags = ImGuiInputTextFlags_ReadOnly;
-            } else if (_updateInputText) {
+            }
+            else if (_updateInputText) {
                 flags = ImGuiInputTextFlags_CallbackAlways;
             }
 
             bool wasInputProcessed;
             if (_isMultiline) {
-                wasInputProcessed = ImGui::InputTextMultiline("##console_text", consoleText, 512, {0, 50.0f}, flags,
-                                                              getCallback(inputEditCallback), &inputEditCallback);
-            } else {
-                wasInputProcessed = ImGui::InputText("##console_text", consoleText, 512, flags,
-                                                     getCallback(inputEditCallback), &inputEditCallback);
+                wasInputProcessed = ImGui::InputTextMultiline("##console_text", consoleText, 512, {0, 50.0f}, flags, getCallback(inputEditCallback), &inputEditCallback);
+            }
+            else {
+                wasInputProcessed = ImGui::InputText("##console_text", consoleText, 512, flags, getCallback(inputEditCallback), &inputEditCallback);
             }
 
             if (wasInputProcessed && !_updateInputText) {
@@ -251,9 +249,7 @@ namespace Framework::External::ImGUI::Widgets {
             if (_consoleControl && isAutocompleteOpen && !allCommands.empty() && !commandPreview.empty()) {
                 ImGui::SetNextWindowPos({ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y});
                 ImGui::SetNextWindowSize({ImGui::GetItemRectSize().x, 0});
-                if (ImGui::Begin("##popup", &isAutocompleteOpen,
-                                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                                     ImGuiWindowFlags_Tooltip)) {
+                if (ImGui::Begin("##popup", &isAutocompleteOpen, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_Tooltip)) {
                     isFocused |= ImGui::IsWindowFocused();
                     std::vector<std::string> foundCommands;
                     for (auto &command : allCommands) {
@@ -261,21 +257,21 @@ namespace Framework::External::ImGUI::Widgets {
                             continue;
 
                         foundCommands.push_back(command);
-                        auto help = _commandProcessor->GetCommandInfo(command)->options->help();
+                        auto help                      = _commandProcessor->GetCommandInfo(command)->options->help();
                         const auto formattedSelectable = fmt::format("{} {}", command, help);
                         // TODO ImGui::Selectable(formattedSelectable.c_str(), true)
-                        if (ImGui::Selectable(formattedSelectable.c_str()) ||
-                            (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
-                            _autocompleteWord = command;
-                            _updateInputText = true;
+                        if (ImGui::Selectable(formattedSelectable.c_str()) || (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
+                            _autocompleteWord  = command;
+                            _updateInputText   = true;
                             isAutocompleteOpen = false;
-                            _focusOnInput = true;
+                            _focusOnInput      = true;
                         }
                     }
 
                     if (foundCommands.size() == 1) {
                         _autocompleteWord = foundCommands.at(0) + " ";
-                    } else if (foundCommands.size() > 1) {
+                    }
+                    else if (foundCommands.size() > 1) {
                         // find a common prefix among found commands
                         std::string commonPrefix = foundCommands.at(0);
                         for (const auto &cmd : foundCommands) {
@@ -299,7 +295,7 @@ namespace Framework::External::ImGUI::Widgets {
                 SendCommand(consoleText);
 
                 consoleText[0] = '\0';
-                _focusOnInput = true;
+                _focusOnInput  = true;
             }
         }
 
@@ -335,16 +331,15 @@ namespace Framework::External::ImGUI::Widgets {
             _logger->warn("Input error: {}", result.Unwrap());
         } break;
 
-        default:
-            break;
+        default: break;
         }
     }
 
     bool Console::Open() {
         LockControls(true);
 
-        _isOpen = true;
-        _focusOnInput = true;
+        _isOpen         = true;
+        _focusOnInput   = true;
         _consoleControl = true;
 
         return true;
@@ -354,12 +349,12 @@ namespace Framework::External::ImGUI::Widgets {
         std::regex brackets_regex("\\[.*?\\]", std::regex_constants::ECMAScript);
 
         auto brackets_begin = std::sregex_iterator(log.begin(), log.end(), brackets_regex);
-        auto brackets_end = std::sregex_iterator();
+        auto brackets_end   = std::sregex_iterator();
 
         int logCount = 1;
         for (std::sregex_iterator i = brackets_begin; i != brackets_end; ++i) {
             const std::smatch &match = *i;
-            std::string match_str = match.str();
+            std::string match_str    = match.str();
 
             if (logCount == 1) {
                 ImGui::TextColored(ImVec4(0.5f, 1, 1, 1), "%s", match_str.c_str());

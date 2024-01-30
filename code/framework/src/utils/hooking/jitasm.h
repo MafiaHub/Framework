@@ -154,8 +154,8 @@ namespace jitasm {
     typedef unsigned __int64 uint64;
 #endif
 
-    template <typename T> inline void avoid_unused_warn(const T &) {
-    }
+    template <typename T>
+    inline void avoid_unused_warn(const T &) {}
 
     namespace detail {
 #if defined(JITASM_GCC)
@@ -184,7 +184,7 @@ namespace jitasm {
     /// Physical register ID
     enum PhysicalRegID {
         INVALID = 0x0FFFFFFF,
-        EAX = 0,
+        EAX     = 0,
         ECX,
         EDX,
         EBX,
@@ -307,10 +307,10 @@ namespace jitasm {
      */
 #ifdef JITASM64
         NUM_OF_PHYSICAL_REG = 16,
-        SIZE_OF_GP_REG = 8
+        SIZE_OF_GP_REG      = 8
 #else
         NUM_OF_PHYSICAL_REG = 8,
-        SIZE_OF_GP_REG = 4
+        SIZE_OF_GP_REG      = 4
 #endif
     };
 
@@ -329,8 +329,8 @@ namespace jitasm {
 
     /// Register identifier
     struct RegID {
-        unsigned type : 4;  // RegType
-        unsigned id   : 28; ///< PhysicalRegID or symbolic register id
+        unsigned type : 4; // RegType
+        unsigned id : 28;  ///< PhysicalRegID or symbolic register id
 
         bool operator==(const RegID &rhs) const {
             return type == rhs.type && id == rhs.id;
@@ -345,8 +345,7 @@ namespace jitasm {
             return type == R_TYPE_GP && id == INVALID;
         }
         bool IsSymbolic() const {
-            return type == R_TYPE_SYMBOLIC_GP || type == R_TYPE_SYMBOLIC_MMX || type == R_TYPE_SYMBOLIC_XMM ||
-                   type == R_TYPE_SYMBOLIC_YMM;
+            return type == R_TYPE_SYMBOLIC_GP || type == R_TYPE_SYMBOLIC_MMX || type == R_TYPE_SYMBOLIC_XMM || type == R_TYPE_SYMBOLIC_YMM;
         }
         RegType GetType() const {
             return static_cast<RegType>(type);
@@ -355,20 +354,20 @@ namespace jitasm {
         static RegID Invalid() {
             RegID reg;
             reg.type = R_TYPE_GP;
-            reg.id = INVALID;
+            reg.id   = INVALID;
             return reg;
         }
         static RegID CreatePhysicalRegID(RegType type_, PhysicalRegID id_) {
             RegID reg;
             reg.type = type_;
-            reg.id = id_;
+            reg.id   = id_;
             return reg;
         }
         static RegID CreateSymbolicRegID(RegType type_) {
             static long s_id = 0;
             RegID reg;
             reg.type = type_;
-            reg.id = static_cast<unsigned>(detail::interlocked_increment(&s_id));
+            reg.id   = static_cast<unsigned>(detail::interlocked_increment(&s_id));
             return reg;
         }
     };
@@ -382,7 +381,7 @@ namespace jitasm {
         O_TYPE_TYPE_MASK = 0x03,
 
         O_TYPE_DUMMY = 1 << 2, ///< The operand which has this flag is not encoded. This is for register allocator.
-        O_TYPE_READ = 1 << 3,  ///< The operand is used for reading.
+        O_TYPE_READ  = 1 << 3, ///< The operand is used for reading.
         O_TYPE_WRITE = 1 << 4  ///< The operand is used for writing.
     };
 
@@ -420,7 +419,7 @@ namespace jitasm {
                     RegID index_;
                     sint64 scale_;
                     sint64 disp_;
-                    uint8 base_size_  : 4; // OpdSize
+                    uint8 base_size_ : 4;  // OpdSize
                     uint8 index_size_ : 4; // OpdSize
                 };
                 // IMM
@@ -428,26 +427,23 @@ namespace jitasm {
             };
 
             /// NONE
-            Opd() : opdtype_(O_TYPE_NONE) {
-            }
+            Opd(): opdtype_(O_TYPE_NONE) {}
             /// REG
-            Opd(OpdSize opdsize, const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF)
-                : opdtype_(O_TYPE_REG), opdsize_(static_cast<uint8>(opdsize)), reg_(reg),
-                  reg_assignable_(reg_assignable) {
-            }
+            Opd(OpdSize opdsize, const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF): opdtype_(O_TYPE_REG), opdsize_(static_cast<uint8>(opdsize)), reg_(reg), reg_assignable_(reg_assignable) {}
             /// MEM
-            Opd(OpdSize opdsize, OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index,
-                sint64 scale, sint64 disp)
-                : opdtype_(O_TYPE_MEM), opdsize_(static_cast<uint8>(opdsize)), base_(base), index_(index),
-                  scale_(scale), disp_(disp), base_size_(static_cast<uint8>(base_size)),
-                  index_size_(static_cast<uint8>(index_size)) {
-            }
+            Opd(OpdSize opdsize, OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp)
+                : opdtype_(O_TYPE_MEM)
+                , opdsize_(static_cast<uint8>(opdsize))
+                , base_(base)
+                , index_(index)
+                , scale_(scale)
+                , disp_(disp)
+                , base_size_(static_cast<uint8>(base_size))
+                , index_size_(static_cast<uint8>(index_size)) {}
 
           protected:
             /// IMM
-            explicit Opd(OpdSize opdsize, sint64 imm)
-                : opdtype_(O_TYPE_IMM), opdsize_(static_cast<uint8>(opdsize)), imm_(imm) {
-            }
+            explicit Opd(OpdSize opdsize, sint64 imm): opdtype_(O_TYPE_IMM), opdsize_(static_cast<uint8>(opdsize)), imm_(imm) {}
 
           public:
             bool IsNone() const {
@@ -532,8 +528,7 @@ namespace jitasm {
                     return reg_ == rhs.reg_ && reg_assignable_ == rhs.reg_assignable_;
                 }
                 if (IsMem()) {
-                    return base_ == rhs.base_ && index_ == rhs.index_ && scale_ == rhs.scale_ && disp_ == rhs.disp_ &&
-                           base_size_ == rhs.base_size_ && index_size_ == rhs.index_size_;
+                    return base_ == rhs.base_ && index_ == rhs.index_ && scale_ == rhs.scale_ && disp_ == rhs.disp_ && base_size_ == rhs.base_size_ && index_size_ == rhs.index_size_;
                 }
                 if (IsImm()) {
                     return imm_ == rhs.imm_;
@@ -556,11 +551,9 @@ namespace jitasm {
 
         /// Add O_TYPE_DUMMY to the specified operand and constraint of register assignment
         inline Opd Dummy(const Opd &opd, const Opd &constraint) {
-            JITASM_ASSERT(opd.IsReg() &&
-                          (opd.opdtype_ & O_TYPE_TYPE_MASK) == (constraint.opdtype_ & O_TYPE_TYPE_MASK) &&
-                          !constraint.GetReg().IsSymbolic());
+            JITASM_ASSERT(opd.IsReg() && (opd.opdtype_ & O_TYPE_TYPE_MASK) == (constraint.opdtype_ & O_TYPE_TYPE_MASK) && !constraint.GetReg().IsSymbolic());
             Opd o(opd);
-            o.opdtype_ = static_cast<OpdType>(static_cast<int>(o.opdtype_) | O_TYPE_DUMMY);
+            o.opdtype_        = static_cast<OpdType>(static_cast<int>(o.opdtype_) | O_TYPE_DUMMY);
             o.reg_assignable_ = (1 << constraint.reg_.id);
             return o;
         }
@@ -586,56 +579,61 @@ namespace jitasm {
             return o;
         }
 
-        template <int Size> inline OpdSize ToOpdSize();
-        template <> inline OpdSize ToOpdSize<8>() {
+        template <int Size>
+        inline OpdSize ToOpdSize();
+        template <>
+        inline OpdSize ToOpdSize<8>() {
             return O_SIZE_8;
         }
-        template <> inline OpdSize ToOpdSize<16>() {
+        template <>
+        inline OpdSize ToOpdSize<16>() {
             return O_SIZE_16;
         }
-        template <> inline OpdSize ToOpdSize<32>() {
+        template <>
+        inline OpdSize ToOpdSize<32>() {
             return O_SIZE_32;
         }
-        template <> inline OpdSize ToOpdSize<64>() {
+        template <>
+        inline OpdSize ToOpdSize<64>() {
             return O_SIZE_64;
         }
-        template <> inline OpdSize ToOpdSize<80>() {
+        template <>
+        inline OpdSize ToOpdSize<80>() {
             return O_SIZE_80;
         }
-        template <> inline OpdSize ToOpdSize<128>() {
+        template <>
+        inline OpdSize ToOpdSize<128>() {
             return O_SIZE_128;
         }
-        template <> inline OpdSize ToOpdSize<224>() {
+        template <>
+        inline OpdSize ToOpdSize<224>() {
             return O_SIZE_224;
         }
-        template <> inline OpdSize ToOpdSize<256>() {
+        template <>
+        inline OpdSize ToOpdSize<256>() {
             return O_SIZE_256;
         }
-        template <> inline OpdSize ToOpdSize<864>() {
+        template <>
+        inline OpdSize ToOpdSize<864>() {
             return O_SIZE_864;
         }
-        template <> inline OpdSize ToOpdSize<4096>() {
+        template <>
+        inline OpdSize ToOpdSize<4096>() {
             return O_SIZE_4096;
         }
 
-        template <int Size> struct OpdT : Opd {
+        template <int Size>
+        struct OpdT: Opd {
             /// NONE
-            OpdT() : Opd() {
-            }
+            OpdT(): Opd() {}
             /// REG
-            explicit OpdT(const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF)
-                : Opd(ToOpdSize<Size>(), reg, reg_assignable) {
-            }
+            explicit OpdT(const RegID &reg, uint32 reg_assignable = 0xFFFFFFFF): Opd(ToOpdSize<Size>(), reg, reg_assignable) {}
             /// MEM
-            OpdT(OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale,
-                 sint64 disp)
-                : Opd(ToOpdSize<Size>(), base_size, index_size, base, index, scale, disp) {
-            }
+            OpdT(OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp): Opd(ToOpdSize<Size>(), base_size, index_size, base, index, scale, disp) {}
 
           protected:
             /// IMM
-            OpdT(sint64 imm) : Opd(ToOpdSize<Size>(), imm) {
-            }
+            OpdT(sint64 imm): Opd(ToOpdSize<Size>(), imm) {}
         };
 
     } // namespace detail
@@ -652,74 +650,57 @@ namespace jitasm {
     typedef detail::OpdT<4096> Opd4096; // FPU, MMX, XMM, MXCSR state
 
     /// 8bit general purpose register
-    struct Reg8 : Opd8 {
-        Reg8() : Opd8(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP), 0xFFFFFF0F) {
-        }
-        explicit Reg8(PhysicalRegID id) : Opd8(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {
-        }
+    struct Reg8: Opd8 {
+        Reg8(): Opd8(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP), 0xFFFFFF0F) {}
+        explicit Reg8(PhysicalRegID id): Opd8(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {}
     };
     /// 16bit general purpose register
-    struct Reg16 : Opd16 {
-        Reg16() : Opd16(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP)) {
-        }
-        explicit Reg16(PhysicalRegID id) : Opd16(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {
-        }
+    struct Reg16: Opd16 {
+        Reg16(): Opd16(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP)) {}
+        explicit Reg16(PhysicalRegID id): Opd16(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {}
     };
     /// 32bit general purpose register
-    struct Reg32 : Opd32 {
-        Reg32() : Opd32(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP)) {
-        }
-        explicit Reg32(PhysicalRegID id) : Opd32(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {
-        }
+    struct Reg32: Opd32 {
+        Reg32(): Opd32(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP)) {}
+        explicit Reg32(PhysicalRegID id): Opd32(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {}
     };
 #ifdef JITASM64
     /// 64bit general purpose register
-    struct Reg64 : Opd64 {
-        Reg64() : Opd64(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP)) {
-        }
-        explicit Reg64(PhysicalRegID id) : Opd64(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {
-        }
+    struct Reg64: Opd64 {
+        Reg64(): Opd64(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_GP)) {}
+        explicit Reg64(PhysicalRegID id): Opd64(RegID::CreatePhysicalRegID(R_TYPE_GP, id)) {}
     };
     typedef Reg64 Reg;
 #else
     typedef Reg32 Reg;
 #endif
     /// FPU register
-    struct FpuReg : Opd80 {
-        explicit FpuReg(PhysicalRegID id) : Opd80(RegID::CreatePhysicalRegID(R_TYPE_FPU, id)) {
-        }
+    struct FpuReg: Opd80 {
+        explicit FpuReg(PhysicalRegID id): Opd80(RegID::CreatePhysicalRegID(R_TYPE_FPU, id)) {}
     };
     /// MMX register
-    struct MmxReg : Opd64 {
-        MmxReg() : Opd64(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_MMX)) {
-        }
-        explicit MmxReg(PhysicalRegID id) : Opd64(RegID::CreatePhysicalRegID(R_TYPE_MMX, id)) {
-        }
+    struct MmxReg: Opd64 {
+        MmxReg(): Opd64(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_MMX)) {}
+        explicit MmxReg(PhysicalRegID id): Opd64(RegID::CreatePhysicalRegID(R_TYPE_MMX, id)) {}
     };
     /// XMM register
-    struct XmmReg : Opd128 {
-        XmmReg() : Opd128(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_XMM)) {
-        }
-        explicit XmmReg(PhysicalRegID id) : Opd128(RegID::CreatePhysicalRegID(R_TYPE_XMM, id)) {
-        }
+    struct XmmReg: Opd128 {
+        XmmReg(): Opd128(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_XMM)) {}
+        explicit XmmReg(PhysicalRegID id): Opd128(RegID::CreatePhysicalRegID(R_TYPE_XMM, id)) {}
     };
     /// YMM register
-    struct YmmReg : Opd256 {
-        YmmReg() : Opd256(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_YMM)) {
-        }
-        explicit YmmReg(PhysicalRegID id) : Opd256(RegID::CreatePhysicalRegID(R_TYPE_YMM, id)) {
-        }
+    struct YmmReg: Opd256 {
+        YmmReg(): Opd256(RegID::CreateSymbolicRegID(R_TYPE_SYMBOLIC_YMM)) {}
+        explicit YmmReg(PhysicalRegID id): Opd256(RegID::CreatePhysicalRegID(R_TYPE_YMM, id)) {}
     };
 
-    struct FpuReg_st0 : FpuReg {
-        FpuReg_st0() : FpuReg(ST0) {
-        }
+    struct FpuReg_st0: FpuReg {
+        FpuReg_st0(): FpuReg(ST0) {}
     };
 
-    template <class OpdN> struct MemT : OpdN {
-        MemT(OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : OpdN(base_size, index_size, base, index, scale, disp) {
-        }
+    template <class OpdN>
+    struct MemT: OpdN {
+        MemT(OpdSize base_size, OpdSize index_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp): OpdN(base_size, index_size, base, index, scale, disp) {}
     };
     typedef MemT<Opd8> Mem8;
     typedef MemT<Opd16> Mem16;
@@ -732,10 +713,9 @@ namespace jitasm {
     typedef MemT<Opd864> Mem864;   // FPU state
     typedef MemT<Opd4096> Mem4096; // FPU, MMX, XMM, MXCSR state
 
-    template <class OpdN, OpdSize IndexSize> struct VecMemT : OpdN {
-        VecMemT(OpdSize base_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : OpdN(base_size, IndexSize, base, index, scale, disp) {
-        }
+    template <class OpdN, OpdSize IndexSize>
+    struct VecMemT: OpdN {
+        VecMemT(OpdSize base_size, const RegID &base, const RegID &index, sint64 scale, sint64 disp): OpdN(base_size, IndexSize, base, index, scale, disp) {}
     };
     typedef VecMemT<Opd32, O_SIZE_128> Mem32vxd;
     typedef VecMemT<Opd32, O_SIZE_256> Mem32vyd;
@@ -748,16 +728,15 @@ namespace jitasm {
 
     struct MemOffset64 {
         sint64 offset_;
-        explicit MemOffset64(sint64 offset) : offset_(offset) {
-        }
+        explicit MemOffset64(sint64 offset): offset_(offset) {}
         sint64 GetOffset() const {
             return offset_;
         }
     };
 
-    template <class OpdN, class U, class S> struct ImmT : OpdN {
-        ImmT(U imm) : OpdN((S)imm) {
-        }
+    template <class OpdN, class U, class S>
+    struct ImmT: OpdN {
+        ImmT(U imm): OpdN((S)imm) {}
     };
     typedef ImmT<Opd8, uint8, sint8> Imm8;     ///< 1 byte immediate
     typedef ImmT<Opd16, uint16, sint16> Imm16; ///< 2 byte immediate
@@ -789,10 +768,8 @@ namespace jitasm {
     struct Addr32 {
         RegID reg_;
         sint64 disp_;
-        Addr32(const Reg32 &obj) : reg_(obj.reg_), disp_(0) {
-        } // implicit
-        Addr32(const RegID &reg, sint64 disp) : reg_(reg), disp_(disp) {
-        }
+        Addr32(const Reg32 &obj): reg_(obj.reg_), disp_(0) {} // implicit
+        Addr32(const RegID &reg, sint64 disp): reg_(reg), disp_(disp) {}
     };
     inline Addr32 operator+(const Reg32 &lhs, sint64 rhs) {
         return Addr32(lhs.reg_, rhs);
@@ -818,8 +795,7 @@ namespace jitasm {
         RegID base_;
         RegID index_;
         sint64 disp_;
-        Addr32BI(const RegID &base, const RegID &index, sint64 disp) : base_(base), index_(index), disp_(disp) {
-        }
+        Addr32BI(const RegID &base, const RegID &index, sint64 disp): base_(base), index_(index), disp_(disp) {}
     };
     inline Addr32BI operator+(const Addr32 &lhs, const Addr32 &rhs) {
         return Addr32BI(rhs.reg_, lhs.reg_, lhs.disp_ + rhs.disp_);
@@ -839,8 +815,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr32SI(const RegID &index, sint64 scale, sint64 disp) : index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr32SI(const RegID &index, sint64 scale, sint64 disp): index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr32SI operator*(const Reg32 &lhs, sint64 rhs) {
         return Addr32SI(lhs.reg_, rhs, 0);
@@ -870,9 +845,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr32SIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : base_(base), index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr32SIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp): base_(base), index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr32SIB operator+(const Addr32 &lhs, const Addr32SI &rhs) {
         return Addr32SIB(lhs.reg_, rhs.index_, rhs.scale_, lhs.disp_ + rhs.disp_);
@@ -895,8 +868,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        AddrXmmSI(const RegID &index, sint64 scale, sint64 disp) : index_(index), scale_(scale), disp_(disp) {
-        }
+        AddrXmmSI(const RegID &index, sint64 scale, sint64 disp): index_(index), scale_(scale), disp_(disp) {}
     };
     inline AddrXmmSI operator*(const XmmReg &lhs, sint64 rhs) {
         return AddrXmmSI(lhs.reg_, rhs, 0);
@@ -926,9 +898,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr32XmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : base_(base), index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr32XmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp): base_(base), index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr32XmmSIB operator+(const Addr32 &lhs, const AddrXmmSI &rhs) {
         return Addr32XmmSIB(lhs.reg_, rhs.index_, rhs.scale_, lhs.disp_ + rhs.disp_);
@@ -951,8 +921,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        AddrYmmSI(const RegID &index, sint64 scale, sint64 disp) : index_(index), scale_(scale), disp_(disp) {
-        }
+        AddrYmmSI(const RegID &index, sint64 scale, sint64 disp): index_(index), scale_(scale), disp_(disp) {}
     };
     inline AddrYmmSI operator*(const YmmReg &lhs, sint64 rhs) {
         return AddrYmmSI(lhs.reg_, rhs, 0);
@@ -982,9 +951,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr32YmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : base_(base), index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr32YmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp): base_(base), index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr32YmmSIB operator+(const Addr32 &lhs, const AddrYmmSI &rhs) {
         return Addr32YmmSIB(lhs.reg_, rhs.index_, rhs.scale_, lhs.disp_ + rhs.disp_);
@@ -1007,10 +974,8 @@ namespace jitasm {
     struct Addr64 {
         RegID reg_;
         sint64 disp_;
-        Addr64(const Reg64 &obj) : reg_(obj.reg_), disp_(0) {
-        } // implicit
-        Addr64(const RegID &reg, sint64 disp) : reg_(reg), disp_(disp) {
-        }
+        Addr64(const Reg64 &obj): reg_(obj.reg_), disp_(0) {} // implicit
+        Addr64(const RegID &reg, sint64 disp): reg_(reg), disp_(disp) {}
     };
     inline Addr64 operator+(const Reg64 &lhs, sint64 rhs) {
         return Addr64(lhs.reg_, rhs);
@@ -1036,8 +1001,7 @@ namespace jitasm {
         RegID base_;
         RegID index_;
         sint64 disp_;
-        Addr64BI(const RegID &base, const RegID &index, sint64 disp) : base_(base), index_(index), disp_(disp) {
-        }
+        Addr64BI(const RegID &base, const RegID &index, sint64 disp): base_(base), index_(index), disp_(disp) {}
     };
     inline Addr64BI operator+(const Addr64 &lhs, const Addr64 &rhs) {
         return Addr64BI(rhs.reg_, lhs.reg_, lhs.disp_ + rhs.disp_);
@@ -1057,8 +1021,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr64SI(const RegID &index, sint64 scale, sint64 disp) : index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr64SI(const RegID &index, sint64 scale, sint64 disp): index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr64SI operator*(const Reg64 &lhs, sint64 rhs) {
         return Addr64SI(lhs.reg_, rhs, 0);
@@ -1088,9 +1051,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr64SIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : base_(base), index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr64SIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp): base_(base), index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr64SIB operator+(const Addr64 &lhs, const Addr64SI &rhs) {
         return Addr64SIB(lhs.reg_, rhs.index_, rhs.scale_, lhs.disp_ + rhs.disp_);
@@ -1114,9 +1075,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr64XmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : base_(base), index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr64XmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp): base_(base), index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr64XmmSIB operator+(const Addr64 &lhs, const AddrXmmSI &rhs) {
         return Addr64XmmSIB(lhs.reg_, rhs.index_, rhs.scale_, lhs.disp_ + rhs.disp_);
@@ -1140,9 +1099,7 @@ namespace jitasm {
         RegID index_;
         sint64 scale_;
         sint64 disp_;
-        Addr64YmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp)
-            : base_(base), index_(index), scale_(scale), disp_(disp) {
-        }
+        Addr64YmmSIB(const RegID &base, const RegID &index, sint64 scale, sint64 disp): base_(base), index_(index), scale_(scale), disp_(disp) {}
     };
     inline Addr64YmmSIB operator+(const Addr64 &lhs, const AddrYmmSI &rhs) {
         return Addr64YmmSIB(lhs.reg_, rhs.index_, rhs.scale_, lhs.disp_ + rhs.disp_);
@@ -1171,7 +1128,8 @@ namespace jitasm {
     typedef Addr32SIB AddrSIB;
 #endif
 
-    template <typename OpdN> struct AddressingPtr {
+    template <typename OpdN>
+    struct AddressingPtr {
         // 32bit-Addressing
         MemT<OpdN> operator[](const Addr32 &obj) {
             return MemT<OpdN>(O_SIZE_32, O_SIZE_32, obj.reg_, RegID::Invalid(), 0, obj.disp_);
@@ -1982,67 +1940,67 @@ namespace jitasm {
     };
 
     enum EncodingFlags {
-        E_SPECIAL = 1 << 0,
+        E_SPECIAL             = 1 << 0,
         E_OPERAND_SIZE_PREFIX = 1 << 1, ///< Operand-size override prefix
-        E_REP_PREFIX = 1 << 2,          ///< REP prefix
-        E_REXW_PREFIX = 1 << 3,         ///< REX.W
+        E_REP_PREFIX          = 1 << 2, ///< REP prefix
+        E_REXW_PREFIX         = 1 << 3, ///< REX.W
         E_MANDATORY_PREFIX_66 = 1 << 4, ///< Mandatory prefix 66
         E_MANDATORY_PREFIX_F2 = 1 << 5, ///< Mandatory prefix F2
         E_MANDATORY_PREFIX_F3 = 1 << 6, ///< Mandatory prefix F3
-        E_VEX = 1 << 7,
-        E_XOP = 1 << 8,
-        E_VEX_L = 1 << 9,
-        E_VEX_W = 1 << 10,
-        E_VEX_MMMMM_SHIFT = 11,
-        E_VEX_MMMMM_MASK = 0x1F << E_VEX_MMMMM_SHIFT,
-        E_VEX_0F = 1 << E_VEX_MMMMM_SHIFT,
-        E_VEX_0F38 = 2 << E_VEX_MMMMM_SHIFT,
-        E_VEX_0F3A = 3 << E_VEX_MMMMM_SHIFT,
-        E_XOP_M00011 = 3 << E_VEX_MMMMM_SHIFT,
-        E_XOP_M01000 = 8 << E_VEX_MMMMM_SHIFT,
-        E_XOP_M01001 = 9 << E_VEX_MMMMM_SHIFT,
-        E_VEX_PP_SHIFT = 16,
-        E_VEX_PP_MASK = 0x3 << E_VEX_PP_SHIFT,
-        E_VEX_66 = 1 << E_VEX_PP_SHIFT,
-        E_VEX_F3 = 2 << E_VEX_PP_SHIFT,
-        E_VEX_F2 = 3 << E_VEX_PP_SHIFT,
-        E_XOP_P00 = 0 << E_VEX_PP_SHIFT,
-        E_XOP_P01 = 1 << E_VEX_PP_SHIFT,
+        E_VEX                 = 1 << 7,
+        E_XOP                 = 1 << 8,
+        E_VEX_L               = 1 << 9,
+        E_VEX_W               = 1 << 10,
+        E_VEX_MMMMM_SHIFT     = 11,
+        E_VEX_MMMMM_MASK      = 0x1F << E_VEX_MMMMM_SHIFT,
+        E_VEX_0F              = 1 << E_VEX_MMMMM_SHIFT,
+        E_VEX_0F38            = 2 << E_VEX_MMMMM_SHIFT,
+        E_VEX_0F3A            = 3 << E_VEX_MMMMM_SHIFT,
+        E_XOP_M00011          = 3 << E_VEX_MMMMM_SHIFT,
+        E_XOP_M01000          = 8 << E_VEX_MMMMM_SHIFT,
+        E_XOP_M01001          = 9 << E_VEX_MMMMM_SHIFT,
+        E_VEX_PP_SHIFT        = 16,
+        E_VEX_PP_MASK         = 0x3 << E_VEX_PP_SHIFT,
+        E_VEX_66              = 1 << E_VEX_PP_SHIFT,
+        E_VEX_F3              = 2 << E_VEX_PP_SHIFT,
+        E_VEX_F2              = 3 << E_VEX_PP_SHIFT,
+        E_XOP_P00             = 0 << E_VEX_PP_SHIFT,
+        E_XOP_P01             = 1 << E_VEX_PP_SHIFT,
 
-        E_VEX_128 = E_VEX,
-        E_VEX_256 = E_VEX | E_VEX_L,
-        E_VEX_LIG = E_VEX,
-        E_VEX_LZ = E_VEX,
-        E_VEX_66_0F = E_VEX_66 | E_VEX_0F,
+        E_VEX_128     = E_VEX,
+        E_VEX_256     = E_VEX | E_VEX_L,
+        E_VEX_LIG     = E_VEX,
+        E_VEX_LZ      = E_VEX,
+        E_VEX_66_0F   = E_VEX_66 | E_VEX_0F,
         E_VEX_66_0F38 = E_VEX_66 | E_VEX_0F38,
         E_VEX_66_0F3A = E_VEX_66 | E_VEX_0F3A,
-        E_VEX_F2_0F = E_VEX_F2 | E_VEX_0F,
+        E_VEX_F2_0F   = E_VEX_F2 | E_VEX_0F,
         E_VEX_F2_0F38 = E_VEX_F2 | E_VEX_0F38,
         E_VEX_F2_0F3A = E_VEX_F2 | E_VEX_0F3A,
-        E_VEX_F3_0F = E_VEX_F3 | E_VEX_0F,
+        E_VEX_F3_0F   = E_VEX_F3 | E_VEX_0F,
         E_VEX_F3_0F38 = E_VEX_F3 | E_VEX_0F38,
         E_VEX_F3_0F3A = E_VEX_F3 | E_VEX_0F3A,
-        E_VEX_W0 = 0,
-        E_VEX_W1 = E_VEX_W,
-        E_VEX_WIG = 0,
-        E_XOP_128 = E_XOP,
-        E_XOP_256 = E_XOP | E_VEX_L,
-        E_XOP_W0 = 0,
-        E_XOP_W1 = E_VEX_W,
+        E_VEX_W0      = 0,
+        E_VEX_W1      = E_VEX_W,
+        E_VEX_WIG     = 0,
+        E_XOP_128     = E_XOP,
+        E_XOP_256     = E_XOP | E_VEX_L,
+        E_XOP_W0      = 0,
+        E_XOP_W1      = E_VEX_W,
 
         // Aliases
-        E_VEX_128_0F_WIG = E_VEX_128 | E_VEX_0F | E_VEX_WIG,
-        E_VEX_256_0F_WIG = E_VEX_256 | E_VEX_0F | E_VEX_WIG,
-        E_VEX_128_66_0F_WIG = E_VEX_128 | E_VEX_66_0F | E_VEX_WIG,
-        E_VEX_256_66_0F_WIG = E_VEX_256 | E_VEX_66_0F | E_VEX_WIG,
+        E_VEX_128_0F_WIG      = E_VEX_128 | E_VEX_0F | E_VEX_WIG,
+        E_VEX_256_0F_WIG      = E_VEX_256 | E_VEX_0F | E_VEX_WIG,
+        E_VEX_128_66_0F_WIG   = E_VEX_128 | E_VEX_66_0F | E_VEX_WIG,
+        E_VEX_256_66_0F_WIG   = E_VEX_256 | E_VEX_66_0F | E_VEX_WIG,
         E_VEX_128_66_0F38_WIG = E_VEX_128 | E_VEX_66_0F38 | E_VEX_WIG,
         E_VEX_256_66_0F38_WIG = E_VEX_256 | E_VEX_66_0F38 | E_VEX_WIG,
-        E_VEX_128_66_0F38_W0 = E_VEX_128 | E_VEX_66_0F38 | E_VEX_W0,
-        E_VEX_256_66_0F38_W0 = E_VEX_256 | E_VEX_66_0F38 | E_VEX_W0,
-        E_VEX_128_66_0F38_W1 = E_VEX_128 | E_VEX_66_0F38 | E_VEX_W1,
-        E_VEX_256_66_0F38_W1 = E_VEX_256 | E_VEX_66_0F38 | E_VEX_W1,
-        E_VEX_128_66_0F3A_W0 = E_VEX_128 | E_VEX_66_0F3A | E_VEX_W0,
-        E_VEX_256_66_0F3A_W0 = E_VEX_256 | E_VEX_66_0F3A | E_VEX_W0,
+        E_VEX_128_66_0F38_W0  = E_VEX_128 | E_VEX_66_0F38 | E_VEX_W0,
+        E_VEX_256_66_0F38_W0  = E_VEX_256 | E_VEX_66_0F38 | E_VEX_W0,
+        E_VEX_128_66_0F38_W1  = E_VEX_128 | E_VEX_66_0F38 | E_VEX_W1,
+        E_VEX_256_66_0F38_W1  = E_VEX_256 | E_VEX_66_0F38 | E_VEX_W1,
+        E_VEX_128_66_0F3A_W0  = E_VEX_128 | E_VEX_66_0F3A | E_VEX_W0,
+        E_VEX_256_66_0F3A_W0  = E_VEX_256 | E_VEX_66_0F3A | E_VEX_W0,
     };
 
     /// Instruction
@@ -2054,11 +2012,11 @@ namespace jitasm {
         uint32 encoding_flag_;               ///< EncodingFlags
         detail::Opd opd_[MAX_OPERAND_COUNT]; ///< Operands
 
-        Instr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(),
-              const detail::Opd &opd2 = detail::Opd(), const detail::Opd &opd3 = detail::Opd(),
-              const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(),
-              const detail::Opd &opd6 = detail::Opd())
-            : id_(id), opcode_(opcode), encoding_flag_(encoding_flag) {
+        Instr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(), const detail::Opd &opd2 = detail::Opd(), const detail::Opd &opd3 = detail::Opd(), const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(),
+            const detail::Opd &opd6 = detail::Opd())
+            : id_(id)
+            , opcode_(opcode)
+            , encoding_flag_(encoding_flag) {
             opd_[0] = opd1, opd_[1] = opd2, opd_[2] = opd3, opd_[3] = opd4, opd_[4] = opd5, opd_[5] = opd6;
         }
 
@@ -2079,7 +2037,7 @@ namespace jitasm {
         size_t buffsize_;
         size_t size_;
 
-        Backend(void *pbuff = NULL, size_t buffsize = 0) : pbuff_((uint8 *)pbuff), buffsize_(buffsize), size_(0) {
+        Backend(void *pbuff = NULL, size_t buffsize = 0): pbuff_((uint8 *)pbuff), buffsize_(buffsize), size_(0) {
             memset(pbuff, 0xCC, buffsize); // INT3
         }
 
@@ -2137,31 +2095,31 @@ namespace jitasm {
                 if (r_m.IsMem() && r_m.GetAddressBaseSize() != O_SIZE_64)
                     db(0x67);
 #endif
-                uint8 vvvv = vex.IsReg() ? 0xF - (uint8)vex.GetReg().id : 0xF;
+                uint8 vvvv  = vex.IsReg() ? 0xF - (uint8)vex.GetReg().id : 0xF;
                 uint8 mmmmm = (flag & E_VEX_MMMMM_MASK) >> E_VEX_MMMMM_SHIFT;
-                uint8 pp = static_cast<uint8>((flag & E_VEX_PP_MASK) >> E_VEX_PP_SHIFT);
-                uint8 wrxb = GetWRXB(flag & E_VEX_W, reg, r_m);
+                uint8 pp    = static_cast<uint8>((flag & E_VEX_PP_MASK) >> E_VEX_PP_SHIFT);
+                uint8 wrxb  = GetWRXB(flag & E_VEX_W, reg, r_m);
                 if (flag & E_XOP) {
                     db(0x8F);
                     db((~wrxb & 7) << 5 | mmmmm);
                     db((wrxb & 8) << 4 | vvvv << 3 | (flag & E_VEX_L ? 4 : 0) | pp);
-                } else if (wrxb & 0xB || (flag & E_VEX_MMMMM_MASK) == E_VEX_0F38 ||
-                           (flag & E_VEX_MMMMM_MASK) == E_VEX_0F3A) {
+                }
+                else if (wrxb & 0xB || (flag & E_VEX_MMMMM_MASK) == E_VEX_0F38 || (flag & E_VEX_MMMMM_MASK) == E_VEX_0F3A) {
                     db(0xC4);
                     db((~wrxb & 7) << 5 | mmmmm);
                     db((wrxb & 8) << 4 | vvvv << 3 | (flag & E_VEX_L ? 4 : 0) | pp);
-                } else {
+                }
+                else {
                     db(0xC5);
                     db((~wrxb & 4) << 5 | vvvv << 3 | (flag & E_VEX_L ? 4 : 0) | pp);
                 }
-            } else {
+            }
+            else {
                 uint8 wrxb = GetWRXB(flag & E_REXW_PREFIX, reg, r_m);
                 if (wrxb) {
                     // Encode REX prefix
-                    JITASM_ASSERT(!reg.IsReg() || reg.GetSize() != O_SIZE_8 || reg.GetReg().id < AH ||
-                                  reg.GetReg().id >= R8B); // AH, BH, CH, or DH may not be used with REX.
-                    JITASM_ASSERT(!r_m.IsReg() || r_m.GetSize() != O_SIZE_8 || r_m.GetReg().id < AH ||
-                                  r_m.GetReg().id >= R8B); // AH, BH, CH, or DH may not be used with REX.
+                    JITASM_ASSERT(!reg.IsReg() || reg.GetSize() != O_SIZE_8 || reg.GetReg().id < AH || reg.GetReg().id >= R8B); // AH, BH, CH, or DH may not be used with REX.
+                    JITASM_ASSERT(!r_m.IsReg() || r_m.GetSize() != O_SIZE_8 || r_m.GetReg().id < AH || r_m.GetReg().id >= R8B); // AH, BH, CH, or DH may not be used with REX.
 
                     if (flag & E_REP_PREFIX)
                         db(0xF3);
@@ -2180,7 +2138,8 @@ namespace jitasm {
                         db(0xF3);
 
                     db(0x40 | wrxb);
-                } else {
+                }
+                else {
                     if (flag & E_MANDATORY_PREFIX_66)
                         db(0x66);
                     else if (flag & E_MANDATORY_PREFIX_F2)
@@ -2205,10 +2164,9 @@ namespace jitasm {
 
             if (r_m.IsReg()) {
                 db(0xC0 | (reg << 3) | (r_m.GetReg().id & 0x7));
-            } else if (r_m.IsMem()) {
-                JITASM_ASSERT(r_m.GetBase().type == R_TYPE_GP &&
-                              (r_m.GetIndex().type == R_TYPE_GP || r_m.GetIndex().type == R_TYPE_XMM ||
-                               r_m.GetIndex().type == R_TYPE_YMM));
+            }
+            else if (r_m.IsMem()) {
+                JITASM_ASSERT(r_m.GetBase().type == R_TYPE_GP && (r_m.GetIndex().type == R_TYPE_GP || r_m.GetIndex().type == R_TYPE_XMM || r_m.GetIndex().type == R_TYPE_YMM));
                 int base = r_m.GetBase().id;
                 if (base != INVALID)
                     base &= 0x7;
@@ -2224,13 +2182,14 @@ namespace jitasm {
                     db(reg << 3 | 5);
 #endif
                     dd(r_m.GetDisp());
-                } else {
+                }
+                else {
                     JITASM_ASSERT(base != ESP || index != ESP);
                     JITASM_ASSERT(index != ESP || r_m.GetScale() == 0);
 
                     if (index == ESP) {
                         index = base;
-                        base = ESP;
+                        base  = ESP;
                     }
                     bool sib = index != INVALID || r_m.GetScale() || base == ESP;
 
@@ -2261,11 +2220,14 @@ namespace jitasm {
                             JITASM_ASSERT(0);
                         if (index != INVALID && base != INVALID) {
                             db(ss << 6 | index << 3 | base);
-                        } else if (base != INVALID) {
+                        }
+                        else if (base != INVALID) {
                             db(ss << 6 | 4 << 3 | base);
-                        } else if (index != INVALID) {
+                        }
+                        else if (index != INVALID) {
                             db(ss << 6 | index << 3 | 5);
-                        } else {
+                        }
+                        else {
                             JITASM_ASSERT(0);
                         }
                     }
@@ -2278,7 +2240,8 @@ namespace jitasm {
                     if (mod == 2)
                         dd(r_m.GetDisp());
                 }
-            } else {
+            }
+            else {
                 JITASM_ASSERT(0);
             }
         }
@@ -2336,7 +2299,8 @@ namespace jitasm {
                 if (opd4.IsReg()) {
                     EncodeImm(Imm8(static_cast<uint8>(opd4.GetReg().id << 4)));
                 }
-            } else {
+            }
+            else {
                 const detail::Opd &reg = detail::Opd();
                 const detail::Opd &r_m = opd1.IsReg() ? opd1 : detail::Opd();
                 const detail::Opd &vex = detail::Opd();
@@ -2362,7 +2326,8 @@ namespace jitasm {
             if (reg.GetReg().id == EAX && (reg.GetSize() == O_SIZE_8 || !detail::IsInt8(imm.GetImm()))) {
                 opcode |= (reg.GetSize() == O_SIZE_8 ? 0 : 1);
                 Encode(Instr(instr.GetID(), opcode, instr.encoding_flag_, reg, imm));
-            } else {
+            }
+            else {
                 Encode(instr);
             }
         }
@@ -2371,7 +2336,8 @@ namespace jitasm {
             const detail::Opd &imm = instr.GetOpd(0);
             if (instr.GetID() == I_JMP) {
                 Encode(Instr(instr.GetID(), imm.GetSize() == O_SIZE_8 ? 0xEB : 0xE9, instr.encoding_flag_, imm));
-            } else if (instr.GetID() == I_JCC) {
+            }
+            else if (instr.GetID() == I_JCC) {
 #ifndef JITASM64
                 uint32 tttn = instr.opcode_;
                 if (tttn == JCC_CXZ)
@@ -2379,8 +2345,7 @@ namespace jitasm {
                 else if (tttn == JCC_ECXZ)
                     Encode(Instr(instr.GetID(), 0xE3, instr.encoding_flag_, imm));
                 else
-                    Encode(Instr(instr.GetID(), (imm.GetSize() == O_SIZE_8 ? 0x70 : 0x0F80) | tttn,
-                                 instr.encoding_flag_, imm));
+                    Encode(Instr(instr.GetID(), (imm.GetSize() == O_SIZE_8 ? 0x70 : 0x0F80) | tttn, instr.encoding_flag_, imm));
 #else
                 uint32 tttn = instr.opcode_;
                 if (tttn == JCC_ECXZ)
@@ -2388,12 +2353,13 @@ namespace jitasm {
                 else if (tttn == JCC_RCXZ)
                     Encode(Instr(instr.GetID(), 0xE3, instr.encoding_flag_, imm));
                 else
-                    Encode(Instr(instr.GetID(), (imm.GetSize() == O_SIZE_8 ? 0x70 : 0x0F80) | tttn,
-                                 instr.encoding_flag_, imm));
+                    Encode(Instr(instr.GetID(), (imm.GetSize() == O_SIZE_8 ? 0x70 : 0x0F80) | tttn, instr.encoding_flag_, imm));
 #endif
-            } else if (instr.GetID() == I_LOOP) {
+            }
+            else if (instr.GetID() == I_LOOP) {
                 Encode(Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, imm));
-            } else {
+            }
+            else {
                 JITASM_ASSERT(0);
             }
         }
@@ -2407,7 +2373,8 @@ namespace jitasm {
             if (reg.GetReg().id == EAX && mem.GetBase().IsInvalid() && mem.GetIndex().IsInvalid()) {
                 uint32 opcode = 0xA0 | (~instr.opcode_ & 0x2) | (instr.opcode_ & 1);
                 Encode(Instr(instr.GetID(), opcode, instr.encoding_flag_, Imm32((sint32)mem.GetDisp())));
-            } else {
+            }
+            else {
                 Encode(instr);
             }
 #else
@@ -2423,7 +2390,8 @@ namespace jitasm {
             if (reg.GetReg().id == EAX) {
                 uint32 opcode = 0xA8 | (reg.GetSize() == O_SIZE_8 ? 0 : 1);
                 Encode(Instr(instr.GetID(), opcode, instr.encoding_flag_, reg, imm));
-            } else {
+            }
+            else {
                 Encode(instr);
             }
         }
@@ -2435,9 +2403,11 @@ namespace jitasm {
 
             if (dst.GetReg().id == EAX) {
                 Encode(Instr(instr.GetID(), 0x90, instr.encoding_flag_, src));
-            } else if (src.GetReg().id == EAX) {
+            }
+            else if (src.GetReg().id == EAX) {
                 Encode(Instr(instr.GetID(), 0x90, instr.encoding_flag_, dst));
-            } else {
+            }
+            else {
                 Encode(instr);
             }
         }
@@ -2445,53 +2415,24 @@ namespace jitasm {
         void Assemble(const Instr &instr) {
             if (instr.encoding_flag_ & E_SPECIAL) {
                 switch (instr.GetID()) {
-                case I_ADD:
-                    EncodeALU(instr, 0x04);
-                    break;
-                case I_OR:
-                    EncodeALU(instr, 0x0C);
-                    break;
-                case I_ADC:
-                    EncodeALU(instr, 0x14);
-                    break;
-                case I_SBB:
-                    EncodeALU(instr, 0x1C);
-                    break;
-                case I_AND:
-                    EncodeALU(instr, 0x24);
-                    break;
-                case I_SUB:
-                    EncodeALU(instr, 0x2C);
-                    break;
-                case I_XOR:
-                    EncodeALU(instr, 0x34);
-                    break;
-                case I_CMP:
-                    EncodeALU(instr, 0x3C);
-                    break;
-                case I_JMP:
-                    EncodeJMP(instr);
-                    break;
-                case I_JCC:
-                    EncodeJMP(instr);
-                    break;
-                case I_LOOP:
-                    EncodeJMP(instr);
-                    break;
-                case I_MOV:
-                    EncodeMOV(instr);
-                    break;
-                case I_TEST:
-                    EncodeTEST(instr);
-                    break;
-                case I_XCHG:
-                    EncodeXCHG(instr);
-                    break;
-                default:
-                    JITASM_ASSERT(0);
-                    break;
+                case I_ADD: EncodeALU(instr, 0x04); break;
+                case I_OR: EncodeALU(instr, 0x0C); break;
+                case I_ADC: EncodeALU(instr, 0x14); break;
+                case I_SBB: EncodeALU(instr, 0x1C); break;
+                case I_AND: EncodeALU(instr, 0x24); break;
+                case I_SUB: EncodeALU(instr, 0x2C); break;
+                case I_XOR: EncodeALU(instr, 0x34); break;
+                case I_CMP: EncodeALU(instr, 0x3C); break;
+                case I_JMP: EncodeJMP(instr); break;
+                case I_JCC: EncodeJMP(instr); break;
+                case I_LOOP: EncodeJMP(instr); break;
+                case I_MOV: EncodeMOV(instr); break;
+                case I_TEST: EncodeTEST(instr); break;
+                case I_XCHG: EncodeXCHG(instr); break;
+                default: JITASM_ASSERT(0); break;
                 }
-            } else {
+            }
+            else {
                 Encode(instr);
             }
         }
@@ -2539,26 +2480,26 @@ namespace jitasm {
         }
 
         /// Prior iterator
-        template <class It> It prior(const It &it) {
+        template <class It>
+        It prior(const It &it) {
             It i = it;
             return --i;
         }
 
         /// Next iterator
-        template <class It> It next(const It &it) {
+        template <class It>
+        It next(const It &it) {
             It i = it;
             return ++i;
         }
 
         /// Iterator range
-        template <class T, class It = typename T::iterator> struct Range : std::pair<It, It> {
+        template <class T, class It = typename T::iterator>
+        struct Range: std::pair<It, It> {
             typedef It Iterator;
-            Range() : std::pair<It, It>() {
-            }
-            Range(const It &f, const It &s) : std::pair<It, It>(f, s) {
-            }
-            Range(T &container) : std::pair<It, It>(container.begin(), container.end()) {
-            }
+            Range(): std::pair<It, It>() {}
+            Range(const It &f, const It &s): std::pair<It, It>(f, s) {}
+            Range(T &container): std::pair<It, It>(container.begin(), container.end()) {}
             bool empty() const {
                 return this->first == this->second;
             }
@@ -2568,14 +2509,11 @@ namespace jitasm {
         };
 
         /// Const iterator range
-        template <class T> struct ConstRange : Range<T, typename T::const_iterator> {
-            ConstRange() : Range<T, typename T::const_iterator>() {
-            }
-            ConstRange(const typename T::const_iterator &f, const typename T::const_iterator &s)
-                : Range<T, typename T::const_iterator>(f, s) {
-            }
-            ConstRange(const T &container) : Range<T, typename T::const_iterator>(container.begin(), container.end()) {
-            }
+        template <class T>
+        struct ConstRange: Range<T, typename T::const_iterator> {
+            ConstRange(): Range<T, typename T::const_iterator>() {}
+            ConstRange(const typename T::const_iterator &f, const typename T::const_iterator &s): Range<T, typename T::const_iterator>(f, s) {}
+            ConstRange(const T &container): Range<T, typename T::const_iterator>(container.begin(), container.end()) {}
         };
 
         inline void append_num(std::string &str, size_t num) {
@@ -2607,8 +2545,7 @@ namespace jitasm {
             size_t buffsize_;
 
           public:
-            CodeBuffer() : pbuff_(NULL), codesize_(0), buffsize_(0) {
-            }
+            CodeBuffer(): pbuff_(NULL), codesize_(0), buffsize_(0) {}
             ~CodeBuffer() {
                 Reset(0);
             }
@@ -2630,7 +2567,7 @@ namespace jitasm {
 #else
                     munmap(pbuff_, buffsize_);
 #endif
-                    pbuff_ = NULL;
+                    pbuff_    = NULL;
                     codesize_ = 0;
                     buffsize_ = 0;
                 }
@@ -2645,10 +2582,9 @@ namespace jitasm {
                     ::VirtualQuery(pbuff, &info, sizeof(info));
                     buffsize_ = info.RegionSize;
 #else
-                    int pagesize = getpagesize();
+                    int pagesize    = getpagesize();
                     size_t buffsize = (codesize + pagesize - 1) / pagesize * pagesize;
-                    void *pbuff =
-                        mmap(NULL, buffsize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
+                    void *pbuff     = mmap(NULL, buffsize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
                     if (!pbuff) {
                         JITASM_ASSERT(0);
                         return false;
@@ -2656,7 +2592,7 @@ namespace jitasm {
                     buffsize_ = buffsize;
 #endif
 
-                    pbuff_ = pbuff;
+                    pbuff_    = pbuff;
                     codesize_ = codesize;
                 }
                 return true;
@@ -2687,8 +2623,7 @@ namespace jitasm {
             uint32 stack_size_;
 
           public:
-            StackManager() : stack_base_(RegID::CreatePhysicalRegID(R_TYPE_GP, EBX), 0), stack_size_(0) {
-            }
+            StackManager(): stack_base_(RegID::CreatePhysicalRegID(R_TYPE_GP, EBX), 0), stack_size_(0) {}
 
             /// Get allocated stack size
             uint32 GetSize() const {
@@ -2718,8 +2653,7 @@ namespace jitasm {
             long lock_;
 
           public:
-            SpinLock() : lock_(0) {
-            }
+            SpinLock(): lock_(0) {}
             void Lock() {
                 while (interlocked_exchange(&lock_, 1))
                     ;
@@ -2729,12 +2663,13 @@ namespace jitasm {
             }
         };
 
-        template <class Ty> class ScopedLock {
+        template <class Ty>
+        class ScopedLock {
             Ty &lock_;
             ScopedLock<Ty> &operator=(const ScopedLock<Ty> &);
 
           public:
-            ScopedLock(Ty &lock) : lock_(lock) {
+            ScopedLock(Ty &lock): lock_(lock) {
                 lock.Lock();
             }
             ~ScopedLock() {
@@ -2812,22 +2747,18 @@ namespace jitasm {
         struct Label {
             std::string name;
             size_t instr_number;
-            explicit Label(const std::string &name_) : name(name_), instr_number(0) {
-            }
+            explicit Label(const std::string &name_): name(name_), instr_number(0) {}
         };
         typedef std::deque<Label> LabelList;
         LabelList labels_;
 
-        Frontend() : assembled_(false) {
-        }
-        virtual ~Frontend() {
-        }
+        Frontend(): assembled_(false) {}
+        virtual ~Frontend() {}
 
         virtual void InternalMain() = 0;
 
         /// Declare variable of the function argument on register
-        void DeclareRegArg(const detail::Opd &var, const detail::Opd &arg,
-                           const detail::Opd &spill_slot = detail::Opd()) {
+        void DeclareRegArg(const detail::Opd &var, const detail::Opd &arg, const detail::Opd &spill_slot = detail::Opd()) {
             JITASM_ASSERT(var.IsReg() && arg.IsReg());
             // Insert special instruction after Prolog
             InstrList::iterator it = instrs_.begin();
@@ -2853,9 +2784,11 @@ namespace jitasm {
             // The result register is passed as register constraint of the var.
             if (var.IsGpReg()) {
                 AppendInstr(I_COMPILER_DECLARE_RESULT_REG, 0, E_SPECIAL, Dummy(R(var), zax));
-            } else if (var.IsMmxReg()) {
+            }
+            else if (var.IsMmxReg()) {
                 AppendInstr(I_COMPILER_DECLARE_RESULT_REG, 0, E_SPECIAL, Dummy(R(var), mm0));
-            } else if (var.IsXmmReg()) {
+            }
+            else if (var.IsXmmReg()) {
                 AppendInstr(I_COMPILER_DECLARE_RESULT_REG, 0, E_SPECIAL, Dummy(R(var), xmm0));
             }
         }
@@ -2887,7 +2820,7 @@ namespace jitasm {
                 Instr &instr = *it;
                 if (IsJump(instr.GetID())) {
                     instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8(0x7F),
-                                  Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
+                        Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
                 }
             }
 
@@ -2908,8 +2841,8 @@ namespace jitasm {
                 for (size_t i = 0; i < instrs_.size(); i++) {
                     Instr &instr = instrs_[i];
                     if (IsJump(instr.GetID())) {
-                        size_t d = (size_t)instr.GetOpd(1).GetImm();
-                        int rel = (int)offsets[d] - offsets[i + 1];
+                        size_t d     = (size_t)instr.GetOpd(1).GetImm();
+                        int rel      = (int)offsets[d] - offsets[i + 1];
                         OpdSize size = instr.GetOpd(0).GetSize();
                         if (size == O_SIZE_8) {
                             if (!detail::IsInt8(rel)) {
@@ -2921,13 +2854,12 @@ namespace jitasm {
                                     JITASM_ASSERT(0);
 
                                 // Retry with immediate 32
-                                instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm32(0x7FFFFFFF),
-                                              Imm64(instr.GetOpd(1).GetImm()));
+                                instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm32(0x7FFFFFFF), Imm64(instr.GetOpd(1).GetImm()));
                                 retry = true;
                             }
-                        } else if (size == O_SIZE_32) {
-                            JITASM_ASSERT(
-                                detail::IsInt32(rel)); // There is no jump instruction larger than immediate 32.
+                        }
+                        else if (size == O_SIZE_32) {
+                            JITASM_ASSERT(detail::IsInt32(rel)); // There is no jump instruction larger than immediate 32.
                         }
                     }
                 }
@@ -2937,13 +2869,14 @@ namespace jitasm {
             for (size_t i = 0; i < instrs_.size(); i++) {
                 Instr &instr = instrs_[i];
                 if (IsJump(instr.GetID())) {
-                    size_t d = (size_t)instr.GetOpd(1).GetImm();
-                    int rel = (int)offsets[d] - offsets[i + 1];
+                    size_t d     = (size_t)instr.GetOpd(1).GetImm();
+                    int rel      = (int)offsets[d] - offsets[i + 1];
                     OpdSize size = instr.GetOpd(0).GetSize();
                     if (size == O_SIZE_8) {
                         JITASM_ASSERT(detail::IsInt8(rel));
                         instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8((uint8)rel));
-                    } else if (size == O_SIZE_32) {
+                    }
+                    else if (size == O_SIZE_32) {
                         JITASM_ASSERT(detail::IsInt32(rel));
                         instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm32((uint32)rel));
                     }
@@ -3001,10 +2934,8 @@ namespace jitasm {
             return codebuff_.GetCodeSize();
         }
 
-        void AppendInstr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(),
-                         const detail::Opd &opd2 = detail::Opd(), const detail::Opd &opd3 = detail::Opd(),
-                         const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(),
-                         const detail::Opd &opd6 = detail::Opd()) {
+        void AppendInstr(InstrID id, uint32 opcode, uint32 encoding_flag, const detail::Opd &opd1 = detail::Opd(), const detail::Opd &opd2 = detail::Opd(), const detail::Opd &opd3 = detail::Opd(), const detail::Opd &opd4 = detail::Opd(), const detail::Opd &opd5 = detail::Opd(),
+            const detail::Opd &opd6 = detail::Opd()) {
             instrs_.push_back(Instr(id, opcode, encoding_flag, opd1, opd2, opd3, opd4, opd5, opd6));
         }
 
@@ -3054,16 +2985,13 @@ namespace jitasm {
             AppendInstr(I_ADC, 0x80, 0, Imm8(2), RW(dst), imm);
         }
         void adc(const Reg16 &dst, const Imm16 &imm) {
-            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(2),
-                        RW(dst), detail::ImmXor8(imm));
+            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(2), RW(dst), detail::ImmXor8(imm));
         }
         void adc(const Mem16 &dst, const Imm16 &imm) {
-            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), detail::ImmXor8(imm));
         }
         void adc(const Reg32 &dst, const Imm32 &imm) {
-            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(2), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(2), RW(dst), detail::ImmXor8(imm));
         }
         void adc(const Mem32 &dst, const Imm32 &imm) {
             AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(2), RW(dst), detail::ImmXor8(imm));
@@ -3097,12 +3025,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void adc(const Reg64 &dst, const Imm32 &imm) {
-            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(2), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(2), RW(dst), detail::ImmXor8(imm));
         }
         void adc(const Mem64 &dst, const Imm32 &imm) {
-            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(2), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADC, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(2), RW(dst), detail::ImmXor8(imm));
         }
         void adc(const Reg64 &dst, const Reg64 &src) {
             AppendInstr(I_ADC, 0x13, E_REXW_PREFIX, RW(dst), R(src));
@@ -3121,16 +3047,13 @@ namespace jitasm {
             AppendInstr(I_ADD, 0x80, 0, Imm8(0), RW(dst), imm);
         }
         void add(const Reg16 &dst, const Imm16 &imm) {
-            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(0),
-                        RW(dst), detail::ImmXor8(imm));
+            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(0), RW(dst), detail::ImmXor8(imm));
         }
         void add(const Mem16 &dst, const Imm16 &imm) {
-            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), detail::ImmXor8(imm));
         }
         void add(const Reg32 &dst, const Imm32 &imm) {
-            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(0), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(0), RW(dst), detail::ImmXor8(imm));
         }
         void add(const Mem32 &dst, const Imm32 &imm) {
             AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(0), RW(dst), detail::ImmXor8(imm));
@@ -3164,12 +3087,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void add(const Reg64 &dst, const Imm32 &imm) {
-            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(0), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(0), RW(dst), detail::ImmXor8(imm));
         }
         void add(const Mem64 &dst, const Imm32 &imm) {
-            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(0), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_ADD, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(0), RW(dst), detail::ImmXor8(imm));
         }
         void add(const Reg64 &dst, const Reg64 &src) {
             AppendInstr(I_ADD, 0x03, E_REXW_PREFIX, RW(dst), R(src));
@@ -3188,16 +3109,13 @@ namespace jitasm {
             AppendInstr(I_AND, 0x80, 0, Imm8(4), RW(dst), imm);
         }
         void and (const Reg16 &dst, const Imm16 &imm) {
-            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(4),
-                        RW(dst), detail::ImmXor8(imm));
+            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(4), RW(dst), detail::ImmXor8(imm));
         }
         void and (const Mem16 &dst, const Imm16 &imm) {
-            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), detail::ImmXor8(imm));
         }
         void and (const Reg32 &dst, const Imm32 &imm) {
-            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(4), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(4), RW(dst), detail::ImmXor8(imm));
         }
         void and (const Mem32 &dst, const Imm32 &imm) {
             AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(4), RW(dst), detail::ImmXor8(imm));
@@ -3231,12 +3149,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void and (const Reg64 &dst, const Imm32 &imm) {
-            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(4), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(4), RW(dst), detail::ImmXor8(imm));
         }
         void and (const Mem64 &dst, const Imm32 &imm) {
-            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(4), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_AND, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(4), RW(dst), detail::ImmXor8(imm));
         }
         void and (const Reg64 &dst, const Reg64 &src) {
             AppendInstr(I_AND, 0x23, E_REXW_PREFIX, RW(dst), R(src));
@@ -4037,16 +3953,13 @@ namespace jitasm {
             AppendInstr(I_CMP, 0x80, 0, Imm8(7), R(lhs), imm);
         }
         void cmp(const Reg16 &lhs, const Imm16 &imm) {
-            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(7),
-                        R(lhs), detail::ImmXor8(imm));
+            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(7), R(lhs), detail::ImmXor8(imm));
         }
         void cmp(const Mem16 &lhs, const Imm16 &imm) {
-            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(7), R(lhs),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(7), R(lhs), detail::ImmXor8(imm));
         }
         void cmp(const Reg32 &lhs, const Imm32 &imm) {
-            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(7), R(lhs),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(7), R(lhs), detail::ImmXor8(imm));
         }
         void cmp(const Mem32 &lhs, const Imm32 &imm) {
             AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(7), R(lhs), detail::ImmXor8(imm));
@@ -4080,12 +3993,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void cmp(const Reg64 &lhs, const Imm32 &imm) {
-            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(7), R(lhs),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(7), R(lhs), detail::ImmXor8(imm));
         }
         void cmp(const Mem64 &lhs, const Imm32 &imm) {
-            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(7), R(lhs),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_CMP, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(7), R(lhs), detail::ImmXor8(imm));
         }
         void cmp(const Reg64 &lhs, const Reg64 &rhs) {
             AppendInstr(I_CMP, 0x3B, E_REXW_PREFIX, R(lhs), R(rhs));
@@ -4138,13 +4049,11 @@ namespace jitasm {
         }
 #endif
         void cmpxchg8b(const Mem64 &dst) {
-            AppendInstr(I_CMPXCHG8B, 0x0FC7, 0, Imm8(1), RW(dst), Dummy(RW(edx)), Dummy(RW(eax)), Dummy(R(ecx)),
-                        Dummy(R(ebx)));
+            AppendInstr(I_CMPXCHG8B, 0x0FC7, 0, Imm8(1), RW(dst), Dummy(RW(edx)), Dummy(RW(eax)), Dummy(R(ecx)), Dummy(R(ebx)));
         }
 #ifdef JITASM64
         void cmpxchg16b(const Mem128 &dst) {
-            AppendInstr(I_CMPXCHG16B, 0x0FC7, E_REXW_PREFIX, Imm8(1), RW(dst), Dummy(RW(rdx)), Dummy(RW(rax)),
-                        Dummy(R(rcx)), Dummy(R(rbx)));
+            AppendInstr(I_CMPXCHG16B, 0x0FC7, E_REXW_PREFIX, Imm8(1), RW(dst), Dummy(RW(rdx)), Dummy(RW(rax)), Dummy(R(rcx)), Dummy(R(rbx)));
         }
 #endif
         void cpuid() {
@@ -4283,12 +4192,10 @@ namespace jitasm {
             AppendInstr(I_IMUL, 0x0FAF, 0, RW(dst), R(src));
         }
         void imul(const Reg16 &dst, const Reg16 &src, const Imm16 &imm) {
-            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_OPERAND_SIZE_PREFIX, W(dst), R(src),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_OPERAND_SIZE_PREFIX, W(dst), R(src), detail::ImmXor8(imm));
         }
         void imul(const Reg16 &dst, const Mem16 &src, const Imm16 &imm) {
-            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_OPERAND_SIZE_PREFIX, W(dst), R(src),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_OPERAND_SIZE_PREFIX, W(dst), R(src), detail::ImmXor8(imm));
         }
         void imul(const Reg32 &dst, const Reg32 &src, const Imm32 &imm) {
             AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, 0, W(dst), R(src), detail::ImmXor8(imm));
@@ -4316,12 +4223,10 @@ namespace jitasm {
             AppendInstr(I_IMUL, 0x0FAF, E_REXW_PREFIX, RW(dst), R(src));
         }
         void imul(const Reg64 &dst, const Reg64 &src, const Imm32 &imm) {
-            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_REXW_PREFIX, W(dst), R(src),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_REXW_PREFIX, W(dst), R(src), detail::ImmXor8(imm));
         }
         void imul(const Reg64 &dst, const Mem64 &src, const Imm32 &imm) {
-            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_REXW_PREFIX, W(dst), R(src),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_IMUL, detail::IsInt8(imm.GetImm()) ? 0x6B : 0x69, E_REXW_PREFIX, W(dst), R(src), detail::ImmXor8(imm));
         }
         void imul(const Reg64 &dst, const Imm32 &imm) {
             imul(dst, dst, imm);
@@ -4391,8 +4296,7 @@ namespace jitasm {
             AppendInstr(I_INS_B, 0x6C, E_REP_PREFIX, Dummy(R(src), dx), Dummy(RW(dst), edi), Dummy(RW(count), ecx));
         }
         void rep_insw(const Reg &dst, const Reg16 &src, const Reg &count) {
-            AppendInstr(I_INS_W, 0x6D, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(R(src), dx), Dummy(RW(dst), edi),
-                        Dummy(RW(count), ecx));
+            AppendInstr(I_INS_W, 0x6D, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(R(src), dx), Dummy(RW(dst), edi), Dummy(RW(count), ecx));
         }
         void rep_insd(const Reg &dst, const Reg16 &src, const Reg &count) {
             AppendInstr(I_INS_D, 0x6D, E_REP_PREFIX, Dummy(R(src), dx), Dummy(RW(dst), edi), Dummy(RW(count), ecx));
@@ -4411,7 +4315,8 @@ namespace jitasm {
         void invd() {
             AppendInstr(I_INVD, 0x0F08, 0);
         }
-        template <class Ty> void invlpg(const MemT<Ty> &dst) {
+        template <class Ty>
+        void invlpg(const MemT<Ty> &dst) {
             AppendInstr(I_INVLPG, 0x0F01, 0, Imm8(7), R(dst));
         }
         void iret() {
@@ -4558,14 +4463,17 @@ namespace jitasm {
             AppendInstr(I_LAR, 0x0F02, E_REXW_PREFIX, W(dst), R(src));
         }
 #endif
-        template <class Ty> void lea(const Reg16 &dst, const MemT<Ty> &src) {
+        template <class Ty>
+        void lea(const Reg16 &dst, const MemT<Ty> &src) {
             AppendInstr(I_LEA, 0x8D, E_OPERAND_SIZE_PREFIX, W(dst), R(src));
         }
-        template <class Ty> void lea(const Reg32 &dst, const MemT<Ty> &src) {
+        template <class Ty>
+        void lea(const Reg32 &dst, const MemT<Ty> &src) {
             AppendInstr(I_LEA, 0x8D, 0, W(dst), R(src));
         }
 #ifdef JITASM64
-        template <class Ty> void lea(const Reg64 &dst, const MemT<Ty> &src) {
+        template <class Ty>
+        void lea(const Reg64 &dst, const MemT<Ty> &src) {
             AppendInstr(I_LEA, 0x8D, E_REXW_PREFIX, W(dst), R(src));
         }
 #endif
@@ -4604,16 +4512,14 @@ namespace jitasm {
             AppendInstr(I_LODS_B, 0xAC, E_REP_PREFIX, Dummy(RW(dst), al), Dummy(RW(src), zsi), Dummy(RW(count), zcx));
         } // dst is RW because of ecx == 0
         void rep_lodsw(const Reg16 &dst, const Reg &src, const Reg &count) {
-            AppendInstr(I_LODS_W, 0xAD, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(RW(dst), ax), Dummy(RW(src), zsi),
-                        Dummy(RW(count), zcx));
+            AppendInstr(I_LODS_W, 0xAD, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(RW(dst), ax), Dummy(RW(src), zsi), Dummy(RW(count), zcx));
         } // dst is RW because of ecx == 0
         void rep_lodsd(const Reg32 &dst, const Reg &src, const Reg &count) {
             AppendInstr(I_LODS_D, 0xAD, E_REP_PREFIX, Dummy(RW(dst), eax), Dummy(RW(src), zsi), Dummy(RW(count), zcx));
         } // dst is RW because of ecx == 0
 #ifdef JITASM64
         void rep_lodsq(const Reg64 &dst, const Reg &src, const Reg &count) {
-            AppendInstr(I_LODS_Q, 0xAD, E_REP_PREFIX | E_REXW_PREFIX, Dummy(RW(dst), rax), Dummy(RW(src), rsi),
-                        Dummy(RW(count), rcx));
+            AppendInstr(I_LODS_Q, 0xAD, E_REP_PREFIX | E_REXW_PREFIX, Dummy(RW(dst), rax), Dummy(RW(src), rsi), Dummy(RW(count), rcx));
         } // dst is RW because of ecx == 0
 #endif
         void loop(const std::string &label_name) {
@@ -4707,9 +4613,7 @@ namespace jitasm {
             AppendInstr(I_MOV, 0x8B, E_REXW_PREFIX, W(dst), R(src));
         }
         void mov(const Reg64 &dst, const Imm64 &imm) {
-            detail::IsInt32(imm.GetImm()) ?
-                AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), Imm32((sint32)imm.GetImm())) :
-                AppendInstr(I_MOV, 0xB8, E_REXW_PREFIX, W(dst), imm);
+            detail::IsInt32(imm.GetImm()) ? AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), Imm32((sint32)imm.GetImm())) : AppendInstr(I_MOV, 0xB8, E_REXW_PREFIX, W(dst), imm);
         }
         void mov(const Mem64 &dst, const Imm32 &imm) {
             AppendInstr(I_MOV, 0xC7, E_REXW_PREFIX, Imm8(0), W(dst), imm);
@@ -4768,8 +4672,7 @@ namespace jitasm {
             AppendInstr(I_MOVS_B, 0xA4, E_REP_PREFIX, Dummy(RW(dst), zdi), Dummy(RW(src), zsi), Dummy(RW(count), ecx));
         }
         void rep_movsw(const Reg &dst, const Reg &src, const Reg &count) {
-            AppendInstr(I_MOVS_W, 0xA5, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(RW(dst), zdi), Dummy(RW(src), zsi),
-                        Dummy(RW(count), ecx));
+            AppendInstr(I_MOVS_W, 0xA5, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(RW(dst), zdi), Dummy(RW(src), zsi), Dummy(RW(count), ecx));
         }
         void rep_movsd(const Reg &dst, const Reg &src, const Reg &count) {
             AppendInstr(I_MOVS_D, 0xA5, E_REP_PREFIX, Dummy(RW(dst), zdi), Dummy(RW(src), zsi), Dummy(RW(count), ecx));
@@ -4779,8 +4682,7 @@ namespace jitasm {
             rep_movsq(rdi, rsi, rcx);
         }
         void rep_movsq(const Reg64 &dst, const Reg64 &src, const Reg64 &count) {
-            AppendInstr(I_MOVS_Q, 0xA5, E_REP_PREFIX | E_REXW_PREFIX, Dummy(RW(dst), rdi), Dummy(RW(src), rsi),
-                        Dummy(RW(count), rcx));
+            AppendInstr(I_MOVS_Q, 0xA5, E_REP_PREFIX | E_REXW_PREFIX, Dummy(RW(dst), rdi), Dummy(RW(src), rsi), Dummy(RW(count), rcx));
         }
 #endif
         void movsx(const Reg16 &dst, const Reg8 &src) {
@@ -4941,16 +4843,13 @@ namespace jitasm {
             AppendInstr(I_OR, 0x80, 0, Imm8(1), RW(dst), imm);
         }
         void or (const Reg16 &dst, const Imm16 &imm) {
-            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(1),
-                        RW(dst), detail::ImmXor8(imm));
+            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(1), RW(dst), detail::ImmXor8(imm));
         }
         void or (const Mem16 &dst, const Imm16 &imm) {
-            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), detail::ImmXor8(imm));
         }
         void or (const Reg32 &dst, const Imm32 &imm) {
-            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(1), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(1), RW(dst), detail::ImmXor8(imm));
         }
         void or (const Mem32 &dst, const Imm32 &imm) {
             AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(1), RW(dst), detail::ImmXor8(imm));
@@ -4984,12 +4883,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void or (const Reg64 &dst, const Imm32 &imm) {
-            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(1), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(1), RW(dst), detail::ImmXor8(imm));
         }
         void or (const Mem64 &dst, const Imm32 &imm) {
-            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(1), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_OR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(1), RW(dst), detail::ImmXor8(imm));
         }
         void or (const Reg64 &dst, const Reg64 &src) {
             AppendInstr(I_OR, 0x0B, E_REXW_PREFIX, RW(dst), R(src));
@@ -5032,8 +4929,7 @@ namespace jitasm {
             AppendInstr(I_OUTS_B, 0x6E, E_REP_PREFIX, Dummy(RW(src), esi), Dummy(R(dst), dx), Dummy(RW(count), ecx));
         }
         void rep_outsw(const Reg16 &dst, const Reg &src, const Reg &count) {
-            AppendInstr(I_OUTS_W, 0x6F, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(RW(src), esi), Dummy(R(dst), dx),
-                        Dummy(RW(count), ecx));
+            AppendInstr(I_OUTS_W, 0x6F, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(RW(src), esi), Dummy(R(dst), dx), Dummy(RW(count), ecx));
         }
         void rep_outsd(const Reg16 &dst, const Reg &src, const Reg &count) {
             AppendInstr(I_OUTS_D, 0x6F, E_REP_PREFIX, Dummy(RW(src), esi), Dummy(R(dst), dx), Dummy(RW(count), ecx));
@@ -5133,12 +5029,10 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD2, 0, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD0, 0, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC0, 0, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD2, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5147,12 +5041,10 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD2, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD0, 0, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC0, 0, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD2, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5161,12 +5053,10 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD2, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD0, 0, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC0, 0, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD2, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5175,12 +5065,10 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD2, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD0, 0, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC0, 0, Imm8(1), RW(dst), shift);
         }
         void rcl(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_RCL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), Dummy(R(shift), cl));
@@ -5189,12 +5077,10 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5203,12 +5089,10 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5217,12 +5101,10 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5231,12 +5113,10 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(1), RW(dst), shift);
         }
         void rcl(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_RCL, 0xD3, 0, Imm8(2), RW(dst), Dummy(R(shift), cl));
@@ -5245,12 +5125,10 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD3, 0, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, 0, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC1, 0, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD3, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5259,12 +5137,10 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD3, 0, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, 0, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC1, 0, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD3, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5273,12 +5149,10 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD3, 0, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, 0, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC1, 0, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD3, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5287,12 +5161,10 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD3, 0, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, 0, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC1, 0, Imm8(1), RW(dst), shift);
         }
 #ifdef JITASM64
         void rcl(const Reg64 &dst, const Reg8 &shift) {
@@ -5302,12 +5174,10 @@ namespace jitasm {
             AppendInstr(I_RCL, 0xD3, E_REXW_PREFIX, Imm8(2), RW(dst), Dummy(R(shift), cl));
         }
         void rcl(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcl(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst)) :
-                                  AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCL, 0xD1, E_REXW_PREFIX, Imm8(2), RW(dst)) : AppendInstr(I_RCL, 0xC1, E_REXW_PREFIX, Imm8(2), RW(dst), shift);
         }
         void rcr(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_RCR, 0xD3, E_REXW_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
@@ -5316,12 +5186,10 @@ namespace jitasm {
             AppendInstr(I_RCR, 0xD3, E_REXW_PREFIX, Imm8(3), RW(dst), Dummy(R(shift), cl));
         }
         void rcr(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rcr(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst)) :
-                                  AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_RCR, 0xD1, E_REXW_PREFIX, Imm8(3), RW(dst)) : AppendInstr(I_RCR, 0xC1, E_REXW_PREFIX, Imm8(3), RW(dst), shift);
         }
         void rol(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_ROL, 0xD3, E_REXW_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
@@ -5330,12 +5198,10 @@ namespace jitasm {
             AppendInstr(I_ROL, 0xD3, E_REXW_PREFIX, Imm8(0), RW(dst), Dummy(R(shift), cl));
         }
         void rol(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
         }
         void rol(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst)) :
-                                  AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROL, 0xD1, E_REXW_PREFIX, Imm8(0), RW(dst)) : AppendInstr(I_ROL, 0xC1, E_REXW_PREFIX, Imm8(0), RW(dst), shift);
         }
         void ror(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_ROR, 0xD3, E_REXW_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
@@ -5344,12 +5210,10 @@ namespace jitasm {
             AppendInstr(I_ROR, 0xD3, E_REXW_PREFIX, Imm8(1), RW(dst), Dummy(R(shift), cl));
         }
         void ror(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
         }
         void ror(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst)) :
-                                  AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_ROR, 0xD1, E_REXW_PREFIX, Imm8(1), RW(dst)) : AppendInstr(I_ROR, 0xC1, E_REXW_PREFIX, Imm8(1), RW(dst), shift);
         }
 #endif
         void rdmsr() {
@@ -5389,12 +5253,10 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD2, 0, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD0, 0, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC0, 0, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD2, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5403,12 +5265,10 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD2, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD0, 0, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC0, 0, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg8 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD2, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5417,12 +5277,10 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD2, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem8 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD0, 0, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC0, 0, Imm8(5), RW(dst), shift);
         }
         void sal(const Reg16 &dst, const Reg8 &shift) {
             shl(dst, shift);
@@ -5443,12 +5301,10 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5457,12 +5313,10 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg16 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5471,12 +5325,10 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD3, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem16 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC1, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), shift);
         }
         void sal(const Reg32 &dst, const Reg8 &shift) {
             shl(dst, shift);
@@ -5497,12 +5349,10 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD3, 0, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, 0, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC1, 0, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD3, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5511,12 +5361,10 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD3, 0, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, 0, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC1, 0, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg32 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD3, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5525,12 +5373,10 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD3, 0, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem32 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, 0, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC1, 0, Imm8(5), RW(dst), shift);
         }
 #ifdef JITASM64
         void sal(const Reg64 &dst, const Reg8 &shift) {
@@ -5552,12 +5398,10 @@ namespace jitasm {
             AppendInstr(I_SAR, 0xD3, E_REXW_PREFIX, Imm8(7), RW(dst), Dummy(R(shift), cl));
         }
         void sar(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
         }
         void sar(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst)) :
-                                  AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SAR, 0xD1, E_REXW_PREFIX, Imm8(7), RW(dst)) : AppendInstr(I_SAR, 0xC1, E_REXW_PREFIX, Imm8(7), RW(dst), shift);
         }
         void shl(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_SHL, 0xD3, E_REXW_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
@@ -5566,12 +5410,10 @@ namespace jitasm {
             AppendInstr(I_SHL, 0xD3, E_REXW_PREFIX, Imm8(4), RW(dst), Dummy(R(shift), cl));
         }
         void shl(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shl(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst)) :
-                                  AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHL, 0xD1, E_REXW_PREFIX, Imm8(4), RW(dst)) : AppendInstr(I_SHL, 0xC1, E_REXW_PREFIX, Imm8(4), RW(dst), shift);
         }
         void shr(const Reg64 &dst, const Reg8 &shift) {
             AppendInstr(I_SHR, 0xD3, E_REXW_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
@@ -5580,12 +5422,10 @@ namespace jitasm {
             AppendInstr(I_SHR, 0xD3, E_REXW_PREFIX, Imm8(5), RW(dst), Dummy(R(shift), cl));
         }
         void shr(const Reg64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
         }
         void shr(const Mem64 &dst, const Imm8 &shift) {
-            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst)) :
-                                  AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
+            shift.GetImm() == 1 ? AppendInstr(I_SHR, 0xD1, E_REXW_PREFIX, Imm8(5), RW(dst)) : AppendInstr(I_SHR, 0xC1, E_REXW_PREFIX, Imm8(5), RW(dst), shift);
         }
 #endif
         void sbb(const Reg8 &dst, const Imm8 &imm) {
@@ -5595,16 +5435,13 @@ namespace jitasm {
             AppendInstr(I_SBB, 0x80, 0, Imm8(3), RW(dst), imm);
         }
         void sbb(const Reg16 &dst, const Imm16 &imm) {
-            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(3),
-                        RW(dst), detail::ImmXor8(imm));
+            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(3), RW(dst), detail::ImmXor8(imm));
         }
         void sbb(const Mem16 &dst, const Imm16 &imm) {
-            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(3), RW(dst), detail::ImmXor8(imm));
         }
         void sbb(const Reg32 &dst, const Imm32 &imm) {
-            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(3), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(3), RW(dst), detail::ImmXor8(imm));
         }
         void sbb(const Mem32 &dst, const Imm32 &imm) {
             AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(3), RW(dst), detail::ImmXor8(imm));
@@ -5638,12 +5475,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void sbb(const Reg64 &dst, const Imm32 &imm) {
-            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(3), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(3), RW(dst), detail::ImmXor8(imm));
         }
         void sbb(const Mem64 &dst, const Imm32 &imm) {
-            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(3), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SBB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(3), RW(dst), detail::ImmXor8(imm));
         }
         void sbb(const Reg64 &dst, const Reg64 &src) {
             AppendInstr(I_SBB, 0x1B, E_REXW_PREFIX, RW(dst), R(src));
@@ -5925,10 +5760,12 @@ namespace jitasm {
             AppendInstr(I_SHRD, 0x0FAD, E_REXW_PREFIX, R(src), RW(dst), Dummy(R(place), cl));
         }
 #endif
-        template <class Ty> void sgdt(const MemT<Ty> &dst) {
+        template <class Ty>
+        void sgdt(const MemT<Ty> &dst) {
             AppendInstr(I_SGDT, 0x0F01, 0, Imm8(0), W(dst));
         }
-        template <class Ty> void sidt(const MemT<Ty> &dst) {
+        template <class Ty>
+        void sidt(const MemT<Ty> &dst) {
             AppendInstr(I_SIDT, 0x0F01, 0, Imm8(1), W(dst));
         }
         void sldt(const Reg16 &dst) {
@@ -5980,16 +5817,14 @@ namespace jitasm {
             AppendInstr(I_STOS_B, 0xAA, E_REP_PREFIX, Dummy(R(src), al), Dummy(RW(dst), zdi), Dummy(RW(count), zcx));
         }
         void rep_stosw(const Reg &dst, const Reg16 &src, const Reg &count) {
-            AppendInstr(I_STOS_W, 0xAB, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(R(src), ax), Dummy(RW(dst), zdi),
-                        Dummy(RW(count), zcx));
+            AppendInstr(I_STOS_W, 0xAB, E_REP_PREFIX | E_OPERAND_SIZE_PREFIX, Dummy(R(src), ax), Dummy(RW(dst), zdi), Dummy(RW(count), zcx));
         }
         void rep_stosd(const Reg &dst, const Reg32 &src, const Reg &count) {
             AppendInstr(I_STOS_D, 0xAB, E_REP_PREFIX, Dummy(R(src), eax), Dummy(RW(dst), zdi), Dummy(RW(count), zcx));
         }
 #ifdef JITASM64
         void rep_stosq(const Reg &dst, const Reg64 &src, const Reg &count) {
-            AppendInstr(I_STOS_Q, 0xAB, E_REP_PREFIX | E_REXW_PREFIX, Dummy(R(src), rax), Dummy(RW(dst), zdi),
-                        Dummy(RW(count), zcx));
+            AppendInstr(I_STOS_Q, 0xAB, E_REP_PREFIX | E_REXW_PREFIX, Dummy(R(src), rax), Dummy(RW(dst), zdi), Dummy(RW(count), zcx));
         }
 #endif
         void sub(const Reg8 &dst, const Imm8 &imm) {
@@ -5999,16 +5834,13 @@ namespace jitasm {
             AppendInstr(I_SUB, 0x80, 0, Imm8(5), RW(dst), imm);
         }
         void sub(const Reg16 &dst, const Imm16 &imm) {
-            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(5),
-                        RW(dst), detail::ImmXor8(imm));
+            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(5), RW(dst), detail::ImmXor8(imm));
         }
         void sub(const Mem16 &dst, const Imm16 &imm) {
-            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(5), RW(dst), detail::ImmXor8(imm));
         }
         void sub(const Reg32 &dst, const Imm32 &imm) {
-            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(5), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(5), RW(dst), detail::ImmXor8(imm));
         }
         void sub(const Mem32 &dst, const Imm32 &imm) {
             AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(5), RW(dst), detail::ImmXor8(imm));
@@ -6042,12 +5874,10 @@ namespace jitasm {
         }
 #ifdef JITASM64
         void sub(const Reg64 &dst, const Imm32 &imm) {
-            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(5), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(5), RW(dst), detail::ImmXor8(imm));
         }
         void sub(const Mem64 &dst, const Imm32 &imm) {
-            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(5), RW(dst),
-                        detail::ImmXor8(imm));
+            AppendInstr(I_SUB, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(5), RW(dst), detail::ImmXor8(imm));
         }
         void sub(const Reg64 &dst, const Reg64 &src) {
             AppendInstr(I_SUB, 0x2B, E_REXW_PREFIX, RW(dst), R(src));
@@ -6221,53 +6051,22 @@ namespace jitasm {
         void xlatb() {
             AppendInstr(I_XLATB, 0xD7, 0, Dummy(RW(al)), Dummy(R(ebx)));
         }
-        void xor
-            (const Reg8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, E_SPECIAL, Imm8(6), RW(dst), imm); } void xor
-            (const Mem8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, 0, Imm8(6), RW(dst), imm); } void xor
-            (const Reg16 &dst, const Imm16 &imm) {
-                AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL,
-                            Imm8(6), RW(dst), detail::ImmXor8(imm));
-            } void xor
-            (const Mem16 &dst, const Imm16 &imm) {
-                AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(6), RW(dst),
-                            detail::ImmXor8(imm));
-            } void xor
-            (const Reg32 &dst, const Imm32 &imm) {
-                AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(6), RW(dst),
-                            detail::ImmXor8(imm));
-            } void xor
-            (const Mem32 &dst, const Imm32 &imm) {
-                AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(6), RW(dst),
-                            detail::ImmXor8(imm));
-            } void xor
-            (const Reg8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void xor
-            (const Mem8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x30, 0, R(src), RW(dst)); } void xor
-            (const Reg8 &dst, const Mem8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void xor
-            (const Reg16 &dst, const Reg16 &src) {
-                AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src));
-            } void xor
-            (const Mem16 &dst, const Reg16 &src) {
-                AppendInstr(I_XOR, 0x31, E_OPERAND_SIZE_PREFIX, R(src), RW(dst));
-            } void xor
-            (const Reg16 &dst, const Mem16 &src) {
-                AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src));
-            } void xor
-            (const Reg32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); } void xor
-            (const Mem32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x31, 0, R(src), RW(dst)); } void xor
-            (const Reg32 &dst, const Mem32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); }
+        void xor (const Reg8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, E_SPECIAL, Imm8(6), RW(dst), imm); } void xor (const Mem8 &dst, const Imm8 &imm) { AppendInstr(I_XOR, 0x80, 0, Imm8(6), RW(dst), imm); } void
+            xor (const Reg16 &dst, const Imm16 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX | E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Mem16 &dst, const Imm16 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_OPERAND_SIZE_PREFIX, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Reg32 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Mem32 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, 0, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void xor (const Reg8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void
+            xor (const Mem8 &dst, const Reg8 &src) { AppendInstr(I_XOR, 0x30, 0, R(src), RW(dst)); } void xor (const Reg8 &dst, const Mem8 &src) { AppendInstr(I_XOR, 0x32, 0, RW(dst), R(src)); } void
+            xor (const Reg16 &dst, const Reg16 &src) { AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src)); } void xor (const Mem16 &dst, const Reg16 &src) { AppendInstr(I_XOR, 0x31, E_OPERAND_SIZE_PREFIX, R(src), RW(dst)); } void
+            xor (const Reg16 &dst, const Mem16 &src) { AppendInstr(I_XOR, 0x33, E_OPERAND_SIZE_PREFIX, RW(dst), R(src)); } void xor (const Reg32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); } void
+            xor (const Mem32 &dst, const Reg32 &src) { AppendInstr(I_XOR, 0x31, 0, R(src), RW(dst)); } void
+            xor (const Reg32 &dst, const Mem32 &src) { AppendInstr(I_XOR, 0x33, 0, RW(dst), R(src)); }
 #ifdef JITASM64
-            void xor
-            (const Reg64 &dst, const Imm32 &imm) {
-                AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(6),
-                            RW(dst), detail::ImmXor8(imm));
-            } void xor
-            (const Mem64 &dst, const Imm32 &imm) {
-                AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(6), RW(dst),
-                            detail::ImmXor8(imm));
-            } void xor
-            (const Reg64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); } void xor
-            (const Mem64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x31, E_REXW_PREFIX, R(src), RW(dst)); } void xor
-            (const Reg64 &dst, const Mem64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); }
+            void
+            xor (const Reg64 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX | E_SPECIAL, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Mem64 &dst, const Imm32 &imm) { AppendInstr(I_XOR, detail::IsInt8(imm.GetImm()) ? 0x83 : 0x81, E_REXW_PREFIX, Imm8(6), RW(dst), detail::ImmXor8(imm)); } void
+            xor (const Reg64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); } void xor (const Mem64 &dst, const Reg64 &src) { AppendInstr(I_XOR, 0x31, E_REXW_PREFIX, R(src), RW(dst)); } void
+            xor (const Reg64 &dst, const Mem64 &src) { AppendInstr(I_XOR, 0x33, E_REXW_PREFIX, RW(dst), R(src)); }
 #endif
 
             // x87 Floating-Point Instructions
@@ -9128,25 +8927,17 @@ namespace jitasm {
             AppendInstr(I_CRC32, 0x0F38F1, E_MANDATORY_PREFIX_F2 | E_REXW_PREFIX, RW(dst), R(src));
         }
 #endif
-        void pcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2,
-                       const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRI, 0x0F3A61, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), ecx),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void pcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRI, 0x0F3A61, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), ecx), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
-        void pcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2,
-                       const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRI, 0x0F3A61, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), ecx),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void pcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRI, 0x0F3A61, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), ecx), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
-        void pcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2,
-                       const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRM, 0x0F3A60, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), xmm0),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void pcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRM, 0x0F3A60, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), xmm0), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
-        void pcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2,
-                       const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRM, 0x0F3A60, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), xmm0),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void pcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRM, 0x0F3A60, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), xmm0), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
         void pcmpistri(const Reg &result, const XmmReg &src1, const XmmReg &src2, const Imm8 &mode) {
             AppendInstr(I_PCMPISTRI, 0x0F3A63, E_MANDATORY_PREFIX_66, R(src1), R(src2), mode, Dummy(W(result), ecx));
@@ -10430,25 +10221,17 @@ namespace jitasm {
         void vpcmpgtq(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2) {
             AppendInstr(I_PCMPGTQ, 0x37, E_VEX_128_66_0F38_WIG, W(dst), R(src2), R(src1));
         }
-        void vpcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2,
-                        const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRI, 0x61, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), ecx),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void vpcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRI, 0x61, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), ecx), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
-        void vpcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2,
-                        const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRI, 0x61, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), ecx),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void vpcmpestri(const Reg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRI, 0x61, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), ecx), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
-        void vpcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2,
-                        const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRM, 0x60, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), xmm0),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void vpcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const XmmReg &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRM, 0x60, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), xmm0), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
-        void vpcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2,
-                        const Imm8 &mode) {
-            AppendInstr(I_PCMPESTRM, 0x60, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), xmm0),
-                        Dummy(R(len1), eax), Dummy(R(len2), edx));
+        void vpcmpestrm(const XmmReg &result, const XmmReg &src1, const Reg &len1, const Mem128 &src2, const Reg &len2, const Imm8 &mode) {
+            AppendInstr(I_PCMPESTRM, 0x60, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), xmm0), Dummy(R(len1), eax), Dummy(R(len2), edx));
         }
         void vpcmpistri(const Reg &result, const XmmReg &src1, const XmmReg &src2, const Imm8 &mode) {
             AppendInstr(I_PCMPISTRI, 0x63, E_VEX_128 | E_VEX_66_0F3A, R(src1), R(src2), mode, Dummy(W(result), ecx));
@@ -12115,21 +11898,17 @@ namespace jitasm {
         }
 #endif
         void mulx(const Reg32 &dst1, const Reg32 &dst2, const Reg32 &src1, const Reg32 &src2) {
-            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W0, W(dst1), R(src2), W(dst2),
-                        Dummy(R(src1), edx));
+            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W0, W(dst1), R(src2), W(dst2), Dummy(R(src1), edx));
         }
         void mulx(const Reg32 &dst1, const Reg32 &dst2, const Reg32 &src1, const Mem32 &src2) {
-            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W0, W(dst1), R(src2), W(dst2),
-                        Dummy(R(src1), edx));
+            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W0, W(dst1), R(src2), W(dst2), Dummy(R(src1), edx));
         }
 #ifdef JITASM64
         void mulx(const Reg64 &dst1, const Reg64 &dst2, const Reg64 &src1, const Reg64 &src2) {
-            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W1, W(dst1), R(src2), W(dst2),
-                        Dummy(R(src1), rdx));
+            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W1, W(dst1), R(src2), W(dst2), Dummy(R(src1), rdx));
         }
         void mulx(const Reg64 &dst1, const Reg64 &dst2, const Reg64 &src1, const Mem64 &src2) {
-            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W1, W(dst1), R(src2), W(dst2),
-                        Dummy(R(src1), rdx));
+            AppendInstr(I_MULX, 0xF6, E_VEX_LZ | E_VEX_F2 | E_VEX_0F38 | E_VEX_W1, W(dst1), R(src2), W(dst2), Dummy(R(src1), rdx));
         }
 #endif
         void pdep(const Reg32 &dst, const Reg32 &src1, const Reg32 &src2) {
@@ -12284,52 +12063,40 @@ namespace jitasm {
             AppendInstr(I_VFRCZSS, 0x82, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
         void vpcmov(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPCMOV, 0xA2, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPCMOV, 0xA2, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpcmov(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPCMOV, 0xA2, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPCMOV, 0xA2, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpcmov(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VPCMOV, 0xA2, E_XOP_128 | E_XOP_M01000 | E_XOP_W1 | E_XOP_P00, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VPCMOV, 0xA2, E_XOP_128 | E_XOP_M01000 | E_XOP_W1 | E_XOP_P00, W(dst), R(src3), R(src1), R(src2));
         }
         void vpcmov(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VPCMOV, 0xA2, E_XOP_256 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPCMOV, 0xA2, E_XOP_256 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpcmov(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VPCMOV, 0xA2, E_XOP_256 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPCMOV, 0xA2, E_XOP_256 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpcmov(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VPCMOV, 0xA2, E_XOP_256 | E_XOP_M01000 | E_XOP_W1 | E_XOP_P00, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VPCMOV, 0xA2, E_XOP_256 | E_XOP_M01000 | E_XOP_W1 | E_XOP_P00, W(dst), R(src3), R(src1), R(src2));
         }
         void vpcomb(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Imm8 &type) {
-            AppendInstr(I_VPCOMB, 0xCC, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        type);
+            AppendInstr(I_VPCOMB, 0xCC, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
         void vpcomb(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const Imm8 &type) {
-            AppendInstr(I_VPCOMB, 0xCC, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        type);
+            AppendInstr(I_VPCOMB, 0xCC, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
         void vpcomd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Imm8 &type) {
-            AppendInstr(I_VPCOMD, 0xCE, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        type);
+            AppendInstr(I_VPCOMD, 0xCE, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
         void vpcomd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const Imm8 &type) {
-            AppendInstr(I_VPCOMD, 0xCE, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        type);
+            AppendInstr(I_VPCOMD, 0xCE, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
         void vpcomq(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Imm8 &type) {
-            AppendInstr(I_VPCOMQ, 0xCF, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        type);
+            AppendInstr(I_VPCOMQ, 0xCF, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
         void vpcomq(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const Imm8 &type) {
-            AppendInstr(I_VPCOMQ, 0xCF, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        type);
+            AppendInstr(I_VPCOMQ, 0xCF, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
         // void vpcomub(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)
         // {AppendInstr(I_VPCOMUB, 0x6C, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
@@ -12461,112 +12228,85 @@ namespace jitasm {
             AppendInstr(I_VPHSUBWD, 0xE2, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
         void vpmacsdd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSDD, 0x9E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSDD, 0x9E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsdd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSDD, 0x9E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSDD, 0x9E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsdqh(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSDQH, 0x9F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSDQH, 0x9F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsdqh(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSDQH, 0x9F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSDQH, 0x9F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsdql(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSDQL, 0x97, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSDQL, 0x97, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsdql(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSDQL, 0x97, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSDQL, 0x97, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssdd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSDD, 0x8E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSDD, 0x8E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssdd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSDD, 0x8E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSDD, 0x8E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssdqh(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSDQH, 0x8F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSDQH, 0x8F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssdqh(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSDQH, 0x8F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSDQH, 0x8F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssdql(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSDQL, 0x87, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSDQL, 0x87, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssdql(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSDQL, 0x87, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSDQL, 0x87, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsswd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSWD, 0x86, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSWD, 0x86, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsswd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSWD, 0x86, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSWD, 0x86, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssww(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSWW, 0x85, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSWW, 0x85, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacssww(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSSWW, 0x85, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSSWW, 0x85, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacswd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSWD, 0x96, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSWD, 0x96, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacswd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSWD, 0x96, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSWD, 0x96, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsww(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSWW, 0x95, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSWW, 0x95, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmacsww(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMACSWW, 0x95, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMACSWW, 0x95, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmadcsswd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMADCSSWD, 0xA6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMADCSSWD, 0xA6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmadcsswd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMADCSSWD, 0xA6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMADCSSWD, 0xA6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmadcswd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMADCSWD, 0xB6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMADCSWD, 0xB6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpmadcswd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPMADCSWD, 0xB6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPMADCSWD, 0xB6, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpperm(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VPPERM, 0xA3, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPPERM, 0xA3, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpperm(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VPPERM, 0xA3, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VPPERM, 0xA3, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), R(src3));
         }
         void vpperm(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VPPERM, 0xA3, E_XOP_128 | E_XOP_M01000 | E_XOP_W1 | E_XOP_P00, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VPPERM, 0xA3, E_XOP_128 | E_XOP_M01000 | E_XOP_W1 | E_XOP_P00, W(dst), R(src3), R(src1), R(src2));
         }
         void vprotb(const XmmReg &dst, const XmmReg &src1, const XmmReg &count) {
             AppendInstr(I_VPROTB, 0x90, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src1), R(count));
@@ -12703,388 +12443,292 @@ namespace jitasm {
 
         // FMA4
         void vfmaddpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDPD, 0x69, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPD, 0x69, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddpd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDPD, 0x69, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPD, 0x69, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMADDPD, 0x69, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDPD, 0x69, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDPD, 0x69, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPD, 0x69, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddpd(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDPD, 0x69, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPD, 0x69, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMADDPD, 0x69, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDPD, 0x69, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDPS, 0x68, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPS, 0x68, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddps(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDPS, 0x68, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPS, 0x68, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMADDPS, 0x68, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDPS, 0x68, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDPS, 0x68, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPS, 0x68, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddps(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDPS, 0x68, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDPS, 0x68, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMADDPS, 0x68, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDPS, 0x68, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSD, 0x6B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSD, 0x6B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsd(const XmmReg &dst, const XmmReg &src1, const Mem64 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSD, 0x6B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSD, 0x6B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem64 &src3) {
-            AppendInstr(I_VFMADDSD, 0x6B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDSD, 0x6B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSS, 0x6A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSS, 0x6A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddss(const XmmReg &dst, const XmmReg &src1, const Mem32 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSS, 0x6A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSS, 0x6A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem32 &src3) {
-            AppendInstr(I_VFMADDSS, 0x6A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDSS, 0x6A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddsubpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubpd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddsubpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubpd(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDSUBPD, 0x5D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddsubps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubps(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmaddsubps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubps(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmaddsubps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMADDSUBPS, 0x5C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubaddpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddpd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubaddpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddpd(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBADDPD, 0x5F, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubaddps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddps(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubaddps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddps(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubaddps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBADDPS, 0x5E, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubpd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubpd(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBPD, 0x6D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubps(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubps(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBPS, 0x6C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBSD, 0x6F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBSD, 0x6F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubsd(const XmmReg &dst, const XmmReg &src1, const Mem64 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBSD, 0x6F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBSD, 0x6F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem64 &src3) {
-            AppendInstr(I_VFMSUBSD, 0x6F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBSD, 0x6F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfmsubss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBSS, 0x6E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBSS, 0x6E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubss(const XmmReg &dst, const XmmReg &src1, const Mem32 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFMSUBSS, 0x6E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFMSUBSS, 0x6E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfmsubss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem32 &src3) {
-            AppendInstr(I_VFMSUBSS, 0x6E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFMSUBSS, 0x6E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmaddpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddpd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmaddpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddpd(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMADDPD, 0x79, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmaddps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddps(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmaddps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddps(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMADDPS, 0x78, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmaddsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDSD, 0x7B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDSD, 0x7B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddsd(const XmmReg &dst, const XmmReg &src1, const Mem64 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDSD, 0x7B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDSD, 0x7B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem64 &src3) {
-            AppendInstr(I_VFNMADDSD, 0x7B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMADDSD, 0x7B, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmaddss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDSS, 0x7A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDSS, 0x7A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddss(const XmmReg &dst, const XmmReg &src1, const Mem32 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMADDSS, 0x7A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMADDSS, 0x7A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmaddss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem32 &src3) {
-            AppendInstr(I_VFNMADDSS, 0x7A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMADDSS, 0x7A, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmsubpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubpd(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubpd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmsubpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubpd(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubpd(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMSUBPD, 0x7D, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmsubps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubps(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubps(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem128 &src3) {
-            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmsubps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubps(const YmmReg &dst, const YmmReg &src1, const Mem256 &src2, const YmmReg &src3) {
-            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubps(const YmmReg &dst, const YmmReg &src1, const YmmReg &src2, const Mem256 &src3) {
-            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMSUBPS, 0x7C, E_VEX_256 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmsubsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBSD, 0x7F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBSD, 0x7F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubsd(const XmmReg &dst, const XmmReg &src1, const Mem64 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBSD, 0x7F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBSD, 0x7F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubsd(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem64 &src3) {
-            AppendInstr(I_VFNMSUBSD, 0x7F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMSUBSD, 0x7F, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
         void vfnmsubss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBSS, 0x7E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBSS, 0x7E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubss(const XmmReg &dst, const XmmReg &src1, const Mem32 &src2, const XmmReg &src3) {
-            AppendInstr(I_VFNMSUBSS, 0x7E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1),
-                        R(src3));
+            AppendInstr(I_VFNMSUBSS, 0x7E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W0, W(dst), R(src2), R(src1), R(src3));
         }
         void vfnmsubss(const XmmReg &dst, const XmmReg &src1, const XmmReg &src2, const Mem32 &src3) {
-            AppendInstr(I_VFNMSUBSS, 0x7E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1),
-                        R(src2));
+            AppendInstr(I_VFNMSUBSS, 0x7E, E_VEX_128 | E_VEX_0F3A | E_VEX_66 | E_VEX_W1, W(dst), R(src3), R(src1), R(src2));
         }
 
         // AVX2
@@ -14015,7 +13659,8 @@ namespace jitasm {
 
             L(ctrl_state_.label1);
         }
-        template <class Ty> void Until(const Ty &expr) {
+        template <class Ty>
+        void Until(const Ty &expr) {
             size_t label = NewLabelID("");
             expr(*this, ctrl_state_.label1, label);
             L(label);
@@ -14025,7 +13670,8 @@ namespace jitasm {
         }
 
         // While, EndW
-        template <class Ty> void While(const Ty &expr) {
+        template <class Ty>
+        void While(const Ty &expr) {
             ctrl_state_stack_.push_back(ctrl_state_);
             ctrl_state_.label1 = NewLabelID(""); // begin
             ctrl_state_.label2 = NewLabelID(""); // end
@@ -14044,7 +13690,8 @@ namespace jitasm {
         }
 
         // If, ElseIf, Else, EndIf
-        template <class Ty> void If(const Ty &expr) {
+        template <class Ty>
+        void If(const Ty &expr) {
             ctrl_state_stack_.push_back(ctrl_state_);
             ctrl_state_.label1 = NewLabelID(""); // else
             ctrl_state_.label2 = NewLabelID(""); // end
@@ -14053,7 +13700,8 @@ namespace jitasm {
             expr(*this, label, ctrl_state_.label1);
             L(label);
         }
-        template <class Ty> void ElseIf(const Ty &expr) {
+        template <class Ty>
+        void ElseIf(const Ty &expr) {
             Else();
 
             size_t label = NewLabelID("");
@@ -14074,22 +13722,22 @@ namespace jitasm {
         }
     };
 
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::al = Reg8(AL);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::cl = Reg8(CL);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::dl = Reg8(DL);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::bl = Reg8(BL);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::ah = Reg8(AH);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::ch = Reg8(CH);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::dh = Reg8(DH);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::bh = Reg8(BH);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::ax = Reg16(AX);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::cx = Reg16(CX);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::dx = Reg16(DX);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::bx = Reg16(BX);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::sp = Reg16(SP);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::bp = Reg16(BP);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::si = Reg16(SI);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::di = Reg16(DI);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::al   = Reg8(AL);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::cl   = Reg8(CL);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::dl   = Reg8(DL);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::bl   = Reg8(BL);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::ah   = Reg8(AH);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::ch   = Reg8(CH);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::dh   = Reg8(DH);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::bh   = Reg8(BH);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::ax  = Reg16(AX);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::cx  = Reg16(CX);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::dx  = Reg16(DX);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::bx  = Reg16(BX);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::sp  = Reg16(SP);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::bp  = Reg16(BP);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::si  = Reg16(SI);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::di  = Reg16(DI);
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::eax = Reg32(EAX);
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::ecx = Reg32(ECX);
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::edx = Reg32(EDX);
@@ -14099,21 +13747,21 @@ namespace jitasm {
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::esi = Reg32(ESI);
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::edi = Reg32(EDI);
     FpuReg_st0 JITASM_ATTRIBUTE_WEAK Frontend::st0;
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st1 = FpuReg(ST1);
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st2 = FpuReg(ST2);
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st3 = FpuReg(ST3);
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st4 = FpuReg(ST4);
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st5 = FpuReg(ST5);
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st6 = FpuReg(ST6);
-    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st7 = FpuReg(ST7);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm0 = MmxReg(MM0);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm1 = MmxReg(MM1);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm2 = MmxReg(MM2);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm3 = MmxReg(MM3);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm4 = MmxReg(MM4);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm5 = MmxReg(MM5);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm6 = MmxReg(MM6);
-    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm7 = MmxReg(MM7);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st1  = FpuReg(ST1);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st2  = FpuReg(ST2);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st3  = FpuReg(ST3);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st4  = FpuReg(ST4);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st5  = FpuReg(ST5);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st6  = FpuReg(ST6);
+    FpuReg JITASM_ATTRIBUTE_WEAK Frontend::st7  = FpuReg(ST7);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm0  = MmxReg(MM0);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm1  = MmxReg(MM1);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm2  = MmxReg(MM2);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm3  = MmxReg(MM3);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm4  = MmxReg(MM4);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm5  = MmxReg(MM5);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm6  = MmxReg(MM6);
+    MmxReg JITASM_ATTRIBUTE_WEAK Frontend::mm7  = MmxReg(MM7);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm0 = XmmReg(XMM0);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm1 = XmmReg(XMM1);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm2 = XmmReg(XMM2);
@@ -14131,70 +13779,70 @@ namespace jitasm {
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm6 = YmmReg(YMM6);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm7 = YmmReg(YMM7);
 #ifdef JITASM64
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r8b = Reg8(R8B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r9b = Reg8(R9B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r10b = Reg8(R10B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r11b = Reg8(R11B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r12b = Reg8(R12B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r13b = Reg8(R13B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r14b = Reg8(R14B);
-    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r15b = Reg8(R15B);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r8w = Reg16(R8W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r9w = Reg16(R9W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r10w = Reg16(R10W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r11w = Reg16(R11W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r12w = Reg16(R12W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r13w = Reg16(R13W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r14w = Reg16(R14W);
-    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r15w = Reg16(R15W);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r8d = Reg32(R8D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r9d = Reg32(R9D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r10d = Reg32(R10D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r11d = Reg32(R11D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r12d = Reg32(R12D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r13d = Reg32(R13D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r14d = Reg32(R14D);
-    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r15d = Reg32(R15D);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rax = Reg64(RAX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rcx = Reg64(RCX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rdx = Reg64(RDX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rbx = Reg64(RBX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rsp = Reg64(RSP);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rbp = Reg64(RBP);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rsi = Reg64(RSI);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rdi = Reg64(RDI);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r8 = Reg64(R8);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r9 = Reg64(R9);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r10 = Reg64(R10);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r11 = Reg64(R11);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r12 = Reg64(R12);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r13 = Reg64(R13);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r14 = Reg64(R14);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r15 = Reg64(R15);
-    XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm8 = XmmReg(XMM8);
-    XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm9 = XmmReg(XMM9);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r8b     = Reg8(R8B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r9b     = Reg8(R9B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r10b    = Reg8(R10B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r11b    = Reg8(R11B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r12b    = Reg8(R12B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r13b    = Reg8(R13B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r14b    = Reg8(R14B);
+    Reg8 JITASM_ATTRIBUTE_WEAK Frontend::r15b    = Reg8(R15B);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r8w    = Reg16(R8W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r9w    = Reg16(R9W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r10w   = Reg16(R10W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r11w   = Reg16(R11W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r12w   = Reg16(R12W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r13w   = Reg16(R13W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r14w   = Reg16(R14W);
+    Reg16 JITASM_ATTRIBUTE_WEAK Frontend::r15w   = Reg16(R15W);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r8d    = Reg32(R8D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r9d    = Reg32(R9D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r10d   = Reg32(R10D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r11d   = Reg32(R11D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r12d   = Reg32(R12D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r13d   = Reg32(R13D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r14d   = Reg32(R14D);
+    Reg32 JITASM_ATTRIBUTE_WEAK Frontend::r15d   = Reg32(R15D);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rax    = Reg64(RAX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rcx    = Reg64(RCX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rdx    = Reg64(RDX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rbx    = Reg64(RBX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rsp    = Reg64(RSP);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rbp    = Reg64(RBP);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rsi    = Reg64(RSI);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::rdi    = Reg64(RDI);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r8     = Reg64(R8);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r9     = Reg64(R9);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r10    = Reg64(R10);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r11    = Reg64(R11);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r12    = Reg64(R12);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r13    = Reg64(R13);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r14    = Reg64(R14);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::r15    = Reg64(R15);
+    XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm8  = XmmReg(XMM8);
+    XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm9  = XmmReg(XMM9);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm10 = XmmReg(XMM10);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm11 = XmmReg(XMM11);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm12 = XmmReg(XMM12);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm13 = XmmReg(XMM13);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm14 = XmmReg(XMM14);
     XmmReg JITASM_ATTRIBUTE_WEAK Frontend::xmm15 = XmmReg(XMM15);
-    YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm8 = YmmReg(YMM8);
-    YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm9 = YmmReg(YMM9);
+    YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm8  = YmmReg(YMM8);
+    YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm9  = YmmReg(YMM9);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm10 = YmmReg(YMM10);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm11 = YmmReg(YMM11);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm12 = YmmReg(YMM12);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm13 = YmmReg(YMM13);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm14 = YmmReg(YMM14);
     YmmReg JITASM_ATTRIBUTE_WEAK Frontend::ymm15 = YmmReg(YMM15);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zax = Reg64(RAX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zcx = Reg64(RCX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zdx = Reg64(RDX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zbx = Reg64(RBX);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zsp = Reg64(RSP);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zbp = Reg64(RBP);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zsi = Reg64(RSI);
-    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zdi = Reg64(RDI);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zax    = Reg64(RAX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zcx    = Reg64(RCX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zdx    = Reg64(RDX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zbx    = Reg64(RBX);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zsp    = Reg64(RSP);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zbp    = Reg64(RBP);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zsi    = Reg64(RSI);
+    Reg64 JITASM_ATTRIBUTE_WEAK Frontend::zdi    = Reg64(RDI);
 #else
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::zax = Reg32(EAX);
     Reg32 JITASM_ATTRIBUTE_WEAK Frontend::zcx = Reg32(ECX);
@@ -14207,7 +13855,7 @@ namespace jitasm {
 #endif
 
     namespace compiler {
-        struct BitVector : std::vector<uint32> {
+        struct BitVector: std::vector<uint32> {
             size_t size_bit() const {
                 return size() * 32;
             }
@@ -14218,7 +13866,7 @@ namespace jitasm {
             }
 
             void set_bit(size_t idx, bool b) {
-                const size_t i = idx / 32;
+                const size_t i    = idx / 32;
                 const uint32 mask = (1 << (idx % 32));
                 if (i >= size())
                     resize(i + 1);
@@ -14264,7 +13912,8 @@ namespace jitasm {
                 }
             }
 
-            template <class Fn> void query_bit_indexes(Fn &fn) const {
+            template <class Fn>
+            void query_bit_indexes(Fn &fn) const {
                 for (size_t i = 0; i < size(); ++i) {
                     uint32 m = at(i);
                     while (m != 0) {
@@ -14291,14 +13940,14 @@ namespace jitasm {
             }
         };
 
-        template <class T, size_t N> class FixedArray {
+        template <class T, size_t N>
+        class FixedArray {
           private:
             T data_[N];
             size_t size_;
 
           public:
-            FixedArray() : size_(0) {
-            }
+            FixedArray(): size_(0) {}
             bool empty() const {
                 return size_ == 0;
             }
@@ -14334,55 +13983,51 @@ namespace jitasm {
         /// Register family
         inline size_t GetRegFamily(RegType type) {
             switch (type) {
-            case R_TYPE_GP:
-                return 0;
-            case R_TYPE_MMX:
-                return 1;
-            case R_TYPE_XMM:
-                return 2;
-            case R_TYPE_YMM:
-                return 2;
-            case R_TYPE_SYMBOLIC_GP:
-                return 0;
-            case R_TYPE_SYMBOLIC_MMX:
-                return 1;
-            case R_TYPE_SYMBOLIC_XMM:
-                return 2;
-            case R_TYPE_SYMBOLIC_YMM:
-                return 2;
+            case R_TYPE_GP: return 0;
+            case R_TYPE_MMX: return 1;
+            case R_TYPE_XMM: return 2;
+            case R_TYPE_YMM: return 2;
+            case R_TYPE_SYMBOLIC_GP: return 0;
+            case R_TYPE_SYMBOLIC_MMX: return 1;
+            case R_TYPE_SYMBOLIC_XMM: return 2;
+            case R_TYPE_SYMBOLIC_YMM: return 2;
             case R_TYPE_FPU:
-            default:
-                JITASM_ASSERT(0);
-                return 0x7FFFFFFF;
+            default: JITASM_ASSERT(0); return 0x7FFFFFFF;
             }
         }
 
         inline std::string GetRegName(RegType type, size_t reg_idx) {
 #ifdef JITASM64
-            const static std::string s_gp_reg_name[] = {"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
-                                                        "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15"};
+            const static std::string s_gp_reg_name[] = {"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"};
 #else
             const static std::string s_gp_reg_name[] = {"eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi"};
 #endif
             std::string name;
             if (type == R_TYPE_GP) {
                 return s_gp_reg_name[reg_idx];
-            } else if (type == R_TYPE_MMX) {
+            }
+            else if (type == R_TYPE_MMX) {
                 name.assign("mm");
-            } else if (type == R_TYPE_XMM) {
+            }
+            else if (type == R_TYPE_XMM) {
                 name.assign("xmm");
-            } else if (type == R_TYPE_YMM) {
+            }
+            else if (type == R_TYPE_YMM) {
                 name.assign("ymm");
-            } else if (type == R_TYPE_SYMBOLIC_GP) {
+            }
+            else if (type == R_TYPE_SYMBOLIC_GP) {
                 name.assign("gpsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
-            } else if (type == R_TYPE_SYMBOLIC_MMX) {
+            }
+            else if (type == R_TYPE_SYMBOLIC_MMX) {
                 name.assign("mmsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
-            } else if (type == R_TYPE_SYMBOLIC_XMM) {
+            }
+            else if (type == R_TYPE_SYMBOLIC_XMM) {
                 name.assign("xmmsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
-            } else if (type == R_TYPE_SYMBOLIC_YMM) {
+            }
+            else if (type == R_TYPE_SYMBOLIC_YMM) {
                 name.assign("ymmsym");
                 reg_idx -= NUM_OF_PHYSICAL_REG;
             }
@@ -14392,11 +14037,10 @@ namespace jitasm {
 
         /// Variable attribute
         struct VarAttribute {
-            unsigned size  : 7; // OpdSize
+            unsigned size : 7;  // OpdSize
             unsigned spill : 1; // bool
             Addr stack_slot;
-            VarAttribute() : size(0), spill(0 /*false*/), stack_slot(RegID::Invalid(), 0) {
-            }
+            VarAttribute(): size(0), spill(0 /*false*/), stack_slot(RegID::Invalid(), 0) {}
         };
 
         /// Variable manager
@@ -14447,16 +14091,14 @@ namespace jitasm {
             void AllocSpillSlots(detail::StackManager &stack_manager) {
                 // YMM
                 for (size_t i = 0; i < attributes_[2].size(); ++i) {
-                    if (attributes_[2][i].spill && attributes_[2][i].size == O_SIZE_256 &&
-                        attributes_[2][i].stack_slot.reg_.IsInvalid()) {
+                    if (attributes_[2][i].spill && attributes_[2][i].size == O_SIZE_256 && attributes_[2][i].stack_slot.reg_.IsInvalid()) {
                         attributes_[2][i].stack_slot = stack_manager.Alloc(256 / 8, 16);
                     }
                 }
 
                 // XMM
                 for (size_t i = 0; i < attributes_[2].size(); ++i) {
-                    if (attributes_[2][i].spill && attributes_[2][i].size == O_SIZE_128 &&
-                        attributes_[2][i].stack_slot.reg_.IsInvalid()) {
+                    if (attributes_[2][i].spill && attributes_[2][i].size == O_SIZE_128 && attributes_[2][i].stack_slot.reg_.IsInvalid()) {
                         attributes_[2][i].stack_slot = stack_manager.Alloc(128 / 8, 16);
                     }
                 }
@@ -14487,9 +14129,7 @@ namespace jitasm {
             OpdType type;          ///< Operand type
             uint32 reg_assignable; ///< Register assignment constraint
 
-            RegUsePoint(size_t idx, OpdType t, uint32 assignable)
-                : instr_idx(idx), type(t), reg_assignable(assignable) {
-            }
+            RegUsePoint(size_t idx, OpdType t, uint32 assignable): instr_idx(idx), type(t), reg_assignable(assignable) {}
 
             bool operator<(const RegUsePoint &rhs) const {
                 if (instr_idx == rhs.instr_idx) {
@@ -14515,13 +14155,8 @@ namespace jitasm {
                 std::vector<uint32> reg_assignables; ///< The constraints of register allocation
                 std::vector<int> assignment_table;   ///< Register assignment table
 
-                Interval(size_t instr_idx, const std::vector<uint32> &assignables)
-                    : instr_idx_offset(instr_idx), reg_assignables(assignables) {
-                }
-                Interval(size_t instr_idx, const BitVector &l, const BitVector &s,
-                         const std::vector<uint32> &assignables)
-                    : instr_idx_offset(instr_idx), liveness(l), spill(s), reg_assignables(assignables) {
-                }
+                Interval(size_t instr_idx, const std::vector<uint32> &assignables): instr_idx_offset(instr_idx), reg_assignables(assignables) {}
+                Interval(size_t instr_idx, const BitVector &l, const BitVector &s, const std::vector<uint32> &assignables): instr_idx_offset(instr_idx), liveness(l), spill(s), reg_assignables(assignables) {}
 
                 void UpdateUse(size_t var, RegUsePointRange &range, const Interval *next_interval) {
                     // step range
@@ -14530,8 +14165,7 @@ namespace jitasm {
                     }
 
                     // check if variables used in this interval
-                    const bool used =
-                        !range.empty() && (!next_interval || range.first->instr_idx < next_interval->instr_idx_offset);
+                    const bool used = !range.empty() && (!next_interval || range.first->instr_idx < next_interval->instr_idx_offset);
                     use.set_bit(var, used);
                 }
 
@@ -14543,14 +14177,17 @@ namespace jitasm {
                             char c;
                             if (spill.get_bit(v)) {
                                 c = used ? 'S' : 's';
-                            } else if (dump_assigned_reg) {
+                            }
+                            else if (dump_assigned_reg) {
                                 int reg = assignment_table[v];
-                                c = static_cast<char>(reg < 0xA ? '0' + reg : 'A' + reg);
-                            } else {
+                                c       = static_cast<char>(reg < 0xA ? '0' + reg : 'A' + reg);
+                            }
+                            else {
                                 c = used ? 'R' : 'r';
                             }
                             liveness_str.push_back(c);
-                        } else {
+                        }
+                        else {
                             liveness_str.push_back('.');
                         }
                     }
@@ -14569,15 +14206,13 @@ namespace jitasm {
             bool dirty_live_out;             ///< The dirty flag of live_out
             std::vector<Interval> intervals; ///< Lifetime intervals
 
-            static const int SpillCost_Read = 2;
+            static const int SpillCost_Read  = 2;
             static const int SpillCost_Write = 3;
 
-            Lifetime() : use_points(NUM_OF_PHYSICAL_REG), dirty_live_out(true) {
-            }
+            Lifetime(): use_points(NUM_OF_PHYSICAL_REG), dirty_live_out(true) {}
 
             /// Add register use point
-            void AddUsePoint(size_t instr_idx, const RegID &reg, OpdType opd_type, OpdSize opd_size,
-                             uint32 reg_assignable) {
+            void AddUsePoint(size_t instr_idx, const RegID &reg, OpdType opd_type, OpdSize opd_size, uint32 reg_assignable) {
                 if (use_points.size() <= static_cast<size_t>(reg.id)) {
                     use_points.resize(reg.id + 1);
                 }
@@ -14601,8 +14236,7 @@ namespace jitasm {
                 }
                 for (size_t i = 0; i < use_points.size(); ++i) {
                     int cost = 0;
-                    for (std::vector<RegUsePoint>::const_iterator it = use_points[i].begin(); it != use_points[i].end();
-                         ++it) {
+                    for (std::vector<RegUsePoint>::const_iterator it = use_points[i].begin(); it != use_points[i].end(); ++it) {
                         if (it->type & O_TYPE_READ)
                             cost += SpillCost_Read;
                         if (it->type & O_TYPE_WRITE)
@@ -14623,11 +14257,10 @@ namespace jitasm {
                 // build interval
                 BitVector *last_liveness = NULL;
                 std::vector<uint32> reg_assignables;
-                bool last_reg_constraints = false;
-                bool last_stack_vars = false;
-                const size_t num_of_variables =
-                    live_in.size_bit() < use_points.size() ? use_points.size() : live_in.size_bit();
-                size_t instr_idx = 0;
+                bool last_reg_constraints     = false;
+                bool last_stack_vars          = false;
+                const size_t num_of_variables = live_in.size_bit() < use_points.size() ? use_points.size() : live_in.size_bit();
+                size_t instr_idx              = 0;
                 size_t end_count;
                 do {
                     BitVector liveness = live_in;
@@ -14639,15 +14272,14 @@ namespace jitasm {
                         if (use_points_ranges[i].empty()) {
                             liveness.set_bit(i, live_out.get_bit(i));
                             ++end_count;
-                        } else {
+                        }
+                        else {
                             if (use_points_ranges[i].first->instr_idx < min_instr_idx) {
                                 min_instr_idx = use_points_ranges[i].first->instr_idx;
                             }
 
                             if (use_points_ranges[i].first->instr_idx == instr_idx) {
-                                for (; !use_points_ranges[i].empty() &&
-                                       use_points_ranges[i].first->instr_idx == instr_idx;
-                                     ++use_points_ranges[i].first) {
+                                for (; !use_points_ranges[i].empty() && use_points_ranges[i].first->instr_idx == instr_idx; ++use_points_ranges[i].first) {
                                     // Check the constraints of register allocation
                                     if (use_points_ranges[i].first->reg_assignable != 0xFFFFFFFF) {
                                         reg_assignables.resize(num_of_variables, 0xFFFFFFFF);
@@ -14660,11 +14292,14 @@ namespace jitasm {
                                     }
                                 }
                                 liveness.set_bit(i, true);
-                            } else if (use_points_ranges[i].first->type & O_TYPE_READ) {
+                            }
+                            else if (use_points_ranges[i].first->type & O_TYPE_READ) {
                                 liveness.set_bit(i, true);
-                            } else if (use_points_ranges[i].first->type & O_TYPE_WRITE) {
+                            }
+                            else if (use_points_ranges[i].first->type & O_TYPE_WRITE) {
                                 liveness.set_bit(i, false);
-                            } else {
+                            }
+                            else {
                                 JITASM_ASSERT(0);
                             }
                         }
@@ -14674,15 +14309,14 @@ namespace jitasm {
                     // - The liveness is changed.
                     // - Current or last instruction has any constraints of register allocation.
                     // - Last instruction is I_COMPILER_DECLARE_STACK_ARG
-                    if (!reg_assignables.empty() || last_reg_constraints || last_stack_vars || !last_liveness ||
-                        !last_liveness->is_equal(liveness)) {
+                    if (!reg_assignables.empty() || last_reg_constraints || last_stack_vars || !last_liveness || !last_liveness->is_equal(liveness)) {
                         intervals.push_back(Interval(instr_idx, liveness, stack_vars, reg_assignables));
                         last_liveness = &intervals.back().liveness;
                     }
 
                     last_reg_constraints = !reg_assignables.empty();
-                    last_stack_vars = !stack_vars.empty();
-                    instr_idx = min_instr_idx == instr_idx ? instr_idx + 1 : min_instr_idx;
+                    last_stack_vars      = !stack_vars.empty();
+                    instr_idx            = min_instr_idx == instr_idx ? instr_idx + 1 : min_instr_idx;
                 } while (end_count < use_points_ranges.size());
 
                 // check use
@@ -14697,9 +14331,8 @@ namespace jitasm {
 
             /// Split interval
             void SplitInterval(size_t instr_idx, size_t interval_idx) {
-                std::vector<Interval>::iterator it =
-                    intervals.insert(intervals.begin() + interval_idx + 1, intervals[interval_idx]);
-                it->instr_idx_offset = instr_idx;
+                std::vector<Interval>::iterator it = intervals.insert(intervals.begin() + interval_idx + 1, intervals[interval_idx]);
+                it->instr_idx_offset               = instr_idx;
 
                 // update use
                 for (size_t v = 0; v < use_points.size(); ++v) {
@@ -14713,8 +14346,7 @@ namespace jitasm {
 
             struct LessCost {
                 const std::vector<int> *cost_;
-                LessCost(const std::vector<int> *cost) : cost_(cost) {
-                }
+                LessCost(const std::vector<int> *cost): cost_(cost) {}
                 int get_cost(size_t i) const {
                     return i < cost_->size() ? cost_->at(i) : 0;
                 }
@@ -14724,8 +14356,7 @@ namespace jitasm {
             };
 
             /// Spill identification
-            void SpillIdentification(uint32 available_reg_count, const std::vector<int> &total_spill_cost, int freq,
-                                     const Interval *last_interval, std::vector<VarAttribute> &var_attrs) {
+            void SpillIdentification(uint32 available_reg_count, const std::vector<int> &total_spill_cost, int freq, const Interval *last_interval, std::vector<VarAttribute> &var_attrs) {
                 // initialize use_points ranges
                 std::vector<RegUsePointRange> interval_use_points;
                 interval_use_points.reserve(use_points.size());
@@ -14737,7 +14368,7 @@ namespace jitasm {
                 std::vector<int> cur_spill_cost;
                 for (size_t interval_idx = 0; interval_idx < intervals.size(); ++interval_idx) {
                     const Interval *prior_interval = interval_idx > 0 ? &intervals[interval_idx - 1] : last_interval;
-                    Interval *cur_interval = &intervals[interval_idx];
+                    Interval *cur_interval         = &intervals[interval_idx];
 
                     if (cur_interval->liveness.count_bit() > available_reg_count) {
                         cur_interval->liveness.get_bit_indexes(live_vars);
@@ -14753,8 +14384,7 @@ namespace jitasm {
 
                             // step interval_use_points
                             if (var < interval_use_points.size()) {
-                                while (!interval_use_points[var].empty() &&
-                                       interval_use_points[var].first->instr_idx < cur_interval->instr_idx_offset) {
+                                while (!interval_use_points[var].empty() && interval_use_points[var].first->instr_idx < cur_interval->instr_idx_offset) {
                                     ++interval_use_points[var].first;
                                 }
                             }
@@ -14763,12 +14393,13 @@ namespace jitasm {
                             if (cur_interval->use.get_bit(var) && (interval_use_points[var].first->type & O_TYPE_MEM)) {
                                 // special low spill cost if this variable on stack (function arguemnt)
                                 cur_spill_cost[var] = -1;
-                            } else if (cur_interval->use.get_bit(var) &&
-                                       interval_use_points[var].first->instr_idx == cur_interval->instr_idx_offset) {
+                            }
+                            else if (cur_interval->use.get_bit(var) && interval_use_points[var].first->instr_idx == cur_interval->instr_idx_offset) {
                                 // special high spill cost if this variable is used at first instruction of this
                                 // interval because it must not be spilled.
                                 cur_spill_cost[var] = 0x7FFFFFFF;
-                            } else {
+                            }
+                            else {
                                 cur_spill_cost[var] = total_spill_cost[var];
                                 if (prior_interval && !prior_interval->spill.get_bit(var)) {
                                     cur_spill_cost[var] += (SpillCost_Read + SpillCost_Write) * freq;
@@ -14784,9 +14415,9 @@ namespace jitasm {
                         // Find first instruction index using the spilled variable.
                         size_t split_interval_instr = (size_t)-1;
                         for (size_t i = 0; i < live_vars.size(); ++i) {
-                            const size_t var = live_vars[i];
+                            const size_t var     = live_vars[i];
                             const bool stack_var = (cur_spill_cost[var] < 0); // It may be function argument on stack
-                            const bool spill = (i + available_reg_count < live_vars.size() || stack_var);
+                            const bool spill     = (i + available_reg_count < live_vars.size() || stack_var);
                             cur_interval->spill.set_bit(var, spill);
                             if (spill) {
                                 var_attrs[var].spill = 1;
@@ -14796,7 +14427,8 @@ namespace jitasm {
                                 if (interval_use_points[var].first->instr_idx + 1 < split_interval_instr) {
                                     split_interval_instr = interval_use_points[var].first->instr_idx + 1;
                                 }
-                            } else if (spill && cur_interval->use.get_bit(var)) {
+                            }
+                            else if (spill && cur_interval->use.get_bit(var)) {
                                 // Split if spilled variable is used in this interval.
                                 if (interval_use_points[var].first->instr_idx < split_interval_instr) {
                                     split_interval_instr = interval_use_points[var].first->instr_idx;
@@ -14814,8 +14446,7 @@ namespace jitasm {
             struct LessAssignOrder {
                 Interval *interval;
                 const Interval *prior_interval;
-                LessAssignOrder(Interval *cur, const Interval *prior) : interval(cur), prior_interval(prior) {
-                }
+                LessAssignOrder(Interval *cur, const Interval *prior): interval(cur), prior_interval(prior) {}
                 bool has_constraints(size_t v) const {
                     return v < interval->reg_assignables.size() ? interval->reg_assignables[v] != 0xFFFFFFFF : false;
                 }
@@ -14855,10 +14486,8 @@ namespace jitasm {
 
                     if (prior_interval) {
                         // is the variable assigned register in prior interval or not
-                        const bool lhs_prior_reg =
-                            !prior_interval->spill.get_bit(lhs) && prior_interval->liveness.get_bit(lhs);
-                        const bool rhs_prior_reg =
-                            !prior_interval->spill.get_bit(rhs) && prior_interval->liveness.get_bit(rhs);
+                        const bool lhs_prior_reg = !prior_interval->spill.get_bit(lhs) && prior_interval->liveness.get_bit(lhs);
+                        const bool rhs_prior_reg = !prior_interval->spill.get_bit(rhs) && prior_interval->liveness.get_bit(rhs);
                         if (lhs_prior_reg != rhs_prior_reg) {
                             return lhs_prior_reg;
                         }
@@ -14880,7 +14509,7 @@ namespace jitasm {
                 std::vector<size_t> live_vars;
                 for (size_t interval_idx = 0; interval_idx < intervals.size(); ++interval_idx) {
                     const Interval *prior_interval = interval_idx > 0 ? &intervals[interval_idx - 1] : last_interval;
-                    Interval *cur_interval = &intervals[interval_idx];
+                    Interval *cur_interval         = &intervals[interval_idx];
 
                     // enum variables to assign register
                     live_vars.clear();
@@ -14902,49 +14531,51 @@ namespace jitasm {
                     }
 
                     // Assign register
-                    uint32 cur_avail = available_reg;
+                    uint32 cur_avail              = available_reg;
                     const size_t num_of_live_vars = live_vars.size();
                     for (size_t i = 0; i < live_vars.size(); ++i) {
-                        const size_t var = live_vars[i];
-                        const bool first_try = (i < num_of_live_vars); // Try to assign for the first time
-                        const uint32 reg_assignable = first_try && var < cur_interval->reg_assignables.size() ?
-                                                          cur_interval->reg_assignables[var] :
-                                                          0xFFFFFFFF; // Ignore constraint if it is retried
+                        const size_t var            = live_vars[i];
+                        const bool first_try        = (i < num_of_live_vars);                                                                                    // Try to assign for the first time
+                        const uint32 reg_assignable = first_try && var < cur_interval->reg_assignables.size() ? cur_interval->reg_assignables[var] : 0xFFFFFFFF; // Ignore constraint if it is retried
                         JITASM_ASSERT((cur_avail & reg_assignable) != 0);
                         int assigned_reg = -1;
                         if (var < NUM_OF_PHYSICAL_REG && first_try) {
                             // Physical register
                             if (cur_avail & reg_assignable & (1 << var)) {
                                 assigned_reg = static_cast<int>(var);
-                            } else if (((1 << var) & available_reg) && !cur_interval->use.get_bit(var)) {
+                            }
+                            else if (((1 << var) & available_reg) && !cur_interval->use.get_bit(var)) {
                                 // Try to assign another physical register if it is not used in this interval. But
                                 // assign later.
                                 live_vars.push_back(var);
-                            } else if (reg_assignable != 0xFFFFFFFF && (cur_avail & reg_assignable) &&
-                                       cur_interval->use.get_bit(var)) {
+                            }
+                            else if (reg_assignable != 0xFFFFFFFF && (cur_avail & reg_assignable) && cur_interval->use.get_bit(var)) {
                                 // This physical register violates the register constraint.
                                 // Assign another physical register which satisfy the constraint.
                                 assigned_reg = detail::bit_scan_forward(cur_avail & reg_assignable);
-                            } else {
+                            }
+                            else {
                                 // This may be out of assignment register (ESP, EBP and so on...)
                                 JITASM_ASSERT(((1 << var) & available_reg) == 0); // false assignment!?
                                 assigned_reg = static_cast<int>(var);
                             }
-                        } else {
+                        }
+                        else {
                             // Symbolic register or retried physical register
-                            const int last_assigned = prior_interval && var < prior_interval->assignment_table.size() ?
-                                                          prior_interval->assignment_table[var] :
-                                                          -1;
+                            const int last_assigned = prior_interval && var < prior_interval->assignment_table.size() ? prior_interval->assignment_table[var] : -1;
                             if (last_assigned != -1 && (cur_avail & reg_assignable & (1 << last_assigned))) {
                                 // select last assigned register
                                 assigned_reg = last_assigned;
-                            } else if (cur_avail & reg_assignable) {
+                            }
+                            else if (cur_avail & reg_assignable) {
                                 assigned_reg = detail::bit_scan_forward(cur_avail & reg_assignable);
-                            } else if (reg_assignable != 0xFFFFFFFF && !cur_interval->use.get_bit(var)) {
+                            }
+                            else if (reg_assignable != 0xFFFFFFFF && !cur_interval->use.get_bit(var)) {
                                 // Try to assign register ignoring constraint if it is not used in this interval. But
                                 // assign later.
                                 live_vars.push_back(var);
-                            } else {
+                            }
+                            else {
                                 JITASM_ASSERT(0);
                             }
                         }
@@ -14982,10 +14613,7 @@ namespace jitasm {
             size_t loop_depth;               ///< Loop nesting depth
             Lifetime lifetime[3];            ///< Variable lifetime (0: GP, 1: MMX, 2: XMM/YMM)
 
-            BasicBlock(size_t instr_begin_, size_t instr_end_, BasicBlock *successor0 = NULL,
-                       BasicBlock *successor1 = NULL)
-                : instr_begin(instr_begin_), instr_end(instr_end_), depth((size_t)-1), dfs_parent(NULL),
-                  immediate_dominator(NULL), loop_depth(0) {
+            BasicBlock(size_t instr_begin_, size_t instr_end_, BasicBlock *successor0 = NULL, BasicBlock *successor1 = NULL): instr_begin(instr_begin_), instr_end(instr_end_), depth((size_t)-1), dfs_parent(NULL), immediate_dominator(NULL), loop_depth(0) {
                 successor[0] = successor0;
                 successor[1] = successor1;
             }
@@ -15101,11 +14729,10 @@ namespace jitasm {
 
                 for (size_t w = num_of_nodes - 1; w > 0; --w) {
                     BasicBlock *wb = depth_first_blocks[w];
-                    size_t p = wb->dfs_parent->depth;
+                    size_t p       = wb->dfs_parent->depth;
 
                     // Compute the semidominator
-                    for (std::vector<BasicBlock *>::iterator v = wb->predecessor.begin(); v != wb->predecessor.end();
-                         ++v) {
+                    for (std::vector<BasicBlock *>::iterator v = wb->predecessor.begin(); v != wb->predecessor.end(); ++v) {
                         if ((*v)->depth != (size_t)-1) { // skip out of DFS tree
                             size_t u = Eval((*v)->depth);
                             if (sdom_[u] < sdom_[w])
@@ -15118,7 +14745,7 @@ namespace jitasm {
                     // Implicity compute immediate dominator
                     for (std::vector<size_t>::iterator v = bucket[p].begin(); v != bucket[p].end(); ++v) {
                         size_t u = Eval(*v);
-                        dom[*v] = sdom_[u] < sdom_[*v] ? u : p;
+                        dom[*v]  = sdom_[u] < sdom_[*v] ? u : p;
                     }
                     bucket[p].clear();
                 }
@@ -15190,15 +14817,15 @@ namespace jitasm {
                         if (detail::prior(it)->second == it->second) {
                             // erase backedge of smaller loop
                             it = backedges.erase(it);
-                        } else {
+                        }
+                        else {
                             ++it;
                         }
                     }
                 }
 
                 // Set loop depth
-                for (std::vector<std::pair<size_t, size_t>>::iterator it = backedges.begin(); it != backedges.end();
-                     ++it) {
+                for (std::vector<std::pair<size_t, size_t>>::iterator it = backedges.begin(); it != backedges.end(); ++it) {
                     for (size_t i = it->second; i <= it->first; ++i) {
                         depth_first_blocks_[i]->loop_depth++;
                     }
@@ -15209,11 +14836,11 @@ namespace jitasm {
                 clear();
                 blocks_.resize(num_of_instructions > 0 ? 2 : 1);
                 BasicBlock *enter_block = new BasicBlock(0, num_of_instructions);
-                blocks_[0] = enter_block;
+                blocks_[0]              = enter_block;
                 if (num_of_instructions > 0) {
                     // exit block
-                    BasicBlock *exit_block = new BasicBlock(num_of_instructions, num_of_instructions);
-                    blocks_[1] = exit_block;
+                    BasicBlock *exit_block    = new BasicBlock(num_of_instructions, num_of_instructions);
+                    blocks_[1]                = exit_block;
                     enter_block->successor[0] = exit_block;
                     exit_block->predecessor.push_back(enter_block);
                 }
@@ -15226,13 +14853,13 @@ namespace jitasm {
                 if (target_block->instr_begin == instr_idx)
                     return target_block_it;
 
-                BasicBlock *new_block = new BasicBlock(instr_idx, target_block->instr_end);
+                BasicBlock *new_block   = new BasicBlock(instr_idx, target_block->instr_end);
                 new_block->successor[0] = target_block->successor[0];
                 new_block->successor[1] = target_block->successor[1];
                 new_block->predecessor.push_back(target_block);
                 target_block->successor[0] = new_block;
                 target_block->successor[1] = NULL;
-                target_block->instr_end = instr_idx;
+                target_block->instr_end    = instr_idx;
 
                 // replace predecessor of successors
                 if (new_block->successor[0])
@@ -15249,8 +14876,7 @@ namespace jitasm {
             }
 
             BlockList::iterator get_block(size_t instr_idx) {
-                BlockList::iterator it =
-                    std::upper_bound(blocks_.begin(), blocks_.end(), instr_idx, BasicBlock::less());
+                BlockList::iterator it = std::upper_bound(blocks_.begin(), blocks_.end(), instr_idx, BasicBlock::less());
                 return it != blocks_.begin() ? --it : blocks_.end();
             }
 
@@ -15293,40 +14919,30 @@ namespace jitasm {
                 JITASM_TRACE("digraph CFG {\n");
                 JITASM_TRACE("\tnode[shape=box];\n");
                 for (BlockList::const_iterator it = blocks_.begin(); it != blocks_.end(); ++it) {
-                    BasicBlock *block = *it;
-                    std::string live_in = "live in:";
+                    BasicBlock *block    = *it;
+                    std::string live_in  = "live in:";
                     std::string live_out = "live out:";
                     for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
                         for (size_t i = 0; i < block->lifetime[reg_family].live_in.size_bit(); ++i) {
                             if (block->lifetime[reg_family].live_in.get_bit(i)) {
                                 live_in.append(" ");
-                                live_in.append(GetRegName(
-                                    static_cast<RegType>(reg_family +
-                                                         (i < NUM_OF_PHYSICAL_REG ? R_TYPE_GP : R_TYPE_SYMBOLIC_GP)),
-                                    i));
+                                live_in.append(GetRegName(static_cast<RegType>(reg_family + (i < NUM_OF_PHYSICAL_REG ? R_TYPE_GP : R_TYPE_SYMBOLIC_GP)), i));
                             }
                         }
                         for (size_t i = 0; i < block->lifetime[reg_family].live_out.size_bit(); ++i) {
                             if (block->lifetime[reg_family].live_out.get_bit(i)) {
                                 live_out.append(" ");
-                                live_out.append(GetRegName(
-                                    static_cast<RegType>(reg_family +
-                                                         (i < NUM_OF_PHYSICAL_REG ? R_TYPE_GP : R_TYPE_SYMBOLIC_GP)),
-                                    i));
+                                live_out.append(GetRegName(static_cast<RegType>(reg_family + (i < NUM_OF_PHYSICAL_REG ? R_TYPE_GP : R_TYPE_SYMBOLIC_GP)), i));
                             }
                         }
                     }
-                    JITASM_TRACE("\tnode%d[label=\"Block%d\\ninstruction %d - %d\\nloop depth %d\\n%s\\n%s\"];\n",
-                                 block->instr_begin, block->depth, block->instr_begin, block->instr_end - 1,
-                                 block->loop_depth, live_in.c_str(), live_out.c_str());
+                    JITASM_TRACE("\tnode%d[label=\"Block%d\\ninstruction %d - %d\\nloop depth %d\\n%s\\n%s\"];\n", block->instr_begin, block->depth, block->instr_begin, block->instr_end - 1, block->loop_depth, live_in.c_str(), live_out.c_str());
                     int constraint = 0;
                     avoid_unused_warn(constraint);
                     if (block->successor[0])
-                        JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin,
-                                     block->successor[0]->instr_begin, constraint == 0 ? "true" : "false");
+                        JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin, block->successor[0]->instr_begin, constraint == 0 ? "true" : "false");
                     if (block->successor[1])
-                        JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin,
-                                     block->successor[1]->instr_begin, constraint == 0 ? "true" : "false");
+                        JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin, block->successor[1]->instr_begin, constraint == 0 ? "true" : "false");
                     // if (block->dfs_parent) JITASM_TRACE("\t\"node%d\" -> \"node%d\" [color=\"#ff0000\"];\n",
                     // block->instr_begin, block->dfs_parent->instr_begin); if (block->immediate_dominator)
                     // JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=false, color=\"#0000ff\"];\n",
@@ -15363,8 +14979,9 @@ namespace jitasm {
                                 cur_block->successor[0]->RemovePredecessor(cur_block);
                             cur_block->successor[0] = *get_exit_block();
                             (*get_exit_block())->predecessor.push_back(cur_block);
-                        } else {
-                            const size_t jump_to = f.GetJumpTo(f.instrs_[instr_idx]); // jump target instruction index
+                        }
+                        else {
+                            const size_t jump_to    = f.GetJumpTo(f.instrs_[instr_idx]); // jump target instruction index
                             BasicBlock *jump_target = *split(get_block(jump_to), jump_to);
 
                             // Update cur_block if split cur_block
@@ -15377,7 +14994,8 @@ namespace jitasm {
                                     cur_block->successor[0]->RemovePredecessor(cur_block);
                                 cur_block->successor[0] = jump_target;
                                 jump_target->predecessor.push_back(cur_block);
-                            } else {
+                            }
+                            else {
                                 JITASM_ASSERT(instr_id == I_JCC || instr_id == I_LOOP);
                                 if (cur_block->successor[1])
                                     cur_block->successor[1]->RemovePredecessor(cur_block);
@@ -15403,13 +15021,13 @@ namespace jitasm {
             /// Build dummy control flow graph which has enter and exit blocks.
             void BuildDummy(const Frontend &f) {
                 BasicBlock *enter_block = *initialize(f.instrs_.size());
-                BasicBlock *exit_block = enter_block->successor[0];
+                BasicBlock *exit_block  = enter_block->successor[0];
 
                 enter_block->depth = 0;
                 depth_first_blocks_.push_back(enter_block);
                 if (exit_block) {
-                    exit_block->depth = 1;
-                    exit_block->dfs_parent = enter_block;
+                    exit_block->depth               = 1;
+                    exit_block->dfs_parent          = enter_block;
                     exit_block->immediate_dominator = enter_block;
                     depth_first_blocks_.push_back(exit_block);
                 }
@@ -15427,13 +15045,11 @@ namespace jitasm {
          * \param[out]     need_reg_alloc			Register allocation is needed or not
          * \return There is any compile process if it is true.
          */
-        inline bool PrepareCompile(Frontend::InstrList &instrs, uint32 (&modified_physical_reg)[3],
-                                   bool (&need_reg_alloc)[3]) {
+        inline bool PrepareCompile(Frontend::InstrList &instrs, uint32 (&modified_physical_reg)[3], bool (&need_reg_alloc)[3]) {
             struct RegIDMap {
                 int next_id_;
                 std::map<int, int> id_map_;
-                RegIDMap() : next_id_(NUM_OF_PHYSICAL_REG) {
-                }
+                RegIDMap(): next_id_(NUM_OF_PHYSICAL_REG) {}
                 int GetNormalizedID(int id) {
                     std::map<int, int>::iterator it = id_map_.find(id);
                     if (it != id_map_.end()) {
@@ -15447,24 +15063,23 @@ namespace jitasm {
             RegIDMap reg_id_map[3]; // GP, MMX, XMM/YMM
             modified_physical_reg[0] = modified_physical_reg[1] = modified_physical_reg[2] = 0;
             need_reg_alloc[0] = need_reg_alloc[1] = need_reg_alloc[2] = false;
-            bool compile_process = false;
+            bool compile_process                                      = false;
 
             for (Frontend::InstrList::iterator it = instrs.begin(); it != instrs.end(); ++it) {
                 const InstrID instr_id = it->GetID();
-                if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG ||
-                    instr_id == I_COMPILER_DECLARE_RESULT_REG || instr_id == I_COMPILER_PROLOG ||
-                    instr_id == I_COMPILER_EPILOG) {
+                if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG || instr_id == I_COMPILER_DECLARE_RESULT_REG || instr_id == I_COMPILER_PROLOG || instr_id == I_COMPILER_EPILOG) {
                     compile_process = true;
                 }
 
                 for (size_t i = 0; i < Instr::MAX_OPERAND_COUNT; ++i) {
                     detail::Opd &opd = it->GetOpd(i);
                     if (opd.IsReg() && !opd.IsFpuReg()) {
-                        const RegID &reg = opd.GetReg();
+                        const RegID &reg        = opd.GetReg();
                         const size_t reg_family = GetRegFamily(reg.GetType());
                         if (reg.IsSymbolic()) {
                             opd.reg_.id = reg_id_map[reg_family].GetNormalizedID(reg.id);
-                        } else {
+                        }
+                        else {
                             if (opd.IsWrite()) {
                                 // This physical register is modified
                                 modified_physical_reg[reg_family] |= (1 << reg.id);
@@ -15476,7 +15091,8 @@ namespace jitasm {
                                 need_reg_alloc[reg_family] = true;
                             }
                         }
-                    } else if (opd.IsMem()) {
+                    }
+                    else if (opd.IsMem()) {
                         const RegID &base = opd.GetBase();
                         if (base.IsSymbolic()) {
                             opd.base_.id = reg_id_map[0].GetNormalizedID(base.id);
@@ -15504,16 +15120,13 @@ namespace jitasm {
             // Instructions
             // SUB, SBB, XOR, PXOR, XORPS, XORPD, PANDN, PSUBxx, PCMPxx
             const InstrID id = instr.GetID();
-            if (id == I_SUB || id == I_SBB || id == I_XOR || id == I_PXOR || id == I_XORPS || id == I_XORPD ||
-                id == I_PANDN || id == I_PSUBB || id == I_PSUBW || id == I_PSUBD || id == I_PSUBQ || id == I_PSUBSB ||
-                id == I_PSUBSW || id == I_PSUBUSB || id == I_PSUBUSW || id == I_PCMPEQB || id == I_PCMPEQW ||
-                id == I_PCMPEQD || id == I_PCMPEQQ || id == I_PCMPGTB || id == I_PCMPGTW || id == I_PCMPGTD ||
-                id == I_PCMPGTQ) {
+            if (id == I_SUB || id == I_SBB || id == I_XOR || id == I_PXOR || id == I_XORPS || id == I_XORPD || id == I_PANDN || id == I_PSUBB || id == I_PSUBW || id == I_PSUBD || id == I_PSUBQ || id == I_PSUBSB || id == I_PSUBSW || id == I_PSUBUSB || id == I_PSUBUSW
+                || id == I_PCMPEQB || id == I_PCMPEQW || id == I_PCMPEQD || id == I_PCMPEQQ || id == I_PCMPGTB || id == I_PCMPGTW || id == I_PCMPGTD || id == I_PCMPGTQ) {
                 // source and destination operands are the same register.
                 // 8bit or 16bit register cannot break dependence.
                 const detail::Opd &opd0 = instr.GetOpd(0);
                 const detail::Opd &opd1 = instr.GetOpd(1);
-                const OpdSize opdsize = opd0.GetSize();
+                const OpdSize opdsize   = opd0.GetSize();
                 if (opd0 == opd1 && opd0.IsReg() && opdsize != O_SIZE_8 && opdsize != O_SIZE_16) {
                     return true;
                 }
@@ -15531,11 +15144,11 @@ namespace jitasm {
                 // Scanning instructions of basic block and make register lifetime table
                 for (size_t i = block->instr_begin; i != block->instr_end; ++i) {
                     const size_t instr_offset = i - block->instr_begin;
-                    const Instr &instr = f.instrs_[i];
+                    const Instr &instr        = f.instrs_[i];
                     if (instr.GetID() == I_COMPILER_DECLARE_REG_ARG) {
                         // Declare function argument on register
                         const detail::Opd &opd0 = instr.GetOpd(0);
-                        const RegID &reg = opd0.GetReg();
+                        const RegID &reg        = opd0.GetReg();
                         // Avoid passing operand size 8 or 16 to AddUsePoint
                         // because they are treated as partial access register and cause miss assignment of register.
                         OpdSize opd_size = opd0.GetSize();
@@ -15543,16 +15156,16 @@ namespace jitasm {
                             opd_size = O_SIZE_32;
                         }
                         const detail::Opd &opd1 = instr.GetOpd(1);
-                        block->GetLifetime(reg.GetType())
-                            .AddUsePoint(instr_offset, reg, opd0.GetType(), opd_size, opd0.reg_assignable_);
+                        block->GetLifetime(reg.GetType()).AddUsePoint(instr_offset, reg, opd0.GetType(), opd_size, opd0.reg_assignable_);
                         if (opd1.IsMem()) {
                             var_manager.SetSpillSlot(reg.GetType(), reg.id, Addr(opd1.GetBase(), opd1.GetDisp()));
                         }
-                    } else if (instr.GetID() == I_COMPILER_DECLARE_STACK_ARG) {
+                    }
+                    else if (instr.GetID() == I_COMPILER_DECLARE_STACK_ARG) {
                         // Declare function argument on stack
                         // The register variable starts "spill" state by O_TYPE_MEM of AddUsePoint
                         const detail::Opd &opd0 = instr.GetOpd(0); // Register variable.
-                        const RegID &reg = opd0.GetReg();
+                        const RegID &reg        = opd0.GetReg();
                         // Avoid passing operand size 8 or 16 to AddUsePoint
                         // because they are treated as partial access register and cause miss assignment of register.
                         OpdSize opd_size = opd0.GetSize();
@@ -15560,81 +15173,61 @@ namespace jitasm {
                             opd_size = O_SIZE_32;
                         }
                         const detail::Opd &opd1 = instr.GetOpd(1); // Argument
-                        block->GetLifetime(reg.GetType())
-                            .AddUsePoint(instr_offset, reg, static_cast<OpdType>(O_TYPE_MEM | O_TYPE_WRITE), opd_size,
-                                         opd0.reg_assignable_);
+                        block->GetLifetime(reg.GetType()).AddUsePoint(instr_offset, reg, static_cast<OpdType>(O_TYPE_MEM | O_TYPE_WRITE), opd_size, opd0.reg_assignable_);
                         var_manager.SetSpillSlot(reg.GetType(), reg.id, Addr(opd1.GetBase(), opd1.GetDisp()));
-                    } else if (instr.GetID() == I_COMPILER_DECLARE_RESULT_REG) {
+                    }
+                    else if (instr.GetID() == I_COMPILER_DECLARE_RESULT_REG) {
                         // Declare function result on register
                         const detail::Opd &opd0 = instr.GetOpd(0);
-                        const RegID &reg = opd0.GetReg();
-                        block->GetLifetime(reg.GetType())
-                            .AddUsePoint(instr_offset, reg, opd0.GetType(), opd0.GetSize(), opd0.reg_assignable_);
-                    } else if (IsBreakDependenceInstr(instr)) {
+                        const RegID &reg        = opd0.GetReg();
+                        block->GetLifetime(reg.GetType()).AddUsePoint(instr_offset, reg, opd0.GetType(), opd0.GetSize(), opd0.reg_assignable_);
+                    }
+                    else if (IsBreakDependenceInstr(instr)) {
                         // Add only 1 use point if the instruction that break register dependence
                         const detail::Opd &opd = instr.GetOpd(0);
-                        const RegID &reg = opd.GetReg();
-                        block->GetLifetime(reg.GetType())
-                            .AddUsePoint(instr_offset, reg, static_cast<OpdType>(O_TYPE_REG | O_TYPE_WRITE),
-                                         opd.GetSize(), opd.reg_assignable_);
+                        const RegID &reg       = opd.GetReg();
+                        block->GetLifetime(reg.GetType()).AddUsePoint(instr_offset, reg, static_cast<OpdType>(O_TYPE_REG | O_TYPE_WRITE), opd.GetSize(), opd.reg_assignable_);
                         var_manager.UpdateVarSize(reg.GetType(), reg.id, opd.GetSize());
-                    } else if (instr.GetID() == I_PUSHAD || instr.GetID() == I_POPAD) {
+                    }
+                    else if (instr.GetID() == I_PUSHAD || instr.GetID() == I_POPAD) {
                         // Add use point of pushad/popad
-                        const OpdType type =
-                            static_cast<OpdType>(O_TYPE_REG | (instr.GetID() == I_PUSHAD ? O_TYPE_READ : O_TYPE_WRITE));
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EAX), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ECX), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EDX), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EBX), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESI), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EDI), type, O_SIZE_32, 0xFFFFFFFF);
-                        block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                            instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESP),
-                            static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ | O_TYPE_WRITE), O_SIZE_32, 0xFFFFFFFF);
-                    } else if (instr.GetID() == I_VZEROALL || instr.GetID() == I_VZEROUPPER) {
+                        const OpdType type = static_cast<OpdType>(O_TYPE_REG | (instr.GetID() == I_PUSHAD ? O_TYPE_READ : O_TYPE_WRITE));
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EAX), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ECX), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EDX), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EBX), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESI), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, EDI), type, O_SIZE_32, 0xFFFFFFFF);
+                        block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_GP, ESP), static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ | O_TYPE_WRITE), O_SIZE_32, 0xFFFFFFFF);
+                    }
+                    else if (instr.GetID() == I_VZEROALL || instr.GetID() == I_VZEROUPPER) {
                         // Add use point of vzeroall/vzeroupper
-                        const OpdType type = static_cast<OpdType>(
-                            O_TYPE_REG | (instr.GetID() == I_VZEROALL ? O_TYPE_WRITE : O_TYPE_READ | O_TYPE_WRITE));
+                        const OpdType type = static_cast<OpdType>(O_TYPE_REG | (instr.GetID() == I_VZEROALL ? O_TYPE_WRITE : O_TYPE_READ | O_TYPE_WRITE));
                         for (int j = 0; j < NUM_OF_PHYSICAL_REG; ++j) {
-                            block->GetLifetime(R_TYPE_YMM)
-                                .AddUsePoint(
-                                    instr_offset,
-                                    RegID::CreatePhysicalRegID(R_TYPE_YMM, static_cast<PhysicalRegID>(YMM0 + j)), type,
-                                    O_SIZE_256, 0xFFFFFFFF);
+                            block->GetLifetime(R_TYPE_YMM).AddUsePoint(instr_offset, RegID::CreatePhysicalRegID(R_TYPE_YMM, static_cast<PhysicalRegID>(YMM0 + j)), type, O_SIZE_256, 0xFFFFFFFF);
                         }
-                    } else {
+                    }
+                    else {
                         // Add each use point of all operands
                         for (size_t j = 0; j < Instr::MAX_OPERAND_COUNT; ++j) {
                             const detail::Opd &opd = instr.GetOpd(j);
                             if (opd.IsGpReg() || opd.IsMmxReg() || opd.IsXmmReg() || opd.IsYmmReg()) {
                                 // Register operand
                                 const RegID &reg = opd.GetReg();
-                                block->GetLifetime(reg.GetType())
-                                    .AddUsePoint(instr_offset, reg, opd.GetType(), opd.GetSize(), opd.reg_assignable_);
+                                block->GetLifetime(reg.GetType()).AddUsePoint(instr_offset, reg, opd.GetType(), opd.GetSize(), opd.reg_assignable_);
                                 var_manager.UpdateVarSize(reg.GetType(), reg.id, opd.GetSize());
-                            } else if (opd.IsMem()) {
+                            }
+                            else if (opd.IsMem()) {
                                 // Memory operand
                                 const RegID &base = opd.GetBase();
                                 if (!base.IsInvalid()) {
-                                    block->GetLifetime(R_TYPE_GP).AddUsePoint(
-                                        instr_offset, base, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ),
-                                        opd.GetAddressBaseSize(), 0xFFFFFFFF);
+                                    block->GetLifetime(R_TYPE_GP).AddUsePoint(instr_offset, base, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ), opd.GetAddressBaseSize(), 0xFFFFFFFF);
                                     var_manager.UpdateVarSize(R_TYPE_GP, base.id, opd.GetAddressBaseSize());
                                 }
                                 const RegID &index = opd.GetIndex();
                                 if (!index.IsInvalid()) {
-                                    block->GetLifetime(index.GetType())
-                                        .AddUsePoint(instr_offset, index,
-                                                     static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ),
-                                                     opd.GetAddressIndexSize(), 0xFFFFFFFF);
+                                    block->GetLifetime(index.GetType()).AddUsePoint(instr_offset, index, static_cast<OpdType>(O_TYPE_REG | O_TYPE_READ), opd.GetAddressIndexSize(), 0xFFFFFFFF);
                                     var_manager.UpdateVarSize(index.GetType(), index.id, opd.GetAddressIndexSize());
                                 }
                             }
@@ -15644,14 +15237,15 @@ namespace jitasm {
 
                 // Make GEN and KILL set
                 for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
-                    Lifetime &lifetime = block->lifetime[reg_family];
+                    Lifetime &lifetime           = block->lifetime[reg_family];
                     const size_t num_of_used_reg = lifetime.use_points.size();
                     for (size_t i = 0; i < num_of_used_reg; ++i) {
                         if (!lifetime.use_points[i].empty()) {
                             OpdType type = lifetime.use_points[i][0].type;
                             if (type & O_TYPE_READ) {
                                 lifetime.gen.set_bit(i, true); // GEN
-                            } else {
+                            }
+                            else {
                                 JITASM_ASSERT(type & O_TYPE_WRITE);
                                 lifetime.kill.set_bit(i, true); // KILL
                             }
@@ -15702,8 +15296,7 @@ namespace jitasm {
          * \param[out]    var_attrs		Variable attributes
          * \return	Used physical register mask
          */
-        inline uint32 LinearScanRegisterAlloc(ControlFlowGraph &cfg, size_t reg_family, uint32 available_reg,
-                                              std::vector<VarAttribute> &var_attrs) {
+        inline uint32 LinearScanRegisterAlloc(ControlFlowGraph &cfg, size_t reg_family, uint32 available_reg, std::vector<VarAttribute> &var_attrs) {
             const uint32 available_reg_count = detail::Count1Bits(available_reg);
 
             std::vector<int> total_spill_cost;
@@ -15712,16 +15305,15 @@ namespace jitasm {
                 (*block)->lifetime[reg_family].GetSpillCost((*block)->GetFrequency(), total_spill_cost);
             }
 
-            uint32 used_reg = 0;
+            uint32 used_reg                         = 0;
             const Lifetime::Interval *last_interval = NULL;
-            size_t last_loop_depth = 0;
+            size_t last_loop_depth                  = 0;
             for (ControlFlowGraph::BlockList::iterator block = cfg.dfs_begin(); block != cfg.dfs_end(); ++block) {
-                Lifetime &lifetime = (*block)->lifetime[reg_family];
+                Lifetime &lifetime      = (*block)->lifetime[reg_family];
                 const size_t loop_depth = (*block)->loop_depth;
 
                 // Spill identification
-                lifetime.SpillIdentification(available_reg_count, total_spill_cost, (*block)->GetFrequency(),
-                                             last_loop_depth == loop_depth ? last_interval : NULL, var_attrs);
+                lifetime.SpillIdentification(available_reg_count, total_spill_cost, (*block)->GetFrequency(), last_loop_depth == loop_depth ? last_interval : NULL, var_attrs);
 
                 // Register assignment
                 used_reg |= lifetime.AssignRegister(available_reg, last_interval);
@@ -15730,7 +15322,7 @@ namespace jitasm {
                 lifetime.DumpIntervals((*block)->depth, true);
 #endif
                 if (!lifetime.intervals.empty()) {
-                    last_interval = &lifetime.intervals.back();
+                    last_interval   = &lifetime.intervals.back();
                     last_loop_depth = loop_depth;
                 }
             }
@@ -15743,8 +15335,7 @@ namespace jitasm {
             Frontend *f_;
             const VariableManager *var_manager_;
 
-            GpRegOperator(Frontend *f, const VariableManager *var_manager) : f_(f), var_manager_(var_manager) {
-            }
+            GpRegOperator(Frontend *f, const VariableManager *var_manager): f_(f), var_manager_(var_manager) {}
 
             void Move(PhysicalRegID dst_reg, PhysicalRegID src_reg, OpdSize /*size*/) {
                 f_->mov(Reg(dst_reg), Reg(src_reg));
@@ -15768,8 +15359,7 @@ namespace jitasm {
             Frontend *f_;
             const VariableManager *var_manager_;
 
-            MmxRegOperator(Frontend *f, const VariableManager *var_manager) : f_(f), var_manager_(var_manager) {
-            }
+            MmxRegOperator(Frontend *f, const VariableManager *var_manager): f_(f), var_manager_(var_manager) {}
 
             void Move(PhysicalRegID dst_reg, PhysicalRegID src_reg, OpdSize /*size*/) {
                 f_->movq(MmxReg(dst_reg), MmxReg(src_reg));
@@ -15795,15 +15385,16 @@ namespace jitasm {
             Frontend *f_;
             const VariableManager *var_manager_;
 
-            XmmRegOperator(Frontend *f, const VariableManager *var_manager) : f_(f), var_manager_(var_manager) {
-            }
+            XmmRegOperator(Frontend *f, const VariableManager *var_manager): f_(f), var_manager_(var_manager) {}
 
             void Move(PhysicalRegID dst_reg, PhysicalRegID src_reg, OpdSize size) {
                 if (size == O_SIZE_128) {
                     f_->movaps(XmmReg(dst_reg), XmmReg(src_reg));
-                } else if (size == O_SIZE_256) {
+                }
+                else if (size == O_SIZE_256) {
                     f_->vmovaps(YmmReg(dst_reg), YmmReg(src_reg));
-                } else {
+                }
+                else {
                     JITASM_ASSERT(0);
                 }
             }
@@ -15813,11 +15404,13 @@ namespace jitasm {
                     f_->xorps(XmmReg(reg1), XmmReg(reg2));
                     f_->xorps(XmmReg(reg2), XmmReg(reg1));
                     f_->xorps(XmmReg(reg1), XmmReg(reg2));
-                } else if (size == O_SIZE_256) {
+                }
+                else if (size == O_SIZE_256) {
                     f_->vxorps(YmmReg(reg1), YmmReg(reg1), YmmReg(reg2));
                     f_->vxorps(YmmReg(reg2), YmmReg(reg1), YmmReg(reg2));
                     f_->vxorps(YmmReg(reg1), YmmReg(reg1), YmmReg(reg2));
-                } else {
+                }
+                else {
                     JITASM_ASSERT(0);
                 }
             }
@@ -15826,9 +15419,11 @@ namespace jitasm {
                 const OpdSize size = var_manager_->GetVarSize(2, var);
                 if (size == O_SIZE_128) {
                     f_->movaps(XmmReg(dst_reg), f_->xmmword_ptr[var_manager_->GetSpillSlot(2, var)]);
-                } else if (size == O_SIZE_256) {
+                }
+                else if (size == O_SIZE_256) {
                     f_->vmovaps(YmmReg(dst_reg), f_->ymmword_ptr[var_manager_->GetSpillSlot(2, var)]);
-                } else {
+                }
+                else {
                     JITASM_ASSERT(0);
                 }
             }
@@ -15837,9 +15432,11 @@ namespace jitasm {
                 const OpdSize size = var_manager_->GetVarSize(2, var);
                 if (size == O_SIZE_128) {
                     f_->movaps(f_->xmmword_ptr[var_manager_->GetSpillSlot(2, var)], XmmReg(src_reg));
-                } else if (size == O_SIZE_256) {
+                }
+                else if (size == O_SIZE_256) {
                     f_->vmovaps(f_->ymmword_ptr[var_manager_->GetSpillSlot(2, var)], YmmReg(src_reg));
-                } else {
+                }
+                else {
                     JITASM_ASSERT(0);
                 }
             }
@@ -15854,8 +15451,7 @@ namespace jitasm {
             struct Node {
                 int index;
                 int lowlink;
-                Node() : index(-1) {
-                }
+                Node(): index(-1) {}
             };
             Node nodes_[NUM_OF_PHYSICAL_REG];
             int *successors_;
@@ -15872,8 +15468,9 @@ namespace jitasm {
                 return false;
             }
 
-            template <class Fn> void Find(int v, Fn &fn) {
-                nodes_[v].index = index;
+            template <class Fn>
+            void Find(int v, Fn &fn) {
+                nodes_[v].index   = index;
                 nodes_[v].lowlink = index;
                 ++index;
                 scc_.push_back(v);
@@ -15885,7 +15482,8 @@ namespace jitasm {
                         if (nodes_[w].lowlink < nodes_[v].lowlink) {
                             nodes_[v].lowlink = nodes_[w].lowlink;
                         }
-                    } else if (IsInsideSCC(w)) {
+                    }
+                    else if (IsInsideSCC(w)) {
                         // successor w is in scc_
                         if (nodes_[w].index < nodes_[v].lowlink) {
                             nodes_[v].lowlink = nodes_[w].index;
@@ -15906,10 +15504,10 @@ namespace jitasm {
             }
 
           public:
-            SCCFinder(int *successors) : successors_(successors), index(0) {
-            }
+            SCCFinder(int *successors): successors_(successors), index(0) {}
 
-            template <class Fn> void operator()(Fn fn) {
+            template <class Fn>
+            void operator()(Fn fn) {
                 for (int v = 0; v < NUM_OF_PHYSICAL_REG; ++v) {
                     if (successors_[v] != -1 && nodes_[v].index == -1) {
                         Find(v, fn);
@@ -15926,9 +15524,7 @@ namespace jitasm {
             std::pair<const Lifetime::Interval *, const Lifetime::Interval *> interval;
             const std::vector<VarAttribute> *var_attrs;
 
-            Operations(const Lifetime::Interval *first, const Lifetime::Interval *second,
-                       const std::vector<VarAttribute> *vattrs)
-                : interval(first, second), var_attrs(vattrs) {
+            Operations(const Lifetime::Interval *first, const Lifetime::Interval *second, const std::vector<VarAttribute> *vattrs): interval(first, second), var_attrs(vattrs) {
                 for (size_t i = 0; i < NUM_OF_PHYSICAL_REG; ++i) {
                     move[i] = load[i] = store[i] = -1;
                 }
@@ -15936,7 +15532,7 @@ namespace jitasm {
 
             void operator()(size_t var) {
                 if (interval.second->liveness.get_bit(var)) {
-                    const bool first_spill = interval.first->spill.get_bit(var);
+                    const bool first_spill  = interval.first->spill.get_bit(var);
                     const bool second_spill = interval.second->spill.get_bit(var);
                     if (!first_spill) {
                         const int first_reg = interval.first->assignment_table[var];
@@ -15944,15 +15540,18 @@ namespace jitasm {
                             // register -> register
                             move[first_reg] = interval.second->assignment_table[var];
                             size[first_reg] = static_cast<OpdSize>(var_attrs->at(var).size);
-                        } else {
+                        }
+                        else {
                             // register -> stack
                             store[first_reg] = static_cast<int>(var);
                         }
-                    } else {
+                    }
+                    else {
                         if (!second_spill) {
                             // stack -> register
                             load[interval.second->assignment_table[var]] = static_cast<int>(var);
-                        } else {
+                        }
+                        else {
                             // stack -> stack
                             // do nothing
                         }
@@ -15961,26 +15560,24 @@ namespace jitasm {
             }
         };
 
-        template <class RegOp> struct MoveGenerator {
+        template <class RegOp>
+        struct MoveGenerator {
             int *moves_;
             OpdSize *sizes_;
             RegOp *reg_operator_;
-            MoveGenerator(int *moves, OpdSize *sizes, RegOp *reg_operator)
-                : moves_(moves), sizes_(sizes), reg_operator_(reg_operator) {
-            }
+            MoveGenerator(int *moves, OpdSize *sizes, RegOp *reg_operator): moves_(moves), sizes_(sizes), reg_operator_(reg_operator) {}
             void operator()(const int *scc, size_t count) {
                 if (count > 1) {
                     for (size_t i = 0; i < count - 1; ++i) {
                         const int r = scc[i];
                         JITASM_ASSERT(r != moves_[r] && moves_[r] != -1);
-                        reg_operator_->Swap(static_cast<PhysicalRegID>(moves_[r]), static_cast<PhysicalRegID>(r),
-                                            sizes_[r]);
+                        reg_operator_->Swap(static_cast<PhysicalRegID>(moves_[r]), static_cast<PhysicalRegID>(r), sizes_[r]);
                         JITASM_TRACE("Swap%d %d <-> %d\n", sizes_[r], moves_[r], r);
                     }
-                } else if (moves_[scc[0]] != scc[0] && moves_[scc[0]] != -1) {
+                }
+                else if (moves_[scc[0]] != scc[0] && moves_[scc[0]] != -1) {
                     const int r = scc[0];
-                    reg_operator_->Move(static_cast<PhysicalRegID>(moves_[r]), static_cast<PhysicalRegID>(r),
-                                        sizes_[r]);
+                    reg_operator_->Move(static_cast<PhysicalRegID>(moves_[r]), static_cast<PhysicalRegID>(r), sizes_[r]);
                     JITASM_TRACE("Move%d %d -> %d\n", sizes_[r], r, moves_[r]);
                 }
             }
@@ -15993,9 +15590,7 @@ namespace jitasm {
          * - Store to stack slot
          */
         template <class RegOp>
-        inline void GenerateInterIntervalInstr(const Lifetime::Interval &first_interval,
-                                               const Lifetime::Interval &second_interval,
-                                               const std::vector<VarAttribute> &var_attrs, RegOp reg_operator) {
+        inline void GenerateInterIntervalInstr(const Lifetime::Interval &first_interval, const Lifetime::Interval &second_interval, const std::vector<VarAttribute> &var_attrs, RegOp reg_operator) {
 #ifdef JITASM_DEBUG_DUMP
             first_interval.Dump(true);
 #endif
@@ -16029,25 +15624,18 @@ namespace jitasm {
         }
 
         /// Generate inter-block instructions
-        inline void GenerateInterBlockInstr(const BasicBlock *first_block, const BasicBlock *second_block, Frontend &f,
-                                            const VariableManager &var_manager) {
+        inline void GenerateInterBlockInstr(const BasicBlock *first_block, const BasicBlock *second_block, Frontend &f, const VariableManager &var_manager) {
             if (!first_block->lifetime[0].intervals.empty() && !second_block->lifetime[0].intervals.empty()) {
                 JITASM_TRACE("---- General purpose register ----\n");
-                GenerateInterIntervalInstr(first_block->lifetime[0].intervals.back(),
-                                           second_block->lifetime[0].intervals.front(), var_manager.GetAttributes(0),
-                                           GpRegOperator(&f, &var_manager));
+                GenerateInterIntervalInstr(first_block->lifetime[0].intervals.back(), second_block->lifetime[0].intervals.front(), var_manager.GetAttributes(0), GpRegOperator(&f, &var_manager));
             }
             if (!first_block->lifetime[1].intervals.empty() && !second_block->lifetime[1].intervals.empty()) {
                 JITASM_TRACE("---- MMX register ----\n");
-                GenerateInterIntervalInstr(first_block->lifetime[1].intervals.back(),
-                                           second_block->lifetime[1].intervals.front(), var_manager.GetAttributes(1),
-                                           MmxRegOperator(&f, &var_manager));
+                GenerateInterIntervalInstr(first_block->lifetime[1].intervals.back(), second_block->lifetime[1].intervals.front(), var_manager.GetAttributes(1), MmxRegOperator(&f, &var_manager));
             }
             if (!first_block->lifetime[2].intervals.empty() && !second_block->lifetime[2].intervals.empty()) {
                 JITASM_TRACE("---- XMM/YMM register ----\n");
-                GenerateInterIntervalInstr(first_block->lifetime[2].intervals.back(),
-                                           second_block->lifetime[2].intervals.front(), var_manager.GetAttributes(2),
-                                           XmmRegOperator(&f, &var_manager));
+                GenerateInterIntervalInstr(first_block->lifetime[2].intervals.back(), second_block->lifetime[2].intervals.front(), var_manager.GetAttributes(2), XmmRegOperator(&f, &var_manager));
             }
         }
 
@@ -16076,7 +15664,8 @@ namespace jitasm {
                     // Copy with alignment
                     f.lea(f.rbx, f.ptr[f.rsp - 8]);
                     stack_size += 8; // padding for keep alignment
-                } else {
+                }
+                else {
                     f.mov(f.rbx, f.rsp);
                 }
             }
@@ -16110,7 +15699,7 @@ namespace jitasm {
         inline void GenerateEpilog(Frontend &f, const uint32 (&preserved_reg)[3], const Addr &preserved_reg_stack) {
             avoid_unused_warn(preserved_reg_stack);
 
-            size_t stack_size = f.stack_manager_.GetSize();
+            size_t stack_size                    = f.stack_manager_.GetSize();
             const size_t num_of_preserved_gp_reg = detail::Count1Bits(preserved_reg[0]);
 
 #ifdef JITASM64
@@ -16125,8 +15714,7 @@ namespace jitasm {
 
             // Insert restore instruction by inverse order
             while (!regs.empty()) {
-                f.movaps(XmmReg(static_cast<PhysicalRegID>(regs.back())),
-                         f.xmmword_ptr[preserved_reg_stack + 16 * (regs.size() - 1)]);
+                f.movaps(XmmReg(static_cast<PhysicalRegID>(regs.back())), f.xmmword_ptr[preserved_reg_stack + 16 * (regs.size() - 1)]);
                 regs.pop_back();
             }
 
@@ -16160,8 +15748,7 @@ namespace jitasm {
         struct OrderedLabel {
             size_t id;
             size_t instr_idx;
-            OrderedLabel(size_t id_, size_t instr_idx_) : id(id_), instr_idx(instr_idx_) {
-            }
+            OrderedLabel(size_t id_, size_t instr_idx_): id(id_), instr_idx(instr_idx_) {}
             bool operator<(const OrderedLabel &rhs) const {
                 return instr_idx < rhs.instr_idx;
             }
@@ -16173,8 +15760,7 @@ namespace jitasm {
          * - Generate instructions for register move and spill
          * - Generate function prolog and epilog
          */
-        inline void RewriteInstructions(Frontend &f, const ControlFlowGraph &cfg, const VariableManager &var_manager,
-                                        const uint32 (&preserved_reg)[3], const Addr &preserved_reg_stack) {
+        inline void RewriteInstructions(Frontend &f, const ControlFlowGraph &cfg, const VariableManager &var_manager, const uint32 (&preserved_reg)[3], const Addr &preserved_reg_stack) {
             // Prepare instruction number ordered labels for adjusting label position
             std::vector<OrderedLabel> orderd_labels; // instruction number order
             orderd_labels.reserve(f.labels_.size());
@@ -16209,7 +15795,7 @@ namespace jitasm {
                 // Initialize interval_range
                 detail::ConstRange<std::vector<Lifetime::Interval>> interval_range[3];
                 for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
-                    interval_range[reg_family].first = block->lifetime[reg_family].intervals.begin();
+                    interval_range[reg_family].first  = block->lifetime[reg_family].intervals.begin();
                     interval_range[reg_family].second = block->lifetime[reg_family].intervals.end();
                 }
 
@@ -16218,40 +15804,36 @@ namespace jitasm {
                     const size_t org_instr_index = block->instr_begin + instr_offset;
 
                     // Step each intervals and insert inter-interval instructions
-                    if (interval_range[0].size() > 1 &&
-                        detail::next(interval_range[0].first)->instr_idx_offset == instr_offset) {
+                    if (interval_range[0].size() > 1 && detail::next(interval_range[0].first)->instr_idx_offset == instr_offset) {
                         JITASM_TRACE("---- General purpose register ----\n");
                         const Lifetime::Interval &first_interval = *interval_range[0].first;
-                        GenerateInterIntervalInstr(first_interval, *++interval_range[0].first,
-                                                   var_manager.GetAttributes(0), GpRegOperator(&f, &var_manager));
+                        GenerateInterIntervalInstr(first_interval, *++interval_range[0].first, var_manager.GetAttributes(0), GpRegOperator(&f, &var_manager));
                     }
-                    if (interval_range[1].size() > 1 &&
-                        detail::next(interval_range[1].first)->instr_idx_offset == instr_offset) {
+                    if (interval_range[1].size() > 1 && detail::next(interval_range[1].first)->instr_idx_offset == instr_offset) {
                         JITASM_TRACE("---- MMX register ----\n");
                         const Lifetime::Interval &first_interval = *interval_range[1].first;
-                        GenerateInterIntervalInstr(first_interval, *++interval_range[1].first,
-                                                   var_manager.GetAttributes(1), MmxRegOperator(&f, &var_manager));
+                        GenerateInterIntervalInstr(first_interval, *++interval_range[1].first, var_manager.GetAttributes(1), MmxRegOperator(&f, &var_manager));
                     }
-                    if (interval_range[2].size() > 1 &&
-                        detail::next(interval_range[2].first)->instr_idx_offset == instr_offset) {
+                    if (interval_range[2].size() > 1 && detail::next(interval_range[2].first)->instr_idx_offset == instr_offset) {
                         JITASM_TRACE("---- XMM/YMM register ----\n");
                         const Lifetime::Interval &first_interval = *interval_range[2].first;
-                        GenerateInterIntervalInstr(first_interval, *++interval_range[2].first,
-                                                   var_manager.GetAttributes(2), XmmRegOperator(&f, &var_manager));
+                        GenerateInterIntervalInstr(first_interval, *++interval_range[2].first, var_manager.GetAttributes(2), XmmRegOperator(&f, &var_manager));
                     }
 
                     const size_t cur_instr_index = f.instrs_.size();
-                    const InstrID instr_id = org_instrs[org_instr_index].GetID();
-                    if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG ||
-                        instr_id == I_COMPILER_DECLARE_RESULT_REG) {
+                    const InstrID instr_id       = org_instrs[org_instr_index].GetID();
+                    if (instr_id == I_COMPILER_DECLARE_REG_ARG || instr_id == I_COMPILER_DECLARE_STACK_ARG || instr_id == I_COMPILER_DECLARE_RESULT_REG) {
                         // No actual machine code
-                    } else if (instr_id == I_COMPILER_PROLOG) {
+                    }
+                    else if (instr_id == I_COMPILER_PROLOG) {
                         // Generate function prolog
                         GenerateProlog(f, preserved_reg, preserved_reg_stack);
-                    } else if (instr_id == I_COMPILER_EPILOG) {
+                    }
+                    else if (instr_id == I_COMPILER_EPILOG) {
                         // Generate function epilog
                         GenerateEpilog(f, preserved_reg, preserved_reg_stack);
-                    } else {
+                    }
+                    else {
                         // Copy instruction
                         f.instrs_.push_back(org_instrs[org_instr_index]);
                         Instr &instr = f.instrs_.back();
@@ -16262,13 +15844,13 @@ namespace jitasm {
                             if (opd.IsReg()) {
                                 if (opd.reg_.IsSymbolic()) {
                                     opd.reg_.type = static_cast<RegType>(opd.reg_.type - R_TYPE_SYMBOLIC_GP);
-                                    opd.reg_.id = interval_range[GetRegFamily(opd.reg_.GetType())]
-                                                      .first->assignment_table[opd.reg_.id];
+                                    opd.reg_.id   = interval_range[GetRegFamily(opd.reg_.GetType())].first->assignment_table[opd.reg_.id];
                                 }
-                            } else if (opd.IsMem()) {
+                            }
+                            else if (opd.IsMem()) {
                                 if (opd.base_.IsSymbolic()) {
                                     opd.base_.type = R_TYPE_GP;
-                                    opd.base_.id = interval_range[0].first->assignment_table[opd.base_.id];
+                                    opd.base_.id   = interval_range[0].first->assignment_table[opd.base_.id];
                                 }
                                 if (opd.index_.IsSymbolic()) {
                                     if (opd.index_.type == R_TYPE_SYMBOLIC_GP)
@@ -16279,8 +15861,7 @@ namespace jitasm {
                                         JITASM_ASSERT(opd.index_.type == R_TYPE_SYMBOLIC_YMM);
                                         opd.index_.type = R_TYPE_YMM;
                                     }
-                                    opd.index_.id = interval_range[GetRegFamily(opd.index_.GetType())]
-                                                        .first->assignment_table[opd.index_.id];
+                                    opd.index_.id = interval_range[GetRegFamily(opd.index_.GetType())].first->assignment_table[opd.index_.id];
                                 }
                             }
                         }
@@ -16312,11 +15893,11 @@ namespace jitasm {
                     if (Frontend::IsJump(jump_instr.GetID())) {
                         f.instrs_.push_back(jump_instr);
                     }
-                } else if (block->successor[0] && block->successor[1]) {
+                }
+                else if (block->successor[0] && block->successor[1]) {
                     // 2 successors
-                    JITASM_ASSERT(Frontend::IsJump(f.instrs_.back().GetID()) &&
-                                  f.instrs_.back().GetOpd(0).IsImm()); // the last instruction must be jump
-                    const size_t jump_instr_idx = f.instrs_.size() - 1;
+                    JITASM_ASSERT(Frontend::IsJump(f.instrs_.back().GetID()) && f.instrs_.back().GetOpd(0).IsImm()); // the last instruction must be jump
+                    const size_t jump_instr_idx   = f.instrs_.size() - 1;
                     const size_t label_successor1 = static_cast<size_t>(f.instrs_.back().GetOpd(0).GetImm());
 
                     // Generate inter-block instructions between current block and successor 1 separately
@@ -16361,16 +15942,14 @@ namespace jitasm {
 
 #ifdef JITASM_WIN
             // Win64 preserved registers : rbx, rsi, rdi, r12 ~ r15, xmm6 ~ xmm15
-            uint32 preserved_reg[3] = {
-                (1 << RBX) | (1 << RSI) | (1 << RDI) | (1 << R12) | (1 << R13) | (1 << R14) | (1 << R15), 0, 0xFFC0};
+            uint32 preserved_reg[3] = {(1 << RBX) | (1 << RSI) | (1 << RDI) | (1 << R12) | (1 << R13) | (1 << R14) | (1 << R15), 0, 0xFFC0};
 #else
             // x64 Linux preserved registers : rbx, r12 ~ r15, xmm6 ~ xmm15
             uint32 preserved_reg[3] = {(1 << RBX) | (1 << R12) | (1 << R13) | (1 << R14) | (1 << R15), 0, 0xFFC0};
 #endif
 #else
             // Available registers : eax, ecx, edx, esi, edi, mm0 ~ mm7, xmm0/ymm0 ~ xmm7/ymm7
-            const uint32 available_reg[3] = {(1 << EAX) | (1 << ECX) | (1 << EDX) | (1 << ESI) | (1 << EDI), 0xFF,
-                                             0xFF};
+            const uint32 available_reg[3] = {(1 << EAX) | (1 << ECX) | (1 << EDX) | (1 << ESI) | (1 << EDI), 0xFF, 0xFF};
 
             // Preserved registers : ebx, esi, edi
             uint32 preserved_reg[3] = {(1 << EBX) | (1 << ESI) | (1 << EDI), 0, 0};
@@ -16398,11 +15977,11 @@ namespace jitasm {
                 // Linear scan register allocation
                 for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
                     if (need_reg_alloc[reg_family]) {
-                        used_physical_reg[reg_family] = LinearScanRegisterAlloc(
-                            cfg, reg_family, available_reg[reg_family], var_manager.GetAttributes(reg_family));
+                        used_physical_reg[reg_family] = LinearScanRegisterAlloc(cfg, reg_family, available_reg[reg_family], var_manager.GetAttributes(reg_family));
                     }
                 }
-            } else {
+            }
+            else {
                 // No register allocation
                 // Build dummy CFG
                 cfg.BuildDummy(f);
@@ -16441,16 +16020,14 @@ namespace jitasm {
     namespace detail {
         struct CondExpr {
             virtual void operator()(Frontend &f, size_t beg, size_t end) const = 0;
-            virtual ~CondExpr() {
-            }
+            virtual ~CondExpr() {}
         };
 
         // &&
-        struct CondExpr_ExprAnd : CondExpr {
+        struct CondExpr_ExprAnd: CondExpr {
             const CondExpr &lhs_;
             const CondExpr &rhs_;
-            CondExpr_ExprAnd(const CondExpr &lhs, const CondExpr &rhs) : lhs_(lhs), rhs_(rhs) {
-            }
+            CondExpr_ExprAnd(const CondExpr &lhs, const CondExpr &rhs): lhs_(lhs), rhs_(rhs) {}
             void operator()(Frontend &f, size_t beg, size_t end) const {
                 size_t label = f.NewLabelID("");
                 lhs_(f, label, end);
@@ -16461,11 +16038,10 @@ namespace jitasm {
         };
 
         // ||
-        struct CondExpr_ExprOr : CondExpr {
+        struct CondExpr_ExprOr: CondExpr {
             const CondExpr &lhs_;
             const CondExpr &rhs_;
-            CondExpr_ExprOr(const CondExpr &lhs, const CondExpr &rhs) : lhs_(lhs), rhs_(rhs) {
-            }
+            CondExpr_ExprOr(const CondExpr &lhs, const CondExpr &rhs): lhs_(lhs), rhs_(rhs) {}
             void operator()(Frontend &f, size_t beg, size_t end) const {
                 size_t label = f.NewLabelID("");
                 lhs_(f, beg, label);
@@ -16476,11 +16052,11 @@ namespace jitasm {
         };
 
         // cmp
-        template <class L, class R, JumpCondition Jcc> struct CondExpr_Cmp : CondExpr {
+        template <class L, class R, JumpCondition Jcc>
+        struct CondExpr_Cmp: CondExpr {
             L lhs_;
             R rhs_;
-            CondExpr_Cmp(const L &lhs, const R &rhs) : lhs_(lhs), rhs_(rhs) {
-            }
+            CondExpr_Cmp(const L &lhs, const R &rhs): lhs_(lhs), rhs_(rhs) {}
             void operator()(Frontend &f, size_t beg, size_t end) const {
                 f.cmp(lhs_, rhs_);
                 f.AppendJcc(Jcc, beg);
@@ -16489,11 +16065,11 @@ namespace jitasm {
         };
 
         // or
-        template <class L, class R, JumpCondition Jcc> struct CondExpr_Or : CondExpr {
+        template <class L, class R, JumpCondition Jcc>
+        struct CondExpr_Or: CondExpr {
             L lhs_;
             R rhs_;
-            CondExpr_Or(const L &lhs, const R &rhs) : lhs_(lhs), rhs_(rhs) {
-            }
+            CondExpr_Or(const L &lhs, const R &rhs): lhs_(lhs), rhs_(rhs) {}
             void operator()(Frontend &f, size_t beg, size_t end) const {
                 f.or (lhs_, rhs_);
                 f.AppendJcc(Jcc, beg);
@@ -16542,181 +16118,229 @@ namespace jitasm {
 #endif
 
     // <
-    template <class R> detail::CondExpr_Cmp<Reg8, R, JCC_B> operator<(const Reg8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg8, R, JCC_B> operator<(const Reg8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg8, R, JCC_B>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg16, R, JCC_B> operator<(const Reg16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg16, R, JCC_B> operator<(const Reg16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg16, R, JCC_B>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg32, R, JCC_B> operator<(const Reg32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg32, R, JCC_B> operator<(const Reg32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg32, R, JCC_B>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Reg64, R, JCC_B> operator<(const Reg64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg64, R, JCC_B> operator<(const Reg64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg64, R, JCC_B>(lhs, rhs);
     }
 #endif
-    template <class R> detail::CondExpr_Cmp<Mem8, R, JCC_B> operator<(const Mem8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem8, R, JCC_B> operator<(const Mem8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem8, R, JCC_B>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem16, R, JCC_B> operator<(const Mem16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem16, R, JCC_B> operator<(const Mem16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem16, R, JCC_B>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem32, R, JCC_B> operator<(const Mem32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem32, R, JCC_B> operator<(const Mem32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem32, R, JCC_B>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Mem64, R, JCC_B> operator<(const Mem64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem64, R, JCC_B> operator<(const Mem64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem64, R, JCC_B>(lhs, rhs);
     }
 #endif
 
     // >
-    template <class R> detail::CondExpr_Cmp<Reg8, R, JCC_A> operator>(const Reg8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg8, R, JCC_A> operator>(const Reg8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg8, R, JCC_A>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg16, R, JCC_A> operator>(const Reg16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg16, R, JCC_A> operator>(const Reg16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg16, R, JCC_A>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg32, R, JCC_A> operator>(const Reg32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg32, R, JCC_A> operator>(const Reg32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg32, R, JCC_A>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Reg64, R, JCC_A> operator>(const Reg64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg64, R, JCC_A> operator>(const Reg64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg64, R, JCC_A>(lhs, rhs);
     }
 #endif
-    template <class R> detail::CondExpr_Cmp<Mem8, R, JCC_A> operator>(const Mem8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem8, R, JCC_A> operator>(const Mem8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem8, R, JCC_A>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem16, R, JCC_A> operator>(const Mem16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem16, R, JCC_A> operator>(const Mem16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem16, R, JCC_A>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem32, R, JCC_A> operator>(const Mem32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem32, R, JCC_A> operator>(const Mem32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem32, R, JCC_A>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Mem64, R, JCC_A> operator>(const Mem64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem64, R, JCC_A> operator>(const Mem64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem64, R, JCC_A>(lhs, rhs);
     }
 #endif
 
     // <=
-    template <class R> detail::CondExpr_Cmp<Reg8, R, JCC_BE> operator<=(const Reg8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg8, R, JCC_BE> operator<=(const Reg8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg8, R, JCC_BE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg16, R, JCC_BE> operator<=(const Reg16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg16, R, JCC_BE> operator<=(const Reg16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg16, R, JCC_BE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg32, R, JCC_BE> operator<=(const Reg32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg32, R, JCC_BE> operator<=(const Reg32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg32, R, JCC_BE>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Reg64, R, JCC_BE> operator<=(const Reg64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg64, R, JCC_BE> operator<=(const Reg64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg64, R, JCC_BE>(lhs, rhs);
     }
 #endif
-    template <class R> detail::CondExpr_Cmp<Mem8, R, JCC_BE> operator<=(const Mem8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem8, R, JCC_BE> operator<=(const Mem8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem8, R, JCC_BE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem16, R, JCC_BE> operator<=(const Mem16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem16, R, JCC_BE> operator<=(const Mem16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem16, R, JCC_BE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem32, R, JCC_BE> operator<=(const Mem32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem32, R, JCC_BE> operator<=(const Mem32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem32, R, JCC_BE>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Mem64, R, JCC_BE> operator<=(const Mem64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem64, R, JCC_BE> operator<=(const Mem64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem64, R, JCC_BE>(lhs, rhs);
     }
 #endif
 
     // >=
-    template <class R> detail::CondExpr_Cmp<Reg8, R, JCC_AE> operator>=(const Reg8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg8, R, JCC_AE> operator>=(const Reg8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg8, R, JCC_AE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg16, R, JCC_AE> operator>=(const Reg16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg16, R, JCC_AE> operator>=(const Reg16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg16, R, JCC_AE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg32, R, JCC_AE> operator>=(const Reg32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg32, R, JCC_AE> operator>=(const Reg32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg32, R, JCC_AE>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Reg64, R, JCC_AE> operator>=(const Reg64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg64, R, JCC_AE> operator>=(const Reg64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg64, R, JCC_AE>(lhs, rhs);
     }
 #endif
-    template <class R> detail::CondExpr_Cmp<Mem8, R, JCC_AE> operator>=(const Mem8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem8, R, JCC_AE> operator>=(const Mem8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem8, R, JCC_AE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem16, R, JCC_AE> operator>=(const Mem16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem16, R, JCC_AE> operator>=(const Mem16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem16, R, JCC_AE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem32, R, JCC_AE> operator>=(const Mem32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem32, R, JCC_AE> operator>=(const Mem32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem32, R, JCC_AE>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Mem64, R, JCC_AE> operator>=(const Mem64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem64, R, JCC_AE> operator>=(const Mem64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem64, R, JCC_AE>(lhs, rhs);
     }
 #endif
 
     // ==
-    template <class R> detail::CondExpr_Cmp<Reg8, R, JCC_E> operator==(const Reg8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg8, R, JCC_E> operator==(const Reg8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg8, R, JCC_E>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg16, R, JCC_E> operator==(const Reg16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg16, R, JCC_E> operator==(const Reg16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg16, R, JCC_E>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg32, R, JCC_E> operator==(const Reg32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg32, R, JCC_E> operator==(const Reg32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg32, R, JCC_E>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Reg64, R, JCC_E> operator==(const Reg64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg64, R, JCC_E> operator==(const Reg64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg64, R, JCC_E>(lhs, rhs);
     }
 #endif
-    template <class R> detail::CondExpr_Cmp<Mem8, R, JCC_E> operator==(const Mem8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem8, R, JCC_E> operator==(const Mem8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem8, R, JCC_E>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem16, R, JCC_E> operator==(const Mem16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem16, R, JCC_E> operator==(const Mem16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem16, R, JCC_E>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem32, R, JCC_E> operator==(const Mem32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem32, R, JCC_E> operator==(const Mem32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem32, R, JCC_E>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Mem64, R, JCC_E> operator==(const Mem64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem64, R, JCC_E> operator==(const Mem64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem64, R, JCC_E>(lhs, rhs);
     }
 #endif
 
     // !=
-    template <class R> detail::CondExpr_Cmp<Reg8, R, JCC_NE> operator!=(const Reg8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg8, R, JCC_NE> operator!=(const Reg8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg8, R, JCC_NE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg16, R, JCC_NE> operator!=(const Reg16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg16, R, JCC_NE> operator!=(const Reg16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg16, R, JCC_NE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Reg32, R, JCC_NE> operator!=(const Reg32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg32, R, JCC_NE> operator!=(const Reg32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg32, R, JCC_NE>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Reg64, R, JCC_NE> operator!=(const Reg64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Reg64, R, JCC_NE> operator!=(const Reg64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Reg64, R, JCC_NE>(lhs, rhs);
     }
 #endif
-    template <class R> detail::CondExpr_Cmp<Mem8, R, JCC_NE> operator!=(const Mem8 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem8, R, JCC_NE> operator!=(const Mem8 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem8, R, JCC_NE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem16, R, JCC_NE> operator!=(const Mem16 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem16, R, JCC_NE> operator!=(const Mem16 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem16, R, JCC_NE>(lhs, rhs);
     }
-    template <class R> detail::CondExpr_Cmp<Mem32, R, JCC_NE> operator!=(const Mem32 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem32, R, JCC_NE> operator!=(const Mem32 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem32, R, JCC_NE>(lhs, rhs);
     }
 #ifdef JITASM64
-    template <class R> detail::CondExpr_Cmp<Mem64, R, JCC_NE> operator!=(const Mem64 &lhs, const R &rhs) {
+    template <class R>
+    detail::CondExpr_Cmp<Mem64, R, JCC_NE> operator!=(const Mem64 &lhs, const R &rhs) {
         return detail::CondExpr_Cmp<Mem64, R, JCC_NE>(lhs, rhs);
     }
 #endif
@@ -16724,148 +16348,183 @@ namespace jitasm {
     namespace detail {
         // Flags for ArgumentTraits
         enum {
-            ARG_IN_REG = (1 << 0),     ///< Argument is stored in general purpose register.
-            ARG_IN_STACK = (1 << 1),   ///< Argument is stored on stack.
-            ARG_IN_MMX = (1 << 2),     ///< Argument is stored in mmx register.
-            ARG_IN_XMM_SP = (1 << 3),  ///< Argument is stored in xmm register as single precision.
-            ARG_IN_XMM_DP = (1 << 4),  ///< Argument is stored in xmm register as double precision.
+            ARG_IN_REG     = (1 << 0), ///< Argument is stored in general purpose register.
+            ARG_IN_STACK   = (1 << 1), ///< Argument is stored on stack.
+            ARG_IN_MMX     = (1 << 2), ///< Argument is stored in mmx register.
+            ARG_IN_XMM_SP  = (1 << 3), ///< Argument is stored in xmm register as single precision.
+            ARG_IN_XMM_DP  = (1 << 4), ///< Argument is stored in xmm register as double precision.
             ARG_IN_XMM_INT = (1 << 5), ///< Argument is stored in xmm register as integer.
             ARG_TYPE_VALUE = (1 << 6), ///< Argument is value which is passed.
-            ARG_TYPE_PTR = (1 << 7)    ///< Argument is pointer which is passed to.
+            ARG_TYPE_PTR   = (1 << 7)  ///< Argument is pointer which is passed to.
         };
 
         /// cdecl argument type traits
-        template <int N, class T, int Size = sizeof(T)> struct ArgTraits_cdecl {
+        template <int N, class T, int Size = sizeof(T)>
+        struct ArgTraits_cdecl {
             enum {
                 stack_size = (Size + 4 - 1) / 4 * 4,
-                flag = ARG_IN_STACK | ARG_TYPE_VALUE,
-                reg_id = INVALID
+                flag       = ARG_IN_STACK | ARG_TYPE_VALUE,
+                reg_id     = INVALID
             };
         };
 
 #if JITASM_MMINTRIN
         // specialization for __m64
-        template <int N> struct ArgTraits_cdecl<N, __m64, 8> {
+        template <int N>
+        struct ArgTraits_cdecl<N, __m64, 8> {
             enum {
                 stack_size = 0,
-                flag = ARG_IN_MMX | ARG_TYPE_VALUE,
-                reg_id = MM0
+                flag       = ARG_IN_MMX | ARG_TYPE_VALUE,
+                reg_id     = MM0
             };
         };
 #endif
 
 #if JITASM_XMMINTRIN
         // specialization for __m128
-        template <int N> struct ArgTraits_cdecl<N, __m128, 16> {
+        template <int N>
+        struct ArgTraits_cdecl<N, __m128, 16> {
             enum {
                 stack_size = 0,
-                flag = ARG_IN_XMM_SP | ARG_TYPE_VALUE,
-                reg_id = XMM0
+                flag       = ARG_IN_XMM_SP | ARG_TYPE_VALUE,
+                reg_id     = XMM0
             };
         };
 #endif
 
 #if JITASM_EMMINTRIN
         // specialization for __m128d
-        template <int N> struct ArgTraits_cdecl<N, __m128d, 16> {
+        template <int N>
+        struct ArgTraits_cdecl<N, __m128d, 16> {
             enum {
                 stack_size = 0,
-                flag = ARG_IN_XMM_DP | ARG_TYPE_VALUE,
-                reg_id = XMM0
+                flag       = ARG_IN_XMM_DP | ARG_TYPE_VALUE,
+                reg_id     = XMM0
             };
         };
 
         // specialization for __m128i
-        template <int N> struct ArgTraits_cdecl<N, __m128i, 16> {
+        template <int N>
+        struct ArgTraits_cdecl<N, __m128i, 16> {
             enum {
                 stack_size = 0,
-                flag = ARG_IN_XMM_INT | ARG_TYPE_VALUE,
-                reg_id = XMM0
+                flag       = ARG_IN_XMM_INT | ARG_TYPE_VALUE,
+                reg_id     = XMM0
             };
         };
 #endif
 
         /// Microsoft x64 fastcall argument type traits
-        template <int N, class T, int Size = sizeof(T)> struct ArgTraits_win64 {
+        template <int N, class T, int Size = sizeof(T)>
+        struct ArgTraits_win64 {
             enum {
                 stack_size = 8,
-                flag =
-                    ARG_IN_STACK | (Size == 1 || Size == 2 || Size == 4 || Size == 8 ? ARG_TYPE_VALUE : ARG_TYPE_PTR),
-                reg_id = INVALID
+                flag       = ARG_IN_STACK | (Size == 1 || Size == 2 || Size == 4 || Size == 8 ? ARG_TYPE_VALUE : ARG_TYPE_PTR),
+                reg_id     = INVALID
             };
         };
 
         /**
          * Base class for argument which is stored in general purpose register.
          */
-        template <int RegID, int Flag> struct ArgTraits_win64_reg {
+        template <int RegID, int Flag>
+        struct ArgTraits_win64_reg {
             enum {
                 stack_size = 8,
-                flag = Flag,
-                reg_id = RegID
+                flag       = Flag,
+                reg_id     = RegID
             };
         };
 
         // specialization for argument pointer stored in register
         template <class T, int Size>
-        struct ArgTraits_win64<0, T, Size> : ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_PTR> {};
+        struct ArgTraits_win64<0, T, Size>: ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_PTR> {};
         template <class T, int Size>
-        struct ArgTraits_win64<1, T, Size> : ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_PTR> {};
+        struct ArgTraits_win64<1, T, Size>: ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_PTR> {};
         template <class T, int Size>
-        struct ArgTraits_win64<2, T, Size> : ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_PTR> {};
+        struct ArgTraits_win64<2, T, Size>: ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_PTR> {};
         template <class T, int Size>
-        struct ArgTraits_win64<3, T, Size> : ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_PTR> {};
+        struct ArgTraits_win64<3, T, Size>: ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_PTR> {};
 
         // specialization for 1 byte type
-        template <class T> struct ArgTraits_win64<0, T, 1> : ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<1, T, 1> : ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<2, T, 1> : ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<3, T, 1> : ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<0, T, 1>: ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<1, T, 1>: ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<2, T, 1>: ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<3, T, 1>: ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
 
         // specialization for 2 bytes type
-        template <class T> struct ArgTraits_win64<0, T, 2> : ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<1, T, 2> : ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<2, T, 2> : ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<3, T, 2> : ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<0, T, 2>: ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<1, T, 2>: ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<2, T, 2>: ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<3, T, 2>: ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
 
         // specialization for 4 bytes type
-        template <class T> struct ArgTraits_win64<0, T, 4> : ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<1, T, 4> : ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<2, T, 4> : ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<3, T, 4> : ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<0, T, 4>: ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<1, T, 4>: ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<2, T, 4>: ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<3, T, 4>: ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
 
         // specialization for 8 bytes type
-        template <class T> struct ArgTraits_win64<0, T, 8> : ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<1, T, 8> : ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<2, T, 8> : ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <class T> struct ArgTraits_win64<3, T, 8> : ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<0, T, 8>: ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<1, T, 8>: ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<2, T, 8>: ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <class T>
+        struct ArgTraits_win64<3, T, 8>: ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
 
 #if JITASM_MMINTRIN
         // specialization for __m64
-        template <> struct ArgTraits_win64<0, __m64, 8> : ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<1, __m64, 8> : ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<2, __m64, 8> : ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<3, __m64, 8> : ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<0, __m64, 8>: ArgTraits_win64_reg<RCX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<1, __m64, 8>: ArgTraits_win64_reg<RDX, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<2, __m64, 8>: ArgTraits_win64_reg<R8, ARG_IN_REG | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<3, __m64, 8>: ArgTraits_win64_reg<R9, ARG_IN_REG | ARG_TYPE_VALUE> {};
 #endif
 
         // specialization for float
-        template <> struct ArgTraits_win64<0, float, 4> : ArgTraits_win64_reg<XMM0, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<1, float, 4> : ArgTraits_win64_reg<XMM1, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<2, float, 4> : ArgTraits_win64_reg<XMM2, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<3, float, 4> : ArgTraits_win64_reg<XMM3, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<0, float, 4>: ArgTraits_win64_reg<XMM0, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<1, float, 4>: ArgTraits_win64_reg<XMM1, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<2, float, 4>: ArgTraits_win64_reg<XMM2, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<3, float, 4>: ArgTraits_win64_reg<XMM3, ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
 
         // specialization for double
-        template <> struct ArgTraits_win64<0, double, 8> : ArgTraits_win64_reg<XMM0, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<1, double, 8> : ArgTraits_win64_reg<XMM1, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<2, double, 8> : ArgTraits_win64_reg<XMM2, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
-        template <> struct ArgTraits_win64<3, double, 8> : ArgTraits_win64_reg<XMM3, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<0, double, 8>: ArgTraits_win64_reg<XMM0, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<1, double, 8>: ArgTraits_win64_reg<XMM1, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<2, double, 8>: ArgTraits_win64_reg<XMM2, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
+        template <>
+        struct ArgTraits_win64<3, double, 8>: ArgTraits_win64_reg<XMM3, ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
 
         /// System V ABI AMD64 argument type traits
-        template <int N, class T, int Size = sizeof(T)> struct ArgTraits_linux64 {
+        template <int N, class T, int Size = sizeof(T)>
+        struct ArgTraits_linux64 {
             enum {
                 stack_size = (Size + 8 - 1) / 8 * 8,
-                flag = ARG_IN_STACK | ARG_TYPE_VALUE,
-                reg_id = INVALID
+                flag       = ARG_IN_STACK | ARG_TYPE_VALUE,
+                reg_id     = INVALID
             };
         };
 
@@ -16873,56 +16532,63 @@ namespace jitasm {
         struct ArgTraits_linux64_integer {
             enum {
                 stack_size = 0,
-                flag = ARG_IN_REG | ARG_TYPE_VALUE,
-                reg_id = RDI
+                flag       = ARG_IN_REG | ARG_TYPE_VALUE,
+                reg_id     = RDI
             };
         };
 
-        template <int N> struct ArgTraits_linux64<N, bool, sizeof(bool)> : ArgTraits_linux64_integer {};
-        template <int N> struct ArgTraits_linux64<N, char, sizeof(char)> : ArgTraits_linux64_integer {};
         template <int N>
-        struct ArgTraits_linux64<N, unsigned char, sizeof(unsigned char)> : ArgTraits_linux64_integer {};
-        template <int N> struct ArgTraits_linux64<N, short, sizeof(short)> : ArgTraits_linux64_integer {};
+        struct ArgTraits_linux64<N, bool, sizeof(bool)>: ArgTraits_linux64_integer {};
         template <int N>
-        struct ArgTraits_linux64<N, unsigned short, sizeof(unsigned short)> : ArgTraits_linux64_integer {};
-        template <int N> struct ArgTraits_linux64<N, int, sizeof(int)> : ArgTraits_linux64_integer {};
-        template <int N> struct ArgTraits_linux64<N, unsigned int, sizeof(unsigned int)> : ArgTraits_linux64_integer {};
-        template <int N> struct ArgTraits_linux64<N, long, sizeof(long)> : ArgTraits_linux64_integer {};
+        struct ArgTraits_linux64<N, char, sizeof(char)>: ArgTraits_linux64_integer {};
         template <int N>
-        struct ArgTraits_linux64<N, unsigned long, sizeof(unsigned long)> : ArgTraits_linux64_integer {};
-        template <int N> struct ArgTraits_linux64<N, long long, sizeof(long long)> : ArgTraits_linux64_integer {};
+        struct ArgTraits_linux64<N, unsigned char, sizeof(unsigned char)>: ArgTraits_linux64_integer {};
         template <int N>
-        struct ArgTraits_linux64<N, unsigned long long, sizeof(unsigned long long)> : ArgTraits_linux64_integer {};
-        template <int N, class T> struct ArgTraits_linux64<N, T *, 8> : ArgTraits_linux64_integer {};
+        struct ArgTraits_linux64<N, short, sizeof(short)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, unsigned short, sizeof(unsigned short)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, int, sizeof(int)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, unsigned int, sizeof(unsigned int)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, long, sizeof(long)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, unsigned long, sizeof(unsigned long)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, long long, sizeof(long long)>: ArgTraits_linux64_integer {};
+        template <int N>
+        struct ArgTraits_linux64<N, unsigned long long, sizeof(unsigned long long)>: ArgTraits_linux64_integer {};
+        template <int N, class T>
+        struct ArgTraits_linux64<N, T *, 8>: ArgTraits_linux64_integer {};
 
         // SSE class
-        template <int Flag> struct ArgTraits_linux64_sse {
+        template <int Flag>
+        struct ArgTraits_linux64_sse {
             enum {
                 stack_size = 0,
-                flag = Flag,
-                reg_id = XMM0
+                flag       = Flag,
+                reg_id     = XMM0
             };
         };
 
         template <int N>
-        struct ArgTraits_linux64<N, float, sizeof(float)> : ArgTraits_linux64_sse<ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
+        struct ArgTraits_linux64<N, float, sizeof(float)>: ArgTraits_linux64_sse<ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
         template <int N>
-        struct ArgTraits_linux64<N, double, sizeof(double)> : ArgTraits_linux64_sse<ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
+        struct ArgTraits_linux64<N, double, sizeof(double)>: ArgTraits_linux64_sse<ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
 #if JITASM_MMINTRIN
         template <int N>
-        struct ArgTraits_linux64<N, __m64, sizeof(__m64)> : ArgTraits_linux64_sse<ARG_IN_XMM_INT | ARG_TYPE_VALUE> {};
+        struct ArgTraits_linux64<N, __m64, sizeof(__m64)>: ArgTraits_linux64_sse<ARG_IN_XMM_INT | ARG_TYPE_VALUE> {};
 #endif
 #if JITASM_XMMINTRIN
         template <int N>
-        struct ArgTraits_linux64<N, __m128, sizeof(__m128)> : ArgTraits_linux64_sse<ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
+        struct ArgTraits_linux64<N, __m128, sizeof(__m128)>: ArgTraits_linux64_sse<ARG_IN_XMM_SP | ARG_TYPE_VALUE> {};
 #endif
 #if JITASM_EMMINTRIN
         template <int N>
-        struct ArgTraits_linux64<N, __m128d, sizeof(__m128d)> : ArgTraits_linux64_sse<ARG_IN_XMM_DP | ARG_TYPE_VALUE> {
-        };
+        struct ArgTraits_linux64<N, __m128d, sizeof(__m128d)>: ArgTraits_linux64_sse<ARG_IN_XMM_DP | ARG_TYPE_VALUE> {};
         template <int N>
-        struct ArgTraits_linux64<N, __m128i, sizeof(__m128i)> : ArgTraits_linux64_sse<ARG_IN_XMM_INT | ARG_TYPE_VALUE> {
-        };
+        struct ArgTraits_linux64<N, __m128i, sizeof(__m128i)>: ArgTraits_linux64_sse<ARG_IN_XMM_INT | ARG_TYPE_VALUE> {};
 #endif
 
         /// Special argument type
@@ -16937,15 +16603,11 @@ namespace jitasm {
             uint32 index_mmx;
             uint32 index_xmm;
 
-            ArgInfo(const Addr &addr_, PhysicalRegID reg_id_, uint32 flg, uint32 idx_gp = 0, uint32 idx_mmx = 0,
-                    uint32 idx_xmm_ = 0)
-                : addr(addr_), reg_id(reg_id_), flag(flg), index_gp(idx_gp), index_mmx(idx_mmx), index_xmm(idx_xmm_) {
-            }
+            ArgInfo(const Addr &addr_, PhysicalRegID reg_id_, uint32 flg, uint32 idx_gp = 0, uint32 idx_mmx = 0, uint32 idx_xmm_ = 0): addr(addr_), reg_id(reg_id_), flag(flg), index_gp(idx_gp), index_mmx(idx_mmx), index_xmm(idx_xmm_) {}
 
-            template <class CurArgTraits, class NextArgTraits> ArgInfo Next() const {
-                ArgInfo next_arg_info(addr + CurArgTraits::stack_size,
-                                      static_cast<PhysicalRegID>(NextArgTraits::reg_id), NextArgTraits::flag, index_gp,
-                                      index_mmx, index_xmm);
+            template <class CurArgTraits, class NextArgTraits>
+            ArgInfo Next() const {
+                ArgInfo next_arg_info(addr + CurArgTraits::stack_size, static_cast<PhysicalRegID>(NextArgTraits::reg_id), NextArgTraits::flag, index_gp, index_mmx, index_xmm);
                 if (CurArgTraits::flag & ARG_IN_REG)
                     next_arg_info.index_gp++;
                 if (CurArgTraits::flag & ARG_IN_MMX)
@@ -16960,7 +16622,7 @@ namespace jitasm {
                 // for x64 Linux
                 if (NextArgTraits::flag & ARG_IN_REG) {
                     const PhysicalRegID gp_regs[] = {RDI, RSI, RDX, RCX, R8, R9};
-                    next_arg_info.reg_id = next_arg_info.index_gp < 6 ? gp_regs[next_arg_info.index_gp] : INVALID;
+                    next_arg_info.reg_id          = next_arg_info.index_gp < 6 ? gp_regs[next_arg_info.index_gp] : INVALID;
                 }
                 if (CurArgTraits::flag & ARG_IN_REG) {
                     if (reg_id == INVALID) {
@@ -16972,9 +16634,9 @@ namespace jitasm {
                 // __m128/__m128d/__m128i
                 if (NextArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT)) {
                     if (next_arg_info.index_xmm < 8) {
-                        next_arg_info.reg_id =
-                            static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_xmm);
-                    } else {
+                        next_arg_info.reg_id = static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_xmm);
+                    }
+                    else {
                         next_arg_info.reg_id = INVALID;
                     }
                 }
@@ -16991,9 +16653,9 @@ namespace jitasm {
                 // __m64
                 if (NextArgTraits::flag & ARG_IN_MMX) {
                     if (next_arg_info.index_mmx < 3) {
-                        next_arg_info.reg_id =
-                            static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_mmx);
-                    } else {
+                        next_arg_info.reg_id = static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_mmx);
+                    }
+                    else {
                         next_arg_info.reg_id = INVALID;
                     }
                 }
@@ -17007,9 +16669,9 @@ namespace jitasm {
                 // __m128/__m128d/__m128i
                 if (NextArgTraits::flag & (ARG_IN_XMM_SP | ARG_IN_XMM_DP | ARG_IN_XMM_INT)) {
                     if (next_arg_info.index_xmm < 3) {
-                        next_arg_info.reg_id =
-                            static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_xmm);
-                    } else {
+                        next_arg_info.reg_id = static_cast<PhysicalRegID>(next_arg_info.reg_id + next_arg_info.index_xmm);
+                    }
+                    else {
                         next_arg_info.reg_id = INVALID;
                     }
                 }
@@ -17026,7 +16688,8 @@ namespace jitasm {
         };
 
         /// Result type traits
-        template <class T> struct ResultTraits {
+        template <class T>
+        struct ResultTraits {
             enum {
                 size = sizeof(T)
             };
@@ -17035,7 +16698,8 @@ namespace jitasm {
         };
 
         // specialization for void
-        template <> struct ResultTraits<void> {
+        template <>
+        struct ResultTraits<void> {
             enum {
                 size = 0
             };
@@ -17050,7 +16714,8 @@ namespace jitasm {
                 if (dest.reg_id != INVALID) {
                     // result pointer on register
                     f.DeclareRegArg(ptr, Reg(dest.reg_id), !dest.addr.reg_.IsInvalid() ? f.ptr[dest.addr] : Opd());
-                } else if (!dest.addr.reg_.IsInvalid()) {
+                }
+                else if (!dest.addr.reg_.IsInvalid()) {
                     // result pointer on stack
                     f.DeclareStackArg(ptr, f.ptr[dest.addr]);
                 }
@@ -17058,16 +16723,15 @@ namespace jitasm {
         };
 
         /// Function result
-        template <class T, int Size = ResultTraits<T>::size> struct ResultT {
+        template <class T, int Size = ResultTraits<T>::size>
+        struct ResultT {
             enum {
                 ArgR = 1 /* First (hidden) argument is pointer for copying result. */
             };
             typedef typename ResultTraits<T>::OpdR OpdR;
             OpdR val_;
-            ResultT() {
-            }
-            ResultT(const MemT<OpdR> &val) : val_(val) {
-            }
+            ResultT() {}
+            ResultT(const MemT<OpdR> &val): val_(val) {}
             void StoreResult(Frontend &f, const ResultDest &dst) {
                 if (val_.IsMem()) {
                     f.lea(f.zsi, static_cast<MemT<OpdR> &>(val_));
@@ -17079,7 +16743,8 @@ namespace jitasm {
         };
 
         // specialization for void
-        template <> struct ResultT<void, 0> {
+        template <>
+        struct ResultT<void, 0> {
             enum {
                 ArgR = 0
             };
@@ -17087,123 +16752,127 @@ namespace jitasm {
         };
 
         // specialization for 1byte type
-        template <class T> struct ResultT<T, 1> {
+        template <class T>
+        struct ResultT<T, 1> {
             enum {
                 ArgR = 0
             };
             Opd8 val_;
-            ResultT() {
-            }
-            ResultT(const Opd8 &val) : val_(val) {
-            }
-            ResultT(uint8 imm) : val_(Imm8(imm)) {
-            }
+            ResultT() {}
+            ResultT(const Opd8 &val): val_(val) {}
+            ResultT(uint8 imm): val_(Imm8(imm)) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
                 if (val_.IsGpReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != AL) {
+                    }
+                    else if (val_.GetReg().id != AL) {
                         f.mov(f.al, static_cast<Reg8 &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.mov(f.al, static_cast<Mem8 &>(val_));
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     f.mov(f.al, static_cast<Imm8 &>(val_));
                 }
             }
         };
 
         // specialization for 2bytes type
-        template <class T> struct ResultT<T, 2> {
+        template <class T>
+        struct ResultT<T, 2> {
             enum {
                 ArgR = 0
             };
             Opd16 val_;
-            ResultT() {
-            }
-            ResultT(const Opd16 &val) : val_(val) {
-            }
-            ResultT(uint16 imm) : val_(Imm16(imm)) {
-            }
+            ResultT() {}
+            ResultT(const Opd16 &val): val_(val) {}
+            ResultT(uint16 imm): val_(Imm16(imm)) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
                 if (val_.IsGpReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != AX) {
+                    }
+                    else if (val_.GetReg().id != AX) {
                         f.mov(f.ax, static_cast<Reg16 &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.mov(f.ax, static_cast<Mem16 &>(val_));
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     f.mov(f.ax, static_cast<Imm16 &>(val_));
                 }
             }
         };
 
         // specialization for 4bytes type
-        template <class T> struct ResultT<T, 4> {
+        template <class T>
+        struct ResultT<T, 4> {
             enum {
                 ArgR = 0
             };
             Opd32 val_;
-            ResultT() {
-            }
-            ResultT(const Opd32 &val) : val_(val) {
-            }
-            ResultT(uint32 imm) : val_(Imm32(imm)) {
-            }
+            ResultT() {}
+            ResultT(const Opd32 &val): val_(val) {}
+            ResultT(uint32 imm): val_(Imm32(imm)) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
                 if (val_.IsGpReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != EAX) {
+                    }
+                    else if (val_.GetReg().id != EAX) {
                         f.mov(f.eax, static_cast<Reg32 &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.mov(f.eax, static_cast<Mem32 &>(val_));
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     f.mov(f.eax, static_cast<Imm32 &>(val_));
                 }
             }
         };
 
         // specialization for 8bytes type
-        template <class T> struct ResultT<T, 8> {
+        template <class T>
+        struct ResultT<T, 8> {
             enum {
                 ArgR = 0
             };
             Opd64 val_;
-            ResultT() {
-            }
-            ResultT(const Opd64 &val) : val_(val) {
-            }
-            ResultT(uint64 imm) : val_(Imm64(imm)) {
-            }
+            ResultT() {}
+            ResultT(const Opd64 &val): val_(val) {}
+            ResultT(uint64 imm): val_(Imm64(imm)) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #ifdef JITASM64
                 if (val_.IsGpReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != RAX) {
+                    }
+                    else if (val_.GetReg().id != RAX) {
                         f.mov(f.rax, static_cast<Reg64 &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.mov(f.rax, static_cast<Mem64 &>(val_));
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     f.mov(f.rax, static_cast<Imm64 &>(val_));
-                } else if (val_.IsMmxReg()) {
+                }
+                else if (val_.IsMmxReg()) {
                     f.movq(f.rax, static_cast<MmxReg &>(val_));
                 }
 #else
                 if (val_.IsMem()) {
                     // from memory
-                    Mem32 lo(val_.GetAddressBaseSize(), val_.GetBase(), val_.GetIndex(), val_.GetScale(),
-                             val_.GetDisp());
-                    Mem32 hi(val_.GetAddressBaseSize(), val_.GetBase(), val_.GetIndex(), val_.GetScale(),
-                             val_.GetDisp() + 4);
+                    Mem32 lo(val_.GetAddressBaseSize(), val_.GetBase(), val_.GetIndex(), val_.GetScale(), val_.GetDisp());
+                    Mem32 hi(val_.GetAddressBaseSize(), val_.GetBase(), val_.GetIndex(), val_.GetScale(), val_.GetDisp() + 4);
                     f.mov(f.eax, lo);
                     f.mov(f.edx, hi);
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     // from immediate
                     f.mov(f.eax, static_cast<sint32>(val_.GetImm()));
                     f.mov(f.edx, static_cast<sint32>(val_.GetImm() >> 32));
@@ -17213,38 +16882,38 @@ namespace jitasm {
         };
 
         // specialization for float
-        template <> struct ResultT<float, 4> {
+        template <>
+        struct ResultT<float, 4> {
             enum {
                 ArgR = 0
             };
             detail::Opd val_;
-            ResultT() {
-            }
-            ResultT(const FpuReg &fpu) : val_(fpu) {
-            }
-            ResultT(const Mem32 &mem) : val_(mem) {
-            }
-            ResultT(const XmmReg &xmm) : val_(xmm) {
-            }
-            ResultT(const float imm) : val_(Imm32(*(uint32 *)&imm)) {
-            }
+            ResultT() {}
+            ResultT(const FpuReg &fpu): val_(fpu) {}
+            ResultT(const Mem32 &mem): val_(mem) {}
+            ResultT(const XmmReg &xmm): val_(xmm) {}
+            ResultT(const float imm): val_(Imm32(*(uint32 *)&imm)) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #ifdef JITASM64
                 if (val_.IsFpuReg()) {
                     // from FPU register
                     f.fstp(f.real4_ptr[f.rsp - 4]);
                     f.movss(f.xmm0, f.dword_ptr[f.rsp - 4]);
-                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_32) {
+                }
+                else if (val_.IsMem() && val_.GetSize() == O_SIZE_32) {
                     // from memory
                     f.movss(f.xmm0, static_cast<Mem32 &>(val_));
-                } else if (val_.IsXmmReg()) {
+                }
+                else if (val_.IsXmmReg()) {
                     // from XMM register
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != XMM0) {
+                    }
+                    else if (val_.GetReg().id != XMM0) {
                         f.movss(f.xmm0, static_cast<XmmReg &>(val_));
                     }
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     // from float immediate
                     f.mov(f.dword_ptr[f.rsp - 4], static_cast<Imm32 &>(val_));
                     f.movss(f.xmm0, f.dword_ptr[f.rsp - 4]);
@@ -17255,14 +16924,17 @@ namespace jitasm {
                     if (val_.GetReg().id != ST0) {
                         f.fld(static_cast<FpuReg &>(val_));
                     }
-                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_32) {
+                }
+                else if (val_.IsMem() && val_.GetSize() == O_SIZE_32) {
                     // from memory
                     f.fld(static_cast<Mem32 &>(val_));
-                } else if (val_.IsXmmReg()) {
+                }
+                else if (val_.IsXmmReg()) {
                     // from XMM register
                     f.movss(f.dword_ptr[f.esp - 4], static_cast<XmmReg &>(val_));
                     f.fld(f.real4_ptr[f.esp - 4]);
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     // from float immediate
                     f.mov(f.dword_ptr[f.esp - 4], static_cast<Imm32 &>(val_));
                     f.fld(f.real4_ptr[f.esp - 4]);
@@ -17272,39 +16944,39 @@ namespace jitasm {
         };
 
         // specialization for double
-        template <> struct ResultT<double, 8> {
+        template <>
+        struct ResultT<double, 8> {
             enum {
                 ArgR = 0
             };
             detail::Opd val_;
             double imm_;
-            ResultT() {
-            }
-            ResultT(const FpuReg &fpu) : val_(fpu) {
-            }
-            ResultT(const Mem64 &mem) : val_(mem) {
-            }
-            ResultT(const XmmReg &xmm) : val_(xmm) {
-            }
-            ResultT(const double imm) : val_(Imm32(0)), imm_(imm) {
-            }
+            ResultT() {}
+            ResultT(const FpuReg &fpu): val_(fpu) {}
+            ResultT(const Mem64 &mem): val_(mem) {}
+            ResultT(const XmmReg &xmm): val_(xmm) {}
+            ResultT(const double imm): val_(Imm32(0)), imm_(imm) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #ifdef JITASM64
                 if (val_.IsFpuReg()) {
                     // from FPU register
                     f.fstp(f.real8_ptr[f.rsp - 8]);
                     f.movsd(f.xmm0, f.qword_ptr[f.rsp - 8]);
-                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_64) {
+                }
+                else if (val_.IsMem() && val_.GetSize() == O_SIZE_64) {
                     // from memory
                     f.movsd(f.xmm0, static_cast<Mem64 &>(val_));
-                } else if (val_.IsXmmReg()) {
+                }
+                else if (val_.IsXmmReg()) {
                     // from XMM register
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != XMM0) {
+                    }
+                    else if (val_.GetReg().id != XMM0) {
                         f.movsd(f.xmm0, static_cast<XmmReg &>(val_));
                     }
-                } else if (val_.IsImm()) {
+                }
+                else if (val_.IsImm()) {
                     // from float immediate
                     f.mov(f.dword_ptr[f.rsp - 8], *reinterpret_cast<uint32 *>(&imm_));
                     f.mov(f.dword_ptr[f.rsp - 4], *(reinterpret_cast<uint32 *>(&imm_) + 1));
@@ -17316,14 +16988,17 @@ namespace jitasm {
                     if (val_.GetReg().id != ST0) {
                         f.fld(static_cast<FpuReg &>(val_));
                     }
-                } else if (val_.IsMem() && val_.GetSize() == O_SIZE_64) {
+                }
+                else if (val_.IsMem() && val_.GetSize() == O_SIZE_64) {
                     // from memory
                     f.fld(static_cast<Mem64 &>(val_));
-                } else if (val_.IsXmmReg()) {
+                }
+                else if (val_.IsXmmReg()) {
                     // from XMM register
                     f.movsd(f.qword_ptr[f.esp - 8], static_cast<XmmReg &>(val_));
                     f.fld(f.real8_ptr[f.esp - 8]);
-                } else if (val_.IsImm()) { // val_ is immediate 0
+                }
+                else if (val_.IsImm()) { // val_ is immediate 0
                     // from double immediate
                     f.mov(f.dword_ptr[f.esp - 8], *reinterpret_cast<uint32 *>(&imm_));
                     f.mov(f.dword_ptr[f.esp - 4], *(reinterpret_cast<uint32 *>(&imm_) + 1));
@@ -17335,32 +17010,33 @@ namespace jitasm {
 
 #if JITASM_MMINTRIN
         // specialization for __m64
-        template <> struct ResultT<__m64, 8> {
+        template <>
+        struct ResultT<__m64, 8> {
             enum {
                 ArgR = 0
             };
             Opd64 val_;
-            ResultT() {
-            }
-            ResultT(const MmxReg &mm) : val_(mm) {
-            }
-            ResultT(const Mem64 &mem) : val_(mem) {
-            }
+            ResultT() {}
+            ResultT(const MmxReg &mm): val_(mm) {}
+            ResultT(const Mem64 &mem): val_(mem) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
 #if defined(JITASM64) && !defined(JITASM_WIN)
                 if (val_.IsMmxReg()) {
                     f.movq2dq(f.xmm0, static_cast<const MmxReg &>(val_));
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.movq(f.xmm0, static_cast<const Mem64 &>(val_));
                 }
 #else
                 if (val_.IsMmxReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != MM0) {
+                    }
+                    else if (val_.GetReg().id != MM0) {
                         f.movq(f.mm0, static_cast<const MmxReg &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.movq(f.mm0, static_cast<const Mem64 &>(val_));
                 }
 #endif
@@ -17370,25 +17046,25 @@ namespace jitasm {
 
 #if JITASM_XMMINTRIN
         // specialization for __m128
-        template <> struct ResultT<__m128, 16> {
+        template <>
+        struct ResultT<__m128, 16> {
             enum {
                 ArgR = 0
             };
             Opd128 val_;
-            ResultT() {
-            }
-            ResultT(const XmmReg &xmm) : val_(xmm) {
-            }
-            ResultT(const Mem128 &mem) : val_(mem) {
-            }
+            ResultT() {}
+            ResultT(const XmmReg &xmm): val_(xmm) {}
+            ResultT(const Mem128 &mem): val_(mem) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
                 if (val_.IsXmmReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != XMM0) {
+                    }
+                    else if (val_.GetReg().id != XMM0) {
                         f.movaps(f.xmm0, static_cast<const XmmReg &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.movaps(f.xmm0, static_cast<const Mem128 &>(val_));
                 }
             }
@@ -17397,50 +17073,50 @@ namespace jitasm {
 
 #if JITASM_EMMINTRIN
         // specialization for __m128d
-        template <> struct ResultT<__m128d, 16> {
+        template <>
+        struct ResultT<__m128d, 16> {
             enum {
                 ArgR = 0
             };
             Opd128 val_;
-            ResultT() {
-            }
-            ResultT(const XmmReg &xmm) : val_(xmm) {
-            }
-            ResultT(const Mem128 &mem) : val_(mem) {
-            }
+            ResultT() {}
+            ResultT(const XmmReg &xmm): val_(xmm) {}
+            ResultT(const Mem128 &mem): val_(mem) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
                 if (val_.IsXmmReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != XMM0) {
+                    }
+                    else if (val_.GetReg().id != XMM0) {
                         f.movapd(f.xmm0, static_cast<const XmmReg &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.movapd(f.xmm0, static_cast<const Mem128 &>(val_));
                 }
             }
         };
 
         // specialization for __m128i
-        template <> struct ResultT<__m128i, 16> {
+        template <>
+        struct ResultT<__m128i, 16> {
             enum {
                 ArgR = 0
             };
             Opd128 val_;
-            ResultT() {
-            }
-            ResultT(const XmmReg &xmm) : val_(xmm) {
-            }
-            ResultT(const Mem128 &mem) : val_(mem) {
-            }
+            ResultT() {}
+            ResultT(const XmmReg &xmm): val_(xmm) {}
+            ResultT(const Mem128 &mem): val_(mem) {}
             void StoreResult(Frontend &f, const ResultDest & /*dst*/) {
                 if (val_.IsXmmReg()) {
                     if (val_.GetReg().IsSymbolic()) {
                         f.DeclareResultReg(val_);
-                    } else if (val_.GetReg().id != XMM0) {
+                    }
+                    else if (val_.GetReg().id != XMM0) {
                         f.movdqa(f.xmm0, static_cast<const XmmReg &>(val_));
                     }
-                } else if (val_.IsMem()) {
+                }
+                else if (val_.IsMem()) {
                     f.movdqa(f.xmm0, static_cast<const Mem128 &>(val_));
                 }
             }
@@ -17450,90 +17126,87 @@ namespace jitasm {
         namespace calling_convention_cdecl {
 #ifdef JITASM64
 #ifdef JITASM_WIN
-            template <int N, class T, int Size = sizeof(T)> struct ArgTraits : ArgTraits_win64<N, T, Size> {};
+            template <int N, class T, int Size = sizeof(T)>
+            struct ArgTraits: ArgTraits_win64<N, T, Size> {};
 #else
-            template <int N, class T, int Size = sizeof(T)> struct ArgTraits : ArgTraits_linux64<N, T, Size> {};
+            template <int N, class T, int Size = sizeof(T)>
+            struct ArgTraits: ArgTraits_linux64<N, T, Size> {};
 #endif
 #else
-            template <int N, class T, int Size = sizeof(T)> struct ArgTraits : ArgTraits_cdecl<N, T, Size> {};
+            template <int N, class T, int Size = sizeof(T)>
+            struct ArgTraits: ArgTraits_cdecl<N, T, Size> {};
 #endif
 
-            template <class R> ArgInfo ResultInfo() {
+            template <class R>
+            ArgInfo ResultInfo() {
                 if (ResultT<R>::ArgR) {
 #ifdef JITASM64
-                    return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, RBP), SIZE_OF_GP_REG * 2), RCX,
-                                   ARG_IN_REG | ARG_TYPE_PTR);
+                    return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, RBP), SIZE_OF_GP_REG * 2), RCX, ARG_IN_REG | ARG_TYPE_PTR);
 #else
-                    return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * 2), INVALID,
-                                   ARG_IN_STACK | ARG_TYPE_PTR);
+                    return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * 2), INVALID, ARG_IN_STACK | ARG_TYPE_PTR);
 #endif
-                } else {
+                }
+                else {
                     return ArgInfo(Addr(RegID::Invalid(), 0), INVALID, 0);
                 }
             }
 
-            template <class R, class A1> ArgInfo ArgInfo1() {
-                return ArgInfo(
-                    Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * (2 + ResultT<R>::ArgR)),
-                    static_cast<PhysicalRegID>(ArgTraits<ResultT<R>::ArgR + 0, A1>::reg_id),
-                    ArgTraits<ResultT<R>::ArgR + 0, A1>::flag);
+            template <class R, class A1>
+            ArgInfo ArgInfo1() {
+                return ArgInfo(Addr(RegID::CreatePhysicalRegID(R_TYPE_GP, EBP), SIZE_OF_GP_REG * (2 + ResultT<R>::ArgR)), static_cast<PhysicalRegID>(ArgTraits<ResultT<R>::ArgR + 0, A1>::reg_id), ArgTraits<ResultT<R>::ArgR + 0, A1>::flag);
             }
-            template <class R, class A1, class A2> ArgInfo ArgInfo2() {
-                return ArgInfo(ArgInfo1<R, A1>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 0, A1>, ArgTraits<ResultT<R>::ArgR + 1, A2>>();
+            template <class R, class A1, class A2>
+            ArgInfo ArgInfo2() {
+                return ArgInfo(ArgInfo1<R, A1>()).Next<ArgTraits<ResultT<R>::ArgR + 0, A1>, ArgTraits<ResultT<R>::ArgR + 1, A2>>();
             }
-            template <class R, class A1, class A2, class A3> ArgInfo ArgInfo3() {
-                return ArgInfo(ArgInfo2<R, A1, A2>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 1, A2>, ArgTraits<ResultT<R>::ArgR + 2, A3>>();
+            template <class R, class A1, class A2, class A3>
+            ArgInfo ArgInfo3() {
+                return ArgInfo(ArgInfo2<R, A1, A2>()).Next<ArgTraits<ResultT<R>::ArgR + 1, A2>, ArgTraits<ResultT<R>::ArgR + 2, A3>>();
             }
-            template <class R, class A1, class A2, class A3, class A4> ArgInfo ArgInfo4() {
-                return ArgInfo(ArgInfo3<R, A1, A2, A3>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 2, A3>, ArgTraits<ResultT<R>::ArgR + 3, A4>>();
+            template <class R, class A1, class A2, class A3, class A4>
+            ArgInfo ArgInfo4() {
+                return ArgInfo(ArgInfo3<R, A1, A2, A3>()).Next<ArgTraits<ResultT<R>::ArgR + 2, A3>, ArgTraits<ResultT<R>::ArgR + 3, A4>>();
             }
-            template <class R, class A1, class A2, class A3, class A4, class A5> ArgInfo ArgInfo5() {
-                return ArgInfo(ArgInfo4<R, A1, A2, A3, A4>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 3, A4>, ArgTraits<ResultT<R>::ArgR + 4, A5>>();
+            template <class R, class A1, class A2, class A3, class A4, class A5>
+            ArgInfo ArgInfo5() {
+                return ArgInfo(ArgInfo4<R, A1, A2, A3, A4>()).Next<ArgTraits<ResultT<R>::ArgR + 3, A4>, ArgTraits<ResultT<R>::ArgR + 4, A5>>();
             }
-            template <class R, class A1, class A2, class A3, class A4, class A5, class A6> ArgInfo ArgInfo6() {
-                return ArgInfo(ArgInfo5<R, A1, A2, A3, A4, A5>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 4, A5>, ArgTraits<ResultT<R>::ArgR + 5, A6>>();
+            template <class R, class A1, class A2, class A3, class A4, class A5, class A6>
+            ArgInfo ArgInfo6() {
+                return ArgInfo(ArgInfo5<R, A1, A2, A3, A4, A5>()).Next<ArgTraits<ResultT<R>::ArgR + 4, A5>, ArgTraits<ResultT<R>::ArgR + 5, A6>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7>
             ArgInfo ArgInfo7() {
-                return ArgInfo(ArgInfo6<R, A1, A2, A3, A4, A5, A6>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 5, A6>, ArgTraits<ResultT<R>::ArgR + 6, A7>>();
+                return ArgInfo(ArgInfo6<R, A1, A2, A3, A4, A5, A6>()).Next<ArgTraits<ResultT<R>::ArgR + 5, A6>, ArgTraits<ResultT<R>::ArgR + 6, A7>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8>
             ArgInfo ArgInfo8() {
-                return ArgInfo(ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 6, A7>, ArgTraits<ResultT<R>::ArgR + 7, A8>>();
+                return ArgInfo(ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()).Next<ArgTraits<ResultT<R>::ArgR + 6, A7>, ArgTraits<ResultT<R>::ArgR + 7, A8>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9>
             ArgInfo ArgInfo9() {
-                return ArgInfo(ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 7, A8>, ArgTraits<ResultT<R>::ArgR + 8, A9>>();
+                return ArgInfo(ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()).Next<ArgTraits<ResultT<R>::ArgR + 7, A8>, ArgTraits<ResultT<R>::ArgR + 8, A9>>();
             }
-            template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9,
-                      class A10>
+            template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10>
             ArgInfo ArgInfo10() {
-                return ArgInfo(ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>())
-                    .Next<ArgTraits<ResultT<R>::ArgR + 8, A9>, ArgTraits<ResultT<R>::ArgR + 9, A10>>();
+                return ArgInfo(ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()).Next<ArgTraits<ResultT<R>::ArgR + 8, A9>, ArgTraits<ResultT<R>::ArgR + 9, A10>>();
             }
 
             /// Function argument
-            template <class T, size_t Size = sizeof(T)> struct Arg {
+            template <class T, size_t Size = sizeof(T)>
+            struct Arg {
                 Addr addr_;
 #ifdef JITASM64
-                Arg(Frontend &f, const ArgInfo &arg_info) : addr_(Reg()) {
+                Arg(Frontend &f, const ArgInfo &arg_info): addr_(Reg()) {
                     if (arg_info.reg_id != INVALID) {
                         f.DeclareRegArg(Reg(addr_.reg_), Reg(arg_info.reg_id), f.ptr[arg_info.addr]);
-                    } else {
+                    }
+                    else {
                         f.DeclareStackArg(Reg(addr_.reg_), f.ptr[arg_info.addr]);
                     }
                 }
 #else
-                Arg(Frontend &f, const ArgInfo &arg_info) : addr_(arg_info.addr) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): addr_(arg_info.addr) {}
 #endif
                 operator Addr() {
                     return addr_;
@@ -17541,12 +17214,12 @@ namespace jitasm {
             };
 
             // specialization for 1byte type
-            template <class T> struct Arg<T, 1> {
+            template <class T>
+            struct Arg<T, 1> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
@@ -17561,21 +17234,22 @@ namespace jitasm {
                     Reg8 reg;
                     if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->byte_ptr[arg_info_.addr]); // argument on stack
-                    } else {
+                    }
+                    else {
                         f_->DeclareRegArg(reg, Reg8(arg_info_.reg_id),
-                                          f_->byte_ptr[arg_info_.addr]); // argument on register
+                            f_->byte_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
             };
 
             // specialization for 2byte type
-            template <class T> struct Arg<T, 2> {
+            template <class T>
+            struct Arg<T, 2> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
@@ -17590,21 +17264,22 @@ namespace jitasm {
                     Reg16 reg;
                     if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->word_ptr[arg_info_.addr]); // argument on stack
-                    } else {
+                    }
+                    else {
                         f_->DeclareRegArg(reg, Reg16(arg_info_.reg_id),
-                                          f_->word_ptr[arg_info_.addr]); // argument on register
+                            f_->word_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
             };
 
             // specialization for 4byte type
-            template <class T> struct Arg<T, 4> {
+            template <class T>
+            struct Arg<T, 4> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
@@ -17618,9 +17293,10 @@ namespace jitasm {
                     Reg32 reg;
                     if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->dword_ptr[arg_info_.addr]); // argument on stack
-                    } else {
+                    }
+                    else {
                         f_->DeclareRegArg(reg, Reg32(arg_info_.reg_id),
-                                          f_->dword_ptr[arg_info_.addr]); // argument on register
+                            f_->dword_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
@@ -17628,12 +17304,12 @@ namespace jitasm {
 
 #ifdef JITASM64
             // specialization for 8byte type
-            template <class T> struct Arg<T, 8> {
+            template <class T>
+            struct Arg<T, 8> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
                     // Dump to shadow space when x64 argument on register
                     if (arg_info_.reg_id != INVALID) {
@@ -17645,9 +17321,10 @@ namespace jitasm {
                     Reg64 reg;
                     if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]); // argument on stack
-                    } else {
+                    }
+                    else {
                         f_->DeclareRegArg(reg, Reg64(arg_info_.reg_id),
-                                          f_->qword_ptr[arg_info_.addr]); // argument on register
+                            f_->qword_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
@@ -17655,12 +17332,12 @@ namespace jitasm {
 #endif
 
             // specialization for float
-            template <> struct Arg<float, 4> {
+            template <>
+            struct Arg<float, 4> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
@@ -17674,7 +17351,8 @@ namespace jitasm {
                     XmmReg reg;
                     if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->dword_ptr[arg_info_.addr]); // argument on stack
-                    } else {
+                    }
+                    else {
                         f_->DeclareRegArg(reg, XmmReg(arg_info_.reg_id)); // argument on register
                     }
                     return reg;
@@ -17682,12 +17360,12 @@ namespace jitasm {
             };
 
             // specialization for double
-            template <> struct Arg<double, 8> {
+            template <>
+            struct Arg<double, 8> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
 #ifdef JITASM64
                     // Dump to shadow space when x64 argument on register
@@ -17701,7 +17379,8 @@ namespace jitasm {
                     XmmReg reg;
                     if (arg_info_.reg_id == INVALID) {
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]); // argument on stack
-                    } else {
+                    }
+                    else {
                         f_->DeclareRegArg(reg, XmmReg(arg_info_.reg_id)); // argument on register
                     }
                     return reg;
@@ -17710,12 +17389,12 @@ namespace jitasm {
 
 #if JITASM_MMINTRIN
             // specialization for __m64
-            template <> struct Arg<__m64, 8> {
+            template <>
+            struct Arg<__m64, 8> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
                     if (arg_info_.reg_id != INVALID) {
                         // Passed by mmx register
@@ -17728,21 +17407,24 @@ namespace jitasm {
                             f_->mov(f_->qword_ptr[arg_info_.addr], arg);
 #endif
                             return arg_info_.addr;
-                        } else if (arg_info_.flag & ARG_IN_XMM_INT) {
+                        }
+                        else if (arg_info_.flag & ARG_IN_XMM_INT) {
                             // x64 Linux
                             XmmReg arg;
                             f_->DeclareRegArg(arg, XmmReg(arg_info_.reg_id));
                             Addr addr = f_->stack_manager_.Alloc(8, 8);
                             f_->movq(f_->qword_ptr[addr], arg);
                             return addr;
-                        } else {
+                        }
+                        else {
                             MmxReg arg;
                             f_->DeclareRegArg(arg, MmxReg(arg_info_.reg_id));
                             Addr addr = f_->stack_manager_.Alloc(8, 8);
                             f_->movq(f_->qword_ptr[addr], arg);
                             return addr;
                         }
-                    } else {
+                    }
+                    else {
                         // Passed by stack
                         return arg_info_.addr;
                     }
@@ -17758,15 +17440,18 @@ namespace jitasm {
                             f_->DeclareRegArg(arg, Reg64(arg_info_.reg_id));
                             f_->movq(reg, arg);
 #endif
-                        } else if (arg_info_.flag & ARG_IN_XMM_INT) {
+                        }
+                        else if (arg_info_.flag & ARG_IN_XMM_INT) {
                             // x64 Linux
                             XmmReg arg;
                             f_->DeclareRegArg(arg, XmmReg(arg_info_.reg_id));
                             f_->movdq2q(reg, arg);
-                        } else {
+                        }
+                        else {
                             f_->DeclareRegArg(reg, MmxReg(arg_info_.reg_id));
                         }
-                    } else {
+                    }
+                    else {
                         // Passed by stack
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]);
                     }
@@ -17777,26 +17462,29 @@ namespace jitasm {
 
 #if JITASM_XMMINTRIN
             // specialization for __m128
-            template <> struct Arg<__m128, 16> {
+            template <>
+            struct Arg<__m128, 16> {
                 Frontend *f_;
                 ArgInfo arg_info_;
 
-                Arg(Frontend &f, const ArgInfo &arg_info) : f_(&f), arg_info_(arg_info) {
-                }
+                Arg(Frontend &f, const ArgInfo &arg_info): f_(&f), arg_info_(arg_info) {}
                 operator Addr() {
                     if (arg_info_.flag & ARG_TYPE_PTR) {
                         Reg ptr;
                         if (arg_info_.reg_id != INVALID) {
                             f_->DeclareRegArg(ptr, Reg(arg_info_.reg_id)); // argument on register
-                        } else {
+                        }
+                        else {
                             f_->mov(ptr, f_->ptr[arg_info_.addr]);
                         }
                         return ptr;
-                    } else if (arg_info_.reg_id != INVALID) {
+                    }
+                    else if (arg_info_.reg_id != INVALID) {
                         Addr addr = f_->stack_manager_.Alloc(16, 16);
                         f_->movdqa(f_->xmmword_ptr[addr], XmmReg(arg_info_.reg_id));
                         return addr;
-                    } else {
+                    }
+                    else {
                         return arg_info_.addr;
                     }
                 }
@@ -17807,16 +17495,19 @@ namespace jitasm {
                         if (arg_info_.reg_id != INVALID) {
                             // argument pointer on register
                             f_->movdqa(reg, f_->xmmword_ptr[Reg(arg_info_.reg_id)]);
-                        } else {
+                        }
+                        else {
                             // argument pointer on stack
                             Reg ptr;
                             f_->mov(ptr, f_->ptr[arg_info_.addr]);
                             f_->movdqa(reg, f_->xmmword_ptr[ptr]);
                         }
-                    } else if (arg_info_.reg_id != INVALID) {
+                    }
+                    else if (arg_info_.reg_id != INVALID) {
                         // Passed by xmm register
                         f_->DeclareRegArg(reg, XmmReg(arg_info_.reg_id));
-                    } else {
+                    }
+                    else {
                         // Passed by stack
                         f_->DeclareStackArg(reg, f_->xmmword_ptr[arg_info_.addr]);
                     }
@@ -17827,14 +17518,14 @@ namespace jitasm {
 
 #if JITASM_EMMINTRIN
             // specialization for __m128d, __m128i
-            template <> struct Arg<__m128d, 16> : Arg<__m128, 16> {
-                Arg(Frontend &f, const ArgInfo &arg_info) : Arg<__m128, 16>(f, arg_info) {
-                }
+            template <>
+            struct Arg<__m128d, 16>: Arg<__m128, 16> {
+                Arg(Frontend &f, const ArgInfo &arg_info): Arg<__m128, 16>(f, arg_info) {}
             };
 
-            template <> struct Arg<__m128i, 16> : Arg<__m128, 16> {
-                Arg(Frontend &f, const ArgInfo &arg_info) : Arg<__m128, 16>(f, arg_info) {
-                }
+            template <>
+            struct Arg<__m128i, 16>: Arg<__m128, 16> {
+                Arg(Frontend &f, const ArgInfo &arg_info): Arg<__m128, 16>(f, arg_info) {}
             };
 #endif // JITASM_EMMINTRIN
         } // namespace calling_convention_cdecl
@@ -17842,11 +17533,9 @@ namespace jitasm {
     } // namespace detail
 
     /// cdecl function
-    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone,
-              class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone,
-              class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone,
-              class A9 = detail::ArgNone, class A10 = detail::ArgNone>
-    struct function_cdecl : Frontend {
+    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone, class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone, class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone,
+        class A9 = detail::ArgNone, class A10 = detail::ArgNone>
+    struct function_cdecl: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -17862,23 +17551,17 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()),
-                       Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
-                       Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                       Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()),
-                       Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                       Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()),
-                       Arg<A10>(*this, ArgInfo10<R, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()),
+                    Arg<A10>(*this, ArgInfo10<R, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
     };
 
     // specialization for 10 arguments and no result
-    template <class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9,
-              class A10>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10> : Frontend {
+    template <class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10>
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17889,23 +17572,16 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()),
-                Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
-                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()),
-                Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()),
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()),
                 Arg<A10>(*this, ArgInfo10<void, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10>()));
             Epilog();
         }
     };
 
     // specialization for 9 arguments
-    template <class R, class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8,
-              class A9>
-    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, detail::ArgNone> : Frontend {
+    template <class R, class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9>
+    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8, A9);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -17920,13 +17596,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()),
-                       Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
-                       Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                       Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()),
-                       Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                       Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17934,7 +17605,7 @@ namespace jitasm {
 
     // specialization for 9 arguments and no result
     template <class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8, A9);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17945,21 +17616,15 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()),
-                Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
-                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()),
-                Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()),
-                Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()), Arg<A9>(*this, ArgInfo9<void, A1, A2, A3, A4, A5, A6, A7, A8, A9>()));
             Epilog();
         }
     };
 
     // specialization for 8 arguments
     template <class R, class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8>
-    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -17974,12 +17639,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()),
-                       Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
-                       Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                       Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()),
-                       Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -17987,7 +17648,7 @@ namespace jitasm {
 
     // specialization for 8 arguments and no result
     template <class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, A8, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, A8, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7, A8);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -17998,21 +17659,15 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()),
-                Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
-                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()),
-                Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()), Arg<A8>(*this, ArgInfo8<void, A1, A2, A3, A4, A5, A6, A7, A8>()));
             Epilog();
         }
     };
 
     // specialization for 7 arguments
     template <class R, class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7>
-    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, detail::ArgNone, detail::ArgNone, detail::ArgNone>
-        : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18027,11 +17682,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()),
-                       Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
-                       Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()),
-                       Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -18039,8 +17691,7 @@ namespace jitasm {
 
     // specialization for 7 arguments and no result
     template <class Derived, class A1, class A2, class A3, class A4, class A5, class A6, class A7>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, detail::ArgNone, detail::ArgNone, detail::ArgNone>
-        : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, A7, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4, A5, A6, A7);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18051,20 +17702,15 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()),
-                Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
-                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()),
-                Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+                Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()), Arg<A7>(*this, ArgInfo7<void, A1, A2, A3, A4, A5, A6, A7>()));
             Epilog();
         }
     };
 
     // specialization for 6 arguments
     template <class R, class Derived, class A1, class A2, class A3, class A4, class A5, class A6>
-    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5, A6);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18079,10 +17725,8 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()),
-                       Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
-                       Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()),
+                    Arg<A6>(*this, ArgInfo6<R, A1, A2, A3, A4, A5, A6>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -18090,8 +17734,7 @@ namespace jitasm {
 
     // specialization for 6 arguments and no result
     template <class Derived, class A1, class A2, class A3, class A4, class A5, class A6>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, A6, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4, A5, A6);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18102,10 +17745,7 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()),
-                Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()),
                 Arg<A6>(*this, ArgInfo6<void, A1, A2, A3, A4, A5, A6>()));
             Epilog();
         }
@@ -18113,8 +17753,7 @@ namespace jitasm {
 
     // specialization for 5 arguments
     template <class R, class Derived, class A1, class A2, class A3, class A4, class A5>
-    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, A3, A4, A5, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4, A5);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18129,9 +17768,7 @@ namespace jitasm {
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
             static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()),
-                       Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()))
+                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<R, A1, A2, A3, A4, A5>()))
                 .StoreResult(*this, result_dst);
             Epilog();
         }
@@ -18139,8 +17776,7 @@ namespace jitasm {
 
     // specialization for 5 arguments and no result
     template <class Derived, class A1, class A2, class A3, class A4, class A5>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, A5, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4, A5);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18151,18 +17787,14 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()),
-                Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()), Arg<A5>(*this, ArgInfo5<void, A1, A2, A3, A4, A5>()));
             Epilog();
         }
     };
 
     // specialization for 4 arguments
     template <class R, class Derived, class A1, class A2, class A3, class A4>
-    struct function_cdecl<R, Derived, A1, A2, A3, A4, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, A3, A4, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3, A4);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18176,18 +17808,14 @@ namespace jitasm {
             using namespace detail::calling_convention_cdecl;
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
-            static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>()))
-                .StoreResult(*this, result_dst);
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<R, A1, A2, A3, A4>())).StoreResult(*this, result_dst);
             Epilog();
         }
     };
 
     // specialization for 4 arguments and no result
     template <class Derived, class A1, class A2, class A3, class A4>
-    struct function_cdecl<void, Derived, A1, A2, A3, A4, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, A4, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3, A4);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18198,17 +17826,14 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(
-                Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()), Arg<A4>(*this, ArgInfo4<void, A1, A2, A3, A4>()));
             Epilog();
         }
     };
 
     // specialization for 3 arguments
     template <class R, class Derived, class A1, class A2, class A3>
-    struct function_cdecl<R, Derived, A1, A2, A3, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, A3, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2, A3);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18222,18 +17847,14 @@ namespace jitasm {
             using namespace detail::calling_convention_cdecl;
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
-            static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()),
-                       Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>()))
-                .StoreResult(*this, result_dst);
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()), Arg<A3>(*this, ArgInfo3<R, A1, A2, A3>())).StoreResult(*this, result_dst);
             Epilog();
         }
     };
 
     // specialization for 3 arguments and no result
     template <class Derived, class A1, class A2, class A3>
-    struct function_cdecl<void, Derived, A1, A2, A3, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, A3, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2, A3);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18244,17 +17865,14 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()),
-                                               Arg<A2>(*this, ArgInfo2<void, A1, A2>()),
-                                               Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()), Arg<A3>(*this, ArgInfo3<void, A1, A2, A3>()));
             Epilog();
         }
     };
 
     // specialization for 2 arguments
     template <class R, class Derived, class A1, class A2>
-    struct function_cdecl<R, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1, A2);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18268,17 +17886,14 @@ namespace jitasm {
             using namespace detail::calling_convention_cdecl;
             Prolog();
             detail::ResultDest result_dst(*this, ResultInfo<R>());
-            static_cast<Derived *>(this)
-                ->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>()))
-                .StoreResult(*this, result_dst);
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<R, A1>()), Arg<A2>(*this, ArgInfo2<R, A1, A2>())).StoreResult(*this, result_dst);
             Epilog();
         }
     };
 
     // specialization for 2 arguments and no result
     template <class Derived, class A1, class A2>
-    struct function_cdecl<void, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, A1, A2, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1, A2);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18289,17 +17904,14 @@ namespace jitasm {
         void naked_main() {
             using namespace detail::calling_convention_cdecl;
             Prolog();
-            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()),
-                                               Arg<A2>(*this, ArgInfo2<void, A1, A2>()));
+            static_cast<Derived *>(this)->main(Arg<A1>(*this, ArgInfo1<void, A1>()), Arg<A2>(*this, ArgInfo2<void, A1, A2>()));
             Epilog();
         }
     };
 
     // specialization for 1 argument
     template <class R, class Derived, class A1>
-    struct function_cdecl<R, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>
-        : Frontend {
+    struct function_cdecl<R, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)(A1);
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18320,9 +17932,7 @@ namespace jitasm {
 
     // specialization for 1 argument and no result
     template <class Derived, class A1>
-    struct function_cdecl<void, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>
-        : Frontend {
+    struct function_cdecl<void, Derived, A1, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)(A1);
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18340,9 +17950,7 @@ namespace jitasm {
 
     // specialization for no arguments
     template <class R, class Derived>
-    struct function_cdecl<R, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone> : Frontend {
+    struct function_cdecl<R, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef R (*FuncPtr)();
         typedef detail::ResultT<R> Result; ///< main function result type
         typename detail::ResultTraits<R>::ResultPtr result_ptr;
@@ -18362,9 +17970,7 @@ namespace jitasm {
 
     // specialization for no arguments and no result
     template <class Derived>
-    struct function_cdecl<void, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone,
-                          detail::ArgNone> : Frontend {
+    struct function_cdecl<void, Derived, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone, detail::ArgNone>: Frontend {
         typedef void (*FuncPtr)();
         operator FuncPtr() {
             return (FuncPtr)GetCode();
@@ -18380,11 +17986,9 @@ namespace jitasm {
     };
 
     /// function
-    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone,
-              class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone,
-              class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone,
-              class A9 = detail::ArgNone, class A10 = detail::ArgNone>
-    struct function : function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10> {};
+    template <class R, class Derived, class A1 = detail::ArgNone, class A2 = detail::ArgNone, class A3 = detail::ArgNone, class A4 = detail::ArgNone, class A5 = detail::ArgNone, class A6 = detail::ArgNone, class A7 = detail::ArgNone, class A8 = detail::ArgNone,
+        class A9 = detail::ArgNone, class A10 = detail::ArgNone>
+    struct function: function_cdecl<R, Derived, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10> {};
 
 } // namespace jitasm
 

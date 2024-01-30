@@ -30,8 +30,7 @@ namespace Framework::External::Optick {
 
         static void Shutdown();
 
-        static void SetAllocator(::Optick::AllocateFn allocateFn, ::Optick::DeallocateFn deallocateFn,
-                                 ::Optick::InitThreadCb initThreadCb);
+        static void SetAllocator(::Optick::AllocateFn allocateFn, ::Optick::DeallocateFn deallocateFn, ::Optick::InitThreadCb initThreadCb);
 
         static void SetStateChangedCallback(::Optick::StateCallback stateCallback);
     };

@@ -19,6 +19,5 @@ namespace Framework::Graphics {
         return true;
     }
 
-    void D3D9Backend::Update() {
-    }
+    void D3D9Backend::Update() {}
 } // namespace Framework::Graphics

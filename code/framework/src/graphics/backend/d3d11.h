@@ -13,12 +13,12 @@
 #ifdef WIN32
 #include <d3d11.h>
 #else
-#define ID3D11Device void
+#define ID3D11Device        void
 #define ID3D11DeviceContext void
 #endif
 
 namespace Framework::Graphics {
-    class D3D11Backend : public Backend<ID3D11Device *, ID3D11DeviceContext *, void *, void *> {
+    class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, void *, void *> {
       public:
         bool Init(ID3D11Device *, ID3D11DeviceContext *, void *, void *) override;
         bool Shutdown() override;

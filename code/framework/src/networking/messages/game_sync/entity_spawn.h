@@ -15,9 +15,9 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntitySpawn final : public GameSyncMessage {
+    class GameSyncEntitySpawn final: public GameSyncMessage {
       private:
-        World::Modules::Base::Transform _transform{};
+        World::Modules::Base::Transform _transform {};
 
       public:
         uint8_t GetMessageID() const override {

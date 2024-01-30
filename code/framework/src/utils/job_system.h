@@ -56,8 +56,8 @@ namespace Framework::Utils {
         struct Job {
             JobProc proc;
             JobPriority priority = JobPriority::Normal;
-            JobStatus status = JobStatus::Invalid;
-            bool repeatOnFail = false;
+            JobStatus status     = JobStatus::Invalid;
+            bool repeatOnFail    = false;
         };
 
         using JobQueue = std::queue<Job>;
@@ -65,7 +65,7 @@ namespace Framework::Utils {
         std::vector<std::thread> _threads;
         std::recursive_mutex _mutex;
         std::atomic_bool _pendingShutdown = false;
-        std::atomic_uint64_t _counter = 0;
+        std::atomic_uint64_t _counter     = 0;
 
         /**
          * Don't touch or shit explodes

@@ -15,7 +15,7 @@
 #include <flecs/flecs.h>
 
 namespace Framework::Networking::Messages {
-    class ClientKick final : public IMessage {
+    class ClientKick final: public IMessage {
       private:
         DisconnectionReason _reason = DisconnectionReason::UNKNOWN;
 
