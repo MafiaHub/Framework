@@ -22,6 +22,9 @@ namespace Framework::Utils::Version {
     }
 
     bool VersionSatisfies(const char *a, const char *b) {
+        if (!a && !b) {
+            return true;
+        })
         semver_t va, vb;
         if (!BuildVersion(a, va)) {
             return false;
