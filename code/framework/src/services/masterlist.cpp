@@ -14,7 +14,7 @@ namespace Framework::Services {
     MasterlistConnector::MasterlistConnector() {
         _client = std::make_shared<httplib::Client>("https://api.mafiahub.dev");
     }
-    bool MasterlistConnector::Init(const std::string pushKey) {
+    bool MasterlistConnector::Init(const std::string &pushKey) {
         if (pushKey.empty()) {
             return false;
         }
