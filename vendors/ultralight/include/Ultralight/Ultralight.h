@@ -21,6 +21,8 @@
 #include <Ultralight/Listener.h>
 #include <Ultralight/Matrix.h>
 #include <Ultralight/MouseEvent.h>
+#include <Ultralight/NetworkRequest.h>
+#include <Ultralight/ConsoleMessage.h>
 #include <Ultralight/Renderer.h>
 #include <Ultralight/Geometry.h>
 #include <Ultralight/RenderTarget.h>

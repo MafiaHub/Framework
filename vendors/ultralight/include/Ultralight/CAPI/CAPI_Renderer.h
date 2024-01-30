@@ -63,6 +63,14 @@ ULExport void ulDestroyRenderer(ULRenderer renderer);
 ULExport void ulUpdate(ULRenderer renderer);
 
 ///
+/// Notify the renderer that a display has refreshed (you should call this after vsync).
+///
+/// This updates animations, smooth scroll, and window.requestAnimationFrame() for all Views
+/// matching the display id.
+///
+ULExport void ulRefreshDisplay(ULRenderer renderer, unsigned int display_id);
+
+///
 /// Render all active Views.
 ///
 ULExport void ulRender(ULRenderer renderer);

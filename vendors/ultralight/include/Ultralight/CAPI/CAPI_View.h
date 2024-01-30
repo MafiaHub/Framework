@@ -120,7 +120,7 @@ ULExport void ulViewConfigSetUserAgent(ULViewConfig config, ULString agent_strin
 /// @note  You can pass null to 'session' to use the default session.
 ///
 ULExport ULView ulCreateView(ULRenderer renderer, unsigned int width, unsigned int height,
-                             ULViewConfig view_config, ULSession session);
+                             ULViewConfig view_config, ULSession session, unsigned int display_id);
 
 ///
 /// Destroy a View.
@@ -150,6 +150,10 @@ ULExport unsigned int ulViewGetWidth(ULView view);
 /// Get the height, in pixels.
 ///
 ULExport unsigned int ulViewGetHeight(ULView view);
+
+ULExport unsigned int ulViewGetDisplayId(ULView view);
+
+ULExport void ulViewSetDisplayId(ULView view, unsigned int display_id);
 
 ///
 /// Get the device scale, ie. the amount to scale page units to screen pixels.

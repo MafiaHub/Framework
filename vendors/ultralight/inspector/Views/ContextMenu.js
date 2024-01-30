@@ -116,6 +116,13 @@ WI.ContextSubMenuItem = class ContextSubMenuItem extends WI.ContextMenuItem
         return item;
     }
 
+    appendHeader(label)
+    {
+        return this.appendItem(label, () => {
+            console.assert(false, "not reached");
+        }, true);
+    }
+
     appendSeparator()
     {
         if (this._items.length)
@@ -205,7 +212,7 @@ WI.ContextMenu = class ContextMenu extends WI.ContextSubMenuItem
                 this._event.target.addEventListener("contextmenu", this, true);
                 InspectorFrontendHost.dispatchEventAsContextMenuEvent(this._event);
             } else
-                this._showSoftContextMenu(this._event, menuObject);
+                InspectorFrontendHost.showContextMenu(this._event, menuObject);
         }
 
         if (this._event)
@@ -227,7 +234,7 @@ WI.ContextMenu = class ContextMenu extends WI.ContextSubMenuItem
             callback(this);
 
         this._event.target.removeEventListener("contextmenu", this, true);
-        this._showSoftContextMenu(event, this._menuObject);
+        InspectorFrontendHost.showContextMenu(event, this._menuObject);
         this._menuObject = null;
 
         event.stopImmediatePropagation();
@@ -248,13 +255,12 @@ WI.ContextMenu = class ContextMenu extends WI.ContextSubMenuItem
 
     _itemSelected(id)
     {
-        if (this._handlers[id])
-            this._handlers[id].call(this);
-    }
-
-    _showSoftContextMenu(event, menuObject)
-    {
-        new WI.SoftContextMenu(menuObject).show(event);
+        try {
+            if (this._handlers[id])
+                this._handlers[id].call(this);
+        } catch (e) {
+            WI.reportInternalError(e);
+        }
     }
 };
 
