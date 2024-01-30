@@ -9,8 +9,8 @@
 #include "instance.h"
 
 #include <networking/messages/client_connection_finalized.h>
-#include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_handshake.h>
+#include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
 
 #include <world/game_rpc/set_transform.h>
@@ -116,7 +116,7 @@ namespace Framework::Integrations::Client {
                 case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(_opts.rendererOptions.d3d9.device, nullptr, nullptr, nullptr); break;
                 case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions.d3d11.device, _opts.rendererOptions.d3d11.deviceContext, nullptr, nullptr); break;
                 case Graphics::RendererBackend::BACKEND_D3D_12: {
-                    const auto& ctx = _opts.rendererOptions.d3d12;
+                    const auto &ctx = _opts.rendererOptions.d3d12;
                     _renderer->GetD3D12Backend()->Init(ctx.device, nullptr, ctx.swapchain, ctx.commandQueue);
                 } break;
                 default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
@@ -214,7 +214,7 @@ namespace Framework::Integrations::Client {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
             ClientHandshake msg;
-            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Utils::Version::rel, _opts.gameVersion, _opts.gameName);
+            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", _opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
@@ -259,7 +259,7 @@ namespace Framework::Integrations::Client {
             }
 
             auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
-            *tr = msg->GetTransform();
+            *tr     = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             _worldEngine->OnDisconnect();

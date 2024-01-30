@@ -174,7 +174,7 @@ namespace Framework::Integrations::Server {
             nlohmann::json root;
             root["mod_name"]          = _opts.modName;
             root["mod_slug"]          = _opts.modSlug;
-            root["mod_version"]       = _opts.modVersion;
+            root["mod_version"]       = Utils::Version::rel;
             root["host"]              = _opts.bindHost;
             root["port"]              = _opts.bindPort;
             root["password_required"] = !_opts.bindPassword.empty();
@@ -242,8 +242,19 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
-            if (msg->GetMPClientGame() != _opts.gameName) {
+            if (msg->GetGameName() != _opts.gameName) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
+                net->Send(kick, guid);
+                net->GetPeer()->CloseConnection(guid, true);
+                return;
+            }
+
+            const auto fwVersion = msg->GetFWVersion();
+
+            if (!Utils::Version::VersionSatisfies(fwVersion.c_str(), Utils::Version::rel)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid Framework version, force-disconnecting peer");
                 Framework::Networking::Messages::ClientKick kick;
                 kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
                 net->Send(kick, guid);
@@ -253,7 +264,7 @@ namespace Framework::Integrations::Server {
 
             const auto clientVersion = msg->GetClientVersion();
 
-            if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), Utils::Version::rel)) {
+            if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), _opts.modVersion.c_str())) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
                 Framework::Networking::Messages::ClientKick kick;
                 kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
@@ -262,9 +273,9 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
-            const auto mpClientVersion = msg->GetMPClientVersion();
+            const auto mpClientVersion = msg->GetGameVersion();
 
-            if (!Utils::Version::VersionSatisfies(mpClientVersion.c_str(), _opts.gameVersion.c_str())) {
+            if (mpClientVersion != _opts.gameVersion) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
                 Framework::Networking::Messages::ClientKick kick;
                 kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
@@ -371,7 +382,7 @@ namespace Framework::Integrations::Server {
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
                 info.gameMode       = _scriptingEngine->GetEngine()->GetGameModeName();
-                info.version        = _opts.modVersion;
+                info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
                 _masterlist->Ping(info);

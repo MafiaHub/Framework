@@ -42,8 +42,10 @@ namespace Framework::Integrations::Client {
         // networked game metadata (required)
         std::string gameName;
         std::string gameVersion;
+        std::string modVersion;
 
         bool initRendererManually = false;
+
         Graphics::RendererConfiguration rendererOptions = {};
     };
 
@@ -55,7 +57,7 @@ namespace Framework::Integrations::Client {
 
     class Instance {
       private:
-        bool _initialized = false;
+        bool _initialized       = false;
         bool _renderInitialized = false;
         InstanceOptions _opts;
 
