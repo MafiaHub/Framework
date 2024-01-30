@@ -39,6 +39,7 @@ namespace Framework::Services {
 
             // Only ping every 5 seconds
             if (Utils::Time::GetDifference(Utils::Time::GetTimePoint(), _lastPingAt) < 5000) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 continue;
             }
 
