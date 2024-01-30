@@ -169,7 +169,7 @@ if(HTTPLIB_COMPILE)
 	set(_INTERFACE_OR_PUBLIC PUBLIC)
 	
 	# split.py puts output in "out"
-	set(_httplib_build_includedir "${CMAKE_CURRENT_BINARY_DIR}/out")
+	set(_httplib_build_includedir "${CMAKE_CURRENT_SOURCE_DIR}")
 	# This will automatically be either static or shared based on the value of BUILD_SHARED_LIBS
 	add_library(${PROJECT_NAME} "${_httplib_build_includedir}/httplib.cc")
 	target_sources(${PROJECT_NAME}
