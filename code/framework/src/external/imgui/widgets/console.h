@@ -32,8 +32,8 @@ namespace Framework::External::ImGUI::Widgets {
         bool _consoleControl         = false;
         float _consoleUnfocusedAlpha = 0.25f;
         std::string _autocompleteWord;
-        std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
-        std::shared_ptr<Framework::Input::IInput> _input;
+        std::shared_ptr<Utils::CommandProcessor> _commandProcessor;
+        std::shared_ptr<Input::IInput> _input;
         std::vector<MenuBarProc> _menuBarDrawers;
         std::vector<std::string> _history;
         std::string _tempInputText;
@@ -43,7 +43,7 @@ namespace Framework::External::ImGUI::Widgets {
         void SendCommand(const std::string &command);
 
       public:
-        explicit Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor, std::shared_ptr<Framework::Input::IInput> input);
+        explicit Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor, std::shared_ptr<Input::IInput> input);
         ~Console() = default;
 
         void Toggle();

@@ -32,8 +32,8 @@ namespace Framework::External::ImGUI {
     };
 
     struct Config {
-        Framework::Graphics::PlatformBackend windowBackend = Framework::Graphics::PlatformBackend::PLATFORM_WIN32;
-        Framework::Graphics::RendererBackend renderBackend = Framework::Graphics::RendererBackend::BACKEND_D3D_11;
+        Graphics::PlatformBackend windowBackend = Graphics::PlatformBackend::PLATFORM_WIN32;
+        Graphics::RendererBackend renderBackend = Graphics::RendererBackend::BACKEND_D3D_11;
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
@@ -64,11 +64,11 @@ namespace Framework::External::ImGUI {
         Error Update();
         Error Render();
 
-        inline void PushWidget(const RenderProc &proc) {
+        void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);
         }
 
-        inline bool IsInitialized() const {
+        bool IsInitialized() const {
             return _initialized;
         };
     };

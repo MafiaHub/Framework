@@ -19,7 +19,7 @@
 #include <sstream>
 
 namespace Framework::External::ImGUI::Widgets {
-    Console::Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor, std::shared_ptr<Framework::Input::IInput> input): _commandProcessor(commandProcessor), _input(input), _logger(Framework::Logging::GetLogger("Console").get()) {}
+    Console::Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor, std::shared_ptr<Input::IInput> input): _commandProcessor(commandProcessor), _input(input), _logger(Logging::GetLogger("Console").get()) {}
 
     void Console::Toggle() {
         if (_isOpen)
@@ -57,7 +57,7 @@ namespace Framework::External::ImGUI::Widgets {
             }
         }
 
-        auto ringBuffer = Framework::Logging::GetInstance()->GetRingBuffer();
+        auto ringBuffer = Logging::GetInstance()->GetRingBuffer();
 
         if (_consoleControl) {
             ImVec4 *colors = ImGui::GetStyle().Colors;
@@ -315,19 +315,19 @@ namespace Framework::External::ImGUI::Widgets {
         const auto result = _commandProcessor->ProcessCommand(command);
 
         switch (result.GetError()) {
-        case Framework::Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
+        case Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
             _logger->info("{}", result.Unwrap());
         } break;
-        case Framework::Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
+        case Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
             _logger->warn("Command already exists: {}", result.Unwrap());
         } break;
-        case Framework::Utils::CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME: {
+        case Utils::CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME: {
             _logger->warn("Command name was unspecified");
         } break;
-        case Framework::Utils::CommandProcessorError::ERROR_CMD_UNKNOWN: {
+        case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN: {
             _logger->warn("Command not found: {}", result.Unwrap());
         } break;
-        case Framework::Utils::CommandProcessorError::ERROR_INTERNAL: {
+        case Utils::CommandProcessorError::ERROR_INTERNAL: {
             _logger->warn("Input error: {}", result.Unwrap());
         } break;
 

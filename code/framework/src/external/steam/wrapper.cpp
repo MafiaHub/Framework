@@ -27,8 +27,8 @@ namespace Framework::External::Steam {
             return SteamError::STEAM_USER_NOT_LOGGED_ON;
         }
 
-        CSteamAPIContext *ctx = new CSteamAPIContext();
-        _ctx                  = ctx;
+        auto ctx = new CSteamAPIContext();
+        _ctx     = ctx;
 
         if (!_ctx) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to create steam api context");
@@ -66,7 +66,7 @@ namespace Framework::External::Steam {
 
     EPersonaState Wrapper::GetSteamUserState() const {
         if (!_ctx) {
-            return EPersonaState::k_EPersonaStateOffline;
+            return k_EPersonaStateOffline;
         }
 
         return _ctx->SteamFriends()->GetPersonaState();

@@ -32,11 +32,11 @@ namespace Framework::External::ImGUI {
             return Error::IMGUI_RENDERER_NOT_SET;
         }
 
-        if (!_config.windowHandle && _config.windowBackend == Framework::Graphics::PlatformBackend::PLATFORM_WIN32) {
+        if (!_config.windowHandle && _config.windowBackend == Graphics::PlatformBackend::PLATFORM_WIN32) {
             return Error::IMGUI_WINDOW_NOT_SET;
         }
 
-        if (!_config.sdlWindow && _config.windowBackend == Framework::Graphics::PlatformBackend::PLATFORM_SDL2) {
+        if (!_config.sdlWindow && _config.windowBackend == Graphics::PlatformBackend::PLATFORM_SDL2) {
             return Error::IMGUI_WINDOW_NOT_SET;
         }
 
@@ -49,10 +49,10 @@ namespace Framework::External::ImGUI {
         ImGui::StyleColorsDark();
 
         switch (_config.renderBackend) {
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
+        case Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_Init(_config.renderer->GetD3D9Backend()->GetDevice());
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
+        case Graphics::RendererBackend::BACKEND_D3D_11: {
             const auto renderBackend = _config.renderer->GetD3D11Backend();
             ImGui_ImplDX11_Init(renderBackend->GetDevice(), renderBackend->GetContext());
         } break;
@@ -64,10 +64,10 @@ namespace Framework::External::ImGUI {
         }
 
         switch (_config.windowBackend) {
-        case Framework::Graphics::PlatformBackend::PLATFORM_WIN32: {
+        case Graphics::PlatformBackend::PLATFORM_WIN32: {
             ImGui_ImplWin32_Init(_config.windowHandle);
         } break;
-        case Framework::Graphics::PlatformBackend::PLATFORM_SDL2: {
+        case Graphics::PlatformBackend::PLATFORM_SDL2: {
             ImGui_ImplSDL2_InitForD3D(_config.sdlWindow);
         } break;
         }
@@ -82,22 +82,22 @@ namespace Framework::External::ImGUI {
         }
 
         switch (_config.renderBackend) {
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
+        case Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_Shutdown();
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
+        case Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_Shutdown();
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
+        case Graphics::RendererBackend::BACKEND_D3D_12: {
             ImGui_ImplDX12_Shutdown();
         } break;
         }
 
         switch (_config.windowBackend) {
-        case Framework::Graphics::PlatformBackend::PLATFORM_WIN32: {
+        case Graphics::PlatformBackend::PLATFORM_WIN32: {
             ImGui_ImplWin32_Shutdown();
         } break;
-        case Framework::Graphics::PlatformBackend::PLATFORM_SDL2: {
+        case Graphics::PlatformBackend::PLATFORM_SDL2: {
             ImGui_ImplSDL2_Shutdown();
         } break;
         }
@@ -113,22 +113,22 @@ namespace Framework::External::ImGUI {
         OPTICK_EVENT();
 
         switch (_config.renderBackend) {
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
+        case Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_NewFrame();
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
+        case Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_NewFrame();
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
+        case Graphics::RendererBackend::BACKEND_D3D_12: {
             ImGui_ImplDX12_NewFrame();
         } break;
         }
 
         switch (_config.windowBackend) {
-        case Framework::Graphics::PlatformBackend::PLATFORM_WIN32: {
+        case Graphics::PlatformBackend::PLATFORM_WIN32: {
             ImGui_ImplWin32_NewFrame();
         } break;
-        case Framework::Graphics::PlatformBackend::PLATFORM_SDL2: {
+        case Graphics::PlatformBackend::PLATFORM_SDL2: {
             ImGui_ImplSDL2_NewFrame();
         } break;
         }
@@ -159,13 +159,13 @@ namespace Framework::External::ImGUI {
             return Error::IMGUI_NONE;
 
         switch (_config.renderBackend) {
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_9: {
+        case Graphics::RendererBackend::BACKEND_D3D_9: {
             ImGui_ImplDX9_RenderDrawData(drawData);
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_11: {
+        case Graphics::RendererBackend::BACKEND_D3D_11: {
             ImGui_ImplDX11_RenderDrawData(drawData);
         } break;
-        case Framework::Graphics::RendererBackend::BACKEND_D3D_12: {
+        case Graphics::RendererBackend::BACKEND_D3D_12: {
             // TODO(DavoSK): pass second argument here
             const auto renderBackend = _config.renderer->GetD3D12Backend();
             ImGui_ImplDX12_RenderDrawData(drawData, renderBackend->GetGraphicsCommandList());
@@ -176,29 +176,25 @@ namespace Framework::External::ImGUI {
     }
 
     InputState Wrapper::ProcessEvent(const SDL_Event *event) const {
-        if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_SDL2) {
+        if (_config.windowBackend != Graphics::PlatformBackend::PLATFORM_SDL2) {
             return InputState::ERROR_MISMATCH;
         }
 
         if (ImGui_ImplSDL2_ProcessEvent(event)) {
             return InputState::BLOCK;
         }
-        else {
-            return InputState::PASS;
-        }
+        return InputState::PASS;
     }
 
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
-        if (_config.windowBackend != Framework::Graphics::PlatformBackend::PLATFORM_WIN32) {
+        if (_config.windowBackend != Graphics::PlatformBackend::PLATFORM_WIN32) {
             return InputState::ERROR_MISMATCH;
         }
 
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return InputState::BLOCK;
         }
-        else {
-            return InputState::PASS;
-        }
+        return InputState::PASS;
     }
 
     void Wrapper::ShowCursor(bool show) {

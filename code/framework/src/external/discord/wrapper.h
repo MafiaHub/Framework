@@ -22,7 +22,7 @@ namespace Framework::External::Discord {
         discord::Core *_instance {};
 
       public:
-        using DiscordLoginProc = fu2::function<void(std::string const &token) const>;
+        using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
         Wrapper()              = default;
         DiscordError Init(int64_t id);
         DiscordError Shutdown();
@@ -32,10 +32,10 @@ namespace Framework::External::Discord {
         }
 
         DiscordError Update();
-        DiscordError SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity, std::string const &largeImage, std::string const &largeText, std::string const &smallImage, std::string const &smallText);
-        DiscordError SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity);
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText);
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
 
-        void SignInWithDiscord(DiscordLoginProc const &proc);
+        void SignInWithDiscord(const DiscordLoginProc &proc);
 
         discord::ActivityManager &GetActivityManager();
         discord::UserManager &GetUserManager();

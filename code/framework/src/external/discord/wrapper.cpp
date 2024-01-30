@@ -46,7 +46,7 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity, std::string const &largeImage, std::string const &largeText, std::string const &smallImage, std::string const &smallText) {
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) {
         if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
@@ -70,12 +70,12 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::SetPresence(std::string const &state, std::string const &details, discord::ActivityType activity) {
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
-    void Wrapper::SignInWithDiscord(DiscordLoginProc const &proc) {
-        _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, discord::OAuth2Token const &tokenData) {
+    void Wrapper::SignInWithDiscord(const DiscordLoginProc &proc) {
+        _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
             if (result == discord::Result::Ok) {
                 proc(tokenData.GetAccessToken());
             }
