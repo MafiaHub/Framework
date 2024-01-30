@@ -42,8 +42,10 @@ namespace Framework::Integrations::Client {
         // networked game metadata (required)
         std::string gameName;
         std::string gameVersion;
+        std::string modVersion;
 
-        bool initRendererManually                       = false;
+        bool initRendererManually = false;
+
         Graphics::RendererConfiguration rendererOptions = {};
     };
 

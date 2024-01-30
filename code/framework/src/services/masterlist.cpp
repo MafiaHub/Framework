@@ -35,33 +35,34 @@ namespace Framework::Services {
     }
     void MasterlistConnector::PingThread() {
         while (_isInitialized) {
-            std::lock_guard lock(_mutex);
-
             // Only ping every 5 seconds
             if (Utils::Time::GetDifference(Utils::Time::GetTimePoint(), _lastPingAt) < 5000) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 continue;
             }
 
-            // Update the last ping time
-            _lastPingAt = Utils::Time::GetTimePoint();
+            {
+                std::lock_guard lock(_mutex);
+                // Update the last ping time
+                _lastPingAt = Utils::Time::GetTimePoint();
 
-            // Build the payload
-            httplib::Params params {
-                {"gamemode", _storedInfo.gameMode},
-                {"version", _storedInfo.version},
-                {"max_players", std::to_string(_storedInfo.maxPlayers)},
-                {"current_players", std::to_string(_storedInfo.currentPlayers)},
-            };
+                // Build the payload
+                httplib::Params params {
+                    {"gamemode", _storedInfo.gameMode},
+                    {"version", _storedInfo.version},
+                    {"max_players", std::to_string(_storedInfo.maxPlayers)},
+                    {"current_players", std::to_string(_storedInfo.currentPlayers)},
+                };
 
-            // Send the request
-            // Make sure we can only handle valid responses
-            const auto res = _client->Post("/rcon/ping", params);
-            if (!res) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {}", res.error());
-            }
-            if (res->status != 200 && res->status != 201) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {} {}", res->status, res->body);
+                // Send the request
+                // Make sure we can only handle valid responses
+                const auto res = _client->Post("/rcon/ping", params);
+                if (!res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {}", res.error());
+                }
+                if (res->status != 200 && res->status != 201) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {} {}", res->status, res->body);
+                }
             }
         }
     }

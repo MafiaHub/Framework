@@ -20,10 +20,6 @@ namespace Framework::World {
             return status;
         }
 
-        // Set up the monitoring service, visit https://www.flecs.dev/explorer/ to monitor server performance
-        GetWorld()->set<flecs::Rest>({});
-        GetWorld()->import <flecs::monitor>();
-
         _findAllGameModeEntities = _world->query_builder<Modules::Base::RemovedOnGameModeReload>().build();
 
         // Set up a proc to validate entity visibility.
