@@ -29,7 +29,8 @@ namespace Framework::External::Optick {
         OPTICK_SHUTDOWN();
     }
 
-    void Wrapper::SetAllocator(::Optick::AllocateFn allocateFn, ::Optick::DeallocateFn deallocateFn, ::Optick::InitThreadCb initThreadCb) {
+    void Wrapper::SetAllocator(::Optick::AllocateFn allocateFn, ::Optick::DeallocateFn deallocateFn,
+                               ::Optick::InitThreadCb initThreadCb) {
         OPTICK_SET_MEMORY_ALLOCATOR(allocateFn, deallocateFn, initThreadCb);
     }
 

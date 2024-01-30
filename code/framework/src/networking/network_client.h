@@ -20,7 +20,7 @@
 #include <utility>
 
 namespace Framework::Networking {
-    class NetworkClient: public NetworkPeer {
+    class NetworkClient : public NetworkPeer {
       private:
         PeerState _state;
 
@@ -57,14 +57,16 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        bool SendGameRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        bool SendGameRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID,
+                         PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             SLNet::BitStream bs;
             bs.Write(Messages::INTERNAL_RPC);
             bs.Write(rpc.GetHashName());
             rpc.Serialize(&bs, true);
             rpc.Serialize2(&bs, true);
 
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0)
+            {
                 return false;
             }
             return true;

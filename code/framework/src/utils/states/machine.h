@@ -36,8 +36,7 @@ namespace Framework::Utils::States {
 
         bool RequestNextState(int32_t);
 
-        template <typename T>
-        void RegisterState() {
+        template <typename T> void RegisterState() {
             auto ptr = std::make_shared<T>();
             _states.insert(std::make_pair(ptr->GetId(), ptr));
         }

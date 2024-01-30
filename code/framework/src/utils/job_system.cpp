@@ -15,9 +15,11 @@
 namespace Framework::Utils {
     JobSystem *JobSystem::GetInstance() {
         static JobSystem *instance = nullptr;
-        if (instance == nullptr) {
+        if (instance == nullptr)
+        {
             instance = new JobSystem();
-            if (!instance->Init()) {
+            if (!instance->Init())
+            {
                 Logging::GetLogger(FRAMEWORK_INNER_JOBS)->error("Default job system could not be initialized");
             }
         }
@@ -31,52 +33,64 @@ namespace Framework::Utils {
     bool JobSystem::Init(uint32_t numThreads) {
         _pendingShutdown = false;
 
-        for (size_t i = 0; i < numThreads; i++) {
+        for (size_t i = 0; i < numThreads; i++)
+        {
             std::thread worker = std::thread([=]() {
                 OPTICK_THREAD("JobSystemWorker");
-                while (!_pendingShutdown) {
+                while (!_pendingShutdown)
+                {
                     OPTICK_EVENT();
-                    Job jobInfo {};
+                    Job jobInfo{};
 
                     // Wait for a job to be available
                     {
                         const std::lock_guard<std::recursive_mutex> lock(_mutex);
                         bool last_empty = false;
 
-                        for (auto [queue, end, id] = std::tuple {_jobs.begin(), _jobs.end(), 0}; queue != end; ++queue, ++id) {
-                            if (queue->empty()) {
+                        for (auto [queue, end, id] = std::tuple{_jobs.begin(), _jobs.end(), 0}; queue != end;
+                             ++queue, ++id)
+                        {
+                            if (queue->empty())
+                            {
                                 last_empty = ((queue + 1) == end);
                                 continue;
                             }
-                            else if (!last_empty && ((_counter++ % GetJobPriorityFromIndex(id)) != 0)) {
+                            else if (!last_empty && ((_counter++ % GetJobPriorityFromIndex(id)) != 0))
+                            {
                                 continue;
                             }
 
                             last_empty = false;
-                            jobInfo    = queue->front();
+                            jobInfo = queue->front();
                             queue->pop();
-                            Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} is now being processed", id);
+                            Logging::GetLogger(FRAMEWORK_INNER_JOBS)
+                                ->trace("Job with priority {} is now being processed", id);
 
                             break;
                         }
                     }
 
-                    if (jobInfo.status == JobStatus::Invalid) {
+                    if (jobInfo.status == JobStatus::Invalid)
+                    {
                         std::this_thread::yield();
                     }
-                    else {
+                    else
+                    {
                         jobInfo.status = JobStatus::Running;
-                        if (!jobInfo.proc()) {
+                        if (!jobInfo.proc())
+                        {
                             // TODO: Improve reports
                             Logging::GetLogger(FRAMEWORK_INNER_JOBS)->warn("Job has failed its execution");
 
-                            if (jobInfo.repeatOnFail) {
+                            if (jobInfo.repeatOnFail)
+                            {
                                 Logging::GetLogger(FRAMEWORK_INNER_JOBS)->debug("Job is enqueued for another attempt");
                                 jobInfo.status = JobStatus::Pending;
                                 _jobs[jobInfo.priority].push(jobInfo);
                             }
                         }
-                        else {
+                        else
+                        {
                             Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job is done");
                         }
                     }
@@ -95,7 +109,8 @@ namespace Framework::Utils {
 
     bool JobSystem::Shutdown() {
         _pendingShutdown = true;
-        for (auto &thread : _threads) {
+        for (auto &thread : _threads)
+        {
             thread.join();
             Logging::GetLogger(FRAMEWORK_INNER_JOBS)->debug("Job worker thread was terminated");
         }
@@ -106,7 +121,7 @@ namespace Framework::Utils {
     void JobSystem::EnqueueJob(const JobProc &job, JobPriority priority, bool repeatOnFail) {
         const std::lock_guard<std::recursive_mutex> lock(_mutex);
         Logging::GetLogger(FRAMEWORK_INNER_JOBS)->trace("Job with priority {} was enqueued", priority);
-        _jobs[priority].push(Job {job, priority, JobStatus::Pending, repeatOnFail});
+        _jobs[priority].push(Job{job, priority, JobStatus::Pending, repeatOnFail});
     }
 
     bool JobSystem::IsQueueEmpty(JobPriority priority) {

@@ -13,17 +13,23 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
+    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers,
+                                    const std::string &password) {
         SLNet::SocketDescriptor newSocketSd = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
-        SLNet::StartupResult result         = _peer->Startup(maxPlayers, &newSocketSd, 1);
-        if (result != SLNet::RAKNET_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
+        SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
+        if (result != SLNet::RAKNET_STARTED)
+        {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)
+                ->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
             return SERVER_PEER_FAILED;
         }
 
-        if (!password.empty()) {
+        if (!password.empty())
+        {
             _peer->SetIncomingPassword(password.c_str(), (uint32_t)password.length());
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Applying incoming password to networking peer");
+            Logging::GetInstance()
+                ->Get(FRAMEWORK_INNER_NETWORKING)
+                ->debug("Applying incoming password to networking peer");
         }
 
         _peer->SetMaximumIncomingConnections((uint16_t)maxPlayers);
@@ -31,62 +37,81 @@ namespace Framework::Networking {
     }
 
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
-        switch (packetID) {
+        switch (packetID)
+        {
         case ID_NEW_INCOMING_CONNECTION: {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", packet->guid.ToString());
-            if (_onPlayerConnectCallback) {
+            Framework::Logging::GetInstance()
+                ->Get(FRAMEWORK_INNER_NETWORKING)
+                ->debug("Incoming connection request {}", packet->guid.ToString());
+            if (_onPlayerConnectCallback)
+            {
                 _onPlayerConnectCallback(packet);
             }
             return true;
         };
 
         case ID_DISCONNECTION_NOTIFICATION: {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
-            if (_onPlayerDisconnectCallback) {
+            Framework::Logging::GetInstance()
+                ->Get(FRAMEWORK_INNER_NETWORKING)
+                ->debug("Disconnection from {}", packet->guid.ToString());
+            if (_onPlayerDisconnectCallback)
+            {
                 _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
             }
             return true;
         };
         case ID_CONNECTION_LOST: {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
-            if (_onPlayerDisconnectCallback) {
+            Framework::Logging::GetInstance()
+                ->Get(FRAMEWORK_INNER_NETWORKING)
+                ->debug("Connection lost for {}", packet->guid.ToString());
+            if (_onPlayerDisconnectCallback)
+            {
                 _onPlayerDisconnectCallback(_packet, Messages::LOST);
             }
             return true;
         };
-        default: break;
+        default:
+            break;
         }
         return false;
     }
 
     ServerError NetworkServer::Shutdown() {
-        if (!_peer) {
+        if (!_peer)
+        {
             return SERVER_PEER_NULL;
         }
 
         _peer->Shutdown(1000);
-//        SLNet::RakPeerInterface::DestroyInstance(_peer);
+        //        SLNet::RakPeerInterface::DestroyInstance(_peer);
         return SERVER_NONE;
     }
 
     int NetworkServer::GetPing(SLNet::RakNetGUID guid) {
         return _peer->GetAveragePing(guid);
     }
-    bool NetworkServer::SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, SLNet::RakNetGUID guid, SLNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) {
+    bool NetworkServer::SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world,
+                                            flecs::entity_t ent_id, SLNet::RakNetGUID guid,
+                                            SLNet::RakNetGUID excludeGUID, PacketPriority priority,
+                                            PacketReliability reliability) {
         const auto ent = world->WrapEntity(ent_id);
 
-        if (!ent.is_alive()) {
+        if (!ent.is_alive())
+        {
             return false;
         }
 
         const auto streamers = world->FindVisibleStreamers(ent);
 
-        for (const auto &streamer_ent : streamers) {
+        for (const auto &streamer_ent : streamers)
+        {
             const auto streamer = streamer_ent.get<World::Modules::Base::Streamer>();
-            if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+            if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g)
+            {
                 continue;
             }
-            if (streamer->guid == excludeGUID.g) {
+            if (streamer->guid == excludeGUID.g)
+            {
                 continue;
             }
             _peer->Send(&bs, priority, reliability, 0, SLNet::RakNetGUID(streamer->guid), false);

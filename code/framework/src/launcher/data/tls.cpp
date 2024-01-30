@@ -24,6 +24,6 @@ class TlsActivation {
 [[maybe_unused]] static TlsActivation TlsActivateItEarly;
 
 extern "C" __declspec(dllexport) void GetThreadLocalStorage(void **base, uint32_t *index) {
-    *base  = &_tls_start;
+    *base = &_tls_start;
     *index = _tls_index;
 }

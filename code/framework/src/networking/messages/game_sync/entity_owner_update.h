@@ -14,7 +14,7 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntityOwnerUpdate final: public GameSyncMessage {
+    class GameSyncEntityOwnerUpdate final : public GameSyncMessage {
       private:
         uint64_t _owner = SLNet::UNASSIGNED_RAKNET_GUID.g;
 

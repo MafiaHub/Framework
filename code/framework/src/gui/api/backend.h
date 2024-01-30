@@ -11,8 +11,8 @@
 namespace Framework::GUI {
     class Backend {
       public:
-        virtual bool Init()     = 0;
+        virtual bool Init() = 0;
         virtual bool Shutdown() = 0;
-        virtual void Update()   = 0;
+        virtual void Update() = 0;
     };
 }; // namespace Framework::GUI

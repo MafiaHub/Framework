@@ -16,13 +16,14 @@
 namespace Framework::Scripting::Engines {
     class IEngine {
       public:
-        virtual ~IEngine() {}
+        virtual ~IEngine() {
+        }
         virtual EngineError Init(SDKRegisterCallback) = 0;
-        virtual EngineError Shutdown()                = 0;
-        virtual void Update()                         = 0;
+        virtual EngineError Shutdown() = 0;
+        virtual void Update() = 0;
 
         virtual bool PreloadGamemode(std::string) = 0;
-        virtual bool LoadGamemode(std::string)   = 0;
+        virtual bool LoadGamemode(std::string) = 0;
         virtual bool UnloadGamemode(std::string) = 0;
 
         virtual void SetProcessArguments(int, char **) = 0;

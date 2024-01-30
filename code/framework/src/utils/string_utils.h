@@ -19,17 +19,13 @@
 namespace Framework::Utils::StringUtils {
     inline std::wstring NormalToWide(const std::string &str) {
         std::wstring wstr(str.length(), 0);
-        std::transform(str.begin(), str.end(), wstr.begin(), [](char c) {
-            return (wchar_t)c;
-        });
+        std::transform(str.begin(), str.end(), wstr.begin(), [](char c) { return (wchar_t)c; });
         return wstr;
     }
 
     inline std::string WideToNormal(const std::wstring &wstr) {
         std::string str(wstr.length(), 0);
-        std::transform(wstr.begin(), wstr.end(), str.begin(), [](wchar_t c) {
-            return (char)c;
-        });
+        std::transform(wstr.begin(), wstr.end(), str.begin(), [](wchar_t c) { return (char)c; });
         return str;
     }
 

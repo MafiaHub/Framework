@@ -9,5 +9,12 @@
 #pragma once
 
 namespace Framework::External::Steam {
-    enum class SteamError { STEAM_NONE, STEAM_CLIENT_NOT_RUNNING, STEAM_INIT_FAILED, STEAM_CONTEXT_CREATION_FAILED, STEAM_CONTEXT_INIT_FAILED, STEAM_USER_NOT_LOGGED_ON };
-}
+    enum class SteamError {
+        STEAM_NONE,
+        STEAM_CLIENT_NOT_RUNNING,
+        STEAM_INIT_FAILED,
+        STEAM_CONTEXT_CREATION_FAILED,
+        STEAM_CONTEXT_INIT_FAILED,
+        STEAM_USER_NOT_LOGGED_ON
+    };
+} // namespace Framework::External::Steam

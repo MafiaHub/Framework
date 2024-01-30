@@ -12,12 +12,12 @@
 #include "world/server.h"
 
 namespace Framework::Integrations::Scripting {
-    class ServerEngine: public Framework::Scripting::Module {
+    class ServerEngine : public Framework::Scripting::Module {
       private:
         std::shared_ptr<World::ServerEngine> _world;
 
       public:
-        ServerEngine(std::shared_ptr<World::ServerEngine> world): _world(world) {};
+        ServerEngine(std::shared_ptr<World::ServerEngine> world) : _world(world){};
 
         ~ServerEngine() = default;
 

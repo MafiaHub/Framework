@@ -11,7 +11,8 @@
 #include <logging/logger.h>
 
 namespace Framework::Utils::States {
-    Machine::Machine(): _currentState(nullptr), _nextState(nullptr), _currentContext(Context::Enter) {}
+    Machine::Machine() : _currentState(nullptr), _nextState(nullptr), _currentContext(Context::Enter) {
+    }
 
     Machine::~Machine() {
         _states.clear();
@@ -20,60 +21,76 @@ namespace Framework::Utils::States {
     bool Machine::RequestNextState(int32_t stateId) {
         // Has the state been registered?
         auto it = _states.find(stateId);
-        if (it == _states.end()) {
+        if (it == _states.end())
+        {
             return false;
         }
 
         // The state has already been requested
-        if ((*it).second == _nextState) {
+        if ((*it).second == _nextState)
+        {
             return false;
         }
 
         // Already transitionning to a new state, so we cannot request a new one.
-        if (_nextState != nullptr) {
+        if (_nextState != nullptr)
+        {
             return false;
         }
 
         // Mark it for processing and force the actual state to exit
-        _nextState      = (*it).second;
+        _nextState = (*it).second;
         _currentContext = Context::Exit;
 
-        Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_UTILS)->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
+        Framework::Logging::GetInstance()
+            ->Get(FRAMEWORK_INNER_UTILS)
+            ->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
         return true;
     }
 
     bool Machine::Update() {
-        if (_currentState != nullptr) {
+        if (_currentState != nullptr)
+        {
             // Otherwise, we just process the current state
-            if (_currentContext == Context::Enter) {
-                // If init succeed, next context is obviously the update, otherwise it means that something failed and exit is required
+            if (_currentContext == Context::Enter)
+            {
+                // If init succeed, next context is obviously the update, otherwise it means that something failed and
+                // exit is required
                 _currentContext = _currentState->OnEnter(this) ? Context::Update : Context::Exit;
             }
-            else if (_currentContext == Context::Update) {
-                // If the state answer true to update call, it means that it willed only a single tick, otherwise we keep ticking
-                if (_currentState->OnUpdate(this)) {
+            else if (_currentContext == Context::Update)
+            {
+                // If the state answer true to update call, it means that it willed only a single tick, otherwise we
+                // keep ticking
+                if (_currentState->OnUpdate(this))
+                {
                     _currentContext = Context::Exit;
                 }
             }
-            else if (_currentContext == Context::Exit) {
+            else if (_currentContext == Context::Exit)
+            {
                 _currentState->OnExit(this);
                 _currentContext = Context::Next;
             }
-            else if (_currentContext == Context::Next) {
-                _currentState   = _nextState;
+            else if (_currentContext == Context::Next)
+            {
+                _currentState = _nextState;
                 _currentContext = Context::Enter;
-                _nextState      = nullptr;
+                _nextState = nullptr;
             }
-            else {
+            else
+            {
                 return false;
             }
         }
-        else if (_nextState != nullptr) {
-            _currentState   = _nextState;
+        else if (_nextState != nullptr)
+        {
+            _currentState = _nextState;
             _currentContext = Context::Enter;
-            _nextState      = nullptr;
+            _nextState = nullptr;
         }
-        else {
+        else
+        {
             return false;
         }
 

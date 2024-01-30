@@ -23,13 +23,13 @@ namespace Framework::External::ImGUI::Widgets {
         using MenuBarProc = fu2::function<void() const>;
 
       protected:
-        bool _shouldDisplayWidget    = true;
-        bool _autoScroll             = true;
-        bool _isOpen                 = false;
-        bool _updateInputText        = false;
-        bool _focusOnInput           = false;
-        bool _isMultiline            = false;
-        bool _consoleControl         = false;
+        bool _shouldDisplayWidget = true;
+        bool _autoScroll = true;
+        bool _isOpen = false;
+        bool _updateInputText = false;
+        bool _focusOnInput = false;
+        bool _isMultiline = false;
+        bool _consoleControl = false;
         float _consoleUnfocusedAlpha = 0.25f;
         std::string _autocompleteWord;
         std::shared_ptr<Framework::Utils::CommandProcessor> _commandProcessor;
@@ -43,7 +43,8 @@ namespace Framework::External::ImGUI::Widgets {
         void SendCommand(const std::string &command);
 
       public:
-        explicit Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor, std::shared_ptr<Framework::Input::IInput> input);
+        explicit Console(std::shared_ptr<Framework::Utils::CommandProcessor> commandProcessor,
+                         std::shared_ptr<Framework::Input::IInput> input);
         ~Console() = default;
 
         void Toggle();

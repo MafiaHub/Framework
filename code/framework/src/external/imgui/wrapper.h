@@ -25,7 +25,11 @@ namespace Framework::Graphics {
 } // namespace Framework::Graphics
 
 namespace Framework::External::ImGUI {
-    enum class InputState { BLOCK, PASS, ERROR_MISMATCH };
+    enum class InputState {
+        BLOCK,
+        PASS,
+        ERROR_MISMATCH
+    };
 
     struct Config {
         Framework::Graphics::PlatformBackend windowBackend = Framework::Graphics::PlatformBackend::PLATFORM_WIN32;
@@ -33,8 +37,8 @@ namespace Framework::External::ImGUI {
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
-        SDL_Window *sdlWindow        = nullptr;
-        HWND windowHandle            = nullptr;
+        SDL_Window *sdlWindow = nullptr;
+        HWND windowHandle = nullptr;
     };
 
     class Wrapper final {
@@ -48,6 +52,7 @@ namespace Framework::External::ImGUI {
         std::recursive_mutex _renderMtx;
 
         static inline std::atomic_bool isContextInitialized = false;
+
       public:
         Error Init(Config &config);
         Error Shutdown();

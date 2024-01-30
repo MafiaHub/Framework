@@ -60,7 +60,7 @@ namespace Framework::Integrations::Server {
         bool enableSignals;
 
         // update intervals
-        float tickInterval         = 0.016667f;
+        float tickInterval = 0.016667f;
         float streamerTickInterval = 0.033334f;
 
         // args
@@ -116,11 +116,14 @@ namespace Framework::Integrations::Server {
         ServerError Init(InstanceOptions &);
         ServerError Shutdown();
 
-        virtual void PostInit() {}
+        virtual void PostInit() {
+        }
 
-        virtual void PostUpdate() {}
+        virtual void PostUpdate() {
+        }
 
-        virtual void PreShutdown() {}
+        virtual void PreShutdown() {
+        }
 
         virtual void ModuleRegister(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
             (void)sdk;

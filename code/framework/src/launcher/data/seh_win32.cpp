@@ -13,8 +13,8 @@
 
 #ifdef _M_AMD64
 
-//NOTE: Hooking.Aux
-//#include <tlhelp32.h>
+// NOTE: Hooking.Aux
+// #include <tlhelp32.h>
 struct DisableToolHelpScope {
     inline DisableToolHelpScope() {
         // write code to disable hooks
@@ -58,31 +58,38 @@ static void *FindCallFromAddress(void *methodPtr, ud_mnemonic_code mnemonic = UD
     ud_set_input_buffer(&ud, reinterpret_cast<uint8_t *>(methodPtr), INT32_MAX);
 
     // loop the instructions
-    while (true) {
+    while (true)
+    {
         // disassemble the next instruction
         ud_disassemble(&ud);
 
         // if this is a retn, break from the loop
-        if (ud_insn_mnemonic(&ud) == UD_Iint3 || ud_insn_mnemonic(&ud) == UD_Inop) {
+        if (ud_insn_mnemonic(&ud) == UD_Iint3 || ud_insn_mnemonic(&ud) == UD_Inop)
+        {
             break;
         }
 
-        if (ud_insn_mnemonic(&ud) == mnemonic) {
+        if (ud_insn_mnemonic(&ud) == mnemonic)
+        {
             // get the first operand
             auto operand = ud_insn_opr(&ud, 0);
 
             // if it's a static call...
-            if (operand->type == UD_OP_JIMM) {
+            if (operand->type == UD_OP_JIMM)
+            {
                 // ... and there's been no other such call...
-                if (retval == nullptr) {
+                if (retval == nullptr)
+                {
                     // ... calculate the effective address and store it
                     retval = reinterpret_cast<void *>(ud_insn_len(&ud) + ud_insn_off(&ud) + operand->lval.sdword);
 
-                    if (breakOnFirst) {
+                    if (breakOnFirst)
+                    {
                         break;
                     }
                 }
-                else {
+                else
+                {
                     // return an empty pointer
                     retval = nullptr;
                     break;
@@ -114,8 +121,10 @@ static void *RtlpxLookupFunctionTableOverride(void *exceptionAddress, FUNCTION_T
 
     DWORD64 addressNum = (DWORD64)exceptionAddress;
 
-    if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd) {
-        if (addressNum != 0) {
+    if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd)
+    {
+        if (addressNum != 0)
+        {
             *outData = g_overriddenTable;
 
             retval = (void *)g_overriddenTable.TableAddress;
@@ -132,10 +141,12 @@ static void *RtlpxLookupFunctionTableOverrideDownLevel(void *exceptionAddress, P
 
     DWORD64 addressNum = (DWORD64)exceptionAddress;
 
-    if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd) {
-        if (addressNum != 0) {
+    if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd)
+    {
+        if (addressNum != 0)
+        {
             *imageBase = g_overriddenTable.ImageBase;
-            *length    = g_overriddenTable.Size;
+            *length = g_overriddenTable.Size;
 
             retval = (void *)g_overriddenTable.TableAddress;
         }
@@ -149,8 +160,10 @@ static void *RtlpxLookupFunctionTableOverrideDownLevel(void *exceptionAddress, P
 static PVOID (*g_origRtlImageDirectoryEntryToData)(HMODULE hModule, BOOL a2, WORD directory, ULONG *a4);
 
 static PVOID RtlImageDirectoryEntryToDataStub(HMODULE hModule, BOOL a2, WORD directory, ULONG *size) {
-    if ((DWORD64)hModule == g_overrideStart) {
-        if (directory == IMAGE_DIRECTORY_ENTRY_EXCEPTION) {
+    if ((DWORD64)hModule == g_overrideStart)
+    {
+        if (directory == IMAGE_DIRECTORY_ENTRY_EXCEPTION)
+        {
             *size = g_overriddenTable.Size;
             return (PVOID)g_overriddenTable.TableAddress;
         }
@@ -159,17 +172,20 @@ static PVOID RtlImageDirectoryEntryToDataStub(HMODULE hModule, BOOL a2, WORD dir
     return g_origRtlImageDirectoryEntryToData(hModule, a2, directory, size);
 }
 
-extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, void *moduleEnd, PRUNTIME_FUNCTION runtimeFunctions, DWORD entryCount) {
+extern "C" void __declspec(dllexport)
+    CoreRT_SetupSEHHandler(void *moduleBase, void *moduleEnd, PRUNTIME_FUNCTION runtimeFunctions, DWORD entryCount) {
     // store passed data
     g_overrideStart = (DWORD64)moduleBase;
-    g_overrideEnd   = (DWORD64)moduleEnd;
+    g_overrideEnd = (DWORD64)moduleEnd;
 
-    g_overriddenTable.ImageBase    = g_overrideStart;
+    g_overriddenTable.ImageBase = g_overrideStart;
     g_overriddenTable.TableAddress = (DWORD64)runtimeFunctions;
-    g_overriddenTable.Size         = entryCount * sizeof(RUNTIME_FUNCTION);
+    g_overriddenTable.Size = entryCount * sizeof(RUNTIME_FUNCTION);
 
-    if (IsWindows8Point1OrGreater()) {
-        auto ZwQueryVirtualMemory = (NTSTATUS(NTAPI *)(HANDLE, PVOID, INT, PVOID, SIZE_T, PSIZE_T))GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryVirtualMemory");
+    if (IsWindows8Point1OrGreater())
+    {
+        auto ZwQueryVirtualMemory = (NTSTATUS(NTAPI *)(HANDLE, PVOID, INT, PVOID, SIZE_T, PSIZE_T))GetProcAddress(
+            GetModuleHandle("ntdll.dll"), "NtQueryVirtualMemory");
 
         struct {
             DWORD64 field0;
@@ -178,7 +194,8 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
             DWORD64 field10;
         } queryResult;
 
-        ZwQueryVirtualMemory(GetCurrentProcess(), GetModuleHandle(nullptr), 6, &queryResult, sizeof(queryResult), nullptr);
+        ZwQueryVirtualMemory(GetCurrentProcess(), GetModuleHandle(nullptr), 6, &queryResult, sizeof(queryResult),
+                             nullptr);
 
         g_overriddenTable.ImageSize = queryResult.imageSize;
     }
@@ -186,26 +203,32 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
     // find the location to hook (RtlpxLookupFunctionTable from RtlLookupFunctionTable)
     void *baseAddress = GetProcAddress(GetModuleHandle("ntdll.dll"), "RtlLookupFunctionTable");
 
-    if (baseAddress) {
+    if (baseAddress)
+    {
         void *internalAddress = FindCallFromAddress(baseAddress);
 
-        void *patchFunction  = RtlpxLookupFunctionTableOverride;
+        void *patchFunction = RtlpxLookupFunctionTableOverride;
         void **patchOriginal = (void **)&g_originalLookup;
 
         // if we couldn't _reliably_ find it, error out
-        if (!internalAddress) {
+        if (!internalAddress)
+        {
             // Windows 8 uses a Rtl*-style call for Rtlpx
-            if (!IsWindows8Point1OrGreater()) {
+            if (!IsWindows8Point1OrGreater())
+            {
                 internalAddress = FindCallFromAddress(baseAddress, UD_Ijmp);
 
                 patchFunction = RtlpxLookupFunctionTableOverrideDownLevel;
                 patchOriginal = (void **)&g_originalLookupDownLevel;
             }
 
-            if (!internalAddress) {
+            if (!internalAddress)
+            {
                 // and 2k3 to 7 don't even _have_ Rtlpx - so we directly hook the Rtl* function
-                if (IsWindows8OrGreater()) {
-                    printf("could not find RtlpxLookupFunctionTable - hooking RtlLookupFunctionTable directly. This will break on a Win8+ system since RtlpxLookupFunctionTable is "
+                if (IsWindows8OrGreater())
+                {
+                    printf("could not find RtlpxLookupFunctionTable - hooking RtlLookupFunctionTable directly. This "
+                           "will break on a Win8+ system since RtlpxLookupFunctionTable is "
                            "supposed to exist!\n");
                 }
 
@@ -221,11 +244,13 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
         MH_CreateHook(internalAddress, patchFunction, patchOriginal);
         MH_EnableHook(MH_ALL_HOOKS);
     }
-    else {
+    else
+    {
         // trace("Not running on Windows - no RtlLookupFunctionTable. Is this some fake OS?\n");
 
         DisableToolHelpScope scope;
-        MH_CreateHookApi(L"ntdll.dll", "RtlImageDirectoryEntryToData", RtlImageDirectoryEntryToDataStub, (void **)&g_origRtlImageDirectoryEntryToData);
+        MH_CreateHookApi(L"ntdll.dll", "RtlImageDirectoryEntryToData", RtlImageDirectoryEntryToDataStub,
+                         (void **)&g_origRtlImageDirectoryEntryToData);
         MH_EnableHook(MH_ALL_HOOKS);
     }
 }
@@ -235,29 +260,34 @@ static BOOLEAN (*g_origRtlDispatchException)(EXCEPTION_RECORD *record, CONTEXT *
 
 static BOOLEAN RtlDispatchExceptionStub(EXCEPTION_RECORD *record, CONTEXT *context) {
     // anti-anti-anti-anti-debug
-    if (IsDebuggerPresent() && (record->ExceptionCode == 0xc0000008 /* || record->ExceptionCode == 0x80000003*/)) {
+    if (IsDebuggerPresent() && (record->ExceptionCode == 0xc0000008 /* || record->ExceptionCode == 0x80000003*/))
+    {
         return TRUE;
     }
 
     BOOLEAN success = g_origRtlDispatchException(record, context);
 
-    if (IsDebuggerPresent()) {
+    if (IsDebuggerPresent())
+    {
         return success;
     }
 
     static bool inExceptionFallback;
 
-    if (!success) {
-        if (!inExceptionFallback) {
+    if (!success)
+    {
+        if (!inExceptionFallback)
+        {
             inExceptionFallback = true;
 
             // AddCrashometry("exception_override", "true");
 
             EXCEPTION_POINTERS ptrs;
-            ptrs.ContextRecord   = context;
+            ptrs.ContextRecord = context;
             ptrs.ExceptionRecord = record;
 
-            if (g_exceptionHandler) {
+            if (g_exceptionHandler)
+            {
                 g_exceptionHandler(&ptrs);
             }
 
@@ -273,7 +303,8 @@ extern "C" void __declspec(dllexport) CoreSetExceptionOverride(LONG (*handler)(E
 
     void *baseAddress = GetProcAddress(GetModuleHandle("ntdll.dll"), "KiUserExceptionDispatcher");
 
-    if (baseAddress) {
+    if (baseAddress)
+    {
         void *internalAddress = FindCallFromAddress(baseAddress, UD_Icall, true);
 
         {

@@ -16,4 +16,4 @@ namespace Framework::Utils {
         dst[copy_len] = '\0';
         return src_len;
     }
-}
+} // namespace Framework::Utils

@@ -16,12 +16,12 @@ namespace Framework::World {
     EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
         CoreModules::SetWorldEngine(this);
         _networkPeer = networkPeer;
-        _world       = std::make_unique<flecs::world>();
+        _world = std::make_unique<flecs::world>();
 
         // Register a base module
         _world->import <Modules::Base>();
 
-        _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
+        _allStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
 
         return EngineError::ENGINE_NONE;
@@ -39,14 +39,16 @@ namespace Framework::World {
 
     bool Engine::IsEntityOwner(flecs::entity e, uint64_t guid) {
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-        if (!es) {
+        if (!es)
+        {
             return false;
         }
         return (es->owner == guid);
     }
 
     void Engine::WakeEntity(flecs::entity e) {
-        if (!e.get<Framework::World::Modules::Base::TickRateRegulator>()) {
+        if (!e.get<Framework::World::Modules::Base::TickRateRegulator>())
+        {
             return;
         }
         auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
@@ -58,8 +60,10 @@ namespace Framework::World {
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {
-            for (auto i : it) {
-                if (s[i].guid == guid) {
+            for (auto i : it)
+            {
+                if (s[i].guid == guid)
+                {
                     ourEntity = it.entity(i);
                     return;
                 }

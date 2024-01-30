@@ -30,14 +30,14 @@
 
 namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
-    using NetworkConnectionClosedCallback    = fu2::function<void() const>;
+    using NetworkConnectionClosedCallback = fu2::function<void() const>;
 
     struct InstanceOptions {
-        int64_t discordAppId                = 0;
-        bool usePresence                    = true;
-        bool useRenderer                    = true;
+        int64_t discordAppId = 0;
+        bool usePresence = true;
+        bool useRenderer = true;
         [[maybe_unused]] bool useNetworking = true;
-        bool useImGUI                       = false;
+        bool useImGUI = false;
 
         // networked game metadata (required)
         std::string gameName;
@@ -89,10 +89,10 @@ namespace Framework::Integrations::Client {
         void Render();
         void Update();
 
-        virtual bool PostInit()    = 0;
+        virtual bool PostInit() = 0;
         virtual bool PreShutdown() = 0;
-        virtual void PostUpdate()  = 0;
-        virtual void PostRender()  = 0;
+        virtual void PostUpdate() = 0;
+        virtual void PostRender() = 0;
 
         ClientError RenderInit();
 

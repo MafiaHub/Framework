@@ -21,17 +21,16 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::RPC {
-    template <class T>
-    class IGameRPC {
+    template <class T> class IGameRPC {
       private:
-        SLNet::Packet *packet {};
+        SLNet::Packet *packet{};
         uint32_t _hashName = 0;
 
       protected:
         flecs::entity_t _serverID = 0;
 
       public:
-        IGameRPC(): _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
+        IGameRPC() : _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())){};
         void SetServerID(flecs::entity_t serverID) {
             _serverID = serverID;
         }
@@ -41,7 +40,7 @@ namespace Framework::Networking::RPC {
         }
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
-        virtual bool Valid() const                               = 0;
+        virtual bool Valid() const = 0;
 
         void Serialize2(SLNet::BitStream *bs, bool write) {
             bs->Serialize(write, _serverID);

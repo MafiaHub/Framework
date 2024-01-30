@@ -12,18 +12,21 @@
 
 namespace Framework::External::SDL2 {
     Error Wrapper::Init(HWND windowHandle) {
-        if (!windowHandle) {
+        if (!windowHandle)
+        {
             return Error::ERROR_WINDOW_INVALID_HANDLE;
         }
         _windowHandle = windowHandle;
 
-        if (!SDL_Init(SDL_INIT_EVERYTHING)) {
+        if (!SDL_Init(SDL_INIT_EVERYTHING))
+        {
             return Error::ERROR_INIT_FAILED;
         }
 
         _window = SDL_CreateWindowFrom(windowHandle);
 
-        if (!_window) {
+        if (!_window)
+        {
             return Error::ERROR_WINDOW_CREATION_FAILED;
         }
 

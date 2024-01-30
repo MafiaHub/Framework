@@ -9,7 +9,8 @@
 #pragma once
 
 /*
- * This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.h
+ * This file is based on ExecutableLoader from:
+ * https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.h
  * See:https://github.com/citizenfx/fivem/blob/master/code/LICENSE
  */
 
@@ -23,14 +24,14 @@ namespace Framework::Launcher::Loaders {
     class ExecutableLoader {
       public:
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
-        using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;
+        using LibraryLoaderProc = fu2::function<HMODULE(const char *) const>;
 
       private:
         const uint8_t *_origBinary;
-        HMODULE _module {};
+        HMODULE _module{};
         uintptr_t _loadLimit;
 
-        void *_entryPoint {};
+        void *_entryPoint{};
 
         LibraryLoaderProc _libraryLoader;
         FunctionResolverProc _functionResolver;
@@ -52,13 +53,11 @@ namespace Framework::Launcher::Loaders {
 
         HMODULE ResolveLibrary(const char *name);
 
-        template <typename T>
-        inline const T *GetRVA(uint32_t rva) {
+        template <typename T> inline const T *GetRVA(uint32_t rva) {
             return (T *)(_origBinary + rva);
         }
 
-        template <typename T>
-        inline T *GetTargetRVA(uint32_t rva) {
+        template <typename T> inline T *GetTargetRVA(uint32_t rva) {
             return (T *)((uint8_t *)_module + rva);
         }
 

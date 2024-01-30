@@ -16,12 +16,14 @@
 
 #include "world/types/streaming.hpp"
 
-#define CALL_CUSTOM_PROC(kind)                                                                                                                                                                                                                                                         \
-    const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();                                                                                                                                                                                                      \
-    if (streamable != nullptr) {                                                                                                                                                                                                                                                       \
-        if (streamable->modEvents.kind != nullptr) {                                                                                                                                                                                                                                   \
-            streamable->modEvents.kind(peer, guid, e);                                                                                                                                                                                                                                 \
-        }                                                                                                                                                                                                                                                                              \
+#define CALL_CUSTOM_PROC(kind)                                                                                         \
+    const auto streamable = e.get<Framework::World::Modules::Base::Streamable>();                                      \
+    if (streamable != nullptr)                                                                                         \
+    {                                                                                                                  \
+        if (streamable->modEvents.kind != nullptr)                                                                     \
+        {                                                                                                              \
+            streamable->modEvents.kind(peer, guid, e);                                                                 \
+        }                                                                                                              \
     }
 
 namespace Framework::World::Modules {
@@ -45,7 +47,8 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+        streamable->events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid,
+                                                flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntitySelfUpdate entitySelfUpdate;
             entitySelfUpdate.SetServerID(e.id());
             peer->Send(entitySelfUpdate, guid);
@@ -65,7 +68,8 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+        streamable->events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid,
+                                                 flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
@@ -80,9 +84,10 @@ namespace Framework::World::Modules {
     void Base::SetupClientEmitters(Streamable *streamable) {
         streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
-            const auto tr  = e.get<Framework::World::Modules::Base::Transform>();
+            const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto sid = e.get<Framework::World::Modules::Base::ServerID>();
-            if (tr && sid) {
+            if (tr && sid)
+            {
                 entityUpdate.FromParameters(*tr, 0);
                 entityUpdate.SetServerID(sid->id);
             }
@@ -94,100 +99,125 @@ namespace Framework::World::Modules {
 
     void Base::SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine) {
         using namespace Framework::Networking::Messages;
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE,
+                                                   [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+                                                       if (!msg->Valid())
+                                                       {
+                                                           return;
+                                                       }
 
-            const auto e = worldEngine->WrapEntity(msg->GetServerID());
+                                                       const auto e = worldEngine->WrapEntity(msg->GetServerID());
 
-            if (!e.is_alive()) {
-                return;
-            }
+                                                       if (!e.is_alive())
+                                                       {
+                                                           return;
+                                                       }
 
-            if (!worldEngine->IsEntityOwner(e, guid.g)) {
-                return;
-            }
+                                                       if (!worldEngine->IsEntityOwner(e, guid.g))
+                                                       {
+                                                           return;
+                                                       }
 
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            const auto incomingTr = msg->GetTransform();
+                                                       auto tr = e.get_mut<World::Modules::Base::Transform>();
+                                                       const auto incomingTr = msg->GetTransform();
 
-            if (tr->ValidateGeneration(incomingTr)) {
-                *tr = incomingTr;
-            }
-        });
+                                                       if (tr->ValidateGeneration(incomingTr))
+                                                       {
+                                                           *tr = incomingTr;
+                                                       }
+                                                   });
     }
 
-    void Base::SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory) {
+    void Base::SetupClientReceivers(Framework::Networking::NetworkPeer *net,
+                                    Framework::World::ClientEngine *worldEngine,
+                                    Framework::World::Archetypes::StreamingFactory *streamingFactory) {
         using namespace Framework::Networking::Messages;
-        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [worldEngine, streamingFactory](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            if (worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
-                return;
-            }
-            const auto e = worldEngine->CreateEntity(msg->GetServerID());
-            streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
+        net->RegisterMessage<GameSyncEntitySpawn>(
+            GameMessages::GAME_SYNC_ENTITY_SPAWN,
+            [worldEngine, streamingFactory](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
+                if (!msg->Valid())
+                {
+                    return;
+                }
+                if (worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive())
+                {
+                    return;
+                }
+                const auto e = worldEngine->CreateEntity(msg->GetServerID());
+                streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
 
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
-        });
-        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+                auto tr = e.get_mut<World::Modules::Base::Transform>();
+                *tr = msg->GetTransform();
+            });
+        net->RegisterMessage<GameSyncEntityDespawn>(
+            GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
+                if (!msg->Valid())
+                {
+                    return;
+                }
 
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
+                const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
 
-            if (!e.is_alive()) {
-                return;
-            }
+                if (!e.is_alive())
+                {
+                    return;
+                }
 
-            e.destruct();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+                e.destruct();
+            });
+        net->RegisterMessage<GameSyncEntityUpdate>(
+            GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+                if (!msg->Valid())
+                {
+                    return;
+                }
 
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
+                const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
 
-            if (!e.is_alive()) {
-                return;
-            }
+                if (!e.is_alive())
+                {
+                    return;
+                }
 
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+                auto tr = e.get_mut<World::Modules::Base::Transform>();
+                *tr = msg->GetTransform();
 
-            auto es   = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+                auto es = e.get_mut<World::Modules::Base::Streamable>();
+                es->owner = msg->GetOwner();
+            });
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE,
+                                                   [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+                                                       if (!msg->Valid())
+                                                       {
+                                                           return;
+                                                       }
 
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
+                                                       const auto e =
+                                                           worldEngine->GetEntityByServerID(msg->GetServerID());
 
-            if (!e.is_alive()) {
-                return;
-            }
-            auto es   = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+                                                       if (!e.is_alive())
+                                                       {
+                                                           return;
+                                                       }
+                                                       auto es = e.get_mut<World::Modules::Base::Streamable>();
+                                                       es->owner = msg->GetOwner();
+                                                   });
+        net->RegisterMessage<GameSyncEntitySelfUpdate>(
+            GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE,
+            [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
+                if (!msg->Valid())
+                {
+                    return;
+                }
 
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
+                const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
 
-            if (!e.is_alive()) {
-                return;
-            }
+                if (!e.is_alive())
+                {
+                    return;
+                }
 
-            // Nothing to do for now.
-        });
+                // Nothing to do for now.
+            });
     }
 } // namespace Framework::World::Modules

@@ -15,9 +15,9 @@
 #include <flecs/flecs.h>
 
 namespace Framework::Networking::Messages {
-    class ClientConnectionFinalized final: public IMessage {
+    class ClientConnectionFinalized final : public IMessage {
       private:
-        float _serverTickRate     = 0.0f;
+        float _serverTickRate = 0.0f;
         flecs::entity_t _entityID = 0;
 
       public:
@@ -27,7 +27,7 @@ namespace Framework::Networking::Messages {
 
         void FromParameters(float tickRate, flecs::entity_t entityID) {
             _serverTickRate = tickRate;
-            _entityID       = entityID;
+            _entityID = entityID;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

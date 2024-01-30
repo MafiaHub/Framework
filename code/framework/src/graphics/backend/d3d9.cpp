@@ -9,7 +9,7 @@
 #include "d3d9.h"
 
 namespace Framework::Graphics {
-    bool D3D9Backend::Init(IDirect3DDevice9 *device, void *_nothing, void*, void*) {
+    bool D3D9Backend::Init(IDirect3DDevice9 *device, void *_nothing, void *, void *) {
         _device = device;
 
         return true;
@@ -19,5 +19,6 @@ namespace Framework::Graphics {
         return true;
     }
 
-    void D3D9Backend::Update() {}
+    void D3D9Backend::Update() {
+    }
 } // namespace Framework::Graphics

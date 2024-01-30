@@ -12,30 +12,35 @@
 
 namespace Framework::External::Steam {
     SteamError Wrapper::Init() {
-        if (!SteamAPI_IsSteamRunning()) {
+        if (!SteamAPI_IsSteamRunning())
+        {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Steam API is not running");
             return SteamError::STEAM_CLIENT_NOT_RUNNING;
         }
 
-        if (!SteamAPI_Init()) {
+        if (!SteamAPI_Init())
+        {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam API");
             return SteamError::STEAM_INIT_FAILED;
         }
 
-        if (!SteamUser()->BLoggedOn()) {
+        if (!SteamUser()->BLoggedOn())
+        {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("User is not logged on");
             return SteamError::STEAM_USER_NOT_LOGGED_ON;
         }
 
         CSteamAPIContext *ctx = new CSteamAPIContext();
-        _ctx                  = ctx;
+        _ctx = ctx;
 
-        if (!_ctx) {
+        if (!_ctx)
+        {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to create steam api context");
             return SteamError::STEAM_CONTEXT_CREATION_FAILED;
         }
 
-        if (!_ctx->Init()) {
+        if (!_ctx->Init())
+        {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam context");
             return SteamError::STEAM_CONTEXT_INIT_FAILED;
         }
@@ -49,7 +54,8 @@ namespace Framework::External::Steam {
     }
 
     CSteamID Wrapper::GetSteamID() const {
-        if (!_ctx) {
+        if (!_ctx)
+        {
             return CSteamID();
         }
 
@@ -57,7 +63,8 @@ namespace Framework::External::Steam {
     }
 
     std::string Wrapper::GetSteamUsername() const {
-        if (!_ctx) {
+        if (!_ctx)
+        {
             return std::string();
         }
 
@@ -65,7 +72,8 @@ namespace Framework::External::Steam {
     }
 
     EPersonaState Wrapper::GetSteamUserState() const {
-        if (!_ctx) {
+        if (!_ctx)
+        {
             return EPersonaState::k_EPersonaStateOffline;
         }
 

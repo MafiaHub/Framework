@@ -15,7 +15,7 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncEntityDespawn final: public GameSyncMessage {
+    class GameSyncEntityDespawn final : public GameSyncMessage {
       public:
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_DESPAWN;

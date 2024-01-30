@@ -27,7 +27,7 @@ namespace Framework::Scripting {
         EngineTypes _engineType = EngineTypes::ENGINE_NODE;
 
       public:
-        Module()  = default;
+        Module() = default;
         ~Module() = default;
 
         ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
@@ -48,7 +48,7 @@ namespace Framework::Scripting {
 
         void SetProcessArguments(int argc, char **argv) {
             _processArgsCount = argc;
-            _processArgs      = argv;
+            _processArgs = argv;
         }
 
         void SetModName(std::string name) {

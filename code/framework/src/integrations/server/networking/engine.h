@@ -13,7 +13,7 @@
 namespace Framework::Integrations::Server::Networking {
     class Engine {
       private:
-        std::unique_ptr<Framework::Networking::NetworkServer> _networkServer {};
+        std::unique_ptr<Framework::Networking::NetworkServer> _networkServer{};
 
       public:
         Engine();

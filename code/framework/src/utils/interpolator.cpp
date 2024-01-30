@@ -19,7 +19,9 @@ namespace math {
         return static_cast<float>((pos - from) / (to - from));
     }
 
-    inline float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to, const std::chrono::high_resolution_clock::time_point &pos) {
+    inline float Unlerp(const std::chrono::high_resolution_clock::time_point &from,
+                        const std::chrono::high_resolution_clock::time_point &to,
+                        const std::chrono::high_resolution_clock::time_point &pos) {
         float r = std::chrono::duration<float, std::milli>(to - from).count();
 
         // Avoid dividing by 0 (results in INF values)
@@ -34,16 +36,17 @@ namespace math {
     }
 } // namespace math
 
-void Framework::Utils::Interpolator::Position::SetTargetValue(const glm::vec3 &current, const glm::vec3 &target, float delay) {
+void Framework::Utils::Interpolator::Position::SetTargetValue(const glm::vec3 &current, const glm::vec3 &target,
+                                                              float delay) {
     UpdateTargetValue(current);
 
-    _end   = target;
+    _end = target;
     _start = current;
     _error = target - current;
 
     _error *= glm::mix(0.25f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay));
 
-    _startTime  = std::chrono::high_resolution_clock::now();
+    _startTime = std::chrono::high_resolution_clock::now();
     _finishTime = _startTime + std::chrono::milliseconds(static_cast<int>(delay));
 
     _lastAlpha = 0.0f;
@@ -53,13 +56,13 @@ glm::vec3 Framework::Utils::Interpolator::Position::UpdateTargetValue(const glm:
         return current;
 
     const auto currentTime = GetCurrentTime();
-    float alpha            = math::Unlerp(_startTime, _finishTime, currentTime);
+    float alpha = math::Unlerp(_startTime, _finishTime, currentTime);
 
     // NOTE: don't let it overcompensate
     alpha = std::clamp(alpha, 0.0f, _compensationFactor);
 
     auto currentAlpha = alpha - _lastAlpha;
-    _lastAlpha        = alpha;
+    _lastAlpha = alpha;
 
     glm::vec3 compensation = glm::mix(glm::vec3(), _error, currentAlpha);
 
@@ -68,22 +71,26 @@ glm::vec3 Framework::Utils::Interpolator::Position::UpdateTargetValue(const glm:
 
     auto newPos = current + compensation;
 
-    // NOTE: snap value to target pos if below threshold (useful when entity stands, no need to run calculations during that time)
-    if (glm::distance(newPos, _end) <= _snapThreshold) {
+    // NOTE: snap value to target pos if below threshold (useful when entity stands, no need to run calculations during
+    // that time)
+    if (glm::distance(newPos, _end) <= _snapThreshold)
+    {
         _finishTime = TimePoint::max();
-        newPos      = _end;
+        newPos = _end;
     }
 
     return newPos;
 }
-void Framework::Utils::Interpolator::Rotation::SetTargetValue(const glm::quat &current, const glm::quat &target, float delay) {
+void Framework::Utils::Interpolator::Rotation::SetTargetValue(const glm::quat &current, const glm::quat &target,
+                                                              float delay) {
     UpdateTargetValue(current);
 
-    _end   = glm::normalize(target);
+    _end = glm::normalize(target);
     _start = glm::normalize(current);
-    _error = glm::slerp(glm::identity<glm::quat>(), glm::normalize(glm::inverse(_start)) * _end, glm::mix(0.40f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay)));
+    _error = glm::slerp(glm::identity<glm::quat>(), glm::normalize(glm::inverse(_start)) * _end,
+                        glm::mix(0.40f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay)));
 
-    _startTime  = GetCurrentTime();
+    _startTime = GetCurrentTime();
     _finishTime = _startTime + std::chrono::milliseconds(static_cast<int>(delay));
 
     _lastAlpha = 0.0f;
@@ -93,13 +100,13 @@ glm::quat Framework::Utils::Interpolator::Rotation::UpdateTargetValue(const glm:
         return current;
 
     const auto currentTime = GetCurrentTime();
-    float alpha            = math::Unlerp(_startTime, _finishTime, currentTime);
+    float alpha = math::Unlerp(_startTime, _finishTime, currentTime);
 
     // NOTE: don't let it overcompensate
     alpha = std::clamp(alpha, 0.0f, _compensationFactor);
 
     auto currentAlpha = alpha - _lastAlpha;
-    _lastAlpha        = alpha;
+    _lastAlpha = alpha;
 
     auto compensation = glm::slerp(glm::identity<glm::quat>(), _error, currentAlpha);
 
@@ -111,13 +118,13 @@ glm::quat Framework::Utils::Interpolator::Rotation::UpdateTargetValue(const glm:
 void Framework::Utils::Interpolator::Scalar::SetTargetValue(const float &current, const float &target, float delay) {
     UpdateTargetValue(current);
 
-    _end   = target;
+    _end = target;
     _start = current;
     _error = target - current;
 
     _error *= glm::mix(0.25f, 1.0f, math::UnlerpClamped(_delayMin, _delayMax, delay));
 
-    _startTime  = std::chrono::high_resolution_clock::now();
+    _startTime = std::chrono::high_resolution_clock::now();
     _finishTime = _startTime + std::chrono::milliseconds(static_cast<int>(delay));
 
     _lastAlpha = 0.0f;
@@ -127,13 +134,13 @@ float Framework::Utils::Interpolator::Scalar::UpdateTargetValue(const float &cur
         return current;
 
     const auto currentTime = GetCurrentTime();
-    float alpha            = math::Unlerp(_startTime, _finishTime, currentTime);
+    float alpha = math::Unlerp(_startTime, _finishTime, currentTime);
 
     // NOTE: don't let it overcompensate
     alpha = std::clamp(alpha, 0.0f, _compensationFactor);
 
     auto currentAlpha = alpha - _lastAlpha;
-    _lastAlpha        = alpha;
+    _lastAlpha = alpha;
 
     float compensation = glm::mix(0.0f, _error, currentAlpha);
 

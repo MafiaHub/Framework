@@ -17,11 +17,13 @@ namespace Framework::Utils {
         _document = nullptr;
     }
     bool Config::Parse(const std::string &content) {
-        try {
+        try
+        {
             const auto doc = nlohmann::json::parse(content, nullptr, true, true);
-            *_document     = doc;
+            *_document = doc;
         }
-        catch (nlohmann::json::exception &e) {
+        catch (nlohmann::json::exception &e)
+        {
             _lastError = e.what();
             return false;
         }

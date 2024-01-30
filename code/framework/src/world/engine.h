@@ -18,24 +18,28 @@
 
 #include "core_modules.h"
 
-#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                                                                                                                                                                                \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc {};                                                                                                                                                                                                                                                               \
-        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                               \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendRPC<rpc>(s);                                                                                                                                                                                                                                                    \
-        }                                                                                                                                                                                                                                                                              \
+#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        auto s = rpc{};                                                                                                \
+        s.FromParameters(__VA_ARGS__);                                                                                 \
+        auto __net = Framework::CoreModules::GetNetworkPeer();                                                         \
+        if (__net)                                                                                                     \
+        {                                                                                                              \
+            __net->SendRPC<rpc>(s);                                                                                    \
+        }                                                                                                              \
     } while (0)
 
-#define FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)                                                                                                                                                                                                                                       \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc {};                                                                                                                                                                                                                                                               \
-        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                               \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendRPC<rpc>(s, guid);                                                                                                                                                                                                                                              \
-        }                                                                                                                                                                                                                                                                              \
+#define FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)                                                                       \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        auto s = rpc{};                                                                                                \
+        s.FromParameters(__VA_ARGS__);                                                                                 \
+        auto __net = Framework::CoreModules::GetNetworkPeer();                                                         \
+        if (__net)                                                                                                     \
+        {                                                                                                              \
+            __net->SendRPC<rpc>(s, guid);                                                                              \
+        }                                                                                                              \
     } while (0)
 
 namespace Framework::Scripting::Engines::Node {

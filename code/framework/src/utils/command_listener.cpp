@@ -14,9 +14,10 @@
 
 namespace Framework::Utils {
     CommandListener::CommandListener() {
-        _running       = true;
+        _running = true;
         _currentThread = std::make_shared<std::thread>([this]() {
-            while (_running) {
+            while (_running)
+            {
                 std::string commandString;
                 std::getline(std::cin, commandString);
 
@@ -32,11 +33,13 @@ namespace Framework::Utils {
     }
 
     void CommandListener::Update() {
-        if (!_cb) {
+        if (!_cb)
+        {
             return;
         }
         std::lock_guard<std::mutex> lock(_mutex);
-        while (!_queue.empty()) {
+        while (!_queue.empty())
+        {
             const auto &cmdLine = _queue.front();
             _cb(cmdLine);
             _queue.pop();

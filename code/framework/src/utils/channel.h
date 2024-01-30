@@ -13,8 +13,7 @@
 #include <queue>
 
 namespace Framework::Utils {
-    template <typename ProcT = fu2::function<void() const>>
-    class Channel {
+    template <typename ProcT = fu2::function<void() const>> class Channel {
       public:
         using Proc = ProcT;
 
@@ -30,7 +29,8 @@ namespace Framework::Utils {
 
         void Update() {
             std::lock_guard lock(_mtx);
-            while (!_queue.empty()) {
+            while (!_queue.empty())
+            {
                 const auto &proc = _queue.front();
                 proc();
                 _queue.pop();

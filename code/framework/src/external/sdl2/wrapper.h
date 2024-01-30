@@ -16,7 +16,7 @@
 namespace Framework::External::SDL2 {
     class Wrapper final {
       private:
-        HWND _windowHandle  = 0;
+        HWND _windowHandle = 0;
         SDL_Window *_window = nullptr;
 
       public:

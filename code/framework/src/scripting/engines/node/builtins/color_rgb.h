@@ -81,11 +81,13 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         static ColorRGB FromVec4(const glm::vec4 &vec) {
-            return ColorRGB(static_cast<int>(vec.r * 255.0f), static_cast<int>(vec.g * 255.0f), static_cast<int>(vec.b * 255.0f));
+            return ColorRGB(static_cast<int>(vec.r * 255.0f), static_cast<int>(vec.g * 255.0f),
+                            static_cast<int>(vec.b * 255.0f));
         }
 
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
-            if (!rootModule) {
+            if (!rootModule)
+            {
                 return;
             }
 

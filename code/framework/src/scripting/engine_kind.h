@@ -9,5 +9,9 @@
 #pragma once
 
 namespace Framework::Scripting {
-    enum EngineTypes { ENGINE_NODE, ENGINE_LUA, ENGINE_SQUIRREL };
-}
+    enum EngineTypes {
+        ENGINE_NODE,
+        ENGINE_LUA,
+        ENGINE_SQUIRREL
+    };
+} // namespace Framework::Scripting

@@ -21,7 +21,14 @@ namespace Framework::Utils {
       public:
         using JobProc = fu2::function<bool() const>;
 
-        enum JobPriority : size_t { RealTime, High, Normal, Low, Idle, NumJobPriorities };
+        enum JobPriority : size_t {
+            RealTime,
+            High,
+            Normal,
+            Low,
+            Idle,
+            NumJobPriorities
+        };
 
         ~JobSystem();
 
@@ -40,13 +47,17 @@ namespace Framework::Utils {
         static JobSystem *GetInstance();
 
       private:
-        enum class JobStatus : int32_t { Invalid = -1, Pending = 0, Running = 1 };
+        enum class JobStatus : int32_t {
+            Invalid = -1,
+            Pending = 0,
+            Running = 1
+        };
 
         struct Job {
             JobProc proc;
             JobPriority priority = JobPriority::Normal;
-            JobStatus status     = JobStatus::Invalid;
-            bool repeatOnFail    = false;
+            JobStatus status = JobStatus::Invalid;
+            bool repeatOnFail = false;
         };
 
         using JobQueue = std::queue<Job>;
@@ -54,7 +65,7 @@ namespace Framework::Utils {
         std::vector<std::thread> _threads;
         std::recursive_mutex _mutex;
         std::atomic_bool _pendingShutdown = false;
-        std::atomic_uint64_t _counter     = 0;
+        std::atomic_uint64_t _counter = 0;
 
         /**
          * Don't touch or shit explodes

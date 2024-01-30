@@ -9,15 +9,14 @@
 #pragma once
 
 namespace Framework::Utils {
-    template <typename T>
-    class Watcher {
+    template <typename T> class Watcher {
       private:
-        T _value {};
+        T _value{};
         bool _hasChanged = false;
 
       public:
         Watcher() = default;
-        Watcher(T value): _value(value), _hasChanged(true) {};
+        Watcher(T value) : _value(value), _hasChanged(true){};
 
         inline bool HasChanged() const {
             return _hasChanged;
@@ -28,7 +27,7 @@ namespace Framework::Utils {
         }
 
         inline void Changed(T value) {
-            _value      = value;
+            _value = value;
             _hasChanged = true;
         }
 
@@ -42,7 +41,7 @@ namespace Framework::Utils {
 
         inline void operator=(T value) {
             _hasChanged = (_value != value);
-            _value      = value;
+            _value = value;
         }
     };
 } // namespace Framework::Utils

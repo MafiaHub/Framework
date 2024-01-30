@@ -11,12 +11,10 @@
 #include <tuple>
 
 namespace Framework::Utils {
-    template <typename T>
-    struct function_traits: public function_traits<decltype(&T::operator())> {};
+    template <typename T> struct function_traits : public function_traits<decltype(&T::operator())> {};
 
     template <typename ClassType, typename ReturnType, typename... Args>
     struct function_traits<ReturnType (ClassType::*)(Args...) const> {
-        template <size_t i>
-        using arg_t = std::tuple_element_t<i, std::tuple<Args...>>;
+        template <size_t i> using arg_t = std::tuple_element_t<i, std::tuple<Args...>>;
     };
 } // namespace Framework::Utils

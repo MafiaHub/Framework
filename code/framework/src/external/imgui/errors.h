@@ -9,5 +9,12 @@
 #pragma once
 
 namespace Framework::External::ImGUI {
-    enum class Error { IMGUI_NONE, IMGUI_NOT_INITIALIZED, IMGUI_RENDERER_NOT_SET, IMGUI_WINDOW_NOT_SET, IMGUI_BACKEND_MISMATCH, IMGUI_GENERIC_ERROR };
-}
+    enum class Error {
+        IMGUI_NONE,
+        IMGUI_NOT_INITIALIZED,
+        IMGUI_RENDERER_NOT_SET,
+        IMGUI_WINDOW_NOT_SET,
+        IMGUI_BACKEND_MISMATCH,
+        IMGUI_GENERIC_ERROR
+    };
+} // namespace Framework::External::ImGUI

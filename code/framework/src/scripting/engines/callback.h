@@ -14,17 +14,19 @@
 namespace Framework::Scripting::Engines::Node {
     class SDK;
     class Engine;
-}
+} // namespace Framework::Scripting::Engines::Node
 
 namespace Framework::Scripting::Engines {
     class SDKRegisterWrapper final {
       private:
         Framework::Scripting::EngineTypes _kind = ENGINE_NODE;
-        void *_sdk                              = nullptr;
-        void *_engine                           = nullptr;
+        void *_sdk = nullptr;
+        void *_engine = nullptr;
 
       public:
-        SDKRegisterWrapper(void *engine, void *sdk, Framework::Scripting::EngineTypes kind): _engine(engine), _sdk(sdk), _kind(kind) {}
+        SDKRegisterWrapper(void *engine, void *sdk, Framework::Scripting::EngineTypes kind)
+            : _engine(engine), _sdk(sdk), _kind(kind) {
+        }
 
         Framework::Scripting::EngineTypes GetKind() const {
             return _kind;

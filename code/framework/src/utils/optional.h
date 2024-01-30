@@ -11,23 +11,22 @@
 #include <BitStream.h>
 
 namespace Framework::Utils {
-    template <typename T>
-    class Optional {
+    template <typename T> class Optional {
       private:
-        T _value {};
+        T _value{};
         bool _hasValue = false;
 
       public:
         Optional() = default;
-        Optional(T value): _value(value), _hasValue(true) {};
+        Optional(T value) : _value(value), _hasValue(true){};
 
         Optional(const Optional &other) {
-            _value    = other._value;
+            _value = other._value;
             _hasValue = other._hasValue;
         }
 
         Optional &operator=(const Optional &other) {
-            _value    = other._value;
+            _value = other._value;
             _hasValue = other._hasValue;
             return *this;
         }
@@ -40,12 +39,12 @@ namespace Framework::Utils {
             return _value;
         }
 
-        inline const T& RefValue() const {
+        inline const T &RefValue() const {
             return _value;
         }
 
         inline void Clear() {
-            _value    = T {};
+            _value = T{};
             _hasValue = false;
         }
 
@@ -54,21 +53,25 @@ namespace Framework::Utils {
         }
 
         inline void operator=(T value) {
-            _value    = value;
+            _value = value;
             _hasValue = true;
         }
 
         // BitStream support for serialization
         void Serialize(SLNet::BitStream *bs, bool write) {
-            if (write) {
+            if (write)
+            {
                 bs->Write(_hasValue);
-                if (_hasValue) {
+                if (_hasValue)
+                {
                     bs->Write(_value);
                 }
             }
-            else {
+            else
+            {
                 bs->Read(_hasValue);
-                if (_hasValue) {
+                if (_hasValue)
+                {
                     bs->Read(_value);
                 }
             }

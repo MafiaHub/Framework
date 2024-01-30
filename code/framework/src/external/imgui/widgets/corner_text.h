@@ -22,15 +22,17 @@ namespace Framework::External::ImGUI::Widgets {
     };
     // Adapted from Mafia: Oakwood Multiplayer
     static inline void DrawCornerText(Corner corner, const std::string &text, bool shadow = true) {
-        constexpr float padding       = 2.0f;
-        ImGuiIO &io                   = ImGui::GetIO();
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+        constexpr float padding = 2.0f;
+        ImGuiIO &io = ImGui::GetIO();
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+                                        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                                        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
-        ImVec2 work_pos               = viewport->WorkPos;
-        ImVec2 work_size              = viewport->WorkSize;
+        ImVec2 work_pos = viewport->WorkPos;
+        ImVec2 work_size = viewport->WorkSize;
         ImVec2 window_pos, window_pos_pivot;
-        window_pos.x       = (corner & 1) ? (work_pos.x + work_size.x - padding) : (work_pos.x + padding);
-        window_pos.y       = (corner & 2) ? (work_pos.y + work_size.y - padding) : (work_pos.y + padding);
+        window_pos.x = (corner & 1) ? (work_pos.x + work_size.x - padding) : (work_pos.x + padding);
+        window_pos.y = (corner & 2) ? (work_pos.y + work_size.y - padding) : (work_pos.y + padding);
         window_pos_pivot.x = (corner & 1) ? 1.0f : 0.0f;
         window_pos_pivot.y = (corner & 2) ? 1.0f : 0.0f;
         ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, window_pos_pivot);
@@ -39,7 +41,8 @@ namespace Framework::External::ImGUI::Widgets {
 
         const auto windowName = fmt::format("Overlay #{}", corner);
 
-        if (ImGui::Begin(windowName.c_str(), nullptr, window_flags)) {
+        if (ImGui::Begin(windowName.c_str(), nullptr, window_flags))
+        {
             if (shadow)
                 ImGui::PushFontShadow(0xFF000000);
             ImGui::Text("%s", text.c_str());

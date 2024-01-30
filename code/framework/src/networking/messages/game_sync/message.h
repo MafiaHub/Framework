@@ -14,7 +14,7 @@
 #include <BitStream.h>
 
 namespace Framework::Networking::Messages {
-    class GameSyncMessage: public IMessage {
+    class GameSyncMessage : public IMessage {
       protected:
         flecs::entity_t _serverID = 0;
 

@@ -15,15 +15,15 @@
 #include <spdlog/spdlog.h>
 #include <unordered_map>
 
-#define FRAMEWORK_INNER_NETWORKING   "Networking"
-#define FRAMEWORK_INNER_SCRIPTING    "Scripting"
-#define FRAMEWORK_INNER_HTTP         "HTTP"
-#define FRAMEWORK_INNER_SERVICES     "Services"
+#define FRAMEWORK_INNER_NETWORKING "Networking"
+#define FRAMEWORK_INNER_SCRIPTING "Scripting"
+#define FRAMEWORK_INNER_HTTP "HTTP"
+#define FRAMEWORK_INNER_SERVICES "Services"
 #define FRAMEWORK_INNER_INTEGRATIONS "Integrations"
-#define FRAMEWORK_INNER_JOBS         "Jobs"
-#define FRAMEWORK_INNER_LAUNCHER     "Launcher"
-#define FRAMEWORK_INNER_UTILS        "Utils"
-#define FRAMEWORK_INNER_GRAPHICS     "Graphics"
+#define FRAMEWORK_INNER_JOBS "Jobs"
+#define FRAMEWORK_INNER_LAUNCHER "Launcher"
+#define FRAMEWORK_INNER_UTILS "Utils"
+#define FRAMEWORK_INNER_GRAPHICS "Graphics"
 
 #define FRAMEWORK_INNER_SERVER "Server"
 #define FRAMEWORK_INNER_CLIENT "Client"
@@ -33,11 +33,11 @@ namespace Framework::Logging {
       private:
         [[maybe_unused]] std::chrono::time_point<std::chrono::system_clock> _sessionStart;
         std::unordered_map<const char *, std::shared_ptr<spdlog::logger>> _loggers;
-        std::string _logName   = "framework";
+        std::string _logName = "framework";
         std::string _logFolder = "logs";
-        size_t _maxFileSize    = 1024 * 1024 * 10;
-        size_t _maxFileCount   = 10;
-        bool _loggingPaused    = false;
+        size_t _maxFileSize = 1024 * 1024 * 10;
+        size_t _maxFileCount = 10;
+        bool _loggingPaused = false;
         std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> ringbuffer_sink;
         static inline size_t _maxRingBufferSize = 128;
 

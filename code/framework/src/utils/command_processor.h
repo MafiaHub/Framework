@@ -19,7 +19,15 @@
 #include <vector>
 
 namespace Framework::Utils {
-    enum CommandProcessorError { ERROR_NONE, ERROR_NONE_PRINT_HELP, ERROR_EMPTY_INPUT, ERROR_CMD_ALREADY_EXISTS, ERROR_CMD_UNSPECIFIED_NAME, ERROR_CMD_UNKNOWN, ERROR_INTERNAL };
+    enum CommandProcessorError {
+        ERROR_NONE,
+        ERROR_NONE_PRINT_HELP,
+        ERROR_EMPTY_INPUT,
+        ERROR_CMD_ALREADY_EXISTS,
+        ERROR_CMD_UNSPECIFIED_NAME,
+        ERROR_CMD_UNKNOWN,
+        ERROR_INTERNAL
+    };
 
     using CommandProc = fu2::function<void(cxxopts::ParseResult &) const>;
     class CommandProcessor {
@@ -35,7 +43,8 @@ namespace Framework::Utils {
 
         inline std::vector<std::string> GetCommandNames() const {
             std::vector<std::string> names;
-            for (auto &cmd : _commands) {
+            for (auto &cmd : _commands)
+            {
                 names.push_back(cmd.first);
             }
             return names;
@@ -46,6 +55,9 @@ namespace Framework::Utils {
         }
 
         Result<std::string, CommandProcessorError> ProcessCommand(const std::string &input);
-        Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
+        Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name,
+                                                                   std::initializer_list<cxxopts::Option> options,
+                                                                   const CommandProc &proc,
+                                                                   const std::string &desc = "");
     };
 } // namespace Framework::Utils

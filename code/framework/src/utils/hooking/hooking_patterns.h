@@ -25,10 +25,10 @@ namespace hook {
         void *m_pointer;
 
       public:
-        inline pattern_match(void *pointer): m_pointer(pointer) {}
+        inline pattern_match(void *pointer) : m_pointer(pointer) {
+        }
 
-        template <typename T>
-        T *get(ptrdiff_t offset = 0) const {
+        template <typename T> T *get(ptrdiff_t offset = 0) const {
             char *ptr = reinterpret_cast<char *>(m_pointer);
             return reinterpret_cast<T *>(ptr + offset);
         }
@@ -56,9 +56,11 @@ namespace hook {
         };
 
       protected:
-        inline pattern(void *module): m_rangeStart((uintptr_t)module), m_matched(false), m_rangeEnd(0) {}
+        inline pattern(void *module) : m_rangeStart((uintptr_t)module), m_matched(false), m_rangeEnd(0) {
+        }
 
-        inline pattern(uintptr_t begin, uintptr_t end): m_rangeStart(begin), m_rangeEnd(end), m_matched(false) {}
+        inline pattern(uintptr_t begin, uintptr_t end) : m_rangeStart(begin), m_rangeEnd(end), m_matched(false) {
+        }
 
         void Initialize(const char *pattern, size_t length);
 
@@ -72,12 +74,11 @@ namespace hook {
         }
 
       public:
-        template <size_t Len>
-        pattern(const char (&p)[Len]): pattern(getRVA<void>(0)) {
+        template <size_t Len> pattern(const char (&p)[Len]) : pattern(getRVA<void>(0)) {
             Initialize(p, Len);
         }
 
-        pattern(std::string_view p): pattern(getRVA<void>(0)) {
+        pattern(std::string_view p) : pattern(getRVA<void>(0)) {
             Initialize(p.data(), p.size());
         }
 
@@ -133,8 +134,7 @@ namespace hook {
             return std::forward<pattern>(*this).count(1)._get_internal(0);
         }
 
-        template <typename T = void>
-        inline auto get_first(ptrdiff_t offset = 0) {
+        template <typename T = void> inline auto get_first(ptrdiff_t offset = 0) {
             return get_one().get<T>(offset);
         }
 
@@ -145,43 +145,40 @@ namespace hook {
 #endif
     };
 
-    class module_pattern: public pattern {
+    class module_pattern : public pattern {
       public:
-        template <size_t Len>
-        module_pattern(void *module, const char (&pattern)[Len]): pattern(module) {
+        template <size_t Len> module_pattern(void *module, const char (&pattern)[Len]) : pattern(module) {
             Initialize(pattern, Len);
         }
 
-        module_pattern(void *module, std::string_view p): pattern(module) {
+        module_pattern(void *module, std::string_view p) : pattern(module) {
             Initialize(p.data(), p.size());
         }
     };
 
-    class range_pattern: public pattern {
+    class range_pattern : public pattern {
       public:
         template <size_t Len>
-        range_pattern(uintptr_t begin, uintptr_t end, const char (&pattern)[Len]): pattern(begin, end) {
+        range_pattern(uintptr_t begin, uintptr_t end, const char (&pattern)[Len]) : pattern(begin, end) {
             Initialize(pattern, Len);
         }
 
-        range_pattern(uintptr_t begin, uintptr_t end, std::string_view p): pattern(begin, end) {
+        range_pattern(uintptr_t begin, uintptr_t end, std::string_view p) : pattern(begin, end) {
             Initialize(p.data(), p.size());
         }
     };
 
-    template <typename T = void, size_t Len>
-    auto get_pattern(const char (&pattern_string)[Len], ptrdiff_t offset = 0) {
+    template <typename T = void, size_t Len> auto get_pattern(const char (&pattern_string)[Len], ptrdiff_t offset = 0) {
         return pattern(pattern_string).get_first<T>(offset);
     }
 
-    template <typename T = void>
-    auto get_pattern(std::string_view pattern_view, ptrdiff_t offset = 0) {
+    template <typename T = void> auto get_pattern(std::string_view pattern_view, ptrdiff_t offset = 0) {
         return pattern(pattern_view).get_first<T>(offset);
     }
 
     template <typename T = void, size_t Len>
     auto get_opcode_address(const char (&pattern_string)[Len], ptrdiff_t offset = 0) {
-        auto res         = pattern(pattern_string).get_first<T>(offset);
+        auto res = pattern(pattern_string).get_first<T>(offset);
         uint8_t *bytePtr = reinterpret_cast<uint8_t *>(res);
         return reinterpret_cast<uint64_t>(bytePtr + *(int32_t *)(bytePtr + 1) + 5);
     }

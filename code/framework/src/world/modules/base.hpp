@@ -35,8 +35,8 @@ namespace Framework::World::Modules {
             uint16_t genID = 0;
 
           public:
-            glm::vec3 pos {};
-            glm::vec3 vel {};
+            glm::vec3 pos{};
+            glm::vec3 vel{};
             glm::quat rot = glm::identity<glm::quat>();
 
             uint16_t GetGeneration() const {
@@ -47,7 +47,7 @@ namespace Framework::World::Modules {
                 ++genID;
             }
 
-            bool ValidateGeneration(const Transform& tr) {
+            bool ValidateGeneration(const Transform &tr) {
                 return genID == tr.genID;
             }
         };
@@ -57,7 +57,7 @@ namespace Framework::World::Modules {
         };
 
         struct Frame {
-            uint64_t modelHash {};
+            uint64_t modelHash{};
             glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
             std::string modelName;
         };
@@ -75,16 +75,20 @@ namespace Framework::World::Modules {
         };
 
         struct Streamable {
-            using IsVisibleProc   = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
+            using IsVisibleProc = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
             using AssignOwnerProc = fu2::function<bool(flecs::entity e, Streamable &streamable)>;
-            enum class HeuristicMode { ADD, REPLACE, REPLACE_POSITION };
+            enum class HeuristicMode {
+                ADD,
+                REPLACE,
+                REPLACE_POSITION
+            };
 
-            int virtualWorld      = 0;
-            bool isVisible        = true;
-            bool alwaysVisible    = false;
+            int virtualWorld = 0;
+            bool isVisible = true;
+            bool alwaysVisible = false;
             double defaultUpdateInterval = (1000.0 / 60.0); // 16.1667~ ms interval
             double updateInterval = defaultUpdateInterval;
-            uint64_t owner        = 0;
+            uint64_t owner = 0;
 
             AssignOwnerProc assignOwnerProc;
 
@@ -125,7 +129,7 @@ namespace Framework::World::Modules {
             struct StreamData {
                 double lastUpdate = 0.0;
             };
-            float range   = 100.0f;
+            float range = 100.0f;
             uint64_t guid = (uint64_t)-1;
             std::string nickname;
             std::unordered_map<flecs::entity_t, StreamData> entities;
@@ -138,10 +142,10 @@ namespace Framework::World::Modules {
 
             // TODO expose STL types once https://github.com/SanderMertens/flecs/issues/712 is resolved.
 
-            auto _transform  = world.component<Transform>();
-            auto _frame      = world.component<Frame>();
+            auto _transform = world.component<Transform>();
+            auto _frame = world.component<Frame>();
             auto _streamable = world.component<Streamable>();
-            auto _streamer   = world.component<Streamer>();
+            auto _streamer = world.component<Streamer>();
 
             world.component<RemovedOnGameModeReload>();
             world.component<PendingRemoval>();
@@ -157,7 +161,11 @@ namespace Framework::World::Modules {
                 _quat.member<float>("w").member<float>("x").member<float>("y").member<float>("z");
                 _transform.member<glm::vec3>("pos").member<glm::quat>("rot").member<glm::vec3>("vel");
                 _frame.member<uint64_t>("modelHash").member<glm::vec3>("scale");
-                _streamable.member<int>("virtualWorld").member<bool>("isVisible").member<bool>("alwaysVisible").member<double>("updateInterval").member<uint64_t>("owner");
+                _streamable.member<int>("virtualWorld")
+                    .member<bool>("isVisible")
+                    .member<bool>("alwaysVisible")
+                    .member<double>("updateInterval")
+                    .member<uint64_t>("owner");
                 _streamer.member<float>("range").member<uint64_t>("guid");
             }
 #endif
@@ -165,7 +173,10 @@ namespace Framework::World::Modules {
 
         static void SetupServerEmitters(Streamable *streamable);
         static void SetupClientEmitters(Streamable *streamable);
-        static void SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine);
-        static void SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory);
+        static void SetupServerReceivers(Framework::Networking::NetworkPeer *net,
+                                         Framework::World::Engine *worldEngine);
+        static void SetupClientReceivers(Framework::Networking::NetworkPeer *net,
+                                         Framework::World::ClientEngine *worldEngine,
+                                         Framework::World::Archetypes::StreamingFactory *streamingFactory);
     };
 } // namespace Framework::World::Modules

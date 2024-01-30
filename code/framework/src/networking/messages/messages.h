@@ -16,13 +16,27 @@
 #include "utils/optional.h"
 
 namespace Framework::Networking::Messages {
-    using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
+    using PacketCallback = fu2::function<void(SLNet::Packet *) const>;
     using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, uint32_t reason) const>;
 
-    enum DisconnectionReason { NO_FREE_SLOT, GRACEFUL_SHUTDOWN, LOST, FAILED, INVALID_PASSWORD, WRONG_VERSION, BANNED, KICKED, KICKED_INVALID_PACKET, UNKNOWN };
+    enum DisconnectionReason {
+        NO_FREE_SLOT,
+        GRACEFUL_SHUTDOWN,
+        LOST,
+        FAILED,
+        INVALID_PASSWORD,
+        WRONG_VERSION,
+        BANNED,
+        KICKED,
+        KICKED_INVALID_PACKET,
+        UNKNOWN
+    };
 
     // Internal Framework messages
-    enum InternalMessages : uint8_t { INTERNAL_RPC = ID_USER_PACKET_ENUM + 1, INTERNAL_NEXT_MESSAGE_ID };
+    enum InternalMessages : uint8_t {
+        INTERNAL_RPC = ID_USER_PACKET_ENUM + 1,
+        INTERNAL_NEXT_MESSAGE_ID
+    };
 
     // Internal game flow messages
     enum GameMessages : uint8_t {
@@ -49,7 +63,7 @@ namespace Framework::Networking::Messages {
      */
     class IMessage {
       private:
-        SLNet::Packet *packet {};
+        SLNet::Packet *packet{};
 
       public:
         virtual uint8_t GetMessageID() const = 0;
@@ -61,7 +75,7 @@ namespace Framework::Networking::Messages {
          * @param bs
          * @param write
          */
-        virtual void Serialize2(SLNet::BitStream *bs, bool write) {};
+        virtual void Serialize2(SLNet::BitStream *bs, bool write){};
 
         virtual bool Valid() const = 0;
 

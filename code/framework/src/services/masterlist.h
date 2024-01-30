@@ -29,10 +29,10 @@ namespace Framework::Services {
         std::mutex _mutex;
         std::thread _pingThread;
         std::shared_ptr<httplib::Client> _client;
-        std::string _pushKey {};
-        ServerInfo _storedInfo {};
-        Utils::Time::TimePoint _lastPingAt {};
-        bool _isInitialized {false};
+        std::string _pushKey{};
+        ServerInfo _storedInfo{};
+        Utils::Time::TimePoint _lastPingAt{};
+        bool _isInitialized{false};
 
         void PingThread();
 
@@ -42,7 +42,7 @@ namespace Framework::Services {
         bool Init(const std::string);
         bool Shutdown();
 
-        void Ping(const ServerInfo&);
+        void Ping(const ServerInfo &);
         bool IsInitialized() const {
             return _isInitialized;
         }

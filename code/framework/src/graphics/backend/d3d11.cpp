@@ -9,8 +9,8 @@
 #include "d3d11.h"
 
 namespace Framework::Graphics {
-    bool D3D11Backend::Init(ID3D11Device *device, ID3D11DeviceContext *context, void*, void*) {
-        _device  = device;
+    bool D3D11Backend::Init(ID3D11Device *device, ID3D11DeviceContext *context, void *, void *) {
+        _device = device;
         _context = context;
 
         return true;
@@ -20,5 +20,6 @@ namespace Framework::Graphics {
         return true;
     }
 
-    void D3D11Backend::Update() {}
+    void D3D11Backend::Update() {
+    }
 } // namespace Framework::Graphics

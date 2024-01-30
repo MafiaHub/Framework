@@ -10,8 +10,8 @@
 
 #include "utils/safe_win32.h"
 
-#include "backend/d3d12.h"
 #include "backend/d3d11.h"
+#include "backend/d3d12.h"
 #include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
@@ -41,14 +41,14 @@ namespace Framework::Graphics {
     class Renderer {
       private:
         RendererConfiguration _config{};
-        RendererState _state     = RendererState::STATE_NOT_INITIALIZED;
+        RendererState _state = RendererState::STATE_NOT_INITIALIZED;
         RendererBackend _backend = RendererBackend::BACKEND_D3D_11;
 
-        HWND _window {};
+        HWND _window{};
 
-        D3D9Backend *_d3d9Backend {};
-        D3D11Backend *_d3d11Backend {};
-        D3D12Backend *_d3d12Backend {};
+        D3D9Backend *_d3d9Backend{};
+        D3D11Backend *_d3d11Backend{};
+        D3D12Backend *_d3d12Backend{};
 
         bool _initialized = false;
 

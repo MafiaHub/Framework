@@ -16,11 +16,10 @@ namespace Framework::Utils {
     class Interpolator {
       public:
         using TimePoint = std::chrono::high_resolution_clock::time_point;
-        template <typename T>
-        class Value {
+        template <typename T> class Value {
           public:
             explicit Value() {
-                _startTime  = TimePoint::max();
+                _startTime = TimePoint::max();
                 _finishTime = TimePoint::max();
             }
             virtual bool HasTargetValue() const {
@@ -73,12 +72,12 @@ namespace Framework::Utils {
             T _error;
             TimePoint _startTime;
             TimePoint _finishTime;
-            float _lastAlpha          = 0.0f;
-            float _delayMin           = 100.f;
-            float _delayMax           = 400.f;
+            float _lastAlpha = 0.0f;
+            float _delayMin = 100.f;
+            float _delayMax = 400.f;
             float _compensationFactor = 1.0f;
-            bool _debugEnabled        = false;
-            std::chrono::milliseconds _debugTime {};
+            bool _debugEnabled = false;
+            std::chrono::milliseconds _debugTime{};
 
             TimePoint GetCurrentTime();
         };
@@ -97,7 +96,7 @@ namespace Framework::Utils {
         }
 
       protected:
-        class Position: public Value<glm::vec3> {
+        class Position : public Value<glm::vec3> {
           public:
             Position() = default;
             void SetTargetValue(const glm::vec3 &current, const glm::vec3 &target, float delay) override;
@@ -117,7 +116,7 @@ namespace Framework::Utils {
             float _snapThreshold = 0.001f;
         };
 
-        class Rotation: public Value<glm::quat> {
+        class Rotation : public Value<glm::quat> {
           public:
             Rotation() = default;
             void SetTargetValue(const glm::quat &current, const glm::quat &target, float delay) override;
@@ -125,7 +124,7 @@ namespace Framework::Utils {
             glm::quat UpdateTargetValue(const glm::quat &current) override;
         };
 
-        class Scalar: public Value<float> {
+        class Scalar : public Value<float> {
           public:
             Scalar() = default;
             void SetTargetValue(const float &current, const float &target, float delay) override;
@@ -141,17 +140,17 @@ namespace Framework::Utils {
         Rotation _rotation;
     };
 
-    template <typename T>
-    void Interpolator::Value<T>::SetDebugTime(int64_t debugTime) {
+    template <typename T> void Interpolator::Value<T>::SetDebugTime(int64_t debugTime) {
         _debugEnabled = true;
-        _debugTime    = std::chrono::milliseconds(debugTime);
+        _debugTime = std::chrono::milliseconds(debugTime);
     }
-    template <typename T>
-    Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() {
-        if (_debugEnabled) {
+    template <typename T> Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() {
+        if (_debugEnabled)
+        {
             return _startTime + _debugTime;
         }
-        else {
+        else
+        {
             return std::chrono::high_resolution_clock::now();
         }
     }

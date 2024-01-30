@@ -16,11 +16,11 @@
 
 namespace hook {
     struct passed {
-        template <typename... T>
-        passed(T...) {}
+        template <typename... T> passed(T...) {
+        }
     };
 
-    class CallStubEx: public jitasm::Frontend {
+    class CallStubEx : public jitasm::Frontend {
       private:
         void *m_callback;
         void *m_userData;
@@ -28,7 +28,8 @@ namespace hook {
         size_t m_argumentSize;
 
       public:
-        CallStubEx() {}
+        CallStubEx() {
+        }
 
         inline void SetCallback(void *cb, void *userData) {
             m_callback = cb;
@@ -83,8 +84,7 @@ namespace hook {
         }
     };
 
-    template <typename TRet, typename TClass, typename... Args>
-    struct thiscall {
+    template <typename TRet, typename TClass, typename... Args> struct thiscall {
         typedef fu2::function<TRet(Args...)> TOrigFunc;
         typedef TRet(__thiscall *TOrigCB)(void *, Args...);
         typedef fu2::function<TRet(TClass *, Args...)> THookFunc;
@@ -103,12 +103,12 @@ namespace hook {
 
       public:
         static void inject(uintptr_t address, THookFunc hookFunc) {
-            auto hookData      = new hookdata;
+            auto hookData = new hookdata;
             hookData->hookFunc = hookFunc;
 
             size_t argSize = 0;
 
-            passed {(
+            passed{(
                 [&] {
                     int size = min(sizeof(Args), sizeof(uintptr_t));
 
@@ -124,8 +124,7 @@ namespace hook {
         }
     };
 
-    template <typename TRet, typename TClass>
-    struct thiscall<TRet, TClass, void> {
+    template <typename TRet, typename TClass> struct thiscall<TRet, TClass, void> {
         typedef fu2::function<TRet()> TOrigFunc;
         typedef TRet(__thiscall *TOrigCB)(void *);
         typedef fu2::function<TRet(TClass *)> THookFunc;
@@ -144,7 +143,7 @@ namespace hook {
 
       public:
         static void inject(uintptr_t address, THookFunc hookFunc) {
-            auto hookData      = new hookdata;
+            auto hookData = new hookdata;
             hookData->hookFunc = hookFunc;
 
             CallStubEx callStub;

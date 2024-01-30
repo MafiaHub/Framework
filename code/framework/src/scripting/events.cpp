@@ -12,5 +12,9 @@
 #include <string>
 
 namespace Framework::Scripting {
-    std::map<EventIDs, std::string> Events = {{EventIDs::GAMEMODE_LOADED, "gamemodeLoaded"}, {EventIDs::GAMEMODE_UNLOADING, "gamemodeUnloading"}, {EventIDs::GAMEMODE_UPDATED, "gamemodeUpdated"}};
+    std::map<EventIDs, std::string> Events = {
+        {EventIDs::GAMEMODE_LOADED,    "gamemodeLoaded"   },
+        {EventIDs::GAMEMODE_UNLOADING, "gamemodeUnloading"},
+        {EventIDs::GAMEMODE_UPDATED,   "gamemodeUpdated"  }
+    };
 } // namespace Framework::Scripting

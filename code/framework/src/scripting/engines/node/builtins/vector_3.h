@@ -44,7 +44,8 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
         std::string ToString() const {
             std::ostringstream ss;
-            ss << std::fixed << std::setprecision(4) << "Vector3{ x: " << _data.x << ", y: " << _data.y << ", z: " << _data.z << " }";
+            ss << std::fixed << std::setprecision(4) << "Vector3{ x: " << _data.x << ", y: " << _data.y
+               << ", z: " << _data.z << " }";
             return ss.str();
         }
 
@@ -78,7 +79,8 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         };
 
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {
-            if (!rootModule) {
+            if (!rootModule)
+            {
                 return;
             }
 
