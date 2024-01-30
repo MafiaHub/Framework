@@ -56,7 +56,7 @@ namespace Framework::Graphics {
         RendererError Init(RendererConfiguration);
         RendererError Shutdown();
 
-        void Update();
+        void Update() const;
 
         RendererState GetCurrentState() const {
             return _state;

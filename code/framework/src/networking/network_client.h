@@ -32,7 +32,7 @@ namespace Framework::Networking {
 
         ~NetworkClient();
 
-        ClientError Init();
+        ClientError Init() const;
         ClientError Shutdown();
 
         void Update() override;
@@ -42,7 +42,7 @@ namespace Framework::Networking {
 
         ClientError Disconnect();
 
-        int GetPing();
+        int GetPing() const;
 
         PeerState GetConnectionState() const {
             return _state;

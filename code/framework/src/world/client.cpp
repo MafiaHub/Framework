@@ -57,11 +57,11 @@ namespace Framework::World {
         return serverID->id;
     }
 
-    flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) {
+    flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) const {
         const auto e = _world->entity();
 
-        auto sid = e.get_mut<Modules::Base::ServerID>();
-        sid->id  = serverID;
+        const auto sid = e.get_mut<Modules::Base::ServerID>();
+        sid->id        = serverID;
         return e;
     }
 
@@ -109,7 +109,7 @@ namespace Framework::World {
 
         _networkPeer = nullptr;
     }
-    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) {
+    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) const {
         net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
             if (!msg->Valid()) {
                 return;
@@ -118,8 +118,8 @@ namespace Framework::World {
             if (!e.is_alive()) {
                 return;
             }
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+            const auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr           = msg->GetTransform();
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
             if (!msg->Valid()) {
@@ -129,8 +129,8 @@ namespace Framework::World {
             if (!e.is_alive()) {
                 return;
             }
-            auto fr = e.get_mut<World::Modules::Base::Frame>();
-            *fr     = msg->GetFrame();
+            const auto fr = e.get_mut<World::Modules::Base::Frame>();
+            *fr           = msg->GetFrame();
         });
     }
 

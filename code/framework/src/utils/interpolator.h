@@ -80,7 +80,7 @@ namespace Framework::Utils {
             bool _debugEnabled        = false;
             std::chrono::milliseconds _debugTime {};
 
-            TimePoint GetCurrentTime();
+            TimePoint GetCurrentTime() const;
         };
 
         Value<glm::vec3> *GetPosition() {
@@ -147,7 +147,7 @@ namespace Framework::Utils {
         _debugTime    = std::chrono::milliseconds(debugTime);
     }
     template <typename T>
-    Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() {
+    Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() const {
         if (_debugEnabled) {
             return _startTime + _debugTime;
         }

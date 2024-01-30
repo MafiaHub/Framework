@@ -23,7 +23,7 @@ namespace Framework::Utils {
         std::string outputDump;
 
       protected:
-        virtual void OnOutput(LPCSTR dump) override {
+        void OnOutput(LPCSTR dump) override {
             outputDump += dump;
         }
 

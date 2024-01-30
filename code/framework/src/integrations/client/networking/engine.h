@@ -18,12 +18,12 @@ namespace Framework::Integrations::Client::Networking {
       public:
         Engine();
 
-        bool Init();
-        bool Shutdown();
+        bool Init() const;
+        bool Shutdown() const;
 
-        bool Connect(const std::string &, const int32_t, const std::string password = "");
+        bool Connect(const std::string &, const int32_t, const std::string password = "") const;
 
-        void Update();
+        void Update() const;
 
         Framework::Networking::NetworkClient *GetNetworkClient() const {
             return _networkClient.get();

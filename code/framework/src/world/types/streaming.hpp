@@ -18,7 +18,7 @@ namespace Framework::World::Archetypes {
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
             e.add<Framework::World::Modules::Base::Transform>();
 
-            auto streamable                   = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            const auto streamable             = e.get_mut<Framework::World::Modules::Base::Streamable>();
             streamable->owner                 = guid;
             streamable->defaultUpdateInterval = CoreModules::GetTickRate() * 1000.0f; // we need ms here
 
@@ -29,14 +29,14 @@ namespace Framework::World::Archetypes {
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            const auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
             Framework::World::Modules::Base::SetupClientEmitters(streamable);
         }
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            const auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
             Framework::World::Modules::Base::SetupServerEmitters(streamable);
         }
     };

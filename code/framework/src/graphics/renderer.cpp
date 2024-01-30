@@ -51,7 +51,7 @@ namespace Framework::Graphics {
         return RendererError::RENDERER_NONE;
     }
 
-    void Renderer::Update() {
+    void Renderer::Update() const {
         OPTICK_EVENT();
         if (_d3d11Backend) {
             _d3d11Backend->Update();

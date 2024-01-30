@@ -49,16 +49,16 @@ namespace Framework::World {
         if (!e.get<Framework::World::Modules::Base::TickRateRegulator>()) {
             return;
         }
-        auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
+        const auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
         tr->lastGenID--;
-        auto es            = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        const auto es      = e.get_mut<Framework::World::Modules::Base::Streamable>();
         es->updateInterval = es->defaultUpdateInterval;
     }
 
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
         _findAllStreamerEntities.iter([&ourEntity, guid](flecs::iter &it, Modules::Base::Streamer *s) {
-            for (auto i : it) {
+            for (const auto i : it) {
                 if (s[i].guid == guid) {
                     ourEntity = it.entity(i);
                     return;
@@ -73,7 +73,7 @@ namespace Framework::World {
         return flecs::entity(_world->get_world(), serverID);
     }
 
-    void Engine::PurgeAllGameModeEntities() {
+    void Engine::PurgeAllGameModeEntities() const {
         _world->defer_begin();
         _findAllGameModeEntities.each([this](flecs::entity e, Modules::Base::RemovedOnGameModeReload &rhs) {
             if (e.is_alive())

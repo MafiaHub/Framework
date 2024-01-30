@@ -24,17 +24,17 @@ namespace Framework::Scripting::Engines {
         void *_engine                           = nullptr;
 
       public:
-        SDKRegisterWrapper(void *engine, void *sdk, Framework::Scripting::EngineTypes kind): _engine(engine), _sdk(sdk), _kind(kind) {}
+        SDKRegisterWrapper(void *engine, void *sdk, Framework::Scripting::EngineTypes kind): _kind(kind), _sdk(sdk), _engine(engine) {}
 
         Framework::Scripting::EngineTypes GetKind() const {
             return _kind;
         }
 
-        Framework::Scripting::Engines::Node::SDK *GetNodeSDK() {
+        Framework::Scripting::Engines::Node::SDK *GetNodeSDK() const {
             return reinterpret_cast<Framework::Scripting::Engines::Node::SDK *>(_sdk);
         }
 
-        Framework::Scripting::Engines::Node::Engine *GetNodeEngine() {
+        Framework::Scripting::Engines::Node::Engine *GetNodeEngine() const {
             return reinterpret_cast<Framework::Scripting::Engines::Node::Engine *>(_engine);
         }
     };

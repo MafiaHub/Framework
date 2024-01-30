@@ -94,7 +94,7 @@ namespace Framework::Graphics {
         _rtvHeap->Release();
         _srvHeap->Release();
         _commandList->Release();
-        for (auto &frameContext : _frameContext) {
+        for (const auto &frameContext : _frameContext) {
             frameContext._commandAllocator->Release();
             frameContext._mainRenderTargetResource->Release();
         }
@@ -102,7 +102,7 @@ namespace Framework::Graphics {
     }
 
     void D3D12Backend::Begin() {
-        auto &currentFrameContext = _frameContext[_swapChain->GetCurrentBackBufferIndex()];
+        const auto &currentFrameContext = _frameContext[_swapChain->GetCurrentBackBufferIndex()];
         currentFrameContext._commandAllocator->Reset();
 
         _barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;

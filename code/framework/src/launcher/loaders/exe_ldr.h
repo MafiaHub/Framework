@@ -51,7 +51,7 @@ namespace Framework::Launcher::Loaders {
 
         void LoadImports(IMAGE_NT_HEADERS *ntHeader);
 
-        HMODULE ResolveLibrary(const char *name);
+        HMODULE ResolveLibrary(const char *name) const;
 
         template <typename T>
         inline const T *GetRVA(uint32_t rva) {
@@ -82,11 +82,11 @@ namespace Framework::Launcher::Loaders {
             _tlsInitializer = callback;
         }
 
-        inline void *GetEntryPoint() {
+        inline void *GetEntryPoint() const {
             return _entryPoint;
         }
 
-        void Protect();
+        void Protect() const;
         void LoadIntoModule(HMODULE module);
     };
 } // namespace Framework::Launcher::Loaders

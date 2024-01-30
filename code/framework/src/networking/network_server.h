@@ -27,13 +27,13 @@ namespace Framework::Networking {
         Messages::PacketCallback _onPlayerConnectCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
         bool SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, SLNet::RakNetGUID excludeGUID = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED);
+            PacketReliability reliability = RELIABLE_ORDERED) const;
 
       public:
         NetworkServer(): NetworkPeer() {}
 
-        ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
-        ServerError Shutdown();
+        ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "") const;
+        ServerError Shutdown() const;
 
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
 
@@ -50,7 +50,7 @@ namespace Framework::Networking {
             return SendGameRPCInternal(bs, world, rpc.GetServerID(), guid, excludeGUID, priority, reliability);
         }
 
-        int GetPing(SLNet::RakNetGUID guid);
+        int GetPing(SLNet::RakNetGUID guid) const;
 
         void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
             _onPlayerConnectCallback = std::move(callback);

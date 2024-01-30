@@ -48,7 +48,7 @@ namespace Framework::World {
         OnEntityDestroyCallback _onEntityDestroyCallback;
 
       private:
-        void InitRPCs(Networking::NetworkPeer *peer);
+        void InitRPCs(Networking::NetworkPeer *peer) const;
 
       public:
         EngineError Init();
@@ -60,7 +60,7 @@ namespace Framework::World {
 
         void Update() override;
 
-        flecs::entity CreateEntity(flecs::entity_t serverID);
+        flecs::entity CreateEntity(flecs::entity_t serverID) const;
         flecs::entity GetEntityByServerID(flecs::entity_t id) const;
         static flecs::entity_t GetServerID(flecs::entity entity);
 

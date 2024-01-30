@@ -30,22 +30,22 @@ namespace Framework::Scripting::Helpers {
             return false;
         }
 
-        v8::TryCatch tryCatch(isolate);
+        const v8::TryCatch tryCatch(isolate);
 
         if (!fn()) {
-            v8::Local<v8::Value> exception = tryCatch.Exception();
-            v8::Local<v8::Message> message = tryCatch.Message();
+            const v8::Local<v8::Value> exception = tryCatch.Exception();
+            const v8::Local<v8::Message> message = tryCatch.Message();
 
             if (!message.IsEmpty() && !context.IsEmpty()) {
                 v8::MaybeLocal<v8::String> maybeSourceLine = message->GetSourceLine(context);
-                v8::Maybe<int32_t> line                    = message->GetLineNumber(context);
-                v8::ScriptOrigin origin                    = message->GetScriptOrigin();
+                const v8::Maybe<int32_t> line              = message->GetLineNumber(context);
+                const v8::ScriptOrigin origin              = message->GetScriptOrigin();
 
                 if (!origin.ResourceName()->IsUndefined()) {
                     Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] exception at {}: {}", *v8::String::Utf8Value(isolate, origin.ResourceName()), line.ToChecked());
 
                     if (!maybeSourceLine.IsEmpty()) {
-                        v8::Local<v8::String> sourceLine = maybeSourceLine.ToLocalChecked();
+                        const v8::Local<v8::String> sourceLine = maybeSourceLine.ToLocalChecked();
 
                         if (sourceLine->Length() <= 80) {
                             Logging::GetInstance()->Get(FRAMEWORK_INNER_SCRIPTING)->debug("[Helpers] {}", *v8::String::Utf8Value(isolate, sourceLine));

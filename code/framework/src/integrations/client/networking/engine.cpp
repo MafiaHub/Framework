@@ -15,11 +15,11 @@ namespace Framework::Integrations::Client::Networking {
         _networkClient = std::make_unique<Framework::Networking::NetworkClient>();
     }
 
-    bool Engine::Init() {
+    bool Engine::Init() const {
         return _networkClient->Init() == Framework::Networking::CLIENT_NONE;
     }
 
-    bool Engine::Connect(const std::string &host, const int32_t port, const std::string password) {
+    bool Engine::Connect(const std::string &host, const int32_t port, const std::string password) const {
         if (!_networkClient) {
             return false;
         }
@@ -31,14 +31,14 @@ namespace Framework::Integrations::Client::Networking {
         return true;
     }
 
-    bool Engine::Shutdown() {
+    bool Engine::Shutdown() const {
         if (_networkClient) {
             _networkClient->Shutdown();
         }
         return true;
     }
 
-    void Engine::Update() {
+    void Engine::Update() const {
         if (_networkClient) {
             _networkClient->Update();
         }

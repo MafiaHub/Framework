@@ -138,13 +138,13 @@ namespace Framework::Launcher {
         static bool EnsureFilesExist(const std::vector<std::string> &);
         static bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
         bool EnsureGameExecutableIsCompatible(uint32_t);
-        uint32_t GetGameVersion();
+        uint32_t GetGameVersion() const;
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();
 
         bool LoadJSONConfig();
-        void SaveJSONConfig();
+        void SaveJSONConfig() const;
 
         static void InvokeEntryPoint(void (*entryPoint)());
 

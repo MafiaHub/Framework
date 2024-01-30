@@ -71,7 +71,7 @@ namespace Framework::Integrations::Server {
                 {"H,apihost", "HTTP API host to bind", cxxopts::value<std::string>()->default_value(_opts.webBindHost)}, {"help", "Prints this help message", cxxopts::value<bool>()->default_value("false")}});
 
         // Try to parse and return if anything wrong happened
-        auto result = options.parse(_opts.argc, _opts.argv);
+        const auto result = options.parse(_opts.argc, _opts.argv);
 
         // If help was specified, just print the help and exit
         if (result.count("help")) {
@@ -186,9 +186,9 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
     }
 
-    void Instance::InitModules() {
+    void Instance::InitModules() const {
         if (_worldEngine) {
-            auto world = _worldEngine->GetWorld();
+            const auto world = _worldEngine->GetWorld();
 
             world->import <Integrations::Shared::Modules::Mod>();
         }
@@ -197,14 +197,14 @@ namespace Framework::Integrations::Server {
     }
 
     bool Instance::LoadConfigFromJSON() {
-        auto configHandle = cppfs::fs::open(_opts.modConfigFile);
+        const auto configHandle = cppfs::fs::open(_opts.modConfigFile);
 
         if (!configHandle.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("JSON config file is not present, skipping load...");
             return true;
         }
 
-        auto configData = configHandle.readFile();
+        const auto configData = configHandle.readFile();
 
         try {
             // Parse our config data first
@@ -229,7 +229,7 @@ namespace Framework::Integrations::Server {
         return true;
     }
 
-    void Instance::InitNetworkingMessages() {
+    void Instance::InitNetworkingMessages() const {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
         net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
@@ -296,7 +296,7 @@ namespace Framework::Integrations::Server {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
-            auto e = _worldEngine->GetEntityByGUID(guid.g);
+            const auto e = _worldEngine->GetEntityByGUID(guid.g);
 
             if (e.is_valid()) {
                 if (_onPlayerDisconnectCallback)
@@ -309,7 +309,7 @@ namespace Framework::Integrations::Server {
         });
 
         net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
-            auto e = _worldEngine->GetEntityByGUID(guid.g);
+            const auto e = _worldEngine->GetEntityByGUID(guid.g);
             if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
                 _onPlayerConnectCallback(e, guid.g);
         });
@@ -410,7 +410,7 @@ namespace Framework::Integrations::Server {
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
         switch (sdk.GetKind()) {
         case Framework::Scripting::EngineTypes::ENGINE_NODE: {
-            auto nodeSDK = sdk.GetNodeSDK();
+            const auto nodeSDK = sdk.GetNodeSDK();
             Framework::Integrations::Scripting::Entity::Register(nodeSDK->GetIsolate(), nodeSDK->GetModule());
         } break;
         }

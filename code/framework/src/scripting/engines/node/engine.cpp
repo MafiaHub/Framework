@@ -16,7 +16,7 @@
 
 #include "world/server.h"
 
-static const char bootstrap_code[] = R"(
+static constexpr char bootstrap_code[] = R"(
 const publicRequire = require("module").createRequire(process.cwd() + "/gamemode/");
 globalThis.require = publicRequire;
 require("vm").runInThisContext(process.argv[1]);
@@ -33,7 +33,7 @@ namespace Framework::Scripting::Engines::Node {
         std::vector<std::string> errors {};
 
         // Initialize the node with the provided arguments
-        int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
+        const int initCode = node::InitializeNodeWithArgs(&args, &exec_args, &errors);
         if (initCode != 0) {
             for (std::string &error : errors) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Failed to initialize node: {}", error);
@@ -57,7 +57,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::HandleScope handleScope(_isolate);
 
         // Create our global object template
-        v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
+        const v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
 
         // Initialize our SDK and bind to the global object template
         _sdk = new SDK;
@@ -164,7 +164,7 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Check the package.json file exists
-        cppfs::FileHandle packageFile = cppfs::fs::open(mainPath + "/package.json");
+        const cppfs::FileHandle packageFile = cppfs::fs::open(mainPath + "/package.json");
         if (!packageFile.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The gamemode package.json file does not exists");
             return false;
@@ -220,14 +220,14 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Make sure the specified entrypoint is valid
-        cppfs::FileHandle entryPointFile = cppfs::fs::open(mainPath + "/" + _gamemodeMetadata.entrypoint);
+        const cppfs::FileHandle entryPointFile = cppfs::fs::open(mainPath + "/" + _gamemodeMetadata.entrypoint);
         if (!entryPointFile.exists() || !entryPointFile.isFile()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint '{}' from '{}' is not a file", _gamemodeMetadata.entrypoint, _gamemodeMetadata.name);
             return false;
         }
 
         // Read the entrypoint file content
-        std::string content = entryPointFile.readFile();
+        const std::string content = entryPointFile.readFile();
         if (content.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("The specified entrypoint file '{}' from '{}' is empty", _gamemodeMetadata.entrypoint, _gamemodeMetadata.name);
             return false;
@@ -239,7 +239,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::HandleScope handleScope(_isolate);
 
         // Create our gamemode context
-        v8::Local<v8::Context> context = v8::Context::New(_isolate, nullptr, _globalObjectTemplate.Get(_isolate));
+        const v8::Local<v8::Context> context = v8::Context::New(_isolate, nullptr, _globalObjectTemplate.Get(_isolate));
         v8::Context::Scope scope(context);
 
         // Assign ourselves to the context
@@ -247,13 +247,13 @@ namespace Framework::Scripting::Engines::Node {
         _context.Reset(_isolate, context);
 
         // Create the execution environment
-        node::EnvironmentFlags::Flags flags = (node::EnvironmentFlags::Flags)(node::EnvironmentFlags::kOwnsProcessState);
+        constexpr auto flags                = node::EnvironmentFlags::kOwnsProcessState;
         _gamemodeData                       = node::CreateIsolateData(_isolate, &uv_loop, GetPlatform());
-        std::vector<std::string> argv       = {"mafiahub-gamemode"};
+        const std::vector<std::string> argv = {"mafiahub-gamemode"};
         _gamemodeEnvironment                = node::CreateEnvironment(_gamemodeData, context, argv, argv, flags);
 
         // Make sure isolate is linked to our node environment
-        node::IsolateSettings is;
+        constexpr node::IsolateSettings is;
         node::SetIsolateUpForNode(_isolate, is);
 
         // Load the environment
@@ -338,7 +338,7 @@ namespace Framework::Scripting::Engines::Node {
                 script = v8::Script::Compile(context, source);
             }
             else {
-                auto originValue = Helpers::MakeString(_isolate, path).ToLocalChecked();
+                const auto originValue = Helpers::MakeString(_isolate, path).ToLocalChecked();
                 v8::ScriptOrigin scriptOrigin(_isolate, originValue);
 
                 script = v8::Script::Compile(context, source, &scriptOrigin);
@@ -352,7 +352,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::RunGamemodeScript() {
+    bool Engine::RunGamemodeScript() const {
         if (_gamemodeScript.IsEmpty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid gamemode script object");
             return false;
@@ -361,7 +361,7 @@ namespace Framework::Scripting::Engines::Node {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
         Helpers::TryCatch([&] {
-            auto context = _context.Get(_isolate);
+            const auto context = _context.Get(_isolate);
             v8::Context::Scope contextScope(context);
 
             _gamemodeScript.Get(_isolate)->Run(context);

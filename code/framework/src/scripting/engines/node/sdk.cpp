@@ -42,11 +42,11 @@ namespace Framework::Scripting::Engines::Node {
         const auto isolate = info.GetIsolate();
         const auto ctx     = isolate->GetEnteredOrMicrotaskContext();
 
-        v8::Local<v8::String> eventName       = info[0]->ToString(ctx).ToLocalChecked();
-        v8::Local<v8::Function> eventCallback = info[1].As<v8::Function>();
+        const v8::Local<v8::String> eventName       = info[0]->ToString(ctx).ToLocalChecked();
+        const v8::Local<v8::Function> eventCallback = info[1].As<v8::Function>();
 
         // Create a persistent handle to the event callback function
-        v8::Persistent<v8::Function> persistentCallback(isolate, eventCallback);
+        const v8::Persistent<v8::Function> persistentCallback(isolate, eventCallback);
 
         const auto engine = static_cast<Node::Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
         engine->_gamemodeEventHandlers[Helpers::ToString(eventName, isolate)].push_back(persistentCallback);
@@ -73,8 +73,8 @@ namespace Framework::Scripting::Engines::Node {
         const auto isolate = info.GetIsolate();
         const auto ctx     = isolate->GetEnteredOrMicrotaskContext();
 
-        v8::Local<v8::String> eventName = info[0]->ToString(ctx).ToLocalChecked();
-        v8::Local<v8::String> eventData = info[1]->ToString(ctx).ToLocalChecked();
+        const v8::Local<v8::String> eventName = info[0]->ToString(ctx).ToLocalChecked();
+        const v8::Local<v8::String> eventData = info[1]->ToString(ctx).ToLocalChecked();
 
         const auto engine = static_cast<Node::Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
         engine->InvokeEvent(Helpers::ToString(eventName, isolate), Helpers::ToString(eventData, isolate));

@@ -129,7 +129,7 @@ namespace Framework::World {
         });
 
         _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator").interval(3.0f).iter([](flecs::iter &it, Modules::Base::TickRateRegulator *tr, Modules::Base::Transform *t, Modules::Base::Streamable *s) {
-            for (auto i : it) {
+            for (const auto i : it) {
                 bool decreaseRate       = true;
                 constexpr float EPSILON = 0.01f;
 
@@ -252,7 +252,7 @@ namespace Framework::World {
         Engine::Update();
     }
 
-    flecs::entity ServerEngine::CreateEntity(const std::string &name) {
+    flecs::entity ServerEngine::CreateEntity(const std::string &name) const {
         if (name.empty()) {
             return _world->entity();
         }
@@ -262,7 +262,7 @@ namespace Framework::World {
     }
 
     void ServerEngine::SetOwner(flecs::entity e, uint64_t guid) {
-        auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        const auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return;
         }

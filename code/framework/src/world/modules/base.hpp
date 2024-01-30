@@ -47,7 +47,7 @@ namespace Framework::World::Modules {
                 ++genID;
             }
 
-            bool ValidateGeneration(const Transform &tr) {
+            bool ValidateGeneration(const Transform &tr) const {
                 return genID == tr.genID;
             }
         };

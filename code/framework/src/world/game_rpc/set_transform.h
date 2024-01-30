@@ -21,7 +21,7 @@ namespace Framework::World::RPC {
             _transform = tr;
         }
 
-        World::Modules::Base::Transform GetTransform() {
+        World::Modules::Base::Transform GetTransform() const {
             return _transform;
         }
 

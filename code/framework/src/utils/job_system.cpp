@@ -32,7 +32,7 @@ namespace Framework::Utils {
         _pendingShutdown = false;
 
         for (size_t i = 0; i < numThreads; i++) {
-            std::thread worker = std::thread([=]() {
+            auto worker = std::thread([=]() {
                 OPTICK_THREAD("JobSystemWorker");
                 while (!_pendingShutdown) {
                     OPTICK_EVENT();

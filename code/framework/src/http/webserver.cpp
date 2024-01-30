@@ -20,21 +20,21 @@ namespace Framework::HTTP {
         _running  = true;
         _serveDir = serveDir;
 
-        auto address = (host.empty() ? "0.0.0.0" : host);
+        const auto address = (host.empty() ? "0.0.0.0" : host);
 
         if (!serveDir.empty()) {
             _server->set_mount_point("/", serveDir.c_str());
         }
 
         _server->set_error_handler([](const auto &req, auto &res) {
-            auto fmt = "<p>Error Status: <span style='color:red;'>%d</span></p>";
+            const auto fmt = "<p>Error Status: <span style='color:red;'>%d</span></p>";
             char buf[BUFSIZ];
             snprintf(buf, sizeof(buf), fmt, res.status);
             res.set_content(buf, "text/html");
         });
 
         _server->set_exception_handler([](const auto &req, auto &res, std::exception_ptr ep) {
-            auto fmt = "<h1>Error 500</h1><p>%s</p>";
+            const auto fmt = "<h1>Error 500</h1><p>%s</p>";
             char buf[BUFSIZ];
             try {
                 std::rethrow_exception(ep);
@@ -67,7 +67,7 @@ namespace Framework::HTTP {
         return true;
     }
 
-    void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) {
+    void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) const {
         if (strlen(path) > 0 && callback) {
             _server->Get(path, callback);
         }

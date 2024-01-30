@@ -16,11 +16,11 @@ namespace math {
         if (from == to)
             return 1.0f;
 
-        return static_cast<float>((pos - from) / (to - from));
+        return (pos - from) / (to - from);
     }
 
     inline float Unlerp(const std::chrono::high_resolution_clock::time_point &from, const std::chrono::high_resolution_clock::time_point &to, const std::chrono::high_resolution_clock::time_point &pos) {
-        float r = std::chrono::duration<float, std::milli>(to - from).count();
+        const float r = std::chrono::duration<float, std::milli>(to - from).count();
 
         // Avoid dividing by 0 (results in INF values)
         if (r < std::numeric_limits<float>::epsilon())
@@ -58,10 +58,10 @@ glm::vec3 Framework::Utils::Interpolator::Position::UpdateTargetValue(const glm:
     // NOTE: don't let it overcompensate
     alpha = std::clamp(alpha, 0.0f, _compensationFactor);
 
-    auto currentAlpha = alpha - _lastAlpha;
-    _lastAlpha        = alpha;
+    const auto currentAlpha = alpha - _lastAlpha;
+    _lastAlpha              = alpha;
 
-    glm::vec3 compensation = glm::mix(glm::vec3(), _error, currentAlpha);
+    const glm::vec3 compensation = glm::mix(glm::vec3(), _error, currentAlpha);
 
     if (alpha == _compensationFactor)
         _finishTime = TimePoint::max();
@@ -99,10 +99,10 @@ glm::quat Framework::Utils::Interpolator::Rotation::UpdateTargetValue(const glm:
     // NOTE: don't let it overcompensate
     alpha = std::clamp(alpha, 0.0f, _compensationFactor);
 
-    auto currentAlpha = alpha - _lastAlpha;
-    _lastAlpha        = alpha;
+    const auto currentAlpha = alpha - _lastAlpha;
+    _lastAlpha              = alpha;
 
-    auto compensation = glm::slerp(glm::identity<glm::quat>(), _error, currentAlpha);
+    const auto compensation = glm::slerp(glm::identity<glm::quat>(), _error, currentAlpha);
 
     if (alpha == _compensationFactor)
         _finishTime = TimePoint::max();
@@ -133,10 +133,10 @@ float Framework::Utils::Interpolator::Scalar::UpdateTargetValue(const float &cur
     // NOTE: don't let it overcompensate
     alpha = std::clamp(alpha, 0.0f, _compensationFactor);
 
-    auto currentAlpha = alpha - _lastAlpha;
-    _lastAlpha        = alpha;
+    const auto currentAlpha = alpha - _lastAlpha;
+    _lastAlpha              = alpha;
 
-    float compensation = glm::mix(0.0f, _error, currentAlpha);
+    const float compensation = glm::mix(0.0f, _error, currentAlpha);
 
     if (alpha == _compensationFactor)
         _finishTime = TimePoint::max();

@@ -18,10 +18,10 @@ namespace Framework::Integrations::Server::Networking {
       public:
         Engine();
 
-        bool Init(int32_t, std::string &, int32_t, std::string &);
-        bool Shutdown();
+        bool Init(int32_t, std::string &, int32_t, std::string &) const;
+        bool Shutdown() const;
 
-        void Update();
+        void Update() const;
 
         Framework::Networking::NetworkServer *GetNetworkServer() const {
             return _networkServer.get();

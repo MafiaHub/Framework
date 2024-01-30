@@ -50,27 +50,27 @@ namespace Framework::Networking::Messages {
             return _playerName.GetLength() > 0 && (_playerSteamId.GetLength() > 0 || _playerDiscordId.GetLength() > 0) && _clientVersion.GetLength() > 0 && _mpClientVersion.GetLength() > 0 && _mpClientGame.GetLength() > 0;
         }
 
-        std::string GetPlayerName() {
+        std::string GetPlayerName() const {
             return _playerName.C_String();
         }
 
-        std::string GetPlayerSteamID() {
+        std::string GetPlayerSteamID() const {
             return _playerSteamId.C_String();
         }
 
-        std::string GetPlayerDiscordID() {
+        std::string GetPlayerDiscordID() const {
             return _playerDiscordId.C_String();
         }
 
-        std::string GetClientVersion() {
+        std::string GetClientVersion() const {
             return _clientVersion.C_String();
         }
 
-        std::string GetMPClientVersion() {
+        std::string GetMPClientVersion() const {
             return _mpClientVersion.C_String();
         }
 
-        std::string GetMPClientGame() {
+        std::string GetMPClientGame() const {
             return _mpClientGame.C_String();
         }
     };

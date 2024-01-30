@@ -40,7 +40,7 @@ namespace Framework::External::ImGUI::Widgets {
         int _historyPos = -1;
         spdlog::logger *_logger;
         static void FormatLog(std::string log);
-        void SendCommand(const std::string &command);
+        void SendCommand(const std::string &command) const;
 
       public:
         explicit Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor, std::shared_ptr<Input::IInput> input);

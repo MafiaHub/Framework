@@ -9,7 +9,7 @@
 #include "delay_scope.h"
 
 namespace Framework::Utils {
-    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback): _delay(delay), _callback(callback) {
+    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback): _callback(callback), _delay(delay) {
         _created = std::chrono::high_resolution_clock::now();
     }
 

@@ -25,14 +25,14 @@ namespace Framework::External::Sentry {
 #endif
 
         // Setup the breakpad path
-        cppfs::FileHandle breakpadFile = cppfs::fs::open(path + "/" + handlerName);
+        const cppfs::FileHandle breakpadFile = cppfs::fs::open(path + "/" + handlerName);
         if (!breakpadFile.exists()) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to locate the crashpad handler");
             return SentryError::SENTRY_BREAKPAD_NOT_FOUND;
         }
 
         cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
-        auto result                      = cacheDirectory.createDirectory();
+        const auto result                = cacheDirectory.createDirectory();
         if (!result) {
             return SentryError::SENTRY_CACHE_DIRECTORY_CREATION_FAILED;
         }
@@ -57,7 +57,7 @@ namespace Framework::External::Sentry {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
-        sentry_value_t game = sentry_value_new_object();
+        const sentry_value_t game = sentry_value_new_object();
         sentry_value_set_by_key(game, "title", sentry_value_new_string(infos._title.c_str()));
         sentry_value_set_by_key(game, "version", sentry_value_new_string(infos._version.c_str()));
         sentry_set_extra("game", game);
@@ -68,7 +68,7 @@ namespace Framework::External::Sentry {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
-        sentry_value_t screen = sentry_value_new_object();
+        const sentry_value_t screen = sentry_value_new_object();
         sentry_value_set_by_key(screen, "width", sentry_value_new_int32(infos._width));
         sentry_value_set_by_key(screen, "height", sentry_value_new_int32(infos._height));
         sentry_value_set_by_key(screen, "fullscreen", sentry_value_new_bool(infos._fullscreen));
@@ -80,7 +80,7 @@ namespace Framework::External::Sentry {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
-        sentry_value_t system = sentry_value_new_object();
+        const sentry_value_t system = sentry_value_new_object();
         sentry_value_set_by_key(system, "cpuBrandString", sentry_value_new_string(infos._cpuBrand.c_str()));
         sentry_value_set_by_key(system, "cpuProcessors", sentry_value_new_int32(infos._cpuProcessorsCount));
 
@@ -100,7 +100,7 @@ namespace Framework::External::Sentry {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
-        sentry_value_t user = sentry_value_new_object();
+        const sentry_value_t user = sentry_value_new_object();
         if (!infos._userId.empty()) {
             sentry_value_set_by_key(user, "id", sentry_value_new_string(infos._userId.c_str()));
         }
@@ -118,10 +118,10 @@ namespace Framework::External::Sentry {
         if (!_valid) {
             return SentryError::SENTRY_INVALID_INSTANCE;
         }
-        sentry_value_t exc = sentry_value_new_object();
+        const sentry_value_t exc = sentry_value_new_object();
         sentry_value_set_by_key(exc, "type", sentry_value_new_string(type.c_str()));
         sentry_value_set_by_key(exc, "value", sentry_value_new_string(message.c_str()));
-        sentry_value_t event = sentry_value_new_event();
+        const sentry_value_t event = sentry_value_new_event();
         sentry_value_set_by_key(event, "exception", exc);
         sentry_capture_event(event);
         return SentryError::SENTRY_NONE;

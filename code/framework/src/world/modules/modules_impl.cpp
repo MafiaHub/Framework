@@ -109,7 +109,7 @@ namespace Framework::World::Modules {
                 return;
             }
 
-            auto tr               = e.get_mut<World::Modules::Base::Transform>();
+            const auto tr         = e.get_mut<World::Modules::Base::Transform>();
             const auto incomingTr = msg->GetTransform();
 
             if (tr->ValidateGeneration(incomingTr)) {
@@ -130,8 +130,8 @@ namespace Framework::World::Modules {
             const auto e = worldEngine->CreateEntity(msg->GetServerID());
             streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
 
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+            const auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr           = msg->GetTransform();
         });
         net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
             if (!msg->Valid()) {
@@ -157,11 +157,11 @@ namespace Framework::World::Modules {
                 return;
             }
 
-            auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+            const auto tr = e.get_mut<World::Modules::Base::Transform>();
+            *tr           = msg->GetTransform();
 
-            auto es   = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
+            const auto es = e.get_mut<World::Modules::Base::Streamable>();
+            es->owner     = msg->GetOwner();
         });
         net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
             if (!msg->Valid()) {
@@ -173,8 +173,8 @@ namespace Framework::World::Modules {
             if (!e.is_alive()) {
                 return;
             }
-            auto es   = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner = msg->GetOwner();
+            const auto es = e.get_mut<World::Modules::Base::Streamable>();
+            es->owner     = msg->GetOwner();
         });
         net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
             if (!msg->Valid()) {

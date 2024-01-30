@@ -311,7 +311,7 @@ namespace Framework::External::ImGUI::Widgets {
         return true;
     }
 
-    void Console::SendCommand(const std::string &command) {
+    void Console::SendCommand(const std::string &command) const {
         const auto result = _commandProcessor->ProcessCommand(command);
 
         switch (result.GetError()) {

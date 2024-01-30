@@ -65,7 +65,7 @@ namespace Framework::World {
 
         void Update() override;
 
-        flecs::entity CreateEntity(const std::string &name = "");
+        flecs::entity CreateEntity(const std::string &name = "") const;
         static void RemoveEntity(flecs::entity e);
 
         static void SetOwner(flecs::entity e, uint64_t guid);

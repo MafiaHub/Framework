@@ -21,11 +21,11 @@ namespace Framework::External::SDL2 {
 
       public:
         Error Init(HWND windowHandle);
-        Error Shutdown();
+        Error Shutdown() const;
 
         static SDL_Event PollEvent();
 
-        SDL_Window *GetWindow() {
+        SDL_Window *GetWindow() const {
             return _window;
         }
     };

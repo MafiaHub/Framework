@@ -30,7 +30,7 @@ namespace Framework::External::SDL2 {
         return Error::ERROR_NONE;
     }
 
-    Error Wrapper::Shutdown() {
+    Error Wrapper::Shutdown() const {
         SDL_DestroyWindow(_window);
         SDL_Quit();
 

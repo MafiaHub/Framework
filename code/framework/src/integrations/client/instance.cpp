@@ -116,7 +116,7 @@ namespace Framework::Integrations::Client {
                 case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(_opts.rendererOptions.d3d9.device, nullptr, nullptr, nullptr); break;
                 case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions.d3d11.device, _opts.rendererOptions.d3d11.deviceContext, nullptr, nullptr); break;
                 case Graphics::RendererBackend::BACKEND_D3D_12: {
-                    auto const &ctx = _opts.rendererOptions.d3d12;
+                    const auto &ctx = _opts.rendererOptions.d3d12;
                     _renderer->GetD3D12Backend()->Init(ctx.device, nullptr, ctx.swapchain, ctx.commandQueue);
                 } break;
                 default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
@@ -207,9 +207,9 @@ namespace Framework::Integrations::Client {
         PostRender();
     }
 
-    void Instance::InitNetworkingMessages() {
+    void Instance::InitNetworkingMessages() const {
         using namespace Framework::Networking::Messages;
-        auto const net = _networkingEngine->GetNetworkClient();
+        const auto net = _networkingEngine->GetNetworkClient();
         net->SetOnPlayerConnectedCallback([this, net](SLNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
@@ -258,8 +258,8 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+            const auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
+            *tr           = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             _worldEngine->OnDisconnect();

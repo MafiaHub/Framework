@@ -33,10 +33,10 @@ namespace Framework::Scripting {
         ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
         ModuleError Shutdown();
 
-        void Update();
+        void Update() const;
 
-        bool LoadGamemode();
-        bool UnloadGamemode();
+        bool LoadGamemode() const;
+        bool UnloadGamemode() const;
 
         Engines::IEngine *GetEngine() const {
             return _engine;

@@ -19,7 +19,7 @@ namespace Framework::Utils::States {
 
     bool Machine::RequestNextState(int32_t stateId) {
         // Has the state been registered?
-        auto it = _states.find(stateId);
+        const auto it = _states.find(stateId);
         if (it == _states.end()) {
             return false;
         }
