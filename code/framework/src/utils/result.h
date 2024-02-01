@@ -18,7 +18,7 @@ namespace Framework::Utils {
         ErrorType _errorCode {};
 
       public:
-        Result(ErrorType error, const ResultType &message = {}): _errorCode(error), _message(message) {} // NOLINT(google-explicit-constructor)
+        Result(ErrorType error, const ResultType &message = {}): _message(message), _errorCode(error) {} // NOLINT(google-explicit-constructor)
 
         inline ErrorType GetError() const {
             return _errorCode;

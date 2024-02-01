@@ -13,9 +13,9 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
-        SLNet::SocketDescriptor newSocketSd = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
-        SLNet::StartupResult result         = _peer->Startup(maxPlayers, &newSocketSd, 1);
+    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) const {
+        auto newSocketSd                  = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
+        const SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != SLNet::RAKNET_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
             return SERVER_PEER_FAILED;
@@ -59,20 +59,20 @@ namespace Framework::Networking {
         return false;
     }
 
-    ServerError NetworkServer::Shutdown() {
+    ServerError NetworkServer::Shutdown() const {
         if (!_peer) {
             return SERVER_PEER_NULL;
         }
 
         _peer->Shutdown(1000);
-//        SLNet::RakPeerInterface::DestroyInstance(_peer);
+        //        SLNet::RakPeerInterface::DestroyInstance(_peer);
         return SERVER_NONE;
     }
 
-    int NetworkServer::GetPing(SLNet::RakNetGUID guid) {
+    int NetworkServer::GetPing(SLNet::RakNetGUID guid) const {
         return _peer->GetAveragePing(guid);
     }
-    bool NetworkServer::SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, SLNet::RakNetGUID guid, SLNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) {
+    bool NetworkServer::SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, SLNet::RakNetGUID guid, SLNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) const {
         const auto ent = world->WrapEntity(ent_id);
 
         if (!ent.is_alive()) {

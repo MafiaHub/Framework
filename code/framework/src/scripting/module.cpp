@@ -40,7 +40,6 @@ namespace Framework::Scripting {
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
         }
 
-
         // Everything just went fine hihi
         CoreModules::SetScriptingModule(this);
 
@@ -54,7 +53,7 @@ namespace Framework::Scripting {
 
         // Unload the gamemode if it's loaded, it can fail but it's not critical since we are shutdowning
         // So we just log out, then it's obvious for everyone
-        if(!UnloadGamemode()){
+        if (!UnloadGamemode()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to unload the gamemode");
         }
 
@@ -65,7 +64,7 @@ namespace Framework::Scripting {
         return ModuleError::MODULE_NONE;
     }
 
-    void Module::Update() {
+    void Module::Update() const {
         if (!_engine) {
             return;
         }
@@ -73,8 +72,8 @@ namespace Framework::Scripting {
         _engine->Update();
     }
 
-    bool Module::LoadGamemode(){
-        cppfs::FileHandle dir = cppfs::fs::open("gamemode");
+    bool Module::LoadGamemode() const {
+        const cppfs::FileHandle dir = cppfs::fs::open("gamemode");
         if (!dir.exists() || !dir.isDirectory()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to find the gamemode directory");
             return false;
@@ -83,7 +82,7 @@ namespace Framework::Scripting {
         return _engine->PreloadGamemode("gamemode");
     }
 
-    bool Module::UnloadGamemode(){
+    bool Module::UnloadGamemode() const {
         return _engine->UnloadGamemode("gamemode");
     }
 } // namespace Framework::Scripting

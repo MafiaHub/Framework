@@ -16,16 +16,16 @@
 namespace Framework::External::SDL2 {
     class Wrapper final {
       private:
-        HWND _windowHandle  = 0;
+        HWND _windowHandle  = nullptr;
         SDL_Window *_window = nullptr;
 
       public:
         Error Init(HWND windowHandle);
-        Error Shutdown();
+        Error Shutdown() const;
 
         static SDL_Event PollEvent();
 
-        inline SDL_Window *GetWindow() {
+        SDL_Window *GetWindow() const {
             return _window;
         }
     };

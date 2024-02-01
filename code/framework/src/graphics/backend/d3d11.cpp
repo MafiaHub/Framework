@@ -9,7 +9,7 @@
 #include "d3d11.h"
 
 namespace Framework::Graphics {
-    bool D3D11Backend::Init(ID3D11Device *device, ID3D11DeviceContext *context, void*, void*) {
+    bool D3D11Backend::Init(ID3D11Device *device, ID3D11DeviceContext *context, void *, void *) {
         _device  = device;
         _context = context;
 

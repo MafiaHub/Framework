@@ -19,7 +19,15 @@
 #include <vector>
 
 namespace Framework::Utils {
-    enum CommandProcessorError { ERROR_NONE, ERROR_NONE_PRINT_HELP, ERROR_EMPTY_INPUT, ERROR_CMD_ALREADY_EXISTS, ERROR_CMD_UNSPECIFIED_NAME, ERROR_CMD_UNKNOWN, ERROR_INTERNAL };
+    enum CommandProcessorError {
+        ERROR_NONE,
+        ERROR_NONE_PRINT_HELP,
+        ERROR_EMPTY_INPUT,
+        ERROR_CMD_ALREADY_EXISTS,
+        ERROR_CMD_UNSPECIFIED_NAME,
+        ERROR_CMD_UNKNOWN,
+        ERROR_INTERNAL
+    };
 
     using CommandProc = fu2::function<void(cxxopts::ParseResult &) const>;
     class CommandProcessor {

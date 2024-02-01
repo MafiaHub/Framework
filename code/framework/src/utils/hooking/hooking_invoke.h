@@ -35,7 +35,7 @@ namespace hook {
                 m_stub     = stub;
             }
 
-            virtual void Run() {
+            void Run() override {
                 m_stub->SetFunctionAddress(m_function());
             }
         };

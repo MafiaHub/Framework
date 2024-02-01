@@ -12,7 +12,7 @@
 
 namespace Framework::External::Discord {
     DiscordError Wrapper::Init(int64_t id) {
-        auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
+        const auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
         if (result != discord::Result::Ok) {
             return DiscordError::DISCORD_CORE_CREATE_FAILED;
         }
@@ -37,7 +37,7 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::Update() {
+    DiscordError Wrapper::Update() const {
         if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
@@ -46,7 +46,7 @@ namespace Framework::External::Discord {
         return DiscordError::DISCORD_NONE;
     }
 
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) {
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const {
         if (!_instance) {
             return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
@@ -69,11 +69,12 @@ namespace Framework::External::Discord {
 
         return DiscordError::DISCORD_NONE;
     }
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) {
+
+    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 
-    void Wrapper::SignInWithDiscord(const DiscordLoginProc &proc) {
+    void Wrapper::SignInWithDiscord(const DiscordLoginProc &proc) const {
         _instance->ApplicationManager().GetOAuth2Token([proc](discord::Result result, const discord::OAuth2Token &tokenData) {
             if (result == discord::Result::Ok) {
                 proc(tokenData.GetAccessToken());
@@ -83,31 +84,31 @@ namespace Framework::External::Discord {
         });
     }
 
-    discord::UserManager &Wrapper::GetUserManager() {
+    discord::UserManager &Wrapper::GetUserManager() const {
         return _instance->UserManager();
     }
 
-    discord::ActivityManager &Wrapper::GetActivityManager() {
+    discord::ActivityManager &Wrapper::GetActivityManager() const {
         return _instance->ActivityManager();
     }
 
-    discord::ImageManager &Wrapper::GetImageManager() {
+    discord::ImageManager &Wrapper::GetImageManager() const {
         return _instance->ImageManager();
     }
 
-    discord::OverlayManager &Wrapper::GetOverlayManager() {
+    discord::OverlayManager &Wrapper::GetOverlayManager() const {
         return _instance->OverlayManager();
     }
 
-    discord::ApplicationManager &Wrapper::GetApplicationManager() {
+    discord::ApplicationManager &Wrapper::GetApplicationManager() const {
         return _instance->ApplicationManager();
     }
 
-    discord::VoiceManager &Wrapper::GetVoiceManager() {
+    discord::VoiceManager &Wrapper::GetVoiceManager() const {
         return _instance->VoiceManager();
     }
 
-    discord::RelationshipManager &Wrapper::GetRelationshipManager() {
+    discord::RelationshipManager &Wrapper::GetRelationshipManager() const {
         return _instance->RelationshipManager();
     }
 } // namespace Framework::External::Discord

@@ -9,11 +9,27 @@
 #pragma once
 
 namespace Framework::Graphics {
-    enum class RendererBackend { BACKEND_D3D_9, BACKEND_D3D_11, BACKEND_D3D_12 };
+    enum class RendererBackend {
+        BACKEND_D3D_9,
+        BACKEND_D3D_11,
+        BACKEND_D3D_12
+    };
 
-    enum class RendererAPI { IMGUI, ULTRALIGHT };
+    enum class RendererAPI {
+        IMGUI,
+        ULTRALIGHT
+    };
 
-    enum class PlatformBackend { PLATFORM_WIN32, PLATFORM_SDL2 };
+    enum class PlatformBackend {
+        PLATFORM_WIN32,
+        PLATFORM_SDL2
+    };
 
-    enum class RendererState { STATE_NOT_INITIALIZED, STATE_READY, STATE_DEVICE_LOST, STATE_DEVICE_NOT_RESET, STATE_DRIVER_ERROR };
+    enum class RendererState {
+        STATE_NOT_INITIALIZED,
+        STATE_READY,
+        STATE_DEVICE_LOST,
+        STATE_DEVICE_NOT_RESET,
+        STATE_DRIVER_ERROR
+    };
 } // namespace Framework::Graphics

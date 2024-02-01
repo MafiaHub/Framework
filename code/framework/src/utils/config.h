@@ -15,7 +15,7 @@
 #include "utils/string_utils.h"
 
 namespace Framework::Utils {
-    typedef std::conditional_t<sizeof(wchar_t) == 2, std::u16string, std::u32string> wstring;
+    using wstring = std::conditional_t<sizeof(wchar_t) == 2, std::u16string, std::u32string>;
 
     class Config {
       private:
@@ -33,9 +33,9 @@ namespace Framework::Utils {
             return _lastError.empty();
         }
 
-        std::string ToString();
+        std::string ToString() const;
 
-        nlohmann::json *GetDocument() {
+        nlohmann::json *GetDocument() const {
             return _document;
         }
 

@@ -28,7 +28,7 @@ namespace Framework::HTTP {
 
         bool Shutdown();
 
-        void RegisterRequest(const char *, const RequestCallback &);
+        void RegisterRequest(const char *, const RequestCallback &) const;
 
         const std::string &GetServeDirectory() {
             return _serveDir;

@@ -64,7 +64,7 @@ namespace Framework::Scripting::Engines::Node {
         uv_loop_t uv_loop;
 
         // Gamemode
-        std::atomic<bool> _gamemodeLoaded  = false;
+        std::atomic<bool> _gamemodeLoaded = false;
         std::string _gamemodePath;
         GamemodeMetadata _gamemodeMetadata = {};
         v8::Persistent<v8::Script> _gamemodeScript;
@@ -86,7 +86,7 @@ namespace Framework::Scripting::Engines::Node {
 
         bool LoadGamemodePackageFile(std::string);
         bool CompileGamemodeScript(const std::string &, const std::string &);
-        bool RunGamemodeScript();
+        bool RunGamemodeScript() const;
         bool WatchGamemodeChanges(std::string);
 
         template <typename... Args>
@@ -100,7 +100,7 @@ namespace Framework::Scripting::Engines::Node {
                 return;
             }
 
-            constexpr int const arg_count                           = sizeof...(Args);
+            constexpr const int arg_count                           = sizeof...(Args);
             v8::Local<v8::Value> v8_args[arg_count ? arg_count : 1] = {v8pp::to_v8(_isolate, std::forward<Args>(args))...};
 
             for (auto it = _gamemodeEventHandlers[name].begin(); it != _gamemodeEventHandlers[name].end(); ++it) {
@@ -109,8 +109,8 @@ namespace Framework::Scripting::Engines::Node {
                 it->Get(_isolate)->Call(_context.Get(_isolate), v8::Undefined(_isolate), arg_count, v8_args);
 
                 if (tryCatch.HasCaught()) {
-                    auto context                               = _context.Get(_isolate);
-                    v8::Local<v8::Message> message             = tryCatch.Message();
+                    const auto context                         = _context.Get(_isolate);
+                    const v8::Local<v8::Message> message       = tryCatch.Message();
                     v8::Local<v8::Value> exception             = tryCatch.Exception();
                     v8::MaybeLocal<v8::String> maybeSourceLine = message->GetSourceLine(context);
                     v8::Maybe<int32_t> line                    = message->GetLineNumber(context);
@@ -150,11 +150,11 @@ namespace Framework::Scripting::Engines::Node {
             _modName = name;
         }
 
-        std::string GetModName() const {
+        std::string GetModName() const override {
             return _modName;
         }
 
-        std::string GetGameModeName() const {
+        std::string GetGameModeName() const override {
             return _gamemodeMetadata.name;
         }
 

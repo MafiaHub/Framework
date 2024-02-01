@@ -9,5 +9,9 @@
 #pragma once
 
 namespace Framework::Networking {
-    enum PeerState { CONNECTING, CONNECTED, DISCONNECTED };
-};
+    enum PeerState {
+        CONNECTING,
+        CONNECTED,
+        DISCONNECTED
+    };
+}; // namespace Framework::Networking

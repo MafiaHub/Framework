@@ -9,7 +9,8 @@
 #pragma once
 
 /*
- * This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.h
+ * This file is based on ExecutableLoader from:
+ * https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.h
  * See:https://github.com/citizenfx/fivem/blob/master/code/LICENSE
  */
 
@@ -50,7 +51,7 @@ namespace Framework::Launcher::Loaders {
 
         void LoadImports(IMAGE_NT_HEADERS *ntHeader);
 
-        HMODULE ResolveLibrary(const char *name);
+        HMODULE ResolveLibrary(const char *name) const;
 
         template <typename T>
         inline const T *GetRVA(uint32_t rva) {
@@ -81,11 +82,11 @@ namespace Framework::Launcher::Loaders {
             _tlsInitializer = callback;
         }
 
-        inline void *GetEntryPoint() {
+        inline void *GetEntryPoint() const {
             return _entryPoint;
         }
 
-        void Protect();
+        void Protect() const;
         void LoadIntoModule(HMODULE module);
     };
 } // namespace Framework::Launcher::Loaders

@@ -7,7 +7,8 @@
  */
 
 /*
- * This file is based on ExecutableLoader from: https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.cpp
+ * This file is based on ExecutableLoader from:
+ * https://github.com/citizenfx/fivem/blob/cbe56f78f86bebb68d7960a38c3cdc31c7d76790/code/client/launcher/ExecutableLoader.cpp
  * See: https://github.com/citizenfx/fivem/blob/master/code/LICENSE
  */
 
@@ -34,7 +35,7 @@ namespace Framework::Launcher::Loaders {
     }
 
     void ExecutableLoader::LoadImports(IMAGE_NT_HEADERS *ntHeader) {
-        IMAGE_DATA_DIRECTORY *importDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+        const IMAGE_DATA_DIRECTORY *importDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
         auto descriptor = GetTargetRVA<IMAGE_IMPORT_DESCRIPTOR>(importDirectory->VirtualAddress);
 
@@ -68,14 +69,14 @@ namespace Framework::Launcher::Loaders {
 
                 // is this an ordinal-only import?
                 if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
-                    uint64_t ordinalId = IMAGE_ORDINAL(*nameTableEntry);
-                    function           = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
+                    const uint64_t ordinalId = IMAGE_ORDINAL(*nameTableEntry);
+                    function                 = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
                     static char _backingFunctionNameBuf[4096];
                     ::snprintf(_backingFunctionNameBuf, 4096, "#%lld", ordinalId);
                     functionName = _backingFunctionNameBuf;
                 }
                 else {
-                    auto import = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
+                    const auto import = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
 
                     function     = (FARPROC)_functionResolver(module, import->Name);
                     functionName = import->Name;
@@ -99,7 +100,7 @@ namespace Framework::Launcher::Loaders {
     }
 
     void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
-        void *targetAddress       = GetTargetRVA<uint8_t>(section->VirtualAddress);
+        void *targetAddress = GetTargetRVA<uint8_t>(section->VirtualAddress);
         if (!targetAddress) {
             return;
         }
@@ -120,7 +121,7 @@ namespace Framework::Launcher::Loaders {
         }
 
         // Calculate the size of data to be copied
-        uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
+        const uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
 
         // Copy the data
         memcpy(targetAddress, sourceAddress, sizeOfData);
@@ -179,7 +180,7 @@ namespace Framework::Launcher::Loaders {
     }
 
     void ExecutableLoader::LoadSections(IMAGE_NT_HEADERS *ntHeader) {
-        IMAGE_SECTION_HEADER *section = IMAGE_FIRST_SECTION(ntHeader);
+        auto section = IMAGE_FIRST_SECTION(ntHeader);
 
         for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
             LoadSection(section);
@@ -187,7 +188,7 @@ namespace Framework::Launcher::Loaders {
         }
     }
 
-    void ExecutableLoader::Protect() {
+    void ExecutableLoader::Protect() const {
         for (const auto &protection : _targetProtections) {
             DWORD op;
             VirtualProtect(std::get<0>(protection), std::get<1>(protection), std::get<2>(protection), &op);
@@ -196,13 +197,13 @@ namespace Framework::Launcher::Loaders {
 
 #if defined(_M_AMD64)
     void ExecutableLoader::LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader) {
-        IMAGE_DATA_DIRECTORY *exceptionDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+        const IMAGE_DATA_DIRECTORY *exceptionDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
 
         RUNTIME_FUNCTION *functionList = GetTargetRVA<RUNTIME_FUNCTION>(exceptionDirectory->VirtualAddress);
-        DWORD entryCount               = exceptionDirectory->Size / sizeof(RUNTIME_FUNCTION);
+        const DWORD entryCount         = exceptionDirectory->Size / sizeof(RUNTIME_FUNCTION);
 
-        if (HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll")) {
-            auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
+        if (const HMODULE coreRT = GetModuleHandleW(L"FrameworkLoaderData.dll")) {
+            const auto sehMapper = (void (*)(void *, void *, PRUNTIME_FUNCTION, DWORD))GetProcAddress(coreRT, "CoreRT_SetupSEHHandler");
             sehMapper(_module, ((char *)_module) + ntHeader->OptionalHeader.SizeOfImage, functionList, entryCount);
         }
     }
@@ -210,21 +211,21 @@ namespace Framework::Launcher::Loaders {
     void ExecutableLoader::LoadIntoModule(HMODULE module) {
         _module = module;
 
-        IMAGE_DOS_HEADER *header = (IMAGE_DOS_HEADER *)_origBinary;
+        const auto header = (IMAGE_DOS_HEADER *)_origBinary;
 
         if (header->e_magic != IMAGE_DOS_SIGNATURE) {
             return;
         }
 
-        IMAGE_DOS_HEADER *sourceHeader   = (IMAGE_DOS_HEADER *)module;
+        const auto sourceHeader          = (IMAGE_DOS_HEADER *)module;
         IMAGE_NT_HEADERS *sourceNtHeader = GetTargetRVA<IMAGE_NT_HEADERS>(sourceHeader->e_lfanew);
 
-        auto origCheckSum  = sourceNtHeader->OptionalHeader.CheckSum;
-        auto origTimeStamp = sourceNtHeader->FileHeader.TimeDateStamp;
-        auto origDebugDir  = sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
+        const auto origCheckSum  = sourceNtHeader->OptionalHeader.CheckSum;
+        const auto origTimeStamp = sourceNtHeader->FileHeader.TimeDateStamp;
+        const auto origDebugDir  = sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
 
-        IMAGE_NT_HEADERS *ntHeader = (IMAGE_NT_HEADERS *)(_origBinary + header->e_lfanew);
-        _entryPoint                = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
+        const auto ntHeader = (IMAGE_NT_HEADERS *)(_origBinary + header->e_lfanew);
+        _entryPoint         = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
 
         DWORD oldProtect1;
         VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1);
@@ -255,7 +256,7 @@ namespace Framework::Launcher::Loaders {
 #if defined(_M_IX86)
             LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
 #elif defined(_M_AMD64)
-            LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
+            auto tlsBase = (LPVOID *)__readgsqword(0x58);
 #endif
 
             if (sourceTls->StartAddressOfRawData && tlsInit != nullptr) {
@@ -282,16 +283,16 @@ namespace Framework::Launcher::Loaders {
     }
 
     bool ExecutableLoader::ApplyRelocations() {
-        IMAGE_DOS_HEADER *dosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(_module);
+        const auto dosHeader = reinterpret_cast<IMAGE_DOS_HEADER *>(_module);
 
-        IMAGE_NT_HEADERS *ntHeader = GetTargetRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
+        const IMAGE_NT_HEADERS *ntHeader = GetTargetRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
 
-        IMAGE_DATA_DIRECTORY *relocationDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+        const IMAGE_DATA_DIRECTORY *relocationDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 
-        IMAGE_BASE_RELOCATION *relocation    = GetTargetRVA<IMAGE_BASE_RELOCATION>(relocationDirectory->VirtualAddress);
-        IMAGE_BASE_RELOCATION *endRelocation = reinterpret_cast<IMAGE_BASE_RELOCATION *>((char *)relocation + relocationDirectory->Size);
+        IMAGE_BASE_RELOCATION *relocation = GetTargetRVA<IMAGE_BASE_RELOCATION>(relocationDirectory->VirtualAddress);
+        const auto endRelocation          = reinterpret_cast<IMAGE_BASE_RELOCATION *>((char *)relocation + relocationDirectory->Size);
 
-        intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - reinterpret_cast<intptr_t>(GetModuleHandle(NULL));
+        const intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - reinterpret_cast<intptr_t>(GetModuleHandle(NULL));
 
         if (relocOffset == 0) {
             return true;
@@ -310,12 +311,12 @@ namespace Framework::Launcher::Loaders {
             }
 
             // go through each and every relocation
-            size_t numRelocations = (relocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
-            uint16_t *relocStart  = reinterpret_cast<uint16_t *>(relocation + 1);
+            const size_t numRelocations = (relocation->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(uint16_t);
+            const auto relocStart       = reinterpret_cast<uint16_t *>(relocation + 1);
 
             for (size_t i = 0; i < numRelocations; i++) {
-                uint16_t type = relocStart[i] >> 12;
-                uint32_t rva  = (relocStart[i] & 0xFFF) + relocation->VirtualAddress;
+                const uint16_t type = relocStart[i] >> 12;
+                const uint32_t rva  = (relocStart[i] & 0xFFF) + relocation->VirtualAddress;
 
                 void *addr = GetTargetRVA<void>(rva);
                 DWORD oldProtect;
@@ -341,7 +342,7 @@ namespace Framework::Launcher::Loaders {
         return true;
     }
 
-    HMODULE ExecutableLoader::ResolveLibrary(const char *name) {
+    HMODULE ExecutableLoader::ResolveLibrary(const char *name) const {
         return _libraryLoader(name);
     }
 } // namespace Framework::Launcher::Loaders

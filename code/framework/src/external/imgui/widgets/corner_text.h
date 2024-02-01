@@ -26,8 +26,8 @@ namespace Framework::External::ImGUI::Widgets {
         ImGuiIO &io                   = ImGui::GetIO();
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
-        ImVec2 work_pos               = viewport->WorkPos;
-        ImVec2 work_size              = viewport->WorkSize;
+        const ImVec2 work_pos         = viewport->WorkPos;
+        const ImVec2 work_size        = viewport->WorkSize;
         ImVec2 window_pos, window_pos_pivot;
         window_pos.x       = (corner & 1) ? (work_pos.x + work_size.x - padding) : (work_pos.x + padding);
         window_pos.y       = (corner & 2) ? (work_pos.y + work_size.y - padding) : (work_pos.y + padding);

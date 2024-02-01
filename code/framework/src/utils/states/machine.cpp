@@ -19,7 +19,7 @@ namespace Framework::Utils::States {
 
     bool Machine::RequestNextState(int32_t stateId) {
         // Has the state been registered?
-        auto it = _states.find(stateId);
+        const auto it = _states.find(stateId);
         if (it == _states.end()) {
             return false;
         }
@@ -46,11 +46,13 @@ namespace Framework::Utils::States {
         if (_currentState != nullptr) {
             // Otherwise, we just process the current state
             if (_currentContext == Context::Enter) {
-                // If init succeed, next context is obviously the update, otherwise it means that something failed and exit is required
+                // If init succeed, next context is obviously the update, otherwise it means that something failed and
+                // exit is required
                 _currentContext = _currentState->OnEnter(this) ? Context::Update : Context::Exit;
             }
             else if (_currentContext == Context::Update) {
-                // If the state answer true to update call, it means that it willed only a single tick, otherwise we keep ticking
+                // If the state answer true to update call, it means that it willed only a single tick, otherwise we
+                // keep ticking
                 if (_currentState->OnUpdate(this)) {
                     _currentContext = Context::Exit;
                 }

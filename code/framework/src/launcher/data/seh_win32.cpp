@@ -13,8 +13,8 @@
 
 #ifdef _M_AMD64
 
-//NOTE: Hooking.Aux
-//#include <tlhelp32.h>
+// NOTE: Hooking.Aux
+// #include <tlhelp32.h>
 struct DisableToolHelpScope {
     inline DisableToolHelpScope() {
         // write code to disable hooks
@@ -28,7 +28,7 @@ struct DisableToolHelpScope {
     }
 
     inline ~DisableToolHelpScope() {
-        auto target = (char *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "CreateToolhelp32Snapshot");
+        const auto target = (char *)GetProcAddress(GetModuleHandleA("kernel32.dll"), "CreateToolhelp32Snapshot");
         memcpy(target, oldCode, sizeof(oldCode));
 
         VirtualProtect(target, 16, oldProtect, &oldProtect);
@@ -69,7 +69,7 @@ static void *FindCallFromAddress(void *methodPtr, ud_mnemonic_code mnemonic = UD
 
         if (ud_insn_mnemonic(&ud) == mnemonic) {
             // get the first operand
-            auto operand = ud_insn_opr(&ud, 0);
+            const auto operand = ud_insn_opr(&ud, 0);
 
             // if it's a static call...
             if (operand->type == UD_OP_JIMM) {
@@ -112,7 +112,7 @@ static void *RtlpxLookupFunctionTableOverride(void *exceptionAddress, FUNCTION_T
 
     void *retval = g_originalLookup(exceptionAddress, outData);
 
-    DWORD64 addressNum = (DWORD64)exceptionAddress;
+    const DWORD64 addressNum = (DWORD64)exceptionAddress;
 
     if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd) {
         if (addressNum != 0) {
@@ -130,7 +130,7 @@ static void *(*g_originalLookupDownLevel)(void *, PDWORD64, PULONG);
 static void *RtlpxLookupFunctionTableOverrideDownLevel(void *exceptionAddress, PDWORD64 imageBase, PULONG length) {
     void *retval = g_originalLookupDownLevel(exceptionAddress, imageBase, length);
 
-    DWORD64 addressNum = (DWORD64)exceptionAddress;
+    const DWORD64 addressNum = (DWORD64)exceptionAddress;
 
     if (addressNum >= g_overrideStart && addressNum <= g_overrideEnd) {
         if (addressNum != 0) {
@@ -169,7 +169,7 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
     g_overriddenTable.Size         = entryCount * sizeof(RUNTIME_FUNCTION);
 
     if (IsWindows8Point1OrGreater()) {
-        auto ZwQueryVirtualMemory = (NTSTATUS(NTAPI *)(HANDLE, PVOID, INT, PVOID, SIZE_T, PSIZE_T))GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryVirtualMemory");
+        const auto ZwQueryVirtualMemory = (NTSTATUS(NTAPI *)(HANDLE, PVOID, INT, PVOID, SIZE_T, PSIZE_T))GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryVirtualMemory");
 
         struct {
             DWORD64 field0;
@@ -189,8 +189,8 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
     if (baseAddress) {
         void *internalAddress = FindCallFromAddress(baseAddress);
 
-        void *patchFunction  = RtlpxLookupFunctionTableOverride;
-        void **patchOriginal = (void **)&g_originalLookup;
+        void *patchFunction = RtlpxLookupFunctionTableOverride;
+        auto patchOriginal  = (void **)&g_originalLookup;
 
         // if we couldn't _reliably_ find it, error out
         if (!internalAddress) {
@@ -205,7 +205,8 @@ extern "C" void __declspec(dllexport) CoreRT_SetupSEHHandler(void *moduleBase, v
             if (!internalAddress) {
                 // and 2k3 to 7 don't even _have_ Rtlpx - so we directly hook the Rtl* function
                 if (IsWindows8OrGreater()) {
-                    printf("could not find RtlpxLookupFunctionTable - hooking RtlLookupFunctionTable directly. This will break on a Win8+ system since RtlpxLookupFunctionTable is "
+                    printf("could not find RtlpxLookupFunctionTable - hooking RtlLookupFunctionTable directly. This "
+                           "will break on a Win8+ system since RtlpxLookupFunctionTable is "
                            "supposed to exist!\n");
                 }
 
@@ -239,7 +240,7 @@ static BOOLEAN RtlDispatchExceptionStub(EXCEPTION_RECORD *record, CONTEXT *conte
         return TRUE;
     }
 
-    BOOLEAN success = g_origRtlDispatchException(record, context);
+    const BOOLEAN success = g_origRtlDispatchException(record, context);
 
     if (IsDebuggerPresent()) {
         return success;

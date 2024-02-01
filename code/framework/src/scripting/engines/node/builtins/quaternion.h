@@ -65,23 +65,23 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void Add(float w, float x, float y, float z) {
-            glm::quat newQuat(w, x, y, z);
+            const glm::quat newQuat(w, x, y, z);
             _data += newQuat;
         }
 
         void Sub(float w, float x, float y, float z) {
-            glm::quat newQuat(w, x, y, z);
+            const glm::quat newQuat(w, x, y, z);
             _data -= newQuat;
         }
 
         void Mul(float w, float x, float y, float z) {
-            glm::quat newQuat(w, x, y, z);
+            const glm::quat newQuat(w, x, y, z);
             _data *= newQuat;
         }
 
         void Lerp(float w, float x, float y, float z, float f) {
-            glm::quat newQuat(w, x, y, z);
-            _data = glm::mix(_data, newQuat, static_cast<float>(f));
+            const glm::quat newQuat(w, x, y, z);
+            _data = glm::mix(_data, newQuat, f);
         }
 
         void Conjugate(float w, float x, float y, float z) {
@@ -90,12 +90,12 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void Cross(float w, float x, float y, float z) {
-            glm::quat newQuat(w, x, y, z);
+            const glm::quat newQuat(w, x, y, z);
             _data = glm::cross(_data, newQuat);
         }
 
-        float Dot(float w, float x, float y, float z) {
-            glm::quat newQuat(w, x, y, z);
+        float Dot(float w, float x, float y, float z) const {
+            const glm::quat newQuat(w, x, y, z);
             return glm::dot(_data, newQuat);
         }
 
@@ -108,7 +108,7 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void FromAxisAngle(float x, float y, float z, float angle) {
-            _data = glm::quat(glm::angleAxis(static_cast<float>(angle), glm::vec3(x, y, z)));
+            _data = glm::quat(glm::angleAxis(angle, glm::vec3(x, y, z)));
         }
 
         static void Register(v8::Isolate *isolate, v8pp::module *rootModule) {

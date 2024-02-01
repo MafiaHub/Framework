@@ -77,10 +77,10 @@ namespace hook {
     T get_tls() {
         // ah, the irony in using TLS to get TLS
         static auto tlsIndex = ([]() {
-            auto base       = (char *)GetModuleHandle(NULL);
-            auto moduleBase = (PIMAGE_DOS_HEADER)base;
-            auto ntBase     = (PIMAGE_NT_HEADERS)(base + moduleBase->e_lfanew);
-            auto tlsBase    = (PIMAGE_TLS_DIRECTORY)(base + ntBase->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+            const auto base       = (char *)GetModuleHandle(NULL);
+            const auto moduleBase = (PIMAGE_DOS_HEADER)base;
+            const auto ntBase     = (PIMAGE_NT_HEADERS)(base + moduleBase->e_lfanew);
+            const auto tlsBase    = (PIMAGE_TLS_DIRECTORY)(base + ntBase->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 
             return reinterpret_cast<uint32_t *>(tlsBase->AddressOfIndex);
         })();
@@ -88,7 +88,7 @@ namespace hook {
 #if defined(_M_IX86)
         LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
 #elif defined(_M_AMD64)
-        LPVOID *tlsBase       = (LPVOID *)__readgsqword(0x58);
+        auto tlsBase          = (LPVOID *)__readgsqword(0x58);
 #endif
 
         return (T)tlsBase[*tlsIndex];
@@ -121,7 +121,7 @@ namespace hook {
             VirtualFree(m_code, 0, MEM_RELEASE);
         }
 
-        inline void *GetCode() {
+        inline void *GetCode() const {
             return m_code;
         }
     };
@@ -220,7 +220,7 @@ namespace hook {
         template <>
         inline bool iat_matches_ordinal(uintptr_t *nameTableEntry, const char *ordinal) {
             if (!IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
-                auto import = getRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
+                const auto import = getRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
 
                 return !_stricmp(import->Name, ordinal);
             }
@@ -234,11 +234,11 @@ namespace hook {
 #ifdef _M_IX86
         IMAGE_DOS_HEADER *imageHeader = (IMAGE_DOS_HEADER *)(baseAddressDifference + 0x400000);
 #elif defined(_M_AMD64)
-        IMAGE_DOS_HEADER *imageHeader = (IMAGE_DOS_HEADER *)(baseAddressDifference + 0x140000000);
+        auto imageHeader = (IMAGE_DOS_HEADER *)(baseAddressDifference + 0x140000000);
 #endif
-        IMAGE_NT_HEADERS *ntHeader = getRVA<IMAGE_NT_HEADERS>(imageHeader->e_lfanew);
+        const IMAGE_NT_HEADERS *ntHeader = getRVA<IMAGE_NT_HEADERS>(imageHeader->e_lfanew);
 
-        IMAGE_IMPORT_DESCRIPTOR *descriptor = getRVA<IMAGE_IMPORT_DESCRIPTOR>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+        const IMAGE_IMPORT_DESCRIPTOR *descriptor = getRVA<IMAGE_IMPORT_DESCRIPTOR>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
 
         while (descriptor->Name) {
             const char *name = getRVA<char>(descriptor->Name);
@@ -644,8 +644,8 @@ namespace hook {
         inject_call(uintptr_t address) {
             if (*(uint8_t *)address != 0xE8) {
                 __debugbreak();
-                // "inject_call attempted on something that was not a call. Are you sure you have a compatible version of the game executable? You might need to try poking the
-                // guru."
+                // "inject_call attempted on something that was not a call. Are you sure you have a compatible version
+                // of the game executable? You might need to try poking the guru."
             }
 
             m_address = address;

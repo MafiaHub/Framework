@@ -22,7 +22,7 @@
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                               \
+        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                         \
         if (__net) {                                                                                                                                                                                                                                                                   \
             __net->SendRPC<rpc>(s);                                                                                                                                                                                                                                                    \
         }                                                                                                                                                                                                                                                                              \
@@ -32,7 +32,7 @@
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                               \
+        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                         \
         if (__net) {                                                                                                                                                                                                                                                                   \
             __net->SendRPC<rpc>(s, guid);                                                                                                                                                                                                                                              \
         }                                                                                                                                                                                                                                                                              \
@@ -46,7 +46,7 @@ namespace Framework::World {
     class Engine {
       private:
         friend class Framework::Scripting::Engines::Node::Engine;
-        void PurgeAllGameModeEntities();
+        void PurgeAllGameModeEntities() const;
 
       protected:
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
@@ -67,7 +67,7 @@ namespace Framework::World {
         static bool IsEntityOwner(flecs::entity e, uint64_t guid);
         void WakeEntity(flecs::entity e);
 
-        flecs::world *GetWorld() {
+        flecs::world *GetWorld() const {
             return _world.get();
         }
     };

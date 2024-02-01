@@ -20,11 +20,11 @@ namespace Framework::Scripting {
     class Module {
       private:
         int _processArgsCount = 0;
-        char **_processArgs = nullptr;
+        char **_processArgs   = nullptr;
         std::string _modName;
 
         Engines::IEngine *_engine = nullptr;
-        EngineTypes _engineType = EngineTypes::ENGINE_NODE;
+        EngineTypes _engineType   = EngineTypes::ENGINE_NODE;
 
       public:
         Module()  = default;
@@ -33,10 +33,10 @@ namespace Framework::Scripting {
         ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
         ModuleError Shutdown();
 
-        void Update();
+        void Update() const;
 
-        bool LoadGamemode();
-        bool UnloadGamemode();
+        bool LoadGamemode() const;
+        bool UnloadGamemode() const;
 
         Engines::IEngine *GetEngine() const {
             return _engine;

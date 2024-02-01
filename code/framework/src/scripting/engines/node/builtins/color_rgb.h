@@ -61,22 +61,22 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void Add(int r, int g, int b) {
-            glm::ivec4 newVec(r, g, b, 0);
+            const glm::ivec4 newVec(r, g, b, 0);
             _data += newVec;
         }
 
         void Sub(int r, int g, int b) {
-            glm::ivec4 newVec(r, g, b, 0);
+            const glm::ivec4 newVec(r, g, b, 0);
             _data -= newVec;
         }
 
         void Mul(int r, int g, int b) {
-            glm::ivec4 newVec(r, g, b, 1);
+            const glm::ivec4 newVec(r, g, b, 1);
             _data *= newVec;
         }
 
         void Div(int r, int g, int b) {
-            glm::ivec4 newVec(r, g, b, 1);
+            const glm::ivec4 newVec(r, g, b, 1);
             _data /= newVec;
         }
 

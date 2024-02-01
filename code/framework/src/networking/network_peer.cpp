@@ -37,7 +37,7 @@ namespace Framework::Networking {
         CoreModules::SetNetworkPeer(nullptr);
     }
 
-    bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) {
+    bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
         if (!_peer) {
             return false;
         }

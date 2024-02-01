@@ -271,7 +271,7 @@ namespace Framework::Utils::Hashing {
     uint32_t CalculateCRC32(const char *data, size_t len) {
         ptrdiff_t remaining;
         uint32_t result = ~((uint32_t)0);
-        char const *c   = (char const *)data;
+        auto c          = data;
         for (remaining = (ptrdiff_t)len; remaining--; c++) result = (result >> 8) ^ (crc32_table[(result ^ *c) & 0xff]);
         return ~result;
     }

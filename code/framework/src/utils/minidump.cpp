@@ -23,7 +23,7 @@ namespace Framework::Utils {
         std::string outputDump;
 
       protected:
-        virtual void OnOutput(LPCSTR dump) override {
+        void OnOutput(LPCSTR dump) override {
             outputDump += dump;
         }
 
@@ -97,9 +97,9 @@ namespace Framework::Utils {
     }
 
     void MiniDump::InitExceptionOverride() {
-        /*const auto coreSetExceptionOverride = reinterpret_cast<void(* __cdecl)(CoreSetExceptionOverride)>(GetProcAddress(GetModuleHandleA("FrameworkLoaderData.dll"), "CoreSetExceptionOverride"));
-        if (coreSetExceptionOverride) {
-            coreSetExceptionOverride(ExceptionFilter);
+        /*const auto coreSetExceptionOverride = reinterpret_cast<void(*
+        __cdecl)(CoreSetExceptionOverride)>(GetProcAddress(GetModuleHandleA("FrameworkLoaderData.dll"),
+        "CoreSetExceptionOverride")); if (coreSetExceptionOverride) { coreSetExceptionOverride(ExceptionFilter);
         }*/
 
         SetUnhandledExceptionFilter(ExceptionFilter);

@@ -20,8 +20,14 @@
 #include <vector>
 
 namespace Framework::Launcher {
-    enum class ProjectPlatform { CLASSIC, STEAM };
-    enum class ProjectLaunchType { PE_LOADING, DLL_INJECTION };
+    enum class ProjectPlatform {
+        CLASSIC,
+        STEAM
+    };
+    enum class ProjectLaunchType {
+        PE_LOADING,
+        DLL_INJECTION
+    };
 
     enum DLLInjectionResults {
         INJECT_LIBRARY_RESULT_OK,
@@ -132,13 +138,13 @@ namespace Framework::Launcher {
         static bool EnsureFilesExist(const std::vector<std::string> &);
         static bool EnsureAtLeastOneFileExists(const std::vector<std::string> &);
         bool EnsureGameExecutableIsCompatible(uint32_t);
-        uint32_t GetGameVersion();
+        uint32_t GetGameVersion() const;
 
         bool RunInnerSteamChecks();
         bool RunInnerClassicChecks();
 
         bool LoadJSONConfig();
-        void SaveJSONConfig();
+        void SaveJSONConfig() const;
 
         static void InvokeEntryPoint(void (*entryPoint)());
 

@@ -19,7 +19,7 @@ namespace Framework::Graphics {
         Backend() = default;
 
         virtual bool Init(TDevice device, TContext context, TSwapChain swapChain, TCommandQueue commandList) = 0;
-        virtual bool Shutdown()                             = 0;
+        virtual bool Shutdown()                                                                              = 0;
 
         virtual void Update() = 0;
 

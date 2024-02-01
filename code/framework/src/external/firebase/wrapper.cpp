@@ -55,55 +55,47 @@ namespace Framework::External::Firebase {
     }
 
     FirebaseError Wrapper::SignInWithCustomToken(const std::string &token) const {
-        auto auth                                       = GetAuth();
-        firebase::Future<firebase::auth::User *> result = auth->SignInWithCustomToken(token.c_str());
-        while (result.status() != firebase::kFutureStatusComplete) {};
+        const auto auth                                       = GetAuth();
+        const firebase::Future<firebase::auth::User *> result = auth->SignInWithCustomToken(token.c_str());
+        while (result.status() != firebase::kFutureStatusComplete) {}
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
         }
-        else {
-            return FirebaseError::FIREBASE_AUTH_FAILED;
-        }
+        return FirebaseError::FIREBASE_AUTH_FAILED;
     }
 
     FirebaseError Wrapper::SignInWithEmailPassword(const std::string &email, const std::string &password) const {
-        auto auth                                       = GetAuth();
-        firebase::Future<firebase::auth::User *> result = auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());
-        while (result.status() != firebase::kFutureStatusComplete) {};
+        const auto auth                                       = GetAuth();
+        const firebase::Future<firebase::auth::User *> result = auth->SignInWithEmailAndPassword(email.c_str(), password.c_str());
+        while (result.status() != firebase::kFutureStatusComplete) {}
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
         }
-        else {
-            return FirebaseError::FIREBASE_AUTH_FAILED;
-        }
+        return FirebaseError::FIREBASE_AUTH_FAILED;
     }
 
     FirebaseError Wrapper::SignUpWithEmailPassword(const std::string &email, const std::string &password) const {
-        auto auth                                       = GetAuth();
-        firebase::Future<firebase::auth::User *> result = auth->CreateUserWithEmailAndPassword(email.c_str(), password.c_str());
-        while (result.status() != firebase::kFutureStatusComplete) {};
+        const auto auth                                       = GetAuth();
+        const firebase::Future<firebase::auth::User *> result = auth->CreateUserWithEmailAndPassword(email.c_str(), password.c_str());
+        while (result.status() != firebase::kFutureStatusComplete) {}
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
         }
-        else {
-            return FirebaseError::FIREBASE_AUTH_FAILED;
-        }
+        return FirebaseError::FIREBASE_AUTH_FAILED;
     }
 
     FirebaseError Wrapper::SignInAnonymously() const {
-        auto auth                                       = GetAuth();
-        firebase::Future<firebase::auth::User *> result = auth->SignInAnonymously();
-        while (result.status() != firebase::kFutureStatusComplete) {};
+        const auto auth                                       = GetAuth();
+        const firebase::Future<firebase::auth::User *> result = auth->SignInAnonymously();
+        while (result.status() != firebase::kFutureStatusComplete) {}
         if (result.error() == firebase::auth::kAuthErrorNone) {
             return FirebaseError::FIREBASE_NONE;
         }
-        else {
-            return FirebaseError::FIREBASE_AUTH_FAILED;
-        }
+        return FirebaseError::FIREBASE_AUTH_FAILED;
     }
 
     FirebaseError Wrapper::SignOut() const {
-        auto auth = GetAuth();
+        const auto auth = GetAuth();
         auth->SignOut();
         return FirebaseError::FIREBASE_NONE;
     }

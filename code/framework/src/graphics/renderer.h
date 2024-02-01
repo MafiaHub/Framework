@@ -10,8 +10,8 @@
 
 #include "utils/safe_win32.h"
 
-#include "backend/d3d12.h"
 #include "backend/d3d11.h"
+#include "backend/d3d12.h"
 #include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
@@ -31,8 +31,8 @@ namespace Framework::Graphics {
         } d3d11;
 
         struct {
-            ID3D12Device *device = nullptr;
-            IDXGISwapChain3 *swapchain = nullptr;
+            ID3D12Device *device             = nullptr;
+            IDXGISwapChain3 *swapchain       = nullptr;
             ID3D12CommandQueue *commandQueue = nullptr;
             // todo
         } d3d12;
@@ -40,7 +40,7 @@ namespace Framework::Graphics {
 
     class Renderer {
       private:
-        RendererConfiguration _config{};
+        RendererConfiguration _config {};
         RendererState _state     = RendererState::STATE_NOT_INITIALIZED;
         RendererBackend _backend = RendererBackend::BACKEND_D3D_11;
 
@@ -56,7 +56,7 @@ namespace Framework::Graphics {
         RendererError Init(RendererConfiguration);
         RendererError Shutdown();
 
-        void Update();
+        void Update() const;
 
         RendererState GetCurrentState() const {
             return _state;

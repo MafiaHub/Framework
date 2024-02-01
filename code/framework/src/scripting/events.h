@@ -12,7 +12,11 @@
 #include <string>
 
 namespace Framework::Scripting {
-    enum class EventIDs { GAMEMODE_LOADED, GAMEMODE_UNLOADING, GAMEMODE_UPDATED };
+    enum class EventIDs {
+        GAMEMODE_LOADED,
+        GAMEMODE_UNLOADING,
+        GAMEMODE_UPDATED
+    };
 
     extern std::map<EventIDs, std::string> Events;
 } // namespace Framework::Scripting

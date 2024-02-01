@@ -39,7 +39,7 @@ class InitFunction: public HookFunctionBase {
         m_function = function;
     }
 
-    virtual void Run() {
+    void Run() override {
         m_function();
     }
 };
@@ -53,7 +53,7 @@ class HookFunction: public HookFunctionBase {
         m_function = function;
     }
 
-    virtual void Run() {
+    void Run() override {
         m_function();
     }
 };

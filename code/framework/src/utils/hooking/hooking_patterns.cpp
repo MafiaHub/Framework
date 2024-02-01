@@ -33,7 +33,7 @@ template <std::uint64_t FnvPrime, std::uint64_t OffsetBasis>
 struct basic_fnv_1 {
     std::uint64_t operator()(std::string_view text) const {
         std::uint64_t hash = OffsetBasis;
-        for (auto it : text) {
+        for (const auto it : text) {
             hash *= FnvPrime;
             hash ^= it;
         }
@@ -42,10 +42,10 @@ struct basic_fnv_1 {
     }
 };
 
-const std::uint64_t fnv_prime        = 1099511628211u;
-const std::uint64_t fnv_offset_basis = 14695981039346656037u;
+constexpr std::uint64_t fnv_prime        = 1099511628211u;
+constexpr std::uint64_t fnv_offset_basis = 14695981039346656037u;
 
-typedef basic_fnv_1<fnv_prime, fnv_offset_basis> fnv_1;
+using fnv_1 = basic_fnv_1<fnv_prime, fnv_offset_basis>;
 
 #endif
 
@@ -81,7 +81,7 @@ namespace hook {
             return uint8_t(ch - '0');
         };
 
-        for (auto ch : pattern) {
+        for (const auto ch : pattern) {
             if (ch == ' ') {
                 continue;
             }
@@ -90,7 +90,7 @@ namespace hook {
                 mask.push_back('?');
             }
             else if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F') || (ch >= 'a' && ch <= 'f')) {
-                uint8_t thisDigit = tol(ch);
+                const uint8_t thisDigit = tol(ch);
 
                 if (!tempFlag) {
                     tempDigit = thisDigit << 4;
@@ -119,8 +119,8 @@ namespace hook {
         }
 
         explicit executable_meta(void *module): m_begin((uintptr_t)module) {
-            PIMAGE_DOS_HEADER dosHeader = getRVA<IMAGE_DOS_HEADER>(0);
-            PIMAGE_NT_HEADERS ntHeader  = getRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
+            const PIMAGE_DOS_HEADER dosHeader = getRVA<IMAGE_DOS_HEADER>(0);
+            const PIMAGE_NT_HEADERS ntHeader  = getRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
 
             m_end = m_begin + ntHeader->OptionalHeader.SizeOfImage;
         }
@@ -147,7 +147,7 @@ namespace hook {
 #if PATTERNS_USE_HINTS
         // if there's hints, try those first
         if (m_module == GetModuleHandle(nullptr)) {
-            auto range = GetHints().equal_range(m_hash);
+            const auto range = GetHints().equal_range(m_hash);
 
             if (range.first != range.second) {
                 std::for_each(range.first, range.second, [&](const std::pair<uint64_t, uintptr_t> &hint) {
@@ -170,7 +170,7 @@ namespace hook {
         }
 
         // scan the executable for code
-        executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd) : executable_meta(m_module);
+        const executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd) : executable_meta(m_module);
 
         auto matchSuccess = [&](uintptr_t address) {
 #if PATTERNS_USE_HINTS
@@ -183,10 +183,10 @@ namespace hook {
             return (m_matches.size() == maxCount);
         };
 
-        const uint8_t *pattern = reinterpret_cast<const uint8_t *>(m_bytes.c_str());
-        const char *mask       = m_mask.c_str();
-        size_t maskSize        = m_mask.size();
-        size_t lastWild        = m_mask.find_last_of('?');
+        auto pattern          = reinterpret_cast<const uint8_t *>(m_bytes.c_str());
+        const char *mask      = m_mask.c_str();
+        const size_t maskSize = m_mask.size();
+        const size_t lastWild = m_mask.find_last_of('?');
 
         ptrdiff_t Last[256];
 
@@ -199,8 +199,8 @@ namespace hook {
         }
 
         for (uintptr_t i = executable.begin(), end = executable.end() - maskSize; i <= end;) {
-            uint8_t *ptr = reinterpret_cast<uint8_t *>(i);
-            ptrdiff_t j  = maskSize - 1;
+            auto ptr    = reinterpret_cast<uint8_t *>(i);
+            ptrdiff_t j = maskSize - 1;
 
             while ((j >= 0) && (mask[j] == '?' || pattern[j] == ptr[j])) j--;
 
@@ -223,7 +223,7 @@ namespace hook {
         const char *pattern = m_bytes.c_str();
         const char *mask    = m_mask.c_str();
 
-        char *ptr = reinterpret_cast<char *>(offset);
+        auto ptr = reinterpret_cast<char *>(offset);
 
         for (size_t i = 0, j = m_mask.size(); i < j; i++) {
             if (mask[i] == '?') {
@@ -242,7 +242,7 @@ namespace hook {
 
 #if PATTERNS_USE_HINTS
     void pattern::hint(uint64_t hash, uintptr_t address) {
-        auto range = GetHints().equal_range(hash);
+        const auto range = GetHints().equal_range(hash);
 
         for (auto it = range.first; it != range.second; it++) {
             if (it->second == address) {

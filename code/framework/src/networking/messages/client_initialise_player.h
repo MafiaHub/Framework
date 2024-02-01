@@ -21,9 +21,7 @@ namespace Framework::Networking::Messages {
             return GAME_INIT_PLAYER;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
-
-        }
+        void Serialize(SLNet::BitStream *bs, bool write) override {}
 
         bool Valid() const override {
             return true;

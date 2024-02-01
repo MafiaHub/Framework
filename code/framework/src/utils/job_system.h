@@ -21,7 +21,14 @@ namespace Framework::Utils {
       public:
         using JobProc = fu2::function<bool() const>;
 
-        enum JobPriority : size_t { RealTime, High, Normal, Low, Idle, NumJobPriorities };
+        enum JobPriority : size_t {
+            RealTime,
+            High,
+            Normal,
+            Low,
+            Idle,
+            NumJobPriorities
+        };
 
         ~JobSystem();
 
@@ -40,7 +47,11 @@ namespace Framework::Utils {
         static JobSystem *GetInstance();
 
       private:
-        enum class JobStatus : int32_t { Invalid = -1, Pending = 0, Running = 1 };
+        enum class JobStatus : int32_t {
+            Invalid = -1,
+            Pending = 0,
+            Running = 1
+        };
 
         struct Job {
             JobProc proc;

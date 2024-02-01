@@ -62,44 +62,44 @@ namespace Framework::Integrations::Scripting {
             return ss.str();
         }
 
-        void SetPosition(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
-            auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
-            tr->pos = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
+        void SetPosition(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) const {
+            const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
+            tr->pos       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
             CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
-        void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) {
-            auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
-            tr->rot = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
+        void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) const {
+            const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
+            tr->rot       = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
             tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
             CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
-        void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
-            auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
-            tr->vel = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
+        void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) const {
+            const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
+            tr->vel       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             tr->IncrementGeneration();
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
             CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
-        void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) {
-            auto fr   = _ent.get_mut<Framework::World::Modules::Base::Frame>();
-            fr->scale = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
+        void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) const {
+            const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+            fr->scale     = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
-        void SetModelName(std::string name) {
-            auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+        void SetModelName(std::string name) const {
+            const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelName = name;
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
 
-        void SetModelHash(uint64_t hash) {
-            auto fr       = _ent.get_mut<Framework::World::Modules::Base::Frame>();
+        void SetModelHash(uint64_t hash) const {
+            const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->modelHash = hash;
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
         }
@@ -134,13 +134,13 @@ namespace Framework::Integrations::Scripting {
             return fr->modelHash;
         }
 
-        void SetVisible(bool visible) {
-            auto st       = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+        void SetVisible(bool visible) const {
+            const auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->isVisible = visible;
         }
 
-        void SetAlwaysVisible(bool visible) {
-            auto st           = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+        void SetAlwaysVisible(bool visible) const {
+            const auto st     = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->alwaysVisible = visible;
         }
 
@@ -154,8 +154,8 @@ namespace Framework::Integrations::Scripting {
             return st->alwaysVisible;
         }
 
-        void SetVirtualWorld(int virtualWorld) {
-            auto st          = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+        void SetVirtualWorld(int virtualWorld) const {
+            const auto st    = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->virtualWorld = virtualWorld;
         }
 
@@ -164,8 +164,8 @@ namespace Framework::Integrations::Scripting {
             return st->virtualWorld;
         }
 
-        void SetUpdateInterval(double interval) {
-            auto st            = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
+        void SetUpdateInterval(double interval) const {
+            const auto st      = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
             st->updateInterval = interval;
         }
 
@@ -174,7 +174,7 @@ namespace Framework::Integrations::Scripting {
             return st->updateInterval;
         }
 
-        void Destroy() {
+        void Destroy() const {
             Framework::World::ServerEngine::RemoveEntity(_ent);
         }
 

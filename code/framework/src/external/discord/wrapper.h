@@ -31,18 +31,18 @@ namespace Framework::External::Discord {
             return _initialized;
         }
 
-        DiscordError Update();
-        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText);
-        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity);
+        DiscordError Update() const;
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const;
+        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const;
 
-        void SignInWithDiscord(const DiscordLoginProc &proc);
+        void SignInWithDiscord(const DiscordLoginProc &proc) const;
 
-        discord::ActivityManager &GetActivityManager();
-        discord::UserManager &GetUserManager();
-        discord::ImageManager &GetImageManager();
-        discord::OverlayManager &GetOverlayManager();
-        discord::ApplicationManager &GetApplicationManager();
-        discord::VoiceManager &GetVoiceManager();
-        discord::RelationshipManager &GetRelationshipManager();
+        discord::ActivityManager &GetActivityManager() const;
+        discord::UserManager &GetUserManager() const;
+        discord::ImageManager &GetImageManager() const;
+        discord::OverlayManager &GetOverlayManager() const;
+        discord::ApplicationManager &GetApplicationManager() const;
+        discord::VoiceManager &GetVoiceManager() const;
+        discord::RelationshipManager &GetRelationshipManager() const;
     };
 } // namespace Framework::External::Discord

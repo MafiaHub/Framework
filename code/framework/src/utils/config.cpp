@@ -32,7 +32,7 @@ namespace Framework::Utils {
     const char *Config::GetDefaultConfig() {
         return "{}";
     }
-    std::string Config::ToString() {
+    std::string Config::ToString() const {
         if (!_lastError.empty())
             return "";
         return _document->dump();

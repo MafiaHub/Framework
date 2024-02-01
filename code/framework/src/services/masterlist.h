@@ -25,7 +25,6 @@ namespace Framework::Services {
         int32_t currentPlayers;
     };
     class MasterlistConnector {
-      private:
         std::mutex _mutex;
         std::thread _pingThread;
         std::shared_ptr<httplib::Client> _client;
@@ -39,10 +38,10 @@ namespace Framework::Services {
       public:
         MasterlistConnector();
 
-        bool Init(const std::string);
+        bool Init(const std::string &);
         bool Shutdown();
 
-        void Ping(const ServerInfo&);
+        void Ping(const ServerInfo &);
         bool IsInitialized() const {
             return _isInitialized;
         }

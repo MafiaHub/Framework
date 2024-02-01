@@ -14,6 +14,7 @@ AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Empty
+AllowShortEnumsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: Empty
 AllowShortLoopsOnASingleLine: true
@@ -36,6 +37,7 @@ BraceWrapping:
     BeforeLambdaBody: false
     IndentBraces:    false
 BreakConstructorInitializers: BeforeComma
+BreakStringLiterals: false
 BreakInheritanceList: BeforeComma
 ColumnLimit: 280
 CommentPragmas: "NOTE:"

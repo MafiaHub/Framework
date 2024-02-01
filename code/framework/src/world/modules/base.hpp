@@ -47,12 +47,12 @@ namespace Framework::World::Modules {
                 ++genID;
             }
 
-            bool ValidateGeneration(const Transform& tr) {
+            bool ValidateGeneration(const Transform &tr) const {
                 return genID == tr.genID;
             }
         };
 
-        struct TickRateRegulator : public Transform {
+        struct TickRateRegulator: public Transform {
             uint16_t lastGenID = 0;
         };
 
@@ -77,14 +77,18 @@ namespace Framework::World::Modules {
         struct Streamable {
             using IsVisibleProc   = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
             using AssignOwnerProc = fu2::function<bool(flecs::entity e, Streamable &streamable)>;
-            enum class HeuristicMode { ADD, REPLACE, REPLACE_POSITION };
+            enum class HeuristicMode {
+                ADD,
+                REPLACE,
+                REPLACE_POSITION
+            };
 
-            int virtualWorld      = 0;
-            bool isVisible        = true;
-            bool alwaysVisible    = false;
+            int virtualWorld             = 0;
+            bool isVisible               = true;
+            bool alwaysVisible           = false;
             double defaultUpdateInterval = (1000.0 / 60.0); // 16.1667~ ms interval
-            double updateInterval = defaultUpdateInterval;
-            uint64_t owner        = 0;
+            double updateInterval        = defaultUpdateInterval;
+            uint64_t owner               = 0;
 
             AssignOwnerProc assignOwnerProc;
 

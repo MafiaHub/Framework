@@ -53,27 +53,27 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void Add(double x, double y, double z) {
-            glm::vec3 newVec(x, y, z);
+            const glm::vec3 newVec(x, y, z);
             _data += newVec;
         }
 
         void Sub(double x, double y, double z) {
-            glm::vec3 newVec(x, y, z);
+            const glm::vec3 newVec(x, y, z);
             _data -= newVec;
         }
 
         void Mul(double x, double y, double z) {
-            glm::vec3 newVec(x, y, z);
+            const glm::vec3 newVec(x, y, z);
             _data *= newVec;
         }
 
         void Div(double x, double y, double z) {
-            glm::vec3 newVec(x, y, z);
+            const glm::vec3 newVec(x, y, z);
             _data /= newVec;
         }
 
         void Lerp(double x, double y, double z, double f) {
-            glm::vec3 newVec(x, y, z);
+            const glm::vec3 newVec(x, y, z);
             _data = glm::mix(_data, newVec, static_cast<float>(f));
         };
 

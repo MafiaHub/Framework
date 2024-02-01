@@ -20,4 +20,4 @@ namespace Framework::Integrations::Server {
         SERVER_FIREBASE_WRAPPER_INIT_FAILED,
         SERVER_SCRIPTING_INIT_FAILED
     };
-}
+} // namespace Framework::Integrations::Server

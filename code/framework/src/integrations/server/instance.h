@@ -93,8 +93,8 @@ namespace Framework::Integrations::Server {
         std::shared_ptr<Services::MasterlistConnector> _masterlist;
 
         void InitEndpoints();
-        void InitModules();
-        void InitNetworkingMessages();
+        void InitModules() const;
+        void InitNetworkingMessages() const;
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper);
 

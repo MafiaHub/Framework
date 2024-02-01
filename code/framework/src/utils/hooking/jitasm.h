@@ -124,7 +124,7 @@
 #define JITASM_ASSERT assert
 #endif
 
-//#define JITASM_DEBUG_DUMP
+// #define JITASM_DEBUG_DUMP
 #ifdef JITASM_DEBUG_DUMP
 #include <stdio.h>
 #if defined(JITASM_GCC)
@@ -386,7 +386,18 @@ namespace jitasm {
     };
 
     /// Operand size
-    enum OpdSize { O_SIZE_8, O_SIZE_16, O_SIZE_32, O_SIZE_64, O_SIZE_80, O_SIZE_128, O_SIZE_224, O_SIZE_256, O_SIZE_864, O_SIZE_4096 };
+    enum OpdSize {
+        O_SIZE_8,
+        O_SIZE_16,
+        O_SIZE_32,
+        O_SIZE_64,
+        O_SIZE_80,
+        O_SIZE_128,
+        O_SIZE_224,
+        O_SIZE_256,
+        O_SIZE_864,
+        O_SIZE_4096
+    };
 
     namespace detail {
 #pragma pack(push, 1)
@@ -2808,7 +2819,8 @@ namespace jitasm {
             for (InstrList::iterator it = instrs_.begin(); it != instrs_.end(); ++it) {
                 Instr &instr = *it;
                 if (IsJump(instr.GetID())) {
-                    instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8(0x7F), Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
+                    instr = Instr(instr.GetID(), instr.opcode_, instr.encoding_flag_, Imm8(0x7F),
+                        Imm64(GetJumpTo(instr))); // Opd(0) = max value in sint8, Opd(1) = instruction number
                 }
             }
 
@@ -12086,40 +12098,51 @@ namespace jitasm {
         void vpcomq(const XmmReg &dst, const XmmReg &src1, const Mem128 &src2, const Imm8 &type) {
             AppendInstr(I_VPCOMQ, 0xCF, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);
         }
-        // void vpcomub(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)	{AppendInstr(I_VPCOMUB, 0x6C, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomub(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)	{AppendInstr(I_VPCOMUB, 0x6C, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomud(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)	{AppendInstr(I_VPCOMUD, 0x6E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomud(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)	{AppendInstr(I_VPCOMUD, 0x6E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomuq(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)	{AppendInstr(I_VPCOMUQ, 0x6F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomuq(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)	{AppendInstr(I_VPCOMUQ, 0x6F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomuw(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)	{AppendInstr(I_VPCOMUW, 0x6D, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);}
-        // void vpcomuw(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)	{AppendInstr(I_VPCOMUW, 0x6D, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 |
-        // E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpcomw(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)	{AppendInstr(I_VPCOMW, 0xCD,
-        // E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpcomw(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8&
-        // type)	{AppendInstr(I_VPCOMW, 0xCD, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1), type);} void vpermil2pd(const XmmReg& dst, const
-        // XmmReg& src1, const XmmReg& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
-        // R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 |
-        // E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
-        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));} void vpermil2pd(const YmmReg& dst, const YmmReg&
-        // src1, const YmmReg& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));}
-        // void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0
-        // | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
-        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));} void vpermil2ps(const XmmReg& dst, const XmmReg&
-        // src1, const XmmReg& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));}
-        // void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0
-        // | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
-        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));} void vpermil2ps(const YmmReg& dst, const YmmReg&
-        // src1, const YmmReg& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));}
-        // void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)	{AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0
-        // | E_XOP_P01, W(dst), R(src2), R(src1), R(src3));} void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
-        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1), R(src2));}
+        // void vpcomub(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUB, 0x6C, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomub(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUB, 0x6C, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomud(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUD, 0x6E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomud(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUD, 0x6E, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomuq(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUQ, 0x6F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomuq(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUQ, 0x6F, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomuw(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUW, 0x6D, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomuw(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMUW, 0x6D, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomw(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMW, 0xCD, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpcomw(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const Imm8& type)
+        // {AppendInstr(I_VPCOMW, 0xCD, E_XOP_128 | E_XOP_M01000 | E_XOP_W0 | E_XOP_P00, W(dst), R(src2), R(src1),
+        // type);} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const XmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2pd(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
+        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_128 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1),
+        // R(src2));} void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const YmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2pd(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
+        // {AppendInstr(I_VPERMIL2PD, 0x49, E_XOP_256 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1),
+        // R(src2));} void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const XmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const Mem128& src2, const XmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2ps(const XmmReg& dst, const XmmReg& src1, const XmmReg& src2, const Mem128& src3)
+        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_128 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1),
+        // R(src2));} void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const YmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const Mem256& src2, const YmmReg& src3)
+        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W0 | E_XOP_P01, W(dst), R(src2), R(src1),
+        // R(src3));} void vpermil2ps(const YmmReg& dst, const YmmReg& src1, const YmmReg& src2, const Mem256& src3)
+        // {AppendInstr(I_VPERMIL2PS, 0x48, E_XOP_256 | E_XOP_M00011 | E_XOP_W1 | E_XOP_P01, W(dst), R(src3), R(src1),
+        // R(src2));}
         void vphaddbd(const XmmReg &dst, const XmmReg &src) {
             AppendInstr(I_VPHADDBD, 0xC2, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
@@ -12162,8 +12185,9 @@ namespace jitasm {
         void vphaddubw(const XmmReg &dst, const Mem128 &src) {
             AppendInstr(I_VPHADDUBW, 0xD1, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
-        // void vphaddudq(const XmmReg& dst, const XmmReg& src)	{AppendInstr(I_VPHADDUDQ, 0xDB, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));}
-        // void vphaddudq(const XmmReg& dst, const Mem128& src)	{AppendInstr(I_VPHADDUDQ, 0xDB, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));}
+        // void vphaddudq(const XmmReg& dst, const XmmReg& src)	{AppendInstr(I_VPHADDUDQ, 0xDB, E_XOP_128 | E_XOP_M01001
+        // | E_XOP_W0 | E_XOP_P00, W(dst), R(src));} void vphaddudq(const XmmReg& dst, const Mem128& src)
+        // {AppendInstr(I_VPHADDUDQ, 0xDB, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));}
         void vphadduwd(const XmmReg &dst, const XmmReg &src) {
             AppendInstr(I_VPHADDUWD, 0xD6, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
@@ -12194,8 +12218,9 @@ namespace jitasm {
         void vphsubbw(const XmmReg &dst, const Mem128 &src) {
             AppendInstr(I_VPHSUBBW, 0xE1, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
-        // void vphsubdq(const XmmReg& dst, const XmmReg& src)		{AppendInstr(I_VPHSUBDQ, 0xDB, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));}
-        // void vphsubdq(const XmmReg& dst, const Mem128& src)		{AppendInstr(I_VPHSUBDQ, 0xDB, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));}
+        // void vphsubdq(const XmmReg& dst, const XmmReg& src)		{AppendInstr(I_VPHSUBDQ, 0xDB, E_XOP_128 |
+        // E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));} void vphsubdq(const XmmReg& dst, const Mem128& src)
+        // {AppendInstr(I_VPHSUBDQ, 0xDB, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));}
         void vphsubwd(const XmmReg &dst, const XmmReg &src) {
             AppendInstr(I_VPHSUBWD, 0xE2, E_XOP_128 | E_XOP_M01001 | E_XOP_W0 | E_XOP_P00, W(dst), R(src));
         }
@@ -14119,8 +14144,8 @@ namespace jitasm {
 
         /// Variable lifetime
         struct Lifetime {
-            typedef detail::Range<std::vector<RegUsePoint> > RegUsePointRange;
-            typedef detail::ConstRange<std::vector<RegUsePoint> > ConstRegUsePointRange;
+            typedef detail::Range<std::vector<RegUsePoint>> RegUsePointRange;
+            typedef detail::ConstRange<std::vector<RegUsePoint>> ConstRegUsePointRange;
 
             struct Interval {
                 size_t instr_idx_offset;             ///< Instruction index offset from basic block start point
@@ -14173,7 +14198,7 @@ namespace jitasm {
 
             // 0 ~ NUM_OF_PHYSICAL_REG-1 : Physical register
             // NUM_OF_PHYSICAL_REG ~     : Symbolic register
-            std::vector<std::vector<RegUsePoint> > use_points;
+            std::vector<std::vector<RegUsePoint>> use_points;
             BitVector gen;                   ///< The set of variables used before any assignment
             BitVector kill;                  ///< The set of variables assigned a value before any use
             BitVector live_in;               ///< The set of live variables at the start of this block
@@ -14370,8 +14395,8 @@ namespace jitasm {
                                 cur_spill_cost[var] = -1;
                             }
                             else if (cur_interval->use.get_bit(var) && interval_use_points[var].first->instr_idx == cur_interval->instr_idx_offset) {
-                                // special high spill cost if this variable is used at first instruction of this interval
-                                // because it must not be spilled.
+                                // special high spill cost if this variable is used at first instruction of this
+                                // interval because it must not be spilled.
                                 cur_spill_cost[var] = 0x7FFFFFFF;
                             }
                             else {
@@ -14520,7 +14545,8 @@ namespace jitasm {
                                 assigned_reg = static_cast<int>(var);
                             }
                             else if (((1 << var) & available_reg) && !cur_interval->use.get_bit(var)) {
-                                // Try to assign another physical register if it is not used in this interval. But assign later.
+                                // Try to assign another physical register if it is not used in this interval. But
+                                // assign later.
                                 live_vars.push_back(var);
                             }
                             else if (reg_assignable != 0xFFFFFFFF && (cur_avail & reg_assignable) && cur_interval->use.get_bit(var)) {
@@ -14545,7 +14571,8 @@ namespace jitasm {
                                 assigned_reg = detail::bit_scan_forward(cur_avail & reg_assignable);
                             }
                             else if (reg_assignable != 0xFFFFFFFF && !cur_interval->use.get_bit(var)) {
-                                // Try to assign register ignoring constraint if it is not used in this interval. But assign later.
+                                // Try to assign register ignoring constraint if it is not used in this interval. But
+                                // assign later.
                                 live_vars.push_back(var);
                             }
                             else {
@@ -14693,7 +14720,7 @@ namespace jitasm {
                 ancestor_.clear();
                 ancestor_.resize(num_of_nodes);
                 best_.resize(num_of_nodes);
-                std::vector<std::vector<size_t> > bucket(num_of_nodes);
+                std::vector<std::vector<size_t>> bucket(num_of_nodes);
                 std::vector<size_t> dom(num_of_nodes);
                 for (size_t i = 0; i < num_of_nodes; ++i) {
                     sdom_[i] = i;
@@ -14770,7 +14797,7 @@ namespace jitasm {
                 dom_finder(depth_first_blocks_);
 
                 // Identify backedges
-                std::vector<std::pair<size_t, size_t> > backedges;
+                std::vector<std::pair<size_t, size_t>> backedges;
                 for (size_t i = 0; i < depth_first_blocks_.size(); ++i) {
                     BasicBlock *block = depth_first_blocks_[i];
                     for (size_t j = 0; j < 2; ++j) {
@@ -14785,7 +14812,7 @@ namespace jitasm {
                 // Merge loops with the same loop header
                 std::sort(backedges.begin(), backedges.end(), sort_backedge());
                 if (backedges.size() >= 2) {
-                    std::vector<std::pair<size_t, size_t> >::iterator it = backedges.begin() + 1;
+                    std::vector<std::pair<size_t, size_t>>::iterator it = backedges.begin() + 1;
                     while (it != backedges.end()) {
                         if (detail::prior(it)->second == it->second) {
                             // erase backedge of smaller loop
@@ -14798,7 +14825,7 @@ namespace jitasm {
                 }
 
                 // Set loop depth
-                for (std::vector<std::pair<size_t, size_t> >::iterator it = backedges.begin(); it != backedges.end(); ++it) {
+                for (std::vector<std::pair<size_t, size_t>>::iterator it = backedges.begin(); it != backedges.end(); ++it) {
                     for (size_t i = it->second; i <= it->first; ++i) {
                         depth_first_blocks_[i]->loop_depth++;
                     }
@@ -14916,10 +14943,11 @@ namespace jitasm {
                         JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin, block->successor[0]->instr_begin, constraint == 0 ? "true" : "false");
                     if (block->successor[1])
                         JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=%s];\n", block->instr_begin, block->successor[1]->instr_begin, constraint == 0 ? "true" : "false");
-                    // if (block->dfs_parent) JITASM_TRACE("\t\"node%d\" -> \"node%d\" [color=\"#ff0000\"];\n", block->instr_begin, block->dfs_parent->instr_begin);
-                    // if (block->immediate_dominator) JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=false, color=\"#0000ff\"];\n", block->instr_begin,
-                    // block->immediate_dominator->instr_begin); for (size_t i = 0; i < block->predecessor.size(); ++i) { 	JITASM_TRACE("\t\"node%d\" -> \"node%d\"
-                    // [constraint=false,
+                    // if (block->dfs_parent) JITASM_TRACE("\t\"node%d\" -> \"node%d\" [color=\"#ff0000\"];\n",
+                    // block->instr_begin, block->dfs_parent->instr_begin); if (block->immediate_dominator)
+                    // JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=false, color=\"#0000ff\"];\n",
+                    // block->instr_begin, block->immediate_dominator->instr_begin); for (size_t i = 0; i <
+                    // block->predecessor.size(); ++i) { 	JITASM_TRACE("\t\"node%d\" -> \"node%d\" [constraint=false,
                     // color=\"#808080\"];\n", block->instr_begin, block->predecessor[i]->instr_begin);
                     //}
                 }
@@ -15765,7 +15793,7 @@ namespace jitasm {
                 }
 
                 // Initialize interval_range
-                detail::ConstRange<std::vector<Lifetime::Interval> > interval_range[3];
+                detail::ConstRange<std::vector<Lifetime::Interval>> interval_range[3];
                 for (size_t reg_family = 0; reg_family < 3; ++reg_family) {
                     interval_range[reg_family].first  = block->lifetime[reg_family].intervals.begin();
                     interval_range[reg_family].second = block->lifetime[reg_family].intervals.end();
@@ -16333,14 +16361,22 @@ namespace jitasm {
         /// cdecl argument type traits
         template <int N, class T, int Size = sizeof(T)>
         struct ArgTraits_cdecl {
-            enum { stack_size = (Size + 4 - 1) / 4 * 4, flag = ARG_IN_STACK | ARG_TYPE_VALUE, reg_id = INVALID };
+            enum {
+                stack_size = (Size + 4 - 1) / 4 * 4,
+                flag       = ARG_IN_STACK | ARG_TYPE_VALUE,
+                reg_id     = INVALID
+            };
         };
 
 #if JITASM_MMINTRIN
         // specialization for __m64
         template <int N>
         struct ArgTraits_cdecl<N, __m64, 8> {
-            enum { stack_size = 0, flag = ARG_IN_MMX | ARG_TYPE_VALUE, reg_id = MM0 };
+            enum {
+                stack_size = 0,
+                flag       = ARG_IN_MMX | ARG_TYPE_VALUE,
+                reg_id     = MM0
+            };
         };
 #endif
 
@@ -16348,7 +16384,11 @@ namespace jitasm {
         // specialization for __m128
         template <int N>
         struct ArgTraits_cdecl<N, __m128, 16> {
-            enum { stack_size = 0, flag = ARG_IN_XMM_SP | ARG_TYPE_VALUE, reg_id = XMM0 };
+            enum {
+                stack_size = 0,
+                flag       = ARG_IN_XMM_SP | ARG_TYPE_VALUE,
+                reg_id     = XMM0
+            };
         };
 #endif
 
@@ -16356,20 +16396,32 @@ namespace jitasm {
         // specialization for __m128d
         template <int N>
         struct ArgTraits_cdecl<N, __m128d, 16> {
-            enum { stack_size = 0, flag = ARG_IN_XMM_DP | ARG_TYPE_VALUE, reg_id = XMM0 };
+            enum {
+                stack_size = 0,
+                flag       = ARG_IN_XMM_DP | ARG_TYPE_VALUE,
+                reg_id     = XMM0
+            };
         };
 
         // specialization for __m128i
         template <int N>
         struct ArgTraits_cdecl<N, __m128i, 16> {
-            enum { stack_size = 0, flag = ARG_IN_XMM_INT | ARG_TYPE_VALUE, reg_id = XMM0 };
+            enum {
+                stack_size = 0,
+                flag       = ARG_IN_XMM_INT | ARG_TYPE_VALUE,
+                reg_id     = XMM0
+            };
         };
 #endif
 
         /// Microsoft x64 fastcall argument type traits
         template <int N, class T, int Size = sizeof(T)>
         struct ArgTraits_win64 {
-            enum { stack_size = 8, flag = ARG_IN_STACK | (Size == 1 || Size == 2 || Size == 4 || Size == 8 ? ARG_TYPE_VALUE : ARG_TYPE_PTR), reg_id = INVALID };
+            enum {
+                stack_size = 8,
+                flag       = ARG_IN_STACK | (Size == 1 || Size == 2 || Size == 4 || Size == 8 ? ARG_TYPE_VALUE : ARG_TYPE_PTR),
+                reg_id     = INVALID
+            };
         };
 
         /**
@@ -16377,7 +16429,11 @@ namespace jitasm {
          */
         template <int RegID, int Flag>
         struct ArgTraits_win64_reg {
-            enum { stack_size = 8, flag = Flag, reg_id = RegID };
+            enum {
+                stack_size = 8,
+                flag       = Flag,
+                reg_id     = RegID
+            };
         };
 
         // specialization for argument pointer stored in register
@@ -16465,12 +16521,20 @@ namespace jitasm {
         /// System V ABI AMD64 argument type traits
         template <int N, class T, int Size = sizeof(T)>
         struct ArgTraits_linux64 {
-            enum { stack_size = (Size + 8 - 1) / 8 * 8, flag = ARG_IN_STACK | ARG_TYPE_VALUE, reg_id = INVALID };
+            enum {
+                stack_size = (Size + 8 - 1) / 8 * 8,
+                flag       = ARG_IN_STACK | ARG_TYPE_VALUE,
+                reg_id     = INVALID
+            };
         };
 
         // INTEGER class
         struct ArgTraits_linux64_integer {
-            enum { stack_size = 0, flag = ARG_IN_REG | ARG_TYPE_VALUE, reg_id = RDI };
+            enum {
+                stack_size = 0,
+                flag       = ARG_IN_REG | ARG_TYPE_VALUE,
+                reg_id     = RDI
+            };
         };
 
         template <int N>
@@ -16501,7 +16565,11 @@ namespace jitasm {
         // SSE class
         template <int Flag>
         struct ArgTraits_linux64_sse {
-            enum { stack_size = 0, flag = Flag, reg_id = XMM0 };
+            enum {
+                stack_size = 0,
+                flag       = Flag,
+                reg_id     = XMM0
+            };
         };
 
         template <int N>
@@ -16622,7 +16690,9 @@ namespace jitasm {
         /// Result type traits
         template <class T>
         struct ResultTraits {
-            enum { size = sizeof(T) };
+            enum {
+                size = sizeof(T)
+            };
             typedef OpdT<sizeof(T) * 8> OpdR;
             typedef AddressingPtr<OpdR> ResultPtr;
         };
@@ -16630,7 +16700,9 @@ namespace jitasm {
         // specialization for void
         template <>
         struct ResultTraits<void> {
-            enum { size = 0 };
+            enum {
+                size = 0
+            };
             struct OpdR {};
             struct ResultPtr {};
         };
@@ -16653,7 +16725,9 @@ namespace jitasm {
         /// Function result
         template <class T, int Size = ResultTraits<T>::size>
         struct ResultT {
-            enum { ArgR = 1 /* First (hidden) argument is pointer for copying result. */ };
+            enum {
+                ArgR = 1 /* First (hidden) argument is pointer for copying result. */
+            };
             typedef typename ResultTraits<T>::OpdR OpdR;
             OpdR val_;
             ResultT() {}
@@ -16671,14 +16745,18 @@ namespace jitasm {
         // specialization for void
         template <>
         struct ResultT<void, 0> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             ResultT();
         };
 
         // specialization for 1byte type
         template <class T>
         struct ResultT<T, 1> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd8 val_;
             ResultT() {}
             ResultT(const Opd8 &val): val_(val) {}
@@ -16704,7 +16782,9 @@ namespace jitasm {
         // specialization for 2bytes type
         template <class T>
         struct ResultT<T, 2> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd16 val_;
             ResultT() {}
             ResultT(const Opd16 &val): val_(val) {}
@@ -16730,7 +16810,9 @@ namespace jitasm {
         // specialization for 4bytes type
         template <class T>
         struct ResultT<T, 4> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd32 val_;
             ResultT() {}
             ResultT(const Opd32 &val): val_(val) {}
@@ -16756,7 +16838,9 @@ namespace jitasm {
         // specialization for 8bytes type
         template <class T>
         struct ResultT<T, 8> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd64 val_;
             ResultT() {}
             ResultT(const Opd64 &val): val_(val) {}
@@ -16800,7 +16884,9 @@ namespace jitasm {
         // specialization for float
         template <>
         struct ResultT<float, 4> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             detail::Opd val_;
             ResultT() {}
             ResultT(const FpuReg &fpu): val_(fpu) {}
@@ -16860,7 +16946,9 @@ namespace jitasm {
         // specialization for double
         template <>
         struct ResultT<double, 8> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             detail::Opd val_;
             double imm_;
             ResultT() {}
@@ -16924,7 +17012,9 @@ namespace jitasm {
         // specialization for __m64
         template <>
         struct ResultT<__m64, 8> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd64 val_;
             ResultT() {}
             ResultT(const MmxReg &mm): val_(mm) {}
@@ -16958,7 +17048,9 @@ namespace jitasm {
         // specialization for __m128
         template <>
         struct ResultT<__m128, 16> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd128 val_;
             ResultT() {}
             ResultT(const XmmReg &xmm): val_(xmm) {}
@@ -16983,7 +17075,9 @@ namespace jitasm {
         // specialization for __m128d
         template <>
         struct ResultT<__m128d, 16> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd128 val_;
             ResultT() {}
             ResultT(const XmmReg &xmm): val_(xmm) {}
@@ -17006,7 +17100,9 @@ namespace jitasm {
         // specialization for __m128i
         template <>
         struct ResultT<__m128i, 16> {
-            enum { ArgR = 0 };
+            enum {
+                ArgR = 0
+            };
             Opd128 val_;
             ResultT() {}
             ResultT(const XmmReg &xmm): val_(xmm) {}
@@ -17061,39 +17157,39 @@ namespace jitasm {
             }
             template <class R, class A1, class A2>
             ArgInfo ArgInfo2() {
-                return ArgInfo(ArgInfo1<R, A1>()).Next<ArgTraits<ResultT<R>::ArgR + 0, A1>, ArgTraits<ResultT<R>::ArgR + 1, A2> >();
+                return ArgInfo(ArgInfo1<R, A1>()).Next<ArgTraits<ResultT<R>::ArgR + 0, A1>, ArgTraits<ResultT<R>::ArgR + 1, A2>>();
             }
             template <class R, class A1, class A2, class A3>
             ArgInfo ArgInfo3() {
-                return ArgInfo(ArgInfo2<R, A1, A2>()).Next<ArgTraits<ResultT<R>::ArgR + 1, A2>, ArgTraits<ResultT<R>::ArgR + 2, A3> >();
+                return ArgInfo(ArgInfo2<R, A1, A2>()).Next<ArgTraits<ResultT<R>::ArgR + 1, A2>, ArgTraits<ResultT<R>::ArgR + 2, A3>>();
             }
             template <class R, class A1, class A2, class A3, class A4>
             ArgInfo ArgInfo4() {
-                return ArgInfo(ArgInfo3<R, A1, A2, A3>()).Next<ArgTraits<ResultT<R>::ArgR + 2, A3>, ArgTraits<ResultT<R>::ArgR + 3, A4> >();
+                return ArgInfo(ArgInfo3<R, A1, A2, A3>()).Next<ArgTraits<ResultT<R>::ArgR + 2, A3>, ArgTraits<ResultT<R>::ArgR + 3, A4>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5>
             ArgInfo ArgInfo5() {
-                return ArgInfo(ArgInfo4<R, A1, A2, A3, A4>()).Next<ArgTraits<ResultT<R>::ArgR + 3, A4>, ArgTraits<ResultT<R>::ArgR + 4, A5> >();
+                return ArgInfo(ArgInfo4<R, A1, A2, A3, A4>()).Next<ArgTraits<ResultT<R>::ArgR + 3, A4>, ArgTraits<ResultT<R>::ArgR + 4, A5>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6>
             ArgInfo ArgInfo6() {
-                return ArgInfo(ArgInfo5<R, A1, A2, A3, A4, A5>()).Next<ArgTraits<ResultT<R>::ArgR + 4, A5>, ArgTraits<ResultT<R>::ArgR + 5, A6> >();
+                return ArgInfo(ArgInfo5<R, A1, A2, A3, A4, A5>()).Next<ArgTraits<ResultT<R>::ArgR + 4, A5>, ArgTraits<ResultT<R>::ArgR + 5, A6>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7>
             ArgInfo ArgInfo7() {
-                return ArgInfo(ArgInfo6<R, A1, A2, A3, A4, A5, A6>()).Next<ArgTraits<ResultT<R>::ArgR + 5, A6>, ArgTraits<ResultT<R>::ArgR + 6, A7> >();
+                return ArgInfo(ArgInfo6<R, A1, A2, A3, A4, A5, A6>()).Next<ArgTraits<ResultT<R>::ArgR + 5, A6>, ArgTraits<ResultT<R>::ArgR + 6, A7>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8>
             ArgInfo ArgInfo8() {
-                return ArgInfo(ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()).Next<ArgTraits<ResultT<R>::ArgR + 6, A7>, ArgTraits<ResultT<R>::ArgR + 7, A8> >();
+                return ArgInfo(ArgInfo7<R, A1, A2, A3, A4, A5, A6, A7>()).Next<ArgTraits<ResultT<R>::ArgR + 6, A7>, ArgTraits<ResultT<R>::ArgR + 7, A8>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9>
             ArgInfo ArgInfo9() {
-                return ArgInfo(ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()).Next<ArgTraits<ResultT<R>::ArgR + 7, A8>, ArgTraits<ResultT<R>::ArgR + 8, A9> >();
+                return ArgInfo(ArgInfo8<R, A1, A2, A3, A4, A5, A6, A7, A8>()).Next<ArgTraits<ResultT<R>::ArgR + 7, A8>, ArgTraits<ResultT<R>::ArgR + 8, A9>>();
             }
             template <class R, class A1, class A2, class A3, class A4, class A5, class A6, class A7, class A8, class A9, class A10>
             ArgInfo ArgInfo10() {
-                return ArgInfo(ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()).Next<ArgTraits<ResultT<R>::ArgR + 8, A9>, ArgTraits<ResultT<R>::ArgR + 9, A10> >();
+                return ArgInfo(ArgInfo9<R, A1, A2, A3, A4, A5, A6, A7, A8, A9>()).Next<ArgTraits<ResultT<R>::ArgR + 8, A9>, ArgTraits<ResultT<R>::ArgR + 9, A10>>();
             }
 
             /// Function argument
@@ -17140,7 +17236,8 @@ namespace jitasm {
                         f_->DeclareStackArg(reg, f_->byte_ptr[arg_info_.addr]); // argument on stack
                     }
                     else {
-                        f_->DeclareRegArg(reg, Reg8(arg_info_.reg_id), f_->byte_ptr[arg_info_.addr]); // argument on register
+                        f_->DeclareRegArg(reg, Reg8(arg_info_.reg_id),
+                            f_->byte_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
@@ -17169,7 +17266,8 @@ namespace jitasm {
                         f_->DeclareStackArg(reg, f_->word_ptr[arg_info_.addr]); // argument on stack
                     }
                     else {
-                        f_->DeclareRegArg(reg, Reg16(arg_info_.reg_id), f_->word_ptr[arg_info_.addr]); // argument on register
+                        f_->DeclareRegArg(reg, Reg16(arg_info_.reg_id),
+                            f_->word_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
@@ -17197,7 +17295,8 @@ namespace jitasm {
                         f_->DeclareStackArg(reg, f_->dword_ptr[arg_info_.addr]); // argument on stack
                     }
                     else {
-                        f_->DeclareRegArg(reg, Reg32(arg_info_.reg_id), f_->dword_ptr[arg_info_.addr]); // argument on register
+                        f_->DeclareRegArg(reg, Reg32(arg_info_.reg_id),
+                            f_->dword_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
@@ -17224,7 +17323,8 @@ namespace jitasm {
                         f_->DeclareStackArg(reg, f_->qword_ptr[arg_info_.addr]); // argument on stack
                     }
                     else {
-                        f_->DeclareRegArg(reg, Reg64(arg_info_.reg_id), f_->qword_ptr[arg_info_.addr]); // argument on register
+                        f_->DeclareRegArg(reg, Reg64(arg_info_.reg_id),
+                            f_->qword_ptr[arg_info_.addr]); // argument on register
                     }
                     return reg;
                 }
@@ -17427,7 +17527,7 @@ namespace jitasm {
             struct Arg<__m128i, 16>: Arg<__m128, 16> {
                 Arg(Frontend &f, const ArgInfo &arg_info): Arg<__m128, 16>(f, arg_info) {}
             };
-#endif    // JITASM_EMMINTRIN
+#endif // JITASM_EMMINTRIN
         } // namespace calling_convention_cdecl
 
     } // namespace detail

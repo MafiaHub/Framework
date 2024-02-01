@@ -15,25 +15,25 @@
 
 #include <function2.hpp>
 
-#define FW_SEND_CLIENT_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                                      \
+#define FW_SEND_CLIENT_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                               \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
         auto __net = reinterpret_cast<Framework::Networking::NetworkClient *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(s);                                                                                                                                                             \
+            __net->SendGameRPC<rpc>(s);                                                                                                                                                                                                                                                \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
-#define FW_SEND_CLIENT_COMPONENT_GAME_RPC_TO(rpc, ent, guid, ...)                                                                                                                                                                                                                             \
+#define FW_SEND_CLIENT_COMPONENT_GAME_RPC_TO(rpc, ent, guid, ...)                                                                                                                                                                                                                      \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
         auto __net = reinterpret_cast<Framework::Networking::NetworkClient *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(s, guid);                                                                                                                                                       \
+            __net->SendGameRPC<rpc>(s, guid);                                                                                                                                                                                                                                          \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
@@ -48,7 +48,7 @@ namespace Framework::World {
         OnEntityDestroyCallback _onEntityDestroyCallback;
 
       private:
-        void InitRPCs(Networking::NetworkPeer *peer);
+        void InitRPCs(Networking::NetworkPeer *peer) const;
 
       public:
         EngineError Init();
@@ -60,7 +60,7 @@ namespace Framework::World {
 
         void Update() override;
 
-        flecs::entity CreateEntity(flecs::entity_t serverID);
+        flecs::entity CreateEntity(flecs::entity_t serverID) const;
         flecs::entity GetEntityByServerID(flecs::entity_t id) const;
         static flecs::entity_t GetServerID(flecs::entity entity);
 

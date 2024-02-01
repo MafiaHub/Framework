@@ -207,7 +207,7 @@ namespace Framework::Integrations::Client {
         PostRender();
     }
 
-    void Instance::InitNetworkingMessages() {
+    void Instance::InitNetworkingMessages() const {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
         net->SetOnPlayerConnectedCallback([this, net](SLNet::Packet *packet) {
@@ -258,8 +258,8 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
-            *tr     = msg->GetTransform();
+            const auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
+            *tr           = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             _worldEngine->OnDisconnect();

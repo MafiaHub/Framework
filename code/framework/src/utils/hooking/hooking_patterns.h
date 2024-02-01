@@ -29,7 +29,7 @@ namespace hook {
 
         template <typename T>
         T *get(ptrdiff_t offset = 0) const {
-            char *ptr = reinterpret_cast<char *>(m_pointer);
+            auto ptr = reinterpret_cast<char *>(m_pointer);
             return reinterpret_cast<T *>(ptr + offset);
         }
     };
@@ -56,9 +56,9 @@ namespace hook {
         };
 
       protected:
-        inline pattern(void *module): m_rangeStart((uintptr_t)module), m_matched(false), m_rangeEnd(0) {}
+        inline pattern(void *module): m_matched(false), m_rangeStart((uintptr_t)module), m_rangeEnd(0) {}
 
-        inline pattern(uintptr_t begin, uintptr_t end): m_rangeStart(begin), m_rangeEnd(end), m_matched(false) {}
+        inline pattern(uintptr_t begin, uintptr_t end): m_matched(false), m_rangeStart(begin), m_rangeEnd(end) {}
 
         void Initialize(const char *pattern, size_t length);
 
@@ -181,8 +181,8 @@ namespace hook {
 
     template <typename T = void, size_t Len>
     auto get_opcode_address(const char (&pattern_string)[Len], ptrdiff_t offset = 0) {
-        auto res         = pattern(pattern_string).get_first<T>(offset);
-        uint8_t *bytePtr = reinterpret_cast<uint8_t *>(res);
+        auto res     = pattern(pattern_string).get_first<T>(offset);
+        auto bytePtr = reinterpret_cast<uint8_t *>(res);
         return reinterpret_cast<uint64_t>(bytePtr + *(int32_t *)(bytePtr + 1) + 5);
     }
 } // namespace hook
