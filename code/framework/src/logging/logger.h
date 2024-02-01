@@ -45,7 +45,7 @@ namespace Framework::Logging {
         Logger();
         ~Logger() = default;
 
-        std::shared_ptr<spdlog::logger> Get(const char *moduleName, bool async = true);
+        std::shared_ptr<spdlog::logger> Get(const char *moduleName, bool async = false);
 
         void SetLogName(const std::string &name) {
             _logName = name;
