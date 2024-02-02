@@ -25,7 +25,7 @@ def move_subfolder_to_parent(root: str, subfolder: str):
     rmdir(join(root, subfolder))
 
 
-def download_v8pp():
+def v8pp():
     version = "2.1.1"
     url = "https://github.com/pmed/v8pp/archive/refs/tags/v{}.zip".format(version)
 
@@ -41,11 +41,11 @@ def download_v8pp():
 
     print("[V8PP] Moving subdirectory...")
     move_subfolder_to_parent("v8pp", "v8pp-{}".format(version))
-    
+
     print("[V8PP] Finished")
 
 def main():
-    download_v8pp()
+    v8pp()
 
 if __name__ == "__main__":
     main()
