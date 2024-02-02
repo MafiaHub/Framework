@@ -54,6 +54,9 @@ First make sure your Git client supports LFS objects, visit [Git LFS page](https
 # Clone the repo
 git clone https://github.com/MafiaHub/Framework.git
 cd Framework
+
+# Pull LFS objects
+git lfs pull
 ```
 **Note:** If you have issues cloning the repository (Git LFS-related errors), first ensure you have Git LFS support enabled. If you do, and this looks to be a server issue, please get in touch with [@ZaKlaus](https://github.com/zpl-zak) on our [Discord](https://discord.gg/eBQ4QHX) server to investigate it.
 
