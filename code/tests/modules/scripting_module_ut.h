@@ -11,12 +11,30 @@
 #include "scripting/engines/node/engine.h"
 #include "scripting/module.h"
 
-MODULE(scripting_engine, {
+MODULE(scripting_module, {
     using namespace Framework::Scripting;
 
     IT("should not allow to initialize the engine with an invalid type", {
         Module *pEngine = new Module;
         EQUALS(pEngine->Init(static_cast<EngineTypes>(-1), NULL), ModuleError::MODULE_ENGINE_NULL);
+        delete pEngine;
+    });
+
+    IT("should not allow to shutdown if the engine is not initialized", {
+        Module *pEngine = new Module;
+        EQUALS(pEngine->Shutdown(), ModuleError::MODULE_ENGINE_NULL);
+        delete pEngine;
+    });
+
+    IT("should not allow to load gamemode if the engine is not initialized", {
+        Module *pEngine = new Module;
+        EQUALS(pEngine->LoadGamemode(), false);
+        delete pEngine;
+    });
+
+    IT("should not allow to unload gamemode if the engine is not initialized", {
+        Module *pEngine = new Module;
+        EQUALS(pEngine->UnloadGamemode(), false);
         delete pEngine;
     });
 
