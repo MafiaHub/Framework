@@ -31,6 +31,12 @@ namespace Framework::Scripting {
 
         default: break;
         }
+
+        // Make sure we got a valid pointer
+        if (!_engine) {
+            return ModuleError::MODULE_ENGINE_NULL;
+        }
+
         _engine->SetModName(_modName);
 
         _engineType = engineType;

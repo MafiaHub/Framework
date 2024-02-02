@@ -14,6 +14,12 @@
 MODULE(scripting_engine, {
     using namespace Framework::Scripting;
 
+    IT("should not allow to initialize the engine with an invalid type", {
+        Module *pEngine = new Module;
+        EQUALS(pEngine->Init(static_cast<EngineTypes>(-1), NULL), ModuleError::MODULE_ENGINE_NULL);
+        delete pEngine;
+    });
+
     IT("can allocate and deallocate a valid scripting engine instance", {
         Module *pEngine = new Module;
 
