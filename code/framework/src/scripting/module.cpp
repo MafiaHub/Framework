@@ -31,6 +31,12 @@ namespace Framework::Scripting {
 
         default: break;
         }
+
+        // Make sure we got a valid pointer
+        if (!_engine) {
+            return ModuleError::MODULE_ENGINE_NULL;
+        }
+
         _engine->SetModName(_modName);
 
         _engineType = engineType;
@@ -73,6 +79,12 @@ namespace Framework::Scripting {
     }
 
     bool Module::LoadGamemode() const {
+        // Make sure there is an engine
+        if (!_engine) {
+            return false;
+        }
+
+        // Load the gamemode
         const cppfs::FileHandle dir = cppfs::fs::open("gamemode");
         if (!dir.exists() || !dir.isDirectory()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to find the gamemode directory");
@@ -83,6 +95,12 @@ namespace Framework::Scripting {
     }
 
     bool Module::UnloadGamemode() const {
+        // Make sure there is an engine
+        if (!_engine) {
+            return false;
+        }
+
+        // Unload the gamemode
         return _engine->UnloadGamemode("gamemode");
     }
 } // namespace Framework::Scripting
