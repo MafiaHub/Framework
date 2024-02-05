@@ -70,4 +70,34 @@ namespace Framework::Utils {
             return nullptr;
         }
     };
+
+    template <typename T>
+    class IncrementalSlotManager {
+      private:
+        std::vector<T> _slots;
+
+      public:
+        IncrementalSlotManager() {
+            _slots.reserve(64);
+        }
+
+        size_t AllocateSlot(const T &val) {
+            _slots.push_back(val);
+            return _slots.size() - 1;
+        }
+
+        T *GetSlot(size_t id) {
+            if (id < _slots.size()) {
+                return &_slots[id];
+            }
+            return nullptr;
+        }
+
+        const T *GetSlot(size_t id) const {
+            if (id < _slots.size()) {
+                return &_slots[id];
+            }
+            return nullptr;
+        }
+    };
 } // namespace Framework::Utils
