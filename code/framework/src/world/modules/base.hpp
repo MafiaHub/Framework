@@ -129,8 +129,9 @@ namespace Framework::World::Modules {
             struct StreamData {
                 double lastUpdate = 0.0;
             };
-            float range   = 100.0f;
-            uint64_t guid = (uint64_t)-1;
+            float range          = 100.0f;
+            uint64_t guid        = (uint64_t)-1;
+            uint16_t playerIndex = (uint64_t)-1;
             std::string nickname;
             std::unordered_map<flecs::entity_t, StreamData> entities;
             std::unordered_set<flecs::entity_t> rangeExemptEntities;

@@ -293,7 +293,7 @@ namespace Framework::Integrations::Server {
                 nickname = nickname.substr(0, 64);
             }
 
-            _playerFactory->SetupServer(newPlayer, guid.g, nickname);
+            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname);
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
 
