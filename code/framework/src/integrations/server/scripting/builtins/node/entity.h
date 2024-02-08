@@ -15,7 +15,11 @@
 #include <v8pp/class.hpp>
 #include <v8pp/module.hpp>
 
+#include "networking/network_server.h"
+
 #include "world/engine.h"
+#include "world/server.h"
+
 #include "world/game_rpc/set_frame.h"
 #include "world/game_rpc/set_transform.h"
 
