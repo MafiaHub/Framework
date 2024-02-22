@@ -25,7 +25,7 @@
 #include <v8pp/module.hpp>
 
 namespace Framework::Scripting::Engines::Node::Builtins {
-    class Quaternion {
+    class Quaternion final {
       private:
         glm::quat _data;
 
@@ -118,13 +118,16 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
             v8pp::class_<Quaternion> cls(isolate);
             cls.ctor<float, float, float, float>();
+
             cls.property("w", &Quaternion::GetW);
             cls.property("x", &Quaternion::GetX);
             cls.property("y", &Quaternion::GetY);
             cls.property("z", &Quaternion::GetZ);
             cls.property("length", &Quaternion::GetLength);
+
             cls.function("toString", &Quaternion::ToString);
             cls.function("toArray", &Quaternion::ToArray);
+
             cls.function("add", &Quaternion::Add);
             cls.function("sub", &Quaternion::Sub);
             cls.function("mul", &Quaternion::Mul);
