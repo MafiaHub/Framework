@@ -17,13 +17,13 @@
 #include <sstream>
 
 namespace Framework::Scripting::Engines::Node::Builtins {
-    class ColorRGB {
-      protected:
-        glm::ivec4 _data;
+    class ColorRGB final {
+      private:
+        glm::ivec3 _data;
 
       public:
         ColorRGB(int r, int g, int b) {
-            _data = {r, g, b, 255};
+            _data = {r, g, b};
         }
 
         int GetR() const {
@@ -61,22 +61,22 @@ namespace Framework::Scripting::Engines::Node::Builtins {
         }
 
         void Add(int r, int g, int b) {
-            const glm::ivec4 newVec(r, g, b, 0);
+            const glm::ivec3 newVec(r, g, b);
             _data += newVec;
         }
 
         void Sub(int r, int g, int b) {
-            const glm::ivec4 newVec(r, g, b, 0);
+            const glm::ivec3 newVec(r, g, b);
             _data -= newVec;
         }
 
         void Mul(int r, int g, int b) {
-            const glm::ivec4 newVec(r, g, b, 1);
+            const glm::ivec3 newVec(r, g, b);
             _data *= newVec;
         }
 
         void Div(int r, int g, int b) {
-            const glm::ivec4 newVec(r, g, b, 1);
+            const glm::ivec3 newVec(r, g, b);
             _data /= newVec;
         }
 
@@ -91,11 +91,14 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
             v8pp::class_<ColorRGB> cls(isolate);
             cls.ctor<int, int, int>();
+
             cls.property("r", &ColorRGB::GetR);
             cls.property("g", &ColorRGB::GetG);
             cls.property("b", &ColorRGB::GetB);
+
             cls.function("toString", &ColorRGB::ToString);
             cls.function("toArray", &ColorRGB::ToArray);
+
             cls.function("add", &ColorRGB::Add);
             cls.function("sub", &ColorRGB::Sub);
             cls.function("mul", &ColorRGB::Mul);

@@ -17,7 +17,7 @@
 #include <sstream>
 
 namespace Framework::Scripting::Engines::Node::Builtins {
-    class Vector2 {
+    class Vector2 final {
       private:
         glm::vec2 _data;
 
@@ -80,11 +80,14 @@ namespace Framework::Scripting::Engines::Node::Builtins {
 
             v8pp::class_<Vector2> cls(isolate);
             cls.ctor<double, double>();
+
             cls.property("x", &Vector2::GetX);
             cls.property("y", &Vector2::GetY);
             cls.property("length", &Vector2::GetLength);
+
             cls.function("toString", &Vector2::ToString);
             cls.function("toArray", &Vector2::ToArray);
+
             cls.function("add", &Vector2::Add);
             cls.function("sub", &Vector2::Sub);
             cls.function("mul", &Vector2::Mul);
