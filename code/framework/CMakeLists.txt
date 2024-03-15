@@ -61,6 +61,8 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/imgui/wrapper.cpp
     src/external/sdl2/wrapper.cpp
 
+    src/external/imgui/widgets/ui_base.cpp
+
     src/external/imgui/widgets/console.cpp
 
     src/integrations/client/instance.cpp
