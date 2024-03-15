@@ -8,58 +8,58 @@
 
 #pragma once
 
-#include <input/input.h>
-#include <utils/command_processor.h>
+#include "ui_base.h"
 
-#include <spdlog/spdlog.h>
+#include <utils/command_processor.h>
 
 #include <function2.hpp>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <vector>
 
 namespace Framework::External::ImGUI::Widgets {
-    class Console {
+    class Console: virtual public UIBase {
       public:
         using MenuBarProc = fu2::function<void() const>;
 
       protected:
-        bool _shouldDisplayWidget    = true;
-        bool _autoScroll             = true;
-        bool _isOpen                 = false;
-        bool _updateInputText        = false;
-        bool _focusOnInput           = false;
-        bool _isMultiline            = false;
-        bool _consoleControl         = false;
-        float _consoleUnfocusedAlpha = 0.25f;
-        std::string _autocompleteWord;
         std::shared_ptr<Utils::CommandProcessor> _commandProcessor;
-        std::shared_ptr<Input::IInput> _input;
-        std::vector<MenuBarProc> _menuBarDrawers;
-        std::vector<std::string> _history;
-        std::string _tempInputText;
-        int _historyPos = -1;
+
         spdlog::logger *_logger;
-        static void FormatLog(std::string log);
+
+        bool _autoScroll = true;
+
+        bool _focusOnInput = false;
+
+        bool _updateInputText = false;
+
+        std::string _tempInputText;
+
+        std::vector<std::string> _history;
+
+        int _historyPos = -1;
+
+        std::string _autocompleteWord;
+
+        std::vector<MenuBarProc> _menuBarDrawers;
+
+        virtual void OnOpen() override;
+
+        virtual void OnClose() override;
+
+        virtual void OnUpdate() override;
+
         void SendCommand(const std::string &command) const;
 
+        static void FormatLog(std::string log);
+
       public:
-        explicit Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor, std::shared_ptr<Input::IInput> input);
+        explicit Console(std::shared_ptr<Utils::CommandProcessor> commandProcessor);
+
         ~Console() = default;
-
-        void Toggle();
-        bool Update();
-
-        bool Open();
-        bool Close();
-
-        virtual void LockControls(bool lock) = 0;
 
         void RegisterMenuBarDrawer(const MenuBarProc &proc) {
             _menuBarDrawers.push_back(proc);
-        }
-
-        bool IsOpen() const {
-            return _isOpen;
         }
     };
 } // namespace Framework::External::ImGUI::Widgets

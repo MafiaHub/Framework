@@ -180,6 +180,10 @@ namespace Framework::External::ImGUI {
             return InputState::ERROR_MISMATCH;
         }
 
+        if (!_processEventEnabled) {
+            return InputState::PASS;
+        }
+
         if (ImGui_ImplSDL2_ProcessEvent(event)) {
             return InputState::BLOCK;
         }
@@ -189,6 +193,10 @@ namespace Framework::External::ImGUI {
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         if (_config.windowBackend != Graphics::PlatformBackend::PLATFORM_WIN32) {
             return InputState::ERROR_MISMATCH;
+        }
+
+        if (!_processEventEnabled) {
+            return InputState::PASS;
         }
 
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
