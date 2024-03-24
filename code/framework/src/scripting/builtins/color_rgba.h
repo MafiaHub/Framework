@@ -16,7 +16,7 @@
 #include <list>
 #include <sstream>
 
-namespace Framework::Scripting::Engines::Node::Builtins {
+namespace Framework::Scripting::Builtins {
     class ColorRGBA final {
       private:
         glm::ivec4 _data;

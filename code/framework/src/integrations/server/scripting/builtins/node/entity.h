@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include "scripting/engines/node/builtins/quaternion.h"
-#include "scripting/engines/node/builtins/vector_3.h"
+#include "scripting/builtins/quaternion.h"
+#include "scripting/builtins/vector_3.h"
 
 #include <glm/glm.hpp>
 #include <v8pp/class.hpp>
@@ -66,7 +66,7 @@ namespace Framework::Integrations::Scripting {
             return ss.str();
         }
 
-        void SetPosition(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) const {
+        void SetPosition(Framework::Scripting::Builtins::Vector3 v3) const {
             const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->pos       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             tr->IncrementGeneration();
@@ -74,7 +74,7 @@ namespace Framework::Integrations::Scripting {
             CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
-        void SetRotation(Framework::Scripting::Engines::Node::Builtins::Quaternion q) const {
+        void SetRotation(Framework::Scripting::Builtins::Quaternion q) const {
             const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->rot       = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
             tr->IncrementGeneration();
@@ -82,7 +82,7 @@ namespace Framework::Integrations::Scripting {
             CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
-        void SetVelocity(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) const {
+        void SetVelocity(Framework::Scripting::Builtins::Vector3 v3) const {
             const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
             tr->vel       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             tr->IncrementGeneration();
@@ -90,7 +90,7 @@ namespace Framework::Integrations::Scripting {
             CoreModules::GetWorldEngine()->WakeEntity(_ent);
         }
 
-        void SetScale(Framework::Scripting::Engines::Node::Builtins::Vector3 v3) const {
+        void SetScale(Framework::Scripting::Builtins::Vector3 v3) const {
             const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
             fr->scale     = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
             FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
@@ -110,22 +110,22 @@ namespace Framework::Integrations::Scripting {
 
         v8::Local<v8::Object> GetPosition() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->pos.x, tr->pos.y, tr->pos.z);
+            return v8pp::class_<Framework::Scripting::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->pos.x, tr->pos.y, tr->pos.z);
         }
 
         v8::Local<v8::Object> GetRotation() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Quaternion>::create_object(v8::Isolate::GetCurrent(), tr->rot.w, tr->rot.x, tr->rot.y, tr->rot.z);
+            return v8pp::class_<Framework::Scripting::Builtins::Quaternion>::create_object(v8::Isolate::GetCurrent(), tr->rot.w, tr->rot.x, tr->rot.y, tr->rot.z);
         }
 
         v8::Local<v8::Object> GetVelocity() const {
             const auto tr = _ent.get<Framework::World::Modules::Base::Transform>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->vel.x, tr->vel.y, tr->vel.z);
+            return v8pp::class_<Framework::Scripting::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), tr->vel.x, tr->vel.y, tr->vel.z);
         }
 
         v8::Local<v8::Object> GetScale() const {
             const auto fr = _ent.get<Framework::World::Modules::Base::Frame>();
-            return v8pp::class_<Framework::Scripting::Engines::Node::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), fr->scale.x, fr->scale.y, fr->scale.z);
+            return v8pp::class_<Framework::Scripting::Builtins::Vector3>::create_object(v8::Isolate::GetCurrent(), fr->scale.x, fr->scale.y, fr->scale.z);
         }
 
         std::string GetModelName() const {

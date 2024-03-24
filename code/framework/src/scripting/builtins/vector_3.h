@@ -16,7 +16,7 @@
 #include <list>
 #include <sstream>
 
-namespace Framework::Scripting::Engines::Node::Builtins {
+namespace Framework::Scripting::Builtins {
     class Vector3 final {
       private:
         glm::vec3 _data;

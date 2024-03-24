@@ -34,12 +34,12 @@ set(FRAMEWORK_SRC
 )
 
 set(FRAMEWORK_SERVER_SRC
-    src/scripting/module.cpp
-    src/scripting/engines/node/engine.cpp
-    src/scripting/engines/node/sdk.cpp
+    src/scripting/client_engine.cpp
+    src/scripting/engine.cpp
     src/scripting/events.cpp
-
-    src/scripting/engines/node/v8_helpers/v8_try_catch.cpp
+    src/scripting/module.cpp
+    src/scripting/server_engine.cpp
+    src/scripting/v8_helpers/v8_try_catch.cpp
 
     src/http/webserver.cpp
 

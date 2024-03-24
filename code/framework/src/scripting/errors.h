@@ -26,6 +26,7 @@ namespace Framework::Scripting {
         MODULE_NONE,
         MODULE_ENGINE_NULL,
         MODULE_ENGINE_INIT_FAILED,
+        MODULE_MISSING_GAMEMODE,
         MODULE_RESOURCE_MANAGER_NULL
     };
 

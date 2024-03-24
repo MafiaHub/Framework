@@ -15,6 +15,12 @@
 
 #include <v8.h>
 
+#define V8_RESOURCE_LOCK(engine)                                                                                                                                                                                                                                                       \
+    v8::Locker locker(engine->GetIsolate());                                                                                                                                                                                                                                           \
+    v8::Isolate::Scope isolateScope(engine->GetIsolate());                                                                                                                                                                                                                             \
+    v8::HandleScope handleScope(engine->GetIsolate());                                                                                                                                                                                                                                 \
+    v8::Context::Scope contextScope(engine->GetContext());
+
 namespace Framework::Scripting::Helpers {
     inline void Throw(v8::Isolate *isolate, const std::string &msg) {
         isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, msg.data(), v8::NewStringType::kNormal, msg.size()).ToLocalChecked()));

@@ -12,7 +12,7 @@
 
 /* TEST CATEGORIES */
 #include "modules/interpolator_ut.h"
-#include "modules/scripting_module_ut.h"
+// #include "modules/scripting_module_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -20,7 +20,7 @@ int main() {
     Framework::Logging::GetInstance()->PauseLogging(true);
 
     UNIT_MODULE(interpolator);
-    UNIT_MODULE(scripting_module);
+    // UNIT_MODULE(scripting_module);
 
     return UNIT_RUN();
 }

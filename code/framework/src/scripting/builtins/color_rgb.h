@@ -16,7 +16,7 @@
 #include <list>
 #include <sstream>
 
-namespace Framework::Scripting::Engines::Node::Builtins {
+namespace Framework::Scripting::Builtins {
     class ColorRGB final {
       private:
         glm::ivec3 _data;

@@ -11,10 +11,11 @@
 #include <map>
 #include <string>
 
-#include "engine_kind.h"
-#include "engines/callback.h"
-#include "engines/engine.h"
 #include "errors.h"
+#include "shared.h"
+
+#include "client_engine.h"
+#include "server_engine.h"
 
 namespace Framework::Scripting {
     class Module {
@@ -23,27 +24,25 @@ namespace Framework::Scripting {
         char **_processArgs   = nullptr;
         std::string _modName;
 
-        Engines::IEngine *_engine = nullptr;
-        EngineTypes _engineType   = EngineTypes::ENGINE_NODE;
+        std::unique_ptr<ClientEngine> _clientEngine;
+        std::unique_ptr<ServerEngine> _serverEngine;
 
       public:
         Module()  = default;
         ~Module() = default;
 
-        ModuleError Init(EngineTypes, Engines::SDKRegisterCallback);
+        ModuleError InitClientEngine(SDKRegisterCallback);
+        ModuleError InitServerEngine(SDKRegisterCallback);
         ModuleError Shutdown();
 
         void Update() const;
-
-        bool LoadGamemode() const;
-        bool UnloadGamemode() const;
-
-        Engines::IEngine *GetEngine() const {
-            return _engine;
+        
+        ClientEngine *GetClientEngine() const {
+            return _clientEngine.get();
         }
 
-        EngineTypes GetEngineType() const {
-            return _engineType;
+        ServerEngine *GetServerEngine() const {
+            return _serverEngine.get();
         }
 
         void SetProcessArguments(int argc, char **argv) {

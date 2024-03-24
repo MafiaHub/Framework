@@ -9,11 +9,9 @@
 #include <nlohmann/json.hpp>
 #include <uv.h>
 
-#include "../../events.h"
-#include "engine.h"
-
+#include "server_engine.h"
+#include "events.h"
 #include "core_modules.h"
-
 #include "world/server.h"
 
 static constexpr char bootstrap_code[] = R"(
@@ -22,13 +20,13 @@ globalThis.require = publicRequire;
 require("vm").runInThisContext(process.argv[1]);
 )";
 
-namespace Framework::Scripting::Engines::Node {
-    EngineError Engine::Init(SDKRegisterCallback cb) {
+namespace Framework::Scripting {
+    EngineError ServerEngine::Init(SDKRegisterCallback cb) {
         if (_wasNodeAlreadyInited) {
             return EngineError::ENGINE_NODE_INIT_FAILED;
         }
         // Define the arguments to be passed to the node instance
-        std::vector<std::string> args = {"mafiahub-server", "--experimental-specifier-resolution=node", "--no-warnings"};
+        std::vector<std::string> args = {"mafiahub-server", "--experimental-modules", "--experimental-specifier-resolution=node", "--no-warnings"};
         std::vector<std::string> exec_args {};
         std::vector<std::string> errors {};
 
@@ -43,7 +41,7 @@ namespace Framework::Scripting::Engines::Node {
 
         // Initialize the platform
         _platform = node::MultiIsolatePlatform::Create(4);
-        v8::V8::InitializePlatform(Engine::_platform.get());
+        v8::V8::InitializePlatform(GetPlatform());
         v8::V8::Initialize();
 
         uv_loop_init(&uv_loop);
@@ -60,9 +58,8 @@ namespace Framework::Scripting::Engines::Node {
         const v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(_isolate);
 
         // Initialize our SDK and bind to the global object template
-        _sdk = new SDK;
-        _sdk->Init(this, _isolate, cb);
-        global->Set(v8pp::to_v8(_isolate, "sdk"), _sdk->GetObjectTemplate());
+        InitSDK(cb);
+        global->Set(v8pp::to_v8(_isolate, "sdk"), GetObjectTemplate());
 
         // Reset and save the global object template pointer
         _globalObjectTemplate.Reset(_isolate, global);
@@ -73,7 +70,7 @@ namespace Framework::Scripting::Engines::Node {
         return EngineError::ENGINE_NONE;
     }
 
-    EngineError Engine::Shutdown() {
+    EngineError ServerEngine::Shutdown() {
         if (!_wasNodeAlreadyInited) {
             return EngineError::ENGINE_NODE_SHUTDOWN_FAILED;
         }
@@ -117,7 +114,7 @@ namespace Framework::Scripting::Engines::Node {
         return EngineError::ENGINE_NONE;
     }
 
-    void Engine::Update() {
+    void ServerEngine::Update() {
         if (!_platform) {
             return;
         }
@@ -144,7 +141,7 @@ namespace Framework::Scripting::Engines::Node {
         }
 
         // Update the file watcher
-        if (_watcher && !_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
+        /*if (_watcher && !_isShuttingDown && Utils::Time::Compare(_nextFileWatchUpdate, Utils::Time::GetTimePoint()) < 0) {
             // Process the file changes watcher
             _watcher->watch(0);
             _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
@@ -154,10 +151,10 @@ namespace Framework::Scripting::Engines::Node {
                 delete _watcher;
                 PreloadGamemode(_gamemodePath);
             }
-        }
+        }*/
     }
 
-    bool Engine::LoadGamemodePackageFile(std::string mainPath) {
+    /*bool ServerEngine::LoadGamemodePackageFile(std::string mainPath) {
         // If gamemmode is already loaded, don't load it again
         if (_gamemodeLoaded) {
             return false;
@@ -204,7 +201,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::PreloadGamemode(std::string mainPath) {
+    bool ServerEngine::PreloadGamemode(std::string mainPath) {
         if (LoadGamemodePackageFile(mainPath)) {
             if (LoadGamemode(mainPath)) {
                 return WatchGamemodeChanges(mainPath);
@@ -213,7 +210,7 @@ namespace Framework::Scripting::Engines::Node {
         return false;
     }
 
-    bool Engine::LoadGamemode(std::string mainPath) {
+    bool ServerEngine::LoadGamemode(std::string mainPath) {
         if (_gamemodeLoaded) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode is already loaded");
             return false;
@@ -270,7 +267,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::UnloadGamemode(std::string mainPath) {
+    bool ServerEngine::UnloadGamemode(std::string mainPath) {
         // If gamemode is not loaded, don't unload it
         if (!_gamemodeLoaded) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode is not loaded");
@@ -324,7 +321,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::CompileGamemodeScript(const std::string &str, const std::string &path) {
+    bool ServerEngine::CompileGamemodeScript(const std::string &str, const std::string &path) {
         v8::Isolate::Scope isolateScope(_isolate);
         v8::HandleScope handleScope(_isolate);
 
@@ -352,7 +349,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::RunGamemodeScript() const {
+    bool ServerEngine::RunGamemodeScript() const {
         if (_gamemodeScript.IsEmpty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Invalid gamemode script object");
             return false;
@@ -370,7 +367,7 @@ namespace Framework::Scripting::Engines::Node {
         return true;
     }
 
-    bool Engine::WatchGamemodeChanges(std::string path) {
+    bool ServerEngine::WatchGamemodeChanges(std::string path) {
         cppfs::FileHandle dir = cppfs::fs::open(path);
         if (!dir.isDirectory()) {
             return false;
@@ -393,5 +390,5 @@ namespace Framework::Scripting::Engines::Node {
 
         _nextFileWatchUpdate = Utils::Time::Add(Utils::Time::GetTimePoint(), _fileWatchUpdatePeriod);
         return true;
-    }
+    }*/
 } // namespace Framework::Scripting::Engines::Node

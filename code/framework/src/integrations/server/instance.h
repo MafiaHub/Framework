@@ -15,7 +15,6 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
-#include "scripting/engines/callback.h"
 #include "scripting/server.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
@@ -96,7 +95,7 @@ namespace Framework::Integrations::Server {
         void InitModules() const;
         void InitNetworkingMessages() const;
         bool LoadConfigFromJSON();
-        void RegisterScriptingBuiltins(Framework::Scripting::Engines::SDKRegisterWrapper);
+        void RegisterScriptingBuiltins(Framework::Scripting::SDKRegisterWrapper);
 
         // managers
         flecs::entity _weatherManager;
@@ -122,7 +121,7 @@ namespace Framework::Integrations::Server {
 
         virtual void PreShutdown() {}
 
-        virtual void ModuleRegister(Framework::Scripting::Engines::SDKRegisterWrapper sdk) {
+        virtual void ModuleRegister(Framework::Scripting::SDKRegisterWrapper sdk) {
             (void)sdk;
         }
 

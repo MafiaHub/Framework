@@ -24,7 +24,7 @@
 #include <v8pp/class.hpp>
 #include <v8pp/module.hpp>
 
-namespace Framework::Scripting::Engines::Node::Builtins {
+namespace Framework::Scripting::Builtins {
     class Quaternion final {
       private:
         glm::quat _data;

@@ -1,28 +1,13 @@
-/*
- * MafiaHub OSS license
- * Copyright (c) 2021-2023, MafiaHub. All rights reserved.
- *
- * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
- * See LICENSE file in the source repository for information regarding licensing.
- */
-
-#include "sdk.h"
-
-#include <string>
+#include "engine.h"
 
 #include "builtins/color_rgb.h"
 #include "builtins/color_rgba.h"
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
-
-#include "engine.h"
-
 #include "v8_helpers/v8_string.h"
 
-#include "scripting/module.h"
-
-namespace Framework::Scripting::Engines::Node {
+namespace Framework::Scripting {
     static void On(const v8::FunctionCallbackInfo<v8::Value> &info) {
         // Ensure that the method was called with exactly two arguments
         if (info.Length() != 2) {
@@ -48,8 +33,8 @@ namespace Framework::Scripting::Engines::Node {
         // Create a persistent handle to the event callback function
         const v8::Persistent<v8::Function> persistentCallback(isolate, eventCallback);
 
-        const auto engine = static_cast<Node::Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
-        engine->_gamemodeEventHandlers[Helpers::ToString(eventName, isolate)].push_back(persistentCallback);
+        const auto engine = static_cast<Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        engine->_eventHandlers[Helpers::ToString(eventName, isolate)].push_back(persistentCallback);
     }
 
     static void Emit(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -76,30 +61,29 @@ namespace Framework::Scripting::Engines::Node {
         const v8::Local<v8::String> eventName = info[0]->ToString(ctx).ToLocalChecked();
         const v8::Local<v8::String> eventData = info[1]->ToString(ctx).ToLocalChecked();
 
-        const auto engine = static_cast<Node::Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
+        const auto engine = static_cast<Engine *>(ctx->GetAlignedPointerFromEmbedderData(0));
         engine->InvokeEvent(Helpers::ToString(eventName, isolate), Helpers::ToString(eventData, isolate));
     }
 
-    bool SDK::Init(Engine *engine, v8::Isolate *isolate, SDKRegisterCallback cb) {
-        _module  = new v8pp::module(isolate);
-        _isolate = isolate;
+    bool Engine::InitSDK(SDKRegisterCallback cb){
+        _module  = new v8pp::module(_isolate);
 
         // Bind the module handler
         _module->function("on", &On);
         _module->function("emit", &Emit);
 
         // Bind the builtins
-        Builtins::ColorRGB::Register(isolate, _module);
-        Builtins::ColorRGBA::Register(isolate, _module);
-        Builtins::Quaternion::Register(isolate, _module);
-        Builtins::Vector3::Register(isolate, _module);
-        Builtins::Vector2::Register(isolate, _module);
+        Builtins::ColorRGB::Register(_isolate, _module);
+        Builtins::ColorRGBA::Register(_isolate, _module);
+        Builtins::Quaternion::Register(_isolate, _module);
+        Builtins::Vector3::Register(_isolate, _module);
+        Builtins::Vector2::Register(_isolate, _module);
 
         // Always bind the mod-side in last
         if (cb) {
-            cb(Framework::Scripting::Engines::SDKRegisterWrapper(engine, this, ENGINE_NODE));
+            cb(Framework::Scripting::SDKRegisterWrapper(this));
         }
 
         return true;
     }
-} // namespace Framework::Scripting::Engines::Node
+}
