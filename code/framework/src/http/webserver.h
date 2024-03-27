@@ -20,6 +20,7 @@
 
 namespace Framework::HTTP {
     using RequestCallback = fu2::function<void(const httplib::Request &, httplib::Response &) const>;
+    using PostCallback = fu2::function<void(const httplib::Request &, httplib::Response &, const httplib::ContentReader &) const>;
 
     class Webserver {
       public:
@@ -29,6 +30,7 @@ namespace Framework::HTTP {
         bool Shutdown();
 
         void RegisterRequest(const char *, const RequestCallback &) const;
+        void RegisterPostRequest(const char *, const PostCallback &) const;
 
         const std::string &GetServeDirectory() {
             return _serveDir;

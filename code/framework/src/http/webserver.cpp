@@ -73,6 +73,12 @@ namespace Framework::HTTP {
         }
     }
 
+    void Webserver::RegisterPostRequest(const char* path, const PostCallback& callback) const {
+        if (strlen(path) > 0 && callback) {
+            _server->Post(path, callback);
+        }
+    }
+
     void Webserver::ServeDirectory(const std::string &dir) {
         _serveDir = dir;
         if (!dir.empty())
