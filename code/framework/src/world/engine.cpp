@@ -57,6 +57,7 @@ namespace Framework::World {
 
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
+        _world->defer_begin();
         _findAllStreamerEntities.run([&ourEntity, guid](flecs::iter &it) {
             while (it.next()) {
                 auto s = it.field<Modules::Base::Streamer>(0);
@@ -68,7 +69,7 @@ namespace Framework::World {
                 }
             }
         });
-
+        _world->defer_end();
         return ourEntity;
     }
 

@@ -63,7 +63,7 @@ namespace Framework::World {
     flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) const {
         const auto e = _world->entity();
 
-        auto sid = e.ensure<Modules::Base::ServerID>();
+        auto &sid = e.ensure<Modules::Base::ServerID>();
         sid.id        = serverID;
         return e;
     }

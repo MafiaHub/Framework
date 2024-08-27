@@ -18,7 +18,7 @@ namespace Framework::World::Archetypes {
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
             e.add<Framework::World::Modules::Base::Transform>();
 
-            auto streamable                  = e.ensure<Framework::World::Modules::Base::Streamable>();
+            auto &streamable                 = e.ensure<Framework::World::Modules::Base::Streamable>();
             streamable.owner                 = guid;
             streamable.defaultUpdateInterval = CoreModules::GetTickRate() * 1000.0f; // we need ms here
 
