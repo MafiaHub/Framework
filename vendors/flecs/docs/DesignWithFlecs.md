@@ -17,7 +17,7 @@ Entities can be created and deleted dynamically. When entities are deleted, the 
 ### Entity Names
 Flecs entities can be named. This makes it easy to identify entities in editors or while debugging, and also allows you to lookup entities by name. Names must be unique inside a scope, which is determined by the `ChildOf` relationship. For example, two entities with the same parent must have different names. 
 
-Names can be looked up using a relative path or absolute path using the `ecs_lookup_fullpath` or `entity::lookup` functions. The default scope separator for C applications is a dot (`.`), whereas in C++ it is a double colon (`::`). Lookups use a hashmap internally, which provides O(1) performance.
+Names can be looked up using a relative path or absolute path using the `ecs_lookup` or `entity::lookup` functions. The default scope separator for C applications is a dot (`.`), whereas in C++ it is a double colon (`::`). Lookups use a hashmap internally, which provides O(1) performance.
 
 Entities can be assigned user friendly names with the doc addon, using the `ecs_doc_set_name` or `entity::set_doc_name` functions. Names assigned by the doc framework do not have to be unique.
 
@@ -44,7 +44,7 @@ There is a misconception that ECS components can only be plain data types, and s
 Queries are the primary method in Flecs for finding the entities for a set of components (or more specifically: a component expression). Queries are easy to use, but there a few things to keep in mind.
 
 ### Use the right query
-Flecs has cached queries and uncached queries. Cached queries (`ecs_query_t` and `flecs::query`) are expensive to create but very cheap to iterate. Uncached queries (`ecs_filter_t`, `flecs::filter`) are fast to create, but more expensive to iterate. If you need to do a quick ad-hoc query for which you couldn't know in advance what you had to query for, an uncached query is the best option. If you have a query that you know in advance and need to iterate many times, a cached query is preferred.
+Flecs has cached queries and uncached queries. Cached queries (`ecs_query_cache_t` and `flecs::query`) are expensive to create but very cheap to iterate. Uncached queries (`ecs_query_t`, `flecs::query`) are fast to create, but more expensive to iterate. If you need to do a quick ad-hoc query for which you couldn't know in advance what you had to query for, an uncached query is the best option. If you have a query that you know in advance and need to iterate many times, a cached query is preferred.
 
 Another difference is that uncached queries can be created from systems, while cached queries cannot. If you need a cached query in a system, it has to be created in advance and passed into the system, either by setting it as system context, adding a component to the system with the query, or passing it in the lambda capture list (C++ only). Systems themselves use cached queries.
 
@@ -83,7 +83,7 @@ The ordering information consists out of a phase (see phases and pipelines) and 
 
 On the other hand, if you are working with an existing framework or engine, you may not have the luxury of scheduling everything yourself. The engine may for example provide you with callbacks in which you need to do certain logic. Maybe you want to build your own threading system. In those situations it can make sense to take control of running systems yourself. 
 
-Sometimes you may even not use systems at all, and just run queries. In this case you may want to disable the system addon (see the addsons section in the README). Note that some Flecs features depend on systems, like the REST API and timers.
+Sometimes you may even not use systems at all, and just run queries. In this case you may want to disable the system addon (see the addons section in the README). Note that some Flecs features depend on systems, like the REST API and timers.
 
 ## Phases and Pipelines
 Phases and pipelines are the primitives that Flecs uses to order systems. A pipeline is a set of ordered phases. Systems can be assigned to those phases. When using phases and pipelines correctly, it allows you to write plug & play systems that are easy to reuse in different projects.
@@ -108,16 +108,16 @@ There are some conventions around the builtin phases, and following them helps t
 This phase contains all the systems that load data into your ECS. This would be a good place to load keyboard and mouse inputs.
 
 ### PostLoad
-Often the imported data needs to be processed. Maybe you want to associate your keypresses with high level actions rather than comparing explicitly in your game code if the user pressed the 'K' key. The `PostLoad` phase is a good place for this.
+Often the imported data needs to be processed. Maybe you want to associate your key presses with high level actions rather than comparing explicitly in your game code if the user pressed the 'K' key. The `PostLoad` phase is a good place for this.
 
 ### PreUpdate
 Now that the input is loaded and processed, it's time to get ready to start processing our game logic. Anything that needs to happen after input processing but before processing the game logic can happen here. This can be a good place to prepare the frame, maybe clean up some things from the previous frame, etcetera.
 
 ### OnUpdate
-This is usually where the magic happens! This is where you put all of your gameplay systems. By default systems are added to this phase.
+This is usually where the magic happens! This is where you put all of your game play systems. By default systems are added to this phase.
 
 ### OnValidate
-This phase was introduced to deal with validating the state of the game after processing the gameplay systems. Sometimes you moved entities too close to each other, or the speed of an entity is increased too much. This phase is for righting that wrong. A typical feature to implement in this phase would be collision detection.
+This phase was introduced to deal with validating the state of the game after processing the game play systems. Sometimes you moved entities too close to each other, or the speed of an entity is increased too much. This phase is for righting that wrong. A typical feature to implement in this phase would be collision detection.
 
 ### PostUpdate
 When your game logic has been updated, and your validation pass has ran, you may want to apply some corrections. For example, if your collision detection system detected collisions in the `OnValidate` phase, you may want to move the entities so that they no longer overlap.
@@ -144,7 +144,7 @@ An application can add phases to the existing list, or define a pipeline from sc
 Large applications can often contain many components and systems. Some large commercial projects have reported up to 800 components! Managing all those components and systems becomes important on that scale, and that is what modules are for. Modules are one of those features that you usually don't think about when selecting an ECS, but they can make your life a lot easier.
 
 ### Defining Modules
-The purpose of modules is really to enable reusability. A well written module can be imported into any project, and will do its thing without any tweaking or tinkering. To achieve this, make sure to define your modules around features. Features seldomly consist out of a single system or component, but can have many. Examples are rendering, collision detection, input management, and so on.
+The purpose of modules is really to enable reusability. A well written module can be imported into any project, and will do its thing without any tweaking or tinkering. To achieve this, make sure to define your modules around features. Features seldom consist out of a single system or component, but can have many. Examples are rendering, collision detection, input management, and so on.
 
 ### Module Dependencies and Ordering
 Modules can depend on each other. In fact, often do! Importing a module twice has no penalties in Flecs, it will not define your systems and components twice. This enables your application code to import the modules it needs, without having to worry about whether they were already loaded.

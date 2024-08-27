@@ -2,6 +2,10 @@ name: CI
 
 on: [ push, pull_request ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -135,9 +139,9 @@ jobs:
           - { os: ubuntu-20.04, cc: gcc-8,  cxx: g++-8 }
           - { os: ubuntu-20.04, cc: gcc-9,  cxx: g++-9 }
           - { os: ubuntu-20.04, cc: gcc-10, cxx: g++-10 }
-          - { os: ubuntu-20.04, cc: gcc-11, cxx: g++-11 }
+          - { os: ubuntu-latest, cc: gcc-11, cxx: g++-11 }
           - { os: ubuntu-latest, cc: gcc-12, cxx: g++-12 }
-          - { os: ubuntu-latest, cc: gcc-13, cxx: g++-13 }
+          - { os: ubuntu-24.04, cc: gcc-13, cxx: g++-13 }
           - { os: ubuntu-20.04, cc: clang-8, cxx: clang++-8 }
           - { os: ubuntu-20.04, cc: clang-9, cxx: clang++-9 }
           - { os: ubuntu-20.04, cc: clang-10, cxx: clang++-10 }
@@ -193,7 +197,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macOS-latest ]
+        os: [ ubuntu-latest, macOS-latest, macOS-14 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -229,10 +233,8 @@ jobs:
 
     strategy:
       matrix:
-        toolset: [default, v141, v142, clang-cl]
+        toolset: [default, v142, clang-cl]
         include:
-          - toolset: v141
-            toolset_option: -T"v141"
           - toolset: v142
             toolset_option: -T"v142"
           - toolset: clang-cl
@@ -339,40 +341,20 @@ jobs:
           bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_MODULE
           bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_MODULE
 
-      - name: FLECS_SNAPSHOT
-        run: |
-          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_SNAPSHOT
-          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_SNAPSHOT
-
       - name: FLECS_STATS
         run: |
           bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_STATS
           bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_STATS
 
-      - name: FLECS_PARSER
+      - name: FLECS_SCRIPT
         run: |
-          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_PARSER
-          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_PARSER
-
-      - name: FLECS_PLECS
-        run: |
-          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_PLECS
-          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_PLECS
+          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_SCRIPT
+          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_SCRIPT
 
       - name: FLECS_META
         run: |
           bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_META
           bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_META
-
-      - name: FLECS_META_C
-        run: |
-          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_META_C
-          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_META_C
-
-      - name: FLECS_EXPR
-        run: |
-          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_EXPR
-          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_EXPR
 
       - name: FLECS_JSON
         run: |
@@ -383,11 +365,6 @@ jobs:
         run: |
           bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_DOC
           bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_DOC
-
-      - name: FLECS_COREDOC
-        run: |
-          bake rebuild --strict -D FLECS_CUSTOM_BUILD -D FLECS_COREDOC
-          bake rebuild --strict --cfg release -D FLECS_CUSTOM_BUILD -D FLECS_COREDOC
 
       - name: FLECS_LOG
         run: |
@@ -443,6 +420,28 @@ jobs:
       - name: build flecs
         run: ${{ matrix.compiler }} flecs.c --shared -fPIC -pedantic -Wall -Wextra -Wno-unused-parameter -Werror -Wshadow -Wconversion -Wno-missing-field-initializers
 
+  test-amalgamated:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install bake
+        run: |
+          git clone https://github.com/SanderMertens/bake
+          make -C bake/build-$(uname)
+          bake/bake setup
+
+      - name: build flecs
+        run: bake rebuild
+
+      - name: git diff check
+        run: git diff --quiet
+
   build-scan-build:
     needs: build-linux
     runs-on: ubuntu-latest
@@ -474,7 +473,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macOS-latest ]
+        os: [ ubuntu-latest, macOS-latest, macOS-14 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -493,14 +492,20 @@ jobs:
       - name: build flecs
         run: bake --strict
 
-      - name: test api
-        run: bake run test/api -- -j 8
+      - name: test core
+        run: bake run test/core -- -j 8
+
+      - name: test query
+        run: bake run test/query -- -j 8
 
       - name: test addons
         run: bake run test/addons -- -j 8
 
       - name: test meta
         run: bake run test/meta -- -j 8
+
+      - name: test script
+        run: bake run test/script -- -j 8
 
       - name: test collections
         run: bake run test/collections -- -j 8
@@ -515,9 +520,9 @@ jobs:
         target:
           - { os: ubuntu-20.04, cc: gcc-9,  cxx: g++-9 }
           - { os: ubuntu-20.04, cc: gcc-10, cxx: g++-10 }
-          - { os: ubuntu-20.04, cc: gcc-11, cxx: g++-11 }
+          - { os: ubuntu-22.04, cc: gcc-11, cxx: g++-11 }
           - { os: ubuntu-latest, cc: gcc-12, cxx: g++-12 }
-          - { os: ubuntu-latest, cc: gcc-13, cxx: g++-13 }
+          - { os: ubuntu-24.04, cc: gcc-13, cxx: g++-13 }
           - { os: ubuntu-20.04, cc: clang-8, cxx: clang++-8 }
           - { os: ubuntu-20.04, cc: clang-9, cxx: clang++-9 }
           - { os: ubuntu-20.04, cc: clang-10, cxx: clang++-10 }
@@ -555,7 +560,7 @@ jobs:
         run: bake --strict
 
       - name: test c++
-        run: bake run test/cpp_api -- -j 8
+        run: bake run test/cpp -- -j 8
 
   test-cpp-macos:
     needs: [build-macos]
@@ -565,11 +570,10 @@ jobs:
       fail-fast: false
       matrix:
         os: 
-          - { version: macOS-11, xcode: '11.7' }
-          - { version: macOS-11, xcode: '12.4' }
-          - { version: macOS-11, xcode: '13.0' }
           - { version: macOS-12, xcode: '13.1' }
           - { version: macOS-12, xcode: '14.0' }
+          - { version: macOS-13, xcode: '14.3.1' }
+          - { version: macOS-14, xcode: '15.2' }
 
     env:
       CC: clang
@@ -596,7 +600,7 @@ jobs:
         run: bake --strict
 
       - name: test c++
-        run: bake run test/cpp_api -- -j 8
+        run: bake run test/cpp -- -j 8
 
   test-windows:
     needs: build-windows
@@ -619,8 +623,8 @@ jobs:
       - name: build flecs
         run: bake/bake
 
-      - name: test api
-        run: bake/bake run test\api -- -j 8
+      - name: test core
+        run: bake/bake run test\core -- -j 8
 
       - name: test addons
         run: bake/bake run test\addons -- -j 8
@@ -628,11 +632,14 @@ jobs:
       - name: test meta
         run: bake/bake run test\meta -- -j 8
 
+      - name: test script
+        run: bake/bake run test\script -- -j 8
+
       - name: test collections
         run: bake/bake run test\collections -- -j 8
 
       - name: test c++
-        run: bake/bake run test\cpp_api -- -j 8
+        run: bake/bake run test\cpp -- -j 8
 
   test-msys:
     runs-on: windows-latest
@@ -641,14 +648,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { sys: mingw64 }
-          - { sys: mingw32 }
-          - { sys: ucrt64 }
-          - { sys: clang64 }
+          - { sys: mingw64, cc: gcc, cxx: g++ }
+          - { sys: mingw32, cc: gcc, cxx: g++ }
+          - { sys: ucrt64, cc: gcc, cxx: g++ }
+          - { sys: clang64, cc: clang, cxx: clang++ }
 
     defaults:
       run:
         shell: msys2 {0}
+
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
 
     steps:
       - uses: actions/checkout@v4
@@ -671,10 +682,13 @@ jobs:
           bake/bake setup
 
       - name: build flecs
-        run: bake/bake --strict
+        run: bake/bake --strict --trace
 
-      - name: test api
-        run: bake/bake run test/api -- -j 8
+      - name: test core
+        run: bake/bake run test/core -- -j 8
+
+      - name: test query
+        run: bake/bake run test/query -- -j 8
 
       - name: test addons
         run: bake/bake run test/addons -- -j 8
@@ -682,20 +696,23 @@ jobs:
       - name: test meta
         run: bake/bake run test/meta -- -j 8
 
+      - name: test script
+        run: bake/bake run test/script -- -j 8
+
       - name: test collections
         run: bake/bake run test/collections -- -j 8
 
       - name: test c++
-        run: bake/bake run test/cpp_api -- -j 8
+        run: bake/bake run test/cpp -- -j 8
 
-  test-sanitized-api:
+  test-sanitized-core:
     needs: [ build-linux ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -710,7 +727,31 @@ jobs:
 
       - name: run tests
         run: |
-          bake run test/api --cfg sanitize -- -j 8
+          bake run test/core --cfg sanitize -- -j 8
+
+  test-sanitized-query:
+    needs: [ build-linux ]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-20.04 ]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: install bake
+        run: |
+          git clone https://github.com/SanderMertens/bake
+          make -C bake/build-$(uname)
+          bake/bake setup
+
+      - name: build flecs
+        run: bake --strict
+
+      - name: run tests
+        run: |
+          bake run test/query --cfg sanitize -- -j 8
 
   test-sanitized-addons:
     needs: [ build-linux ]
@@ -719,7 +760,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -743,7 +784,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -760,6 +801,30 @@ jobs:
         run: |
           bake run test/meta --cfg sanitize -- -j 8
 
+  test-sanitized-script:
+    needs: [ build-linux ]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-20.04 ]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: install bake
+        run: |
+          git clone https://github.com/SanderMertens/bake
+          make -C bake/build-$(uname)
+          bake/bake setup
+
+      - name: build flecs
+        run: bake --strict
+
+      - name: run tests
+        run: |
+          bake run test/script --cfg sanitize -- -j 8
+
   test-sanitized-collections:
     needs: [ build-linux ]
     runs-on: ${{ matrix.os }}
@@ -767,7 +832,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -784,14 +849,14 @@ jobs:
         run: |
           bake run test/collections --cfg sanitize -- -j 8
 
-  test-sanitized-cpp_api:
+  test-sanitized-cpp:
     needs: [ build-linux ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -806,7 +871,7 @@ jobs:
 
       - name: run tests
         run: |
-          bake run test/cpp_api --cfg sanitize -- -j 8
+          bake run test/cpp --cfg sanitize -- -j 8
 
   test-cmake:
     needs: [ build-linux, build-macos ]
@@ -815,7 +880,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macOS-latest ]
+        os: [ ubuntu-latest, macOS-latest, macOS-14 ]
 
     steps:
       - uses: actions/checkout@v4

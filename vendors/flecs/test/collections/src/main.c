@@ -63,6 +63,7 @@ void Sparse_count_of_null(void);
 void Sparse_try_low_after_ensure_high(void);
 void Sparse_is_alive_low_after_ensure_high(void);
 void Sparse_remove_low_after_ensure_high(void);
+void Sparse_ensure_skip_generation(void);
 
 // Testsuite 'Strbuf'
 void Strbuf_setup(void);
@@ -74,21 +75,37 @@ void Strbuf_append_list(void);
 void Strbuf_append_nested_list(void);
 void Strbuf_large_str(void);
 void Strbuf_empty_str(void);
-void Strbuf_append_zerocopy(void);
-void Strbuf_append_zerocopy_only(void);
-void Strbuf_append_zerocopy_const(void);
 void Strbuf_reset(void);
 void Strbuf_merge(void);
-void Strbuf_app_buffer(void);
+void Strbuf_merge_empty(void);
 void Strbuf_append_char(void);
 void Strbuf_append_511_chars(void);
 void Strbuf_append_512_chars(void);
 void Strbuf_append_513_chars(void);
+void Strbuf_append_1023_chars(void);
+void Strbuf_append_1024_chars(void);
+void Strbuf_append_1025_chars(void);
+void Strbuf_append_2047_chars(void);
+void Strbuf_append_2048_chars(void);
+void Strbuf_append_2049_chars(void);
+void Strbuf_append_511_str(void);
+void Strbuf_append_512_str(void);
+void Strbuf_append_513_str(void);
+void Strbuf_append_1023_str(void);
+void Strbuf_append_1024_str(void);
+void Strbuf_append_1025_str(void);
+void Strbuf_append_2047_str(void);
+void Strbuf_append_2048_str(void);
+void Strbuf_append_2049_str(void);
 void Strbuf_append_flt(void);
 void Strbuf_append_nan(void);
 void Strbuf_append_inf(void);
 void Strbuf_append_nan_delim(void);
 void Strbuf_append_inf_delim(void);
+
+// Testsuite 'Allocator'
+void Allocator_setup(void);
+void Allocator_init_fini_empty(void);
 
 bake_test_case Map_testcases[] = {
     {
@@ -293,6 +310,10 @@ bake_test_case Sparse_testcases[] = {
     {
         "remove_low_after_ensure_high",
         Sparse_remove_low_after_ensure_high
+    },
+    {
+        "ensure_skip_generation",
+        Sparse_ensure_skip_generation
     }
 };
 
@@ -330,18 +351,6 @@ bake_test_case Strbuf_testcases[] = {
         Strbuf_empty_str
     },
     {
-        "append_zerocopy",
-        Strbuf_append_zerocopy
-    },
-    {
-        "append_zerocopy_only",
-        Strbuf_append_zerocopy_only
-    },
-    {
-        "append_zerocopy_const",
-        Strbuf_append_zerocopy_const
-    },
-    {
         "reset",
         Strbuf_reset
     },
@@ -350,8 +359,8 @@ bake_test_case Strbuf_testcases[] = {
         Strbuf_merge
     },
     {
-        "app_buffer",
-        Strbuf_app_buffer
+        "merge_empty",
+        Strbuf_merge_empty
     },
     {
         "append_char",
@@ -368,6 +377,66 @@ bake_test_case Strbuf_testcases[] = {
     {
         "append_513_chars",
         Strbuf_append_513_chars
+    },
+    {
+        "append_1023_chars",
+        Strbuf_append_1023_chars
+    },
+    {
+        "append_1024_chars",
+        Strbuf_append_1024_chars
+    },
+    {
+        "append_1025_chars",
+        Strbuf_append_1025_chars
+    },
+    {
+        "append_2047_chars",
+        Strbuf_append_2047_chars
+    },
+    {
+        "append_2048_chars",
+        Strbuf_append_2048_chars
+    },
+    {
+        "append_2049_chars",
+        Strbuf_append_2049_chars
+    },
+    {
+        "append_511_str",
+        Strbuf_append_511_str
+    },
+    {
+        "append_512_str",
+        Strbuf_append_512_str
+    },
+    {
+        "append_513_str",
+        Strbuf_append_513_str
+    },
+    {
+        "append_1023_str",
+        Strbuf_append_1023_str
+    },
+    {
+        "append_1024_str",
+        Strbuf_append_1024_str
+    },
+    {
+        "append_1025_str",
+        Strbuf_append_1025_str
+    },
+    {
+        "append_2047_str",
+        Strbuf_append_2047_str
+    },
+    {
+        "append_2048_str",
+        Strbuf_append_2048_str
+    },
+    {
+        "append_2049_str",
+        Strbuf_append_2049_str
     },
     {
         "append_flt",
@@ -391,6 +460,14 @@ bake_test_case Strbuf_testcases[] = {
     }
 };
 
+bake_test_case Allocator_testcases[] = {
+    {
+        "init_fini_empty",
+        Allocator_init_fini_empty
+    }
+};
+
+
 static bake_test_suite suites[] = {
     {
         "Map",
@@ -403,18 +480,25 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        21,
+        22,
         Sparse_testcases
     },
     {
         "Strbuf",
         Strbuf_setup,
         NULL,
-        23,
+        35,
         Strbuf_testcases
+    },
+    {
+        "Allocator",
+        Allocator_setup,
+        NULL,
+        1,
+        Allocator_testcases
     }
 };
 
 int main(int argc, char *argv[]) {
-    return bake_test_run("collections", argc, argv, suites, 3);
+    return bake_test_run("collections", argc, argv, suites, 4);
 }

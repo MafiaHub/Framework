@@ -13,7 +13,7 @@
  * @{
  */
 
-namespace flecs 
+namespace flecs
 {
 
 struct world;
@@ -29,10 +29,13 @@ struct untyped_component;
 template <typename T>
 struct component;
 
-namespace _ 
+template <typename T>
+struct ref;
+
+namespace _
 {
 template <typename T, typename U = int>
-struct cpp_type;
+struct type;
 
 template <typename Func, typename ... Components>
 struct each_delegate;
@@ -49,9 +52,8 @@ struct each_delegate;
 // Mixin forward declarations
 #include "mixins/id/decl.hpp"
 #include "mixins/term/decl.hpp"
-#include "mixins/filter/decl.hpp"
-#include "mixins/event/decl.hpp"
 #include "mixins/query/decl.hpp"
+#include "mixins/event/decl.hpp"
 #include "mixins/observer/decl.hpp"
 #ifdef FLECS_SYSTEM
 #include "mixins/system/decl.hpp"
@@ -62,17 +64,11 @@ struct each_delegate;
 #ifdef FLECS_TIMER
 #include "mixins/timer/decl.hpp"
 #endif
-#ifdef FLECS_SNAPSHOT
-#include "mixins/snapshot/decl.hpp"
-#endif
 #ifdef FLECS_DOC
 #include "mixins/doc/decl.hpp"
 #endif
 #ifdef FLECS_REST
 #include "mixins/rest/decl.hpp"
-#endif
-#ifdef FLECS_RULES
-#include "mixins/rule/decl.hpp"
 #endif
 #ifdef FLECS_META
 #include "mixins/meta/decl.hpp"
@@ -80,8 +76,8 @@ struct each_delegate;
 #ifdef FLECS_UNITS
 #include "mixins/units/decl.hpp"
 #endif
-#ifdef FLECS_MONITOR
-#include "mixins/monitor/decl.hpp"
+#ifdef FLECS_STATS
+#include "mixins/stats/decl.hpp"
 #endif
 #ifdef FLECS_METRICS
 #include "mixins/metrics/decl.hpp"
@@ -95,26 +91,29 @@ struct each_delegate;
 #ifdef FLECS_APP
 #include "mixins/app/decl.hpp"
 #endif
+#ifdef FLECS_SCRIPT
+#include "mixins/script/decl.hpp"
+#endif
 
 #include "log.hpp"
 #include "pair.hpp"
 #include "lifecycle_traits.hpp"
-#include "ref.hpp"
 #include "world.hpp"
+#include "field.hpp"
 #include "iter.hpp"
 #include "entity.hpp"
 #include "delegate.hpp"
-#include "utils/iterable.hpp"
 #include "component.hpp"
+#include "ref.hpp"
 #include "type.hpp"
 #include "table.hpp"
+#include "utils/iterable.hpp"
 
 // Mixin implementations
 #include "mixins/id/impl.hpp"
 #include "mixins/entity/impl.hpp"
 #include "mixins/component/impl.hpp"
 #include "mixins/term/impl.hpp"
-#include "mixins/filter/impl.hpp"
 #include "mixins/query/impl.hpp"
 #include "mixins/observer/impl.hpp"
 #include "mixins/event/impl.hpp"
@@ -131,9 +130,6 @@ struct each_delegate;
 #ifdef FLECS_TIMER
 #include "mixins/timer/impl.hpp"
 #endif
-#ifdef FLECS_SNAPSHOT
-#include "mixins/snapshot/impl.hpp"
-#endif
 #ifdef FLECS_DOC
 #include "mixins/doc/impl.hpp"
 #endif
@@ -143,17 +139,14 @@ struct each_delegate;
 #ifdef FLECS_REST
 #include "mixins/rest/impl.hpp"
 #endif
-#ifdef FLECS_RULES
-#include "mixins/rule/impl.hpp"
-#endif
 #ifdef FLECS_META
 #include "mixins/meta/impl.hpp"
 #endif
 #ifdef FLECS_UNITS
 #include "mixins/units/impl.hpp"
 #endif
-#ifdef FLECS_MONITOR
-#include "mixins/monitor/impl.hpp"
+#ifdef FLECS_STATS
+#include "mixins/stats/impl.hpp"
 #endif
 #ifdef FLECS_METRICS
 #include "mixins/metrics/impl.hpp"
@@ -161,22 +154,26 @@ struct each_delegate;
 #ifdef FLECS_ALERTS
 #include "mixins/alerts/impl.hpp"
 #endif
+#ifdef FLECS_SCRIPT
+#include "mixins/script/impl.hpp"
+#endif
 
+#include "impl/field.hpp"
 #include "impl/iter.hpp"
 #include "impl/world.hpp"
 
 /**
  * @defgroup cpp_core Core
- * @brief Core ECS functionality (entities, storage, queries)
- * 
+ * Core ECS functionality (entities, storage, queries)
+ *
  * @{
  * @}
  */
 
 /**
  * @defgroup cpp_addons Addons
- * @brief C++ APIs for addons.
- * 
+ * C++ APIs for addons.
+ *
  * @{
  * @}
  */

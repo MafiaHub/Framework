@@ -70,8 +70,8 @@ char* flecs_explorer_request(const char *method, char *request) {
         if (body) {
             return body;
         } else {
-            return ecs_asprintf(
-                "{\"error\": \"bad request (code %d)\"}", reply.code);
+            return flecs_asprintf(
+                "{\"error\": \"bad request\", \"status\": %d}", reply.code);
         }
     }
 }
@@ -83,16 +83,15 @@ int ecs_app_run(
 {
     ecs_app_desc = *desc;
 
-    /* Don't set FPS & threads if custom run action is set, as the platform on
-     * which the app is running may not support it. */
-    if (run_action == flecs_default_run_action) {
-        if (ECS_NEQZERO(ecs_app_desc.target_fps)) {
-            ecs_set_target_fps(world, ecs_app_desc.target_fps);
-        }
-        if (ecs_app_desc.threads) {
-            ecs_set_threads(world, ecs_app_desc.threads);
-        }
+    /* Don't set FPS & threads if using emscripten */
+#ifndef ECS_TARGET_EM
+    if (ECS_NEQZERO(ecs_app_desc.target_fps)) {
+        ecs_set_target_fps(world, ecs_app_desc.target_fps);
     }
+    if (ecs_app_desc.threads) {
+        ecs_set_threads(world, ecs_app_desc.threads);
+    }
+#endif
 
     /* REST server enables connecting to app with explorer */
     if (desc->enable_rest) {
@@ -100,6 +99,7 @@ int ecs_app_run(
 #ifdef ECS_TARGET_EM
         flecs_wasm_rest_server = ecs_rest_server_init(world, NULL);
 #else
+        ECS_IMPORT(world, FlecsRest);
         ecs_set(world, EcsWorld, EcsRest, {.port = desc->port });
 #endif
 #else
@@ -108,9 +108,9 @@ int ecs_app_run(
     }
 
     /* Monitoring periodically collects statistics */
-    if (desc->enable_monitor) {
-#ifdef FLECS_MONITOR
-        ECS_IMPORT(world, FlecsMonitor);
+    if (desc->enable_stats) {
+#ifdef FLECS_STATS
+        ECS_IMPORT(world, FlecsStats);
 #else
         ecs_warn("cannot enable monitoring, MONITOR addon not available");
 #endif

@@ -10,7 +10,7 @@
 namespace flecs {
 
 /**
- * \ingroup cpp_addons_event
+ * @ingroup cpp_addons_event
  * @{
  */
 
@@ -18,20 +18,20 @@ namespace flecs {
 template <typename Base, typename E>
 struct event_builder_base {
     event_builder_base(flecs::world_t *world, flecs::entity_t event)
-        : m_world(world)
-        , m_desc{}
-        , m_ids{}
-        , m_ids_array{}
+        : world_(world)
+        , desc_{}
+        , ids_{}
+        , ids_array_{}
     {
-        m_desc.event = event;
+        desc_.event = event;
     }
 
     /** Add component to emit for */
     template <typename T>
     Base& id() {
-        m_ids.array = m_ids_array;
-        m_ids.array[m_ids.count] = _::cpp_type<T>().id(m_world);
-        m_ids.count ++;
+        ids_.array = ids_array_;
+        ids_.array[ids_.count] = _::type<T>().id(world_);
+        ids_.count ++;
         return *this;
     }
     
@@ -43,8 +43,8 @@ struct event_builder_base {
     template <typename First, typename Second>
     Base& id() {
         return id(
-            ecs_pair(_::cpp_type<First>::id(this->m_world), 
-                _::cpp_type<Second>::id(this->m_world)));
+            ecs_pair(_::type<First>::id(this->world_), 
+                _::type<Second>::id(this->world_)));
     }
 
     /** 
@@ -54,7 +54,7 @@ struct event_builder_base {
      */
     template <typename First>
     Base& id(entity_t second) {
-        return id(ecs_pair(_::cpp_type<First>::id(this->m_world), second));
+        return id(ecs_pair(_::type<First>::id(this->world_), second));
     }
 
     /** 
@@ -66,59 +66,66 @@ struct event_builder_base {
         return id(ecs_pair(first, second));
     }
 
+    template <typename Enum, if_t<is_enum<Enum>::value> = 0>
+    Base& id(Enum value) {
+        const auto& et = enum_type<Enum>(this->world_);
+        flecs::entity_t target = et.entity(value);
+        return id(et.entity(), target);
+    }
+
     /** Add (component) id to emit for */
     Base& id(flecs::id_t id) {
-        m_ids.array = m_ids_array;
-        m_ids.array[m_ids.count] = id;
-        m_ids.count ++;
+        ids_.array = ids_array_;
+        ids_.array[ids_.count] = id;
+        ids_.count ++;
         return *this;
     }
 
     /** Set entity for which to emit event */
     Base& entity(flecs::entity_t e) {
-        m_desc.entity = e;
+        desc_.entity = e;
         return *this;
     }
 
     /* Set table for which to emit event */
     Base& table(flecs::table_t *t, int32_t offset = 0, int32_t count = 0) {
-        m_desc.table = t;
-        m_desc.offset = offset;
-        m_desc.count = count;
+        desc_.table = t;
+        desc_.offset = offset;
+        desc_.count = count;
         return *this;
     }
 
     /* Set event data */
     Base& ctx(const E* ptr) {
-        m_desc.const_param = ptr;
+        desc_.const_param = ptr;
         return *this;
     }
 
     /* Set event data */
     Base& ctx(E* ptr) {
-        m_desc.param = ptr;
+        desc_.param = ptr;
         return *this;
     }
 
     void emit() {
-        m_ids.array = m_ids_array;
-        m_desc.ids = &m_ids;
-        m_desc.observable = const_cast<flecs::world_t*>(ecs_get_world(m_world));
-        ecs_emit(m_world, &m_desc);
+        ids_.array = ids_array_;
+        desc_.ids = &ids_;
+        desc_.observable = const_cast<flecs::world_t*>(ecs_get_world(world_));
+        ecs_emit(world_, &desc_);
     }
 
     void enqueue() {
-        m_ids.array = m_ids_array;
-        m_desc.ids = &m_ids;
-        m_desc.observable = const_cast<flecs::world_t*>(ecs_get_world(m_world));
-        ecs_enqueue(m_world, &m_desc);
+        ids_.array = ids_array_;
+        desc_.ids = &ids_;
+        desc_.observable = const_cast<flecs::world_t*>(ecs_get_world(world_));
+        ecs_enqueue(world_, &desc_);
     }
 
 protected:
-    flecs::world_t *m_world;
-    ecs_event_desc_t m_desc;
-    flecs::type_t m_ids;
-    flecs::id_t m_ids_array[ECS_EVENT_DESC_ID_COUNT_MAX];
+    flecs::world_t *world_;
+    ecs_event_desc_t desc_;
+    flecs::type_t ids_;
+    flecs::id_t ids_array_[ECS_EVENT_DESC_ID_COUNT_MAX];
 
 private:
     operator Base&() {
@@ -140,13 +147,13 @@ public:
 
     /* Set event data */
     Class& ctx(const E& ptr) {
-        this->m_desc.const_param = &ptr;
+        this->desc_.const_param = &ptr;
         return *this;
     }
 
     /* Set event data */
     Class& ctx(E&& ptr) {
-        this->m_desc.param = &ptr;
+        this->desc_.param = &ptr;
         return *this;
     }
 };

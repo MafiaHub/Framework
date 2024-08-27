@@ -111,11 +111,9 @@ void flecs_log_msg(
     int32_t line,  
     const char *msg)
 {
-    FILE *stream;
-    if (level >= 0) {
+    FILE *stream = ecs_os_api.log_out_;
+    if (!stream) {
         stream = stdout;
-    } else {
-        stream = stderr;
     }
 
     bool use_colors = ecs_os_api.flags_ & EcsOsApiLogWithColors;
@@ -140,7 +138,7 @@ void flecs_log_msg(
                 fputs(" ", stream);
             }
             char time_buf[20];
-            ecs_os_sprintf(time_buf, "%u", (uint32_t)delta);
+            ecs_os_snprintf(time_buf, 20, "%u", (uint32_t)delta);
             fputs("+", stream);
             fputs(time_buf, stream);
             fputs(" ", stream);
@@ -154,7 +152,7 @@ void flecs_log_msg(
             now = time(NULL);
         }
         char time_buf[20];
-        ecs_os_sprintf(time_buf, "%u", (uint32_t)now);
+        ecs_os_snprintf(time_buf, 20, "%u", (uint32_t)now);
         fputs(time_buf, stream);
         fputs(" ", stream);
     }
@@ -234,7 +232,7 @@ void flecs_log_msg(
 }
 
 void ecs_os_dbg(
-    const char *file, 
+    const char *file,
     int32_t line, 
     const char *msg)
 {

@@ -127,6 +127,12 @@ int flecs_entity_compare(
     return (e1 > e2) - (e1 < e2);
 }
 
+int flecs_id_qsort_cmp(const void *a, const void *b) {
+    ecs_id_t id_a = *(const ecs_id_t*)a;
+    ecs_id_t id_b = *(const ecs_id_t*)b;
+    return (id_a > id_b) - (id_a < id_b);
+}
+
 uint64_t flecs_string_hash(
     const void *ptr)
 {
@@ -135,7 +141,7 @@ uint64_t flecs_string_hash(
     return str->hash;
 }
 
-char* ecs_vasprintf(
+char* flecs_vasprintf(
     const char *fmt,
     va_list args)
 {
@@ -159,18 +165,18 @@ char* ecs_vasprintf(
         return NULL; 
     }
 
-    ecs_os_vsprintf(result, fmt, args);
+    ecs_os_vsnprintf(result, size + 1, fmt, args);
 
     return result;
 }
 
-char* ecs_asprintf(
+char* flecs_asprintf(
     const char *fmt,
     ...)
 {
     va_list args;
     va_start(args, fmt);
-    char *result = ecs_vasprintf(fmt, args);
+    char *result = flecs_vasprintf(fmt, args);
     va_end(args);
     return result;
 }
@@ -205,4 +211,257 @@ char* flecs_to_snake_case(const char *str) {
     out_ptr[0] = '\0';
 
     return out;
+}
+
+char* flecs_load_from_file(
+    const char *filename)
+{
+    FILE* file;
+    char* content = NULL;
+    int32_t bytes;
+    size_t size;
+
+    /* Open file for reading */
+    ecs_os_fopen(&file, filename, "r");
+    if (!file) {
+        ecs_err("%s (%s)", ecs_os_strerror(errno), filename);
+        goto error;
+    }
+
+    /* Determine file size */
+    fseek(file, 0, SEEK_END);
+    bytes = (int32_t)ftell(file);
+    if (bytes == -1) {
+        goto error;
+    }
+    fseek(file, 0, SEEK_SET);
+
+    /* Load contents in memory */
+    content = ecs_os_malloc(bytes + 1);
+    size = (size_t)bytes;
+    if (!(size = fread(content, 1, size, file)) && bytes) {
+        ecs_err("%s: read zero bytes instead of %d", filename, size);
+        ecs_os_free(content);
+        content = NULL;
+        goto error;
+    } else {
+        content[size] = '\0';
+    }
+
+    fclose(file);
+
+    return content;
+error:
+    ecs_os_free(content);
+    return NULL;
+}
+
+char* flecs_chresc(
+    char *out, 
+    char in, 
+    char delimiter) 
+{
+    char *bptr = out;
+    switch(in) {
+    case '\a':
+        *bptr++ = '\\';
+        *bptr = 'a';
+        break;
+    case '\b':
+        *bptr++ = '\\';
+        *bptr = 'b';
+        break;
+    case '\f':
+        *bptr++ = '\\';
+        *bptr = 'f';
+        break;
+    case '\n':
+        *bptr++ = '\\';
+        *bptr = 'n';
+        break;
+    case '\r':
+        *bptr++ = '\\';
+        *bptr = 'r';
+        break;
+    case '\t':
+        *bptr++ = '\\';
+        *bptr = 't';
+        break;
+    case '\v':
+        *bptr++ = '\\';
+        *bptr = 'v';
+        break;
+    case '\\':
+        *bptr++ = '\\';
+        *bptr = '\\';
+        break;
+    case '\033':
+        *bptr = '['; /* Used for terminal colors */
+        break;
+    default:
+        if (in == delimiter) {
+            *bptr++ = '\\';
+            *bptr = delimiter;
+        } else {
+            *bptr = in;
+        }
+        break;
+    }
+
+    *(++bptr) = '\0';
+
+    return bptr;
+}
+
+const char* flecs_chrparse(
+    const char *in, 
+    char *out) 
+{
+    const char *result = in + 1;
+    char ch;
+
+    if (in[0] == '\\') {
+        result ++;
+
+        switch(in[1]) {
+        case 'a':
+            ch = '\a';
+            break;
+        case 'b':
+            ch = '\b';
+            break;
+        case 'f':
+            ch = '\f';
+            break;
+        case 'n':
+            ch = '\n';
+            break;
+        case 'r':
+            ch = '\r';
+            break;
+        case 't':
+            ch = '\t';
+            break;
+        case 'v':
+            ch = '\v';
+            break;
+        case '\\':
+            ch = '\\';
+            break;
+        case '"':
+            ch = '"';
+            break;
+        case '0':
+            ch = '\0';
+            break;
+        case ' ':
+            ch = ' ';
+            break;
+        case '$':
+            ch = '$';
+            break;
+        default:
+            goto error;
+        }
+    } else {
+        ch = in[0];
+    }
+
+    if (out) {
+        *out = ch;
+    }
+
+    return result;
+error:
+    return NULL;
+}
+
+ecs_size_t flecs_stresc(
+    char *out, 
+    ecs_size_t n, 
+    char delimiter, 
+    const char *in) 
+{
+    const char *ptr = in;
+    char ch, *bptr = out, buff[3];
+    ecs_size_t written = 0;
+    while ((ch = *ptr++)) {
+        if ((written += (ecs_size_t)(flecs_chresc(
+            buff, ch, delimiter) - buff)) <= n) 
+        {
+            /* If size != 0, an out buffer must be provided. */
+            ecs_check(out != NULL, ECS_INVALID_PARAMETER, NULL);
+            *bptr++ = buff[0];
+            if ((ch = buff[1])) {
+                *bptr = ch;
+                bptr++;
+            }
+        }
+    }
+
+    if (bptr) {
+        while (written < n) {
+            *bptr = '\0';
+            bptr++;
+            written++;
+        }
+    }
+    return written;
+error:
+    return 0;
+}
+
+char* flecs_astresc(
+    char delimiter, 
+    const char *in)
+{
+    if (!in) {
+        return NULL;
+    }
+
+    ecs_size_t len = flecs_stresc(NULL, 0, delimiter, in);
+    char *out = ecs_os_malloc_n(char, len + 1);
+    flecs_stresc(out, len, delimiter, in);
+    out[len] = '\0';
+    return out;
+}
+
+const char* flecs_parse_digit(
+    const char *ptr,
+    char *token)
+{
+    char *tptr = token;
+    char ch = ptr[0];
+
+    if (!isdigit(ch) && ch != '-') {
+        ecs_parser_error(NULL, NULL, 0, "invalid start of number '%s'", ptr);
+        return NULL;
+    }
+
+    tptr[0] = ch;
+    tptr ++;
+    ptr ++;
+
+    for (; (ch = *ptr); ptr ++) {
+        if (!isdigit(ch) && (ch != '.') && (ch != 'e')) {
+            break;
+        }
+
+        tptr[0] = ch;
+        tptr ++;
+    }
+
+    tptr[0] = '\0';
+    
+    return ptr;
+}
+
+const char* flecs_parse_ws_eol(
+    const char *ptr)
+{
+    while (isspace(*ptr)) {
+        ptr ++;
+    }
+
+    return ptr;
 }

@@ -2,7 +2,7 @@
 #include <iostream>
 
 /* Prefabs can inherit from each other, which creates prefab variants. With
- * variants applications can reuse a commmon set of components and specialize it
+ * variants applications can reuse a common set of components and specialize it
  * by adding or overriding components on the variant. */
 
 struct Attack { 
@@ -40,7 +40,7 @@ int main() {
             .set<FreightCapacity>({ 100 })
             .set<Defense>({ 50 });
 
-            // Create a MammotFreighter variant which inherits from Freighter
+            // Create a MammothFreighter variant which inherits from Freighter
             flecs::entity MammothFreighter = ecs.prefab("MammothFreighter")
                 .is_a(Freighter)
                 .set<FreightCapacity>({ 500 });

@@ -37,11 +37,14 @@ namespace Framework::World {
 
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
         flecs::entity ent = {};
-        _queryGetEntityByServerID.iter([&ent, id](flecs::iter it, Modules::Base::ServerID *rhs) {
-            for (size_t i = 0; i < it.count(); i++) {
-                if (id == rhs[i].id) {
-                    ent = it.entity(i);
-                    return;
+        _queryGetEntityByServerID.run([&ent, id](flecs::iter &it) {
+            while (it.next()) {
+                const auto rhs = it.field<Modules::Base::ServerID>(0);
+                for (auto i : it) {
+                    if (id == rhs[i].id) {
+                        ent = it.entity(i);
+                        return;
+                    }
                 }
             }
         });
@@ -60,23 +63,28 @@ namespace Framework::World {
     flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) const {
         const auto e = _world->entity();
 
-        const auto sid = e.get_mut<Modules::Base::ServerID>();
-        sid->id        = serverID;
+        auto sid = e.ensure<Modules::Base::ServerID>();
+        sid.id        = serverID;
         return e;
     }
 
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
         _networkPeer = peer;
 
-        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *rs) {
+        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).run([this](flecs::iter &it) {
             OPTICK_EVENT();
             const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
-            for (size_t i = 0; i < it.count(); i++) {
-                const auto &es = &rs[i];
+            while (it.next()) {
+                const auto tr = it.field<Modules::Base::Transform>(0);
+                const auto rs = it.field<Modules::Base::Streamable>(1);
 
-                if (es->GetBaseEvents().updateProc && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
-                    es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                for (auto i : it) {
+                    const auto &es = &rs[i];
+
+                    if (es->GetBaseEvents().updateProc && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
+                        es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                    }
                 }
             }
         });
@@ -91,18 +99,17 @@ namespace Framework::World {
         }
 
         _world->defer_begin();
-        _allStreamableEntities.iter([this](flecs::iter it, Modules::Base::Transform *tr, Modules::Base::Streamable *s) {
-            (void)tr;
-            (void)s;
-
-            for (size_t i = 0; i < it.count(); i++) {
-                if (_onEntityDestroyCallback) {
-                    if (!_onEntityDestroyCallback(it.entity(i))) {
-                        continue;
+        _allStreamableEntities.run([this](flecs::iter &it) {
+            while (it.next()) {
+                for (auto i : it) {
+                    if (_onEntityDestroyCallback) {
+                        if (!_onEntityDestroyCallback(it.entity(i))) {
+                            continue;
+                        }
                     }
-                }
 
-                it.entity(i).destruct();
+                    it.entity(i).destruct();
+                }
             }
         });
         _world->defer_end();

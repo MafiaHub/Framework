@@ -13,12 +13,12 @@ namespace flecs
 // Mixin implementation
 
 inline flecs::event_builder world::event(flecs::entity_t evt) const {
-    return flecs::event_builder(m_world, evt);
+    return flecs::event_builder(world_, evt);
 }
 
 template <typename E>
 inline flecs::event_builder_typed<E> world::event() const {
-    return flecs::event_builder_typed<E>(m_world, _::cpp_type<E>().id(m_world));
+    return flecs::event_builder_typed<E>(world_, _::type<E>().id(world_));
 }
 
 namespace _ {
@@ -27,16 +27,16 @@ namespace _ {
         flecs::entity_t event,
         flecs::entity_t entity,
         ecs_iter_action_t callback,
-        void *binding_ctx,
-        ecs_ctx_free_t binding_ctx_free) 
+        void *callback_ctx,
+        ecs_ctx_free_t callback_ctx_free) 
     {
         ecs_observer_desc_t desc = {};
         desc.events[0] = event;
-        desc.filter.terms[0].id = EcsAny;
-        desc.filter.terms[0].src.id = entity;
+        desc.query.terms[0].id = EcsAny;
+        desc.query.terms[0].src.id = entity;
         desc.callback = callback;
-        desc.binding_ctx = binding_ctx;
-        desc.binding_ctx_free = binding_ctx_free;
+        desc.callback_ctx = callback_ctx;
+        desc.callback_ctx_free = callback_ctx_free;
 
         flecs::entity_t o = ecs_observer_init(world, &desc);
         ecs_add_pair(world, o, EcsChildOf, entity);
@@ -52,7 +52,7 @@ namespace _ {
         {
             using Delegate = _::entity_observer_delegate<Func>;
             auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(f));
-            entity_observer_create(world, _::cpp_type<Evt>::id(world), entity, Delegate::run, ctx, 
+            entity_observer_create(world, _::type<Evt>::id(world), entity, Delegate::run, ctx, 
                 reinterpret_cast<ecs_ctx_free_t>(_::free_obj<Delegate>));
         }
 
@@ -64,7 +64,7 @@ namespace _ {
         {
             using Delegate = _::entity_payload_observer_delegate<Func, Evt>;
             auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(f));
-            entity_observer_create(world, _::cpp_type<Evt>::id(world), entity, Delegate::run, ctx, 
+            entity_observer_create(world, _::type<Evt>::id(world), entity, Delegate::run, ctx, 
                 reinterpret_cast<ecs_ctx_free_t>(_::free_obj<Delegate>));
         }
     };
@@ -72,11 +72,11 @@ namespace _ {
 
 template <typename Self>
 template <typename Func>
-inline Self& entity_builder<Self>::observe(flecs::entity_t evt, Func&& f) {
+inline const Self& entity_builder<Self>::observe(flecs::entity_t evt, Func&& f) const {
     using Delegate = _::entity_observer_delegate<Func>;
     auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(f));
 
-    _::entity_observer_create(m_world, evt, m_id, Delegate::run, ctx,
+    _::entity_observer_create(world_, evt, id_, Delegate::run, ctx,
         reinterpret_cast<ecs_ctx_free_t>(_::free_obj<Delegate>));
 
     return to_base();
@@ -84,23 +84,23 @@ inline Self& entity_builder<Self>::observe(flecs::entity_t evt, Func&& f) {
 
 template <typename Self>
 template <typename Evt, typename Func>
-inline Self& entity_builder<Self>::observe(Func&& f) {
+inline const Self& entity_builder<Self>::observe(Func&& f) const {
     _::entity_observer_factory<Func>::template create<Evt>(
-        m_world, m_id, FLECS_FWD(f));
+        world_, id_, FLECS_FWD(f));
     return to_base();
 }
 
 template <typename Self>
 template <typename Func>
-inline Self& entity_builder<Self>::observe(Func&& f) {
+inline const Self& entity_builder<Self>::observe(Func&& f) const {
     return this->observe<_::event_from_func_t<Func>>(FLECS_FWD(f));
 }
 
-inline void entity_view::emit(flecs::entity evt) {
+inline void entity_view::emit(flecs::entity evt) const {
     this->emit(evt.id());
 }
 
-inline void entity_view::enqueue(flecs::entity evt) {
+inline void entity_view::enqueue(flecs::entity evt) const {
     this->enqueue(evt.id());
 }
 

@@ -130,6 +130,7 @@ namespace Framework::World::Modules {
             const auto e = worldEngine->CreateEntity(msg->GetServerID());
             streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
 
+            e.add<World::Modules::Base::Transform>();
             const auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });

@@ -9,9 +9,9 @@ namespace flecs {
 
 /**
  * @defgroup cpp_addons_meta Meta
- * @brief Flecs reflection framework.
- * 
- * \ingroup cpp_addons
+ * @ingroup cpp_addons
+ * Flecs reflection framework.
+ *
  * @{
  */
 
@@ -37,8 +37,8 @@ using enum_constant_t = ecs_enum_constant_t;
 using bitmask_constant_t = ecs_bitmask_constant_t;
 
 /* Components */
-using MetaType = EcsMetaType;
-using MetaTypeSerialized = EcsMetaTypeSerialized;
+using Type = EcsType;
+using TypeSerializer = EcsTypeSerializer;
 using Primitive = EcsPrimitive;
 using Enum = EcsEnum;
 using Bitmask = EcsBitmask;

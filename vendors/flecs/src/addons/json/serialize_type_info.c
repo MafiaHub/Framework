@@ -1,5 +1,5 @@
 /**
- * @file json/serialize_type_info.c
+ * @file addons/json/serialize_type_info.c
  * @brief Serialize type (reflection) information to JSON.
  */
 
@@ -64,11 +64,8 @@ void json_typeinfo_ser_constants(
     ecs_entity_t type,
     ecs_strbuf_t *str)
 {
-    ecs_iter_t it = ecs_term_iter(world, &(ecs_term_t) {
-        .id = ecs_pair(EcsChildOf, type)
-    });
-
-    while (ecs_term_next(&it)) {
+    ecs_iter_t it = ecs_each_id(world, ecs_pair(EcsChildOf, type));
+    while (ecs_each_next(&it)) {
         int32_t i, count = it.count;
         for (i = 0; i < count; i ++) {
             flecs_json_next(str);
@@ -217,7 +214,8 @@ int json_typeinfo_ser_type_op(
     case EcsOpPush:
     case EcsOpPop:
         /* Should not be parsed as single op */
-        ecs_throw(ECS_INVALID_PARAMETER, NULL);
+        ecs_throw(ECS_INVALID_PARAMETER, 
+            "unexpected push/pop serializer instruction");
         break;
     case EcsOpEnum:
         json_typeinfo_ser_enum(world, op->type, str);
@@ -340,10 +338,21 @@ int json_typeinfo_ser_type_ops(
             ecs_assert(sp < 63, ECS_INVALID_OPERATION, "type nesting too deep");
             stack[sp ++] = ecs_get(world, op->type, EcsStruct);
             break;
-        case EcsOpPop:
+        case EcsOpPop: {
+            ecs_entity_t unit = ecs_get_target_for(world, op->type, EcsIsA, EcsUnit);
+            if (unit) {
+                flecs_json_member(str, "@self");
+                flecs_json_array_push(str);
+                flecs_json_object_push(str);
+                json_typeinfo_ser_unit(world, str, unit);
+                flecs_json_object_pop(str);
+                flecs_json_array_pop(str);
+            }
+
             flecs_json_object_pop(str);
             sp --;
             break;
+        }
         case EcsOpArray:
         case EcsOpVector:
         case EcsOpEnum:
@@ -395,8 +404,8 @@ int json_typeinfo_ser_type(
         return 0;
     }
 
-    const EcsMetaTypeSerialized *ser = ecs_get(
-        world, type, EcsMetaTypeSerialized);
+    const EcsTypeSerializer *ser = ecs_get(
+        world, type, EcsTypeSerializer);
     if (!ser) {
         ecs_strbuf_appendch(buf, '0');
         return 0;
@@ -406,7 +415,11 @@ int json_typeinfo_ser_type(
     ecs_meta_type_op_t *ops = ecs_vec_first_t(&ser->ops, ecs_meta_type_op_t);
     int32_t count = ecs_vec_count(&ser->ops);
 
-    return json_typeinfo_ser_type_ops(world, ops, count, buf, st);
+    if (json_typeinfo_ser_type_ops(world, ops, count, buf, st)) {
+        return -1;
+    }
+
+    return 0;
 }
 
 int ecs_type_info_to_json_buf(

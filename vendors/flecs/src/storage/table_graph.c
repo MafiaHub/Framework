@@ -1,5 +1,5 @@
 /**
- * @file table_graph.c
+ * @file storage/table_graph.c
  * @brief Data structure to speed up table transitions.
  * 
  * The table graph is used to speed up finding tables in add/remove operations.
@@ -531,7 +531,7 @@ void flecs_init_table(
 }
 
 static
-ecs_table_t *flecs_create_table(
+ecs_table_t *flecs_table_new(
     ecs_world_t *world,
     ecs_type_t *type,
     flecs_hashmap_result_t table_elem,
@@ -541,7 +541,25 @@ ecs_table_t *flecs_create_table(
     ecs_assert(result != NULL, ECS_INTERNAL_ERROR, NULL);
     result->_ = flecs_calloc_t(&world->allocator, ecs_table__t);
     ecs_assert(result->_ != NULL, ECS_INTERNAL_ERROR, NULL);
-    
+
+#ifdef FLECS_SANITIZE
+    int32_t i, j, count = type->count;
+    for (i = 0; i < count - 1; i ++) {
+        if (type->array[i] >= type->array[i + 1]) {
+            for (j = 0; j < count; j ++) {
+                char *str = ecs_id_str(world, type->array[j]);
+                if (i == j) {
+                    ecs_err(" > %d: %s", j, str);
+                } else {
+                    ecs_err("   %d: %s", j, str);
+                }
+                ecs_os_free(str);
+            }
+            ecs_abort(ECS_CONSTRAINT_VIOLATED, "table type is not ordered");
+        }
+    }
+#endif
+
     result->id = flecs_sparse_last_id(&world->store.tables);
     result->type = *type;
 
@@ -581,7 +599,7 @@ ecs_table_t* flecs_table_ensure(
     bool own_type,
     ecs_table_t *prev)
 {    
-    ecs_poly_assert(world, ecs_world_t);   
+    flecs_poly_assert(world, ecs_world_t);   
 
     int32_t id_count = type->count;
     if (!id_count) {
@@ -604,11 +622,11 @@ ecs_table_t* flecs_table_ensure(
 
     /* If we get here, the table has not been found, so create it. */
     if (own_type) {
-        return flecs_create_table(world, type, elem, prev);
+        return flecs_table_new(world, type, elem, prev);
     }
 
     ecs_type_t copy = flecs_type_copy(world, type);
-    return flecs_create_table(world, &copy, elem, prev);
+    return flecs_table_new(world, &copy, elem, prev);
 }
 
 static
@@ -638,12 +656,15 @@ void flecs_compute_table_diff(
     ecs_graph_edge_t *edge,
     ecs_id_t id)
 {
+    ecs_type_t node_type = node->type;
+    ecs_type_t next_type = next->type;
+
     if (ECS_IS_PAIR(id)) {
         ecs_id_record_t *idr = flecs_id_record_get(world, ecs_pair(
             ECS_PAIR_FIRST(id), EcsWildcard));
-        if (idr->flags & EcsIdUnion) {
+        if (idr->flags & EcsIdIsUnion) {
             if (node != next) {
-                id = ecs_pair(EcsUnion, ECS_PAIR_FIRST(id));
+                id = ecs_pair(ECS_PAIR_FIRST(id), EcsUnion);
             } else {
                 ecs_table_diff_t *diff = flecs_bcalloc(
                     &world->allocators.table_diff);
@@ -654,9 +675,6 @@ void flecs_compute_table_diff(
             }
         }
     }
-
-    ecs_type_t node_type = node->type;
-    ecs_type_t next_type = next->type;
 
     ecs_id_t *ids_node = node_type.array;
     ecs_id_t *ids_next = next_type.array;
@@ -743,22 +761,22 @@ void flecs_add_overrides_for_base(
     }
 
     ecs_id_t *ids = base_table->type.array;
-
     ecs_flags32_t flags = base_table->flags;
     if (flags & EcsTableHasOverrides) {
         int32_t i, count = base_table->type.count;
         for (i = 0; i < count; i ++) {
             ecs_id_t id = ids[i];
             ecs_id_t to_add = 0;
-            if (ECS_HAS_ID_FLAG(id, OVERRIDE)) {
-                to_add = id & ~ECS_OVERRIDE;
+            if (ECS_HAS_ID_FLAG(id, AUTO_OVERRIDE)) {
+                to_add = id & ~ECS_AUTO_OVERRIDE;
             } else {
                 ecs_table_record_t *tr = &base_table->_->records[i];
                 ecs_id_record_t *idr = (ecs_id_record_t*)tr->hdr.cache;
-                if (idr->flags & EcsIdAlwaysOverride) {
+                if (ECS_ID_ON_INSTANTIATE(idr->flags) == EcsOverride) {
                     to_add = id;
                 }
             }
+
             if (to_add) {
                 ecs_id_t wc = ecs_pair(ECS_PAIR_FIRST(to_add), EcsWildcard);
                 bool exclusive = false;
@@ -837,8 +855,8 @@ ecs_table_t* flecs_find_table_with(
     ecs_world_t *world,
     ecs_table_t *node,
     ecs_id_t with)
-{    
-    ecs_ensure_id(world, with);
+{
+    ecs_make_alive_id(world, with);
 
     ecs_id_record_t *idr = NULL;
     ecs_entity_t r = 0, o = 0;
@@ -847,16 +865,8 @@ ecs_table_t* flecs_find_table_with(
         r = ECS_PAIR_FIRST(with);
         o = ECS_PAIR_SECOND(with);
         idr = flecs_id_record_ensure(world, ecs_pair(r, EcsWildcard));
-        if (idr->flags & EcsIdUnion) {
-            ecs_type_t dst_type;
-            ecs_id_t union_id = ecs_pair(EcsUnion, r);
-            int res = flecs_type_new_with(
-                world, &dst_type, &node->type, union_id);
-            if (res == -1) {
-                return node;
-            }
-
-            return flecs_table_ensure(world, &dst_type, true, node);
+        if (idr->flags & EcsIdIsUnion) {
+            with = ecs_pair(r, EcsUnion);
         } else if (idr->flags & EcsIdExclusive) {
             /* Relationship is exclusive, check if table already has it */
             ecs_table_record_t *tr = flecs_id_record_get_table(idr, node);
@@ -912,8 +922,8 @@ ecs_table_t* flecs_find_table_without(
         ecs_id_record_t *idr = NULL;
         r = ECS_PAIR_FIRST(without);
         idr = flecs_id_record_get(world, ecs_pair(r, EcsWildcard));
-        if (idr && idr->flags & EcsIdUnion) {
-            without = ecs_pair(EcsUnion, r);
+        if (idr && idr->flags & EcsIdIsUnion) {
+            without = ecs_pair(r, EcsUnion);
         }
     }
 
@@ -957,7 +967,7 @@ void flecs_init_edge_for_add(
 
     flecs_table_ensure_hi_edge(world, &table->node.add, id);
 
-    if (table != to || table->flags & EcsTableHasUnion) {
+    if ((table != to) || (table->flags & EcsTableHasUnion)) {
         /* Add edges are appended to refs.next */
         ecs_graph_edge_hdr_t *to_refs = &to->node.refs;
         ecs_graph_edge_hdr_t *next = to_refs->next;
@@ -1033,7 +1043,7 @@ ecs_table_t* flecs_table_traverse_remove(
     ecs_id_t *id_ptr,
     ecs_table_diff_t *diff)
 {
-    ecs_poly_assert(world, ecs_world_t);
+    flecs_poly_assert(world, ecs_world_t);
 
     node = node ? node : &world->store.root;
 
@@ -1072,7 +1082,7 @@ ecs_table_t* flecs_table_traverse_add(
     ecs_id_t *id_ptr,
     ecs_table_diff_t *diff)
 {
-    ecs_poly_assert(world, ecs_world_t);
+    flecs_poly_assert(world, ecs_world_t);
     ecs_assert(diff != NULL, ECS_INTERNAL_ERROR, NULL);
 
     node = node ? node : &world->store.root;
@@ -1110,14 +1120,14 @@ ecs_table_t* flecs_table_find_or_create(
     ecs_world_t *world,
     ecs_type_t *type)
 {
-    ecs_poly_assert(world, ecs_world_t);
+    flecs_poly_assert(world, ecs_world_t);
     return flecs_table_ensure(world, type, false, NULL);
 }
 
 void flecs_init_root_table(
     ecs_world_t *world)
 {
-    ecs_poly_assert(world, ecs_world_t);
+    flecs_poly_assert(world, ecs_world_t);
 
     world->store.root.type = (ecs_type_t){0};
     world->store.root._ = flecs_calloc_t(&world->allocator, ecs_table__t);
@@ -1134,7 +1144,7 @@ void flecs_table_clear_edges(
     ecs_table_t *table)
 {
     (void)world;
-    ecs_poly_assert(world, ecs_world_t);
+    flecs_poly_assert(world, ecs_world_t);
 
     ecs_log_push_1();
 

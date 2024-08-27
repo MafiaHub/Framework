@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 // A monitor observer triggers when an entity starts/stop matching the observer
-// filter. The observer communicates whether an entity is "entering/leaving" the
+// query. The observer communicates whether an entity is "entering/leaving" the
 // monitor by setting ecs_iter_t::event to EcsOnAdd (for entering) or 
 // EcsOnRemove (for leaving).
 //
@@ -42,13 +42,13 @@ int main(int argc, char *argv[]) {
     ECS_COMPONENT(ecs, Velocity);
 
     ecs_observer(ecs, {
-        .filter = { .terms = {{ .id = ecs_id(Position) }, { .id = ecs_id(Velocity) }}},
+        .query  = { .terms = {{ .id = ecs_id(Position) }, { .id = ecs_id(Velocity) }}},
         .events = { EcsMonitor }, // Monitor entities entering/leaving the query
         .callback = Observer,
     });
 
     // Create entity
-    ecs_entity_t e = ecs_new_entity(ecs, "e");
+    ecs_entity_t e = ecs_entity(ecs, { .name = "e" });
 
     // This does not yet trigger the monitor, as the entity does not yet match.
     ecs_set(ecs, e, Position, {10, 20});

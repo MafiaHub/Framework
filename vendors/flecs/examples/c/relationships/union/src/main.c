@@ -32,22 +32,22 @@ int main(int argc, char *argv[]) {
     // Create a query that subscribers for all entities that have a Direction
     // and that are walking.
     ecs_query_t *q = ecs_query(world, {
-        .filter.terms = {
+        .terms = {
             { .id = ecs_pair(Movement, Walking) },
             { .id = ecs_pair(Direction, EcsWildcard) }
         }
     });
 
     // Create a few entities with various state combinations
-    ecs_entity_t e1 = ecs_new_entity(world, "e1");
+    ecs_entity_t e1 = ecs_entity(world, { .name = "e1" });
     ecs_add_pair(world, e1, Movement, Walking);
     ecs_add_pair(world, e1, Direction, Front);
 
-    ecs_entity_t e2 = ecs_new_entity(world, "e2");
+    ecs_entity_t e2 = ecs_entity(world, { .name = "e2" });
     ecs_add_pair(world, e2, Movement, Running);
     ecs_add_pair(world, e2, Direction, Left);
 
-    ecs_entity_t e3 = ecs_new_entity(world, "e3");
+    ecs_entity_t e3 = ecs_entity(world, { .name = "e3" });
     ecs_add_pair(world, e3, Movement, Running);
     ecs_add_pair(world, e3, Direction, Right);
 
@@ -57,14 +57,16 @@ int main(int argc, char *argv[]) {
     // Iterate query as usual
     ecs_iter_t it = ecs_query_iter(world, q);
     while (ecs_iter_next(&it)) {
-        ecs_entity_t *movement = ecs_field(&it, ecs_entity_t, 1);
-        ecs_entity_t *direction = ecs_field(&it, ecs_entity_t, 2);
+        ecs_id_t movement_pair = ecs_field_id(&it, 0);
+        ecs_id_t direction_pair = ecs_field_id(&it, 1);
+        ecs_entity_t movement = ecs_pair_second(world, movement_pair);
+        ecs_entity_t direction = ecs_pair_second(world, direction_pair);
 
         for (int i = 0; i < it.count; i ++) {
             printf("%s: Movement: %s, Direction: %s\n",
                 ecs_get_name(world, it.entities[i]),
-                ecs_get_name(world, movement[i]),
-                ecs_get_name(world, direction[i]));
+                ecs_get_name(world, movement),
+                ecs_get_name(world, direction));
         }
     }
 

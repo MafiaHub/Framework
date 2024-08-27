@@ -1,5 +1,5 @@
 /**
- * @file meta/serialized.c
+ * @file addons/meta/serialized.c
  * @brief Serialize type into flat operations array to speed up deserialization.
  */
 
@@ -56,7 +56,7 @@ int flecs_meta_serialize_primitive(
 {
     const EcsPrimitive *ptr = ecs_get(world, type, EcsPrimitive);
     if (!ptr) {
-        char *name = ecs_get_fullpath(world, type);
+        char *name = ecs_get_path(world, type);
         ecs_err("entity '%s' is not a primitive type", name);
         ecs_os_free(name);
         return -1;
@@ -128,7 +128,9 @@ int flecs_meta_serialize_array_component(
         return -1; /* Should never happen, will trigger internal error */
     }
 
-    flecs_meta_serialize_type(world, ptr->type, 0, ops);
+    if (flecs_meta_serialize_type(world, ptr->type, 0, ops) != 0) {
+        return -1;
+    }
 
     ecs_meta_type_op_t *first = ecs_vec_first(ops);
     first->count = ptr->count;
@@ -194,8 +196,9 @@ int flecs_meta_serialize_struct(
         ecs_member_t *member = &members[i];
 
         cur = ecs_vec_count(ops);
-        flecs_meta_serialize_type(world, 
-            member->type, offset + member->offset, ops);
+        if (flecs_meta_serialize_type(world, member->type, offset + member->offset, ops) != 0) {
+            continue;
+        }
 
         op = flecs_meta_ops_get(ops, cur);
         if (!op->type) {
@@ -216,7 +219,8 @@ int flecs_meta_serialize_struct(
                 member_name, 0, 0);
     }
 
-    flecs_meta_ops_add(ops, EcsOpPop);
+    ecs_meta_type_op_t *pop = flecs_meta_ops_add(ops, EcsOpPop);
+    pop->type = type;
     flecs_meta_ops_get(ops, first)->op_count = ecs_vec_count(ops) - first;
     return 0;
 }
@@ -228,10 +232,10 @@ int flecs_meta_serialize_type(
     ecs_size_t offset,
     ecs_vec_t *ops)
 {
-    const EcsMetaType *ptr = ecs_get(world, type, EcsMetaType);
+    const EcsType *ptr = ecs_get(world, type, EcsType);
     if (!ptr) {
-        char *path = ecs_get_fullpath(world, type);
-        ecs_err("missing EcsMetaType for type %s'", path);
+        char *path = ecs_get_path(world, type);
+        ecs_err("missing EcsType for type %s'", path);
         ecs_os_free(path);
         return -1;
     }
@@ -255,10 +259,10 @@ int flecs_meta_serialize_component(
     ecs_entity_t type,
     ecs_vec_t *ops)
 {
-    const EcsMetaType *ptr = ecs_get(world, type, EcsMetaType);
+    const EcsType *ptr = ecs_get(world, type, EcsType);
     if (!ptr) {
-        char *path = ecs_get_fullpath(world, type);
-        ecs_err("missing EcsMetaType for type %s'", path);
+        char *path = ecs_get_path(world, type);
+        ecs_err("missing EcsType for type %s'", path);
         ecs_os_free(path);
         return -1;
     }
@@ -282,8 +286,8 @@ void ecs_meta_type_serialized_init(
         ecs_vec_init_t(NULL, &ops, ecs_meta_type_op_t, 0);
         flecs_meta_serialize_component(world, e, &ops);
 
-        EcsMetaTypeSerialized *ptr = ecs_get_mut(
-            world, e, EcsMetaTypeSerialized);
+        EcsTypeSerializer *ptr = ecs_ensure(
+            world, e, EcsTypeSerializer);
         if (ptr->ops.array) {
             ecs_meta_dtor_serialized(ptr);
         }

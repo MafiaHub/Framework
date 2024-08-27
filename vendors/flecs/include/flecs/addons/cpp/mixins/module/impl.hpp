@@ -18,19 +18,19 @@ ecs_entity_t do_import(world& world, const char *symbol) {
 
     // Initialize module component type & don't allow it to be registered as a
     // tag, as this would prevent calling emplace()
-    auto m_c = component<T>(world, nullptr, false);
-    ecs_add_id(world, m_c, EcsModule);
+    auto c_ = component<T>(world, nullptr, false);
+    ecs_add_id(world, c_, EcsModule);
 
-    ecs_set_scope(world, m_c);
+    ecs_set_scope(world, c_);
     world.emplace<T>(world);
     ecs_set_scope(world, scope);
 
     // It should now be possible to lookup the module
-    ecs_entity_t m = ecs_lookup_symbol(world, symbol, true, false);
+    ecs_entity_t m = ecs_lookup_symbol(world, symbol, false, false);
     ecs_assert(m != 0, ECS_MODULE_UNDEFINED, symbol);
-    ecs_assert(m == m_c, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(m == c_, ECS_INTERNAL_ERROR, NULL);
 
-    ecs_log_pop();     
+    ecs_log_pop();
 
     return m;
 }
@@ -40,13 +40,13 @@ flecs::entity import(world& world) {
     const char *symbol = _::symbol_name<T>();
 
     ecs_entity_t m = ecs_lookup_symbol(world, symbol, true, false);
-    
-    if (!_::cpp_type<T>::registered(world)) {
+
+    if (!_::type<T>::registered(world)) {
 
         /* Module is registered with world, initialize static data */
         if (m) {
-            _::cpp_type<T>::init(m, false);
-        
+            _::type<T>::init(m, false);
+
         /* Module is not yet registered, register it now */
         } else {
             m = _::do_import<T>(world, symbol);
@@ -65,20 +65,20 @@ flecs::entity import(world& world) {
 
 /**
  * @defgroup cpp_addons_modules Modules
- * @brief Modules organize components, systems and more in reusable units of code.
- * 
- * \ingroup cpp_addons
+ * @ingroup cpp_addons
+ * Modules organize components, systems and more in reusable units of code.
+ *
  * @{
  */
 
 template <typename Module>
 inline flecs::entity world::module(const char *name) const {
-    flecs::id_t result = _::cpp_type<Module>::id(m_world, nullptr, false);
+    flecs::id_t result = _::type<Module>::id(world_, nullptr, false);
     if (name) {
-        ecs_add_path_w_sep(m_world, result, 0, name, "::", "::");
+        ecs_add_path_w_sep(world_, result, 0, name, "::", "::");
     }
-    ecs_set_scope(m_world, result);
-    return flecs::entity(m_world, result);
+    ecs_set_scope(world_, result);
+    return flecs::entity(world_, result);
 }
 
 template <typename Module>
