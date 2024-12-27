@@ -9,150 +9,166 @@
 #pragma once
 
 #include <chrono>
-#include <function2.hpp>
+#include <optional>
 #include <glm/ext.hpp>
+#include <cassert>
+
+namespace math {
+    float Unlerp(float from, float to, float pos);
+    float Unlerp(const std::chrono::high_resolution_clock::time_point& from,
+                 const std::chrono::high_resolution_clock::time_point& to,
+                 const std::chrono::high_resolution_clock::time_point& pos);
+    float UnlerpClamped(float from, float to, float pos);
+} // namespace math
 
 namespace Framework::Utils {
-    class Interpolator {
-      public:
+    // Forward declarations
+    template<typename T>
+    class InterpolationPolicy;
+
+    template<typename T, typename Policy = InterpolationPolicy<T>>
+    class ValueInterpolator {
+    public:
         using TimePoint = std::chrono::high_resolution_clock::time_point;
-        template <typename T>
-        class Value {
-          public:
-            explicit Value() {
-                _startTime  = TimePoint::max();
+        
+        ValueInterpolator(): 
+            _startTime(TimePoint::max()),
+            _finishTime(TimePoint::max()) {}
+
+        bool hasTargetValue() const {
+            return _finishTime != TimePoint::max();
+        }
+
+        virtual void setTargetValue(const T& current, const T& target, float delay) {
+            assert(delay >= 0.0f && "Delay must be non-negative");
+            
+            updateTargetValue(current);
+
+            _end = target;
+            _start = current;
+            _error = Policy::calculateError(current, target);
+
+            float contributionFactor = glm::mix(0.25f, 1.0f, 
+                math::UnlerpClamped(_delayMin, _delayMax, delay));
+            _error = Policy::scaleError(_error, contributionFactor);
+
+            _startTime = getCurrentTime();
+            _finishTime = _startTime + std::chrono::milliseconds(static_cast<int>(delay));
+            _lastAlpha = 0.0f;
+        }
+
+        virtual T updateTargetValue(const T& current) {
+            if (!hasTargetValue()) {
+                return current;
+            }
+
+            const auto currentTime = getCurrentTime();
+            float alpha = math::Unlerp(_startTime, _finishTime, currentTime);
+            alpha = std::clamp(alpha, 0.0f, _compensationFactor);
+
+            const auto currentAlpha = alpha - _lastAlpha;
+            _lastAlpha = alpha;
+
+            T newValue = Policy::interpolate(current, _error, currentAlpha);
+
+            if (alpha == _compensationFactor) {
                 _finishTime = TimePoint::max();
             }
-            virtual bool HasTargetValue() const {
-                return _finishTime != TimePoint::max();
-            };
 
-            /**
-             * Sets up interpolation for the current update stage.
-             * @param current
-             * @param target
-             * @param delay Time since the last update (ideally avg / tickrate)
-             */
-            virtual void SetTargetValue(const T &current, const T &target, float delay) = 0;
-
-            /**
-             * Calculates the currently interpolated value and advances interpolation.
-             * @param current
-             * @return
-             */
-            virtual T UpdateTargetValue(const T &current) = 0;
-
-            /**
-             * Sets up optimal update rate range, so that if we're closer to lower bound, we calculate smaller
-             * error compensation as opposed to higher bound rates.
-             * @param delayMin
-             * @param delayMax
-             */
-            void SetErrorContributionDelayRange(float delayMin, float delayMax) {
-                _delayMin = delayMin;
-                _delayMax = delayMax;
+            if (Policy::shouldSnap(newValue, _end)) {
+                _finishTime = TimePoint::max();
+                return _end;
             }
 
-            /**
-             * Sets compensation factor to improve calculation results during over-compensation.
-             * @param factor
-             */
-            void SetCompensationFactor(float factor) {
-                _compensationFactor = factor;
-            }
-
-            /**
-             * Used internally by unit tests to simulate the passage of time.
-             * @param debugTime
-             */
-            void SetDebugTime(int64_t debugTime);
-
-          protected:
-            T _start;
-            T _end;
-            T _error;
-            TimePoint _startTime;
-            TimePoint _finishTime;
-            float _lastAlpha          = 0.0f;
-            float _delayMin           = 100.f;
-            float _delayMax           = 400.f;
-            float _compensationFactor = 1.0f;
-            bool _debugEnabled        = false;
-            std::chrono::milliseconds _debugTime {};
-
-            TimePoint GetCurrentTime() const;
-        };
-
-        Value<glm::vec3> *GetPosition() {
-            return &_position;
+            return newValue;
         }
 
-        Value<glm::quat> *GetRotation() {
-            return &_rotation;
+        void setErrorContributionDelayRange(float delayMin, float delayMax) {
+            assert(delayMin <= delayMax && "Min delay must be less than or equal to max delay");
+            _delayMin = delayMin;
+            _delayMax = delayMax;
         }
 
-        Interpolator() {
-            _position.SetErrorContributionDelayRange(_delayMin, _delayMax);
-            _rotation.SetErrorContributionDelayRange(_delayMin, _delayMax);
+        void setCompensationFactor(float factor) {
+            assert(factor > 0.0f && "Compensation factor must be positive");
+            _compensationFactor = factor;
         }
 
-      protected:
-        class Position: public Value<glm::vec3> {
-          public:
-            Position() = default;
-            void SetTargetValue(const glm::vec3 &current, const glm::vec3 &target, float delay) override;
+        void setDebugTime(int64_t debugTime) {
+            _debugEnabled = true;
+            _debugTime = std::chrono::milliseconds(debugTime);
+        }
 
-            glm::vec3 UpdateTargetValue(const glm::vec3 &current) override;
+    protected:
+        TimePoint getCurrentTime() const {
+            return _debugEnabled ? 
+                _startTime + _debugTime : 
+                std::chrono::high_resolution_clock::now();
+        }
 
-            /**
-             * Set snap threshold when reaching target position. Used to finalize interpolation early, so that
-             * we avoid calculation errors caused by marginal distance.
-             * @param threshold
-             */
-            void SetSnapThreshold(float threshold) {
-                _snapThreshold = threshold;
-            }
+        T _start{};
+        T _end{};
+        T _error{};
+        TimePoint _startTime;
+        TimePoint _finishTime;
+        float _lastAlpha = 0.0f;
+        float _delayMin = 100.f;
+        float _delayMax = 400.f;
+        float _compensationFactor = 1.0f;
+        bool _debugEnabled = false;
+        std::chrono::milliseconds _debugTime{};
+    };
 
-          protected:
-            float _snapThreshold = 0.001f;
-        };
+    // Specializations declarations
+    template<>
+    class InterpolationPolicy<glm::vec3> {
+    public:
+        static constexpr float DEFAULT_SNAP_THRESHOLD = 0.001f;
+        
+        static glm::vec3 calculateError(const glm::vec3& current, const glm::vec3& target);
+        static glm::vec3 scaleError(const glm::vec3& error, float factor);
+        static glm::vec3 interpolate(const glm::vec3& current, const glm::vec3& error, float alpha);
+        static bool shouldSnap(const glm::vec3& current, const glm::vec3& target);
+    };
 
-        class Rotation: public Value<glm::quat> {
-          public:
-            Rotation() = default;
-            void SetTargetValue(const glm::quat &current, const glm::quat &target, float delay) override;
+    template<>
+    class InterpolationPolicy<glm::quat> {
+    public:
+        static glm::quat calculateError(const glm::quat& current, const glm::quat& target);
+        static glm::quat scaleError(const glm::quat& error, float factor);
+        static glm::quat interpolate(const glm::quat& current, const glm::quat& error, float alpha);
+        static bool shouldSnap(const glm::quat& current, const glm::quat& target);
+    };
 
-            glm::quat UpdateTargetValue(const glm::quat &current) override;
-        };
+    template<>
+    class InterpolationPolicy<float> {
+    public:
+        static constexpr float DEFAULT_SNAP_THRESHOLD = 0.001f;
+        
+        static float calculateError(float current, float target);
+        static float scaleError(float error, float factor);
+        static float interpolate(float current, float error, float alpha);
+        static bool shouldSnap(float current, float target);
+    };
 
-        class Scalar: public Value<float> {
-          public:
-            Scalar() = default;
-            void SetTargetValue(const float &current, const float &target, float delay) override;
+    class Interpolator final {
+    public:
+        using Position = ValueInterpolator<glm::vec3>;
+        using Rotation = ValueInterpolator<glm::quat>;
+        using Scalar = ValueInterpolator<float>;
 
-            float UpdateTargetValue(const float &current) override;
-        };
+        Interpolator();
+        Position* getPosition();
+        Rotation* getRotation();
+        Scalar* getScalar();
 
+    private:
         float _delayMin = 100.f;
         float _delayMax = 400.f;
 
-      private:
         Position _position;
         Rotation _rotation;
+        Scalar _scalar;
     };
 
-    template <typename T>
-    void Interpolator::Value<T>::SetDebugTime(int64_t debugTime) {
-        _debugEnabled = true;
-        _debugTime    = std::chrono::milliseconds(debugTime);
-    }
-    template <typename T>
-    Interpolator::TimePoint Interpolator::Value<T>::GetCurrentTime() const {
-        if (_debugEnabled) {
-            return _startTime + _debugTime;
-        }
-        else {
-            return std::chrono::high_resolution_clock::now();
-        }
-    }
 } // namespace Framework::Utils
