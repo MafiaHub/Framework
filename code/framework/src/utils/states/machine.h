@@ -12,43 +12,61 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 
 namespace Framework::Utils::States {
+    class StateTransitionError : public std::runtime_error {
+        using std::runtime_error::runtime_error;
+    };
+
     enum class Context {
         Enter,
         Update,
         Exit,
-        Next // This one does not keep calling, it requests going to the next one
+        Next
     };
 
     class Machine {
       private:
-        std::map<int32_t, std::shared_ptr<IState>> _states;
-
-        std::shared_ptr<IState> _currentState;
-        std::shared_ptr<IState> _nextState;
-
+        mutable std::mutex _mutex;
+        std::map<int32_t, std::unique_ptr<IState>> _states;
+        IState* _currentState;
+        IState* _nextState;
         Context _currentContext;
+        bool _isUpdating;
 
       public:
         Machine();
         ~Machine();
 
+        // Prevent copying
+        Machine(const Machine&) = delete;
+        Machine& operator=(const Machine&) = delete;
+
         bool RequestNextState(int32_t);
 
         template <typename T>
         void RegisterState() {
-            auto ptr = std::make_shared<T>();
-            _states.insert(std::make_pair(ptr->GetId(), ptr));
+            std::lock_guard<std::mutex> lock(_mutex);
+            auto ptr = std::make_unique<T>();
+            int32_t id = ptr->GetId();
+            
+            if (_states.find(id) != _states.end()) {
+                throw std::runtime_error("State ID already registered");
+            }
+            
+            _states.emplace(id, std::move(ptr));
         }
 
         bool Update();
 
-        std::shared_ptr<IState> GetCurrentState() const {
+        const IState* GetCurrentState() const {
+            std::lock_guard<std::mutex> lock(_mutex);
             return _currentState;
         }
 
-        std::shared_ptr<IState> GetNextState() const {
+        const IState* GetNextState() const {
+            std::lock_guard<std::mutex> lock(_mutex);
             return _nextState;
         }
     };
