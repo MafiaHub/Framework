@@ -8,6 +8,8 @@
 
 #include "interpolator.h"
 
+#include <algorithm>
+
 namespace math {
     float Unlerp(float from, float to, float pos) {
         if (std::abs(from - to) < std::numeric_limits<float>::epsilon()) {
