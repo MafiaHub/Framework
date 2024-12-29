@@ -73,13 +73,13 @@ int flecs_query_set_caching_policy(
     const ecs_query_desc_t *desc)
 {
     ecs_query_cache_kind_t kind = desc->cache_kind;
+    bool group_order_by = desc->group_by || desc->group_by_callback || 
+            desc->order_by || desc->order_by_callback;
 
     /* If caching policy is default, try to pick a policy that does the right
      * thing in most cases. */
     if (kind == EcsQueryCacheDefault) {
-        if (desc->entity || desc->group_by || desc->group_by_callback || 
-            desc->order_by || desc->order_by_callback)
-        {
+        if (desc->entity || group_order_by) {
             /* If the query is created with an entity handle (typically 
              * indicating that the query is named or belongs to a system) the
              * chance is very high that the query will be reused, so enable
@@ -127,8 +127,29 @@ int flecs_query_set_caching_policy(
             /* Same for when the query has no cacheable terms */
             impl->pub.cache_kind = EcsQueryCacheNone;
         } else {
-            /* Part of the query is cacheable */
-            impl->pub.cache_kind = EcsQueryCacheAuto;
+            /* Part of the query is cacheable. Make sure to only create a cache
+             * if the cacheable part of the query contains not just not/optional
+             * terms, as this would build a cache that contains all tables. */
+            int32_t not_optional_terms = 0, cacheable_terms = 0;
+            if (!group_order_by) {
+                int32_t i, term_count = impl->pub.term_count;
+                const ecs_term_t *terms = impl->pub.terms;
+                for (i = 0; i < term_count; i ++) {
+                    const ecs_term_t *term = &terms[i];
+                    if (term->flags_ & EcsTermIsCacheable) {
+                        cacheable_terms ++;
+                        if (term->oper == EcsNot || term->oper == EcsOptional) {
+                            not_optional_terms ++;
+                        }
+                    }
+                }
+            }
+
+            if (group_order_by || cacheable_terms != not_optional_terms) {
+                impl->pub.cache_kind = EcsQueryCacheAuto;
+            } else {
+                impl->pub.cache_kind = EcsQueryCacheNone;
+            }
         }
     }
 
@@ -190,6 +211,27 @@ int flecs_query_create_cache(
                 int8_t, FLECS_TERM_COUNT_MAX);
 
             ecs_os_memcpy_n(impl->cache->field_map, field_map, int8_t, dst_count);
+        }
+    } else {
+        /* Check if query has features that are unsupported for uncached */
+        ecs_assert(q->cache_kind == EcsQueryCacheNone, ECS_INTERNAL_ERROR, NULL);
+
+        if (!(q->flags & EcsQueryNested)) {
+            /* If uncached query is not create to populate a cached query, it 
+             * should not have cascade modifiers */
+            int32_t i, count = q->term_count;
+            ecs_term_t *terms = q->terms;
+            for (i = 0; i < count; i ++) {
+                ecs_term_t *term = &terms[i];
+                if (term->src.id & EcsCascade) {
+                    char *query_str = ecs_query_str(q);
+                    ecs_err(
+                        "cascade is unsupported for uncached query\n  %s",
+                        query_str);
+                    ecs_os_free(query_str);
+                    goto error;
+                }
+            }
         }
     }
 
@@ -486,5 +528,16 @@ int32_t ecs_query_match_count(
         return 0;
     } else {
         return impl->cache->match_count;
+    }
+}
+
+const ecs_query_t* ecs_query_get_cache_query(
+    const ecs_query_t *q)
+{
+    ecs_query_impl_t *impl = flecs_query_impl(q);
+    if (!impl->cache) {
+        return NULL;
+    } else {
+        return impl->cache->query;
     }
 }

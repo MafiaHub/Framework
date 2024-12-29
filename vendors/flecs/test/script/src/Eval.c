@@ -4063,8 +4063,6 @@ void Eval_multiline_string(void) {
         "Special characters }{\"\"'',\n"
     );
 
-    ecs_os_free(ptr->value);
-
     ecs_fini(world);
 }
 
@@ -7898,13 +7896,13 @@ ECS_CTOR(Strings, ptr, {
     ptr->a = NULL;
     ptr->b = NULL;
     strings_ctor_invoked ++;
-});
+})
 
 ECS_DTOR(Strings, ptr, {
     ecs_os_free(ptr->a);
     ecs_os_free(ptr->b);
     strings_dtor_invoked ++;
-});
+})
 
 ECS_MOVE(Strings, dst, src, {
     ecs_os_free(dst->a);
@@ -7914,7 +7912,7 @@ ECS_MOVE(Strings, dst, src, {
     src->a = NULL;
     dst->a = NULL;
     strings_move_invoked ++;
-});
+})
 
 ECS_COPY(Strings, dst, src, {
     ecs_os_free(dst->a);
@@ -7922,7 +7920,7 @@ ECS_COPY(Strings, dst, src, {
     dst->a = ecs_os_strdup(src->a);
     dst->b = ecs_os_strdup(src->b);
     strings_copy_invoked ++;
-});
+})
 
 void Eval_partial_assign_nontrivial(void) {
     ecs_world_t *world = ecs_init();
@@ -8240,4 +8238,40 @@ void Eval_non_trivial_var_with(void) {
     test_int(strings_dtor_invoked, 3);
     test_int(strings_copy_invoked, 2);
     test_int(strings_move_invoked, 0);
+}
+
+void Eval_update_template_w_tag(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Bar);
+
+    const char *expr =
+    HEAD "Foo {}"
+    LINE
+    LINE "template Bar {"
+    LINE "  Foo"
+    LINE "}"
+    LINE
+    LINE "Bar e()";
+
+    ecs_entity_t s = ecs_script(world, {
+        .entity = ecs_entity(world, { .name = "main" }),
+        .code = expr
+    });
+    test_assert(s != 0);
+
+    test_assert(ecs_script_update(world, s, 0, expr) == 0);
+
+    ecs_entity_t foo = ecs_lookup(world, "Foo");
+    ecs_entity_t bar = ecs_lookup(world, "Bar");
+    ecs_entity_t e = ecs_lookup(world, "e");
+
+    test_assert(foo != 0);
+    test_assert(bar != 0);
+    test_assert(e != 0);
+
+    test_assert(ecs_has_id(world, e, foo));
+    test_assert(ecs_has_id(world, e, bar));
+
+    ecs_fini(world);
 }

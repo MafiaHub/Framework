@@ -2,9 +2,9 @@
 This document provides a quick overview of the different features and concepts in Flecs with short examples. This is a good resource if you're just getting started or just want to get a better idea of what kind of features are available in Flecs!
 
 ## Building Flecs
-To use Flecs, copy the [flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/flecs.c) and [flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/flecs.h) files from the repository root to your project's source folder. When building, make sure your build system is setup to do the following:
+To use Flecs, copy the [distr/flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) and [distr/flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.h) files from the [distr folder](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr) to your project's source folder. When building, make sure your build system is setup to do the following:
 
-- If it is a C++ project, make sure to compile [flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/flecs.c) as C code, for example by using `gcc`/`clang` instead of `g++`/`clang++`.
+- If it is a C++ project, make sure to compile [distr/flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) as C code, for example by using `gcc`/`clang` instead of `g++`/`clang++`.
 
 - If you are building on Windows and you're not using the Microsoft Visual Studio compiler, make sure to add `-lWs2_32` to **the end(!)** of the linker command. The socket API is used for connecting to Flecs explorer.
 
@@ -13,13 +13,13 @@ To use Flecs, copy the [flecs.c](https://raw.githubusercontent.com/SanderMertens
 - C++ files that use Flecs must be compiled with `-std=c++0x` (C++11) or higher.
 
 ### Dynamic linking
-To build Flecs as a dynamic library, remove this line from the top of the [flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/flecs.h) file:
+To build Flecs as a dynamic library, remove this line from the top of the [distr/flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.h) file:
 
 ```c
 #define flecs_STATIC
 ```
 
-When compiling [flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/flecs.c), make sure to define `flecs_EXPORTS`, for example by adding `-Dflecs_EXPORTS` to the compiler command.
+When compiling [distr/flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c), make sure to define `flecs_EXPORTS`, for example by adding `-Dflecs_EXPORTS` to the compiler command.
 
 Alternatively Flecs can also be built as a dynamic library with the cmake, meson, bazel or [bake](https://github.com/SanderMertens/bake) build files provided in the repository. These use the files from `src` to build as opposed to the amalgamated files, which is better suited for development.
 
@@ -46,7 +46,7 @@ Run the following commands to run all tests (use `-j` to specify the number of t
 
 ```bash
 # Core test suite
-bake run test/api -- -j 4
+bake run test/core -- -j 4
 
 # Addon tests
 bake run test/addons -- -j 4
@@ -55,7 +55,7 @@ bake run test/addons -- -j 4
 bake run test/meta -- -j 4
 
 # C++ tests
-bake run test/cpp_api -- -j 4
+bake run test/cpp -- -j 4
 ```
 
 To run tests with asan enabled, add `--cfg sanitize` to the command:
@@ -1511,7 +1511,7 @@ move_sys.run();
 
 ```cs
 // Use Each() function that iterates each individual entity
-Routine moveSys = world.Routine<Position, Velocity>()
+System<Position, Velocity> moveSys = world.System<Position, Velocity>()
     .Each((Entity e, ref Position p, ref Velocity v) =>
     {
         p.X += v.X * it.DeltaTime();
@@ -1670,9 +1670,9 @@ world.progress();
 <li><b class="tab-title">C#</b>
 
 ```cs
-world.Routine<Position, Velocity>("Move").Kind(Ecs.OnUpdate).Each( ... );
-world.Routine<Position, Transform>("Transform").Kind(Ecs.PostUpdate).Each( ... );
-world.Routine<Transform, Mesh>("Render").Kind(Ecs.OnStore).Each( ... );
+world.System<Position, Velocity>("Move").Kind(Ecs.OnUpdate).Each( ... );
+world.System<Position, Transform>("Transform").Kind(Ecs.PostUpdate).Each( ... );
+world.System<Transform, Mesh>("Render").Kind(Ecs.OnStore).Each( ... );
 
 world.Progress();
 ```

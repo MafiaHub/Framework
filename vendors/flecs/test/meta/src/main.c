@@ -75,6 +75,7 @@ void EnumTypes_struct_w_enum(void);
 void EnumTypes_zero_initialized(void);
 void EnumTypes_enum_relation(void);
 void EnumTypes_enum_w_short_notation(void);
+void EnumTypes_enum_modified_event(void);
 
 // Testsuite 'BitmaskTypes'
 void BitmaskTypes_bitmask_1_constant(void);
@@ -84,6 +85,47 @@ void BitmaskTypes_bitmask_4_constants(void);
 void BitmaskTypes_bitmask_4_constants_manual_values(void);
 void BitmaskTypes_struct_w_bitmask(void);
 void BitmaskTypes_bitmask_w_short_notation(void);
+
+// Testsuite 'RuntimeTypes'
+void RuntimeTypes_trivial_struct(void);
+void RuntimeTypes_ctor(void);
+void RuntimeTypes_dtor(void);
+void RuntimeTypes_move(void);
+void RuntimeTypes_copy(void);
+void RuntimeTypes_trivial_array(void);
+void RuntimeTypes_array_ctor(void);
+void RuntimeTypes_array_dtor(void);
+void RuntimeTypes_array_move(void);
+void RuntimeTypes_array_copy(void);
+void RuntimeTypes_vector_lifecycle(void);
+void RuntimeTypes_vector_lifecycle_trivial_type(void);
+void RuntimeTypes_opaque(void);
+void RuntimeTypes_struct_with_ints(void);
+void RuntimeTypes_struct_with_strings(void);
+void RuntimeTypes_struct_with_opaque(void);
+void RuntimeTypes_nested_struct_with_strings(void);
+void RuntimeTypes_struct_with_array_of_strings(void);
+void RuntimeTypes_struct_with_array_of_array_of_strings(void);
+void RuntimeTypes_struct_with_vector_of_ints(void);
+void RuntimeTypes_struct_with_vector_of_strings(void);
+void RuntimeTypes_nested_struct_with_vector_of_ints(void);
+void RuntimeTypes_nested_struct_with_vector_of_strings(void);
+void RuntimeTypes_array_of_ints(void);
+void RuntimeTypes_array_of_strings(void);
+void RuntimeTypes_array_of_struct_with_ints(void);
+void RuntimeTypes_array_of_struct_with_strings(void);
+void RuntimeTypes_array_of_struct_with_opaques(void);
+void RuntimeTypes_array_of_array_of_strings(void);
+void RuntimeTypes_array_of_array_of_struct_with_strings(void);
+void RuntimeTypes_array_of_vectors_of_ints(void);
+void RuntimeTypes_array_of_vectors_of_strings(void);
+void RuntimeTypes_array_of_opaque(void);
+void RuntimeTypes_vector_of_ints(void);
+void RuntimeTypes_vector_of_strings(void);
+void RuntimeTypes_vector_of_struct_with_ints(void);
+void RuntimeTypes_vector_of_struct_with_strings(void);
+void RuntimeTypes_vector_of_arrays_of_strings(void);
+void RuntimeTypes_vector_of_opaque(void);
 
 // Testsuite 'StructTypes'
 void StructTypes_i32(void);
@@ -362,7 +404,7 @@ void Cursor_opaque_set_char(void);
 void Cursor_opaque_set_int(void);
 void Cursor_opaque_set_uint(void);
 void Cursor_opaque_set_float(void);
-void Cursor_opaque_set_string(void);
+void Cursor_opaque_get_set_string(void);
 void Cursor_opaque_set_entity(void);
 void Cursor_opaque_set_id(void);
 void Cursor_opaque_set_int_vec(void);
@@ -593,6 +635,9 @@ void SerializeEntityToJson_serialize_w_name_1_tag(void);
 void SerializeEntityToJson_serialize_w_name_2_tags(void);
 void SerializeEntityToJson_serialize_w_name_1_pair(void);
 void SerializeEntityToJson_serialize_w_base(void);
+void SerializeEntityToJson_serialize_w_base_dont_inherit_tag(void);
+void SerializeEntityToJson_serialize_w_base_dont_inherit_component(void);
+void SerializeEntityToJson_serialize_w_base_dont_inherit_pair(void);
 void SerializeEntityToJson_serialize_w_2_base(void);
 void SerializeEntityToJson_serialize_component_w_base(void);
 void SerializeEntityToJson_serialize_component_w_base_no_reflection_data(void);
@@ -649,6 +694,14 @@ void SerializeEntityToJson_serialize_sparse_mixed(void);
 void SerializeEntityToJson_serialize_sparse_inherited(void);
 void SerializeEntityToJson_serialize_sparse_inherited_pair(void);
 void SerializeEntityToJson_serialize_sparse_inherited_mixed(void);
+void SerializeEntityToJson_serialize_sparse_w_type_info(void);
+void SerializeEntityToJson_serialize_auto_override_w_inherited(void);
+void SerializeEntityToJson_serialize_auto_override(void);
+void SerializeEntityToJson_serialize_auto_override_pair(void);
+void SerializeEntityToJson_serialize_auto_override_fullpath(void);
+void SerializeEntityToJson_serialize_auto_override_pair_fullpath(void);
+void SerializeEntityToJson_serialize_toggle(void);
+void SerializeEntityToJson_serialize_toggle_pair(void);
 
 // Testsuite 'SerializeIterToJson'
 void SerializeIterToJson_serialize_1_comps_empty(void);
@@ -722,6 +775,11 @@ void SerializeIterToJson_no_fields(void);
 void SerializeIterToJson_no_fields_w_vars(void);
 void SerializeIterToJson_serialize_from_stage(void);
 void SerializeIterToJson_serialize_sparse(void);
+void SerializeIterToJson_serialize_15_fields(void);
+void SerializeIterToJson_serialize_16_fields(void);
+void SerializeIterToJson_serialize_31_fields(void);
+void SerializeIterToJson_serialize_32_fields(void);
+void SerializeIterToJson_serialize_field_w_escaped_sep(void);
 
 // Testsuite 'SerializeIterToRowJson'
 void SerializeIterToRowJson_serialize_this_w_1_tag(void);
@@ -853,6 +911,8 @@ void SerializeQueryInfoToJson_anonymous_component(void);
 void SerializeQueryInfoToJson_anonymous_tag_recycled(void);
 void SerializeQueryInfoToJson_anonymous_pair_recycled(void);
 void SerializeQueryInfoToJson_anonymous_component_recycled(void);
+void SerializeQueryInfoToJson_serialize_plan_trivial_query(void);
+void SerializeQueryInfoToJson_serialize_plan_nontrivial_query(void);
 
 // Testsuite 'MetaUtils'
 void MetaUtils_struct_w_2_i32(void);
@@ -896,6 +956,7 @@ void OpaqueTypes_deser_entity_from_json(void);
 void OpaqueTypes_ser_deser_world_w_ser_opaque(void);
 void OpaqueTypes_ser_deser_entity(void);
 void OpaqueTypes_ser_deser_0_entity(void);
+void OpaqueTypes_const_string(void);
 
 // Testsuite 'Misc'
 void Misc_primitive_from_stage(void);
@@ -1198,6 +1259,10 @@ bake_test_case EnumTypes_testcases[] = {
     {
         "enum_w_short_notation",
         EnumTypes_enum_w_short_notation
+    },
+    {
+        "enum_modified_event",
+        EnumTypes_enum_modified_event
     }
 };
 
@@ -1229,6 +1294,165 @@ bake_test_case BitmaskTypes_testcases[] = {
     {
         "bitmask_w_short_notation",
         BitmaskTypes_bitmask_w_short_notation
+    }
+};
+
+bake_test_case RuntimeTypes_testcases[] = {
+    {
+        "trivial_struct",
+        RuntimeTypes_trivial_struct
+    },
+    {
+        "ctor",
+        RuntimeTypes_ctor
+    },
+    {
+        "dtor",
+        RuntimeTypes_dtor
+    },
+    {
+        "move",
+        RuntimeTypes_move
+    },
+    {
+        "copy",
+        RuntimeTypes_copy
+    },
+    {
+        "trivial_array",
+        RuntimeTypes_trivial_array
+    },
+    {
+        "array_ctor",
+        RuntimeTypes_array_ctor
+    },
+    {
+        "array_dtor",
+        RuntimeTypes_array_dtor
+    },
+    {
+        "array_move",
+        RuntimeTypes_array_move
+    },
+    {
+        "array_copy",
+        RuntimeTypes_array_copy
+    },
+    {
+        "vector_lifecycle",
+        RuntimeTypes_vector_lifecycle
+    },
+    {
+        "vector_lifecycle_trivial_type",
+        RuntimeTypes_vector_lifecycle_trivial_type
+    },
+    {
+        "opaque",
+        RuntimeTypes_opaque
+    },
+    {
+        "struct_with_ints",
+        RuntimeTypes_struct_with_ints
+    },
+    {
+        "struct_with_strings",
+        RuntimeTypes_struct_with_strings
+    },
+    {
+        "struct_with_opaque",
+        RuntimeTypes_struct_with_opaque
+    },
+    {
+        "nested_struct_with_strings",
+        RuntimeTypes_nested_struct_with_strings
+    },
+    {
+        "struct_with_array_of_strings",
+        RuntimeTypes_struct_with_array_of_strings
+    },
+    {
+        "struct_with_array_of_array_of_strings",
+        RuntimeTypes_struct_with_array_of_array_of_strings
+    },
+    {
+        "struct_with_vector_of_ints",
+        RuntimeTypes_struct_with_vector_of_ints
+    },
+    {
+        "struct_with_vector_of_strings",
+        RuntimeTypes_struct_with_vector_of_strings
+    },
+    {
+        "nested_struct_with_vector_of_ints",
+        RuntimeTypes_nested_struct_with_vector_of_ints
+    },
+    {
+        "nested_struct_with_vector_of_strings",
+        RuntimeTypes_nested_struct_with_vector_of_strings
+    },
+    {
+        "array_of_ints",
+        RuntimeTypes_array_of_ints
+    },
+    {
+        "array_of_strings",
+        RuntimeTypes_array_of_strings
+    },
+    {
+        "array_of_struct_with_ints",
+        RuntimeTypes_array_of_struct_with_ints
+    },
+    {
+        "array_of_struct_with_strings",
+        RuntimeTypes_array_of_struct_with_strings
+    },
+    {
+        "array_of_struct_with_opaques",
+        RuntimeTypes_array_of_struct_with_opaques
+    },
+    {
+        "array_of_array_of_strings",
+        RuntimeTypes_array_of_array_of_strings
+    },
+    {
+        "array_of_array_of_struct_with_strings",
+        RuntimeTypes_array_of_array_of_struct_with_strings
+    },
+    {
+        "array_of_vectors_of_ints",
+        RuntimeTypes_array_of_vectors_of_ints
+    },
+    {
+        "array_of_vectors_of_strings",
+        RuntimeTypes_array_of_vectors_of_strings
+    },
+    {
+        "array_of_opaque",
+        RuntimeTypes_array_of_opaque
+    },
+    {
+        "vector_of_ints",
+        RuntimeTypes_vector_of_ints
+    },
+    {
+        "vector_of_strings",
+        RuntimeTypes_vector_of_strings
+    },
+    {
+        "vector_of_struct_with_ints",
+        RuntimeTypes_vector_of_struct_with_ints
+    },
+    {
+        "vector_of_struct_with_strings",
+        RuntimeTypes_vector_of_struct_with_strings
+    },
+    {
+        "vector_of_arrays_of_strings",
+        RuntimeTypes_vector_of_arrays_of_strings
+    },
+    {
+        "vector_of_opaque",
+        RuntimeTypes_vector_of_opaque
     }
 };
 
@@ -2308,8 +2532,8 @@ bake_test_case Cursor_testcases[] = {
         Cursor_opaque_set_float
     },
     {
-        "opaque_set_string",
-        Cursor_opaque_set_string
+        "opaque_get_set_string",
+        Cursor_opaque_get_set_string
     },
     {
         "opaque_set_entity",
@@ -3217,6 +3441,18 @@ bake_test_case SerializeEntityToJson_testcases[] = {
         SerializeEntityToJson_serialize_w_base
     },
     {
+        "serialize_w_base_dont_inherit_tag",
+        SerializeEntityToJson_serialize_w_base_dont_inherit_tag
+    },
+    {
+        "serialize_w_base_dont_inherit_component",
+        SerializeEntityToJson_serialize_w_base_dont_inherit_component
+    },
+    {
+        "serialize_w_base_dont_inherit_pair",
+        SerializeEntityToJson_serialize_w_base_dont_inherit_pair
+    },
+    {
         "serialize_w_2_base",
         SerializeEntityToJson_serialize_w_2_base
     },
@@ -3439,6 +3675,38 @@ bake_test_case SerializeEntityToJson_testcases[] = {
     {
         "serialize_sparse_inherited_mixed",
         SerializeEntityToJson_serialize_sparse_inherited_mixed
+    },
+    {
+        "serialize_sparse_w_type_info",
+        SerializeEntityToJson_serialize_sparse_w_type_info
+    },
+    {
+        "serialize_auto_override_w_inherited",
+        SerializeEntityToJson_serialize_auto_override_w_inherited
+    },
+    {
+        "serialize_auto_override",
+        SerializeEntityToJson_serialize_auto_override
+    },
+    {
+        "serialize_auto_override_pair",
+        SerializeEntityToJson_serialize_auto_override_pair
+    },
+    {
+        "serialize_auto_override_fullpath",
+        SerializeEntityToJson_serialize_auto_override_fullpath
+    },
+    {
+        "serialize_auto_override_pair_fullpath",
+        SerializeEntityToJson_serialize_auto_override_pair_fullpath
+    },
+    {
+        "serialize_toggle",
+        SerializeEntityToJson_serialize_toggle
+    },
+    {
+        "serialize_toggle_pair",
+        SerializeEntityToJson_serialize_toggle_pair
     }
 };
 
@@ -3726,6 +3994,26 @@ bake_test_case SerializeIterToJson_testcases[] = {
     {
         "serialize_sparse",
         SerializeIterToJson_serialize_sparse
+    },
+    {
+        "serialize_15_fields",
+        SerializeIterToJson_serialize_15_fields
+    },
+    {
+        "serialize_16_fields",
+        SerializeIterToJson_serialize_16_fields
+    },
+    {
+        "serialize_31_fields",
+        SerializeIterToJson_serialize_31_fields
+    },
+    {
+        "serialize_32_fields",
+        SerializeIterToJson_serialize_32_fields
+    },
+    {
+        "serialize_field_w_escaped_sep",
+        SerializeIterToJson_serialize_field_w_escaped_sep
     }
 };
 
@@ -4235,6 +4523,14 @@ bake_test_case SerializeQueryInfoToJson_testcases[] = {
     {
         "anonymous_component_recycled",
         SerializeQueryInfoToJson_anonymous_component_recycled
+    },
+    {
+        "serialize_plan_trivial_query",
+        SerializeQueryInfoToJson_serialize_plan_trivial_query
+    },
+    {
+        "serialize_plan_nontrivial_query",
+        SerializeQueryInfoToJson_serialize_plan_nontrivial_query
     }
 };
 
@@ -4397,6 +4693,10 @@ bake_test_case OpaqueTypes_testcases[] = {
     {
         "ser_deser_0_entity",
         OpaqueTypes_ser_deser_0_entity
+    },
+    {
+        "const_string",
+        OpaqueTypes_const_string
     }
 };
 
@@ -4576,7 +4876,7 @@ static bake_test_suite suites[] = {
         "EnumTypes",
         NULL,
         NULL,
-        8,
+        9,
         EnumTypes_testcases
     },
     {
@@ -4585,6 +4885,13 @@ static bake_test_suite suites[] = {
         NULL,
         7,
         BitmaskTypes_testcases
+    },
+    {
+        "RuntimeTypes",
+        NULL,
+        NULL,
+        39,
+        RuntimeTypes_testcases
     },
     {
         "StructTypes",
@@ -4653,14 +4960,14 @@ static bake_test_suite suites[] = {
         "SerializeEntityToJson",
         NULL,
         NULL,
-        62,
+        73,
         SerializeEntityToJson_testcases
     },
     {
         "SerializeIterToJson",
         NULL,
         NULL,
-        71,
+        76,
         SerializeIterToJson_testcases
     },
     {
@@ -4681,7 +4988,7 @@ static bake_test_suite suites[] = {
         "SerializeQueryInfoToJson",
         NULL,
         NULL,
-        25,
+        27,
         SerializeQueryInfoToJson_testcases
     },
     {
@@ -4695,7 +5002,7 @@ static bake_test_suite suites[] = {
         "OpaqueTypes",
         NULL,
         NULL,
-        17,
+        18,
         OpaqueTypes_testcases
     },
     {
@@ -4708,5 +5015,5 @@ static bake_test_suite suites[] = {
 };
 
 int main(int argc, char *argv[]) {
-    return bake_test_run("meta", argc, argv, suites, 20);
+    return bake_test_run("meta", argc, argv, suites, 21);
 }

@@ -261,6 +261,99 @@ void World_entity_range_add_out_of_range_staged(void) {
     ecs_fini(world);
 }
 
+void World_entity_range_offset_0(void) {
+    ecs_world_t *world = ecs_mini();
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    test_assert(info != NULL);
+
+    ecs_set_entity_range(world, 0, 1000);
+
+    test_uint(info->min_id, ecs_get_max_id(world) + 1);
+    test_uint(info->max_id, 1000);
+
+    ecs_fini(world);
+}
+
+void World_entity_range_set_limit_to_lower(void) {
+    ecs_world_t *world = ecs_mini();
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    test_assert(info != NULL);
+
+    ecs_set_entity_range(world, 0, 2000);
+
+    test_uint(info->max_id, 2000);
+
+    ecs_set_entity_range(world, 0, 1000);
+
+    test_uint(info->max_id, 1000);
+
+    ecs_fini(world);
+}
+
+void World_entity_range_set_limit_to_lower_than_offset(void) {
+    ecs_world_t *world = ecs_mini();
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    test_assert(info != NULL);
+
+    ecs_set_entity_range(world, 2000, 3000);
+
+    test_uint(info->max_id, 3000);
+
+    ecs_set_entity_range(world, 0, 1000);
+
+    test_uint(info->max_id, 1000);
+
+    ecs_fini(world);
+}
+
+void World_entity_range_overlapping_new_id(void) {
+    install_test_abort();
+
+    ecs_world_t *world = ecs_mini();
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    test_assert(info != NULL);
+
+    ecs_set_entity_range(world, 2000, 3000);
+    test_uint(info->max_id, 3000);
+
+    ecs_entity_t e1 = ecs_new(world);
+    test_assert(e1 == 2000);
+
+    ecs_set_entity_range(world, 1999, 0);
+
+    ecs_entity_t e2 = ecs_new(world);
+    test_assert(e2 == 1999);
+
+    test_expect_abort();
+    ecs_new(world);
+}
+
+void World_entity_range_overlapping_new_bulk_id(void) {
+    install_test_abort();
+
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    const ecs_world_info_t *info = ecs_get_world_info(world);
+    test_assert(info != NULL);
+
+    ecs_set_entity_range(world, 2000, 3000);
+    test_uint(info->max_id, 3000);
+
+    ecs_entity_t e1 = ecs_new(world);
+    test_assert(e1 == 2000);
+
+    ecs_set_entity_range(world, 1999, 0);
+
+    test_expect_abort();
+    ecs_bulk_new(world, Position, 2);
+}
+
 void World_get_tick(void) {
     ecs_world_t *world = ecs_init();
 
@@ -1607,4 +1700,85 @@ void World_get_entities(void) {
     }
 
     ecs_fini(world);
+}
+
+static
+int post_frame_action_invoked = 0;
+
+static
+void post_frame_action(
+    ecs_world_t *world, 
+    void *ctx) 
+{
+    test_int(*(int*)ctx, 10);
+    post_frame_action_invoked ++;
+}
+
+void World_run_post_frame(void) {
+    ecs_world_t *world = ecs_mini();
+    
+    ecs_frame_begin(world, 0);
+
+    int ctx = 10;
+    ecs_run_post_frame(world, post_frame_action, &ctx);
+
+    test_int(post_frame_action_invoked, 0);
+    ecs_frame_end(world);
+    test_int(post_frame_action_invoked, 1);
+
+    ecs_fini(world);
+}
+
+void World_run_post_frame_outside_of_frame(void) {
+    install_test_abort();
+
+    ecs_world_t *world = ecs_mini();
+    
+    test_expect_abort();
+    int ctx = 10;
+    ecs_run_post_frame(world, post_frame_action, &ctx);
+}
+
+void World_get_flags(void) {
+    ecs_world_t *world = ecs_mini();
+
+    test_assert(!(ecs_world_get_flags(world) & EcsWorldFrameInProgress));
+
+    ecs_frame_begin(world, 0);
+
+    test_assert((ecs_world_get_flags(world) & EcsWorldFrameInProgress));
+
+    ecs_frame_end(world);
+
+    test_assert(!(ecs_world_get_flags(world) & EcsWorldFrameInProgress));
+
+    ecs_fini(world);
+}
+
+void World_fini_queue_overflow(void) {
+    /* This test verifies command flushing happens in batches during
+    world fini to avoid overflowing the vector holding the
+    command queue */
+
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    /* create a prefab entity: */
+    ecs_entity_t prefab = ecs_new(world);
+    ecs_add_id(world, prefab, EcsPrefab);
+    ecs_add_id(world, prefab, ecs_id(Position));
+
+    /* Create a large amount of entities. A number greater than 16777216,
+     2^30 / sizeof(ecs_cmd_t) would overflow the command queue vector */
+
+    ecs_bulk_init(world, &(ecs_bulk_desc_t) {
+        .count = 17000000,
+        .ids = { ecs_isa(prefab) }
+    });
+
+    /* on world fini, all entities must be destroyed in batches. */
+    ecs_fini(world);
+    
+    test_assert(true); /* if ecs_fini did not crash we're good */
 }

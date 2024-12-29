@@ -263,7 +263,8 @@
                 "partial_assign_nontrivial_with",
                 "partial_assign_with_large_array",
                 "non_trivial_var_component",
-                "non_trivial_var_with"
+                "non_trivial_var_with",
+                "update_template_w_tag"
             ]
         }, {
             "id": "Template",
@@ -301,7 +302,9 @@
                 "anonymous_template_instance",
                 "anonymous_template_instance_no_scope",
                 "anonymous_template_instance_w_prop",
-                "anonymous_template_instance_w_prop_no_scope"
+                "anonymous_template_instance_w_prop_no_scope",
+                "with_after_template",
+                "with_in_scope_after_template"
             ]
         }, {
             "id": "Error",
@@ -320,6 +323,7 @@
                 "invalid_oneof",
                 "default_type_with_tag",
                 "unterminated_multiline_string",
+                "invalid_assign_multiline_string",
                 "const_var_redeclare",
                 "typed_const_w_composite_type_invalid_assignment",
                 "unterminated_multi_line_comment_in_value",

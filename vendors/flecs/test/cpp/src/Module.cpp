@@ -68,6 +68,42 @@ public:
 
 }
 
+class ReparentRootModule {
+public:
+    ReparentRootModule(flecs::world& world) {
+        world.module<ReparentRootModule>("ns::ReparentRootModule");
+    }
+};
+
+namespace ns_parent {
+    struct NsType {
+        float x;
+    };
+
+    struct ShorterParent {
+        ShorterParent(flecs::world& world) {
+            world.module<ShorterParent>("ns::ShorterParent");
+            world.component<NsType>();
+        }
+    };
+
+    struct LongerParent {
+        LongerParent(flecs::world& world) {
+            world.module<LongerParent>("ns_parent_namespace::LongerParent");
+            world.component<NsType>();
+        }
+    };
+
+    namespace ns_child {
+        struct Nested {
+            Nested(flecs::world& world) {
+                world.module<Nested>("ns::child::Nested");
+                world.component<NsType>();
+            }
+        };
+    }
+}
+
 struct Module {
     Module(flecs::world& world) {
         world.module<Module>();
@@ -406,4 +442,67 @@ void Module_implicitly_add_module_to_scopes_entity(void) {
 
     current = current.parent();
     test_assert(current.id() == 0);
+}
+
+void Module_rename_namespace_shorter(void) {
+    flecs::world ecs;
+
+    auto m = ecs.import<ns_parent::ShorterParent>();
+    test_assert(m.has(flecs::Module));
+    test_str(m.path(), "::ns::ShorterParent");
+    test_assert(ecs.lookup("::ns_parent") == 0);
+    test_assert(ecs.lookup("::ns_parent::ShorterParent") == 0);
+    test_assert(ecs.lookup("::ns_parent::ShorterParent::NsType") == 0);
+    test_assert(ecs.lookup("::ns::ShorterParent::NsType") != 0);
+
+    auto ns = ecs.lookup("::ns");
+    test_assert(ns != 0);
+    test_assert(ns.has(flecs::Module));
+}
+
+void Module_rename_namespace_longer(void) {
+    flecs::world ecs;
+
+    auto m = ecs.import<ns_parent::LongerParent>();
+    test_assert(m.has(flecs::Module));
+    test_str(m.path(), "::ns_parent_namespace::LongerParent");
+    test_assert(ecs.lookup("::ns_parent") == 0);
+    test_assert(ecs.lookup("::ns_parent::LongerParent") == 0);
+    test_assert(ecs.lookup("::ns_parent::LongerParent::NsType") == 0);
+    test_assert(ecs.lookup("::ns_parent_namespace::LongerParent::NsType") != 0);
+
+    auto ns = ecs.lookup("::ns_parent_namespace");
+    test_assert(ns != 0);
+    test_assert(ns.has(flecs::Module));
+}
+
+void Module_rename_namespace_nested(void) {
+    flecs::world ecs;
+
+    auto m = ecs.import<ns_parent::ns_child::Nested>();
+    test_assert(m.has(flecs::Module));
+    test_str(m.path(), "::ns::child::Nested");
+    test_assert(ecs.lookup("::ns::child::Nested::NsType") != 0);
+    test_assert(ecs.lookup("::ns_parent::ns_child::Nested::NsType") == 0);
+    test_assert(ecs.lookup("::ns_parent::ns_child::Nested") == 0);
+    test_assert(ecs.lookup("::ns_parent::ns_child") == 0);
+    test_assert(ecs.lookup("::ns_parent") == 0);
+
+    auto ns = ecs.lookup("::ns");
+    test_assert(ns != 0);
+    test_assert(ns.has(flecs::Module));
+
+    auto ns_child = ecs.lookup("::ns::child");
+    test_assert(ns_child != 0);
+    test_assert(ns_child.has(flecs::Module));
+}
+
+void Module_rename_reparent_root_module(void) {
+    flecs::world ecs;
+
+    flecs::entity m = ecs.import<ReparentRootModule>();
+    flecs::entity p = m.parent();
+    test_assert(p != 0);
+    test_str(p.name(), "ns");
+    test_str(m.name(), "ReparentRootModule");
 }

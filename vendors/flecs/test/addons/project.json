@@ -18,11 +18,13 @@
                 "get_set_brief",
                 "get_set_detail",
                 "get_set_link",
+                "get_set_uuid",
                 "set_name_nullptr",
                 "set_brief_nullptr",
                 "set_detail_nullptr",
                 "set_link_nullptr",
-                "set_color_nullptr"
+                "set_color_nullptr",
+                "set_uuid_nullptr"
             ]
         }, {
             "id": "Pipeline",
@@ -109,7 +111,9 @@
                 "run_pipeline_multithreaded_tasks",
                 "pipeline_init_no_terms",
                 "pipeline_init_no_system_term",
-                "disable_component_from_immediate_system"
+                "disable_component_from_immediate_system",
+                "run_w_empty_query",
+                "run_w_0_src_query"
             ]
         }, {
             "id": "SystemMisc",
@@ -129,7 +133,7 @@
                 "invalid_entity_id",
                 "invalid_null_string",
                 "invalid_empty_string",
-                "invalid_empty_string_w_space",        
+                "invalid_empty_string_w_space",
                 "redefine_row_system",
                 "system_w_or_prefab",
                 "system_w_or_disabled",
@@ -176,6 +180,7 @@
                 "update_interval_w_system_init",
                 "update_rate_w_system_init",
                 "system_w_interval_rate_stop_timer",
+                "system_w_rate_filter_self",
                 "system_same_interval_same_tick",
                 "system_no_id_in_scope",
                 "register_callback_after_run",
@@ -344,7 +349,8 @@
                 "get_entity_count",
                 "get_pipeline_stats_w_task_system",
                 "get_not_alive_entity_count",
-                "progress_stats_systems"
+                "progress_stats_systems",
+                "progress_stats_systems_w_empty_table_flag"
             ]
         }, {
             "id": "Run",
@@ -499,7 +505,9 @@
                 "request_commands_garbage_collect",
                 "script_error",
                 "import_rest_after_mini",
-                "get_pipeline_stats_after_delete_system"
+                "get_pipeline_stats_after_delete_system",
+                "request_world_summary_before_monitor_sys_run",
+                "escape_backslash"
             ]
         }, {
             "id": "Metrics",

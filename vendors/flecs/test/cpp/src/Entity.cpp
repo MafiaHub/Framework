@@ -4772,3 +4772,94 @@ void Entity_emplace_sparse(void) {
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
+
+void Entity_override_sparse(void) {
+    flecs::world world;
+
+    world.component<Velocity>().add(flecs::Sparse);
+
+    flecs::entity base = world.entity().set(Velocity{1, 2});
+
+    flecs::entity e = world.entity().is_a(base);
+
+    test_assert(e.has<Velocity>());
+    test_assert(e.owns<Velocity>());
+
+    const Velocity *v = e.get<Velocity>();
+    test_int(v->x, 1);
+    test_int(v->y, 2);
+}
+
+void Entity_delete_w_override_sparse(void) {
+    flecs::world world;
+
+    world.component<Velocity>().add(flecs::Sparse);
+
+    flecs::entity base = world.entity().set(Velocity{1, 2});
+
+    flecs::entity e = world.entity().is_a(base);
+
+    test_assert(e.has<Velocity>());
+    test_assert(e.owns<Velocity>());
+
+    const Velocity *v = e.get<Velocity>();
+    test_int(v->x, 1);
+    test_int(v->y, 2);
+
+    e.destruct();
+}
+
+void Entity_get_pair_second_invalid_type(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    auto v = world.component<Velocity>();
+
+    test_expect_abort();
+    world.entity().get_second<Position>(v);
+}
+
+void Entity_get_mut_pair_second_invalid_type(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    auto v = world.component<Velocity>();
+
+    test_expect_abort();
+    world.entity().get_mut_second<Position>(v);
+}
+
+void Entity_ensure_pair_second_invalid_type(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    auto v = world.component<Velocity>();
+
+    test_expect_abort();
+    world.entity().ensure_second<Position>(v);
+}
+
+void Entity_set_pair_second_invalid_type(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    auto v = world.component<Velocity>();
+
+    test_expect_abort();
+    world.entity().set_second<Position>(v, {0});
+}
+
+void Entity_get_ref_pair_second_invalid_type(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    auto v = world.component<Velocity>();
+
+    test_expect_abort();
+    world.entity().get_ref_second<Position>(v);
+}

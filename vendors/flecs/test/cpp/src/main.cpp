@@ -282,6 +282,13 @@ void Entity_set_sparse(void);
 void Entity_insert_1_sparse(void);
 void Entity_insert_2_w_1_sparse(void);
 void Entity_emplace_sparse(void);
+void Entity_override_sparse(void);
+void Entity_delete_w_override_sparse(void);
+void Entity_get_pair_second_invalid_type(void);
+void Entity_get_mut_pair_second_invalid_type(void);
+void Entity_ensure_pair_second_invalid_type(void);
+void Entity_set_pair_second_invalid_type(void);
+void Entity_get_ref_pair_second_invalid_type(void);
 
 // Testsuite 'Pairs'
 void Pairs_add_component_pair(void);
@@ -352,6 +359,8 @@ void Pairs_deref_pair_obj(void);
 void Pairs_deref_const_pair_obj(void);
 void Pairs_set_R_existing_value(void);
 void Pairs_symmetric_w_childof(void);
+void Pairs_modified_tag_second(void);
+void Pairs_modified_tag_first(void);
 
 // Testsuite 'Enum'
 void Enum_standard_enum_reflection(void);
@@ -418,6 +427,16 @@ void Paths_alias_entity(void);
 void Paths_alias_entity_by_name(void);
 void Paths_alias_entity_by_scoped_name(void);
 void Paths_alias_entity_empty(void);
+void Paths_id_from_str_0_entity(void);
+void Paths_id_from_str_entity_from_str(void);
+void Paths_id_from_str_unresolved_entity_from_str(void);
+void Paths_id_from_str_scoped_entity_from_str(void);
+void Paths_id_from_str_template_entity_from_str(void);
+void Paths_id_from_str_pair_from_str(void);
+void Paths_id_from_str_unresolved_pair_from_str(void);
+void Paths_id_from_str_wildcard_pair_from_str(void);
+void Paths_id_from_str_any_pair_from_str(void);
+void Paths_id_from_str_invalid_pair(void);
 
 // Testsuite 'System'
 void System_iter(void);
@@ -454,6 +473,7 @@ void System_new_from_iter(void);
 void System_each_w_mut_children_it(void);
 void System_readonly_children_iter(void);
 void System_rate_filter(void);
+void System_self_rate_filter(void);
 void System_update_rate_filter(void);
 void System_default_ctor(void);
 void System_test_auto_defer_each(void);
@@ -491,6 +511,7 @@ void System_register_twice_w_each(void);
 void System_register_twice_w_run(void);
 void System_register_twice_w_run_each(void);
 void System_register_twice_w_each_run(void);
+void System_run_w_0_src_query(void);
 
 // Testsuite 'Event'
 void Event_evt_1_id_entity(void);
@@ -641,6 +662,13 @@ void Query_run_w_iter_fini_empty(void);
 void Query_run_w_iter_fini_no_query(void);
 void Query_add_to_match_from_staged_query(void);
 void Query_add_to_match_from_staged_query_readonly_threaded(void);
+void Query_pair_with_variable_src(void);
+void Query_pair_with_variable_src_no_row_fields(void);
+void Query_iter_targets(void);
+void Query_iter_targets_2nd_field(void);
+void Query_iter_targets_field_out_of_range(void);
+void Query_iter_targets_field_not_a_pair(void);
+void Query_iter_targets_field_not_set(void);
 
 // Testsuite 'QueryBuilder'
 void QueryBuilder_setup(void);
@@ -742,6 +770,7 @@ void QueryBuilder_with_pair_name(void);
 void QueryBuilder_with_pair_components(void);
 void QueryBuilder_with_pair_component_id(void);
 void QueryBuilder_with_pair_component_name(void);
+void QueryBuilder_with_pair_name_component_id(void);
 void QueryBuilder_with_enum(void);
 void QueryBuilder_without_id(void);
 void QueryBuilder_without_name(void);
@@ -751,6 +780,7 @@ void QueryBuilder_without_pair_name(void);
 void QueryBuilder_without_pair_components(void);
 void QueryBuilder_without_pair_component_id(void);
 void QueryBuilder_without_pair_component_name(void);
+void QueryBuilder_without_pair_name_component_id(void);
 void QueryBuilder_without_enum(void);
 void QueryBuilder_write_id(void);
 void QueryBuilder_write_name(void);
@@ -846,6 +876,9 @@ void Observer_2_entities_each(void);
 void Observer_create_w_no_template_args(void);
 void Observer_yield_existing(void);
 void Observer_yield_existing_2_terms(void);
+void Observer_yield_existing_on_create_flag(void);
+void Observer_yield_existing_on_delete_flag(void);
+void Observer_yield_existing_on_create_delete_flag(void);
 void Observer_default_ctor(void);
 void Observer_entity_ctor(void);
 void Observer_on_add(void);
@@ -880,6 +913,16 @@ void Observer_register_twice_w_each(void);
 void Observer_register_twice_w_run(void);
 void Observer_register_twice_w_run_each(void);
 void Observer_register_twice_w_each_run(void);
+void Observer_other_table(void);
+void Observer_other_table_w_pair(void);
+void Observer_other_table_w_pair_wildcard(void);
+void Observer_on_add_inherited(void);
+void Observer_on_set_inherited(void);
+void Observer_on_remove_inherited(void);
+void Observer_on_set_after_remove_override(void);
+void Observer_on_set_after_remove_override_create_observer_before(void);
+void Observer_on_set_w_override_after_delete(void);
+void Observer_on_set_w_override_after_clear(void);
 
 // Testsuite 'ComponentLifecycle'
 void ComponentLifecycle_ctor_on_add(void);
@@ -941,6 +984,15 @@ void ComponentLifecycle_on_set_hook(void);
 void ComponentLifecycle_on_add_hook_w_entity(void);
 void ComponentLifecycle_on_remove_hook_w_entity(void);
 void ComponentLifecycle_on_set_hook_w_entity(void);
+void ComponentLifecycle_on_add_hook_sparse(void);
+void ComponentLifecycle_on_remove_hook_sparse(void);
+void ComponentLifecycle_on_set_hook_sparse(void);
+void ComponentLifecycle_on_add_hook_sparse_w_entity(void);
+void ComponentLifecycle_on_remove_hook_sparse_w_entity(void);
+void ComponentLifecycle_on_set_hook_sparse_w_entity(void);
+void ComponentLifecycle_on_add_hook_sparse_w_iter(void);
+void ComponentLifecycle_on_remove_hook_sparse_w_iter(void);
+void ComponentLifecycle_on_set_hook_sparse_w_iter(void);
 void ComponentLifecycle_chained_hooks(void);
 void ComponentLifecycle_ctor_w_2_worlds(void);
 void ComponentLifecycle_ctor_w_2_worlds_explicit_registration(void);
@@ -959,6 +1011,8 @@ void ComponentLifecycle_dtor_relation_target(void);
 void ComponentLifecycle_register_parent_after_child_w_hooks(void);
 void ComponentLifecycle_register_parent_after_child_w_hooks_implicit(void);
 void ComponentLifecycle_sparse_component(void);
+void ComponentLifecycle_count_in_add_hook(void);
+void ComponentLifecycle_count_in_remove_hook(void);
 
 // Testsuite 'Refs'
 void Refs_get_ref_by_ptr(void);
@@ -976,6 +1030,8 @@ void Refs_default_ctor(void);
 void Refs_ctor_from_entity(void);
 void Refs_implicit_operator_bool(void);
 void Refs_try_get(void);
+void Refs_has(void);
+void Refs_bool_operator(void);
 
 // Testsuite 'Module'
 void Module_import(void);
@@ -995,6 +1051,10 @@ void Module_lookup_module_after_reparent(void);
 void Module_reparent_module_in_ctor(void);
 void Module_implicitly_add_module_to_scopes_component(void);
 void Module_implicitly_add_module_to_scopes_entity(void);
+void Module_rename_namespace_shorter(void);
+void Module_rename_namespace_longer(void);
+void Module_rename_namespace_nested(void);
+void Module_rename_reparent_root_module(void);
 
 // Testsuite 'ImplicitComponents'
 void ImplicitComponents_add(void);
@@ -1154,6 +1214,7 @@ void World_get_mut_R_T(void);
 void World_world_mini(void);
 void World_copy_world(void);
 void World_fini_reentrancy(void);
+void World_fini_copy_move_assign(void);
 
 // Testsuite 'Singleton'
 void Singleton_set_get_singleton(void);
@@ -1329,6 +1390,7 @@ void Doc_set_brief(void);
 void Doc_set_name(void);
 void Doc_set_link(void);
 void Doc_set_color(void);
+void Doc_set_uuid(void);
 void Doc_get_name_no_doc_name(void);
 
 bake_test_case PrettyFunction_testcases[] = {
@@ -2418,6 +2480,34 @@ bake_test_case Entity_testcases[] = {
     {
         "emplace_sparse",
         Entity_emplace_sparse
+    },
+    {
+        "override_sparse",
+        Entity_override_sparse
+    },
+    {
+        "delete_w_override_sparse",
+        Entity_delete_w_override_sparse
+    },
+    {
+        "get_pair_second_invalid_type",
+        Entity_get_pair_second_invalid_type
+    },
+    {
+        "get_mut_pair_second_invalid_type",
+        Entity_get_mut_pair_second_invalid_type
+    },
+    {
+        "ensure_pair_second_invalid_type",
+        Entity_ensure_pair_second_invalid_type
+    },
+    {
+        "set_pair_second_invalid_type",
+        Entity_set_pair_second_invalid_type
+    },
+    {
+        "get_ref_pair_second_invalid_type",
+        Entity_get_ref_pair_second_invalid_type
     }
 };
 
@@ -2693,6 +2783,14 @@ bake_test_case Pairs_testcases[] = {
     {
         "symmetric_w_childof",
         Pairs_symmetric_w_childof
+    },
+    {
+        "modified_tag_second",
+        Pairs_modified_tag_second
+    },
+    {
+        "modified_tag_first",
+        Pairs_modified_tag_first
     }
 };
 
@@ -2942,6 +3040,46 @@ bake_test_case Paths_testcases[] = {
     {
         "alias_entity_empty",
         Paths_alias_entity_empty
+    },
+    {
+        "id_from_str_0_entity",
+        Paths_id_from_str_0_entity
+    },
+    {
+        "id_from_str_entity_from_str",
+        Paths_id_from_str_entity_from_str
+    },
+    {
+        "id_from_str_unresolved_entity_from_str",
+        Paths_id_from_str_unresolved_entity_from_str
+    },
+    {
+        "id_from_str_scoped_entity_from_str",
+        Paths_id_from_str_scoped_entity_from_str
+    },
+    {
+        "id_from_str_template_entity_from_str",
+        Paths_id_from_str_template_entity_from_str
+    },
+    {
+        "id_from_str_pair_from_str",
+        Paths_id_from_str_pair_from_str
+    },
+    {
+        "id_from_str_unresolved_pair_from_str",
+        Paths_id_from_str_unresolved_pair_from_str
+    },
+    {
+        "id_from_str_wildcard_pair_from_str",
+        Paths_id_from_str_wildcard_pair_from_str
+    },
+    {
+        "id_from_str_any_pair_from_str",
+        Paths_id_from_str_any_pair_from_str
+    },
+    {
+        "id_from_str_invalid_pair",
+        Paths_id_from_str_invalid_pair
     }
 };
 
@@ -3081,6 +3219,10 @@ bake_test_case System_testcases[] = {
     {
         "rate_filter",
         System_rate_filter
+    },
+    {
+        "self_rate_filter",
+        System_self_rate_filter
     },
     {
         "update_rate_filter",
@@ -3229,6 +3371,10 @@ bake_test_case System_testcases[] = {
     {
         "register_twice_w_each_run",
         System_register_twice_w_each_run
+    },
+    {
+        "run_w_0_src_query",
+        System_run_w_0_src_query
     }
 };
 
@@ -3814,6 +3960,34 @@ bake_test_case Query_testcases[] = {
     {
         "add_to_match_from_staged_query_readonly_threaded",
         Query_add_to_match_from_staged_query_readonly_threaded
+    },
+    {
+        "pair_with_variable_src",
+        Query_pair_with_variable_src
+    },
+    {
+        "pair_with_variable_src_no_row_fields",
+        Query_pair_with_variable_src_no_row_fields
+    },
+    {
+        "iter_targets",
+        Query_iter_targets
+    },
+    {
+        "iter_targets_2nd_field",
+        Query_iter_targets_2nd_field
+    },
+    {
+        "iter_targets_field_out_of_range",
+        Query_iter_targets_field_out_of_range
+    },
+    {
+        "iter_targets_field_not_a_pair",
+        Query_iter_targets_field_not_a_pair
+    },
+    {
+        "iter_targets_field_not_set",
+        Query_iter_targets_field_not_set
     }
 };
 
@@ -4211,6 +4385,10 @@ bake_test_case QueryBuilder_testcases[] = {
         QueryBuilder_with_pair_component_name
     },
     {
+        "with_pair_name_component_id",
+        QueryBuilder_with_pair_name_component_id
+    },
+    {
         "with_enum",
         QueryBuilder_with_enum
     },
@@ -4245,6 +4423,10 @@ bake_test_case QueryBuilder_testcases[] = {
     {
         "without_pair_component_name",
         QueryBuilder_without_pair_component_name
+    },
+    {
+        "without_pair_name_component_id",
+        QueryBuilder_without_pair_name_component_id
     },
     {
         "without_enum",
@@ -4617,6 +4799,18 @@ bake_test_case Observer_testcases[] = {
         Observer_yield_existing_2_terms
     },
     {
+        "yield_existing_on_create_flag",
+        Observer_yield_existing_on_create_flag
+    },
+    {
+        "yield_existing_on_delete_flag",
+        Observer_yield_existing_on_delete_flag
+    },
+    {
+        "yield_existing_on_create_delete_flag",
+        Observer_yield_existing_on_create_delete_flag
+    },
+    {
         "default_ctor",
         Observer_default_ctor
     },
@@ -4751,6 +4945,46 @@ bake_test_case Observer_testcases[] = {
     {
         "register_twice_w_each_run",
         Observer_register_twice_w_each_run
+    },
+    {
+        "other_table",
+        Observer_other_table
+    },
+    {
+        "other_table_w_pair",
+        Observer_other_table_w_pair
+    },
+    {
+        "other_table_w_pair_wildcard",
+        Observer_other_table_w_pair_wildcard
+    },
+    {
+        "on_add_inherited",
+        Observer_on_add_inherited
+    },
+    {
+        "on_set_inherited",
+        Observer_on_set_inherited
+    },
+    {
+        "on_remove_inherited",
+        Observer_on_remove_inherited
+    },
+    {
+        "on_set_after_remove_override",
+        Observer_on_set_after_remove_override
+    },
+    {
+        "on_set_after_remove_override_create_observer_before",
+        Observer_on_set_after_remove_override_create_observer_before
+    },
+    {
+        "on_set_w_override_after_delete",
+        Observer_on_set_w_override_after_delete
+    },
+    {
+        "on_set_w_override_after_clear",
+        Observer_on_set_w_override_after_clear
     }
 };
 
@@ -4992,6 +5226,42 @@ bake_test_case ComponentLifecycle_testcases[] = {
         ComponentLifecycle_on_set_hook_w_entity
     },
     {
+        "on_add_hook_sparse",
+        ComponentLifecycle_on_add_hook_sparse
+    },
+    {
+        "on_remove_hook_sparse",
+        ComponentLifecycle_on_remove_hook_sparse
+    },
+    {
+        "on_set_hook_sparse",
+        ComponentLifecycle_on_set_hook_sparse
+    },
+    {
+        "on_add_hook_sparse_w_entity",
+        ComponentLifecycle_on_add_hook_sparse_w_entity
+    },
+    {
+        "on_remove_hook_sparse_w_entity",
+        ComponentLifecycle_on_remove_hook_sparse_w_entity
+    },
+    {
+        "on_set_hook_sparse_w_entity",
+        ComponentLifecycle_on_set_hook_sparse_w_entity
+    },
+    {
+        "on_add_hook_sparse_w_iter",
+        ComponentLifecycle_on_add_hook_sparse_w_iter
+    },
+    {
+        "on_remove_hook_sparse_w_iter",
+        ComponentLifecycle_on_remove_hook_sparse_w_iter
+    },
+    {
+        "on_set_hook_sparse_w_iter",
+        ComponentLifecycle_on_set_hook_sparse_w_iter
+    },
+    {
         "chained_hooks",
         ComponentLifecycle_chained_hooks
     },
@@ -5062,6 +5332,14 @@ bake_test_case ComponentLifecycle_testcases[] = {
     {
         "sparse_component",
         ComponentLifecycle_sparse_component
+    },
+    {
+        "count_in_add_hook",
+        ComponentLifecycle_count_in_add_hook
+    },
+    {
+        "count_in_remove_hook",
+        ComponentLifecycle_count_in_remove_hook
     }
 };
 
@@ -5125,6 +5403,14 @@ bake_test_case Refs_testcases[] = {
     {
         "try_get",
         Refs_try_get
+    },
+    {
+        "has",
+        Refs_has
+    },
+    {
+        "bool_operator",
+        Refs_bool_operator
     }
 };
 
@@ -5196,6 +5482,22 @@ bake_test_case Module_testcases[] = {
     {
         "implicitly_add_module_to_scopes_entity",
         Module_implicitly_add_module_to_scopes_entity
+    },
+    {
+        "rename_namespace_shorter",
+        Module_rename_namespace_shorter
+    },
+    {
+        "rename_namespace_longer",
+        Module_rename_namespace_longer
+    },
+    {
+        "rename_namespace_nested",
+        Module_rename_namespace_nested
+    },
+    {
+        "rename_reparent_root_module",
+        Module_rename_reparent_root_module
     }
 };
 
@@ -5817,6 +6119,10 @@ bake_test_case World_testcases[] = {
     {
         "fini_reentrancy",
         World_fini_reentrancy
+    },
+    {
+        "fini_copy_move_assign",
+        World_fini_copy_move_assign
     }
 };
 
@@ -6490,6 +6796,10 @@ bake_test_case Doc_testcases[] = {
         Doc_set_color
     },
     {
+        "set_uuid",
+        Doc_set_uuid
+    },
+    {
         "get_name_no_doc_name",
         Doc_get_name_no_doc_name
     }
@@ -6512,14 +6822,14 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        269,
+        276,
         Entity_testcases
     },
     {
         "Pairs",
         NULL,
         NULL,
-        68,
+        70,
         Pairs_testcases
     },
     {
@@ -6540,14 +6850,14 @@ static bake_test_suite suites[] = {
         "Paths",
         NULL,
         NULL,
-        15,
+        25,
         Paths_testcases
     },
     {
         "System",
         NULL,
         NULL,
-        71,
+        73,
         System_testcases
     },
     {
@@ -6568,14 +6878,14 @@ static bake_test_suite suites[] = {
         "Query",
         NULL,
         NULL,
-        109,
+        116,
         Query_testcases
     },
     {
         "QueryBuilder",
         QueryBuilder_setup,
         NULL,
-        164,
+        166,
         QueryBuilder_testcases,
         1,
         QueryBuilder_params
@@ -6591,28 +6901,28 @@ static bake_test_suite suites[] = {
         "Observer",
         NULL,
         NULL,
-        46,
+        59,
         Observer_testcases
     },
     {
         "ComponentLifecycle",
         NULL,
         NULL,
-        77,
+        88,
         ComponentLifecycle_testcases
     },
     {
         "Refs",
         NULL,
         NULL,
-        15,
+        17,
         Refs_testcases
     },
     {
         "Module",
         NULL,
         NULL,
-        17,
+        21,
         Module_testcases
     },
     {
@@ -6633,7 +6943,7 @@ static bake_test_suite suites[] = {
         "World",
         NULL,
         NULL,
-        115,
+        116,
         World_testcases
     },
     {
@@ -6668,7 +6978,7 @@ static bake_test_suite suites[] = {
         "Doc",
         NULL,
         NULL,
-        5,
+        6,
         Doc_testcases
     }
 };

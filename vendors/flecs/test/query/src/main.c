@@ -507,6 +507,8 @@ void Basic_this_src_w_any(void);
 void Basic_this_src_w_any_written(void);
 void Basic_this_src_w_pair_rel_any(void);
 void Basic_this_src_w_pair_tgt_any(void);
+void Basic_this_src_w_pair_tgt_any_n_tgts(void);
+void Basic_this_src_w_pair_tgt_any_n_tgts_written(void);
 void Basic_this_src_w_pair_rel_tgt_any(void);
 void Basic_ent_src_w_wildcard(void);
 void Basic_ent_src_w_pair_rel_wildcard(void);
@@ -663,6 +665,27 @@ void Basic_match_empty_w_order_by(void);
 void Basic_match_new_empty_w_order_by(void);
 void Basic_match_empty_w_bitset(void);
 void Basic_default_query_flags(void);
+void Basic_ref_fields_this(void);
+void Basic_ref_fields_static_src(void);
+void Basic_ref_fields_variable_src(void);
+void Basic_ref_fields_up_src(void);
+void Basic_ref_fields_self_up_src(void);
+void Basic_0_src_match_nothing(void);
+void Basic_0_terms_match_nothing(void);
+void Basic_any_record(void);
+void Basic_pair_rel_any_record(void);
+void Basic_pair_tgt_any_record(void);
+void Basic_pair_any_any_record(void);
+void Basic_written_any_record(void);
+void Basic_written_pair_rel_any_record(void);
+void Basic_written_pair_tgt_any_record(void);
+void Basic_written_pair_any_any_record(void);
+void Basic_pair_rel_any_record_component(void);
+void Basic_pair_tgt_any_record_component(void);
+void Basic_entity_iteration_w_match_empty_tables(void);
+void Basic_get_cache_query_uncached(void);
+void Basic_get_cache_query_cached(void);
+void Basic_get_cache_query_partially_cached(void);
 
 // Testsuite 'Combinations'
 void Combinations_setup(void);
@@ -749,6 +772,13 @@ void Plan_0_src_w_union(void);
 void Plan_0_src_w_sparse_and_component(void);
 void Plan_0_src_w_toggle_and_component(void);
 void Plan_0_src_w_union_and_component(void);
+void Plan_cached_isa_tgt(void);
+void Plan_cached_isa_tgt_w_self_second(void);
+void Plan_cached_isa_tgt_no_expr(void);
+void Plan_cached_isa_tgt_w_self_second_no_expr(void);
+void Plan_cached_w_not_and_uncacheable(void);
+void Plan_cached_w_optional_and_uncacheable(void);
+void Plan_cached_w_not_optional_and_uncacheable(void);
 
 // Testsuite 'Variables'
 void Variables_setup(void);
@@ -969,6 +999,12 @@ void Operators_1_not_any_src_any_tgt_fixed_first(void);
 void Operators_1_not_any_src_any_first_fixed_tgt(void);
 void Operators_1_not_any_src_any_childof_pair_any_tgt(void);
 void Operators_1_not_any_src_any_isa_pair_any_tgt(void);
+void Operators_1_not_match_prefab(void);
+void Operators_1_not_match_disabled(void);
+void Operators_1_not_match_not_queryable(void);
+void Operators_1_not_match_prefab_w_match_prefab_flag(void);
+void Operators_1_not_match_disabled_w_match_disabled_flag(void);
+void Operators_1_not_match_disabled_w_match_prefab_disabled_flag(void);
 void Operators_2_and_optional(void);
 void Operators_3_and_optional_optional(void);
 void Operators_2_and_optional_pair_rel_wildcard(void);
@@ -1351,8 +1387,12 @@ void Traversal_self_up_all_owned(void);
 void Traversal_up_all_owned(void);
 void Traversal_this_self_up_childof_inherited(void);
 void Traversal_this_up_childof_inherited(void);
+void Traversal_this_self_up_childof_inherited_override(void);
+void Traversal_this_up_childof_inherited_override(void);
 void Traversal_this_written_self_up_childof_inherited(void);
 void Traversal_this_written_up_childof_inherited(void);
+void Traversal_this_written_self_up_childof_inherited_override(void);
+void Traversal_this_written_up_childof_inherited_override(void);
 void Traversal_var_self_up_childof_inherited(void);
 void Traversal_var_up_childof_inherited(void);
 void Traversal_var_written_self_up_childof_inherited(void);
@@ -1436,16 +1476,28 @@ void Traversal_up_component_w_singleton_after_parent_table_change_no_data(void);
 void Traversal_up_component_w_var_after_parent_table_change_no_data(void);
 void Traversal_test_up_component_after_parent_table_change_no_data(void);
 void Traversal_test_up_component_w_singleton_after_parent_table_change_no_data(void);
+void Traversal_this_up_childof_isa_childof(void);
+void Traversal_this_up_isa_childof(void);
+void Traversal_this_up_isa_isa_childof(void);
+void Traversal_this_up_isa_childof_isa(void);
+void Traversal_this_up_isa_childof_isa_childof(void);
+void Traversal_this_self_up_childof_isa_childof(void);
+void Traversal_this_self_up_isa_childof(void);
+void Traversal_this_self_up_isa_isa_childof(void);
+void Traversal_this_self_up_isa_childof_isa(void);
+void Traversal_this_self_up_isa_childof_isa_childof(void);
+void Traversal_this_written_up_childof_isa_childof(void);
+void Traversal_this_written_up_isa_childof(void);
+void Traversal_this_written_up_isa_isa_childof(void);
+void Traversal_this_written_up_isa_childof_isa(void);
+void Traversal_this_written_up_isa_childof_isa_childof(void);
+void Traversal_this_written_self_up_childof_isa_childof(void);
+void Traversal_this_written_self_up_isa_childof(void);
+void Traversal_this_written_self_up_isa_isa_childof(void);
+void Traversal_this_written_self_up_isa_childof_isa(void);
+void Traversal_this_written_self_up_isa_childof_isa_childof(void);
 
 // Testsuite 'Cascade'
-void Cascade_this_self_cascade_childof_uncached(void);
-void Cascade_this_cascade_childof_uncached(void);
-void Cascade_this_written_self_cascade_childof_uncached(void);
-void Cascade_this_written_cascade_childof_uncached(void);
-void Cascade_this_self_cascade_childof_w_parent_flag_uncached(void);
-void Cascade_this_cascade_childof_w_parent_flag_uncached(void);
-void Cascade_this_written_self_cascade_childof_w_parent_flag_uncached(void);
-void Cascade_this_written_cascade_childof_w_parent_flag_uncached(void);
 void Cascade_parent_cascade(void);
 void Cascade_existing_custom_rel_cascade(void);
 void Cascade_new_custom_rel_cascade(void);
@@ -1463,6 +1515,12 @@ void Cascade_cascade_desc_rematch_2_lvls(void);
 void Cascade_cascade_desc_rematch_2_lvls_2_relations(void);
 void Cascade_cascade_desc_topological(void);
 void Cascade_cascade_after_recycled_parent_change(void);
+void Cascade_invalid_cascade_for_uncached(void);
+void Cascade_invalid_cascade_for_first(void);
+void Cascade_invalid_cascade_for_second(void);
+void Cascade_invalid_desc_without_cascade(void);
+void Cascade_invalid_desc_for_first(void);
+void Cascade_invalid_desc_for_second(void);
 
 // Testsuite 'Cached'
 void Cached_simple_query_existing_table(void);
@@ -1839,6 +1897,7 @@ void Toggle_toggle_0_src(void);
 void Sparse_setup(void);
 void Sparse_1_fixed_sparse(void);
 void Sparse_1_fixed_sparse_none(void);
+void Sparse_1_this_sparse_simple(void);
 void Sparse_1_this_sparse(void);
 void Sparse_1_this_sparse_none(void);
 void Sparse_1_this_sparse_written(void);
@@ -1847,6 +1906,7 @@ void Sparse_1_var_sparse(void);
 void Sparse_1_var_sparse_none(void);
 void Sparse_1_var_sparse_written(void);
 void Sparse_1_var_sparse_written_none(void);
+void Sparse_2_sparse_simple(void);
 void Sparse_2_sparse(void);
 void Sparse_2_sparse_and_regular(void);
 void Sparse_2_regular_and_sparse(void);
@@ -4031,6 +4091,14 @@ bake_test_case Basic_testcases[] = {
         Basic_this_src_w_pair_tgt_any
     },
     {
+        "this_src_w_pair_tgt_any_n_tgts",
+        Basic_this_src_w_pair_tgt_any_n_tgts
+    },
+    {
+        "this_src_w_pair_tgt_any_n_tgts_written",
+        Basic_this_src_w_pair_tgt_any_n_tgts_written
+    },
+    {
         "this_src_w_pair_rel_tgt_any",
         Basic_this_src_w_pair_rel_tgt_any
     },
@@ -4653,6 +4721,90 @@ bake_test_case Basic_testcases[] = {
     {
         "default_query_flags",
         Basic_default_query_flags
+    },
+    {
+        "ref_fields_this",
+        Basic_ref_fields_this
+    },
+    {
+        "ref_fields_static_src",
+        Basic_ref_fields_static_src
+    },
+    {
+        "ref_fields_variable_src",
+        Basic_ref_fields_variable_src
+    },
+    {
+        "ref_fields_up_src",
+        Basic_ref_fields_up_src
+    },
+    {
+        "ref_fields_self_up_src",
+        Basic_ref_fields_self_up_src
+    },
+    {
+        "0_src_match_nothing",
+        Basic_0_src_match_nothing
+    },
+    {
+        "0_terms_match_nothing",
+        Basic_0_terms_match_nothing
+    },
+    {
+        "any_record",
+        Basic_any_record
+    },
+    {
+        "pair_rel_any_record",
+        Basic_pair_rel_any_record
+    },
+    {
+        "pair_tgt_any_record",
+        Basic_pair_tgt_any_record
+    },
+    {
+        "pair_any_any_record",
+        Basic_pair_any_any_record
+    },
+    {
+        "written_any_record",
+        Basic_written_any_record
+    },
+    {
+        "written_pair_rel_any_record",
+        Basic_written_pair_rel_any_record
+    },
+    {
+        "written_pair_tgt_any_record",
+        Basic_written_pair_tgt_any_record
+    },
+    {
+        "written_pair_any_any_record",
+        Basic_written_pair_any_any_record
+    },
+    {
+        "pair_rel_any_record_component",
+        Basic_pair_rel_any_record_component
+    },
+    {
+        "pair_tgt_any_record_component",
+        Basic_pair_tgt_any_record_component
+    },
+    {
+        "entity_iteration_w_match_empty_tables",
+        Basic_entity_iteration_w_match_empty_tables
+    },
+    {
+        "get_cache_query_uncached",
+        Basic_get_cache_query_uncached
+    },
+    {
+        "get_cache_query_cached",
+        Basic_get_cache_query_cached
+    },
+    {
+        "get_cache_query_partially_cached",
+        Basic_get_cache_query_partially_cached
     }
 };
 
@@ -4983,6 +5135,34 @@ bake_test_case Plan_testcases[] = {
     {
         "0_src_w_union_and_component",
         Plan_0_src_w_union_and_component
+    },
+    {
+        "cached_isa_tgt",
+        Plan_cached_isa_tgt
+    },
+    {
+        "cached_isa_tgt_w_self_second",
+        Plan_cached_isa_tgt_w_self_second
+    },
+    {
+        "cached_isa_tgt_no_expr",
+        Plan_cached_isa_tgt_no_expr
+    },
+    {
+        "cached_isa_tgt_w_self_second_no_expr",
+        Plan_cached_isa_tgt_w_self_second_no_expr
+    },
+    {
+        "cached_w_not_and_uncacheable",
+        Plan_cached_w_not_and_uncacheable
+    },
+    {
+        "cached_w_optional_and_uncacheable",
+        Plan_cached_w_optional_and_uncacheable
+    },
+    {
+        "cached_w_not_optional_and_uncacheable",
+        Plan_cached_w_not_optional_and_uncacheable
     }
 };
 
@@ -5845,6 +6025,30 @@ bake_test_case Operators_testcases[] = {
     {
         "1_not_any_src_any_isa_pair_any_tgt",
         Operators_1_not_any_src_any_isa_pair_any_tgt
+    },
+    {
+        "1_not_match_prefab",
+        Operators_1_not_match_prefab
+    },
+    {
+        "1_not_match_disabled",
+        Operators_1_not_match_disabled
+    },
+    {
+        "1_not_match_not_queryable",
+        Operators_1_not_match_not_queryable
+    },
+    {
+        "1_not_match_prefab_w_match_prefab_flag",
+        Operators_1_not_match_prefab_w_match_prefab_flag
+    },
+    {
+        "1_not_match_disabled_w_match_disabled_flag",
+        Operators_1_not_match_disabled_w_match_disabled_flag
+    },
+    {
+        "1_not_match_disabled_w_match_prefab_disabled_flag",
+        Operators_1_not_match_disabled_w_match_prefab_disabled_flag
     },
     {
         "2_and_optional",
@@ -7329,12 +7533,28 @@ bake_test_case Traversal_testcases[] = {
         Traversal_this_up_childof_inherited
     },
     {
+        "this_self_up_childof_inherited_override",
+        Traversal_this_self_up_childof_inherited_override
+    },
+    {
+        "this_up_childof_inherited_override",
+        Traversal_this_up_childof_inherited_override
+    },
+    {
         "this_written_self_up_childof_inherited",
         Traversal_this_written_self_up_childof_inherited
     },
     {
         "this_written_up_childof_inherited",
         Traversal_this_written_up_childof_inherited
+    },
+    {
+        "this_written_self_up_childof_inherited_override",
+        Traversal_this_written_self_up_childof_inherited_override
+    },
+    {
+        "this_written_up_childof_inherited_override",
+        Traversal_this_written_up_childof_inherited_override
     },
     {
         "var_self_up_childof_inherited",
@@ -7667,42 +7887,90 @@ bake_test_case Traversal_testcases[] = {
     {
         "test_up_component_w_singleton_after_parent_table_change_no_data",
         Traversal_test_up_component_w_singleton_after_parent_table_change_no_data
+    },
+    {
+        "this_up_childof_isa_childof",
+        Traversal_this_up_childof_isa_childof
+    },
+    {
+        "this_up_isa_childof",
+        Traversal_this_up_isa_childof
+    },
+    {
+        "this_up_isa_isa_childof",
+        Traversal_this_up_isa_isa_childof
+    },
+    {
+        "this_up_isa_childof_isa",
+        Traversal_this_up_isa_childof_isa
+    },
+    {
+        "this_up_isa_childof_isa_childof",
+        Traversal_this_up_isa_childof_isa_childof
+    },
+    {
+        "this_self_up_childof_isa_childof",
+        Traversal_this_self_up_childof_isa_childof
+    },
+    {
+        "this_self_up_isa_childof",
+        Traversal_this_self_up_isa_childof
+    },
+    {
+        "this_self_up_isa_isa_childof",
+        Traversal_this_self_up_isa_isa_childof
+    },
+    {
+        "this_self_up_isa_childof_isa",
+        Traversal_this_self_up_isa_childof_isa
+    },
+    {
+        "this_self_up_isa_childof_isa_childof",
+        Traversal_this_self_up_isa_childof_isa_childof
+    },
+    {
+        "this_written_up_childof_isa_childof",
+        Traversal_this_written_up_childof_isa_childof
+    },
+    {
+        "this_written_up_isa_childof",
+        Traversal_this_written_up_isa_childof
+    },
+    {
+        "this_written_up_isa_isa_childof",
+        Traversal_this_written_up_isa_isa_childof
+    },
+    {
+        "this_written_up_isa_childof_isa",
+        Traversal_this_written_up_isa_childof_isa
+    },
+    {
+        "this_written_up_isa_childof_isa_childof",
+        Traversal_this_written_up_isa_childof_isa_childof
+    },
+    {
+        "this_written_self_up_childof_isa_childof",
+        Traversal_this_written_self_up_childof_isa_childof
+    },
+    {
+        "this_written_self_up_isa_childof",
+        Traversal_this_written_self_up_isa_childof
+    },
+    {
+        "this_written_self_up_isa_isa_childof",
+        Traversal_this_written_self_up_isa_isa_childof
+    },
+    {
+        "this_written_self_up_isa_childof_isa",
+        Traversal_this_written_self_up_isa_childof_isa
+    },
+    {
+        "this_written_self_up_isa_childof_isa_childof",
+        Traversal_this_written_self_up_isa_childof_isa_childof
     }
 };
 
 bake_test_case Cascade_testcases[] = {
-    {
-        "this_self_cascade_childof_uncached",
-        Cascade_this_self_cascade_childof_uncached
-    },
-    {
-        "this_cascade_childof_uncached",
-        Cascade_this_cascade_childof_uncached
-    },
-    {
-        "this_written_self_cascade_childof_uncached",
-        Cascade_this_written_self_cascade_childof_uncached
-    },
-    {
-        "this_written_cascade_childof_uncached",
-        Cascade_this_written_cascade_childof_uncached
-    },
-    {
-        "this_self_cascade_childof_w_parent_flag_uncached",
-        Cascade_this_self_cascade_childof_w_parent_flag_uncached
-    },
-    {
-        "this_cascade_childof_w_parent_flag_uncached",
-        Cascade_this_cascade_childof_w_parent_flag_uncached
-    },
-    {
-        "this_written_self_cascade_childof_w_parent_flag_uncached",
-        Cascade_this_written_self_cascade_childof_w_parent_flag_uncached
-    },
-    {
-        "this_written_cascade_childof_w_parent_flag_uncached",
-        Cascade_this_written_cascade_childof_w_parent_flag_uncached
-    },
     {
         "parent_cascade",
         Cascade_parent_cascade
@@ -7770,6 +8038,30 @@ bake_test_case Cascade_testcases[] = {
     {
         "cascade_after_recycled_parent_change",
         Cascade_cascade_after_recycled_parent_change
+    },
+    {
+        "invalid_cascade_for_uncached",
+        Cascade_invalid_cascade_for_uncached
+    },
+    {
+        "invalid_cascade_for_first",
+        Cascade_invalid_cascade_for_first
+    },
+    {
+        "invalid_cascade_for_second",
+        Cascade_invalid_cascade_for_second
+    },
+    {
+        "invalid_desc_without_cascade",
+        Cascade_invalid_desc_without_cascade
+    },
+    {
+        "invalid_desc_for_first",
+        Cascade_invalid_desc_for_first
+    },
+    {
+        "invalid_desc_for_second",
+        Cascade_invalid_desc_for_second
     }
 };
 
@@ -9234,6 +9526,10 @@ bake_test_case Sparse_testcases[] = {
         Sparse_1_fixed_sparse_none
     },
     {
+        "1_this_sparse_simple",
+        Sparse_1_this_sparse_simple
+    },
+    {
         "1_this_sparse",
         Sparse_1_this_sparse
     },
@@ -9264,6 +9560,10 @@ bake_test_case Sparse_testcases[] = {
     {
         "1_var_sparse_written_none",
         Sparse_1_var_sparse_written_none
+    },
+    {
+        "2_sparse_simple",
+        Sparse_2_sparse_simple
     },
     {
         "2_sparse",
@@ -10127,7 +10427,7 @@ static bake_test_suite suites[] = {
         "Basic",
         Basic_setup,
         NULL,
-        207,
+        230,
         Basic_testcases,
         1,
         Basic_params
@@ -10145,7 +10445,7 @@ static bake_test_suite suites[] = {
         "Plan",
         NULL,
         NULL,
-        72,
+        79,
         Plan_testcases
     },
     {
@@ -10161,7 +10461,7 @@ static bake_test_suite suites[] = {
         "Operators",
         Operators_setup,
         NULL,
-        143,
+        149,
         Operators_testcases,
         1,
         Operators_params
@@ -10211,7 +10511,7 @@ static bake_test_suite suites[] = {
         "Traversal",
         Traversal_setup,
         NULL,
-        123,
+        147,
         Traversal_testcases,
         1,
         Traversal_params
@@ -10220,7 +10520,7 @@ static bake_test_suite suites[] = {
         "Cascade",
         NULL,
         NULL,
-        25,
+        23,
         Cascade_testcases
     },
     {
@@ -10266,7 +10566,7 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        21,
+        23,
         Sparse_testcases,
         1,
         Sparse_params

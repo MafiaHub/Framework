@@ -390,6 +390,94 @@ void Observer_yield_existing_2_terms(void) {
     test_int(count, 6);
 }
 
+
+void Observer_yield_existing_on_create_flag(void) {
+    flecs::world world;
+
+    struct Tag0 { };
+    struct Tag1 { };
+
+    auto e1 = world.entity().add<Tag0>();
+    auto e2 = world.entity().add<Tag0>();
+    auto e3 = world.entity().add<Tag0>().add<Tag1>();
+
+    int32_t count = 0;
+
+    auto o = world.observer<Tag0>()
+        .event(flecs::OnAdd)
+        .event(flecs::OnRemove)
+        .observer_flags(EcsObserverYieldOnCreate)
+        .each([&](flecs::entity e, Tag0) {
+            if (e == e1) count ++;
+            if (e == e2) count += 2;
+            if (e == e3) count += 3;
+        });
+
+    test_int(count, 6);
+
+    o.destruct();
+
+    test_int(count, 6);
+}
+
+void Observer_yield_existing_on_delete_flag(void) {
+    flecs::world world;
+
+    struct Tag0 { };
+    struct Tag1 { };
+
+    auto e1 = world.entity().add<Tag0>();
+    auto e2 = world.entity().add<Tag0>();
+    auto e3 = world.entity().add<Tag0>().add<Tag1>();
+
+    int32_t count = 0;
+
+    auto o = world.observer<Tag0>()
+        .event(flecs::OnAdd)
+        .event(flecs::OnRemove)
+        .observer_flags(EcsObserverYieldOnDelete)
+        .each([&](flecs::entity e, Tag0) {
+            if (e == e1) count ++;
+            if (e == e2) count += 2;
+            if (e == e3) count += 3;
+        });
+
+    test_int(count, 0);
+
+    o.destruct();
+
+    test_int(count, 6);
+}
+
+void Observer_yield_existing_on_create_delete_flag(void) {
+    flecs::world world;
+
+    struct Tag0 { };
+    struct Tag1 { };
+
+    auto e1 = world.entity().add<Tag0>();
+    auto e2 = world.entity().add<Tag0>();
+    auto e3 = world.entity().add<Tag0>().add<Tag1>();
+
+    int32_t count = 0;
+
+    auto o = world.observer<Tag0>()
+        .event(flecs::OnAdd)
+        .event(flecs::OnRemove)
+        .observer_flags(EcsObserverYieldOnCreate|EcsObserverYieldOnDelete)
+        .each([&](flecs::entity e, Tag0) {
+            if (e == e1) count ++;
+            if (e == e2) count += 2;
+            if (e == e3) count += 3;
+        });
+
+    test_int(count, 6);
+
+    o.destruct();
+
+    test_int(count, 12);
+}
+
 void Observer_default_ctor(void) {
     flecs::world world;
 
@@ -1135,4 +1223,254 @@ void Observer_register_twice_w_each_run(void) {
 
     ecs.entity().set(Position{10, 20});
     test_int(count2, 1);
+}
+
+void Observer_other_table(void) {
+    flecs::world ecs;
+
+    int32_t count = 0;
+    flecs::entity matched;
+
+    ecs.observer<Velocity>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::iter& it, size_t row, Velocity&) {
+            test_assert(it.table().has<Velocity>());
+            test_assert(!it.other_table().has<Velocity>());
+            matched = it.entity(row);
+            count ++;
+        });
+
+    flecs::entity e = ecs.entity().add<Position>().add<Velocity>();
+    test_assert(e == matched);
+    test_int(count, 1);
+}
+
+void Observer_other_table_w_pair(void) {
+    flecs::world ecs;
+
+    struct Likes {};
+    struct Apples {};
+
+    int32_t count = 0;
+    flecs::entity matched;
+
+    ecs.observer()
+        .with<Likes, Apples>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::iter& it, size_t row) {
+            test_assert((it.table().has<Likes, Apples>()));
+            test_assert((!it.other_table().has<Likes, Apples>()));
+            matched = it.entity(row);
+            count ++;
+        });
+
+    flecs::entity e = ecs.entity().add<Position>().add<Likes, Apples>();
+    test_assert(e == matched);
+    test_int(count, 1);
+}
+
+void Observer_other_table_w_pair_wildcard(void) {
+    flecs::world ecs;
+
+    struct Likes {};
+    struct Apples {};
+
+    int32_t count = 0;
+    flecs::entity matched;
+
+    ecs.observer()
+        .with<Likes, Apples>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::iter& it, size_t row) {
+            test_assert((it.table().has<Likes>(flecs::Wildcard)));
+            test_assert((!it.other_table().has<Likes>(flecs::Wildcard)));
+            matched = it.entity(row);
+            count ++;
+        });
+
+    flecs::entity e = ecs.entity().add<Position>().add<Likes, Apples>();
+    test_assert(e == matched);
+    test_int(count, 1);
+}
+
+void Observer_on_add_inherited(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    int32_t count = 0;
+    flecs::entity matched;
+
+    ecs.observer<Position>()
+        .event(flecs::OnAdd)
+        .each([&](flecs::entity e, Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            count ++;
+            matched = e;
+        });
+
+    auto p = ecs.prefab().set(Position{10, 20});
+    test_int(count, 0);
+
+    auto i = ecs.entity().is_a(p);
+    test_int(count, 1);
+    test_assert(i == matched);
+}
+
+void Observer_on_set_inherited(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    int32_t count = 0;
+    flecs::entity matched;
+
+    ecs.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](flecs::entity e, Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            count ++;
+            matched = e;
+        });
+
+    auto p = ecs.prefab().set(Position{10, 20});
+    test_int(count, 0);
+
+    auto i = ecs.entity().is_a(p);
+    test_int(count, 1);
+    test_assert(i == matched);
+}
+
+void Observer_on_remove_inherited(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    int32_t count = 0;
+    flecs::entity matched;
+
+    ecs.observer<Position>()
+        .event(flecs::OnRemove)
+        .each([&](flecs::entity e, Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            count ++;
+            matched = e;
+        });
+
+    auto p = ecs.prefab().set(Position{10, 20});
+    test_int(count, 0);
+
+    auto i = ecs.entity().is_a(p);
+    test_int(count, 0);
+
+    p.remove<Position>();
+    test_int(count, 1);
+    test_assert(i == matched);
+}
+
+void Observer_on_set_after_remove_override(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    auto base = ecs.prefab()
+        .set(Position{1, 2});
+
+    auto e1 = ecs.entity().is_a(base)
+        .set(Position{10, 20});
+
+    int count = 0;
+
+    ecs.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](flecs::iter& it, size_t row, Position& p) {
+            test_assert(it.entity(row) == e1);
+            test_assert(it.src(0) == base);
+            test_int(p.x, 1);
+            test_int(p.y, 2);
+            count ++;
+        });
+
+    e1.remove<Position>();
+
+    test_int(count, 1);
+}
+
+void Observer_on_set_after_remove_override_create_observer_before(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    int count = 0;
+
+    flecs::entity base = ecs.prefab();
+    flecs::entity e1 = ecs.entity();
+
+    ecs.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](flecs::iter& it, size_t row, Position& p) {
+            test_assert(it.entity(row) == e1);
+            test_assert(it.src(0) == base);
+            count ++;
+        });
+
+    base.set(Position{1, 2});
+    e1.add<Position>().is_a(base);
+
+    test_int(count, 0);
+
+    e1.remove<Position>();
+
+    test_int(count, 1);
+}
+
+void Observer_on_set_w_override_after_delete(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    auto base = ecs.prefab()
+        .set(Position{1, 2});
+
+    auto e1 = ecs.entity().is_a(base)
+        .set(Position{10, 20});
+
+    int count = 0;
+
+    ecs.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](flecs::iter& it, size_t row, Position& p) {
+            count ++;
+        });
+
+    e1.destruct();
+
+    test_int(count, 0);
+}
+
+void Observer_on_set_w_override_after_clear(void) {
+    flecs::world ecs;
+
+    ecs.component<Position>().add(flecs::OnInstantiate, flecs::Inherit);
+
+    auto base = ecs.prefab()
+        .set(Position{1, 2});
+
+    auto e1 = ecs.entity().is_a(base)
+        .set(Position{10, 20});
+
+    int count = 0;
+
+    ecs.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](flecs::iter& it, size_t row, Position& p) {
+            count ++;
+        });
+
+    e1.clear();
+
+    test_int(count, 0);
 }

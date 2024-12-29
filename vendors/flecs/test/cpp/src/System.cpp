@@ -1044,6 +1044,26 @@ void System_rate_filter(void) {
     }
 }
 
+void System_self_rate_filter(void) {
+    flecs::world world;
+
+    int32_t count = 0;
+
+    world.system<Position>("sys")
+        .rate(2)
+        .each([&](Position & p){
+            count ++;
+        });
+
+    world.entity().set<Position>({1.0, 2.0});
+
+    for(int i = 0; i < 10; i++) {
+        world.progress();
+    }
+
+    test_int(count, 5);
+}
+
 void System_update_rate_filter(void) {
     flecs::world world;
 
@@ -2289,4 +2309,19 @@ void System_register_twice_w_each_run(void) {
 
     sys2.run();
     test_int(count2, 1);
+}
+
+void System_run_w_0_src_query(void) {
+    flecs::world world;
+
+    int count = 0;
+
+    world.system()
+        .write<Position>()
+        .run([&](flecs::iter&){
+            count ++;
+        });
+
+    world.progress();
+    test_int(count, 1);
 }

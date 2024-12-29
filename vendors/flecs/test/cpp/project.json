@@ -289,7 +289,14 @@
                 "set_sparse",
                 "insert_1_sparse",
                 "insert_2_w_1_sparse",
-                "emplace_sparse"
+                "emplace_sparse",
+                "override_sparse",
+                "delete_w_override_sparse",
+                "get_pair_second_invalid_type",
+                "get_mut_pair_second_invalid_type",
+                "ensure_pair_second_invalid_type",
+                "set_pair_second_invalid_type",
+                "get_ref_pair_second_invalid_type"
             ]
         }, {
             "id": "Pairs",
@@ -361,7 +368,9 @@
                 "deref_pair_obj",
                 "deref_const_pair_obj",
                 "set_R_existing_value",
-                "symmetric_w_childof"
+                "symmetric_w_childof",
+                "modified_tag_second",
+                "modified_tag_first"
             ]
         }, {
             "id": "Enum",
@@ -433,7 +442,17 @@
                 "alias_entity",
                 "alias_entity_by_name",
                 "alias_entity_by_scoped_name",
-                "alias_entity_empty"
+                "alias_entity_empty",
+                "id_from_str_0_entity",
+                "id_from_str_entity_from_str",
+                "id_from_str_unresolved_entity_from_str",
+                "id_from_str_scoped_entity_from_str",
+                "id_from_str_template_entity_from_str",
+                "id_from_str_pair_from_str",
+                "id_from_str_unresolved_pair_from_str",
+                "id_from_str_wildcard_pair_from_str",
+                "id_from_str_any_pair_from_str",
+                "id_from_str_invalid_pair"
             ]
         }, {
             "id": "System",
@@ -472,6 +491,7 @@
                 "each_w_mut_children_it",
                 "readonly_children_iter",
                 "rate_filter",
+                "self_rate_filter",
                 "update_rate_filter",
                 "default_ctor",
                 "test_auto_defer_each",
@@ -508,7 +528,8 @@
                 "register_twice_w_each",
                 "register_twice_w_run",
                 "register_twice_w_run_each",
-                "register_twice_w_each_run"
+                "register_twice_w_each_run",
+                "run_w_0_src_query"
             ]
         }, {
             "id": "Event",
@@ -664,7 +685,14 @@
                 "run_w_iter_fini_empty",
                 "run_w_iter_fini_no_query",
                 "add_to_match_from_staged_query",
-                "add_to_match_from_staged_query_readonly_threaded"
+                "add_to_match_from_staged_query_readonly_threaded",
+                "pair_with_variable_src",
+                "pair_with_variable_src_no_row_fields",
+                "iter_targets",
+                "iter_targets_2nd_field",
+                "iter_targets_field_out_of_range",
+                "iter_targets_field_not_a_pair",
+                "iter_targets_field_not_set"
             ]
         }, {
             "id": "QueryBuilder",
@@ -771,6 +799,7 @@
                 "with_pair_components",
                 "with_pair_component_id",
                 "with_pair_component_name",
+                "with_pair_name_component_id",
                 "with_enum",
                 "without_id",
                 "without_name",
@@ -780,6 +809,7 @@
                 "without_pair_components",
                 "without_pair_component_id",
                 "without_pair_component_name",
+                "without_pair_name_component_id",
                 "without_enum",
                 "write_id",
                 "write_name",
@@ -879,6 +909,9 @@
                 "create_w_no_template_args",
                 "yield_existing",
                 "yield_existing_2_terms",
+                "yield_existing_on_create_flag",
+                "yield_existing_on_delete_flag",
+                "yield_existing_on_create_delete_flag",
                 "default_ctor",
                 "entity_ctor",
                 "on_add",
@@ -912,7 +945,17 @@
                 "register_twice_w_each",
                 "register_twice_w_run",
                 "register_twice_w_run_each",
-                "register_twice_w_each_run"
+                "register_twice_w_each_run",
+                "other_table",
+                "other_table_w_pair",
+                "other_table_w_pair_wildcard",
+                "on_add_inherited",
+                "on_set_inherited",
+                "on_remove_inherited",
+                "on_set_after_remove_override",
+                "on_set_after_remove_override_create_observer_before",
+                "on_set_w_override_after_delete",
+                "on_set_w_override_after_clear"
             ]
         }, {
             "id": "ComponentLifecycle",
@@ -976,6 +1019,15 @@
                 "on_add_hook_w_entity",
                 "on_remove_hook_w_entity",
                 "on_set_hook_w_entity",
+                "on_add_hook_sparse",
+                "on_remove_hook_sparse",
+                "on_set_hook_sparse",
+                "on_add_hook_sparse_w_entity",
+                "on_remove_hook_sparse_w_entity",
+                "on_set_hook_sparse_w_entity",
+                "on_add_hook_sparse_w_iter",
+                "on_remove_hook_sparse_w_iter",
+                "on_set_hook_sparse_w_iter",
                 "chained_hooks",
                 "ctor_w_2_worlds",
                 "ctor_w_2_worlds_explicit_registration",
@@ -993,7 +1045,9 @@
                 "dtor_relation_target",
                 "register_parent_after_child_w_hooks",
                 "register_parent_after_child_w_hooks_implicit",
-                "sparse_component"
+                "sparse_component",
+                "count_in_add_hook",
+                "count_in_remove_hook"
             ]
         }, {
             "id": "Refs",
@@ -1012,7 +1066,9 @@
                 "default_ctor",
                 "ctor_from_entity",
                 "implicit_operator_bool",
-                "try_get"
+                "try_get",
+                "has",
+                "bool_operator"
             ]
         }, {
             "id": "Module",
@@ -1033,7 +1089,11 @@
                 "lookup_module_after_reparent",
                 "reparent_module_in_ctor",
                 "implicitly_add_module_to_scopes_component",
-                "implicitly_add_module_to_scopes_entity"
+                "implicitly_add_module_to_scopes_entity",
+                "rename_namespace_shorter",
+                "rename_namespace_longer",
+                "rename_namespace_nested",
+                "rename_reparent_root_module"
             ]
         }, {
             "id": "ImplicitComponents",
@@ -1198,7 +1258,8 @@
                 "get_mut_R_T",
                 "world_mini",
                 "copy_world",
-                "fini_reentrancy"
+                "fini_reentrancy",
+                "fini_copy_move_assign"
             ]
         }, {
             "id": "Singleton",
@@ -1384,6 +1445,7 @@
                 "set_name",
                 "set_link",
                 "set_color",
+                "set_uuid",
                 "get_name_no_doc_name"
             ]
         }]

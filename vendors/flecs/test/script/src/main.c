@@ -260,6 +260,7 @@ void Eval_partial_assign_nontrivial_with(void);
 void Eval_partial_assign_with_large_array(void);
 void Eval_non_trivial_var_component(void);
 void Eval_non_trivial_var_with(void);
+void Eval_update_template_w_tag(void);
 
 // Testsuite 'Template'
 void Template_template_no_scope(void);
@@ -296,6 +297,8 @@ void Template_anonymous_template_instance(void);
 void Template_anonymous_template_instance_no_scope(void);
 void Template_anonymous_template_instance_w_prop(void);
 void Template_anonymous_template_instance_w_prop_no_scope(void);
+void Template_with_after_template(void);
+void Template_with_in_scope_after_template(void);
 
 // Testsuite 'Error'
 void Error_multi_line_comment_after_newline_before_newline_scope_open(void);
@@ -312,6 +315,7 @@ void Error_default_type_with_tag(void);
 void Error_invalid_oneof(void);
 void Error_default_type_with_tag(void);
 void Error_unterminated_multiline_string(void);
+void Error_invalid_assign_multiline_string(void);
 void Error_const_var_redeclare(void);
 void Error_typed_const_w_composite_type_invalid_assignment(void);
 void Error_unterminated_multi_line_comment_in_value(void);
@@ -1643,6 +1647,10 @@ bake_test_case Eval_testcases[] = {
     {
         "non_trivial_var_with",
         Eval_non_trivial_var_with
+    },
+    {
+        "update_template_w_tag",
+        Eval_update_template_w_tag
     }
 };
 
@@ -1782,6 +1790,14 @@ bake_test_case Template_testcases[] = {
     {
         "anonymous_template_instance_w_prop_no_scope",
         Template_anonymous_template_instance_w_prop_no_scope
+    },
+    {
+        "with_after_template",
+        Template_with_after_template
+    },
+    {
+        "with_in_scope_after_template",
+        Template_with_in_scope_after_template
     }
 };
 
@@ -1841,6 +1857,10 @@ bake_test_case Error_testcases[] = {
     {
         "unterminated_multiline_string",
         Error_unterminated_multiline_string
+    },
+    {
+        "invalid_assign_multiline_string",
+        Error_invalid_assign_multiline_string
     },
     {
         "const_var_redeclare",
@@ -3134,21 +3154,21 @@ static bake_test_suite suites[] = {
         "Eval",
         NULL,
         NULL,
-        251,
+        252,
         Eval_testcases
     },
     {
         "Template",
         NULL,
         NULL,
-        34,
+        36,
         Template_testcases
     },
     {
         "Error",
         NULL,
         NULL,
-        62,
+        63,
         Error_testcases
     },
     {

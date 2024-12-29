@@ -81,7 +81,8 @@
                 "struct_w_enum",
                 "zero_initialized",
                 "enum_relation",
-                "enum_w_short_notation"
+                "enum_w_short_notation",
+                "enum_modified_event"
             ]
         }, {
             "id": "BitmaskTypes",
@@ -93,6 +94,49 @@
                 "bitmask_4_constants_manual_values",
                 "struct_w_bitmask",
                 "bitmask_w_short_notation"
+            ]
+        }, {
+            "id": "RuntimeTypes",
+            "testcases": [
+                "trivial_struct",
+                "ctor",
+                "dtor",
+                "move",
+                "copy",
+                "trivial_array",
+                "array_ctor",
+                "array_dtor",
+                "array_move",
+                "array_copy",
+                "vector_lifecycle",
+                "vector_lifecycle_trivial_type",
+                "opaque",
+                "struct_with_ints",
+                "struct_with_strings",
+                "struct_with_opaque",
+                "nested_struct_with_strings",
+                "struct_with_array_of_strings",
+                "struct_with_array_of_array_of_strings",
+                "struct_with_vector_of_ints",
+                "struct_with_vector_of_strings",
+                "nested_struct_with_vector_of_ints",
+                "nested_struct_with_vector_of_strings",
+                "array_of_ints",
+                "array_of_strings",
+                "array_of_struct_with_ints",
+                "array_of_struct_with_strings",
+                "array_of_struct_with_opaques",
+                "array_of_array_of_strings",
+                "array_of_array_of_struct_with_strings",
+                "array_of_vectors_of_ints",
+                "array_of_vectors_of_strings",
+                "array_of_opaque",
+                "vector_of_ints",
+                "vector_of_strings",
+                "vector_of_struct_with_ints",
+                "vector_of_struct_with_strings",
+                "vector_of_arrays_of_strings",
+                "vector_of_opaque"
             ]
         }, {
             "id": "StructTypes",
@@ -385,7 +429,7 @@
                 "opaque_set_int",
                 "opaque_set_uint",
                 "opaque_set_float",
-                "opaque_set_string",
+                "opaque_get_set_string",
                 "opaque_set_entity",
                 "opaque_set_id",
                 "opaque_set_int_vec",
@@ -622,6 +666,9 @@
                 "serialize_w_name_2_tags",
                 "serialize_w_name_1_pair",
                 "serialize_w_base",
+                "serialize_w_base_dont_inherit_tag",
+                "serialize_w_base_dont_inherit_component",
+                "serialize_w_base_dont_inherit_pair",
                 "serialize_w_2_base",
                 "serialize_component_w_base",
                 "serialize_component_w_base_no_reflection_data",
@@ -677,7 +724,15 @@
                 "serialize_sparse_mixed",
                 "serialize_sparse_inherited",
                 "serialize_sparse_inherited_pair",
-                "serialize_sparse_inherited_mixed"
+                "serialize_sparse_inherited_mixed",
+                "serialize_sparse_w_type_info",
+                "serialize_auto_override_w_inherited",
+                "serialize_auto_override",
+                "serialize_auto_override_pair",
+                "serialize_auto_override_fullpath",
+                "serialize_auto_override_pair_fullpath",
+                "serialize_toggle",
+                "serialize_toggle_pair"
             ]
         }, {
             "id": "SerializeIterToJson",
@@ -752,7 +807,12 @@
                 "no_fields",
                 "no_fields_w_vars",
                 "serialize_from_stage",
-                "serialize_sparse"
+                "serialize_sparse",
+                "serialize_15_fields",
+                "serialize_16_fields",
+                "serialize_31_fields",
+                "serialize_32_fields",
+                "serialize_field_w_escaped_sep"
             ]
         }, {
             "id": "SerializeIterToRowJson",
@@ -889,7 +949,9 @@
                 "anonymous_component",
                 "anonymous_tag_recycled",
                 "anonymous_pair_recycled",
-                "anonymous_component_recycled"
+                "anonymous_component_recycled",
+                "serialize_plan_trivial_query",
+                "serialize_plan_nontrivial_query"
             ]
         }, {
             "id": "MetaUtils",
@@ -936,7 +998,8 @@
                 "deser_entity_from_json",
                 "ser_deser_world_w_ser_opaque",
                 "ser_deser_entity",
-                "ser_deser_0_entity"
+                "ser_deser_0_entity",
+                "const_string"
             ]
         }, {
             "id": "Misc",

@@ -308,13 +308,13 @@ void flecs_observer_invoke(
             ECS_INTERNAL_ERROR, NULL);
     }
 
-    ecs_termset_t set_fields = it->set_fields;
-    // it->set_fields = 1; /* Field 0 is set otherwise we wouldn't be triggering */
+    ecs_termset_t row_fields = it->row_fields;
+    it->row_fields = query->row_fields;
 
     bool match_this = query->flags & EcsQueryMatchThis;
     if (match_this) {
         callback(it);
-        query->eval_count ++;
+        ecs_os_inc(&query->eval_count);
     } else {
         ecs_entity_t observer_src = ECS_TERM_REF_ID(&term->src);
         if (observer_src && !(term->src.id & EcsIsEntity)) {
@@ -330,7 +330,7 @@ void flecs_observer_invoke(
             it->entities = &e;
             if (!observer_src) {
                 callback(it);
-                query->eval_count ++;
+                ecs_os_inc(&query->eval_count);
             } else if (observer_src == e) {
                 ecs_entity_t dummy = 0;
                 it->entities = &dummy;
@@ -339,7 +339,7 @@ void flecs_observer_invoke(
                 }
 
                 callback(it);
-                query->eval_count ++;
+                ecs_os_inc(&query->eval_count);
                 it->sources[0] = src;
                 break;
             }
@@ -349,7 +349,7 @@ void flecs_observer_invoke(
         it->count = count;
     }
 
-    it->set_fields = set_fields;
+    it->row_fields = row_fields;
 
     flecs_stage_set_system(world->stages[0], old_system);
 
@@ -437,8 +437,7 @@ void flecs_observers_invoke(
         while (ecs_map_next(&oit)) {
             ecs_observer_t *o = ecs_map_ptr(&oit);
             ecs_assert(it->table == table, ECS_INTERNAL_ERROR, NULL);
-            flecs_uni_observer_invoke(
-                world, o, it, table, trav);
+            flecs_uni_observer_invoke(world, o, it, table, trav);
         }
 
         ecs_table_unlock(it->world, table);
@@ -551,8 +550,6 @@ void flecs_multi_observer_invoke(
 
         ecs_table_unlock(it->world, table);
         flecs_stage_set_system(world->stages[0], old_system);
-        
-        return;
     } else {
         /* While the observer query was strictly speaking evaluated, it's more
          * useful to measure how often the observer was actually invoked. */
@@ -561,6 +558,40 @@ void flecs_multi_observer_invoke(
 
 done:
     return;
+}
+
+static
+void flecs_multi_observer_invoke_no_query(
+    ecs_iter_t *it) 
+{
+    ecs_observer_t *o = it->ctx;
+    flecs_poly_assert(o, ecs_observer_t);
+
+    ecs_world_t *world = it->real_world;
+    ecs_table_t *table = it->table;
+    ecs_iter_t user_it = *it;
+
+    user_it.ctx = o->ctx;
+    user_it.callback_ctx = o->callback_ctx;
+    user_it.run_ctx = o->run_ctx;
+    user_it.param = it->param;
+    user_it.callback = o->callback;
+    user_it.system = o->entity;
+    user_it.event = it->event;
+
+    ecs_entity_t old_system = flecs_stage_set_system(
+        world->stages[0], o->entity);
+    ecs_table_lock(it->world, table);
+
+    if (o->run) {
+        user_it.next = flecs_default_next_callback;
+        o->run(&user_it);
+    } else {
+        user_it.callback(&user_it);
+    }
+
+    ecs_table_unlock(it->world, table);
+    flecs_stage_set_system(world->stages[0], old_system);
 }
 
 /* For convenience, so applications can (in theory) use a single run callback 
@@ -599,11 +630,12 @@ void flecs_multi_observer_builtin_run(ecs_iter_t *it) {
 static
 void flecs_observer_yield_existing(
     ecs_world_t *world,
-    ecs_observer_t *o)
+    ecs_observer_t *o,
+    bool yield_on_remove)
 {
     ecs_run_action_t run = o->run;
     if (!run) {
-        run = flecs_multi_observer_invoke;
+        run = flecs_multi_observer_invoke_no_query;
     }
 
     ecs_run_aperiodic(world, EcsAperiodicEmptyTables);
@@ -614,6 +646,19 @@ void flecs_observer_yield_existing(
      * the event, if the event is iterable. */
     int i, count = o->event_count;
     for (i = 0; i < count; i ++) {
+        ecs_entity_t event = o->events[i];
+
+        /* We only yield for OnRemove events if the observer is deleted. */
+        if (event == EcsOnRemove) {
+            if (!yield_on_remove) {
+                continue;
+            }
+        } else {
+            if (yield_on_remove) {
+                continue;
+            }
+        }
+
         ecs_iter_t it = ecs_query_iter(world, o->query);
         it.system = o->entity;
         it.ctx = o;
@@ -684,6 +729,9 @@ int flecs_observer_add_child(
     ecs_observer_t *o,
     const ecs_observer_desc_t *child_desc)
 {
+    ecs_assert(child_desc->query.flags & EcsQueryNested, 
+        ECS_INTERNAL_ERROR, NULL);
+
     ecs_observer_t *child_observer = flecs_observer_init(
         world, 0, child_desc);
     if (!child_observer) {
@@ -729,11 +777,13 @@ int flecs_multi_observer_init(
     child_desc.run_ctx = NULL;
     child_desc.run_ctx_free = NULL;
     child_desc.yield_existing = false;
+    child_desc.flags_ &= ~(EcsObserverYieldOnCreate|EcsObserverYieldOnDelete);
     ecs_os_zeromem(&child_desc.entity);
     ecs_os_zeromem(&child_desc.query.terms);
     ecs_os_zeromem(&child_desc.query);
-    ecs_os_memcpy_n(child_desc.events, o->events, 
-        ecs_entity_t, o->event_count);
+    ecs_os_memcpy_n(child_desc.events, o->events, ecs_entity_t, o->event_count);
+
+    child_desc.query.flags |= EcsQueryNested;
 
     int i, term_count = query->term_count;
     bool optional_only = query->flags & EcsQueryMatchThis;
@@ -847,7 +897,10 @@ int flecs_multi_observer_init(
             term->src.id = EcsThis | EcsIsVariable | EcsSelf;
             term->second.id = 0;
         } else if (term->oper == EcsOptional) {
-            continue;
+            if (only_table_events) {
+                /* For table events optional terms aren't necessary */
+                continue;
+            }
         }
 
         if (flecs_observer_add_child(world, o, &child_desc)) {
@@ -947,6 +1000,11 @@ ecs_observer_t* flecs_observer_init(
     impl->term_index = desc->term_index_;
     impl->flags = desc->flags_;
 
+    ecs_check(!(desc->yield_existing && 
+        (desc->flags_ & (EcsObserverYieldOnCreate|EcsObserverYieldOnDelete))), 
+        ECS_INVALID_PARAMETER,
+         "cannot set yield_existing and YieldOn* flags at the same time");
+
     /* Check if observer is monitor. Monitors are created as multi observers
      * since they require pre/post checking of the filter to test if the
      * entity is entering/leaving the monitor. */
@@ -965,8 +1023,19 @@ ecs_observer_t* flecs_observer_init(
             o->events[1] = EcsOnRemove;
             o->event_count ++;
             impl->flags |= EcsObserverIsMonitor;
+            if (desc->yield_existing) {
+                impl->flags |= EcsObserverYieldOnCreate;
+                impl->flags |= EcsObserverYieldOnDelete;
+            }
         } else {
             o->events[i] = event;
+            if (desc->yield_existing) {
+                if (event == EcsOnRemove) {
+                    impl->flags |= EcsObserverYieldOnDelete;
+                } else {
+                    impl->flags |= EcsObserverYieldOnCreate;
+                }
+            }
         }
 
         o->event_count ++;
@@ -1000,8 +1069,8 @@ ecs_observer_t* flecs_observer_init(
         }
     }
 
-    if (desc->yield_existing) {
-        flecs_observer_yield_existing(world, o);
+    if (impl->flags & EcsObserverYieldOnCreate) {
+        flecs_observer_yield_existing(world, o, false);
     }
 
     return o;
@@ -1125,6 +1194,10 @@ void flecs_observer_fini(
     ecs_assert(o->query != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_world_t *world = o->query->world;
     ecs_observer_impl_t *impl = flecs_observer_impl(o);
+
+    if (impl->flags & EcsObserverYieldOnDelete) {
+        flecs_observer_yield_existing(world, o, true);
+    }
 
     if (impl->flags & EcsObserverIsMulti) {
         ecs_observer_t **children = ecs_vec_first(&impl->children);

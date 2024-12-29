@@ -14,11 +14,13 @@ void Doc_get_entity_name(void);
 void Doc_get_set_brief(void);
 void Doc_get_set_detail(void);
 void Doc_get_set_link(void);
+void Doc_get_set_uuid(void);
 void Doc_set_name_nullptr(void);
 void Doc_set_brief_nullptr(void);
 void Doc_set_detail_nullptr(void);
 void Doc_set_link_nullptr(void);
 void Doc_set_color_nullptr(void);
+void Doc_set_uuid_nullptr(void);
 
 // Testsuite 'Pipeline'
 void Pipeline_system_order_same_phase(void);
@@ -104,6 +106,8 @@ void Pipeline_run_pipeline_multithreaded_tasks(void);
 void Pipeline_pipeline_init_no_terms(void);
 void Pipeline_pipeline_init_no_system_term(void);
 void Pipeline_disable_component_from_immediate_system(void);
+void Pipeline_run_w_empty_query(void);
+void Pipeline_run_w_0_src_query(void);
 
 // Testsuite 'SystemMisc'
 void SystemMisc_invalid_not_without_id(void);
@@ -168,6 +172,7 @@ void SystemMisc_system_w_short_notation(void);
 void SystemMisc_update_interval_w_system_init(void);
 void SystemMisc_update_rate_w_system_init(void);
 void SystemMisc_system_w_interval_rate_stop_timer(void);
+void SystemMisc_system_w_rate_filter_self(void);
 void SystemMisc_system_same_interval_same_tick(void);
 void SystemMisc_system_no_id_in_scope(void);
 void SystemMisc_register_callback_after_run(void);
@@ -317,6 +322,7 @@ void Stats_get_entity_count(void);
 void Stats_get_pipeline_stats_w_task_system(void);
 void Stats_get_not_alive_entity_count(void);
 void Stats_progress_stats_systems(void);
+void Stats_progress_stats_systems_w_empty_table_flag(void);
 
 // Testsuite 'Run'
 void Run_setup(void);
@@ -452,6 +458,8 @@ void Rest_request_commands_garbage_collect(void);
 void Rest_script_error(void);
 void Rest_import_rest_after_mini(void);
 void Rest_get_pipeline_stats_after_delete_system(void);
+void Rest_request_world_summary_before_monitor_sys_run(void);
+void Rest_escape_backslash(void);
 
 // Testsuite 'Metrics'
 void Metrics_member_gauge_1_entity(void);
@@ -552,6 +560,10 @@ bake_test_case Doc_testcases[] = {
         Doc_get_set_link
     },
     {
+        "get_set_uuid",
+        Doc_get_set_uuid
+    },
+    {
         "set_name_nullptr",
         Doc_set_name_nullptr
     },
@@ -570,6 +582,10 @@ bake_test_case Doc_testcases[] = {
     {
         "set_color_nullptr",
         Doc_set_color_nullptr
+    },
+    {
+        "set_uuid_nullptr",
+        Doc_set_uuid_nullptr
     }
 };
 
@@ -905,6 +921,14 @@ bake_test_case Pipeline_testcases[] = {
     {
         "disable_component_from_immediate_system",
         Pipeline_disable_component_from_immediate_system
+    },
+    {
+        "run_w_empty_query",
+        Pipeline_run_w_empty_query
+    },
+    {
+        "run_w_0_src_query",
+        Pipeline_run_w_0_src_query
     }
 };
 
@@ -1156,6 +1180,10 @@ bake_test_case SystemMisc_testcases[] = {
     {
         "system_w_interval_rate_stop_timer",
         SystemMisc_system_w_interval_rate_stop_timer
+    },
+    {
+        "system_w_rate_filter_self",
+        SystemMisc_system_w_rate_filter_self
     },
     {
         "system_same_interval_same_tick",
@@ -1694,6 +1722,10 @@ bake_test_case Stats_testcases[] = {
     {
         "progress_stats_systems",
         Stats_progress_stats_systems
+    },
+    {
+        "progress_stats_systems_w_empty_table_flag",
+        Stats_progress_stats_systems_w_empty_table_flag
     }
 };
 
@@ -2183,6 +2215,14 @@ bake_test_case Rest_testcases[] = {
     {
         "get_pipeline_stats_after_delete_system",
         Rest_get_pipeline_stats_after_delete_system
+    },
+    {
+        "request_world_summary_before_monitor_sys_run",
+        Rest_request_world_summary_before_monitor_sys_run
+    },
+    {
+        "escape_backslash",
+        Rest_escape_backslash
     }
 };
 
@@ -2498,21 +2538,21 @@ static bake_test_suite suites[] = {
         "Doc",
         NULL,
         NULL,
-        10,
+        12,
         Doc_testcases
     },
     {
         "Pipeline",
         NULL,
         NULL,
-        83,
+        85,
         Pipeline_testcases
     },
     {
         "SystemMisc",
         NULL,
         NULL,
-        68,
+        69,
         SystemMisc_testcases
     },
     {
@@ -2582,7 +2622,7 @@ static bake_test_suite suites[] = {
         "Stats",
         NULL,
         NULL,
-        12,
+        13,
         Stats_testcases
     },
     {
@@ -2635,7 +2675,7 @@ static bake_test_suite suites[] = {
         "Rest",
         NULL,
         NULL,
-        16,
+        18,
         Rest_testcases
     },
     {

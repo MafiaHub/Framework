@@ -117,6 +117,8 @@ public:
 
     flecs::table table() const;
 
+    flecs::table other_table() const;
+
     flecs::table_range range() const;
 
     /** Access ctx.
@@ -371,6 +373,14 @@ public:
     void each() {
         iter_->callback(iter_);
     }
+
+    /** Iterate targets for pair field.
+     * 
+     * @param index The field index.
+     * @param func Callback invoked for each target
+     */
+    template <typename Func>
+    void targets(int8_t index, const Func& func);
 
     /** Free iterator resources.
      * This operation only needs to be called when the iterator is not iterated
