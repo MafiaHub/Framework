@@ -85,9 +85,9 @@ namespace Framework::Scripting::Builtins {
 
         static void Register(sol::state &luaEngine) {
             sol::usertype<ColorRGB> cls = luaEngine.new_usertype<ColorRGB>("RGB", sol::constructors<ColorRGB(int, int, int)>());
-            cls.set("r", sol::readonly(&ColorRGB::GetR));
-            cls.set("g", sol::readonly(&ColorRGB::GetG));
-            cls.set("b", sol::readonly(&ColorRGB::GetB));
+            cls["r"] = sol::property([](const ColorRGB& self) { return self.GetR(); });
+            cls["g"] = sol::property([](const ColorRGB& self) { return self.GetG(); });
+            cls["b"] = sol::property([](const ColorRGB& self) { return self.GetB(); });
             cls["toString"] = &ColorRGB::ToString;
             cls["toArray"]  = &ColorRGB::ToArray;
             cls["add"]     = &ColorRGB::Add;

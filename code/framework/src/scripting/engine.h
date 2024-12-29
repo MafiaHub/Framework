@@ -9,6 +9,7 @@
 #pragma once
 
 #include <map>
+#include <vector>
 
 #include <logging/logger.h>
 #include <utils/time.h>
@@ -18,10 +19,11 @@
 #include "shared.h"
 
 namespace Framework::Scripting {
+    using EventHandler = std::vector<sol::function>;
     class Engine {
       public:
         sol::state _luaEngine;
-        // std::map<std::string, std::vector<Callback>> _eventHandlers = {};
+        std::map<std::string, EventHandler> _eventHandlers = {};
 
       public:
         virtual EngineError Init(SDKRegisterCallback) = 0;
@@ -34,36 +36,19 @@ namespace Framework::Scripting {
             return _luaEngine;
         }
 
-        bool IsEventValid(std::string name) {
-            return _luaEngine[name] != nullptr;
-        }
+        void ListenEvent(std::string, sol::function);
+        
+        template <typename... Args>
+        void InvokeEvent(const std::string &name, Args &&...args) {
+            auto &callbacks = _eventHandlers[name];
 
-        template<typename T=void, typename ...Args>
-        T InvokeEvent(const std::string name, Args... args) {
-            if (_luaEngine[name] == nullptr){
-                return T();
-            }
-
-            try {
-                sol::protected_function f(_luaEngine[name]);
-                sol::protected_function_result res = f(args...);
-
-                if (!res.valid()) {
-                    sol::error err = res;
-                    std::cerr << err.what() << std::endl;
-                    return T();
+            for (auto &callback : callbacks) {
+                sol::protected_function pf {callback};
+                auto result = pf(std::forward<Args>(args)...);
+                if (!result.valid()) {
+                    sol::error err = result;
+                    spdlog::error(err.what());
                 }
-
-                if constexpr (std::is_same_v<T, void>) {
-                    return;
-                }
-                else {
-                    return res;
-                }
-            }
-            catch (sol::error &ex) {
-                std::cerr << ex.what() << std::endl;
-                return T();
             }
         }
     };

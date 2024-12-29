@@ -24,11 +24,13 @@ namespace Framework::Scripting {
     }
 
     ModuleError Module::InitServerEngine(SDKRegisterCallback cb) {
-        // Validate the presence of the gamemode and the gamemode server sub folder
-        const cppfs::FileHandle serverFolder = cppfs::fs::open(_mainPath + "/server");
-        if (!serverFolder.exists() || serverFolder.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(fmt::format("The server folder '{}' does not exist", _mainPath + "/server"));
-            return ModuleError::MODULE_MISSING_GAMEMODE;
+        // Ensure server directory exists
+        cppfs::FileHandle serverFolder = cppfs::fs::open(_mainPath + "/server");
+        if (!serverFolder.exists()) {
+            if (!serverFolder.createDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to create server directory");
+                return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
+            }
         }
 
         // Init should return an error if the engine failed to initialize
@@ -57,29 +59,60 @@ namespace Framework::Scripting {
     }
 
     ModuleError Module::LoadManifest() {
-        // Check the manifest.json file exists
-        const cppfs::FileHandle manifestFile = cppfs::fs::open(_mainPath + "/manifest.json");
+        // Ensure main path exists
+        cppfs::FileHandle mainFolder = cppfs::fs::open(_mainPath);
+        if (!mainFolder.exists()) {
+            if (!mainFolder.createDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to create main directory at {}", _mainPath);
+                return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
+            }
+        }
+
+        // Check/create manifest.json
+        cppfs::FileHandle manifestFile = cppfs::fs::open(_mainPath + "/manifest.json");
         if (!manifestFile.exists() || !manifestFile.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode manifest.json handle does not exists or is not a file");
-            return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
+            // Create default manifest
+            nlohmann::json defaultManifest;
+            defaultManifest["client_files"] = std::vector<std::string>();
+            defaultManifest["server_files"] = std::vector<std::string>();
+
+            try {
+                const std::string manifestContent = defaultManifest.dump(4);
+                manifestFile.writeFile(manifestContent);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Created default manifest.json");
+
+                // Set empty arrays for initial state
+                _clientFiles.clear();
+                _serverFiles.clear();
+                return ModuleError::MODULE_NONE;
+            }
+            catch (const std::exception &e) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to write manifest.json: {}", e.what());
+                return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
+            }
         }
 
-        // Load the manifest.json file
-        std::string manifestJsonContent = manifestFile.readFile();
-        if (manifestJsonContent.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode manifest.json is empty");
-            return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
-        }
-
-        auto root = nlohmann::json::parse(manifestJsonContent);
+        // Load existing manifest
         try {
+            std::string manifestJsonContent = manifestFile.readFile();
+            if (manifestJsonContent.empty()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode manifest.json is empty");
+                return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
+            }
+
+            auto root    = nlohmann::json::parse(manifestJsonContent);
             _clientFiles = root["client_files"].get<std::vector<std::string>>();
             _serverFiles = root["server_files"].get<std::vector<std::string>>();
         }
         catch (nlohmann::detail::type_error &err) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode package.json is not valid:\n\t{}", err.what());
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode manifest.json is not valid:\n\t{}", err.what());
             return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
         }
+        catch (const std::exception &e) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to read manifest.json: {}", e.what());
+            return ModuleError::MODULE_RESOURCE_MANAGER_NULL;
+        }
+
         return ModuleError::MODULE_NONE;
     }
 

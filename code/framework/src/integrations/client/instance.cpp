@@ -21,13 +21,10 @@
 
 #include "utils/version.h"
 
-#include <optick.h>
-
 #include "core_modules.h"
 
 namespace Framework::Integrations::Client {
     Instance::Instance() {
-        OPTICK_START_CAPTURE();
         _networkingEngine = std::make_unique<Networking::Engine>();
         _presence         = std::make_unique<External::Discord::Wrapper>();
         _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
@@ -39,7 +36,6 @@ namespace Framework::Integrations::Client {
     }
 
     Instance::~Instance() {
-        OPTICK_STOP_CAPTURE();
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {
@@ -170,7 +166,6 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::Update() {
-        OPTICK_EVENT();
         if (_presence && _presence->IsInitialized()) {
             _presence->Update();
         }
@@ -195,7 +190,6 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::Render() {
-        OPTICK_EVENT();
         if (_renderer && _renderer->IsInitialized()) {
             _renderer->Update();
         }

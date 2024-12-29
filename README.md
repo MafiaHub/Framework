@@ -9,7 +9,7 @@
 
 <br />
 <div align="center">
-  A suite of tools and libraries to accelerate multi-player modification development.
+  Opionated suite of tools and libraries to accelerate build multi-player modifications for AAA games.
 </div>
 
 <div align="center">
@@ -27,11 +27,10 @@
 This codebase provides a suite of tools and libraries to simplify the development of multi-player modifications and ensure consistency across all of them. The primary goal is to provide a common foundation and interface with shared functionality and data. It covers many fields we found necessary during the development of multi-player mods, such as:
 * **Networking**: The core of the framework provides all the necessary tools to synchronize data between players.
 * **ECS**: Backed by a robust ECS framework that simplifies entity management and world streaming, it is also easily extensible.
-* **Scripting**: The **Node.js** scripting layer provides an easy way to create and manage game modes used on game servers.
+* **Scripting**: The **Lua** scripting layer provides an easy way to create and manage game modes used on game servers.
 * **Logging**: It is always vital to log actions and errors, so the framework provides a simple way.
-* **GUI**: It provides a simple way to create and manage GUI elements using the **Ultralight** library.
+* **GUI**: It provides a simple way to create and manage GUI elements using the **Ultralight** and DearImGUI libraries.
 * **Sentry**: The framework provides a simple way to report errors and exceptions to the **Sentry** service.
-* **Firebase**: It easily stores and retrieves data from the **Firebase** service. Including stats, player data, and more.
 * **Externals**: Contains wrappers for various libraries and services used within the framework.
 * **Integrations**: Provides a simple server and client moddable setup combining various framework components, allowing you to focus on game-specific features.
 * **Utils**: It provides useful functions and classes throughout the framework.

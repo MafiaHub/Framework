@@ -11,7 +11,6 @@
 #include <utils/safe_win32.h>
 
 #include "errors.h"
-#include "external/firebase/wrapper.h"
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
@@ -86,7 +85,6 @@ namespace Framework::Integrations::Server {
         std::shared_ptr<Scripting::ServerEngine> _scriptingEngine;
         std::shared_ptr<Networking::Engine> _networkingEngine;
         std::shared_ptr<HTTP::Webserver> _webServer;
-        std::unique_ptr<External::Firebase::Wrapper> _firebaseWrapper;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::shared_ptr<World::ServerEngine> _worldEngine;
         std::shared_ptr<Services::MasterlistConnector> _masterlist;

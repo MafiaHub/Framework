@@ -9,7 +9,6 @@
 #include "webserver.h"
 
 #include <logging/logger.h>
-#include <optick.h>
 
 namespace Framework::HTTP {
     Webserver::Webserver() {

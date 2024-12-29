@@ -2,11 +2,12 @@
 // This needs to be used along with the OpenGL 3 Renderer (imgui_impl_opengl3)
 
 // Implemented features:
-//  [X] Platform: Keyboard support. Since 1.87 we are using the io.AddKeyEvent() function. Pass ImGuiKey values to all key functions e.g. ImGui::IsKeyPressed(ImGuiKey_Space). [Legacy AKEYCODE_* values will also be supported unless IMGUI_DISABLE_OBSOLETE_KEYIO is set]
-// Missing features:
+//  [X] Platform: Keyboard support. Since 1.87 we are using the io.AddKeyEvent() function. Pass ImGuiKey values to all key functions e.g. ImGui::IsKeyPressed(ImGuiKey_Space). [Legacy AKEYCODE_* values are obsolete since 1.87 and not supported since 1.91.5]
+//  [X] Platform: Mouse support. Can discriminate Mouse/TouchScreen/Pen.
+// Missing features or Issues:
 //  [ ] Platform: Clipboard support.
 //  [ ] Platform: Gamepad support. Enable with 'io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad'.
-//  [ ] Platform: Mouse cursor shape and visibility. Disable with 'io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange'. FIXME: Check if this is even possible with Android.
+//  [ ] Platform: Mouse cursor shape and visibility (ImGuiBackendFlags_HasMouseCursors). Disable with 'io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange'. FIXME: Check if this is even possible with Android.
 // Important:
 //  - Consider using SDL or GLFW backend on Android, which will be more full-featured than this.
 //  - FIXME: On-screen keyboard currently needs to be enabled by the application (see examples/ and issue #3446)
@@ -14,40 +15,33 @@
 
 // You can use unmodified imgui_impl_* files in your project. See examples/ folder for examples of using this.
 // Prefer including the entire imgui/ repository into your project (either as a copy or as a submodule), and only build the backends you need.
-// If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
-// Read online: https://github.com/ocornut/imgui/tree/master/docs
+// Learn about Dear ImGui:
+// - FAQ                  https://dearimgui.com/faq
+// - Getting Started      https://dearimgui.com/getting-started
+// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
+// - Introduction, links and more at the top of imgui.cpp
 
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
+//  2022-09-26: Inputs: Renamed ImGuiKey_ModXXX introduced in 1.87 to ImGuiMod_XXX (old names still supported).
+//  2022-01-26: Inputs: replaced short-lived io.AddKeyModsEvent() (added two weeks ago) with io.AddKeyEvent() using ImGuiKey_ModXXX flags. Sorry for the confusion.
+//  2022-01-17: Inputs: calling new io.AddMousePosEvent(), io.AddMouseButtonEvent(), io.AddMouseWheelEvent() API (1.87+).
 //  2022-01-10: Inputs: calling new io.AddKeyEvent(), io.AddKeyModsEvent() + io.SetKeyEventNativeData() API (1.87+). Support for full ImGuiKey range.
 //  2021-03-04: Initial version.
 
 #include "imgui.h"
+#ifndef IMGUI_DISABLE
 #include "imgui_impl_android.h"
 #include <time.h>
-#include <map>
-#include <queue>
 #include <android/native_window.h>
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/log.h>
 
-struct KeyEvent
-{
-    ImGuiKey Key;
-    bool     Down;
-    int      NativeKeycode;
-    int      NativeScancode;
-
-    KeyEvent(): Key(ImGuiKey_None), Down(false), NativeKeycode(-1), NativeScancode(-1) {}
-};
-
 // Android data
 static double                                   g_Time = 0.0;
 static ANativeWindow*                           g_Window;
 static char                                     g_LogTag[] = "ImGuiExample";
-static std::map<ImGuiKey, std::queue<KeyEvent>> g_KeyEventQueues; // FIXME: Remove dependency on map and queue once we use upcoming input queue.
-static ImGuiKeyModFlags                         g_KeyModFlags = ImGuiKeyModFlags_None;
 
 static ImGuiKey ImGui_ImplAndroid_KeyCodeToImGuiKey(int32_t key_code)
 {
@@ -101,12 +95,12 @@ static ImGuiKey ImGui_ImplAndroid_KeyCodeToImGuiKey(int32_t key_code)
         case AKEYCODE_NUMPAD_ADD:           return ImGuiKey_KeypadAdd;
         case AKEYCODE_NUMPAD_ENTER:         return ImGuiKey_KeypadEnter;
         case AKEYCODE_NUMPAD_EQUALS:        return ImGuiKey_KeypadEqual;
+        case AKEYCODE_CTRL_LEFT:            return ImGuiKey_LeftCtrl;
         case AKEYCODE_SHIFT_LEFT:           return ImGuiKey_LeftShift;
-        case AKEYCODE_CTRL_LEFT:            return ImGuiKey_LeftControl;
         case AKEYCODE_ALT_LEFT:             return ImGuiKey_LeftAlt;
         case AKEYCODE_META_LEFT:            return ImGuiKey_LeftSuper;
+        case AKEYCODE_CTRL_RIGHT:           return ImGuiKey_RightCtrl;
         case AKEYCODE_SHIFT_RIGHT:          return ImGuiKey_RightShift;
-        case AKEYCODE_CTRL_RIGHT:           return ImGuiKey_RightControl;
         case AKEYCODE_ALT_RIGHT:            return ImGuiKey_RightAlt;
         case AKEYCODE_META_RIGHT:           return ImGuiKey_RightSuper;
         case AKEYCODE_MENU:                 return ImGuiKey_Menu;
@@ -162,7 +156,7 @@ static ImGuiKey ImGui_ImplAndroid_KeyCodeToImGuiKey(int32_t key_code)
     }
 }
 
-int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* input_event)
+int32_t ImGui_ImplAndroid_HandleInputEvent(const AInputEvent* input_event)
 {
     ImGuiIO& io = ImGui::GetIO();
     int32_t event_type = AInputEvent_getType(input_event);
@@ -175,15 +169,10 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* input_event)
         int32_t event_action = AKeyEvent_getAction(input_event);
         int32_t event_meta_state = AKeyEvent_getMetaState(input_event);
 
-        g_KeyModFlags = ImGuiKeyModFlags_None;
-        if ((event_meta_state & AMETA_CTRL_ON) != 0)
-            g_KeyModFlags |= ImGuiKeyModFlags_Ctrl;
-        if ((event_meta_state & AMETA_SHIFT_ON) != 0)
-            g_KeyModFlags |= ImGuiKeyModFlags_Shift;
-        if ((event_meta_state & AMETA_ALT_ON) != 0)
-            g_KeyModFlags |= ImGuiKeyModFlags_Alt;
-        if ((event_meta_state & AMETA_META_ON) != 0)
-            g_KeyModFlags |= ImGuiKeyModFlags_Super;
+        io.AddKeyEvent(ImGuiMod_Ctrl,  (event_meta_state & AMETA_CTRL_ON)  != 0);
+        io.AddKeyEvent(ImGuiMod_Shift, (event_meta_state & AMETA_SHIFT_ON) != 0);
+        io.AddKeyEvent(ImGuiMod_Alt,   (event_meta_state & AMETA_ALT_ON)   != 0);
+        io.AddKeyEvent(ImGuiMod_Super, (event_meta_state & AMETA_META_ON)  != 0);
 
         switch (event_action)
         {
@@ -194,15 +183,10 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* input_event)
         case AKEY_EVENT_ACTION_UP:
         {
             ImGuiKey key = ImGui_ImplAndroid_KeyCodeToImGuiKey(event_key_code);
-            if (key != ImGuiKey_None && (event_action == AKEY_EVENT_ACTION_DOWN || event_action == AKEY_EVENT_ACTION_UP))
+            if (key != ImGuiKey_None)
             {
-                KeyEvent io_event;
-                io_event.Key = key;
-                io_event.Down = event_action == AKEY_EVENT_ACTION_DOWN;
-                io_event.NativeKeycode = event_key_code;
-                io_event.NativeScancode = event_scan_code;
-
-                g_KeyEventQueues[key].push(io_event);
+                io.AddKeyEvent(key, event_action == AKEY_EVENT_ACTION_DOWN);
+                io.SetKeyEventNativeData(key, event_key_code, event_scan_code);
             }
 
             break;
@@ -217,36 +201,53 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* input_event)
         int32_t event_action = AMotionEvent_getAction(input_event);
         int32_t event_pointer_index = (event_action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
         event_action &= AMOTION_EVENT_ACTION_MASK;
+
+        switch (AMotionEvent_getToolType(input_event, event_pointer_index))
+        {
+        case AMOTION_EVENT_TOOL_TYPE_MOUSE:
+            io.AddMouseSourceEvent(ImGuiMouseSource_Mouse);
+            break;
+        case AMOTION_EVENT_TOOL_TYPE_STYLUS:
+        case AMOTION_EVENT_TOOL_TYPE_ERASER:
+            io.AddMouseSourceEvent(ImGuiMouseSource_Pen);
+            break;
+        case AMOTION_EVENT_TOOL_TYPE_FINGER:
+        default:
+            io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+            break;
+        }
+
         switch (event_action)
         {
         case AMOTION_EVENT_ACTION_DOWN:
         case AMOTION_EVENT_ACTION_UP:
+        {
             // Physical mouse buttons (and probably other physical devices) also invoke the actions AMOTION_EVENT_ACTION_DOWN/_UP,
             // but we have to process them separately to identify the actual button pressed. This is done below via
             // AMOTION_EVENT_ACTION_BUTTON_PRESS/_RELEASE. Here, we only process "FINGER" input (and "UNKNOWN", as a fallback).
-            if((AMotionEvent_getToolType(input_event, event_pointer_index) == AMOTION_EVENT_TOOL_TYPE_FINGER)
-            || (AMotionEvent_getToolType(input_event, event_pointer_index) == AMOTION_EVENT_TOOL_TYPE_UNKNOWN))
+            int tool_type = AMotionEvent_getToolType(input_event, event_pointer_index);
+            if (tool_type == AMOTION_EVENT_TOOL_TYPE_FINGER || tool_type == AMOTION_EVENT_TOOL_TYPE_UNKNOWN)
             {
-                io.MouseDown[0] = (event_action == AMOTION_EVENT_ACTION_DOWN);
-                io.MousePos = ImVec2(AMotionEvent_getX(input_event, event_pointer_index), AMotionEvent_getY(input_event, event_pointer_index));
+                io.AddMousePosEvent(AMotionEvent_getX(input_event, event_pointer_index), AMotionEvent_getY(input_event, event_pointer_index));
+                io.AddMouseButtonEvent(0, event_action == AMOTION_EVENT_ACTION_DOWN);
             }
             break;
+        }
         case AMOTION_EVENT_ACTION_BUTTON_PRESS:
         case AMOTION_EVENT_ACTION_BUTTON_RELEASE:
-            {
-                int32_t button_state = AMotionEvent_getButtonState(input_event);
-                io.MouseDown[0] = ((button_state & AMOTION_EVENT_BUTTON_PRIMARY) != 0);
-                io.MouseDown[1] = ((button_state & AMOTION_EVENT_BUTTON_SECONDARY) != 0);
-                io.MouseDown[2] = ((button_state & AMOTION_EVENT_BUTTON_TERTIARY) != 0);
-            }
+        {
+            int32_t button_state = AMotionEvent_getButtonState(input_event);
+            io.AddMouseButtonEvent(0, (button_state & AMOTION_EVENT_BUTTON_PRIMARY) != 0);
+            io.AddMouseButtonEvent(1, (button_state & AMOTION_EVENT_BUTTON_SECONDARY) != 0);
+            io.AddMouseButtonEvent(2, (button_state & AMOTION_EVENT_BUTTON_TERTIARY) != 0);
             break;
+        }
         case AMOTION_EVENT_ACTION_HOVER_MOVE: // Hovering: Tool moves while NOT pressed (such as a physical mouse)
         case AMOTION_EVENT_ACTION_MOVE:       // Touch pointer moves while DOWN
-            io.MousePos = ImVec2(AMotionEvent_getX(input_event, event_pointer_index), AMotionEvent_getY(input_event, event_pointer_index));
+            io.AddMousePosEvent(AMotionEvent_getX(input_event, event_pointer_index), AMotionEvent_getY(input_event, event_pointer_index));
             break;
         case AMOTION_EVENT_ACTION_SCROLL:
-            io.MouseWheel = AMotionEvent_getAxisValue(input_event, AMOTION_EVENT_AXIS_VSCROLL, event_pointer_index);
-            io.MouseWheelH = AMotionEvent_getAxisValue(input_event, AMOTION_EVENT_AXIS_HSCROLL, event_pointer_index);
+            io.AddMouseWheelEvent(AMotionEvent_getAxisValue(input_event, AMOTION_EVENT_AXIS_HSCROLL, event_pointer_index), AMotionEvent_getAxisValue(input_event, AMOTION_EVENT_AXIS_VSCROLL, event_pointer_index));
             break;
         default:
             break;
@@ -262,6 +263,8 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* input_event)
 
 bool ImGui_ImplAndroid_Init(ANativeWindow* window)
 {
+    IMGUI_CHECKVERSION();
+
     g_Window = window;
     g_Time = 0.0;
 
@@ -274,25 +277,13 @@ bool ImGui_ImplAndroid_Init(ANativeWindow* window)
 
 void ImGui_ImplAndroid_Shutdown()
 {
+    ImGuiIO& io = ImGui::GetIO();
+    io.BackendPlatformName = nullptr;
 }
 
 void ImGui_ImplAndroid_NewFrame()
 {
     ImGuiIO& io = ImGui::GetIO();
-
-    // Process queued key events
-    // FIXME: This is a workaround for multiple key event actions occurring at once (see above) and can be removed once we use upcoming input queue.
-    for (auto& key_queue : g_KeyEventQueues)
-    {
-        if (key_queue.second.empty())
-            continue;
-
-        auto& key_event = key_queue.second.front();
-        io.AddKeyEvent(key_event.Key, key_event.Down);
-        io.SetKeyEventNativeData(key_event.Key, key_event.NativeKeycode, key_event.NativeScancode); // To support legacy indexing (<1.87 user code)
-        key_queue.second.pop();
-    }
-    io.AddKeyModsEvent(g_KeyModFlags);
 
     // Setup display size (every frame to accommodate for window resizing)
     int32_t window_width = ANativeWindow_getWidth(g_Window);
@@ -311,3 +302,7 @@ void ImGui_ImplAndroid_NewFrame()
     io.DeltaTime = g_Time > 0.0 ? (float)(current_time - g_Time) : (float)(1.0f / 60.0f);
     g_Time = current_time;
 }
+
+//-----------------------------------------------------------------------------
+
+#endif // #ifndef IMGUI_DISABLE

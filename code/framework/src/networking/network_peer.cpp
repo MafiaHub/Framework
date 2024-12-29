@@ -11,7 +11,6 @@
 #include "errors.h"
 
 #include <logging/logger.h>
-#include <optick.h>
 
 #include "core_modules.h"
 
@@ -67,8 +66,6 @@ namespace Framework::Networking {
     }
 
     void NetworkPeer::Update() {
-        OPTICK_EVENT();
-
         if (!_peer) {
             return;
         }

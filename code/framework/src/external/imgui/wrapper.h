@@ -13,8 +13,6 @@
 
 #include "graphics/types.h"
 
-#include <SDL2/SDL.h>
-
 #include <atomic>
 #include <function2.hpp>
 #include <mutex>
@@ -37,7 +35,6 @@ namespace Framework::External::ImGUI {
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
-        SDL_Window *sdlWindow        = nullptr;
         HWND windowHandle            = nullptr;
     };
 
@@ -53,11 +50,12 @@ namespace Framework::External::ImGUI {
 
         static inline std::atomic_bool isContextInitialized = false;
 
+        bool _processEventEnabled = true;
+
       public:
         Error Init(Config &config);
         Error Shutdown();
 
-        InputState ProcessEvent(const SDL_Event *event) const;
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         static void ShowCursor(bool show);
 
@@ -70,6 +68,18 @@ namespace Framework::External::ImGUI {
 
         bool IsInitialized() const {
             return _initialized;
-        };
+        }
+
+        /**
+         * This function allows you to enable/disable mouse and keyboard inputs.
+         * By default, process event is enable.
+         */
+        void SetProcessEventEnabled(bool enable) {
+            _processEventEnabled = enable;
+        }
+
+        bool IsProcessEventEnabled() const {
+            return _processEventEnabled;
+        }
     };
 } // namespace Framework::External::ImGUI

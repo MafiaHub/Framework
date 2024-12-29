@@ -21,7 +21,7 @@ namespace Framework::External::ImGUI::Widgets {
         CORNER_RIGHT_BOTTOM,
     };
     // Adapted from Mafia: Oakwood Multiplayer
-    static inline void DrawCornerText(Corner corner, const std::string &text, bool shadow = true) {
+    static inline void DrawCornerText(Corner corner, const std::string &text) {
         constexpr float padding       = 2.0f;
         ImGuiIO &io                   = ImGui::GetIO();
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
@@ -40,11 +40,7 @@ namespace Framework::External::ImGUI::Widgets {
         const auto windowName = fmt::format("Overlay #{}", corner);
 
         if (ImGui::Begin(windowName.c_str(), nullptr, window_flags)) {
-            if (shadow)
-                ImGui::PushFontShadow(0xFF000000);
             ImGui::Text("%s", text.c_str());
-            if (shadow)
-                ImGui::PopFontShadow();
         }
         ImGui::End();
     }

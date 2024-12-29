@@ -21,9 +21,8 @@
 #include "utils/version.h"
 
 #include "cxxopts.hpp"
-#include "optick.h"
 
-#include "scripting/builtins/node/entity.h"
+#include "scripting/builtins/entity.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -33,11 +32,9 @@
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false), _shuttingDown(false) {
-        OPTICK_START_CAPTURE();
         _networkingEngine = std::make_shared<Networking::Engine>();
         _webServer        = std::make_shared<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
-        _firebaseWrapper  = std::make_unique<External::Firebase::Wrapper>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
         _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
@@ -47,7 +44,6 @@ namespace Framework::Integrations::Server {
 
     Instance::~Instance() {
         sig_detach(this);
-        OPTICK_STOP_CAPTURE();
     }
 
     ServerError Instance::Init(InstanceOptions &opts) {
@@ -146,11 +142,6 @@ namespace Framework::Integrations::Server {
         if (_scriptingEngine->InitServerEngine(sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
-        }
-
-        if (_opts.firebaseEnabled && _firebaseWrapper->Init(_opts.firebaseProjectId, _opts.firebaseAppId, _opts.firebaseApiKey) != External::Firebase::FirebaseError::FIREBASE_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the firebase wrapper");
-            return ServerError::SERVER_FIREBASE_WRAPPER_INIT_FAILED;
         }
 
         // Load the gamemode
@@ -365,7 +356,6 @@ namespace Framework::Integrations::Server {
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
-            OPTICK_EVENT();
             if (_networkingEngine) {
                 _networkingEngine->Update();
             }

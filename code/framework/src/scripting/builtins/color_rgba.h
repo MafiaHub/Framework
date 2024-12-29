@@ -93,10 +93,10 @@ namespace Framework::Scripting::Builtins {
 
         static void Register(sol::state &luaEngine) {
             sol::usertype<ColorRGBA> cls = luaEngine.new_usertype<ColorRGBA>("RGBA", sol::constructors<ColorRGBA(int, int, int, int)>());
-            cls.set("r", sol::readonly(&ColorRGBA::GetR));
-            cls.set("g", sol::readonly(&ColorRGBA::GetG));
-            cls.set("b", sol::readonly(&ColorRGBA::GetB));
-            cls.set("a", sol::readonly(&ColorRGBA::GetA));
+            cls["r"] = sol::property([](const ColorRGBA& self) { return self.GetR(); });
+            cls["g"] = sol::property([](const ColorRGBA& self) { return self.GetG(); });
+            cls["b"] = sol::property([](const ColorRGBA& self) { return self.GetB(); });
+            cls["a"] = sol::property([](const ColorRGBA& self) { return self.GetA(); });
             cls["toString"] = &ColorRGBA::ToString;
             cls["toArray"]  = &ColorRGBA::ToArray;
             cls["add"]     = &ColorRGBA::Add;

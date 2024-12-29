@@ -74,9 +74,9 @@ namespace Framework::Scripting::Builtins {
 
         static void Register(sol::state &luaEngine) {
             sol::usertype<Vector2> cls = luaEngine.new_usertype<Vector2>("Vector2", sol::constructors<Vector2(double, double)>());
-            cls.set("x", sol::readonly(&Vector2::GetX));
-            cls.set("y", sol::readonly(&Vector2::GetY));
-            cls.set("length", sol::readonly(&Vector2::GetLength));
+            cls["x"] = sol::property([](const Vector2& self) { return self.GetX(); });
+            cls["y"] = sol::property([](const Vector2& self) { return self.GetY(); });
+            cls["length"] = sol::property([](const Vector2& self) { return self.GetLength(); });
             cls["toString"] = &Vector2::ToString;
             cls["toArray"]  = &Vector2::ToArray;
             cls["add"]     = &Vector2::Add;

@@ -8,7 +8,6 @@ add_library(DearImGUI STATIC
     backends/imgui_impl_dx9.cpp
     backends/imgui_impl_dx11.cpp
     backends/imgui_impl_dx12.cpp
-    backends/imgui_impl_sdl.cpp
     backends/imgui_impl_win32.cpp
 )
 

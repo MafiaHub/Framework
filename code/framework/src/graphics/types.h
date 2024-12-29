@@ -22,7 +22,6 @@ namespace Framework::Graphics {
 
     enum class PlatformBackend {
         PLATFORM_WIN32,
-        PLATFORM_SDL2
     };
 
     enum class RendererState {

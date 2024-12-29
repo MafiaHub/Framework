@@ -111,11 +111,11 @@ namespace Framework::Scripting::Builtins {
 
         static void Register(sol::state &luaEngine) {
             sol::usertype<Quaternion> cls = luaEngine.new_usertype<Quaternion>("Quaternion", sol::constructors<Quaternion(float, float, float, float)>());
-            cls.set("w", sol::readonly(&Quaternion::GetW));
-            cls.set("x", sol::readonly(&Quaternion::GetX));
-            cls.set("y", sol::readonly(&Quaternion::GetY));
-            cls.set("z", sol::readonly(&Quaternion::GetZ));
-            cls.set("length", sol::readonly(&Quaternion::GetLength));
+            cls["w"] = sol::property([](const Quaternion& self) { return self.GetW(); });
+            cls["x"] = sol::property([](const Quaternion& self) { return self.GetX(); });
+            cls["y"] = sol::property([](const Quaternion& self) { return self.GetY(); });
+            cls["z"] = sol::property([](const Quaternion& self) { return self.GetZ(); });
+            cls["length"] = sol::property([](const Quaternion& self) { return self.GetLength(); });
             cls["toString"] = &Quaternion::ToString;
             cls["toArray"]  = &Quaternion::ToArray;
             cls["add"]     = &Quaternion::Add;

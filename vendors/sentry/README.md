@@ -1,5 +1,5 @@
 # Building
-    $ cmake -B build -DSENTRY_BACKEND=crashpad -DBUILD_SHARED_LIBS=OFF
+    $ cmake -B build -DSENTRY_BACKEND=crashpad -DBUILD_SHARED_LIBS=OFF -DSENTRY_BUILD_TESTS=OFF
 
     $ cmake --build build --parallel --config Release
     

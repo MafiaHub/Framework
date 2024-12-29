@@ -10,8 +10,6 @@
 
 #include "modules/base.hpp"
 
-#include <optick.h>
-
 namespace Framework::World {
     EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
         CoreModules::SetWorldEngine(this);
@@ -33,7 +31,6 @@ namespace Framework::World {
     }
 
     void Engine::Update() {
-        OPTICK_EVENT();
         _world->progress();
     }
 
