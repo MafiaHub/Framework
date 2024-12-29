@@ -360,12 +360,12 @@ namespace Framework::Integrations::Server {
                 _networkingEngine->Update();
             }
 
-            if (_worldEngine) {
-                _worldEngine->Update();
-            }
-
             if (_scriptingEngine) {
                 _scriptingEngine->Update();
+            }
+
+            if (_worldEngine) {
+                _worldEngine->Update();
             }
 
             if (_masterlist->IsInitialized()) {
