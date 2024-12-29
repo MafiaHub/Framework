@@ -356,12 +356,12 @@ namespace Framework::Integrations::Server {
     void Instance::Update() {
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
-            if (_worldEngine) {
-                _worldEngine->Update();
-            }
-
             if (_networkingEngine) {
                 _networkingEngine->Update();
+            }
+
+            if (_worldEngine) {
+                _worldEngine->Update();
             }
 
             if (_scriptingEngine) {
