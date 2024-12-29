@@ -54,19 +54,12 @@ namespace Framework::World {
 
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
         flecs::entity ourEntity = {};
-        _world->defer_begin();
-        _findAllStreamerEntities.run([&ourEntity, guid](flecs::iter &it) {
-            while (it.next()) {
-                auto s = it.field<Modules::Base::Streamer>(0);
-                for (const auto i : it) {
-                    if (s[i].guid == guid) {
-                        ourEntity = it.entity(i);
-                        return;
-                    }
-                }
+        _findAllStreamerEntities.each([&ourEntity, guid](flecs::entity e, Modules::Base::Streamer &s) {
+            if (s.guid == guid) {
+                ourEntity = e;
+                return;
             }
         });
-        _world->defer_end();
         return ourEntity;
     }
 

@@ -10,8 +10,6 @@
 
 #include "utils/time.h"
 
-#include <optick.h>
-
 namespace Framework::World {
     EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval) {
         const auto status = Engine::Init(networkPeer);
@@ -176,8 +174,6 @@ namespace Framework::World {
             .kind(flecs::PostUpdate)
             .interval(tickInterval)
             .run([this](flecs::iter &it) {
-                OPTICK_EVENT();
-
                 while (it.next()) {
                     const auto tr = it.field<Modules::Base::Transform>(0);
                     const auto s = it.field<Modules::Base::Streamer>(1);
@@ -256,7 +252,6 @@ namespace Framework::World {
     }
 
     void ServerEngine::Update() {
-        OPTICK_EVENT();
         Engine::Update();
     }
 

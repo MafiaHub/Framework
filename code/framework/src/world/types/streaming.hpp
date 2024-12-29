@@ -29,14 +29,17 @@ namespace Framework::World::Archetypes {
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            const auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
             Framework::World::Modules::Base::SetupClientEmitters(streamable);
+
+            auto ass = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            (void)ass;
         }
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            const auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
             Framework::World::Modules::Base::SetupServerEmitters(streamable);
         }
     };

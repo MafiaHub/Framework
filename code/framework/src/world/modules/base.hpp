@@ -168,8 +168,8 @@ namespace Framework::World::Modules {
 #endif
         }
 
-        static void SetupServerEmitters(Streamable *streamable);
-        static void SetupClientEmitters(Streamable *streamable);
+        static void SetupServerEmitters(Streamable& streamable);
+        static void SetupClientEmitters(Streamable& streamable);
         static void SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine);
         static void SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory);
     };

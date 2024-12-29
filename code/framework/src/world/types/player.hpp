@@ -38,6 +38,7 @@ namespace Framework::World::Archetypes {
             auto &streamer       = e.ensure<World::Modules::Base::Streamer>();
             streamer.nickname    = nickname;
             streamer.playerIndex = playerIndex;
+            streamer.guid        = guid;
         }
     };
 } // namespace Framework::World::Archetypes

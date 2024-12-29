@@ -11,8 +11,6 @@
 #include "game_rpc/set_frame.h"
 #include "game_rpc/set_transform.h"
 
-#include <optick.h>
-
 namespace Framework::World {
     EngineError ClientEngine::Init() {
         const auto status = Engine::Init(nullptr); // assigned by OnConnect
@@ -31,21 +29,15 @@ namespace Framework::World {
     }
 
     void ClientEngine::Update() {
-        OPTICK_EVENT();
         Engine::Update();
     }
 
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
         flecs::entity ent = {};
-        _queryGetEntityByServerID.run([&ent, id](flecs::iter &it) {
-            while (it.next()) {
-                const auto rhs = it.field<Modules::Base::ServerID>(0);
-                for (auto i : it) {
-                    if (id == rhs[i].id) {
-                        ent = it.entity(i);
-                        return;
-                    }
-                }
+        _queryGetEntityByServerID.each([&ent, id](flecs::entity e, Modules::Base::ServerID& rhs) {
+            if (id == rhs.id) {
+                ent = e;
+                return;
             }
         });
         return ent;
@@ -72,7 +64,6 @@ namespace Framework::World {
         _networkPeer = peer;
 
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).run([this](flecs::iter &it) {
-            OPTICK_EVENT();
             const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
 
             while (it.next()) {
@@ -99,18 +90,14 @@ namespace Framework::World {
         }
 
         _world->defer_begin();
-        _allStreamableEntities.run([this](flecs::iter &it) {
-            while (it.next()) {
-                for (auto i : it) {
-                    if (_onEntityDestroyCallback) {
-                        if (!_onEntityDestroyCallback(it.entity(i))) {
-                            continue;
-                        }
-                    }
-
-                    it.entity(i).destruct();
+        _allStreamableEntities.each([this](flecs::entity e, Modules::Base::Transform&, Modules::Base::Streamable&) {
+            if (_onEntityDestroyCallback) {
+                if (!_onEntityDestroyCallback(e)) {
+                    return;
                 }
             }
+
+            e.destruct();
         });
         _world->defer_end();
 
