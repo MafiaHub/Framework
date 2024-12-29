@@ -85,5 +85,9 @@ namespace Framework::Graphics {
         bool IsInitialized() const {
             return _initialized;
         }
+
+        RendererBackend GetBackendType() const {
+            return _backend;
+        }
     };
 } // namespace Framework::Graphics

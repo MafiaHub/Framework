@@ -62,6 +62,12 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
+
+    src/gui/manager.cpp
+    src/gui/clipboard.cpp
+    src/gui/view.cpp
+    src/gui/sdk.cpp
+    src/gui/backend/view_d3d11.cpp
 )
 
 # Append the platform-dependent files to the related lists
@@ -157,7 +163,7 @@ if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
 
-    target_link_libraries(FrameworkClient DiscordSDK DearImGUI UltralightSDK)
+    target_link_libraries(FrameworkClient DiscordSDK DearImGUI)
 
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
@@ -170,7 +176,7 @@ if(WIN32)
     if(NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else()
-        target_link_libraries(FrameworkClient)
+        target_link_libraries(FrameworkClient UltralightSDK JavaScriptCorePP)
         target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
     endif()
 endif()
