@@ -150,6 +150,7 @@ namespace Framework::Integrations::Server {
         // Load the gamemode
         _scriptingEngine->GetServerEngine()->LoadScript();
 
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
@@ -300,14 +301,12 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
             const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            _worldEngine->GetWorld()->defer_begin();
             if (e.is_valid()) {
                 if (_onPlayerDisconnectCallback)
                     _onPlayerDisconnectCallback(e, guid.g);
 
                 _worldEngine->RemoveEntity(e);
             }
-            _worldEngine->GetWorld()->defer_end();
 
             net->GetPeer()->CloseConnection(guid, true);
         });

@@ -9,7 +9,7 @@
 
 <br />
 <div align="center">
-  Opionated suite of tools and libraries to accelerate build multi-player modifications for AAA games.
+  Opinionated suite of tools and libraries to accelerate build multi-player modifications for AAA games.
 </div>
 
 <div align="center">

@@ -50,7 +50,12 @@ namespace Framework::Networking {
                 msg.Serialize(&bs, false);
                 msg.Serialize2(&bs, false);
                 if (msg.Valid2()) {
-                    callback(p->guid, &msg);
+                    if (msg.Valid()) {
+                        callback(p->guid, &msg);
+                    }
+                    else {
+                        Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid() check, skipping!", message);
+                    }
                 }
                 else {
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid2() check, skipping!", message);
@@ -71,7 +76,12 @@ namespace Framework::Networking {
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
-                callback(p->guid, &rpc);
+                if (rpc.Valid()) {
+                    callback(p->guid, &rpc);
+                }
+                else {
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid() check, skipping!", _rpc.GetHashName());
+                }
             });
         }
 
@@ -90,7 +100,13 @@ namespace Framework::Networking {
                 rpc.Serialize(&bs, false);
                 rpc.Serialize2(&bs, false);
                 if (rpc.Valid2()) {
-                    callback(p->guid, &rpc);
+                    if (rpc.Valid()) {
+                        callback(p->guid, &rpc);
+                    }
+                    else {
+                        Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid() check, skipping!", _rpc.GetHashName());
+                    
+                    }
                 }
                 else {
                     Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());

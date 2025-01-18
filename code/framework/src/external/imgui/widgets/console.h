@@ -29,6 +29,8 @@ namespace Framework::External::ImGUI::Widgets {
 
         bool _autoScroll = true;
 
+        bool _scrollToBottom = false;
+
         bool _focusOnInput = false;
 
         bool _updateInputText = false;

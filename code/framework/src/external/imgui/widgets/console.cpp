@@ -81,7 +81,7 @@ namespace Framework::External::ImGUI::Widgets {
             }
 
             const float reservedHeight = AreControlsLocked() ? -(ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing()) : 0;
-            ImGui::BeginChild("ScrollingRegion", ImVec2(0, reservedHeight), false, AreControlsLocked() ? ImGuiWindowFlags_HorizontalScrollbar : ImGuiWindowFlags_NoScrollbar);
+            ImGui::BeginChild("##logs", ImVec2(0, reservedHeight), 0, AreControlsLocked() ? ImGuiWindowFlags_HorizontalScrollbar : ImGuiWindowFlags_NoScrollbar);
             if (ringBuffer != nullptr) {
                 std::vector<std::string> log_message = ringBuffer->last_formatted();
                 for (std::string &log : log_message) {
@@ -91,9 +91,10 @@ namespace Framework::External::ImGUI::Widgets {
 
             ImGui::Spacing();
 
-            if (_autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
-                ImGui::SetScrollHereY(0.0f);
+            if (_scrollToBottom || _autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+                ImGui::SetScrollHereY(1.0f);
             }
+            _scrollToBottom = false;
 
             ImGui::EndChild();
 
@@ -158,6 +159,7 @@ namespace Framework::External::ImGUI::Widgets {
                     SendCommand(consoleText);
                     consoleText[0] = '\0';
                     ImGui::SetKeyboardFocusHere(-1);
+                    _scrollToBottom = true;
                 }
 
                 if (_focusOnInput) {
