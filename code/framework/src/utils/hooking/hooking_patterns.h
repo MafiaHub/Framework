@@ -183,7 +183,7 @@ namespace hook {
     auto get_opcode_address(const char (&pattern_string)[Len], ptrdiff_t offset = 0) {
         auto res     = pattern(pattern_string).get_first<T>(offset);
         auto bytePtr = reinterpret_cast<uint8_t *>(res);
-        return reinterpret_cast<uint64_t>(bytePtr + *(int32_t *)(bytePtr + 1) + 5);
+        return reinterpret_cast<uint64_t>(bytePtr + *reinterpret_cast<int32_t *>(bytePtr + 1) + 5);
     }
 } // namespace hook
 
