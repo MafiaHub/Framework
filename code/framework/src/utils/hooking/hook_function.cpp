@@ -12,12 +12,12 @@
 static HookFunctionBase *g_hookFunctions;
 
 void HookFunctionBase::Register() {
-    m_next          = g_hookFunctions;
+    _next          = g_hookFunctions;
     g_hookFunctions = this;
 }
 
 void HookFunctionBase::RunAll() {
-    for (auto func = g_hookFunctions; func; func = func->m_next) {
+    for (auto func = g_hookFunctions; func; func = func->_next) {
         func->Run();
     }
 }
@@ -25,14 +25,14 @@ void HookFunctionBase::RunAll() {
 static RuntimeHookFunction *g_runtimeHookFunctions;
 
 void RuntimeHookFunction::Register() {
-    m_next                 = g_runtimeHookFunctions;
+    _next                 = g_runtimeHookFunctions;
     g_runtimeHookFunctions = this;
 }
 
 void RuntimeHookFunction::Run(const char *key) {
-    for (auto func = g_runtimeHookFunctions; func; func = func->m_next) {
-        if (func->m_key == key) {
-            func->m_function();
+    for (auto func = g_runtimeHookFunctions; func; func = func->_next) {
+        if (func->_key == key) {
+            func->_function();
         }
     }
 }
