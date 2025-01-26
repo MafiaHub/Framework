@@ -66,6 +66,7 @@ namespace Framework::Networking::Messages {
         SLNet::Packet *packet {};
 
       public:
+        virtual ~IMessage()                  = default;
         virtual uint8_t GetMessageID() const = 0;
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;

@@ -24,6 +24,7 @@ namespace Framework::Networking::RPC {
         uint32_t _hashName = 0;
 
       public:
+        virtual ~IRPC() = default;
         IRPC(): _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
