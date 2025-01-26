@@ -9,7 +9,7 @@
 #include "ui_base.h"
 
 namespace Framework::External::ImGUI::Widgets {
-    void UIBase::Open(bool lockControls) {
+    void UIBase::Open(const bool lockControls) {
         _open    = true;
         _wasOpen = true;
 
@@ -33,7 +33,7 @@ namespace Framework::External::ImGUI::Widgets {
         _open                 = false;
     }
 
-    void UIBase::Toggle(bool lockControls) {
+    void UIBase::Toggle(const bool lockControls) {
         if (_open) {
             Close();
         }
@@ -58,7 +58,7 @@ namespace Framework::External::ImGUI::Widgets {
         OnUpdate();
     }
 
-    void UIBase::CleanUpUIWindow() {
+    void UIBase::CleanUpUIWindow() const {
         if (!AreControlsLocked()) {
 
             ImGui::PopStyleColor();
@@ -68,20 +68,19 @@ namespace Framework::External::ImGUI::Widgets {
         ImGui::End();
     }
 
-    void UIBase::CreateUIWindow(const char *name, WindowContent windowContent, bool *pOpen, ImGuiWindowFlags flags) {
+    void UIBase::CreateUIWindow(const char *name, const WindowContent windowContent, bool *pOpen, ImGuiWindowFlags flags) const {
         if (!AreControlsLocked()) {
             flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse;
 
             ImGui::SetNextWindowBgAlpha(_styleWindowBackgroundAlphaWhenControlsAreUnlocked);
 
-            ImGuiStyle &style = ImGui::GetStyle();
+            const ImGuiStyle &style = ImGui::GetStyle();
             ImGui::PushStyleColor(ImGuiCol_TitleBg, style.Colors[ImGuiCol_TitleBgCollapsed]);
             ImGui::PushStyleColor(ImGuiCol_TitleBgActive, style.Colors[ImGuiCol_TitleBgCollapsed]);
         }
 
-        bool wasWindowProcessed = ImGui::Begin(name, AreControlsLocked() ? pOpen : NULL, flags);
-
-        if (!wasWindowProcessed) {
+        // If the clean up if the window was processed
+        if (!ImGui::Begin(name, AreControlsLocked() ? pOpen : nullptr, flags)) {
             CleanUpUIWindow();
             return;
         }

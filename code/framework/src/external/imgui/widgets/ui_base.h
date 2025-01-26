@@ -14,6 +14,7 @@
 namespace Framework::External::ImGUI::Widgets {
     class UIBase {
       public:
+        virtual ~UIBase()   = default;
         using WindowContent = fu2::function<void() const>;
 
       private:
@@ -21,7 +22,7 @@ namespace Framework::External::ImGUI::Widgets {
 
         bool _wasOpen = false;
 
-        void CleanUpUIWindow();
+        void CleanUpUIWindow() const;
 
       protected:
         bool _open = false;
@@ -77,6 +78,6 @@ namespace Framework::External::ImGUI::Widgets {
          * - resizing is disabled
          * - collapsing is disabled
          */
-        void CreateUIWindow(const char *name, WindowContent windowContent, bool *pOpen = NULL, ImGuiWindowFlags flags = 0);
+        void CreateUIWindow(const char *name, const WindowContent windowContent, bool *pOpen = nullptr, ImGuiWindowFlags flags = 0) const;
     };
 } // namespace Framework::External::ImGUI::Widgets
