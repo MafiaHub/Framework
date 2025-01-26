@@ -370,7 +370,7 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
-                // info.gameMode       = _scriptingEngine->GetGameModeName();
+                info.gameMode       = _scriptingEngine->GetServerEngine()->GetScriptName();
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
