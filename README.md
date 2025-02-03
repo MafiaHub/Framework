@@ -47,8 +47,6 @@ If you're interested in development, please read our [Contribution Guidelines](.
 
 We use **CMake** to build our projects so that you can use any of the supported build systems. We currently support **Windows**, **Linux**, and **MacOS** operating systems. You can follow this guide to get started:
 
-First make sure your Git client supports LFS objects, visit [Git LFS page](https://git-lfs.github.com/) for more info.
-
 ```sh
 # Clone the repo
 git clone https://github.com/MafiaHub/Framework.git
