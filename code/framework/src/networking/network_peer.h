@@ -83,7 +83,7 @@ namespace Framework::Networking {
                     callback(p->guid, &rpc);
                 }
                 else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid() check, skipping!", _rpc.GetHashName());
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} ({}) has failed to pass Valid() check, skipping!", _rpc.GetName(), _rpc.GetHashName());
                 }
             });
         }

@@ -22,16 +22,21 @@ namespace Framework::Networking::RPC {
       private:
         SLNet::Packet *packet {};
         uint32_t _hashName = 0;
+        std::string _rpcName;
 
       public:
         virtual ~IRPC() = default;
-        IRPC(): _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
+        IRPC(): _rpcName(typeid(T).name()), _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
         virtual bool Valid() const                               = 0;
 
         uint32_t GetHashName() const {
             return _hashName;
+        }
+
+        const std::string &GetName() const {
+            return _rpcName;
         }
 
         void SetPacket(SLNet::Packet *p) {
