@@ -48,6 +48,14 @@ namespace Framework::Scripting {
             return _serverEngine.get();
         }
 
+        std::vector<std::string> GetClientFiles() const {
+            return _clientFiles;
+        }
+
+        std::vector<std::string> GetServerFiles() const {
+            return _serverFiles;
+        }
+
         void SetMainPath(const std::string &mainPath) {
             _mainPath = mainPath;
         }
