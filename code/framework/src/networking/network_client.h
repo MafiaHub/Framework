@@ -20,19 +20,32 @@
 #include <utility>
 
 namespace Framework::Networking {
+    using OnAssetsDownloadFailedCallback = fu2::function<void()>;
+    
+    class AssetFileTransfer final: public SLNet::FileListTransfer {
+      private:
+        OnAssetsDownloadFailedCallback *_cb = nullptr;
+
+      public:
+        void SetCallback(OnAssetsDownloadFailedCallback *cb);
+        void OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) override;
+    };
     class NetworkClient: public NetworkPeer {
       private:
+
         PeerState _state;
 
         Messages::PacketCallback _onPlayerConnectedCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
-
+        OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
+        AssetFileTransfer _fileListTransfer;
       public:
+        
         NetworkClient();
 
         ~NetworkClient();
 
-        ClientError Init() const;
+        ClientError Init();
         ClientError Shutdown();
 
         void Update() override;
@@ -54,6 +67,10 @@ namespace Framework::Networking {
 
         void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = std::move(callback);
+        }
+
+        void SetOnAssetsDownloadFailedCallback(OnAssetsDownloadFailedCallback callback) {
+            _onAssetsDownloadFailedCallback = callback;
         }
 
         template <typename T>

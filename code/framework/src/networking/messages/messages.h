@@ -42,6 +42,9 @@ namespace Framework::Networking::Messages {
     enum GameMessages : uint8_t {
         // Game messages handling common client connection flow
         GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID,
+        GAME_CONNECTION_ACKNOWLEDGE_CLIENT,
+        GAME_CONNECTION_READY_ASSETS,
+        GAME_CONNECTION_REQUEST_STREAMER,
         GAME_CONNECTION_FINALIZED,
         GAME_CONNECTION_KICKED,
         GAME_INIT_PLAYER,

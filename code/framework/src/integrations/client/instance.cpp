@@ -9,6 +9,8 @@
 #include "instance.h"
 
 #include <networking/messages/client_connection_finalized.h>
+#include <networking/messages/client_request_streamer.h>
+#include <networking/messages/client_ready_assets.h>
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
@@ -17,6 +19,11 @@
 
 #include "../shared/modules/mod.hpp"
 
+#include <cppfs/cppfs.h>
+#include <cppfs/FilePath.h>
+#include <cppfs/FileHandle.h>
+#include <cppfs/fs.h>
+
 #include <logging/logger.h>
 
 #include "utils/version.h"
@@ -24,6 +31,34 @@
 #include "core_modules.h"
 
 namespace Framework::Integrations::Client {
+    bool AssetDownloadFileProgress::OnFile(SLNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
+        if (onFileStruct->numberOfFilesInThisSet > 0) {
+            auto &downloadStatus    = _instance->GetAssetDownloadStatus();
+            downloadStatus.progress = onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet);
+            if (onFileStruct->bytesDownloadedForThisFile == onFileStruct->byteLengthOfThisFile) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Asset downloaded ({}/{} - {}%): {}", onFileStruct->fileIndex + 1, onFileStruct->numberOfFilesInThisSet, int(downloadStatus.progress * 100.0f), onFileStruct->fileName);
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+            }
+        }
+        return true;
+    }
+
+    void AssetDownloadFileProgress::OnFileProgress(SLNet::FileListTransferCBInterface::FileProgressStruct *fps) {
+        auto &downloadStatus    = _instance->GetAssetDownloadStatus();
+        auto onFileStruct       = fps->onFileStruct;
+        downloadStatus.progress = onFileStruct->byteLengthOfThisSet / float(onFileStruct->bytesDownloadedForThisSet);
+    }
+
+    bool AssetDownloadFileProgress::OnDownloadComplete(DownloadCompleteStruct *dcs) {
+        (void)dcs;
+
+        auto &downloadStatus       = _instance->GetAssetDownloadStatus();
+        downloadStatus.progress    = 1.0f;
+        downloadStatus.downloading = false;
+        _instance->OnAssetsDownloaded();
+        return false;
+    }
+
     Instance::Instance() {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _presence         = std::make_unique<External::Discord::Wrapper>();
@@ -77,6 +112,7 @@ namespace Framework::Integrations::Client {
         }
 
         InitNetworkingMessages();
+        InitAssetDownloader();
 
         PostInit();
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
@@ -91,6 +127,14 @@ namespace Framework::Integrations::Client {
         Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
         _initialized = true;
         return ClientError::CLIENT_NONE;
+    }
+
+    void Instance::InitAssetDownloader() {
+        cppfs::fs::open("cache").createDirectory();
+
+        GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
+            this->OnAssetsDownloadFailed();
+        });
     }
 
     ClientError Instance::RenderInit() {
@@ -201,16 +245,47 @@ namespace Framework::Integrations::Client {
         PostRender();
     }
 
-    void Instance::InitNetworkingMessages() const {
+    void Instance::InitNetworkingMessages() {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
         net->SetOnPlayerConnectedCallback([this, net](SLNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
             ClientHandshake msg;
-            msg.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", _opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
+            msg.FromParameters(_opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+        });
+        net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
+            const auto serverHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
+            const auto cacheDir = fmt::format("cache\\{}", serverHash);
+            const auto streamer = net->GetAssetStreamer();
+            SetAssetCachePath(cacheDir);
+            streamer->SetApplicationDirectory(cacheDir.c_str());
+            auto folderHandle = cppfs::fs::open(cacheDir);
+
+            // TODO grab client entry point from the message
+            // GetClientEntryPoint() and only set client scripting up if it's specified and file is present
+
+            if (!folderHandle.exists()) {
+                if (folderHandle.createDirectory()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", serverHash);
+                }
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not create folder for client asset cache: {}", cacheDir);
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Skip downloading assets.");
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+                    // assume assets are already downloaded
+                    _downloadStatus.progress = 1.0f;
+                    _downloadStatus.downloading = false;
+                    OnAssetsDownloaded();
+                }
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+       
+            streamer->DownloadFromSubdirectory(nullptr, "/", true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), HIGH_PRIORITY, 0, nullptr);
         });
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
@@ -267,5 +342,29 @@ namespace Framework::Integrations::Client {
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
+    }
+
+    void Instance::OnAssetsDownloaded() {
+        const auto net = GetNetworkingEngine()->GetNetworkClient();
+        if (_downloadStatus.downloading == false && _downloadStatus.progress == 1.0f) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+            Framework::Networking::Messages::ClientRequestStreamer req;
+            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
+            net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
+
+            _downloadStatus = {};
+        }
+    }
+
+    void Instance::OnAssetsDownloadFailed() {
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+        // assume assets are already downloaded
+        _downloadStatus.progress    = 1.0f;
+        _downloadStatus.downloading = false;
+        OnAssetsDownloaded();    
     }
 } // namespace Framework::Integrations::Client

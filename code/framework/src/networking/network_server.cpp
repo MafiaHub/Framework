@@ -13,7 +13,7 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) const {
+    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
         auto newSocketSd                  = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
         const SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != SLNet::RAKNET_STARTED) {
@@ -27,6 +27,11 @@ namespace Framework::Networking {
         }
 
         _peer->SetMaximumIncomingConnections((uint16_t)maxPlayers);
+
+        _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
+        _peer->AttachPlugin(&_fileListTransfer);
+        _peer->AttachPlugin(&_assetStreamer);
+
         return SERVER_NONE;
     }
 

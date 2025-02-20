@@ -17,13 +17,18 @@ namespace Framework::Networking {
         Shutdown();
     }
 
-    ClientError NetworkClient::Init() const {
+    ClientError NetworkClient::Init() {
         SLNet::SocketDescriptor sd {};
         const SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
             return CLIENT_PEER_FAILED;
         }
+
+        _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
+        _peer->AttachPlugin(&_fileListTransfer);
+        _peer->AttachPlugin(&_assetStreamer);
+
         return CLIENT_NONE;
     }
 
@@ -160,5 +165,15 @@ namespace Framework::Networking {
         }
 
         return _peer->GetAveragePing(_peer->GetSystemAddressFromIndex(0));
+    }
+
+    void AssetFileTransfer::OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) {
+        if (_cb) {
+            (*_cb)();
+        }
+    }
+
+    void AssetFileTransfer::SetCallback(OnAssetsDownloadFailedCallback *cb) {
+        _cb = cb;
     }
 } // namespace Framework::Networking
