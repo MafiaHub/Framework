@@ -12,6 +12,8 @@
 
 #include <PacketPriority.h>
 #include <RakPeerInterface.h>
+#include <FileListTransfer.h>
+#include <DirectoryDeltaTransfer.h>
 #include <logging/logger.h>
 #include <unordered_map>
 #include <utility>
@@ -26,6 +28,7 @@ namespace Framework::Networking {
         std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
+        SLNet::DirectoryDeltaTransfer _assetStreamer;
 
       public:
         NetworkPeer();
@@ -80,7 +83,7 @@ namespace Framework::Networking {
                     callback(p->guid, &rpc);
                 }
                 else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid() check, skipping!", _rpc.GetHashName());
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} ({}) has failed to pass Valid() check, skipping!", _rpc.GetName(), _rpc.GetHashName());
                 }
             });
         }
@@ -145,6 +148,10 @@ namespace Framework::Networking {
 
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
+
+        SLNet::DirectoryDeltaTransfer* GetAssetStreamer() {
+            return &_assetStreamer;
+        }
 
         static inline NetworkPeer *_networkRef = nullptr;
     };

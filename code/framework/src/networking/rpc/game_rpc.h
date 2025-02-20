@@ -26,18 +26,23 @@ namespace Framework::Networking::RPC {
       private:
         SLNet::Packet *packet {};
         uint32_t _hashName = 0;
+        std::string _rpcName;
 
       protected:
         flecs::entity_t _serverID = 0;
 
       public:
-        IGameRPC(): _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
+        IGameRPC(): _rpcName(typeid(T).name()), _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
         void SetServerID(flecs::entity_t serverID) {
             _serverID = serverID;
         }
 
         flecs::entity_t GetServerID() const {
             return _serverID;
+        }
+
+        const std::string& GetName() const {
+            return _rpcName;
         }
 
         virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
