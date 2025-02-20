@@ -285,7 +285,7 @@ namespace Framework::Integrations::Client {
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
        
-            streamer->DownloadFromSubdirectory(nullptr, "/", true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), HIGH_PRIORITY, 0, nullptr);
+            streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), HIGH_PRIORITY, 2, nullptr);
         });
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
