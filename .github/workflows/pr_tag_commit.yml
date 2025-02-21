@@ -6,9 +6,31 @@ on:
     branches: [develop]
 
 jobs:
+  bump-semver:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensure full history for diff comparisons
+
+      - name: Run bump semver script
+        run: |
+          chmod +x ./.github/bump_version.sh
+          ./.github/bump_version.sh "${{ github.event.pull_request.title }}"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add VERSION
+          git diff-index --quiet HEAD || git commit -m "Bump version to $(cat VERSION) [skip ci]"
+          git push origin HEAD:develop --follow-tags
   evaluate-release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    needs: bump-semver
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
