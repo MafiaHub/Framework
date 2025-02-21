@@ -19,7 +19,6 @@ jobs:
                 os: [ windows-2019 ]
             fail-fast: false
         runs-on: ${{ matrix.os }}
-        needs: prep
 
         steps:
             -   uses: actions/checkout@v2
