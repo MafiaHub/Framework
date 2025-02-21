@@ -2,9 +2,7 @@ name: Check VERSION File Presence
 
 on:
   pull_request:
-    types:
-      - opened
-      - reopened
+    branches: [ 'develop' ]
 
 jobs:
   check-version-file:
