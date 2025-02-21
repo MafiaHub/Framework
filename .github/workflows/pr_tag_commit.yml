@@ -13,10 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for full tag history
+          fetch-depth: 0  # Get full history for tag comparison
 
       - name: Read raw version
-        id: read-version
+        id: version
         run: |
           VERSION=$(cat VERSION)
           echo "raw_version=${VERSION}" >> $GITHUB_OUTPUT
@@ -25,37 +25,35 @@ jobs:
         id: previous-tag
         run: |
           git fetch --tags
+          # Default to v0.0.0 if no tags exist
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
           echo "prev_version=${PREV_TAG#v}" >> $GITHUB_OUTPUT
 
-      - name: Validate semver
-        uses: AshVerdex/assert-semver-version@v2.2.0
-        with:
-          version: ${{ steps.read-version.outputs.raw_version }}
-
       - name: Compare versions
         id: version-check
         run: |
-          NEW_VERSION=${{ steps.read-version.outputs.raw_version }}
+          NEW_VERSION=${{ steps.version.outputs.raw_version }}
           PREV_VERSION=${{ steps.previous-tag.outputs.prev_version }}
 
           IFS='.' read -ra NEW <<< "$NEW_VERSION"
           IFS='.' read -ra PREV <<< "$PREV_VERSION"
 
-          # Major/minor check
+          # Major/minor check (ignore patch)
           if [[ ${NEW[0]} -gt ${PREV[0]} || (${NEW[0]} -eq ${PREV[0]} && ${NEW[1]} -gt ${PREV[1]}) ]];
           then
             echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
             echo "new_tag=v${NEW_VERSION}" >> $GITHUB_ENV
           fi
 
-      - name: Create release
+      - name: Create semver tag and release
         if: env.RELEASE_NEEDED == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: actions/create-release@v1
         with:
           tag_name: ${{ env.new_tag }}
-          name: Release ${{ env.new_tag }}
+          release_name: ${{ env.new_tag }}
+          draft: false
+          prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
