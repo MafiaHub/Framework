@@ -355,9 +355,7 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Skip downloading assets.");
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
-                // Assume assets are already downloaded
-                _downloadStatus.progress    = 1.0f;
-                _downloadStatus.downloading = false;
+                // Ensure we finish the download flow gracefully
                 OnAssetsDownloaded(false);
             }
         }
@@ -388,10 +386,11 @@ namespace Framework::Integrations::Client {
         
         _downloadStatus = {};
 
-        if (_onAssetsDownloadFinished)
-            _onAssetsDownloadFinished(success);
-
         // TODO grab client entry point from the message
         // GetClientEntryPoint() and only set client scripting up if it's specified and file is present
+
+        // Let the mod-level know assets have just been finished processing
+        if (_onAssetsDownloadFinished)
+            _onAssetsDownloadFinished(success);
     }
 } // namespace Framework::Integrations::Client
