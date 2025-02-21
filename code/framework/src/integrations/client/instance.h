@@ -32,6 +32,7 @@
 namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
     using NetworkConnectionClosedCallback    = fu2::function<void() const>;
+    using AssetsDownloadFinishedCallback     = fu2::function<void(bool success) const>;
 
     class Instance;
 
@@ -75,6 +76,7 @@ namespace Framework::Integrations::Client {
     struct AssetDownloadStatus {
         float progress {0.0f};
         bool downloading;
+        uint16_t setID;
     };
 
     class Instance {
@@ -96,6 +98,7 @@ namespace Framework::Integrations::Client {
         CurrentState _currentState;
         NetworkConnectionFinalizedCallback _onConnectionFinalized;
         NetworkConnectionClosedCallback _onConnectionClosed;
+        AssetsDownloadFinishedCallback _onAssetsDownloadFinished;
 
         // Entity factories
         std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
@@ -104,11 +107,11 @@ namespace Framework::Integrations::Client {
         // assets
         AssetDownloadStatus _downloadStatus {};
         std::string _assetDownloadPath;
+        bool _initialDownloadDone {};
 
         void InitNetworkingMessages();
         void InitAssetDownloader();
-        void OnAssetsDownloaded();
-        void OnAssetsDownloadFailed();
+        void OnAssetsDownloaded(bool success);
 
       public:
         Instance();
@@ -126,6 +129,8 @@ namespace Framework::Integrations::Client {
         virtual void PostRender()  = 0;
 
         ClientError RenderInit();
+
+        void DownloadsAssetsFromConnectedServer();
 
         InstanceOptions *GetOptions() {
             return &_opts;
@@ -149,6 +154,10 @@ namespace Framework::Integrations::Client {
 
         void SetOnConnectionClosedCallback(NetworkConnectionClosedCallback cb) {
             _onConnectionClosed = std::move(cb);
+        }
+
+        void SetOnAssetsDownloadFinishedCallback(AssetsDownloadFinishedCallback cb) {
+            _onAssetsDownloadFinished = std::move(cb);
         }
 
         Networking::Engine *GetNetworkingEngine() const {

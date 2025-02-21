@@ -24,10 +24,10 @@ namespace Framework::Networking {
     
     class AssetFileTransfer final: public SLNet::FileListTransfer {
       private:
-        OnAssetsDownloadFailedCallback *_cb = nullptr;
+        OnAssetsDownloadFailedCallback _cb {};
 
       public:
-        void SetCallback(OnAssetsDownloadFailedCallback *cb);
+        void SetCallback(OnAssetsDownloadFailedCallback cb);
         void OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) override;
     };
     class NetworkClient: public NetworkPeer {
@@ -61,6 +61,10 @@ namespace Framework::Networking {
             return _state;
         }
 
+        AssetFileTransfer* GetFileListTransfer() {
+            return &_fileListTransfer;
+        }
+
         void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
             _onPlayerConnectedCallback = std::move(callback);
         }
@@ -70,7 +74,7 @@ namespace Framework::Networking {
         }
 
         void SetOnAssetsDownloadFailedCallback(OnAssetsDownloadFailedCallback callback) {
-            _onAssetsDownloadFailedCallback = callback;
+            _onAssetsDownloadFailedCallback = std::move(callback);
         }
 
         template <typename T>

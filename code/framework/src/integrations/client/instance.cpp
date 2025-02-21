@@ -19,6 +19,8 @@
 
 #include "../shared/modules/mod.hpp"
 
+#include "networking/state.h"
+
 #include <cppfs/cppfs.h>
 #include <cppfs/FilePath.h>
 #include <cppfs/FileHandle.h>
@@ -55,7 +57,7 @@ namespace Framework::Integrations::Client {
         auto &downloadStatus       = _instance->GetAssetDownloadStatus();
         downloadStatus.progress    = 1.0f;
         downloadStatus.downloading = false;
-        _instance->OnAssetsDownloaded();
+        _instance->OnAssetsDownloaded(true);
         return false;
     }
 
@@ -133,7 +135,7 @@ namespace Framework::Integrations::Client {
         cppfs::fs::open("cache").createDirectory();
 
         GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
-            this->OnAssetsDownloadFailed();
+            this->OnAssetsDownloaded(false);
         });
     }
 
@@ -257,35 +259,7 @@ namespace Framework::Integrations::Client {
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
         net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
-            const auto serverHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
-            const auto cacheDir = fmt::format("cache\\{}", serverHash);
-            const auto streamer = net->GetAssetStreamer();
-            SetAssetCachePath(cacheDir);
-            streamer->SetApplicationDirectory(cacheDir.c_str());
-            auto folderHandle = cppfs::fs::open(cacheDir);
-
-            // TODO grab client entry point from the message
-            // GetClientEntryPoint() and only set client scripting up if it's specified and file is present
-
-            if (!folderHandle.exists()) {
-                if (folderHandle.createDirectory()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", serverHash);
-                }
-                else {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not create folder for client asset cache: {}", cacheDir);
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Skip downloading assets.");
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
-
-                    // assume assets are already downloaded
-                    _downloadStatus.progress = 1.0f;
-                    _downloadStatus.downloading = false;
-                    OnAssetsDownloaded();
-                }
-            }
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
-       
-            streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), HIGH_PRIORITY, 2, nullptr);
+            DownloadsAssetsFromConnectedServer();
         });
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
@@ -331,6 +305,11 @@ namespace Framework::Integrations::Client {
             *tr           = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
+            // Reset initial asset download state
+            _initialDownloadDone = false;
+            _downloadStatus      = {};
+            
+            // Request the world engine to clean up entities
             _worldEngine->OnDisconnect();
 
             // Notify mod-level that network integration got closed
@@ -344,27 +323,75 @@ namespace Framework::Integrations::Client {
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
     }
 
-    void Instance::OnAssetsDownloaded() {
+    void Instance::DownloadsAssetsFromConnectedServer() {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
-        if (_downloadStatus.downloading == false && _downloadStatus.progress == 1.0f) {
+
+        // Make sure we're connected to the server already, otherwise bail with warning
+        if (net->GetConnectionState() != Framework::Networking::CONNECTED) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("We can't download assets if we are not connected to the server yet!");
+            return;
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
+        const auto serverHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
+        const auto cacheDir   = fmt::format("cache\\{}", serverHash);
+        const auto streamer   = net->GetAssetStreamer();
+        SetAssetCachePath(cacheDir);
+        streamer->SetApplicationDirectory(cacheDir.c_str());
+        auto folderHandle = cppfs::fs::open(cacheDir);
+
+        // Ensure we stop existing downloads since the server has pushed new changes already
+        if (_downloadStatus.downloading) {
+            net->GetFileListTransfer()->CancelReceive(_downloadStatus.setID);
+            _downloadStatus = {};
+        }
+
+        if (!folderHandle.exists()) {
+            if (folderHandle.createDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", serverHash);
+            }
+            else {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not create folder for client asset cache: {}", cacheDir);
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Skip downloading assets.");
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+                // Assume assets are already downloaded
+                _downloadStatus.progress    = 1.0f;
+                _downloadStatus.downloading = false;
+                OnAssetsDownloaded(false);
+            }
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), HIGH_PRIORITY, 2, nullptr);
+    }
+
+    void Instance::OnAssetsDownloaded(bool success) {
+        const auto net = GetNetworkingEngine()->GetNetworkClient();
+        if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+        }
+        else {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+
+        // Send the server a request to initialise our client and assign a streamer
+        // but only do so the first time we connect to the server
+        if (!_initialDownloadDone) {
+            _initialDownloadDone = true;
 
             Framework::Networking::Messages::ClientRequestStreamer req;
             req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
             net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
-
-            _downloadStatus = {};
         }
-    }
+        
+        _downloadStatus = {};
 
-    void Instance::OnAssetsDownloadFailed() {
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+        if (_onAssetsDownloadFinished)
+            _onAssetsDownloadFinished(success);
 
-        // assume assets are already downloaded
-        _downloadStatus.progress    = 1.0f;
-        _downloadStatus.downloading = false;
-        OnAssetsDownloaded();    
+        // TODO grab client entry point from the message
+        // GetClientEntryPoint() and only set client scripting up if it's specified and file is present
     }
 } // namespace Framework::Integrations::Client

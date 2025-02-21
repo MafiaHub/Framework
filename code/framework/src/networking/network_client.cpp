@@ -169,11 +169,11 @@ namespace Framework::Networking {
 
     void AssetFileTransfer::OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) {
         if (_cb) {
-            (*_cb)();
+            _cb();
         }
     }
 
-    void AssetFileTransfer::SetCallback(OnAssetsDownloadFailedCallback *cb) {
-        _cb = cb;
+    void AssetFileTransfer::SetCallback(OnAssetsDownloadFailedCallback cb) {
+        _cb = std::move(cb);
     }
 } // namespace Framework::Networking
