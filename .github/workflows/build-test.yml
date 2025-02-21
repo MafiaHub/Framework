@@ -11,17 +11,6 @@ env:
     BUILD_TYPE: Debug
 
 jobs:
-    prep:
-        name: Notify about testing
-        runs-on: ubuntu-latest
-        steps:
-          - uses: inlife/actiord-action@v1
-            if: "always()"
-            continue-on-error: true
-            with:
-              url: ${{ secrets.ACTIORD_URL }}
-              icon: "https://cdn.zakto.pw/office/test.jpg"
-              state: started
     build:
         env:
             buildDir: '${{ github.workspace }}/build/'
@@ -37,19 +26,6 @@ jobs:
                 with:
                     submodules: true
                     
-            -   name: Create LFS file list
-                run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
-
-            -   name: Restore LFS cache
-                uses: actions/cache@v2
-                id: lfs-cache
-                with:
-                 path: .git/lfs
-                 key: ${{ runner.os }}-lfs-${{ hashFiles('.lfs-assets-id') }}-v1
-
-            -   name: Checkout LFS objects
-                run: git lfs pull
-
             -   uses: maxim-lobanov/setup-xcode@v1
                 with:
                     xcode-version: '11.2.1'
@@ -83,23 +59,3 @@ jobs:
             -   name: Run the tests
                 run: |
                     cmake --build build --target RunFrameworkTests
-
-    done:
-        name: Notify about status
-        runs-on: ubuntu-latest
-        needs: build
-        if: "always()"
-        steps:
-          - uses: inlife/actiord-action@v1
-            if: ${{ contains(needs.build.result, 'success') }}
-            continue-on-error: true
-            with:
-              url: ${{ secrets.ACTIORD_URL }}
-              state: succeeded
-          - uses: inlife/actiord-action@v1
-            if: ${{ !(contains(needs.build.result, 'success')) }}
-            continue-on-error: true
-            with:
-              url: ${{ secrets.ACTIORD_URL }}
-              icon: "https://cdn.zakto.pw/office/fail.jpg"
-              state: failed
