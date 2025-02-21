@@ -357,6 +357,7 @@ namespace Framework::Integrations::Client {
 
                 // Ensure we finish the download flow gracefully
                 OnAssetsDownloaded(false);
+                return;
             }
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
