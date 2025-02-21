@@ -1,0 +1,58 @@
+name: Version Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - develop
+
+jobs:
+  evaluate-release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for full git history/tag access
+
+      - name: Read VERSION file
+        id: version
+        uses: andstor/file-reader-action@v1
+        with:
+          path: VERSION
+
+      - name: Get previous version
+        id: prev-version
+        run: |
+          git fetch --tags
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          echo "prev_version=${PREV_TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        id: version-check
+        run: |
+          NEW_VERSION=${{ steps.version.outputs.contents }}
+          PREV_VERSION=${{ steps.prev-version.outputs.prev_version }}
+
+          IFS='.' read -ra NEW <<< "$NEW_VERSION"
+          IFS='.' read -ra PREV <<< "$PREV_VERSION"
+
+          NEW_MAJOR=${NEW[0]}
+          NEW_MINOR=${NEW[1]}
+          PREV_MAJOR=${PREV[0]}
+          PREV_MINOR=${PREV[1]}
+
+          if [[ $NEW_MAJOR -gt $PREV_MAJOR || ($NEW_MAJOR -eq $PREV_MAJOR && $NEW_MINOR -gt $PREV_MINOR) ]];
+          then
+            echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
+          fi
+
+      - name: Create tag and release
+        if: env.RELEASE_NEEDED == 'true'
+        uses: avakar/tag-and-release@v1
+        with:
+          tag_name: "v${{ steps.version.outputs.contents }}"
+          release_name: "Release v${{ steps.version.outputs.contents }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
