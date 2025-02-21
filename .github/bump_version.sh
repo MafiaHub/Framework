@@ -23,7 +23,7 @@ major_paths=(
     "code/framework/src/networking/rpc"
 )
 minor_paths=(
-    "code/framework/src/scripting"
+    "code/framework/src/scripting/builtins"
     "code/framework/src/integrations/server/scripting/builtins"
 )
 
