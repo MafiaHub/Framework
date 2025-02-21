@@ -1,0 +1,26 @@
+name: Check VERSION File Presence
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+
+jobs:
+  check-version-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required to access commit history
+
+      - name: Verify VERSION file change
+        run: |
+          # Get list of changed files between base and HEAD
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          
+          # Check if VERSION is in changed files
+          if ! echo "$CHANGED_FILES" | grep -q '^VERSION$'; then
+            echo "::error::VERSION file must be updated in this pull request"
+            exit 1
+          fi
