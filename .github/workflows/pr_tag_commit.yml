@@ -3,8 +3,7 @@ name: Version Release
 on:
   pull_request:
     types: [closed]
-    branches:
-      - develop
+    branches: [develop]
 
 jobs:
   evaluate-release:
@@ -14,45 +13,49 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for full git history/tag access
+          fetch-depth: 0  # Required for full tag history
 
-      - name: Read VERSION file
-        id: version
-        uses: andstor/file-reader-action@v1
-        with:
-          path: VERSION
+      - name: Read raw version
+        id: read-version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "raw_version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Get previous version
-        id: prev-version
+      - name: Get previous tag
+        id: previous-tag
         run: |
           git fetch --tags
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
           echo "prev_version=${PREV_TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Validate semver
+        uses: AshVerdex/assert-semver-version@v2.2.0
+        with:
+          version: ${{ steps.read-version.outputs.raw_version }}
 
       - name: Compare versions
         id: version-check
         run: |
-          NEW_VERSION=${{ steps.version.outputs.contents }}
-          PREV_VERSION=${{ steps.prev-version.outputs.prev_version }}
+          NEW_VERSION=${{ steps.read-version.outputs.raw_version }}
+          PREV_VERSION=${{ steps.previous-tag.outputs.prev_version }}
 
           IFS='.' read -ra NEW <<< "$NEW_VERSION"
           IFS='.' read -ra PREV <<< "$PREV_VERSION"
 
-          NEW_MAJOR=${NEW[0]}
-          NEW_MINOR=${NEW[1]}
-          PREV_MAJOR=${PREV[0]}
-          PREV_MINOR=${PREV[1]}
-
-          if [[ $NEW_MAJOR -gt $PREV_MAJOR || ($NEW_MAJOR -eq $PREV_MAJOR && $NEW_MINOR -gt $PREV_MINOR) ]];
+          # Major/minor check
+          if [[ ${NEW[0]} -gt ${PREV[0]} || (${NEW[0]} -eq ${PREV[0]} && ${NEW[1]} -gt ${PREV[1]}) ]];
           then
             echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
+            echo "new_tag=v${NEW_VERSION}" >> $GITHUB_ENV
           fi
 
-      - name: Create tag and release
+      - name: Create release
         if: env.RELEASE_NEEDED == 'true'
-        uses: avakar/tag-and-release@v1
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: "v${{ steps.version.outputs.contents }}"
-          release_name: "Release v${{ steps.version.outputs.contents }}"
+          tag_name: ${{ env.new_tag }}
+          name: Release ${{ env.new_tag }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
