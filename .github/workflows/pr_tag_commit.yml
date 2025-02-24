@@ -63,11 +63,11 @@ jobs:
           IFS='.' read -ra PREV <<< "$PREV_VERSION"
 
           # Major/minor check (ignore patch)
-          if [[ ${NEW[0]} -gt ${PREV[0]} || (${NEW[0]} -eq ${PREV[0]} && ${NEW[1]} -gt ${PREV[1]}) ]];
-          then
+          #if [[ ${NEW[0]} -gt ${PREV[0]} || (${NEW[0]} -eq ${PREV[0]} && ${NEW[1]} -gt ${PREV[1]}) ]];
+          #then
             echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
             echo "new_tag=v${NEW_VERSION}" >> $GITHUB_ENV
-          fi
+          #fi
 
       - name: Create semver tag and release
         if: env.RELEASE_NEEDED == 'true'
