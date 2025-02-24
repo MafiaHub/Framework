@@ -99,6 +99,13 @@ public:
 	/// \param[in] subdir Concatenated with pathToApplication to form the final path from which to allow uploads.
 	void AddUploadsFromSubdirectory(const char *subdir);
 
+    /// <summary>
+    /// Add a specific file to the file list
+    /// </summary>
+    /// <param name="filePath">relative path to the file</param>
+    /// <param name="fileName">name of the particular file, without path</param>
+    void AddFile(const char *filePath, const char *fileName);
+
 	/// \brief Downloads files from the matching parameter \a subdir in AddUploadsFromSubdirectory.
 	/// \details \a subdir must contain all starting characters in \a subdir in AddUploadsFromSubdirectory
 	/// Therefore,

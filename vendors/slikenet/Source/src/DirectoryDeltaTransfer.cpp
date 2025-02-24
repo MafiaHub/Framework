@@ -135,6 +135,10 @@ void DirectoryDeltaTransfer::SetUploadSendParameters(PacketPriority _priority, c
 	priority=_priority;
 	orderingChannel=_orderingChannel;
 }
+void DirectoryDeltaTransfer::AddFile(const char* filePath, const char* fileName)
+{
+    availableUploads->AddFile(filePath, fileName, FileListNodeContext(0, 0, 0, 0));
+}
 void DirectoryDeltaTransfer::AddUploadsFromSubdirectory(const char *subdir)
 {
 	availableUploads->AddFilesFromDirectory(applicationDirectory, subdir, true, false, true, FileListNodeContext(0,0,0,0));

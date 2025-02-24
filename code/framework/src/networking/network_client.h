@@ -20,19 +20,32 @@
 #include <utility>
 
 namespace Framework::Networking {
+    using OnAssetsDownloadFailedCallback = fu2::function<void()>;
+    
+    class AssetFileTransfer final: public SLNet::FileListTransfer {
+      private:
+        OnAssetsDownloadFailedCallback _cb {};
+
+      public:
+        void SetCallback(OnAssetsDownloadFailedCallback cb);
+        void OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) override;
+    };
     class NetworkClient: public NetworkPeer {
       private:
+
         PeerState _state;
 
         Messages::PacketCallback _onPlayerConnectedCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
-
+        OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
+        AssetFileTransfer _fileListTransfer;
       public:
+        
         NetworkClient();
 
         ~NetworkClient();
 
-        ClientError Init() const;
+        ClientError Init();
         ClientError Shutdown();
 
         void Update() override;
@@ -48,12 +61,20 @@ namespace Framework::Networking {
             return _state;
         }
 
+        AssetFileTransfer* GetFileListTransfer() {
+            return &_fileListTransfer;
+        }
+
         void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
             _onPlayerConnectedCallback = std::move(callback);
         }
 
         void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = std::move(callback);
+        }
+
+        void SetOnAssetsDownloadFailedCallback(OnAssetsDownloadFailedCallback callback) {
+            _onAssetsDownloadFailedCallback = std::move(callback);
         }
 
         template <typename T>

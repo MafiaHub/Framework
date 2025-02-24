@@ -161,7 +161,7 @@ target_link_libraries(FrameworkServer libsig Lua54)
 # Platform-dependent post processing
 if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
-    target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
+    target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv shlwapi)
 
     target_link_libraries(FrameworkClient DiscordSDK DearImGUI)
 

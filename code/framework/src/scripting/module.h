@@ -56,6 +56,10 @@ namespace Framework::Scripting {
             return _serverFiles;
         }
 
+        const std::string GetMainPath() const {
+            return _mainPath;
+        }
+
         void SetMainPath(const std::string &mainPath) {
             _mainPath = mainPath;
         }
