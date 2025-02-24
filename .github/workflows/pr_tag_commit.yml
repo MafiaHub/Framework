@@ -58,16 +58,13 @@ jobs:
         run: |
           NEW_VERSION=${{ steps.version.outputs.raw_version }}
           PREV_VERSION=${{ steps.previous-tag.outputs.prev_version }}
-
-          IFS='.' read -ra NEW <<< "$NEW_VERSION"
-          IFS='.' read -ra PREV <<< "$PREV_VERSION"
-
-          # Major/minor check (ignore patch)
-          #if [[ ${NEW[0]} -gt ${PREV[0]} || (${NEW[0]} -eq ${PREV[0]} && ${NEW[1]} -gt ${PREV[1]}) ]];
-          #then
+          
+          if [ "$NEW_VERSION" = "$PREV_VERSION" ]; then
+            echo "No new version detected, skipping build"
+          else
             echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
             echo "new_tag=v${NEW_VERSION}" >> $GITHUB_ENV
-          #fi
+          fi
 
       - name: Create semver tag and release
         if: env.RELEASE_NEEDED == 'true'
