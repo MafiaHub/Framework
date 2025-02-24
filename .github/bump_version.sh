@@ -16,6 +16,12 @@ fi
 mapfile -t changed_files < <(git diff --name-only "$REFERENCE_COMMIT" HEAD)
 echo "Changed files: ${changed_files[@]}"
 
+# Check if there are any changed files
+if [ ${#changed_files[@]} -eq 0 ]; then
+    echo "No files have been changed. Skipping version bump."
+    exit 0
+fi
+
 # Default bump type is patch
 BUMP_TYPE="patch"
 
