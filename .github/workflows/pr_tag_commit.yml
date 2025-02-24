@@ -35,6 +35,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: develop
           fetch-depth: 0  # Get full history for tag comparison
 
       - name: Read raw version
