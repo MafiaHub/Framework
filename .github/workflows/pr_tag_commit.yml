@@ -24,8 +24,9 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add VERSION
-          git diff-index --quiet HEAD || (git commit -m "Bump version to $(cat VERSION) [skip ci]" && git push origin HEAD:develop --follow-tags)
+          git add VERSION || true
+          git diff-index --quiet HEAD || git commit -m "Bump version to $(cat VERSION) [skip ci]" || true
+          git push origin HEAD:develop --follow-tags || true
 
   evaluate-release:
     runs-on: ubuntu-latest
