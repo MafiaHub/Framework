@@ -25,8 +25,6 @@ We separate and bump versions based on these criteria:
 
 Our PR workflow automates version bumping for you based on files that have been modified. This way we ensure each PR properly communicates potential dependency changes.
 
-Make sure to tag your PR as [PATCH] in case you wish to hotfix an existing code.
-
 ## Code submission policy
 
 Please follow the following rules when contributing to the project:
