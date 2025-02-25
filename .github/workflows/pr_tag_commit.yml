@@ -22,8 +22,8 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          git config user.name "MafiaHub CI"
+          git config user.email "${{ secrets.MHCI_MAIL }}"
           git add VERSION || true
           git diff-index --quiet HEAD || git commit -m "ci: bump version to $(cat VERSION) [skip ci]" || true
           git push origin HEAD:develop --follow-tags || true
