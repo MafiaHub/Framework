@@ -39,6 +39,9 @@ namespace Framework::GUI {
         std::vector<ultralight::IndexType> _indices {};
         bool _needsUpdate = true;
         uint32_t _geometryID = 0;
+        ultralight::GPUState _gpuCursorState {};
+        uint32_t _cursorTextureID = 0;
+        ultralight::RefPtr<ultralight::Bitmap> _cursorBitmap;
 
       private:
         bool _d3dInitialized = false;

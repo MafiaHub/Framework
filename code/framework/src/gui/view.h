@@ -72,11 +72,9 @@ namespace Framework::GUI {
 
             if (enable) {
                 _internalView->Focus();
-                ShowCursor(true);
             }
             else {
                 _internalView->Unfocus();
-                ShowCursor(false);
             }
         }
 

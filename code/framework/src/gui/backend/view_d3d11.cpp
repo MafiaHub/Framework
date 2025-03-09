@@ -470,6 +470,21 @@ namespace Framework::GUI {
             // _gpuState.render_buffer_id = UINT32_MAX; // do not set/change render target at all
             _gpuState.texture_1_id = target.texture_id;
 
+            // set up cursor texture
+            _cursorBitmap = ultralight::Bitmap::Create(_width, _height, ultralight::BitmapFormat::BGRA8_UNORM_SRGB);
+            _cursorTextureID = driver->NextTextureId();
+            driver->CreateTexture(_cursorTextureID, _cursorBitmap);
+
+            _gpuCursorState.viewport_width   = _width;
+            _gpuCursorState.viewport_height  = _height;
+            _gpuCursorState.transform        = identity.GetMatrix4x4();
+            _gpuCursorState.enable_scissor   = false;
+            _gpuCursorState.enable_blend     = true;
+            _gpuCursorState.enable_texturing = true;
+            _gpuCursorState.shader_type      = ultralight::ShaderType::Fill;
+            _gpuCursorState.render_buffer_id = 0; // main texture of swap-chain
+            _gpuCursorState.texture_1_id = _cursorTextureID;
+
             is_new = true;
         }
 
@@ -567,23 +582,23 @@ namespace Framework::GUI {
 
         std::lock_guard lock(_renderMutex);
 
-        // Call UpdateGeometry for GPU-accelerated views instead.
+        // GPU-accelerated views rely on a D3D11Driver to push new frames
         if (_gpuAccelerated) {
             UpdateGeometry();
 
             const auto driver = bd->_rendererBackend->GetDriver();
-
             driver->DrawGeometry(_geometryID, 6, 0, _gpuState);
+            driver->DrawGeometry(_geometryID, 6, 0, _gpuCursorState);
             return;
         }
-
-        // Make sure we have D3D setup
-        InitD3D();
 
         // Make sure we have textures
         if (!_pixelData) {
             return;
         }
+
+        // Make sure we have D3D setup
+        InitD3D();
 
         // Grab the device & context
         const auto device    = _graphicsRenderer->GetD3D11Backend()->GetDevice();
@@ -629,9 +644,6 @@ namespace Framework::GUI {
         if (bd->_cursors.find(_cursor) == bd->_cursors.end())
             return;
 
-        if (_gpuAccelerated)
-            return;
-
         const auto &cursorData = bd->_cursors[_cursor];
         for (int y = 0; y < cursorData.h; y++) {
             for (int x = 0; x < cursorData.w; x++) {
@@ -649,6 +661,16 @@ namespace Framework::GUI {
                     }
                 }
             }
+        }
+
+        // Update cursor bitmap for GPU-accelerated views
+        if (_gpuAccelerated && _cursorBitmap) {
+            void *pixels = _cursorBitmap->LockPixels();
+            int size     = _cursorBitmap->size();
+            memcpy(pixels, _pixelData, size);
+            _cursorBitmap->UnlockPixels();
+
+            bd->_rendererBackend->GetDriver()->UpdateTexture(_cursorTextureID, _cursorBitmap);
         }
     }
 

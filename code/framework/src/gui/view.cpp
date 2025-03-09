@@ -66,6 +66,14 @@ namespace Framework::GUI {
             memcpy(_pixelData, pixels, size);
             surface->UnlockPixels();
         }
+        else {
+            // Set up dummy pixel buffer, so we can blit our cursor into it
+            // TODO: Realloc if size changes
+            if (!_pixelData) {
+                _pixelData = new uint8_t[_width * _height * 4];
+            }
+            memset(_pixelData, 0, _width * _height * 4);
+        }
     }
 
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
