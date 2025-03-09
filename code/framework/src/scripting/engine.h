@@ -15,7 +15,7 @@
 #include <utils/time.h>
 #include <sol/sol.hpp>
 
-#include "errors.h"
+#include "types/errors.h"
 #include "shared.h"
 
 namespace Framework::Scripting {
@@ -23,6 +23,7 @@ namespace Framework::Scripting {
     class Engine {
       public:
         sol::state _luaEngine;
+
         std::map<std::string, EventHandler> _eventHandlers = {};
 
       public:
@@ -32,22 +33,25 @@ namespace Framework::Scripting {
 
         bool InitCommonSDK();
 
-        sol::state& GetLuaEngine() {
+        sol::state &GetLuaEngine() {
             return _luaEngine;
         }
 
-        void ListenEvent(std::string, sol::function);
-        
+        void ListenEvent(std::string name, sol::function fnc) {
+            _eventHandlers[name].push_back(fnc);
+        }
+
         template <typename... Args>
         void InvokeEvent(const std::string &name, Args &&...args) {
-            auto &callbacks = _eventHandlers[name];
-
-            for (auto &callback : callbacks) {
-                sol::protected_function pf {callback};
-                auto result = pf(std::forward<Args>(args)...);
-                if (!result.valid()) {
-                    sol::error err = result;
-                    spdlog::error(err.what());
+            auto it = _eventHandlers.find(name);
+            if (it != _eventHandlers.end()) {
+                for (auto &callback : it->second) {
+                    sol::protected_function pf {callback};
+                    auto result = pf(std::forward<Args>(args)...);
+                    if (!result.valid()) {
+                        sol::error err = result;
+                        spdlog::error(err.what());
+                    }
                 }
             }
         }

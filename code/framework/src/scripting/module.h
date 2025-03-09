@@ -12,11 +12,12 @@
 #include <vector>
 #include <string>
 
-#include "errors.h"
 #include "shared.h"
 
 #include "client_engine.h"
 #include "server_engine.h"
+
+#include "types/errors.h"
 
 namespace Framework::Scripting {
     class Module {
@@ -29,7 +30,7 @@ namespace Framework::Scripting {
         std::unique_ptr<ServerEngine> _serverEngine;
 
       public:
-        Module() = default;
+        Module();
         ~Module() = default;
 
         ModuleError InitClientEngine(SDKRegisterCallback);
@@ -39,6 +40,18 @@ namespace Framework::Scripting {
         ModuleError LoadManifest();
 
         void Update() const;
+
+        Engine *GetEngine() const {
+            if (_clientEngine != nullptr) {
+                return _clientEngine.get();
+            }
+            else if (_serverEngine != nullptr) {
+                return _serverEngine.get();
+            }
+            else {
+                return nullptr;
+            }
+        }
         
         ClientEngine *GetClientEngine() const {
             return _clientEngine.get();

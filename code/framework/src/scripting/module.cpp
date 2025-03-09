@@ -18,6 +18,10 @@
 #include "core_modules.h"
 
 namespace Framework::Scripting {
+    Module::Module() {
+        CoreModules::SetScriptingModule(this);
+    }
+
     ModuleError Module::InitClientEngine(SDKRegisterCallback cb) {
         // TODO: implement
         return ModuleError::MODULE_NONE;
@@ -54,7 +58,6 @@ namespace Framework::Scripting {
             return ModuleError::MODULE_ENGINE_INIT_FAILED;
         }
 
-        CoreModules::SetScriptingModule(this);
         return ModuleError::MODULE_NONE;
     }
 
