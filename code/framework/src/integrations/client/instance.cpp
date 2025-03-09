@@ -270,14 +270,14 @@ namespace Framework::Integrations::Client {
             GetStreamingFactory()->SetupClient(newPlayer, guid.g);
             GetPlayerFactory()->SetupClient(newPlayer, guid.g);
 
+            // Notify server we are ready to obtain player data
+            Framework::Networking::Messages::ClientInitPlayer initPlayer {};
+            net->Send(initPlayer, SLNet::UNASSIGNED_RAKNET_GUID);
+
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
             }
-
-            // Notify server we are ready to obtain player data
-            Framework::Networking::Messages::ClientInitPlayer initPlayer {};
-            net->Send(initPlayer, SLNet::UNASSIGNED_RAKNET_GUID);
         });
         net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](SLNet::RakNetGUID guid, ClientKick *msg) {
             std::string reason = "Unknown.";
