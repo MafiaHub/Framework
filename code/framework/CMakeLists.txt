@@ -33,9 +33,9 @@ set(FRAMEWORK_SRC
 set(FRAMEWORK_SERVER_SRC
     src/scripting/client_engine.cpp
     src/scripting/engine.cpp
-    src/scripting/events.cpp
     src/scripting/module.cpp
     src/scripting/server_engine.cpp
+    src/scripting/types/events.cpp
 
     src/http/webserver.cpp
 
