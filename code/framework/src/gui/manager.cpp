@@ -38,12 +38,10 @@ namespace Framework::GUI {
         ultralight::Platform::instance().set_file_system(ultralight::GetPlatformFileSystem(rootDir.c_str()));
         ultralight::Platform::instance().set_logger(ultralight::GetDefaultLogger((rootDir + "/logs/web_manager.log").c_str()));
 
-        // Initialise rendering subsystems for GPU-accelerated views
-        if (_gpuAccelerated) {
-            switch (_graphicsRenderer->GetBackendType()) {
+        // Initialise backend renderer for Ultralight
+        switch (_graphicsRenderer->GetBackendType()) {
             case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::InitRenderer(_graphicsRenderer); break;
             default: break;
-            }
         }
         
         // Initialize the ultralight renderer
@@ -85,12 +83,10 @@ namespace Framework::GUI {
             view->Render();
         }
 
-        // Only prompt render for GPU-accelerated views
-        if (_gpuAccelerated) {
-            switch (_graphicsRenderer->GetBackendType()) {
+        // Process all render requests
+        switch (_graphicsRenderer->GetBackendType()) {
             case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::UpdateRenderer(); break;
             default: break;
-            }
         }
     }
 

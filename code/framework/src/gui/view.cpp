@@ -39,7 +39,6 @@ namespace Framework::GUI {
 
         // Load the initial URL
         _internalView->LoadURL(path.c_str());
-        //_internalView->LoadURL("https://www.ledr.com/colours/multi.htm");
 
         // Store the width/height
         _width  = width;
@@ -65,14 +64,6 @@ namespace Framework::GUI {
             }
             memcpy(_pixelData, pixels, size);
             surface->UnlockPixels();
-        }
-        else {
-            // Set up dummy pixel buffer, so we can blit our cursor into it
-            // TODO: Realloc if size changes
-            if (!_pixelData) {
-                _pixelData = new uint8_t[_width * _height * 4];
-            }
-            memset(_pixelData, 0, _width * _height * 4);
         }
     }
 

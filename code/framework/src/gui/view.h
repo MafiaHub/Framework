@@ -86,6 +86,10 @@ namespace Framework::GUI {
             return _shouldDisplay;
         }
 
+        ultralight::Cursor GetCursor() const {
+            return _cursor;
+        }
+
         inline void AddEventListener(std::string eventName, const EventCallbackProc &proc) {
             if (!_sdk) {
                 return;
