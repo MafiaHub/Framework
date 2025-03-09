@@ -115,16 +115,16 @@ namespace Framework::Integrations::Client {
 
         InitNetworkingMessages();
         InitAssetDownloader();
-
-        PostInit();
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
-
+        
         if (!opts.initRendererManually) {
             if (RenderInit() != ClientError::CLIENT_NONE) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Rendering subsystems failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
         }
+
+        PostInit();
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
         _initialized = true;
