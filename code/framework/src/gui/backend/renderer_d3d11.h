@@ -13,5 +13,9 @@ namespace Framework::GUI {
 
         public:
         bool Init(Graphics::Renderer *);
+
+        ultralight::GPUDriverD3D11* GetDriver() const {
+            return _gpuDriver.get();
+        }
     };
 }

@@ -500,24 +500,24 @@ namespace Framework::GUI {
         if (bd->_cursors.find(_cursor) == bd->_cursors.end())
             return;
 
-        const auto &cursorData = bd->_cursors[_cursor];
-        for (int y = 0; y < cursorData.h; y++) {
-            for (int x = 0; x < cursorData.w; x++) {
-                int i  = (y * cursorData.w + x) * 4;
-                int bx = _cursorPos.x + x;
-                int by = _cursorPos.y + y;
+        //const auto &cursorData = bd->_cursors[_cursor];
+        //for (int y = 0; y < cursorData.h; y++) {
+        //    for (int x = 0; x < cursorData.w; x++) {
+        //        int i  = (y * cursorData.w + x) * 4;
+        //        int bx = _cursorPos.x + x;
+        //        int by = _cursorPos.y + y;
 
-                if (bx >= 0 && bx < _width && by >= 0 && by < _height) {
-                    int bi             = (by * _width + bx) * 4;
-                    char *cursorPixels = (char *)cursorData.pixels;
-                    if (cursorPixels[i + 3]) {
-                        _pixelData[bi]     = cursorPixels[i + 0]; // B
-                        _pixelData[bi + 1] = cursorPixels[i + 1]; // G
-                        _pixelData[bi + 2] = cursorPixels[i + 2]; // R
-                    }
-                }
-            }
-        }
+        //        if (bx >= 0 && bx < _width && by >= 0 && by < _height) {
+        //            int bi             = (by * _width + bx) * 4;
+        //            char *cursorPixels = (char *)cursorData.pixels;
+        //            if (cursorPixels[i + 3]) {
+        //                _pixelData[bi]     = cursorPixels[i + 0]; // B
+        //                _pixelData[bi + 1] = cursorPixels[i + 1]; // G
+        //                _pixelData[bi + 2] = cursorPixels[i + 2]; // R
+        //            }
+        //        }
+        //    }
+        //}
     }
 
     void ViewD3D11::OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) {

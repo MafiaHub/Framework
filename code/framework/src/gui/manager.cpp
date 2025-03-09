@@ -41,6 +41,8 @@ namespace Framework::GUI {
         static const auto rendererBackend = new RendererD3D11();
         rendererBackend->Init(_graphicsRenderer);
 
+        ultralight::Platform::instance().set_gpu_driver(rendererBackend->GetDriver());
+
         // Initialize the ultralight renderer
         _ultralightRenderer = ultralight::Renderer::Create();
         if (!_ultralightRenderer) {

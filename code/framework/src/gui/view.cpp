@@ -18,7 +18,7 @@ namespace Framework::GUI {
     bool View::Init(std::string &path, int width, int height) {
         // Initialize a view configuration
         ultralight::ViewConfig config;
-        config.is_accelerated = false;
+        config.is_accelerated = true;
         config.is_transparent = true;
         config.initial_focus  = false;
 
@@ -49,15 +49,15 @@ namespace Framework::GUI {
         std::lock_guard lock(_renderMutex);
 
         // Update the view content
-        auto surface = (ultralight::BitmapSurface *)_internalView->surface();
-        void *pixels = surface->LockPixels();
-        int size     = surface->size(); // TODO: calc from res
-        // TODO: Realloc if size changes
-        if (!_pixelData) {
-            _pixelData = new uint8_t[size];
-        }
-        memcpy(_pixelData, pixels, size);
-        surface->UnlockPixels();
+        //auto surface = (ultralight::BitmapSurface *)_internalView->surface();
+        //void *pixels = surface->LockPixels();
+        //int size     = surface->size(); // TODO: calc from res
+        //// TODO: Realloc if size changes
+        //if (!_pixelData) {
+        //    _pixelData = new uint8_t[size];
+        //}
+        //memcpy(_pixelData, pixels, size);
+        //surface->UnlockPixels();
     }
 
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
