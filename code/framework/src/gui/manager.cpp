@@ -2,6 +2,7 @@
 
 #include <logging/logger.h>
 
+#include "gui/backend/renderer_d3d11.h"
 #include "gui/backend/view_d3d11.h"
 
 namespace Framework::GUI {
@@ -15,9 +16,9 @@ namespace Framework::GUI {
             view.reset();
         }
 
-        // Destroy the renderer
-        if (_renderer) {
-            _renderer->Release();
+        // Destroy the Ultralight renderer
+        if (_ultralightRenderer) {
+            _ultralightRenderer->Release();
         }
     }
 
@@ -37,9 +38,12 @@ namespace Framework::GUI {
         ultralight::Platform::instance().set_file_system(ultralight::GetPlatformFileSystem(rootDir.c_str()));
         ultralight::Platform::instance().set_logger(ultralight::GetDefaultLogger((rootDir + "/logs/web_manager.log").c_str()));
 
-        // Initialize the renderer
-        _renderer = ultralight::Renderer::Create();
-        if (!_renderer) {
+        static const auto rendererBackend = new RendererD3D11();
+        rendererBackend->Init(_graphicsRenderer);
+
+        // Initialize the ultralight renderer
+        _ultralightRenderer = ultralight::Renderer::Create();
+        if (!_ultralightRenderer) {
             Framework::Logging::GetLogger("Web")->error("Failed to initialize renderer");
             return false;
         }
@@ -48,15 +52,15 @@ namespace Framework::GUI {
     }
 
     void Manager::Update() {
-        if (!_renderer) {
+        if (!_ultralightRenderer) {
             return;
         }
 
         // Update the renderer
         std::lock_guard lock(_renderMutex);
-        _renderer->Update();
-        _renderer->Render();
-        _renderer->RefreshDisplay(0);
+        _ultralightRenderer->Update();
+        _ultralightRenderer->Render();
+        _ultralightRenderer->RefreshDisplay(0);
 
         // Update the views
         for (auto &view : _views) {
@@ -65,7 +69,7 @@ namespace Framework::GUI {
     }
 
     void Manager::Render() {
-        if (!_renderer) {
+        if (!_ultralightRenderer) {
             return;
         }
 
@@ -88,7 +92,7 @@ namespace Framework::GUI {
     }
 
     int Manager::CreateView(std::string url, int width, int height) {
-        if (!_renderer) {
+        if (!_ultralightRenderer) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Renderer is not initialized");
             return -1;
         }
@@ -97,7 +101,7 @@ namespace Framework::GUI {
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
         case Graphics::RendererBackend::BACKEND_D3D_11: 
-            view = std::make_unique<ViewD3D11>(_renderer.get(), _graphicsRenderer); break;
+            view = std::make_unique<ViewD3D11>(_ultralightRenderer.get(), _graphicsRenderer); break;
         default: 
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
             return -1;
@@ -124,7 +128,7 @@ namespace Framework::GUI {
     }
 
     bool Manager::DestroyView(int id) {
-        if (!_renderer) {
+        if (!_ultralightRenderer) {
             Framework::Logging::GetLogger("Web")->error("Failed to destroy view: Renderer is not initialized");
             return false;
         }

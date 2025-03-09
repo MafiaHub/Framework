@@ -441,6 +441,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D11::Render() {
+        return;
         if (!_internalView || !_shouldDisplay) {
             return;
         }

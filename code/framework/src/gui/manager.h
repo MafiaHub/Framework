@@ -30,7 +30,7 @@ namespace Framework::GUI {
     class Manager {
       private:
         ViewportConfiguration _viewportConfiguration;
-        ultralight::RefPtr<ultralight::Renderer> _renderer;
+        ultralight::RefPtr<ultralight::Renderer> _ultralightRenderer;
 
         std::recursive_mutex _renderMutex;
 
