@@ -78,6 +78,10 @@ namespace Framework::GUI {
             }
         }
 
+        bool HasFocus() const {
+            return _internalView->HasFocus();
+        }
+
         void Display(bool enable) {
             _shouldDisplay = enable;
         }
