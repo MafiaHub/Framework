@@ -8,11 +8,11 @@
 namespace Framework::Scripting::Builtins {
     class Event final {
         static void On(const std::string name, const sol::function fnc) {
-            Framework::CoreModules::GetScriptingModule()->GetEngine()->ListenEvent(name, fnc, true);
+            Framework::CoreModules::GetScriptingModule()->GetEngine()->ListenEvent(name, fnc);
         }
 
         static void Emit(const std::string name, sol::variadic_args args) {
-            Framework::CoreModules::GetScriptingModule()->GetEngine()->InvokeUserDefinedEvent(name, args);
+            Framework::CoreModules::GetScriptingModule()->GetEngine()->InvokeEvent(name, args);
         }
 
       public:
