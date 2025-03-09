@@ -117,7 +117,9 @@ namespace ultralight {
         desc.Width     = bitmap->width();
         desc.Height    = bitmap->height();
         desc.MipLevels = desc.ArraySize = 1;
-        desc.Format                     = bitmap->format() == BitmapFormat::BGRA8_UNORM_SRGB ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_A8_UNORM;
+        desc.Format                     = bitmap->format() == BitmapFormat::BGRA8_UNORM_SRGB ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_A8_UNORM;
+        //desc.Format                     = bitmap->format() == BitmapFormat::BGRA8_UNORM_SRGB ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_A8_UNORM;
+        //desc.Format                     = DXGI_FORMAT_B8G8R8A8_UNORM;
         desc.SampleDesc.Count           = 1;
         desc.Usage                      = D3D11_USAGE_DYNAMIC;
         desc.BindFlags                  = D3D11_BIND_SHADER_RESOURCE;
@@ -260,7 +262,7 @@ namespace ultralight {
 
         D3D11_RENDER_TARGET_VIEW_DESC renderTargetViewDesc;
         ZeroMemory(&renderTargetViewDesc, sizeof(renderTargetViewDesc));
-        renderTargetViewDesc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+        renderTargetViewDesc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM;
         renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 #if ENABLE_MSAA
         renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
@@ -361,7 +363,7 @@ namespace ultralight {
     void GPUDriverD3D11::BindTexture(uint8_t texture_unit, uint32_t texture_id) {
         auto i = textures_.find(texture_id);
         if (i == textures_.end()) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::BindTexture, texture id doesn't exist.", L"Error", MB_OK);
+            //MessageBoxW(nullptr, L"GPUDriverD3D11::BindTexture, texture id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -393,7 +395,7 @@ namespace ultralight {
 
         ID3D11RenderTargetView *target = GetRenderTargetView(render_buffer_id);
         if (!target) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::BindRenderBuffer, render buffer id doesn't exist.", L"Error", MB_OK);
+            //MessageBoxW(nullptr, L"GPUDriverD3D11::BindRenderBuffer, render buffer id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -408,7 +410,7 @@ namespace ultralight {
 
         ID3D11RenderTargetView *target = GetRenderTargetView(render_buffer_id);
         if (!target) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::ClearRenderBuffer, render buffer id doesn't exist.", L"Error", MB_OK);
+            //MessageBoxW(nullptr, L"GPUDriverD3D11::ClearRenderBuffer, render buffer id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -682,20 +684,17 @@ void GPUDriverD3D11::LoadPixelShader(const char* path, ID3D11PixelShader** ppPix
         }
         else {
             // Couldn't find the render buffer id in our local render target map.
-            // Search the swap chains instead.
-            /*auto swap_chain = context_->GetSwapChainByRenderBufferId(render_buffer_id);
-            if (swap_chain)
-            {
-                    target = swap_chain->render_target_view();
-            }*/
-            // throw std::runtime_error("baka");
-            //*((int*)0) = 0;
+            ID3D11RenderTargetView *pRenderTargetView = nullptr;
+            ID3D11Texture2D *pBackBuffer              = nullptr;
 
-            // target = *reinterpret_cast<ID3D11RenderTargetView**>(DLL::materialsystem_dx11 + 0x1A65D0);
-            ////target = *reinterpret_cast<ID3D11RenderTargetView**>(DLL::materialsystem_dx11 + 0x1A65C8);
-            // target = *reinterpret_cast<ID3D11RenderTargetView**>(DLL::materialsystem_dx11 + 0x1A65B0);
-            // extern ID3D11RenderTargetView *g_mainRenderTargetView;
-            // target = g_mainRenderTargetView;
+            if (context_->swap_chain()) {
+                // Get the back buffer from the swap chain
+                if (SUCCEEDED(context_->swap_chain()->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&pBackBuffer))) {
+                    // Create a render target view
+                    context_->device()->CreateRenderTargetView(pBackBuffer, nullptr, &target);
+                    pBackBuffer->Release();
+                }
+            }
         }
 
         return target;

@@ -156,7 +156,7 @@ namespace Framework::Integrations::Client {
 
                 switch (_opts.rendererOptions.backend) {
                 case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(_opts.rendererOptions.d3d9.device, nullptr, nullptr, nullptr); break;
-                case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions.d3d11.device, _opts.rendererOptions.d3d11.deviceContext, nullptr, nullptr); break;
+                case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions.d3d11.device, _opts.rendererOptions.d3d11.deviceContext, _opts.rendererOptions.d3d11.swapChain, nullptr); break;
                 case Graphics::RendererBackend::BACKEND_D3D_12: {
                     const auto &ctx = _opts.rendererOptions.d3d12;
                     _renderer->GetD3D12Backend()->Init(ctx.device, nullptr, ctx.swapchain, ctx.commandQueue);

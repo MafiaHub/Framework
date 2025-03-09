@@ -11,11 +11,16 @@
 
 #include <unordered_map>
 
+#include "gui/backend/renderer_d3d11.h"
+
+static ultralight::IndexType patternCW[]  = {0, 1, 3, 1, 2, 3};
+static ultralight::IndexType patternCCW[] = {0, 3, 1, 1, 3, 2};
+
 struct CursorData {
     void *pixels;
     int w, h;
 };
-
+struct ID3D11CommandList;
 struct D3D11WebData {
     ID3D11Buffer *pVB {};
     ID3D11Buffer *pIB {};
@@ -26,6 +31,9 @@ struct D3D11WebData {
     ID3D11RasterizerState *pRasterizerState {};
     ID3D11BlendState *pBlendState {};
     ID3D11DepthStencilState *pDepthStencilState {};
+    ID3D11CommandList *_commandList {};
+    Framework::GUI::RendererD3D11 *_rendererBackend {};
+
     std::unordered_map<ultralight::Cursor, CursorData> _cursors;
 };
 
@@ -41,11 +49,11 @@ namespace Framework::GUI {
         _sdk = new SDK;
     }
 
-    bool ViewD3D11::Init(std::string &path, int width, int height) {
+    bool ViewD3D11::Init(std::string &path, int width, int height, bool gpu_accelerated) {
         // Load default cursor
         LoadCursorData(ultralight::kCursor_Pointer);
 
-        return View::Init(path, width, height);
+        return View::Init(path, width, height, gpu_accelerated);
     }
 
     void ViewD3D11::InitD3D() {
@@ -426,6 +434,118 @@ namespace Framework::GUI {
         DestroyIcon(hCursor);
     }
 
+    void ViewD3D11::UpdateGeometry() {
+        const auto driver = bd->_rendererBackend->GetDriver();
+        
+        ultralight::RenderTarget target = _internalView->render_target();
+        bool is_new                     = false;
+
+        if (_vertices.empty()) {
+            _vertices.resize(4);
+            _indices.resize(6);
+
+            auto &config = ultralight::Platform::instance().config();
+
+            if (config.face_winding == ultralight::FaceWinding::Clockwise) {
+                std::memcpy(_indices.data(), patternCW, sizeof(ultralight::IndexType) * _indices.size());
+            }
+            else {
+                std::memcpy(_indices.data(), patternCCW, sizeof(ultralight::IndexType) * _indices.size());
+            }
+
+            std::memset(&_gpuState, 0, sizeof(_gpuState));
+            ultralight::Matrix identity;
+            identity.SetIdentity();
+
+            _gpuState.viewport_width   = _width;
+            _gpuState.viewport_height  = _height;
+            _gpuState.transform        = identity.GetMatrix4x4();
+            _gpuState.enable_scissor   = false;
+            _gpuState.enable_blend     = true;
+            _gpuState.enable_texturing = true;
+            _gpuState.shader_type      = ultralight::ShaderType::Fill;
+            // _gpuState.render_buffer_id = window_->render_buffer_id(); // remnant of AppCore
+            // _gpuState.render_buffer_id = target.render_buffer_id; // dedicated off-screen texture
+            _gpuState.render_buffer_id = 0; // main texture of swap-chain
+            // _gpuState.render_buffer_id = UINT32_MAX; // do not set/change render target at all
+            _gpuState.texture_1_id = target.texture_id;
+
+            is_new = true;
+        }
+
+        if (!_needsUpdate) {
+            return;
+        }
+
+        ultralight::Vertex_2f_4ub_2f_2f_28f v;
+        memset(&v, 0, sizeof(v));
+
+        v.data0[0] = 1; // Fill Type: Image
+
+        v.color[0] = 255;
+        v.color[1] = 255;
+        v.color[2] = 255;
+        v.color[3] = 255;
+
+        auto x_      = 0;
+        auto y_      = 0;
+        float left   = static_cast<float>(x_);
+        float top    = static_cast<float>(y_);
+        float right  = static_cast<float>(x_ + _width);
+        float bottom = static_cast<float>(y_ + _height);
+
+        // TOP LEFT
+        v.pos[0] = v.obj[0] = left;
+        v.pos[1] = v.obj[1] = top;
+        v.tex[0]            = target.uv_coords.left;
+        v.tex[1]            = target.uv_coords.top;
+
+        _vertices[0] = v;
+
+        // TOP RIGHT
+        v.pos[0] = v.obj[0] = right;
+        v.pos[1] = v.obj[1] = top;
+        v.tex[0]            = target.uv_coords.right;
+        v.tex[1]            = target.uv_coords.top;
+
+        _vertices[1] = v;
+
+        // BOTTOM RIGHT
+        v.pos[0] = v.obj[0] = right;
+        v.pos[1] = v.obj[1] = bottom;
+        v.tex[0]            = target.uv_coords.right;
+        v.tex[1]            = target.uv_coords.bottom;
+
+        _vertices[2] = v;
+
+        // BOTTOM LEFT
+        v.pos[0] = v.obj[0] = left;
+        v.pos[1] = v.obj[1] = bottom;
+        v.tex[0]            = target.uv_coords.left;
+        v.tex[1]            = target.uv_coords.bottom;
+
+        _vertices[3] = v;
+
+        ultralight::VertexBuffer vbuffer;
+        vbuffer.format = ultralight::VertexBufferFormat::_2f_4ub_2f_2f_28f;
+        vbuffer.size   = static_cast<uint32_t>(sizeof(ultralight::Vertex_2f_4ub_2f_2f_28f) * _vertices.size());
+        vbuffer.data   = (uint8_t *)_vertices.data();
+
+        ultralight::IndexBuffer ibuffer;
+        ibuffer.size = static_cast<uint32_t>(sizeof(ultralight::IndexType) * _indices.size());
+        ibuffer.data = (uint8_t *)_indices.data();
+
+        if (is_new) {
+            _geometryID = driver->NextGeometryId();
+            driver->CreateGeometry(_geometryID, vbuffer, ibuffer);
+        }
+        else {
+            driver->UpdateGeometry(_geometryID, vbuffer, ibuffer);
+        }
+
+        _needsUpdate = false;
+    }
+
     void ViewD3D11::Update() {
         if (!_internalView || !_shouldDisplay) {
             return;
@@ -441,12 +561,21 @@ namespace Framework::GUI {
     }
 
     void ViewD3D11::Render() {
-        return;
         if (!_internalView || !_shouldDisplay) {
             return;
         }
 
         std::lock_guard lock(_renderMutex);
+
+        // Call UpdateGeometry for GPU-accelerated views instead.
+        if (_gpuAccelerated) {
+            UpdateGeometry();
+
+            const auto driver = bd->_rendererBackend->GetDriver();
+
+            driver->DrawGeometry(_geometryID, 6, 0, _gpuState);
+            return;
+        }
 
         // Make sure we have D3D setup
         InitD3D();
@@ -500,24 +629,59 @@ namespace Framework::GUI {
         if (bd->_cursors.find(_cursor) == bd->_cursors.end())
             return;
 
-        //const auto &cursorData = bd->_cursors[_cursor];
-        //for (int y = 0; y < cursorData.h; y++) {
-        //    for (int x = 0; x < cursorData.w; x++) {
-        //        int i  = (y * cursorData.w + x) * 4;
-        //        int bx = _cursorPos.x + x;
-        //        int by = _cursorPos.y + y;
+        if (_gpuAccelerated)
+            return;
 
-        //        if (bx >= 0 && bx < _width && by >= 0 && by < _height) {
-        //            int bi             = (by * _width + bx) * 4;
-        //            char *cursorPixels = (char *)cursorData.pixels;
-        //            if (cursorPixels[i + 3]) {
-        //                _pixelData[bi]     = cursorPixels[i + 0]; // B
-        //                _pixelData[bi + 1] = cursorPixels[i + 1]; // G
-        //                _pixelData[bi + 2] = cursorPixels[i + 2]; // R
-        //            }
-        //        }
-        //    }
-        //}
+        const auto &cursorData = bd->_cursors[_cursor];
+        for (int y = 0; y < cursorData.h; y++) {
+            for (int x = 0; x < cursorData.w; x++) {
+                int i  = (y * cursorData.w + x) * 4;
+                int bx = _cursorPos.x + x;
+                int by = _cursorPos.y + y;
+
+                if (bx >= 0 && bx < _width && by >= 0 && by < _height) {
+                    int bi             = (by * _width + bx) * 4;
+                    char *cursorPixels = (char *)cursorData.pixels;
+                    if (cursorPixels[i + 3]) {
+                        _pixelData[bi]     = cursorPixels[i + 0]; // B
+                        _pixelData[bi + 1] = cursorPixels[i + 1]; // G
+                        _pixelData[bi + 2] = cursorPixels[i + 2]; // R
+                    }
+                }
+            }
+        }
+    }
+
+    void ViewD3D11::InitRenderer(Framework::Graphics::Renderer *graphicsRenderer) {
+        if (!bd->_rendererBackend) {
+            bd->_rendererBackend = new RendererD3D11();
+            bd->_rendererBackend->Init(graphicsRenderer);
+
+            ultralight::Platform::instance().set_gpu_driver(bd->_rendererBackend->GetDriver());
+        }
+    }
+
+    void ViewD3D11::UpdateRenderer() {
+        if (!bd->_rendererBackend) {
+            return;
+        }
+
+        const auto driver = bd->_rendererBackend->GetDriver();
+
+        if (driver->HasCommandsPending()) {
+            driver->DrawCommandList();
+        }
+
+        ID3D11CommandList *cc;
+        driver->context_->deferred_context()->FinishCommandList(false, &cc);
+
+        if (bd->_commandList)
+            bd->_commandList->Release();
+        bd->_commandList = cc;
+
+        if (cc) {
+            driver->context_->immediate_context()->ExecuteCommandList(cc, true);
+        }
     }
 
     void ViewD3D11::OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) {

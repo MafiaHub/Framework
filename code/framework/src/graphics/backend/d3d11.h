@@ -18,10 +18,16 @@
 #endif
 
 namespace Framework::Graphics {
-    class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, void *, void *> {
+    class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *> {
+      private:
+        IDXGISwapChain *_swapChain {};
       public:
-        bool Init(ID3D11Device *, ID3D11DeviceContext *, void *, void *) override;
+        bool Init(ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *) override;
         bool Shutdown() override;
         void Update() override;
+
+        IDXGISwapChain* GetSwapChain() const {
+            return _swapChain;
+        }
     };
 } // namespace Framework::Graphics

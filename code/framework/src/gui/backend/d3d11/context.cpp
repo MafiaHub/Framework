@@ -97,7 +97,7 @@ namespace ultralight {
         device()->CreateDeferredContext(0, deferred_context_.GetAddressOf());
     }
 
-    GPUContextD3D11::GPUContextD3D11(ID3D11Device *device, ID3D11DeviceContext *immediate_context): device_(device), immediate_context_(immediate_context) {}
+    GPUContextD3D11::GPUContextD3D11(ID3D11Device *device, ID3D11DeviceContext *immediate_context, IDXGISwapChain *swap_chain): device_(device), immediate_context_(immediate_context), swap_chain_(swap_chain) {}
 
     GPUContextD3D11::~GPUContextD3D11() {
         if (device_) {
@@ -149,6 +149,9 @@ namespace ultralight {
 
     void GPUContextD3D11::DisableScissor() {
         context()->RSSetState(rasterizer_state_.Get());
+    }
+    IDXGISwapChain *GPUContextD3D11::swap_chain() {
+        return swap_chain_.Get();
     }
 
 } // namespace ultralight

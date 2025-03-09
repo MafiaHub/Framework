@@ -2,7 +2,6 @@
 
 #include <logging/logger.h>
 
-#include "gui/backend/renderer_d3d11.h"
 #include "gui/backend/view_d3d11.h"
 
 namespace Framework::GUI {
@@ -22,8 +21,9 @@ namespace Framework::GUI {
         }
     }
 
-    bool Manager::Init(const std::string& rootDir, ViewportConfiguration initialViewport, Graphics::Renderer* renderer) {
+    bool Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpu_accelerated) {
         _graphicsRenderer = renderer;
+        _gpuAccelerated   = gpu_accelerated;
 
         SetViewportConfiguration(initialViewport);
 
@@ -38,11 +38,14 @@ namespace Framework::GUI {
         ultralight::Platform::instance().set_file_system(ultralight::GetPlatformFileSystem(rootDir.c_str()));
         ultralight::Platform::instance().set_logger(ultralight::GetDefaultLogger((rootDir + "/logs/web_manager.log").c_str()));
 
-        static const auto rendererBackend = new RendererD3D11();
-        rendererBackend->Init(_graphicsRenderer);
-
-        ultralight::Platform::instance().set_gpu_driver(rendererBackend->GetDriver());
-
+        // Initialise rendering subsystems for GPU-accelerated views
+        if (_gpuAccelerated) {
+            switch (_graphicsRenderer->GetBackendType()) {
+            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::InitRenderer(_graphicsRenderer); break;
+            default: break;
+            }
+        }
+        
         // Initialize the ultralight renderer
         _ultralightRenderer = ultralight::Renderer::Create();
         if (!_ultralightRenderer) {
@@ -74,10 +77,20 @@ namespace Framework::GUI {
         if (!_ultralightRenderer) {
             return;
         }
+        
+        std::lock_guard lock(_renderMutex);
 
         // Render the views
         for (auto &view : _views) {
             view->Render();
+        }
+
+        // Only prompt render for GPU-accelerated views
+        if (_gpuAccelerated) {
+            switch (_graphicsRenderer->GetBackendType()) {
+            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::UpdateRenderer(); break;
+            default: break;
+            }
         }
     }
 
@@ -113,7 +126,7 @@ namespace Framework::GUI {
             return -1;
         }
 
-        if (!view->Init(url, width, height)) {
+        if (!view->Init(url, width, height, _gpuAccelerated)) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: initialization failed");
             return -1;
         }

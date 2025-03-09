@@ -37,12 +37,13 @@ namespace Framework::GUI {
         std::vector<std::unique_ptr<View>> _views;
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer* _graphicsRenderer;
+        bool _gpuAccelerated = false;
 
       public:
         Manager();
         ~Manager();
 
-        bool Init(const std::string&, ViewportConfiguration, Graphics::Renderer*);
+        bool Init(const std::string&, ViewportConfiguration, Graphics::Renderer*, bool gpu_accelerated = false);
 
         int CreateView(std::string, int, int);
         bool DestroyView(int);
