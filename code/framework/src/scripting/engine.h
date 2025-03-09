@@ -15,7 +15,7 @@
 #include <utils/time.h>
 #include <sol/sol.hpp>
 
-#include "errors.h"
+#include "types/errors.h"
 #include "shared.h"
 
 namespace Framework::Scripting {
@@ -23,7 +23,25 @@ namespace Framework::Scripting {
     class Engine {
       public:
         sol::state _luaEngine;
-        std::map<std::string, EventHandler> _eventHandlers = {};
+
+        std::map<std::string, EventHandler> _internalEventHandlers = {};
+        std::map<std::string, EventHandler> _userDefinedEventHandlers = {};
+
+      private:
+        template <typename... Args>
+        void InvokeHandlers(const std::map<std::string, std::vector<sol::function>> &handlersMap, const std::string &name, Args &&...args) {
+            auto it = handlersMap.find(name);
+            if (it != handlersMap.end()) {
+                for (auto &callback : it->second) {
+                    sol::protected_function pf {callback};
+                    auto result = pf(std::forward<Args>(args)...);
+                    if (!result.valid()) {
+                        sol::error err = result;
+                        spdlog::error(err.what());
+                    }
+                }
+            }
+        }
 
       public:
         virtual EngineError Init(SDKRegisterCallback) = 0;
@@ -36,20 +54,25 @@ namespace Framework::Scripting {
             return _luaEngine;
         }
 
-        void ListenEvent(std::string, sol::function);
-        
+        void ListenEvent(std::string name, sol::function fnc, bool userDefined = false) {
+            if (userDefined) {
+                _userDefinedEventHandlers[name].push_back(fnc);
+            }
+            else {
+                _internalEventHandlers[name].push_back(fnc);
+            }
+        }
+
         template <typename... Args>
         void InvokeEvent(const std::string &name, Args &&...args) {
-            auto &callbacks = _eventHandlers[name];
+            InvokeHandlers(_internalEventHandlers, name, std::forward<Args>(args)...);
+            InvokeHandlers(_userDefinedEventHandlers, name, std::forward<Args>(args)...);
+        }
 
-            for (auto &callback : callbacks) {
-                sol::protected_function pf {callback};
-                auto result = pf(std::forward<Args>(args)...);
-                if (!result.valid()) {
-                    sol::error err = result;
-                    spdlog::error(err.what());
-                }
-            }
+        // Invoke only user-defined event handlers
+        template <typename... Args>
+        void InvokeUserDefinedEvent(const std::string &name, Args &&...args) {
+            InvokeHandlers(_userDefinedEventHandlers, name, std::forward<Args>(args)...);
         }
     };
 } // namespace Framework::Scripting

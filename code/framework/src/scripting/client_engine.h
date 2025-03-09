@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include "errors.h"
 #include "shared.h"
+#include "types/errors.h"
 
 #include "engine.h"
 

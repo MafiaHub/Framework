@@ -9,8 +9,8 @@
 #include <nlohmann/json.hpp>
 
 #include "core_modules.h"
-#include "events.h"
 #include "server_engine.h"
+#include "types/events.h"
 
 namespace Framework::Scripting {
     int my_exception_handler(lua_State *L, sol::optional<const std::exception &> maybe_exception, sol::string_view description) {
