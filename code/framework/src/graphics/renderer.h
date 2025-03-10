@@ -75,6 +75,8 @@ namespace Framework::Graphics {
         RendererError Shutdown();
 
         void Update() const;
+        void Render();
+        void Paint();
 
         RendererState GetCurrentState() const {
             return _state;

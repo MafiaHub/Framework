@@ -137,6 +137,30 @@ namespace Framework::Graphics {
 
     void D3D11Backend::Update() {}
 
+    void D3D11Backend::Render() {
+        Backend::Render();
+
+        // If there is no deferred context initialised
+        // we have rendered all our resources already.
+        if (!GetDeferredContext()) {
+            return;
+        }
+
+        ID3D11CommandList *cc;
+        GetDeferredContext()->FinishCommandList(false, &cc);
+
+        if (_deviceCommandList)
+            _deviceCommandList->Release();
+        _deviceCommandList = cc;
+    }
+
+    void D3D11Backend::Paint() {
+        ID3D11DeviceContext *ctx = GetImmediateContext();
+        if (_deviceCommandList && ctx) {
+            ctx->ExecuteCommandList(_deviceCommandList, true);
+        }
+    }
+
     void D3D11Backend::CreateTexture(uint32_t texture_id, Bitmap bitmap) {
         auto i = _textures.find(texture_id);
         if (i != _textures.end()) {

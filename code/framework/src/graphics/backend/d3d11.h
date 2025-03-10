@@ -32,6 +32,8 @@ namespace Framework::Graphics {
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         bool Shutdown() override;
         void Update() override;
+        void Render() override;
+        void Paint() override;
 
         void BeginDrawing() override;
         void EndDrawing() override;
@@ -78,6 +80,7 @@ namespace Framework::Graphics {
         
       protected:
         IDXGISwapChain *_swapChain {};
+        ID3D11CommandList *_deviceCommandList {}; 
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> _deferredContext;
 
         Microsoft::WRL::ComPtr<ID3D11BlendState> _blendState;

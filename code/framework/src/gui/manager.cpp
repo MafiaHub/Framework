@@ -82,20 +82,6 @@ namespace Framework::GUI {
         for (auto &view : _views) {
             view->Render();
         }
-
-        // Process all render requests
-        switch (_graphicsRenderer->GetBackendType()) {
-            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::RenderViews(); break;
-            default: break;
-        }
-    }
-
-    void Manager::Paint() {
-        // Paint views
-        switch (_graphicsRenderer->GetBackendType()) {
-            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::Paint(); break;
-            default: break;
-        }
     }
 
     void Manager::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {

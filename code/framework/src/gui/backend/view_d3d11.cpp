@@ -196,34 +196,4 @@ namespace Framework::GUI {
             ultralight::Platform::instance().set_gpu_driver(rendererBackend);
         }
     }
-
-    void ViewD3D11::RenderViews() {
-        if (!rendererBackend) {
-            return;
-        }
-
-        if (rendererBackend->HasCommandsPending()) {
-            rendererBackend->DrawCommandList();
-        }
-    }
-
-    void ViewD3D11::Paint() {
-        // If there is no deferred context initialised
-        // we have rendered all our resources already.
-        if (!rendererBackend->GetBackend()->GetDeferredContext()) {
-            return;
-        }
-
-        ID3D11CommandList *cc;
-        rendererBackend->GetBackend()->GetDeferredContext()->FinishCommandList(false, &cc);
-
-        if (commandList)
-            commandList->Release();
-        commandList = cc;
-
-        ID3D11DeviceContext *ctx = rendererBackend->GetBackend()->GetImmediateContext();
-        if (cc && ctx) {
-            ctx->ExecuteCommandList(cc, true);
-        }
-    }
 } // namespace Framework::GUI

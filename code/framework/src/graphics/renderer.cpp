@@ -64,4 +64,28 @@ namespace Framework::Graphics {
             _d3d12Backend->Update();
         }
     }
+
+    void Renderer::Render() {
+        if (_d3d11Backend) {
+            _d3d11Backend->Render();
+        }
+        else if (_d3d9Backend) {
+            _d3d9Backend->Render();
+        }
+        else if (_d3d12Backend) {
+            _d3d12Backend->Render();
+        }
+    }
+    
+    void Renderer::Paint() {
+        if (_d3d11Backend) {
+            _d3d11Backend->Paint();
+        }
+        else if (_d3d9Backend) {
+            _d3d9Backend->Paint();
+        }
+        else if (_d3d12Backend) {
+            _d3d12Backend->Paint();
+        }
+    }
 } // namespace Framework::Graphics

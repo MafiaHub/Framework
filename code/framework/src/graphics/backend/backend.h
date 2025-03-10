@@ -31,6 +31,14 @@ namespace Framework::Graphics {
 
         virtual void Update() = 0;
 
+        virtual void Render() {
+            if (HasCommandsPending()) {
+                DrawCommandList();
+            }
+        }
+
+        virtual void Paint() {}
+
         bool IsInitialized() const {
             return _device != nullptr;
         }
