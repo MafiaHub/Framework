@@ -117,8 +117,9 @@ namespace ultralight {
             hr = context_->device()->CreateTexture2D(&desc, NULL, texture_entry.texture.GetAddressOf());
         }
         else {
-            if (bitmap->size() == 0 && bitmap->raw_pixels() == nullptr)
-                spdlog::error("GPUDriverD3D11::CreateTexture fault, size:{} ptr:{}", bitmap->size(), (void *)bitmap->raw_pixels());
+            if (bitmap->size() == 0 && bitmap->raw_pixels() == nullptr) {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("GPUDriverD3D11::CreateTexture fault, size:{} ptr:{}", bitmap->size(), (void *)bitmap->raw_pixels());
+            }
             D3D11_SUBRESOURCE_DATA tex_data;
             ZeroMemory(&tex_data, sizeof(tex_data));
             tex_data.pSysMem          = bitmap->LockPixels();
@@ -130,7 +131,7 @@ namespace ultralight {
         }
 
         if (FAILED(hr)) {
-            spdlog::error("GPUDriverD3D11::CreateTexture, unable to create texture. hr:{}, w:{}, h:{}, size:{}", hr, desc.Width, desc.Height, bitmap->size());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("GPUDriverD3D11::CreateTexture, unable to create texture. hr:{}, w:{}, h:{}, size:{}", hr, desc.Width, desc.Height, bitmap->size());
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
