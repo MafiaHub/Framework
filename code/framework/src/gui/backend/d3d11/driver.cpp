@@ -142,27 +142,27 @@ namespace ultralight {
 
         hr = context_->device()->CreateShaderResourceView(texture_entry.texture.Get(), &srv_desc, texture_entry.texture_srv.GetAddressOf());
 
-        if (FAILED(hr))
 #if ENABLE_MSAA
-        if (texture_entry.is_msaa_render_target) {
-            // Create resolve texture and shader resource view
+        if (FAILED(hr)) {
+            if (texture_entry.is_msaa_render_target) {
+                // Create resolve texture and shader resource view
 
-            desc.SampleDesc.Count   = 1;
-            desc.SampleDesc.Quality = 0;
-            hr                      = context_->device()->CreateTexture2D(&desc, NULL, texture_entry.resolve_texture.GetAddressOf());
+                desc.SampleDesc.Count   = 1;
+                desc.SampleDesc.Quality = 0;
+                hr                      = context_->device()->CreateTexture2D(&desc, NULL, texture_entry.resolve_texture.GetAddressOf());
 
-            if (FAILED(hr))
-                MessageBoxW(nullptr, L"GPUDriverD3D11::CreateTexture, unable to create MSAA resolve texture.", L"Error", MB_OK);
+                if (FAILED(hr))
+                    MessageBoxW(nullptr, L"GPUDriverD3D11::CreateTexture, unable to create MSAA resolve texture.", L"Error", MB_OK);
 
-            srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+                srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 
-            hr = context_->device()->CreateShaderResourceView(texture_entry.resolve_texture.Get(), &srv_desc, texture_entry.resolve_texture_srv.GetAddressOf());
+                hr = context_->device()->CreateShaderResourceView(texture_entry.resolve_texture.Get(), &srv_desc, texture_entry.resolve_texture_srv.GetAddressOf());
 
-            if (FAILED(hr))
-                MessageBoxW(nullptr,
-                    L"GPUDriverD3D11::CreateTexture, unable to create shader resource view for MSAA "
-                    L"resolve texture.",
-                    L"Error", MB_OK);
+                if (FAILED(hr))
+                    MessageBoxW(nullptr,
+                        L"GPUDriverD3D11::CreateTexture, unable to create shader resource view for MSAA "
+                        L"resolve texture.",
+                        L"Error", MB_OK);
         }
 #endif
     }
