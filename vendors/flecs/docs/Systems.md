@@ -2,16 +2,19 @@
 Systems are queries + a function that can be ran manually or get scheduled as part of a pipeline. To use systems, applications must build Flecs with the `FLECS_SYSTEM` addon (enabled by default).
 
 An example of a simple system:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // System implementation
 void Move(ecs_iter_t *it) {
     // Get fields from system query
-    Position *p = ecs_field(it, Position, 1);
-    Velocity *v = ecs_field(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 0);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     // Iterate matched entities
-    for (int i = 0; i < it->count, i++) {
+    for (int i = 0; i < it->count; i++) {
         p[i].x += v[i].x;
         p[i].y += v[i].y;
     }
@@ -20,6 +23,25 @@ void Move(ecs_iter_t *it) {
 // System declaration
 ECS_SYSTEM(world, Move, EcsOnUpdate, Position, [in] Velocity);
 ```
+
+In C, a system can also be created with the `ecs_system_init` function / `ecs_system` shorthand which provides more flexibility. The same system can be created like this:
+
+```c
+ecs_entity_t ecs_id(Move) = ecs_system(world, {
+    .entity = ecs_entity(world, { /* ecs_entity_desc_t */
+        .name = "Move",
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
+    }),
+    .query.terms = { /* ecs_query_desc_t::terms */
+        { ecs_id(Position) },
+        { ecs_id(Velocity), .inout = EcsIn }
+    }
+    .callback = Move
+})
+```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // System declaration
 flecs::system sys = world.system<Position, const Velocity>("Move")
@@ -29,54 +51,143 @@ flecs::system sys = world.system<Position, const Velocity>("Move")
         p.y += v.y;
     });
 ```
+</li>
+<li><b class="tab-title">C#</b>
 
-In C, a system can also be created with the `ecs_system_init` function / `ecs_system` shorthand which provides more flexibility. The same system can be created like this:
-
-```c
-ecs_entity_t ecs_id(Move) = ecs_system(world, {
-    .entity = ecs_entity(world, { /* ecs_entity_desc_t */
-        .name = "Move",
-        .add = { ecs_dependson(EcsOnUpdate) }
-    }),
-    .query.filter.terms = { /* ecs_filter_desc_t::terms */
-        { ecs_id(Position) },
-        { ecs_id(Velocity), .inout = EcsIn }
-    }
-    .callback = Move
-})
+```cs
+// System declaration
+System<Position, Velocity> sys = world.System<Position, Velocity>("Move")
+    .Each((ref Position p, ref Velocity v) =>
+    {
+        // Each is invoked for each entity
+        p.X += v.X;
+        p.Y += v.Y;
+    });
 ```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// System declaration
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .each(|(p, v)| {
+        p.x += v.x;
+        p.y += v.y;
+    });
+```
+</li>
+</ul>
+</div>
 
 To manually run a system, do:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_run(world, ecs_id(Move), 0.0 /* delta_time */, NULL /* param */)
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
+flecs::system sys = ...;
 sys.run();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+System_ sys = ...;
+sys.Run();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let sys = ...;
+sys.run();
+```
+</li>
+</ul>
+</div>
 
 By default systems are registered for a pipeline which orders systems by their "phase" (`EcsOnUpdate`). To run all systems in a pipeline, do:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_progress(world, 0 /* delta_time */);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
+flecs::world world = ...;
 world.progress();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+using World world = World.Create();
+world.Progress();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let world = World::new();
+world.progress();
+```
+</li>
+</ul>
+</div>
 
 To run systems as part of a pipeline, applications must build Flecs with the `FLECS_PIPELINE` addon (enabled by default). To prevent a system from being registered as part of a pipeline, specify 0 as phase:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ECS_SYSTEM(world, Move, 0, Position, [in] Velocity);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 flecs::system sys = world.system<Position, const Velocity>("Move")
     .kind(0)
     .each([](Position& p, const Velocity &v) { /* ... */ });
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+System<Position, Velocity> sys = world.System<Position, Velocity>("Move")
+    .Kind(0)
+    .Each((ref Position p, ref Velocity v) => { /* ... */ });
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .kind_id(0)
+    .each(|(p, v)| { /* ... */ });
+```
+</li>
+</ul>
+</div>
 
 ## System Iteration
 Because systems use queries, the iterating code looks similar:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Query iteration
@@ -85,11 +196,11 @@ ecs_iter_t it = ecs_query_iter(world, q);
 // Iterate tables matched by query
 while (ecs_query_next(&it)) {
     // Get fields from query
-    Position *p = ecs_field(it, Position, 1);
-    Velocity *v = ecs_field(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 0);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     // Iterate matched entities
-    for (int i = 0; i < it->count, i++) {
+    for (int i = 0; i < it->count; i++) {
         p[i].x += v[i].x;
         p[i].y += v[i].y;
     }
@@ -98,20 +209,18 @@ while (ecs_query_next(&it)) {
 // System code
 void Move(ecs_iter_t *it) {
     // Get fields from system query
-    Position *p = ecs_field(it, Position, 1);
-    Velocity *v = ecs_field(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 0);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     // Iterate matched entities
-    for (int i = 0; i < it->count, i++) {
+    for (int i = 0; i < it->count; i++) {
         p[i].x += v[i].x;
         p[i].y += v[i].y;
     }
 }
 ```
-
-Note how query iteration has an outer and an inner loop, whereas system iteration only has the inner loop. The outer loop for systems is iterated by the `ecs_run` function, which invokes the system function. When running a pipeline, this means that a system callback can be invoked multiple times per frame, once for each matched table.
-
-In C++ system and query iteration uses the same `each`/`iter` functions:
+</li>
+<li><b class="tab-title">C++</b>
 
 ```cpp
 // Query iteration (each)
@@ -122,78 +231,301 @@ world.system<Position, const Velocity>("Move")
   .each([](Position& p, const Velocity &v) { /* ... */ });
 ```
 ```cpp
-// Query iteration (iter)
-q.iter([](flecs::iter& it, Position *p, const Velocity *v) {
-    for (auto i : it) {
-        p[i].x += v[i].x;
-        p[i].y += v[i].y;
+// Query iteration (run)
+q.run([](flecs::iter& it) {
+    while (it.next()) {
+        auto p = it.field<Position>(0);
+        auto v = it.field<const Velocity>(1);
+
+        for (auto i : it) {
+            p[i].x += v[i].x;
+            p[i].y += v[i].y;
+        }
     }
 });
 
 // System iteration (iter)
 world.system<Position, const Velocity>("Move")
-  .iter([](flecs::iter& it, Position *p, const Velocity *v) {
-    for (auto i : it) {
+    .run([](flecs::iter& it) {
+        while (it.next()) {
+            auto p = it.field<Position>(0);
+            auto v = it.field<const Velocity>(1);
+
+            for (auto i : it) {
+                p[i].x += v[i].x;
+                p[i].y += v[i].y;
+            }
+        }
+    });
+```
+
+The `run()` function can be invoked multiple times per frame, once for each matched table. The `each` function is called once per matched entity.
+
+Note that there is no significant performance difference between `iter()` and `each`, which can both be vectorized by the compiler.
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Query iteration (Each)
+q.Each((ref Position p, ref Velocity v) => { /* ... */ });
+
+// System iteration (Each)
+world.System<Position, Velocity>("Move")
+    .Each((ref Position p, ref Velocity v) => { /* ... */ });
+```
+```cs
+// Query iteration (Iter)
+q.Iter((Iter it, Field<Position> p, Field<Velocity> v) =>
+{
+    foreach (int i in it) 
+    {
+        p[i].X += v[i].X;
+        p[i].Y += v[i].Y;
+    }
+});
+
+// System iteration (Iter)
+world.System<Position, Velocity>("Move")
+    .Iter((Iter it, Field<Position> p, Field<Velocity> v) =>
+    {
+        foreach (int i in it)
+        {
+            p[i].X += v[i].X;
+            p[i].Y += v[i].Y;
+        }
+    });
+```
+
+The `Iter` function can be invoked multiple times per frame, once for each matched table. The `Each` function is called once per matched entity.
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// `.each_entity` if you need the associated entity.
+
+// Query iteration (each)
+q.each(|(p, v)| { /* ... */ });
+
+// System iteration (each)
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .each(|(p, v)| { /* ... */ });
+```
+```rust
+// Query iteration (run)
+q.run(|mut it| {
+    while it.next() {
+        let mut p = it
+            .field::<Position>(0)
+            .expect("query term changed and not at the same index anymore");
+        let v = it
+            .field::<Velocity>(1)
+            .expect("query term changed and not at the same index anymore");
+        for i in it.iter() {
+            p[i].x += v[i].x;
+            p[i].y += v[i].y;
+        }
+    }
+});
+
+// System iteration (run)
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .run(|mut it| {
+        while it.next() {
+            let mut p = it
+                .field::<Position>(0)
+                .expect("query term changed and not at the same index anymore");
+            let v = it
+                .field::<Velocity>(1)
+                .expect("query term changed and not at the same index anymore");
+            for i in it.iter() {
+                p[i].x += v[i].x;
+                p[i].y += v[i].y;
+            }
+        }
+    });
+```
+```rust
+// Query iteration (run_iter)
+q.run_iter(|it, (p, v)| {
+    for i in it.iter() {
         p[i].x += v[i].x;
         p[i].y += v[i].y;
     }
-  });
+});
+
+// System iteration (run_iter)
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .run_iter(|it, (p, v)| {
+        for i in it.iter() {
+            p[i].x += v[i].x;
+            p[i].y += v[i].y;
+        }
+    });
 ```
 
-Just like in the C API, the `iter` function can be invoked multiple times per frame, once for each matched table. The `each` function is called once per matched entity.
+The `run` function can be invoked multiple times per frame, once for each matched table. The `each` function is called once per matched entity.
 
-Note that there is no significant performance difference between `iter` and `each`, which can both be vectorized by the compiler. By default `each` can actually end up being faster, as it is instanced (see [query manual](Queries.md#each-c)).
+Note that there is no significant performance difference between `run` and `each`, which can both be vectorized by the compiler.
+</li>
+</ul>
+</div>
+
+Note how query iteration has an outer and an inner loop, whereas system iteration only has the inner loop. The outer loop for systems is iterated by the `ecs_run` function, which invokes the system function. When running a pipeline, this means that a system callback can be invoked multiple times per frame, once for each matched table.
 
 ## Using delta_time
 A system provides a `delta_time` which contains the time passed since the last frame:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
-Position *p = ecs_field(it, Position, 1);
-Velocity *v = ecs_field(it, Velocity, 2);
+Position *p = ecs_field(it, Position, 0);
+Velocity *v = ecs_field(it, Velocity, 1);
 
-for (int i = 0; i < it->count, i++) {
+for (int i = 0; i < it->count; i++) {
     p[i].x += v[i].x * it->delta_time;
     p[i].y += v[i].y * it->delta_time;
 }
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.system<Position, const Velocity>("Move")
-    .iter([](flecs::iter& it, size_t, Position& p, const Velocity &v) {
+    .each([](flecs::iter& it, size_t, Position& p, const Velocity &v) {
         p.x += v.x * it.delta_time();
         p.y += v.y * it.delta_time();
     });
 
 world.system<Position, const Velocity>("Move")
-    .iter([](flecs::iter& it, Position *p, const Velocity *v) {
-        for (auto i : it) {
+    .run([](flecs::iter& it) {
+        while (it.next()) {
+            auto p = it.field<Position>(0);
+            auto v = it.field<const Velocity>(1);
+
+            for (auto i : it) {
+                p[i].x += v[i].x * it.delta_time();
+                p[i].y += v[i].y * it.delta_time();
+            }
+        }
+    });
+```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.System<Position, Velocity>("Move")
+    .Each((Iter it, int i, ref Position p, ref Velocity v) =>
+    {
+        p.X += v.X * it.DeltaTime();
+        p.Y += v.Y * it.DeltaTime();
+    });
+
+world.System<Position, Velocity>("Move")
+    .Iter((Iter it, Field<Position> p, Field<Velocity> v) =>
+    {
+        foreach (int i in it)
+        {
+            p[i].X += v[i].X * it.DeltaTime();
+            p[i].Y += v[i].Y * it.DeltaTime();
+        }
+    });
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .each_iter(|it, i, (p, v)| {
+        p.x += v.x * it.delta_time();
+        p.y += v.y * it.delta_time();
+    });
+    
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .run_iter(|it, (p, v)| {
+        for i in it.iter() {
             p[i].x += v[i].x * it.delta_time();
             p[i].y += v[i].y * it.delta_time();
         }
     });
 ```
+</li>
+</ul>
+</div>
 
 This is the value passed into `ecs_progress`:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_progress(world, delta_time);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.progress(delta_time);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.Progress(deltaTime);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.progress_time(delta_time);
+```
+</li>
+</ul>
+</div>
 
 Passing a value for `delta_time` is useful if you're running `progress()` from within an existing game loop that already has time management. Providing 0 for the argument, or omitting it in the C++ API will cause `progress()` to measure the time since the last call and use that as value for `delta_time`:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_progress(world, 0);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.progress();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.Progress();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.progress();
+```
+</li>
+</ul>
+</div>
 
 A system may also use `delta_system_time`, which is the time elapsed since the last time the system was invoked. This can be useful when a system is not invoked each frame, for example when using a timer.
 
 ## Tasks
 A task is a system that matches no entities. Tasks are ran once per frame, and are useful for running code that is not related to entities. An example of a task system:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // System function
@@ -208,7 +540,7 @@ ECS_SYSTEM(world, PrintTime, EcsOnUpdate, 0);
 ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "PrintTime",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
     .callback = PrintTime
 });
@@ -216,24 +548,60 @@ ecs_system(world, {
 // Runs PrintTime
 ecs_progress(world, 0);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.system("PrintTime")
     .kind(flecs::OnUpdate)
-    .iter([](flecs::iter& it) {
+    .run([](flecs::iter& it) {
         printf("Time: %f\n", it.delta_time());
     });
 
 // Runs PrintTime
 world.progress();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.System("PrintTime")
+    .Kind(Ecs.OnUpdate)
+    .Iter((Iter it) =>
+    {
+        Console.WriteLine($"Time: {it.DeltaTime()}");
+    });
+
+// Runs PrintTime
+world.progress();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.system_named::<()>("PrintTime").run(|mut it| {
+    while it.next() {
+        println!("Time: {}", it.delta_time());
+    }
+});
+
+// Runs PrintTime
+world.progress();
+```
+</li>
+</ul>
+</div>
 
 Tasks may query for components from a fixed source or singleton:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // System function
 void PrintTime(ecs_iter_t *it) {
     // Get singleton component
-    Game *g = ecs_field(it, Game, 1);
+    Game *g = ecs_field(it, Game, 0);
 
     printf("Time: %f\n", g->time);
 }
@@ -245,24 +613,53 @@ ECS_SYSTEM(world, PrintTime, EcsOnUpdate, Game($));
 ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "PrintTime",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
-    .query.filter.terms = {
+    .query.terms = {
         { .id = ecs_id(Game), .src.id = ecs_id(Game) } // Singleton source
     },
     .callback = PrintTime
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.system<Game>("PrintTime")
-    .term_at(1).singleton()
+    .term_at(0).singleton()
     .kind(flecs::OnUpdate)
-    .iter([](flecs::iter& it, Game *g) {
-        printf("Time: %f\n", g->time);
+    .each([](Game& g) {
+        printf("Time: %f\n", g.time);
     });
 ```
+</li>
+<li><b class="tab-title">C#</b>
 
-Note that `it->count` is always 0 for tasks, as they don't match any entities. In C++ this means that the function passed to `each` is never invoked for tasks. Applications will have to use `iter` instead when using tasks in C++.
+```cs
+world.System<Game>("PrintTime")
+    .TermAt(0).Singleton()
+    .Kind(Ecs.OnUpdate)
+    .Each((ref Game g) =>
+    {
+        Console.WriteLine($"Time: {g.Time}");
+    });
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .system_named::<&Game>("PrintTime")
+    .term_at(0)
+    .singleton()
+    .kind::<flecs::pipeline::OnUpdate>()
+    .run_iter(|it, game| {
+        println!("Time: {}", game[0].time);
+    });
+```
+</li>
+</ul>
+</div>
 
 ## Pipelines
 A pipeline is a list of systems that is executed when the `ecs_progress`/`world::progress` function is invoked. Which systems are part of the pipeline is determined by a pipeline query. A pipeline query is a regular ECS query, which matches system entities. Flecs has a builtin pipeline with a predefined query, in addition to offering the ability to specify a custom pipeline query.
@@ -275,11 +672,17 @@ In addition to a system query, pipelines also analyze the components that system
 
 ### Builtin Pipeline
 The builtin pipeline matches systems that depend on a _phase_. A phase is any entity with the `EcsPhase`/`flecs::Phase` tag. To add a dependency on a phase, the `DependsOn` relationship is used. This happens automatically when using the `ECS_SYSTEM` macro/`flecs::system::kind` method:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // System is created with (DependsOn, OnUpdate)
 ECS_SYSTEM(world, Move, EcsOnUpdate, Position, Velocity);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // System is created with (DependsOn, OnUpdate)
 world.system<Position, Velocity>("Move")
@@ -288,6 +691,33 @@ world.system<Position, Velocity>("Move")
     // ...
   });
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// System is created with (DependsOn, OnUpdate)
+world.System<Position, Velocity>("Move")
+    .Kind(Ecs.OnUpdate)
+    .Each((ref Position p, ref Velocity v) =>
+    {
+        // ...
+    });
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+ // System is created with (DependsOn, OnUpdate)
+ world
+     .system_named::<(&mut Position, &Velocity)>("Move")
+     .kind::<flecs::pipeline::OnUpdate>()
+     .each(|(p, v)| {
+         // ...
+     });
+```
+</li>
+</ul>
+</div>
 
 Systems are ordered using a topology sort on the `DependsOn` relationship. Systems higher up in the topology are ran first. In the following example the order of systems is `InputSystem, MoveSystem, CollisionSystem`:
 
@@ -302,6 +732,9 @@ Systems are ordered using a topology sort on the `DependsOn` relationship. Syste
 ```
 
 Flecs has the following builtin phases, listed in topology order:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 - `EcsOnStart`
 - `EcsOnLoad`
@@ -312,8 +745,8 @@ Flecs has the following builtin phases, listed in topology order:
 - `EcsPostUpdate`
 - `EcsPreStore`
 - `EcsOnStore`
-
-In C++ the phase identifiers are namespaced:
+</li>
+<li><b class="tab-title">C++</b>
 
 - `flecs::OnStart`
 - `flecs::OnLoad`
@@ -324,6 +757,33 @@ In C++ the phase identifiers are namespaced:
 - `flecs::PostUpdate`
 - `flecs::PreStore`
 - `flecs::OnStore`
+</li>
+<li><b class="tab-title">C#</b>
+
+- `Ecs.OnStart`
+- `Ecs.OnLoad`
+- `Ecs.PostLoad`
+- `Ecs.PreUpdate`
+- `Ecs.OnUpdate`
+- `Ecs.OnValidate`
+- `Ecs.PostUpdate`
+- `Ecs.PreStore`
+- `Ecs.OnStore`
+</li>
+<li><b class="tab-title">Rust</b>
+
+- `flecs::pipeline::OnStart`
+- `flecs::pipeline::OnLoad`
+- `flecs::pipeline::PostLoad`
+- `flecs::pipeline::PreUpdate`
+- `flecs::pipeline::OnUpdate`
+- `flecs::pipeline::OnValidate`
+- `flecs::pipeline::PostUpdate`
+- `flecs::pipeline::PreStore`
+- `flecs::pipeline::OnStore`
+</li>
+</ul>
+</div>
 
 The `EcsOnStart`/`flecs::OnStart` phase is a special phase that is only ran the first time `progress()` is called.
 
@@ -345,25 +805,24 @@ ECS_SYSTEM(world, Collide, Collisions, Position, Velocity);
 #### Builtin Pipeline Query
 The builtin pipeline query looks like this:
 
-Query DSL:
-```
-flecs.system.System, Phase(cascade(DependsOn)), !Disabled(up(DependsOn)), !Disabled(up(ChildOf))
-```
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
-C descriptor API:
 ```c
 ecs_pipeline_init(world, &(ecs_pipeline_desc_t){
-    .query.filter.terms = {
+    .query.terms = {
         { .id = EcsSystem },
-        { .id = EcsPhase, .src.flags = EcsCascade, .src.trav = EcsDependsOn },
-        { .id = EcsDisabled, .src.flags = EcsUp, .src.trav = EcsDependsOn, .oper = EcsNot },
-        { .id = EcsDisabled, .src.flags = EcsUp, .src.trav = EcsChildOf, .oper = EcsNot }
+        { .id = EcsPhase, .src.flags = EcsCascade, .trav = EcsDependsOn },
+        { .id = EcsDisabled, .src.flags = EcsUp, .trav = EcsDependsOn, .oper = EcsNot },
+        { .id = EcsDisabled, .src.flags = EcsUp, .trav = EcsChildOf, .oper = EcsNot }
     }
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
 
-C++ builder API:
-```c
+```cpp
 world.pipeline()
   .with(flecs::System)
   .with(flecs::Phase).cascade(flecs::DependsOn)
@@ -371,16 +830,55 @@ world.pipeline()
   .without(flecs::Disabled).up(flecs::ChildOf)
   .build();
 ```
+</li>
+<li><b class="tab-title">Query DSL</b>
+
+```
+flecs.system.System, Phase(cascade(DependsOn)), !Disabled(up(DependsOn)), !Disabled(up(ChildOf))
+```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.Pipeline()
+    .With(Ecs.System)
+    .With(Ecs.Phase).Cascade(Ecs.DependsOn)
+    .Without(Ecs.Disabled).Up(Ecs.DependsOn)
+    .Without(Ecs.Disabled).Up(Ecs.ChildOf)
+    .Build();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .pipeline()
+    .with::<flecs::system::System>()
+    .with::<flecs::pipeline::Phase>()
+    .cascade_type::<flecs::DependsOn>()
+    .without::<flecs::Disabled>()
+    .up_type::<flecs::DependsOn>()
+    .without::<flecs::Disabled>()
+    .up_type::<flecs::ChildOf>()
+    .build();
+```
+
+</li>
+</ul>
+</div>
 
 ### Custom pipeline
 Applications can create their own pipelines which fully customize which systems are matched, and in which order they are executed. Custom pipelines can use phases and `DependsOn`, or they may use a completely different approach. This example shows how to create a pipeline that matches all systems with the `Foo` tag:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ECS_TAG(world, Foo);
 
 // Create custom pipeline
 ecs_entity_t pipeline = ecs_pipeline_init(world, &(ecs_pipeline_desc_t){
-    .query.filter.terms = {
+    .query.terms = {
         { .id = EcsSystem }, // mandatory
         { .id = Foo }
     }
@@ -395,6 +893,9 @@ ECS_SYSTEM(world, Move, Foo, Position, Velocity);
 // Runs the pipeline & system
 ecs_progress(world, 0);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Create custom pipeline
 flecs::entity pipeline = world.pipeline()
@@ -413,6 +914,55 @@ auto move = world.system<Position, Velocity>("Move")
 // Runs the pipeline & system
 world.progress();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Create custom pipeline
+Pipeline pipeline = world.Pipeline()
+    .With(Ecs.System)
+    .With(foo) // or .With<Foo>() if a type
+    .Build();
+
+// Configure the world to use the custom pipeline
+world.SetPipeline(pipeline);
+
+// Create system
+System<Position, Velocity> move = world.System<Position, Velocity>("Move")
+    .Kind(foo) // or .Kind<Foo>() if a type
+    .Each(...);
+
+// Runs the pipeline & system
+world.Progress();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Create custom pipeline
+let pipeline = world
+    .pipeline()
+    .with::<flecs::system::System>()
+    .with::<Foo>() // or `.with_id(foo) if an id`
+    .build();
+
+// Configure the world to use the custom pipeline
+world.set_pipeline_id(pipeline);
+
+// Create system
+world
+    .system_named::<(&mut Position, &Velocity)>("Move")
+    .kind::<Foo>() // or `.kind_id(foo) if an id`
+    .each(|(p, v)| {
+        p.x += v.x;
+        p.y += v.y;
+    });
+// Runs the pipeline & system
+world.progress();
+```
+</li>
+</ul>
+</div>
 
 Note that `ECS_SYSTEM` kind parameter/`flecs::system::kind` add the provided entity both by itself as well as with a `DependsOn` relationship. As a result, the above `Move` system ends up with both:
 
@@ -420,13 +970,33 @@ Note that `ECS_SYSTEM` kind parameter/`flecs::system::kind` add the provided ent
 - `(DependsOn, Foo)`
 
 This allows applications to still use the macro/builder API with custom pipelines, even if the custom pipeline does not use the `DependsOn` relationship. To avoid adding the `DependsOn` relationship, `0` can be passed to `ECS_SYSTEM` or `flecs::system::kind` followed by adding the tag manually:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_add(world, Move, Foo);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 move.add(Foo);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+move.Entity.Add(foo);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+move_sys.add::<Foo>();
+```
+</ul>
+</div>
 
 #### Pipeline switching performance
 When running a multithreaded application, switching pipelines can be an expensive operation. The reason for this is that it requires tearing down and recreating the worker threads with the new pipeline context. For this reason it can be more efficient to use queries that allow for enabling/disabling groups of systems vs. switching pipelines.
@@ -438,6 +1008,9 @@ For example, the builtin pipeline excludes groups of systems from the schedule t
 
 ### Disabling systems
 Because pipelines use regular ECS queries, adding the `EcsDisabled`/`flecs::Disabled` tag to a system entity will exclude the system from the pipeline. An application can use the `ecs_enable` function or `entity::enable`/`entity::disable` methods to enable/disable a system:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Disable system in C
@@ -445,21 +1018,66 @@ ecs_enable(world, Move, false);
 // Enable system in C
 ecs_enable(world, Move, true);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Disable system in C++
 s.disable();
 // Enable system in C++
 s.enable();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Disable system in C#
+s.Entity.Disable();
+// Enable system in C#
+s.Entity.Enable();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Disable system
+s.disable_self();
+// Enable system
+s.enable_self();
+```
+</li>
+</ul>
+</div>
 
 Additionally the `EcsDisabled`/`flecs::Disabled` tag can be added/removed directly:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_add_id(world, Move, EcsDisabled);
 ```
-```c
+</li>
+<li><b class="tab-title">C++</b>
+
+```cpp
 s.add(flecs::Disabled);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+s.Entity.Add(Ecs.Disabled);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+sys.add::<flecs::Disabled>();
+```
+</li>
+</ul>
+</div>
 
 Note that this applies both to builtin pipelines and custom pipelines, as entities with the `Disabled` tag are ignored by default by queries.
 
@@ -486,7 +1104,7 @@ There are a number of things applications can do to force merging of operations,
 1. Commands to be merged before another system
 2. Operations not to be enqueued as commands.
 
-The mechanisms to accomplish this are sync points for 1), and `no_readonly` systems for 2).
+The mechanisms to accomplish this are sync points for 1), and `immediate` systems for 2).
 
 ### Sync points
 Sync points are moments during the frame where all commands are flushed to the storage. Systems that run after a sync point will be able to see all operations that happened up until the sync point. Sync points are inserted automatically by analyzing which commands could have been inserted and which components are being read by systems.
@@ -500,6 +1118,9 @@ A pipeline tracks on a per-component basis whether commands could have been inse
 - Different combinations of modules have different sync requirements, automatic sync point insertion ensures that sync points are only inserted for the set of systems that are imported and are active.
 
 To make the scheduler aware that a system can enqueue commands for a component, use the `out` modifier in combination with matching a component on an empty entity (`0`). This tells the scheduler that even though a system is not matching with the component, it is still "writing" it:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // The '()' means, don't match this component on an entity, while `[out]` indicates 
@@ -511,7 +1132,7 @@ ECS_SYSTEM(world, SetTransform, EcsOnUpdate, Position, [out] Transform());
 // When using the descriptor API for creating the system, set the EcsIsEntity
 // flag while leaving the id field to 0. This is equivalent to doing `()` in the DSL.
 ecs_system(world, {
-    .query.filter.terms = {
+    .query.terms = {
         { ecs_id(Position) },
         {
             .inout = EcsOut,
@@ -523,21 +1144,48 @@ ecs_system(world, {
     /* ... */
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // In the C++ API, use the write method to indicate commands could be inserted.
 world.system<Position>()
     .write<Transform>()
     .each( /* ... */);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// In the C# API, use the write method to indicate commands could be inserted.
+world.System<Position>()
+    .Write<Transform>()
+    .Each( /* ... */);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// In the Rust API, use the write method to indicate commands could be inserted.
+world.system::<&Position>().write::<Transform>().each(|p| {
+    // ...
+});
+```
+</li>
+</ul>
+</div>
 
 This will cause insertion of a sync point before the next system that reads `Transform`. Similarly, a system can also be annotated with reading a component that it doesn't match with, which is useful when a system calls `get`:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ECS_SYSTEM(world, SetTransform, EcsOnUpdate, Position, [in] Transform());
 ```
 ```c
 ecs_system(world, {
-    .query.filter.terms = {
+    .query.terms = {
         { ecs_id(Position) },
         {
             .inout = EcsIn,
@@ -549,48 +1197,107 @@ ecs_system(world, {
     /* ... */
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // In the C++ API, use the read method to indicate a component is read using .get
 world.system<Position>()
     .read<Transform>()
     .each( /* ... */);
 ```
+</li>
+<li><b class="tab-title">C#</b>
 
-### No readonly systems
-By default systems are ran while the world is in "readonly" mode, where all ECS operations are enqueued as commands. Note that readonly mode only applies to "structural" changes, such as changing the components of an entity or other operations that mutate ECS data structures. Systems can still write component values while in readonly mode.
+```cs
+// In the C# API, use the read method to indicate a component is read using .Get
+world.System<Position>()
+    .Read<Transform>()
+    .Each( /* ... */);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// In the Rust API, use the read method to indicate a component is read using .get
+world.system::<&Position>().read::<Transform>().each(|p| {
+    // ...
+});
+```
+</li>
+</ul>
+</div>
+
+### Immediate systems
+By default systems are ran while the world is in "readonly" mode, where all ECS operations are enqueued as commands. Readonly here means that structural changes, such as changing the components of an entity are deferred. Systems can still write component values while in readonly mode.
 
 In some cases however, operations need to be immediately visible to a system. A typical example is a system that assigns tasks to resources, like assigning plates to a waiter. A system should only assign plates to a waiter that hasn't been assigned any plates yet, but to know which waiters are free, the operation that assigns a plate to a waiter must be immediately visible.
 
-To accomplish this, systems can be marked with the `no_readonly` flag, which signals that a system should be ran while the world is not in readonly mode. This causes ECS operations to not get enqueued, and allows the system to directly see the results of operations. There are a few limitations to `no_readonly` systems:
+To accomplish this, systems can be marked with the `immediate` flag, which signals that a system should be ran while the world is not in readonly mode. This causes ECS operations to not get enqueued, and allows the system to directly see the results of operations. There are a few limitations to `immediate` systems:
 
-- `no_readonly` systems are always single threaded
+- `immediate` systems are always single threaded
 - operations on the iterated over entity must still be deferred
 
 The reason for the latter limitation is that allowing for operations on the iterated over entity would cause the system to modify the storage it is iterating, which could cause undefined behavior similar to what you'd see when changing a vector while iterating it.
 
-The following example shows how to create a `no_readonly` system:
+The following example shows how to create a `immediate` system:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_system(ecs, {
     .entity = ecs_entity(ecs, {
         .name = "AssignPlate",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
-    .query.filter.terms = {
+    .query.terms = {
         { .id = Plate },
     },
     .callback = AssignPlate,
-    .no_readonly = true // disable readonly mode for this system
+    .immediate = true // disable readonly mode for this system
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
     ecs.system("AssignPlate")
         .with<Plate>()
-        .no_readonly() // disable readonly mode for this system
-        .iter([&](flecs::iter& it) { /* ... */ })
+        .immediate() // disable readonly mode for this system
+        .run([&](flecs::iter& it) { /* ... */ })
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+ecs.System("AssignPlate")
+    .With<Plate>()
+    .NoReadonly() // disable readonly mode for this system
+    .Iter((Iter it) => { /* ... */ })
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .system_named::<&Plate>("AssignPlate")
+    .immediate(true) // disable readonly mode for this system
+    .run(|mut it| {
+        while it.next() {
+            // ...
+        }
+    });
+```
+</li>
+</ul>
+</div>
 
 This ensures the world is not in readonly mode when the system is ran. Operations are however still enqueued as commands, which ensures that the system can enqueue commands for the entity that is being iterated over. To prevent commands from being enqueued, a system needs to suspend and resume command enqueueing. This is an extra step, but makes it possible for a system to both enqueue commands for the iterated over entity, as well as do operations that are immediately visible. An example:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 void AssignPlate(ecs_iter_t *it) {
@@ -603,9 +1310,44 @@ void AssignPlate(ecs_iter_t *it) {
     }
 }
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
-.iter([](flecs::iter& it) {
-    for (auto i : it) {
+.run([](flecs::iter& it) {
+    while (it.next()) {
+        for (auto i : it) {
+            // ECS operations ran here are visible after running the system
+            it.world().defer_suspend();
+            // ECS operations ran here are immediately visible
+            it.world().defer_resume();
+            // ECS operations ran here are visible after running the system
+        }
+    }
+});
+```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+.Iter((Iter it) =>
+{
+    foreach (int i in it)
+    {
+        // ECS operations ran here are visible after running the system
+        it.World().DeferSuspend();
+        // ECS operations ran here are immediately visible
+        it.World().DeferResume();
+        // ECS operations ran here are visible after running the system
+    }
+});
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+.run(|mut it| {
+    while it.next() {
         // ECS operations ran here are visible after running the system
         it.world().defer_suspend();
         // ECS operations ran here are immediately visible
@@ -614,38 +1356,87 @@ void AssignPlate(ecs_iter_t *it) {
     }
 });
 ```
+</li>
+</ul>
+</div>
 
-Note that `defer_suspend` and `defer_resume` may only be called from within a `no_readonly` system.
+Note that `defer_suspend` and `defer_resume` may only be called from within a `immediate` system.
 
 ### Threading
 Systems in Flecs can be multithreaded. This requires both the system to be created as a multithreaded system, as well as configuring the world to have a number of worker threads. To create worker threads, use the `set_threads` function:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_set_threads(world, 4); // Create 4 worker threads
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.set_threads(4);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.SetThreads(4);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.set_threads(4);
+```
+</li>
+</ul>
+</div>
 
 To create a multithreaded system, use the `multi_threaded` flag:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 ecs_system(ecs, {
     .entity = ecs_entity(ecs, {
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
-    .query.filter.terms = {
+    .query.terms = {
         { .id = ecs_id(Position) }
     },
     .callback = Dummy,
     .multi_threaded = true // run system on multiple threads
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.system<Position>()
   .multi_threaded()
   .each( /* ... */ );
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.System<Position>()
+  .MultiThreaded()
+  .Each( /* ... */ );
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.system::<&Position>().multi_threaded().each(|p| {
+    // ...
+});
+```
+</li>
+</ul>
+</div>
 
 By default systems are created as single threaded. Single threaded systems are always ran on the main thread. Multithreaded systems are ran on all worker threads. The scheduler runs each multithreaded system on all threads, and divides the number of matched entities across the threads. The way entities are allocated to threads ensures that the same entity is always processed by the same thread, until the next sync point. This means that in an ideal case, all systems in a frame can run until completion without having to synchronize.
 
@@ -654,13 +1445,34 @@ The way the scheduler ensures that the same entities are processed by the same t
 ### Threading with Async Tasks
 Systems in Flecs can also be multithreaded using an external asynchronous task system. Instead of creating regular worker threads using `set_threads`, use the `set_task_threads` function and provide the OS API callbacks to create and wait for task completion using your job system.
 This can be helpful when using Flecs within an application which already has a job queue system to handle multithreaded tasks.
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
-ecs_set_tasks_threads(world, 4); // Create 4 worker task threads for the duration of each ecs_progress update
+ecs_set_task_threads(world, 4); // Create 4 worker task threads for the duration of each ecs_progress update
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.set_task_threads(4);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.SetTaskThreads(4);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.set_task_threads(4);
+```
+</li>
+</ul>
+</div>
 
 For simplicity, these task callbacks use the same format as Flecs `ecs_os_api_t` thread APIs. In fact, you could provide your regular os thread api functions to create short-duration threads for multithreaded system processing.
 Create multithreaded systems using the `multi_threaded` flag as with `ecs_set_threads` above.
@@ -674,6 +1486,9 @@ When running a pipeline, systems are ran each time `progress()` is called. The `
 
 ### Interval
 The following example shows how to run systems at a time interval:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Using the ECS_SYSTEM macro
@@ -685,9 +1500,9 @@ ecs_set_interval(world, ecs_id(Move), 1.0); // Run at 1Hz
 ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "Move",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
-    .query.filter.terms = {
+    .query.terms = {
         { ecs_id(Position) }, 
         { ecs_id(Velocity), .inout = EcsIn }
     },
@@ -695,14 +1510,41 @@ ecs_system(world, {
     .interval = 1.0 // Run at 1Hz
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.system<Position, const Velocity>()
     .interval(1.0) // Run at 1Hz
     .each(...);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.System<Position, Velocity>()
+    .Interval(1.0f) // Run at 1Hz
+    .Each(...);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world.system::<&Position>()
+    .interval(1.0) // Run at 1Hz
+    .each(|p| {
+    // ...
+});
+```
+</li>
+</ul>
+</div>
 
 ### Rate
 The following example shows how to run systems every Nth tick with a rate filter:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Using the ECS_SYSTEM macro
@@ -714,9 +1556,9 @@ ecs_set_rate(world, ecs_id(Move), 2); // Run every other frame
 ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "Move",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
-    .query.filter.terms = {
+    .query.terms = {
         { ecs_id(Position) }, 
         { ecs_id(Velocity), .inout = EcsIn }
     },
@@ -724,14 +1566,42 @@ ecs_system(world, {
     .rate = 2.0 // Run every other frame
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 world.system<Position, const Velocity>()
     .rate(2) // Run every other frame
     .each(...);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.System<Position, Velocity>()
+    .Rate(2) // Run every other frame
+    .Each(...);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .system::<&Position>()
+    .rate(2) // Run every other frame
+    .each(|p| {
+        // ...
+    });
+```
+</li>
+</ul>
+</div>
 
 ### Tick source
 Instead of setting the interval or rate directly on the system, an application may also create a separate entity that holds the time or rate filter, and use that as a "tick source" for a system. This makes it easier to use the same settings across groups of systems:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Using the ECS_SYSTEM macro
@@ -753,9 +1623,9 @@ ecs_entity_t tick_source = ecs_set_interval(world, 0, 1.0);
 ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "Move",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
-    .query.filter.terms = {
+    .query.terms = {
         { ecs_id(Position) }, 
         { ecs_id(Velocity), .inout = EcsIn }
     },
@@ -763,6 +1633,9 @@ ecs_system(world, {
     .tick_source = tick_source // Set tick source for system
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // A rate filter can be created with .rate(2)
 flecs::entity tick_source = world.timer()
@@ -772,8 +1645,33 @@ world.system<Position, const Velocity>()
     .tick_source(tick_source) // Set tick source for system
     .each(...);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// A rate filter can be created with .Rate(2)
+TimerEntity tickSource = world.Timer()
+    .Interval(1.0f);
+
+world.System<Position, Velocity>()
+    .TickSource(tickSource) // Set tick source for system
+    .Each(...);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Timer not yet implemented in Rust
+```
+</li>
+</ul>
+</div>
 
 Interval filters can be paused and resumed:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 // Pause timer
 ecs_stop_timer(world, tick_source);
@@ -781,6 +1679,9 @@ ecs_stop_timer(world, tick_source);
 // Resume timer
 ecs_start_timer(world, tick_source);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Pause timer
 tick_source.stop();
@@ -788,11 +1689,33 @@ tick_source.stop();
 // Resume timer
 tick_source.start();
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Pause timer
+tickSource.Stop();
+
+// Resume timer
+tickSource.Start();
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Timer addon yet to be implemented in rust
+```
+</li>
+</ul>
+</div>
 
 An additional advantage of using shared interval/rate filter between systems is that it guarantees that systems are ran at the same tick. When a system is disabled, its interval/rate filters aren't updated, which means that when the system is reenabled again it would be out of sync with other systems that had the same interval/rate specified. When using a shared tick source however the system is guaranteed to run at the same tick as other systems with the same tick source, even after the system is reenabled.
 
 ### Nested tick sources
 One tick source can be used as the input of another (rate) tick source. The rate tick source will run at each Nth tick of the input tick source. This can be used to create nested tick sources, like in the following example:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Tick at 1Hz
@@ -806,6 +1729,9 @@ ecs_set_tick_source(world, each_minute, each_second);
 ecs_entity_t each_hour = ecs_set_rate(world, 0, 60);
 ecs_set_tick_source(world, each_hour, each_minute);
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Tick at 1Hz
 flecs::entity each_second = world.timer()
@@ -819,15 +1745,43 @@ flecs::entity each_minute = world.timer()
 flecs::entity each_hour = world.timer()
     .rate(60, each_minute);
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Tick at 1Hz
+TimerEntity eachSecond = world.Timer()
+    .Interval(1.0f);
+
+// Tick each minute
+TimerEntity eachMinute = world.Timer()
+    .Rate(60, eachSecond);
+
+// Tick each hour
+TimerEntity eachHour = world.Timer()
+    .Rate(60, eachMinute);
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Timer not yet implemented in Rust
+```
+</li>
+</ul>
+</div>
 
 Systems can also act as each others tick source:
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Tick at 1Hz
 ecs_entity_t each_second = ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "EachSecond",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
     .callback = Dummy,
     .interval = 1.0
@@ -837,7 +1791,7 @@ ecs_entity_t each_second = ecs_system(world, {
 ecs_entity_t each_minute = ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "EachMinute",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
     .callback = Dummy,
     .tick_source = each_second,
@@ -848,28 +1802,61 @@ ecs_entity_t each_minute = ecs_system(world, {
 ecs_entity_t each_hour = ecs_system(world, {
     .entity = ecs_entity(world, {
         .name = "EachHour",
-        .add = { ecs_dependson(EcsOnUpdate) }
+        .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
     .callback = Dummy,
     .tick_source = each_minute,
     .rate = 60
 });
 ```
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Tick at 1Hz
 flecs::entity each_second = world.system("EachSecond")
     .interval(1.0)
-    .iter([](flecs::iter& it) { /* ... */ });
+    .run([](flecs::iter& it) { /* ... */ });
 
 // Tick each minute
 flecs::entity each_minute = world.system("EachMinute")
     .tick_source(each_second)
     .rate(60)
-    .iter([](flecs::iter& it) { /* ... */ });
+    .run([](flecs::iter& it) { /* ... */ });
 
 // Tick each hour
 flecs::entity each_hour = world.system("EachHour")
     .tick_source(each_minute)
     .rate(60)
-    .iter([](flecs::iter& it) { /* ... */ });
+    .run([](flecs::iter& it) { /* ... */ });
 ```
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Tick at 1Hz
+System_ eachSecond = world.System("EachSecond")
+    .Interval(1.0f)
+    .Iter((Iter it) => { /* ... */ });
+
+// Tick each minute
+System_ eachMinute = world.System("EachMinute")
+    .TickSource(eachSecond)
+    .Rate(60)
+    .Iter((Iter it) => { /* ... */ });
+
+// Tick each hour
+System_ eachHour = world.System("EachHour")
+    .TickSource(eachMinute)
+    .Rate(60)
+    .Iter((Iter it) => { /* ... */ });
+```
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Timer not yet implemented in Rust
+```
+</li>
+</ul>
+</div>

@@ -14,6 +14,17 @@ If you have something on your mind, that is compatible with project's philosophy
 
 If you feel up for it, feel free to code and pull request any changes you've made, that can be useful for the project. This is the best way to help us out and it is highly appreciated!
 
+## Version changes
+
+We loosely follow semver to enforce build requirements between networked peers.
+
+We separate and bump versions based on these criteria:
+* PATCH when changes were made to either side that do not affect sync between peers nor the scripting layer itself (could also be cosmetic/meta changes)
+* MINOR when a change is made in the scripting layer
+* MAJOR when a change is made to the netcode, shared ecs modules or sync flow between peers (requires both client and the server side to be updated)
+
+Our PR workflow automates version bumping for you based on files that have been modified. This way we ensure each PR properly communicates potential dependency changes.
+
 ## Code submission policy
 
 Please follow the following rules when contributing to the project:

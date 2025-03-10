@@ -48,7 +48,7 @@ This is likely because queries (`flecs::query`) are created repeatedly in a loop
 flecs::query<Position> q = world.query<Position>();
 
 world.system()
-    .iter([=](flecs::iter& it) {
+    .run([=](flecs::iter& it) {
         q.each([&](Position& p) {
             // ...
         });
@@ -57,7 +57,7 @@ world.system()
 ```cpp
 // BAD
 world.system()
-    .iter([](flecs::iter& it) {
+    .run([](flecs::iter& it) {
         flecs::query<Position> q = world.query<Position>();
         q.each([&](Position& p) {
             // ...
@@ -111,11 +111,11 @@ Yes it can! See the reflection examples:
 - https://github.com/SanderMertens/flecs/tree/master/examples/cpp/reflection
 
 ## Why is Flecs so large?
-If you look at the size of the flecs.c and flecs.h files you might wonder why they are so large. There are a few reasons:
+If you look at the size of the [distr/flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) and [distr/flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) files you might wonder why they are so large. There are a few reasons:
 
 - The files contain a _lot_ of comments and in-code documentation!
-- Flecs has a small core with a lot of addons. The flecs.c and flecs.h files are the full source code, including addons.
-- The flecs.h file contains the full C++ API.
+- Flecs has a small core with a lot of addons. The [distr/flecs.c](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) and [distr/flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) files are the full source code, including addons.
+- The [distr/flecs.h](https://raw.githubusercontent.com/SanderMertens/flecs/master/distr/flecs.c) file contains the full C++ API.
 - Flecs implements its own data structures like vectors and maps, vs. depending on something like the STL.
 - C tends to be a bit more verbose than other languages.
 
@@ -123,7 +123,7 @@ Not all addons are useful in any project. You can customize a Flecs build to onl
 
 ## Why does the explorer not work?
 Make sure that:
-- The REST API is enabled (see the [REST manual](https://www.flecs.dev/flecs/md_docs_RestApi.html))
+- The REST API is enabled (see the [Remote API manual](FlecsRemoteApi.md))
 - You can reach the REST API by testing http://localhost:27750/entity/flecs
 - You call `ecs_progress`/`world::progress` in your main loop
 
@@ -154,7 +154,7 @@ You can! Systems are an optional addon that can be disabled. You can build appli
 This is likely because the entity has a parent. A lookup by name requires you to provide the full path to an entity, like:
 
 ```c
-ecs_lookup_fullpath(world, "parent.child");
+ecs_lookup(world, "parent.child");
 ```
 
 or in C++:
@@ -165,3 +165,22 @@ world.lookup("parent::child");
 
 ## Can I add or remove components from within a system?
 You can! By default ECS operations are deferred when called from inside a system, which means that they are added to a queue and processed later when it's safe to do so. Flecs does not have a dedicated command API, if you call an operation from a system it will be automatically added to the command queue!
+
+## What does a LOCKED_STORAGE error mean?
+A LOCKED_STORAGE error means that you're trying to add or remove an entity to an archetype that is currently being accessed, usually during query iteration. An example:
+
+```cpp
+q.each([](flecs::entity e) {
+    e.destruct(); // LOCKED_STORAGE error: removes entity from table
+});
+```
+
+Most LOCKED_STORAGE errors can be resolved by putting `defer_begin` and `defer_end` around the iteration, which postpones the table-changing operations until after the iteration:
+
+```cpp
+world.defer_begin();
+q.each([](flecs::entity e) {
+    e.destruct();
+});
+world.defer_end(); // OK: entities are deleted here
+```

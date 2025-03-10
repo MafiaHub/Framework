@@ -11,15 +11,18 @@
 
 #include <string>
 
+#include <logging/logger.h>
+
 //
 // Initialization function that will be called after the game is loaded.
 //
 
 class HookFunctionBase {
   private:
-    HookFunctionBase *m_next;
+    HookFunctionBase *_next;
 
   public:
+    ~HookFunctionBase() = default;
     HookFunctionBase() {
         Register();
     }
@@ -30,46 +33,46 @@ class HookFunctionBase {
     void Register();
 };
 
-class InitFunction: public HookFunctionBase {
+class InitFunction final: public HookFunctionBase {
   private:
-    void (*m_function)();
+    const char *_name;
+    bool _disabled;
+    void (*_function)();
 
   public:
-    InitFunction(void (*function)()) {
-        m_function = function;
+    InitFunction(void (*function)(), const char *name, bool disabled = false): _function(function), _name(name), _disabled(disabled) {
     }
 
     void Run() override {
-        m_function();
+        if (!_disabled) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Running module: {}", _name);
+            _function();
+        }
     }
 };
 
 class HookFunction: public HookFunctionBase {
   private:
-    void (*m_function)();
+    void (*_function)();
 
   public:
-    HookFunction(void (*function)()) {
-        m_function = function;
+    HookFunction(void (*function)()): _function(function) {
     }
 
     void Run() override {
-        m_function();
+        _function();
     }
 };
 
 class RuntimeHookFunction {
   private:
-    void (*m_function)();
-    std::string m_key;
+    void (*_function)();
+    std::string _key;
 
-    RuntimeHookFunction *m_next;
+    RuntimeHookFunction *_next;
 
   public:
-    RuntimeHookFunction(const char *key, void (*function)()) {
-        m_key      = key;
-        m_function = function;
-
+    RuntimeHookFunction(const char *key, void (*function)()): _key(key), _function(function) {
         Register();
     }
 

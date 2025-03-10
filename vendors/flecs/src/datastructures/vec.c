@@ -5,7 +5,7 @@
 
 #include "../private_api.h"
 
-ecs_vec_t* ecs_vec_init(
+void ecs_vec_init(
     ecs_allocator_t *allocator,
     ecs_vec_t *v,
     ecs_size_t size,
@@ -25,7 +25,6 @@ ecs_vec_t* ecs_vec_init(
 #ifdef FLECS_SANITIZE
     v->elem_size = size;
 #endif
-    return v;
 }
 
 void ecs_vec_init_if(
@@ -98,6 +97,31 @@ ecs_vec_t ecs_vec_copy(
     return (ecs_vec_t) {
         .count = v->count,
         .size = v->size,
+        .array = array
+#ifdef FLECS_SANITIZE
+        , .elem_size = size
+#endif
+    };
+}
+
+ecs_vec_t ecs_vec_copy_shrink(
+    ecs_allocator_t *allocator,
+    const ecs_vec_t *v,
+    ecs_size_t size)
+{
+    ecs_san_assert(size == v->elem_size, ECS_INVALID_PARAMETER, NULL);
+    int32_t count = v->count;
+    void *array = NULL;
+    if (count) {
+        if (allocator) {
+            array = flecs_dup(allocator, size * count, v->array);
+        } else {
+            array = ecs_os_memdup(v->array, size * count);
+        }
+    }
+    return (ecs_vec_t) {
+        .count = count,
+        .size = count,
         .array = array
 #ifdef FLECS_SANITIZE
         , .elem_size = size
@@ -187,7 +211,7 @@ void ecs_vec_set_min_count_zeromem(
     int32_t count = vec->count;
     if (count < elem_count) {
         ecs_vec_set_min_count(allocator, vec, size, elem_count);
-        ecs_os_memset(ECS_ELEM(vec->array, size, count), 0, 
+        ecs_os_memset(ECS_ELEM(vec->array, size, count), 0,
             size * (elem_count - count));
     }
 }
@@ -276,6 +300,7 @@ void* ecs_vec_get(
     int32_t index)
 {
     ecs_san_assert(size == v->elem_size, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(index >= 0, ECS_OUT_OF_RANGE, NULL);
     ecs_assert(index < v->count, ECS_OUT_OF_RANGE, NULL);
     return ECS_ELEM(v->array, size, index);
 }
@@ -284,7 +309,7 @@ void* ecs_vec_last(
     const ecs_vec_t *v,
     ecs_size_t size)
 {
-    ecs_san_assert(!v->elem_size || size == v->elem_size, 
+    ecs_san_assert(!v->elem_size || size == v->elem_size,
         ECS_INVALID_PARAMETER, NULL);
     return ECS_ELEM(v->array, size, v->count - 1);
 }

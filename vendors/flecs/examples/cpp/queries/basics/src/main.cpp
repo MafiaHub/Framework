@@ -12,9 +12,12 @@ struct Velocity {
 int main(int, char *[]) {
     flecs::world ecs;
 
-    // Create a query for Position, Velocity. Queries are the fastest way to
-    // iterate entities as they cache results.
-    flecs::query<Position, const Velocity> q = ecs.query<Position, const Velocity>();
+    // Create a cached query for Position, Velocity. Cached queries are the 
+    // fastest way to iterate entities as they cache results.
+    flecs::query<Position, const Velocity> q = 
+        ecs.query_builder<Position, const Velocity>()
+            .cached()
+            .build();
 
     // Create a few test entities for a Position, Velocity query
     ecs.entity("e1")
@@ -48,7 +51,7 @@ int main(int, char *[]) {
         std::cout << "{" << p.x << ", " << p.y << "}\n";
     });
 
-    // Each also accepts flecs::iter + index (for the iterated entity) arguemnts
+    // Each also accepts flecs::iter + index (for the iterated entity) arguments
     // currently being iterated. A flecs::iter has lots of information on what
     // is being iterated, which is demonstrated in the "iter" example.
     q.each([](flecs::iter& it, size_t i, Position& p, const Velocity& v) {
@@ -57,14 +60,19 @@ int main(int, char *[]) {
         std::cout << it.entity(i).name() << ": {" << p.x << ", " << p.y << "}\n";
     });
 
-    // Iter is a bit more verbose, but allows for more control over how entities
+    // Run is a bit more verbose, but allows for more control over how entities
     // are iterated as it provides multiple entities in the same callback.
-    q.iter([](flecs::iter& it, Position *p, const Velocity *v) {
-        for (auto i : it) {
-            p[i].x += v[i].x;
-            p[i].y += v[i].y;
-            std::cout << it.entity(i).name() << 
-                ": {" << p[i].x << ", " << p[i].y << "}\n";
+    q.run([](flecs::iter& it) {
+        while (it.next()) {
+            auto p = it.field<Position>(0);
+            auto v = it.field<const Velocity>(1);
+
+            for (auto i : it) {
+                p[i].x += v[i].x;
+                p[i].y += v[i].y;
+                std::cout << it.entity(i).name() << 
+                    ": {" << p[i].x << ", " << p[i].y << "}\n";
+            }
         }
     });
 }

@@ -27,7 +27,6 @@ void Stats_get_pipeline_stats_before_progress_mini_world(void) {
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), false);
 
     test_assert(ecs_vec_count(&stats.systems) == 0);
-    test_assert(ecs_map_count(&stats.system_stats) == 0);
 
     ecs_fini(world);
 }
@@ -42,7 +41,6 @@ void Stats_get_pipeline_stats_before_progress(void) {
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), true);
 
     test_assert(ecs_vec_count(&stats.systems) == 0);
-    test_assert(ecs_map_count(&stats.system_stats) != 0); /* Inactive systems */
 
     ecs_pipeline_stats_fini(&stats);
 
@@ -62,8 +60,6 @@ void Stats_get_pipeline_stats_after_progress_no_systems(void) {
 
     test_int(ecs_vec_count(&stats.systems), 1);
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[0], 0); /* merge */
-    
-    test_assert(ecs_map_count(&stats.system_stats) != 0); /* Inactive systems */
 
     ecs_pipeline_stats_fini(&stats);
 
@@ -89,19 +85,10 @@ void Stats_get_pipeline_stats_after_progress_1_system(void) {
     test_int(ecs_vec_count(&stats.systems), 2);
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[0], ecs_id(FooSys));
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[1], 0); /* merge */
-    
-    test_assert(ecs_map_count(&stats.system_stats) != 0);
-    ecs_system_stats_t *sys_stats = ecs_map_get_deref(
-        &stats.system_stats, ecs_system_stats_t, ecs_id(FooSys));
-    test_assert(sys_stats != NULL);
-    test_int(sys_stats->query.t, 1);
-    test_int(sys_stats->invoke_count.counter.value[1], 1);
 
     ecs_progress(world, 0);
 
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), true);
-    test_int(sys_stats->query.t, 2);
-    test_int(sys_stats->invoke_count.counter.value[2], 2);
 
     ecs_pipeline_stats_fini(&stats);
 
@@ -124,19 +111,10 @@ void Stats_get_pipeline_stats_after_progress_1_inactive_system(void) {
 
     test_int(ecs_vec_count(&stats.systems), 1);
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[0], 0); /* merge */
-    
-    test_assert(ecs_map_count(&stats.system_stats) != 0);
-    ecs_system_stats_t *sys_stats = ecs_map_get_deref(
-        &stats.system_stats, ecs_system_stats_t, ecs_id(FooSys));
-    test_assert(sys_stats != NULL);
-    test_int(sys_stats->query.t, 1);
-    test_int(sys_stats->invoke_count.counter.value[1], 0);
 
     ecs_progress(world, 0);
 
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), true);
-    test_int(sys_stats->query.t, 2);
-    test_int(sys_stats->invoke_count.counter.value[2], 0);
 
     ecs_pipeline_stats_fini(&stats);
 
@@ -161,30 +139,12 @@ void Stats_get_pipeline_stats_after_progress_2_systems(void) {
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[0], ecs_id(FooSys));
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[1], ecs_id(BarSys));
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[2], 0); /* merge */
-    
-    test_assert(ecs_map_count(&stats.system_stats) != 0);
-    ecs_system_stats_t *sys_foo_stats = ecs_map_get_deref(
-        &stats.system_stats, ecs_system_stats_t, ecs_id(FooSys));
-    test_assert(sys_foo_stats != NULL);
-    test_int(sys_foo_stats->query.t, 1);
-    test_int(sys_foo_stats->invoke_count.counter.value[1], 1);
-
-    ecs_system_stats_t *sys_bar_stats = ecs_map_get_deref(
-        &stats.system_stats, ecs_system_stats_t, ecs_id(BarSys));
-    test_assert(sys_bar_stats != NULL);
-    test_int(sys_bar_stats->query.t, 1);
-    test_int(sys_bar_stats->invoke_count.counter.value[1], 1);
 
     ecs_progress(world, 0);
 
     ecs_run(world, ecs_id(BarSys), 0, 0);
 
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), true);
-    test_int(sys_foo_stats->query.t, 2);
-    test_int(sys_foo_stats->invoke_count.counter.value[2], 2);
-
-    test_int(sys_bar_stats->query.t, 2);
-    test_int(sys_bar_stats->invoke_count.counter.value[2], 3);
 
     ecs_pipeline_stats_fini(&stats);
 
@@ -196,7 +156,7 @@ void Stats_get_pipeline_stats_after_progress_2_systems_one_merge(void) {
 
     ECS_COMPONENT(world, Position);
     
-    ecs_new(world, Position); // Make sure systems are active
+    ecs_new_w(world, Position); // Make sure systems are active
 
     ECS_SYSTEM(world, FooSys, EcsOnUpdate, [out] Position());
     ECS_SYSTEM(world, BarSys, EcsOnUpdate, Position);
@@ -214,28 +174,10 @@ void Stats_get_pipeline_stats_after_progress_2_systems_one_merge(void) {
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[1], 0); /* merge */
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[2], ecs_id(BarSys));
     test_int(ecs_vec_get_t(&stats.systems, ecs_entity_t, 0)[3], 0); /* merge */
-    
-    test_assert(ecs_map_count(&stats.system_stats) != 0);
-    ecs_system_stats_t *sys_foo_stats = ecs_map_get_deref(
-        &stats.system_stats, ecs_system_stats_t, ecs_id(FooSys));
-    test_assert(sys_foo_stats != NULL);
-    test_int(sys_foo_stats->query.t, 1);
-    test_int(sys_foo_stats->invoke_count.counter.value[1], 1);
-
-    ecs_system_stats_t *sys_bar_stats = ecs_map_get_deref(
-        &stats.system_stats, ecs_system_stats_t, ecs_id(BarSys));
-    test_assert(sys_bar_stats != NULL);
-    test_int(sys_bar_stats->query.t, 1);
-    test_int(sys_bar_stats->invoke_count.counter.value[1], 1);
 
     ecs_progress(world, 0);
 
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), true);
-    test_int(sys_foo_stats->query.t, 2);
-    test_int(sys_foo_stats->invoke_count.counter.value[2], 2);
-
-    test_int(sys_bar_stats->query.t, 2);
-    test_int(sys_bar_stats->invoke_count.counter.value[2], 2);
 
     ecs_pipeline_stats_fini(&stats);
 
@@ -252,7 +194,6 @@ void Stats_get_pipeline_stats_w_task_system(void) {
 
     ecs_pipeline_stats_t stats = {0};
     test_bool(ecs_pipeline_stats_get(world, pipeline, &stats), true);
-    test_assert(ecs_map_count(&stats.system_stats) != 0); /* Inactive systems */
     test_int(ecs_vec_count(&stats.systems), 0);
 
     ecs_pipeline_stats_fini(&stats);
@@ -270,7 +211,7 @@ void Stats_get_entity_count(void) {
     float prev = count = stats.entities.count.gauge.avg[stats.t];
     test_assert(count != 0);
 
-    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t e = ecs_new(world);
 
     ecs_world_stats_get(world, &stats);
     count = stats.entities.count.gauge.avg[stats.t];
@@ -296,7 +237,7 @@ void Stats_get_not_alive_entity_count(void) {
     float prev = count = stats.entities.not_alive_count.gauge.avg[stats.t];
     test_int(count, 0);
 
-    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t e = ecs_new(world);
 
     prev = count;
     ecs_world_stats_get(world, &stats);
@@ -309,6 +250,36 @@ void Stats_get_not_alive_entity_count(void) {
     ecs_world_stats_get(world, &stats);
     count = stats.entities.not_alive_count.gauge.avg[stats.t];
     test_int(count - prev, 1);
+
+    ecs_fini(world);
+}
+
+void Stats_progress_stats_systems(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_IMPORT(world, FlecsStats);
+
+    for (int i = 0; i < 60 * 60; i ++) {
+        ecs_progress(world, 0.016);
+    }
+
+    test_assert(true); // used to catch memory leaks
+
+    ecs_fini(world);
+}
+
+void Stats_progress_stats_systems_w_empty_table_flag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_set_default_query_flags(world, EcsQueryMatchEmptyTables);
+
+    ECS_IMPORT(world, FlecsStats);
+
+    for (int i = 0; i < 60 * 60; i ++) {
+        ecs_progress(world, 0.016);
+    }
+
+    test_assert(true); // used to catch memory leaks
 
     ecs_fini(world);
 }

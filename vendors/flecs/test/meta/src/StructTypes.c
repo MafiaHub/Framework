@@ -11,7 +11,7 @@ void _meta_test_struct(
     test_int(ct->size, size);
     test_int(ct->alignment, alignment);
 
-    const EcsMetaType *mt = ecs_get(world, t, EcsMetaType);
+    const EcsType *mt = ecs_get(world, t, EcsType);
     test_assert(mt != NULL);
     test_assert(mt->kind == EcsStructType);
 }
@@ -368,7 +368,7 @@ void StructTypes_incomplete_member(void) {
 
     ecs_world_t *world = ecs_init();
 
-    ecs_entity_t t = ecs_new_id(world);
+    ecs_entity_t t = ecs_new(world);
 
     ecs_entity_t m_x = ecs_new_w_pair(world, EcsChildOf, t);
     ecs_set_name(world, m_x, "x");
@@ -412,7 +412,7 @@ void StructTypes_partial_type(void) {
     test_int(cptr->size, sizeof(Position));
     test_int(cptr->alignment, ECS_ALIGNOF(Position));
 
-    const EcsMetaType *mptr = ecs_get(world, s, EcsMetaType);
+    const EcsType *mptr = ecs_get(world, s, EcsType);
     test_assert(mptr != NULL);
     test_bool(mptr->partial, true);
     test_bool(mptr->existing, true);
@@ -444,7 +444,7 @@ void StructTypes_partial_type_custom_offset(void) {
     test_int(cptr->size, sizeof(Vec3));
     test_int(cptr->alignment, ECS_ALIGNOF(Vec3));
 
-    const EcsMetaType *mptr = ecs_get(world, s, EcsMetaType);
+    const EcsType *mptr = ecs_get(world, s, EcsType);
     test_assert(mptr != NULL);
     test_bool(mptr->partial, true);
     test_bool(mptr->existing, true);
@@ -499,9 +499,9 @@ void StructTypes_value_range(void) {
 
     test_assert(s == ecs_id(Position));
 
-    ecs_entity_t x = ecs_lookup_fullpath(world, "Position.x");
+    ecs_entity_t x = ecs_lookup(world, "Position.x");
     test_assert(x != 0);
-    ecs_entity_t y = ecs_lookup_fullpath(world, "Position.y");
+    ecs_entity_t y = ecs_lookup(world, "Position.y");
     test_assert(y != 0);
 
     const EcsMemberRanges *xr = ecs_get(world, x, EcsMemberRanges);
@@ -540,9 +540,9 @@ void StructTypes_error_range(void) {
 
     test_assert(s == ecs_id(Position));
 
-    ecs_entity_t x = ecs_lookup_fullpath(world, "Position.x");
+    ecs_entity_t x = ecs_lookup(world, "Position.x");
     test_assert(x != 0);
-    ecs_entity_t y = ecs_lookup_fullpath(world, "Position.y");
+    ecs_entity_t y = ecs_lookup(world, "Position.y");
     test_assert(y != 0);
 
     const EcsMemberRanges *xr = ecs_get(world, x, EcsMemberRanges);
@@ -577,9 +577,9 @@ void StructTypes_warning_range(void) {
 
     test_assert(s == ecs_id(Position));
 
-    ecs_entity_t x = ecs_lookup_fullpath(world, "Position.x");
+    ecs_entity_t x = ecs_lookup(world, "Position.x");
     test_assert(x != 0);
-    ecs_entity_t y = ecs_lookup_fullpath(world, "Position.y");
+    ecs_entity_t y = ecs_lookup(world, "Position.y");
     test_assert(y != 0);
 
     const EcsMemberRanges *xr = ecs_get(world, x, EcsMemberRanges);
@@ -614,9 +614,9 @@ void StructTypes_error_and_warning_range(void) {
 
     test_assert(s == ecs_id(Position));
 
-    ecs_entity_t x = ecs_lookup_fullpath(world, "Position.x");
+    ecs_entity_t x = ecs_lookup(world, "Position.x");
     test_assert(x != 0);
-    ecs_entity_t y = ecs_lookup_fullpath(world, "Position.y");
+    ecs_entity_t y = ecs_lookup(world, "Position.y");
     test_assert(y != 0);
 
     const EcsMemberRanges *xr = ecs_get(world, x, EcsMemberRanges);
@@ -813,10 +813,49 @@ void StructTypes_struct_w_16_alignment(void) {
     test_int(cptr->size, sizeof(T));
     test_int(cptr->alignment, 16);
 
-    const EcsMetaType *mptr = ecs_get(world, t, EcsMetaType);
+    const EcsType *mptr = ecs_get(world, t, EcsType);
     test_assert(mptr != NULL);
     test_bool(mptr->partial, false);
     test_bool(mptr->existing, true);
+
+    ecs_fini(world);
+}
+
+void StructTypes_struct_w_use_offset(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t s = ecs_struct(world, {
+        .entity = ecs_id(Position),
+        .members = {{ 
+            .name = "y",
+            .type = ecs_id(ecs_i32_t),
+            .offset = offsetof(Position, y),
+            .use_offset = true
+        }, { 
+            .name = "x",
+            .type = ecs_id(ecs_i32_t),
+            .offset = offsetof(Position, x),
+            .use_offset = true
+        }}
+    });
+
+    test_assert(s == ecs_id(Position));
+
+    const EcsComponent *cptr = ecs_get(world, s, EcsComponent);
+    test_assert(cptr != NULL);
+    test_int(cptr->size, sizeof(Position));
+    test_int(cptr->alignment, ECS_ALIGNOF(Position));
+
+    const EcsType *mptr = ecs_get(world, s, EcsType);
+    test_assert(mptr != NULL);
+    // test_bool(mptr->partial, false); TODO
+    test_bool(mptr->existing, true);
+
+    meta_test_struct(world, s, Position);
+    meta_test_member(world, s, Position, x, ecs_id(ecs_i32_t), 1);
+    meta_test_member(world, s, Position, y, ecs_id(ecs_i32_t), 1);
 
     ecs_fini(world);
 }

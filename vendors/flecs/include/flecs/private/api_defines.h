@@ -104,9 +104,6 @@
 /* Filenames aren't consistent across targets as they can use different casing 
  * (e.g. WinSock2 vs winsock2). */
 #pragma clang diagnostic ignored "-Wnonportable-system-include-path"
-/* Enum reflection relies on testing constant values that may not be valid for
- * the enumeration. */
-#pragma clang diagnostic ignored "-Wenum-constexpr-conversion"
 /* Very difficult to workaround this warning in C, especially for an ECS. */
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 /* This warning gets thrown when trying to cast pointer returned from dlproc */
@@ -114,6 +111,17 @@
 /* This warning can get thrown for expressions that evaluate to constants
  * in debug/release mode. */
 #pragma clang diagnostic ignored "-Wconstant-logical-operand"
+/* With soft asserts enabled the code won't abort, which in some cases means
+ * code paths are reached where values are uninitialized. */
+#ifdef FLECS_SOFT_ASSERT
+#pragma clang diagnostic ignored "-Wsometimes-uninitialized"
+#endif
+
+/* Allows for enum reflection support on legacy compilers */
+#if __clang_major__ < 16
+#pragma clang diagnostic ignored "-Wenum-constexpr-conversion"
+#endif
+
 #elif defined(ECS_TARGET_GNU)
 #ifndef __cplusplus
 #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
@@ -128,6 +136,21 @@
  * initialized), and later versions of gcc (>=11) seem to no longer throw this 
  * warning. */
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+/* Produces false positives in addons/cpp/delegate.hpp. */
+#pragma GCC diagnostic ignored "-Warray-bounds"
+/* Produces false positives in queries/src/cache.c */
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#pragma GCC diagnostic ignored "-Wrestrict"
+
+#elif defined(ECS_TARGET_MSVC)
+/* recursive on all control paths, function will cause runtime stack overflow
+ * This warning is incorrectly thrown on enum reflection code. */
+#pragma warning(disable: 4717)
+#endif
+
+/* Allows for enum reflection support on legacy compilers */
+#if defined(__GNUC__) && __GNUC__ <= 10
+#pragma GCC diagnostic ignored "-Wconversion"
 #endif
 
 /* Standard library dependencies */
@@ -150,7 +173,7 @@ extern "C" {
 #endif
 
 /* Some symbols are only exported when building in debug build, to enable
- * whitebox testing of internal datastructures */
+ * white-box testing of internal data structures */
 #ifndef FLECS_NDEBUG
 #define FLECS_DBG_API FLECS_API
 #else
@@ -186,6 +209,20 @@ typedef uint16_t ecs_flags16_t;
 typedef uint32_t ecs_flags32_t;
 typedef uint64_t ecs_flags64_t;
 
+/* Bitmask type with compile-time defined size */
+#define ecs_flagsn_t_(bits) ecs_flags##bits##_t
+#define ecs_flagsn_t(bits) ecs_flagsn_t_(bits)
+
+/* Bitset type that can store exactly as many bits as there are terms */
+#define ecs_termset_t ecs_flagsn_t(FLECS_TERM_COUNT_MAX)
+
+/* Utility macro's for setting/clearing termset bits */
+#define ECS_TERMSET_SET(set, flag) ((set) |= (ecs_termset_t)(flag))
+#define ECS_TERMSET_CLEAR(set, flag) ((set) &= (ecs_termset_t)~(flag))
+#define ECS_TERMSET_COND(set, flag, cond) ((cond) \
+    ? (ECS_TERMSET_SET(set, flag)) \
+    : (ECS_TERMSET_CLEAR(set, flag)))
+
 /* Keep unsigned integers out of the codebase as they do more harm than good */
 typedef int32_t ecs_size_t;
 
@@ -200,6 +237,8 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #elif defined(ECS_TARGET_MSVC)
 #define ECS_ALIGNOF(T) (int64_t)__alignof(T)
 #elif defined(ECS_TARGET_GNU)
+#define ECS_ALIGNOF(T) (int64_t)__alignof__(T)
+#elif defined(ECS_TARGET_CLANG)
 #define ECS_ALIGNOF(T) (int64_t)__alignof__(T)
 #else
 #define ECS_ALIGNOF(T) ((int64_t)&((struct { char c; T d; } *)0)->d)
@@ -251,6 +290,11 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ECS_EQZERO(a) ECS_EQ(a, (uint64_t){0})
 #define ECS_NEQZERO(a) ECS_NEQ(a, (uint64_t){0})
 
+/* Utilities to convert flecs version to string */
+#define FLECS_VERSION_IMPLSTR(major, minor, patch) #major "." #minor "." #patch
+#define FLECS_VERSION_IMPL(major, minor, patch) \
+    FLECS_VERSION_IMPLSTR(major, minor, patch)
+
 #define ECS_CONCAT(a, b) a ## b
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,11 +304,7 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 /* Magic number to identify the type of the object */
 #define ecs_world_t_magic     (0x65637377)
 #define ecs_stage_t_magic     (0x65637373)
-#define ecs_query_t_magic     (0x65637371)
-#define ecs_rule_t_magic      (0x65637375)
-#define ecs_table_t_magic     (0x65637374)
-#define ecs_filter_t_magic    (0x65637366)
-#define ecs_trigger_t_magic   (0x65637372)
+#define ecs_query_t_magic     (0x65637375)
 #define ecs_observer_t_magic  (0x65637362)
 
 
@@ -290,6 +330,8 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ECS_PAIR_SECOND(e)            (ecs_entity_t_lo(e))
 #define ECS_HAS_RELATION(e, rel)      (ECS_HAS_ID_FLAG(e, PAIR) && (ECS_PAIR_FIRST(e) == rel))
 
+#define ECS_TERM_REF_FLAGS(ref)       ((ref)->id & EcsTermRefFlags)
+#define ECS_TERM_REF_ID(ref)          ((ref)->id & ~EcsTermRefFlags)
 
 ////////////////////////////////////////////////////////////////////////////////
 //// Convert between C typenames and variables
@@ -312,9 +354,9 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ecs_pair_first(world, pair) ecs_get_alive(world, ECS_PAIR_FIRST(pair))
 #define ecs_pair_second(world, pair) ecs_get_alive(world, ECS_PAIR_SECOND(pair))
 #define ecs_pair_relation ecs_pair_first
-#define ecs_pair_object ecs_pair_second
+#define ecs_pair_target ecs_pair_second
 
-#define ecs_poly_id(tag) ecs_pair(ecs_id(EcsPoly), tag)
+#define flecs_poly_id(tag) ecs_pair(ecs_id(EcsPoly), tag)
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -408,7 +450,7 @@ typedef struct ecs_allocator_t ecs_allocator_t;
     {\
         for (int32_t i = 0; i < _it->count; i ++) {\
             ecs_entity_t entity = _it->entities[i];\
-            type *var = &((type*)_it->ptrs[0])[i];\
+            type *var = ecs_field(_it, type, 0);\
             (void)entity;\
             (void)var;\
             __VA_ARGS__\

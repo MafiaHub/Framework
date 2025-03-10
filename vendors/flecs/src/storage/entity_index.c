@@ -59,7 +59,8 @@ ecs_record_t* flecs_entity_index_get_any(
     ecs_entity_index_page_t *page = ecs_vec_get_t(&index->pages, 
         ecs_entity_index_page_t*, page_index)[0];
     ecs_record_t *r = &page->records[id & FLECS_ENTITY_PAGE_MASK];
-    ecs_assert(r->dense != 0, ECS_INVALID_PARAMETER, NULL);
+    ecs_assert(r->dense != 0, ECS_INVALID_PARAMETER, 
+        "entity %u does not exist", (uint32_t)entity);
     return r;
 }
 
@@ -70,7 +71,7 @@ ecs_record_t* flecs_entity_index_get(
     ecs_record_t *r = flecs_entity_index_get_any(index, entity);
     ecs_assert(r->dense < index->alive_count, ECS_INVALID_PARAMETER, NULL);
     ecs_assert(ecs_vec_get_t(&index->dense, uint64_t, r->dense)[0] == entity, 
-        ECS_INVALID_PARAMETER, NULL);
+        ECS_INVALID_PARAMETER, "mismatching liveliness generation for entity");
     return r;
 }
 
@@ -187,7 +188,7 @@ void flecs_entity_index_remove(
         ECS_INTERNAL_ERROR, NULL);
 }
 
-void flecs_entity_index_set_generation(
+void flecs_entity_index_make_alive(
     ecs_entity_index_t *index,
     uint64_t entity)
 {
@@ -197,7 +198,7 @@ void flecs_entity_index_set_generation(
     }
 }
 
-uint64_t flecs_entity_index_get_generation(
+uint64_t flecs_entity_index_get_alive(
     const ecs_entity_index_t *index,
     uint64_t entity)
 {
@@ -248,6 +249,11 @@ uint64_t flecs_entity_index_new_id(
 
     /* Create new id */
     uint32_t id = (uint32_t)++ index->max_id;
+
+    /* Make sure id hasn't been issued before */
+    ecs_assert(!flecs_entity_index_exists(index, id), ECS_INVALID_OPERATION, 
+        "new entity %u id already in use (likely due to overlapping ranges)", (uint32_t)id);
+
     ecs_vec_append_t(index->allocator, &index->dense, uint64_t)[0] = id;
 
     ecs_entity_index_page_t *page = flecs_entity_index_ensure_page(index, id);
@@ -279,6 +285,11 @@ uint64_t* flecs_entity_index_new_ids(
     int32_t i, to_add = new_count - dense_count;
     for (i = 0; i < to_add; i ++) {
         uint32_t id = (uint32_t)++ index->max_id;
+
+        /* Make sure id hasn't been issued before */
+        ecs_assert(!flecs_entity_index_exists(index, id), ECS_INVALID_OPERATION, 
+            "new entity %u id already in use (likely due to overlapping ranges)", (uint32_t)id);
+
         int32_t dense = dense_count + i;
         ecs_vec_get_t(&index->dense, uint64_t, dense)[0] = id;
         ecs_entity_index_page_t *page = flecs_entity_index_ensure_page(index, id);
@@ -339,50 +350,4 @@ const uint64_t* flecs_entity_index_ids(
     const ecs_entity_index_t *index)
 {
     return ecs_vec_get_t(&index->dense, uint64_t, 1);
-}
-
-static
-void flecs_entity_index_copy_intern(
-    ecs_entity_index_t * dst,
-    const ecs_entity_index_t * src)
-{
-    flecs_entity_index_set_size(dst, flecs_entity_index_size(src));
-    const uint64_t *ids = flecs_entity_index_ids(src);
-    
-    int32_t i, count = src->alive_count;
-    for (i = 0; i < count - 1; i ++) {
-        uint64_t id = ids[i];
-        ecs_record_t *src_ptr = flecs_entity_index_get(src, id);
-        ecs_record_t *dst_ptr = flecs_entity_index_ensure(dst, id);
-        flecs_entity_index_set_generation(dst, id);
-        ecs_os_memcpy_t(dst_ptr, src_ptr, ecs_record_t);
-    }
-
-    dst->max_id = src->max_id;
-
-    ecs_assert(src->alive_count == dst->alive_count, ECS_INTERNAL_ERROR, NULL);
-}
-
-void flecs_entity_index_copy(
-    ecs_entity_index_t *dst,
-    const ecs_entity_index_t *src)
-{
-    if (!src) {
-        return;
-    }
-
-    flecs_entity_index_init(src->allocator, dst);
-    flecs_entity_index_copy_intern(dst, src);
-}
-
-void flecs_entity_index_restore(
-    ecs_entity_index_t *dst,
-    const ecs_entity_index_t *src)
-{
-    if (!src) {
-        return;
-    }
-
-    flecs_entity_index_clear(dst);
-    flecs_entity_index_copy_intern(dst, src);
 }

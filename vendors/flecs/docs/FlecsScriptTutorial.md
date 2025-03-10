@@ -1,11 +1,13 @@
+This tutorial hasn't been updated for v4 yet! Use the [Script Manual](FlecsScript.md) for now.
+
 # Flecs Script Tutorial
 This tutorial shows you how to use Flecs script, which is a declarative language for creating entities without having to write and compile code. Flecs script can be used for different things, such as building scenes, assets, or as a language for configuration files.
 
 In this tutorial we will be designing a simple fence asset from scratch, and make it parameterizable so it can be easily reused across scenes. By the end of the tutorial we'll have an asset that looks like this:
 
-[![preview of fence asset](img/script_tutorial/tut_playground_preview.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20assembly%20Fence%0A%0A%0Aassembly%20Enclosing%20%7B%0A%20%20prop%20width%3A%20f32%20%3D%2040%0A%20%20prop%20height%3A%20f32%20%3D%2010%0A%20%20prop%20depth%3A%20f32%20%3D%2040%0A%20%20prop%20color%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20width_half%20%3D%20%24width%20%2F%202%0A%20%20const%20depth_half%20%3D%20%24depth%20%2F%202%0A%20%20const%20PI%20%3D%203.1415926%0A%0A%20%20left%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20-%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20right%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20back%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20-%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20front%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%7D%20%2F%2F%20assembly%20Enclosing%0A%0Afence_a%20%7B%0A%20%20-%20Enclosing%7B%7D%0A%7D%0A%0Acamera%20%7B%0A%20%20-%20Position3%7B21%2C%2019%2C%20-37%7D%0A%20%20-%20Rotation3%7B-0.42%2C%20-0.52%7D%0A%7D%0A)
+[![preview of fence asset](img/script_tutorial/tut_playground_preview.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20template%20Fence%0A%0A%0Atemplate%20Enclosing%20%7B%0A%20%20prop%20width%3A%20f32%20%3D%2040%0A%20%20prop%20height%3A%20f32%20%3D%2010%0A%20%20prop%20depth%3A%20f32%20%3D%2040%0A%20%20prop%20color%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20width_half%20%3D%20%24width%20%2F%202%0A%20%20const%20depth_half%20%3D%20%24depth%20%2F%202%0A%20%20const%20PI%20%3D%203.1415926%0A%0A%20%20left%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20-%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20right%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20back%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20-%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20front%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%7D%20%2F%2F%20template%20Enclosing%0A%0Afence_a%20%7B%0A%20%20-%20Enclosing%7B%7D%0A%7D%0A%0Acamera%20%7B%0A%20%20-%20Position3%7B21%2C%2019%2C%20-37%7D%0A%20%20-%20Rotation3%7B-0.42%2C%20-0.52%7D%0A%7D%0A)
 
-Note: in order to use Flecs script an app needs to be built with the `FLECS_PLECS` addon.
+Note: in order to use Flecs script an app needs to be built with the `FLECS_SCRIPT` addon.
 
 ## Getting Started with the Explorer
 The Flecs explorer is a web-based application that lets us write scripts and see the results directly. In the tutorial we will use the explorer in combination with the Flecs playground, which has a rendering canvas and comes preloaded with a number of modules and assets.
@@ -145,7 +147,7 @@ Now add these lines into the editor to create our ground `plane`:
 ```js
 plane {
   - Position3{}
-  - Rectangle{100, 100}
+  Rectangle: {100, 100}
   - Rgb{0.9, 0.9, 0.9}
 }
 ```
@@ -181,8 +183,8 @@ Let's now add a cube to the scene. The code for this looks similar to the plane:
 ```js
 box {
   - Position3{}
-  - Box{10, 10, 10}
-  - Rgb{1, 0, 0}
+  Box: {10, 10, 10}
+  Rgb: {1, 0, 0}
 }
 ```
 
@@ -195,8 +197,8 @@ To fix this, we can move it up by setting the `y` member of `Position3` to half 
 ```js
 box {
   - Position3{y: 5}
-  - Box{10, 10, 10}
-  - Rgb{1, 0, 0}
+  Box: {10, 10, 10}
+  Rgb: {1, 0, 0}
 }
 ```
 
@@ -223,11 +225,11 @@ Inside the `with` statement we can now create two box entities for the left and 
 with Rgb{0.15, 0.1, 0.05} {
   left_pillar {
     - Position3{x: -10, y: 5}
-    - Box{2, 10, 2}
+    Box: {2, 10, 2}
   }
   right_pillar {
     - Position3{x: 10, y: 5}
-    - Box{2, 10, 2}
+    Box: {2, 10, 2}
   }
 }
 ```
@@ -241,7 +243,7 @@ That works, but the code is starting to look a bit unwieldy. There are lots of m
 First lets define two variables for the color and box shape of the pillars. We already saw an example of a variable when we defined `PI`. These looks similar, except that because they are composite values, we also define their type:
 
 ```js
-const color : Rgb = {0.15, 0.1, 0.05}
+const color = Rgb: {0.15, 0.1, 0.05}
 const pillar_box : Box = {2, 10, 2}
 ```
 
@@ -249,7 +251,7 @@ This is better, but `pillar_box` still contains values that we have to update ea
 
 ```js
 const height = 10
-const color : Rgb = {0.15, 0.1, 0.05}
+const color = Rgb: {0.15, 0.1, 0.05}
 
 const pillar_width = 2
 const pillar_box : Box = {
@@ -287,7 +289,7 @@ This is no fence yet. We're still missing the crossbars. Let's add another entit
 ```js
 bar {
   - Position3{y: $height / 2}
-  - Box{$width, 2, 1}
+  Box: {$width, 2, 1}
   - $color  
 }
 ```
@@ -299,12 +301,12 @@ Let's add a second entity and space the two entities out a bit so they don't ove
 ```js
 top_bar {
   - Position3{y: $height/2 + 2}
-  - Box{$width, 2, 1}
+  Box: {$width, 2, 1}
   - $color  
 }
 bottom_bar {
   - Position3{y: $height/2 - 2}
-  - Box{$width, 2, 1}
+  Box: {$width, 2, 1}
   - $color  
 }
 ```
@@ -411,9 +413,9 @@ We could save this script as is, load it into our game, and instantiate the pref
 
 ```c
 // In C
-ecs_plecs_from_file(world, "fence.flecs");
+ecs_script_run_file(world, "fence.flecs");
 
-ecs_entity_t fence = ecs_lookup_fullpath(world, "Fence");
+ecs_entity_t fence = ecs_lookup(world, "Fence");
 ecs_entity_t fence_a = ecs_new_w_pair(world, EcsIsA, fence);
 ecs_entity_t fence_b = ecs_new_w_pair(world, EcsIsA, fence);
 
@@ -424,7 +426,7 @@ ecs_set(world, fence_b, EcsPosition3, {10});
 // In C++
 using namespace flecs::components::transform;
 
-ecs_plecs_from_file(world, "fence.flecs");
+ecs_script_run_file(world, "fence.flecs");
 
 auto fence = world.lookup("Fence");
 auto fence_a = world.entity().is_a(fence);
@@ -438,10 +440,10 @@ We still have some problems, which we'll address in the next section:
 - Our prefab is static, we cannot change the parameters of the fence
 - The pillars and bars don't increase when the fence size increases
 
-## Assemblies
-Prefabs are static collections of entities and components that we can instantiate multiple times. Assemblies are _prefab compositions_ that can be parameterized. In other words, assemblies let us to create our Fence, while also specifying the width and height.
+## Templates
+Prefabs are static collections of entities and components that we can instantiate multiple times. Templates are _prefab compositions_ that can be parameterized. In other words, templates let us to create our Fence, while also specifying the width and height.
 
-Changing the above code into an assembly is easy. Just change this line:
+Changing the above code into an template is easy. Just change this line:
 
 ```js
 Prefab Fence {
@@ -452,7 +454,7 @@ Prefab Fence {
 into this:
 
 ```js
-assembly Fence {
+template Fence {
   // fence code
 }
 ```
@@ -460,22 +462,22 @@ assembly Fence {
 The editor will throw the following error:
 
 ```
-assembly 'Fence' has no properties
+template 'Fence' has no properties
 ```
 
-[![a fence assembly](img/script_tutorial/tut_playground_assembly_error.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20const%20width%20%3D%2020%0A%20%20const%20height%20%3D%2010%0A%20%20const%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24pillar_box%20%7B%0A%20%20%20%20left_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20-%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20right_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence_a%20%3A%20Fence%20%7B%0A%20%20-%20Position3%7B-10%7D%0A%7D%0Afence_b%20%3A%20Fence%20%7B%0A%20%20-%20Position3%7B10%7D%0A%7D%0A)
+[![a fence template](img/script_tutorial/tut_playground_template_error.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20const%20width%20%3D%2020%0A%20%20const%20height%20%3D%2010%0A%20%20const%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24pillar_box%20%7B%0A%20%20%20%20left_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20-%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20right_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence_a%20%3A%20Fence%20%7B%0A%20%20-%20Position3%7B-10%7D%0A%7D%0Afence_b%20%3A%20Fence%20%7B%0A%20%20-%20Position3%7B10%7D%0A%7D%0A)
 
-What does this mean? Assemblies, unlike prefabs, need _properties_, which are like the inputs to the assembly. For our fence, these could be `width` and `heigth` values.
+What does this mean? Templates, unlike prefabs, need _properties_, which are like the inputs to the template. For our fence, these could be `width` and `height` values.
 
-To add properties to the assembly, we can take some of our existing `const` variables, and change `const` to `prop`. This will make the variables visible to the outside. Another thing we must do for properties is explicitly specify their type.
+To add properties to the template, we can take some of our existing `const` variables, and change `const` to `prop`. This will make the variables visible to the outside. Another thing we must do for properties is explicitly specify their type.
 
-Let's take the existing `width`, `height` and `color` variables, and change them to properties. It is also good practice to put the props at the top of the assembly code, so it's easy to see which inputs it has:
+Let's take the existing `width`, `height` and `color` variables, and change them to properties. It is also good practice to put the props at the top of the template code, so it's easy to see which inputs it has:
 
 ```js
-assembly Fence {
-  prop width : flecs.meta.f32 = 20
-  prop height : flecs.meta.f32 = 10
-  prop color : Rgb = {0.15, 0.1, 0.05}
+template Fence {
+  prop width = flecs.meta.f32: 20
+  prop height = flecs.meta.f32: 10
+  prop color = Rgb: {0.15, 0.1, 0.05}
 
   // fence code
 }
@@ -490,16 +492,16 @@ using flecs.meta
 The code can now be changed to this:
 
 ```js
-assembly Fence {
-  prop width : f32 = 20
-  prop height : f32 = 10
-  prop color : Rgb = {0.15, 0.1, 0.05}
+template Fence {
+  prop width = f32: 20
+  prop height = f32: 10
+  prop color = Rgb: {0.15, 0.1, 0.05}
 
   // fence code
 }
 ```
 
-Note that while we were doing this, the fence disappeared again from the canvas. This happened because while we _inherit_ a prefab, we _assign_ an assembly. To make the fences visible again, change the code that creates the fences to this:
+Note that while we were doing this, the fence disappeared again from the canvas. This happened because while we _inherit_ a prefab, we _assign_ an template. To make the fences visible again, change the code that creates the fences to this:
 
 ```js
 fence_a {
@@ -516,20 +518,20 @@ The fences are back, with the default values we provided to our props. But we no
 
 ```js
 fence_a {
-  - Fence{width: 10, height: 20}
+  Fence: {width: 10, height: 20}
   - Position3{-10}
 }
 fence_b {
-  - Fence{width: 25, height: 10}
+  Fence: {width: 25, height: 10}
   - Position3{10}
 }
 ```
 
-[![two instantiated fence assemblies](img/script_tutorial/tut_playground_assembly.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20prop%20width%20%3A%20f32%20%3D%2020%0A%20%20prop%20height%20%3A%20f32%20%3D%2010%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24pillar_box%20%7B%0A%20%20%20%20left_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20-%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20right_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence_a%20%7B%0A%20%20-%20Fence%7Bwidth%3A%2010%2C%20height%3A%2020%7D%0A%20%20-%20Position3%7B-10%7D%0A%7D%0Afence_b%20%7B%0A%20%20-%20Fence%7Bwidth%3A%2025%2C%20height%3A%2010%7D%0A%20%20-%20Position3%7B10%7D%0A%7D%0A)
+[![two instantiated fence templates](img/script_tutorial/tut_playground_template.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20prop%20width%20%3A%20f32%20%3D%2020%0A%20%20prop%20height%20%3A%20f32%20%3D%2010%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24pillar_box%20%7B%0A%20%20%20%20left_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20-%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20right_pillar%20%7B%0A%20%20%20%20%20%20-%20Position3%7Bx%3A%20%24width%2F2%2C%20y%3A%20%24height%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence_a%20%7B%0A%20%20-%20Fence%7Bwidth%3A%2010%2C%20height%3A%2020%7D%0A%20%20-%20Position3%7B-10%7D%0A%7D%0Afence_b%20%7B%0A%20%20-%20Fence%7Bwidth%3A%2025%2C%20height%3A%2010%7D%0A%20%20-%20Position3%7B10%7D%0A%7D%0A)
 
-We are now well on our way to define a procedural fence. Note how similar assigning an assembly looks to assigning a component. This is no coincidence: an assembly is translated to a component, where each property becomes a member of that component.
+We are now well on our way to define a procedural fence. Note how similar assigning an template looks to assigning a component. This is no coincidence: an template is translated to a component, where each property becomes a member of that component.
 
-This is something we can exploit in C/C++ code to make assigning assemblies to entities as easy as assigning a component:
+This is something we can exploit in C/C++ code to make assigning templates to entities as easy as assigning a component:
 
 ```c
 // In C
@@ -542,13 +544,13 @@ typedef struct {
 // Register a regular component
 ECS_COMPONENT(world, Fence);
 
-// Because the Fence assembly has the same name as the
+// Because the Fence template has the same name as the
 // component it will "bind" to it.
-ecs_plecs_from_file(world, "fence.flecs");
+ecs_script_run_file(world, "fence.flecs");
 
 // Set the component as usual
-ecs_entity_t fence_a = ecs_set(world, 0, Fence, {10, 20});
-ecs_entity_t fence_b = ecs_set(world, 0, Fence, {25, 10});
+ecs_entity_t fence_a = ecs_insert(world, ecs_value(Fence, {10, 20}));
+ecs_entity_t fence_b = ecs_insert(world, ecs_value(Fence, {25, 10}));
 
 ecs_set(world, fence_a, EcsPosition3, {-10});
 ecs_set(world, fence_b, EcsPosition3, {10});
@@ -563,9 +565,9 @@ struct Fence {
   flecs::components::graphics::Rgb color;
 }
 
-// Because the Fence assembly has the same name as the
+// Because the Fence template has the same name as the
 // component it will "bind" to it.
-ecs_plecs_from_file(world, "fence.flecs");
+ecs_script_run_file(world, "fence.flecs");
 
 auto fence_a = world.entity().set<Fence>({10, 20});
 auto fence_b = world.entity().set<Fence>({25, 10});
@@ -644,12 +646,12 @@ fence :- Fence{}
 And increase the `width` of the fence to `60`:
 
 ```js
-  prop width : f32 = 60
+  prop width = f32: 60
 ```
 
 We now get a number of pillars that matches the fence length:
 
-[![a fence with multiple pillars](img/script_tutorial/tut_playground_grid.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20prop%20width%20%3A%20f32%20%3D%2060%0A%20%20prop%20height%20%3A%20f32%20%3D%2010%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20Prefab%20Pillar%20%7B%0A%20%20%20%20-%20%24color%0A%20%20%20%20-%20%24pillar_box%0A%20%20%7D%0A%20%20%20%20%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%0A%20%20%20%20%20%20x.spacing%3A%20%24pillar_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%20%20%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence%20%3A-%20Fence%7B%7D%0A)
+[![a fence with multiple pillars](img/script_tutorial/tut_playground_grid.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20prop%20width%20%3A%20f32%20%3D%2060%0A%20%20prop%20height%20%3A%20f32%20%3D%2010%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20Prefab%20Pillar%20%7B%0A%20%20%20%20-%20%24color%0A%20%20%20%20-%20%24pillar_box%0A%20%20%7D%0A%20%20%20%20%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%0A%20%20%20%20%20%20x.spacing%3A%20%24pillar_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%20%20%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence%20%3A-%20Fence%7B%7D%0A)
 
 There's still something off though, which is that the pillars don't exactly line up with the ends up of the fence. We can fix this with a simple calculation that takes the number of pillars, and uses that to recompute the grid spacing.
 
@@ -659,30 +661,30 @@ There's still something off though, which is that the pillars don't exactly line
 
 Note that this takes into account that there is one more pillar than there are spaces between pillars. When we replace `pillar_spacing` in the grid with `grid_spacing`, we get the correct pillar alignment:
 
-[![a fence with correctly aligned pillars](img/script_tutorial/tut_playground_pillar_grid.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20prop%20width%20%3A%20f32%20%3D%2060%0A%20%20prop%20height%20%3A%20f32%20%3D%2010%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20Prefab%20Pillar%20%7B%0A%20%20%20%20-%20%24color%0A%20%20%20%20-%20%24pillar_box%0A%20%20%7D%0A%20%20%20%20%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%0A%20%20%20%20%20%20x.spacing%3A%20%24grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%20%20%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence_a%20%7B%0A%20%20-%20Fence%7B%7D%0A%20%20-%20Position3%7B-10%7D%0A%7D%0A)
+[![a fence with correctly aligned pillars](img/script_tutorial/tut_playground_pillar_grid.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20prop%20width%20%3A%20f32%20%3D%2060%0A%20%20prop%20height%20%3A%20f32%20%3D%2010%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%20const%20pillar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24pillar_width%2C%20%0A%20%20%20%20%24height%2C%20%0A%20%20%20%20%24pillar_width%0A%20%20%7D%0A%20%20%0A%20%20Prefab%20Pillar%20%7B%0A%20%20%20%20-%20%24color%0A%20%20%20%20-%20%24pillar_box%0A%20%20%7D%0A%20%20%20%20%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%0A%20%20%20%20%20%20x.spacing%3A%20%24grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%20%20%0A%20%20%0A%20%20const%20bar_sep%20%3D%204%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%2F2%0A%20%20const%20bar_box%20%3A%20Box%20%3D%20%7B%0A%20%20%20%20%24width%2C%20%0A%20%20%20%20%24bar_height%2C%20%0A%20%20%20%20%24bar_depth%0A%20%20%7D%0A%20%20%0A%20%20with%20%24color%2C%20%24bar_box%20%7B%0A%20%20%20%20top_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20%2B%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%20%20bottom_bar%20%7B%0A%20%20%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%20-%20%24bar_sep%2F2%7D%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Afence_a%20%7B%0A%20%20-%20Fence%7B%7D%0A%20%20-%20Position3%7B-10%7D%0A%7D%0A)
 
 We can do the same thing for the bars. I'll skip right to the result since it involves very similar steps:
 
-[![a fence with multiple pillars and bars](img/script_tutorial/tut_playground_grids.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0A%2F%2F%20The%20ground%20plane%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%2F2%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20const%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20assembly%20Fence%0A%0Afence%20%3A-%20Fence%7B%7D)
+[![a fence with multiple pillars and bars](img/script_tutorial/tut_playground_grids.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0A%2F%2F%20The%20ground%20plane%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%2F2%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20const%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20template%20Fence%0A%0Afence%20%3A-%20Fence%7B%7D)
 
 The values got tweaked a bit to get a more aesthetically pleasing result when scaling up. Feel free to tune the variables to values that produce something you like!
 
-We're almost done! There is only one thing left, which is to combine the fence assembly in a nested assembly so we can create an enclosing.
+We're almost done! There is only one thing left, which is to combine the fence template in a nested template so we can create an enclosing.
 
-## Nested Assemblies
-Now that we have our Fence assembly ready to go, we can build a higher level assemblies which reuses existing the `Fence` assembly. One typical thing we could do is instantiate a `Fence` four times, so that it creates an enclosed space.
+## Nested Templates
+Now that we have our Fence template ready to go, we can build a higher level templates which reuses existing the `Fence` template. One typical thing we could do is instantiate a `Fence` four times, so that it creates an enclosed space.
 
-The code for this doesn't introduce anything beyond what we've already learned. Let's first setup a new assembly at the bottom of our script.
-Inside the assembly, lets create `width` and `depth` properties, so we can define a rectangular area. Let's also add a `color` and `height` property that we can passthrough to our `Fence` assembly.
+The code for this doesn't introduce anything beyond what we've already learned. Let's first setup a new template at the bottom of our script.
+Inside the template, lets create `width` and `depth` properties, so we can define a rectangular area. Let's also add a `color` and `height` property that we can passthrough to our `Fence` template.
 
 When put together, this is what it looks like:
 
 ```js
-assembly Enclosing {
-  prop width: f32 = 40
-  prop height: f32 = 10
-  prop depth: f32 = 40
-  prop color: Rgb = {0.15, 0.1, 0.05}
+template Enclosing {
+  prop width = f32: 40
+  prop height = f32: 10
+  prop depth = f32: 40
+  prop color = Rgb: {0.15, 0.1, 0.05}
   
   // enclosing code goes here
 }
@@ -699,26 +701,26 @@ up writing the same divisions multiple times.
   left {
     - Position3{x: -$width_half}
     - Rotation3{y: $PI/2}
-    - Fence{width: $depth, height:$, color:$}
+    Fence: {width: $depth, height:$, color:$}
   }
   right {
     - Position3{x: $width_half}
     - Rotation3{y: $PI/2}
-    - Fence{width: $depth, height:$, color:$}
+    Fence: {width: $depth, height:$, color:$}
   }
   back {
     - Position3{z: -$depth_half}
-    - Fence{width: $width, height:$, color:$}
+    Fence: {width: $width, height:$, color:$}
   }
   front {
     - Position3{z: $depth_half}
-    - Fence{width: $width, height:$, color:$}
+    Fence: {width: $width, height:$, color:$}
   }
 ```
 
-Note how the passthrough parameters are specified as `height:$`. This is a shorthand notation for `height: $height`, and can save a lot of typing when working with nested assemblies.
+Note how the passthrough parameters are specified as `height:$`. This is a shorthand notation for `height: $height`, and can save a lot of typing when working with nested templates.
 
-Let's now use our new `Enclosing` assembly by changing
+Let's now use our new `Enclosing` template by changing
 
 ```js
 fence :- Fence{}
@@ -732,17 +734,17 @@ enclosing :- Enclosing{}
 
 Here is what that looks like. You might need to zoom out a bit with the camera to see the full fence. Remember that you can do this by first clicking on the canvas to give it focus, then using the WASD keys to move the camera around. Don't forget to click on the canvas again to give focus back to the explorer.
 
-[![an enclosing](img/script_tutorial/tut_playground_pasture.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20assembly%20Fence%0A%0A%0Aassembly%20Enclosing%20%7B%0A%20%20prop%20width%3A%20f32%20%3D%2040%0A%20%20prop%20height%3A%20f32%20%3D%2010%0A%20%20prop%20depth%3A%20f32%20%3D%2040%0A%20%20prop%20color%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20width_half%20%3D%20%24width%20%2F%202%0A%20%20const%20depth_half%20%3D%20%24depth%20%2F%202%0A%20%20const%20PI%20%3D%203.1415926%0A%0A%20%20left%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20-%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20right%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20back%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20-%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20front%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%7D%20%2F%2F%20assembly%20Enclosing%0A%0Afence_a%20%7B%0A%20%20-%20Enclosing%7B%7D%0A%7D%0A%0Acamera%20%7B%0A%20%20-%20Position3%7B21%2C%2019%2C%20-37%7D%0A%20%20-%20Rotation3%7B-0.42%2C%20-0.52%7D%0A%7D%0A)
+[![an enclosing](img/script_tutorial/tut_playground_pasture.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20prop%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20template%20Fence%0A%0A%0Atemplate%20Enclosing%20%7B%0A%20%20prop%20width%3A%20f32%20%3D%2040%0A%20%20prop%20height%3A%20f32%20%3D%2010%0A%20%20prop%20depth%3A%20f32%20%3D%2040%0A%20%20prop%20color%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20width_half%20%3D%20%24width%20%2F%202%0A%20%20const%20depth_half%20%3D%20%24depth%20%2F%202%0A%20%20const%20PI%20%3D%203.1415926%0A%0A%20%20left%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20-%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20right%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20back%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20-%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%20%20front%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%2C%20color%3A%24%7D%0A%20%20%7D%0A%7D%20%2F%2F%20template%20Enclosing%0A%0Afence_a%20%7B%0A%20%20-%20Enclosing%7B%7D%0A%7D%0A%0Acamera%20%7B%0A%20%20-%20Position3%7B21%2C%2019%2C%20-37%7D%0A%20%20-%20Rotation3%7B-0.42%2C%20-0.52%7D%0A%7D%0A)
 
 We can now easily modify our enclosing by passing in parameters for width and height:
 
 ```
-enclosing :- Enclosing{width: 100, height: 30}
+enclosing { Enclosing: {width: 100, height: 30} }
 ```
 
-[![a tall enclosing](img/script_tutorial/tut_playground_pasture_2.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0A%2F%2F%20The%20ground%20plane%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%2F2%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Aassembly%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20const%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Aassembly%20Enclosing%20%7B%0A%20%20prop%20width%3A%20f32%20%3D%2040%0A%20%20prop%20height%3A%20f32%20%3D%2010%0A%20%20prop%20depth%3A%20f32%20%3D%2040%0A%20%20prop%20color%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20width_half%20%3D%20%24width%20%2F%202%0A%20%20const%20depth_half%20%3D%20%24depth%20%2F%202%0A%20%20const%20PI%20%3D%203.1415926%0A%0A%20%20left%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20-%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%7D%0A%20%20%7D%0A%20%20right%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%7D%0A%20%20%7D%0A%20%20back%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20-%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%7D%0A%20%20%7D%0A%20%20front%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%7D%0A%20%20%7D%0A%7D%0A%0Apasture%20%3A-%20Enclosing%7B%0A%20%20width%3A%20100%2C%20%0A%20%20depth%3A%20100%0A%20%20height%3A%2030%0A%7D%0A%0Acamera%20%7B%0A%20%20-%20Position3%7B52%2C%2041%2C%20-82%7D%0A%20%20-%20Rotation3%7B-0.45%2C%20-0.54%7D%0A%7D%0A)
+[![a tall enclosing](img/script_tutorial/tut_playground_pasture_2.png)](https://www.flecs.dev/explorer/?local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20flecs.meta%0Ausing%20flecs.game%0A%0Aconst%20PI%20%3D%203.1415926%0A%0A%2F%2F%20The%20ground%20plane%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%2F2%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atemplate%20Fence%20%7B%0A%20%20%2F%2F%20Fence%20parameters%0A%20%20prop%20width%20%3A%20f32%20%3D%2040%0A%20%20prop%20height%20%3A%20f32%20%3D%2020%0A%20%20const%20color%20%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%0A%20%20%2F%2F%20Pillar%20parameters%0A%20%20const%20pillar_width%20%3D%202%0A%20%20const%20pillar_spacing%20%3D%2010%0A%20%20const%20pillar_count%20%3D%20%24width%20%2F%20%24pillar_spacing%0A%20%20const%20p_grid_spacing%20%3D%20%24width%20%2F%20(%24pillar_count%20-%201)%0A%20%0A%20%20%2F%2F%20Bar%20parameters%0A%20%20const%20bar_spacing%20%3D%203%0A%20%20const%20bar_height%20%3D%202%0A%20%20const%20bar_depth%20%3D%20%24pillar_width%20%2F%202%0A%20%20const%20bar_count%20%3D%20%24height%20%2F%20%24bar_spacing%0A%20%20const%20b_grid_spacing%20%3D%20%24height%20%2F%20%24bar_count%0A%20%20%20%0A%20%20with%20Prefab%2C%20%24color%20%7B%0A%20%20%20%20Pillar%20%3A-%20Box%20%7B%0A%20%20%20%20%20%20%24pillar_width%2C%20%24height%2C%20%24pillar_width%0A%20%20%20%20%7D%0A%20%20%20%20Bar%20%3A-%20Box%20%7B%24width%2C%20%24bar_height%2C%20%24bar_depth%7D%0A%20%20%7D%20%20%20%20%0A%20%20%0A%20%20%2F%2F%20Pillars%0A%20%20pillars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20x.count%3A%20%24pillar_count%2C%0A%20%20%20%20%20%20x.spacing%3A%20%24p_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Pillar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%0A%20%20%2F%2F%20Bars%0A%20%20bars%20%7B%0A%20%20%20%20-%20Position3%7By%3A%20%24height%2F2%7D%0A%20%20%20%20-%20Grid%7B%0A%20%20%20%20%20%20y.count%3A%20%24bar_count%2C%0A%20%20%20%20%20%20y.spacing%3A%20%24b_grid_spacing%0A%20%20%20%20%20%20prefab%3A%20Bar%20%20%20%20%0A%20%20%20%20%7D%0A%20%20%7D%0A%7D%20%2F%2F%20Prefab%20Fence%0A%0Atemplate%20Enclosing%20%7B%0A%20%20prop%20width%3A%20f32%20%3D%2040%0A%20%20prop%20height%3A%20f32%20%3D%2010%0A%20%20prop%20depth%3A%20f32%20%3D%2040%0A%20%20prop%20color%3A%20Rgb%20%3D%20%7B0.15%2C%200.1%2C%200.05%7D%0A%20%20%0A%20%20const%20width_half%20%3D%20%24width%20%2F%202%0A%20%20const%20depth_half%20%3D%20%24depth%20%2F%202%0A%20%20const%20PI%20%3D%203.1415926%0A%0A%20%20left%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20-%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%7D%0A%20%20%7D%0A%20%20right%20%7B%0A%20%20%20%20-%20Position3%7Bx%3A%20%24width_half%7D%0A%20%20%20%20-%20Rotation3%7By%3A%20%24PI%20%2F%202%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24depth%2C%20height%3A%24%7D%0A%20%20%7D%0A%20%20back%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20-%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%7D%0A%20%20%7D%0A%20%20front%20%7B%0A%20%20%20%20-%20Position3%7Bz%3A%20%24depth_half%7D%0A%20%20%20%20-%20Fence%7Bwidth%3A%20%24width%2C%20height%3A%24%7D%0A%20%20%7D%0A%7D%0A%0Apasture%20%3A-%20Enclosing%7B%0A%20%20width%3A%20100%2C%20%0A%20%20depth%3A%20100%0A%20%20height%3A%2030%0A%7D%0A%0Acamera%20%7B%0A%20%20-%20Position3%7B52%2C%2041%2C%20-82%7D%0A%20%20-%20Rotation3%7B-0.45%2C%20-0.54%7D%0A%7D%0A)
 
-Congratulations! You now know how to create assets in Flecs Script! If you'd like to see more examples of how assemblies can be used to create complex compositions of assets, take a look at the assemblies in the Flecs playground project:
+Congratulations! You now know how to create assets in Flecs Script! If you'd like to see more examples of how templates can be used to create complex compositions of assets, take a look at the templates in the Flecs playground project:
 
 https://github.com/flecs-hub/playground/tree/main/etc/assets
 
@@ -750,20 +752,20 @@ Additionally you can also try instantiating one of the assets that come preloade
 
 ```js
 using flecs.components.*
-using assemblies
+using templates
 
 const PI = 3.1415926
 
 plane {
   - Position3{}
   - Rotation3{$PI / 2}
-  - Rectangle{10000, 10000}
+  Rectangle: {10000, 10000}
   - Rgb{0.9, 0.9, 0.9}
 }
 
 town :- Town{}
 ```
 
-[![a town](img/script_tutorial/tut_playground_town.png)](https://www.flecs.dev/explorer/?show=plecs,explorer_canvas&local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20assemblies%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atown%20%3A-%20Town%7B%7D)
+[![a town](img/script_tutorial/tut_playground_town.png)](https://www.flecs.dev/explorer/?show=flecs script,explorer_canvas&local=true&wasm=https://www.flecs.dev/explorer/playground.js&script=using%20flecs.components.*%0Ausing%20templates%0A%0Aconst%20PI%20%3D%203.1415926%0A%0Aplane%20%7B%0A%20%20-%20Position3%7B%7D%0A%20%20-%20Rotation3%7B%24PI%20%2F%202%7D%0A%20%20-%20Rectangle%7B10000%2C%2010000%7D%0A%20%20-%20Rgb%7B0.9%2C%200.9%2C%200.9%7D%0A%7D%0A%0Atown%20%3A-%20Town%7B%7D)
 
 That's all for this tutorial. Have fun creating, and don't hesitate to share the results in the `#showcase` channel on Discord! (link: https://discord.gg/caR2WmY)

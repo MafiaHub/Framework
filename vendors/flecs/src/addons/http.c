@@ -46,6 +46,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -97,12 +100,6 @@ typedef int ecs_http_socket_t;
 /* Total number of outstanding send requests */
 #define ECS_HTTP_SEND_QUEUE_MAX (256)
 
-/* Cache invalidation timeout (s) */
-#define ECS_HTTP_CACHE_TIMEOUT ((ecs_ftime_t)1.0)
-
-/* Cache entry purge timeout (s) */
-#define ECS_HTTP_CACHE_PURGE_TIMEOUT ((ecs_ftime_t)10.0)
-
 /* Global statistics */
 int64_t ecs_http_request_received_count = 0;
 int64_t ecs_http_request_invalid_count = 0;
@@ -139,7 +136,8 @@ typedef struct ecs_http_request_key_t {
 typedef struct ecs_http_request_entry_t {
     char *content;
     int32_t content_length;
-    ecs_ftime_t time;
+    int code;
+    double time;
 } ecs_http_request_entry_t;
 
 /* HTTP server struct */
@@ -153,6 +151,9 @@ struct ecs_http_server_t {
 
     ecs_http_reply_action_t callback;
     void *ctx;
+
+    double cache_timeout;
+    double cache_purge_timeout;
 
     ecs_sparse_t connections; /* sparse<http_connection_t> */
     ecs_sparse_t requests; /* sparse<http_request_t> */
@@ -555,8 +556,8 @@ ecs_http_request_entry_t* http_find_request_entry(
         &srv->request_cache, &key, ecs_http_request_entry_t);
 
     if (entry) {
-        ecs_ftime_t tf = (ecs_ftime_t)ecs_time_measure(&t);
-        if ((tf - entry->time) < ECS_HTTP_CACHE_TIMEOUT) {
+        double tf = ecs_time_measure(&t);
+        if ((tf - entry->time) < srv->cache_timeout) {
             return entry;
         }
     }
@@ -590,9 +591,10 @@ void http_insert_request_entry(
     }
 
     ecs_time_t t = {0, 0};
-    entry->time = (ecs_ftime_t)ecs_time_measure(&t);
+    entry->time = ecs_time_measure(&t);
     entry->content_length = ecs_strbuf_written(&reply->body);
     entry->content = ecs_strbuf_get(&reply->body);
+    entry->code = reply->code;
     ecs_strbuf_appendstrn(&reply->body, 
             entry->content, entry->content_length);
 }
@@ -604,6 +606,7 @@ char* http_decode_request(
 {
     ecs_os_zeromem(req);
 
+    ecs_size_t req_len = frag->buf.length;
     char *res = ecs_strbuf_get(&frag->buf);
     if (!res) {
         return NULL;
@@ -633,6 +636,9 @@ char* http_decode_request(
     req->pub.param_count = frag->param_count;
     req->res = res;
     req->req_len = frag->header_offsets[0];
+    if (!req->req_len) {
+        req->req_len = req_len;
+    }
 
     return res;
 }
@@ -694,16 +700,16 @@ bool http_parse_request(
         switch (frag->state) {
         case HttpFragStateBegin:
             ecs_os_memset_t(frag, 0, ecs_http_fragment_t);
-            frag->buf.max = ECS_HTTP_METHOD_LEN_MAX;
             frag->state = HttpFragStateMethod;
             frag->header_buf_ptr = frag->header_buf;
-            
+
             /* fall through */
         case HttpFragStateMethod:
             if (c == ' ') {
                 http_parse_method(frag);
+                ecs_strbuf_reset(&frag->buf);
                 frag->state = HttpFragStatePath;
-                frag->buf.max = ECS_HTTP_REQUEST_LEN_MAX;
+                frag->buf.content = NULL;
             } else {
                 ecs_strbuf_appendch(&frag->buf, c);
             }
@@ -980,7 +986,7 @@ void http_append_send_headers(
     ecs_strbuf_appendlit(hdrs, "Access-Control-Allow-Origin: *\r\n");
     if (preflight) {
         ecs_strbuf_appendlit(hdrs, "Access-Control-Allow-Private-Network: true\r\n");
-        ecs_strbuf_appendlit(hdrs, "Access-Control-Allow-Methods: GET, PUT, OPTIONS\r\n");
+        ecs_strbuf_appendlit(hdrs, "Access-Control-Allow-Methods: GET, PUT, DELETE, OPTIONS\r\n");
         ecs_strbuf_appendlit(hdrs, "Access-Control-Max-Age: 600\r\n");
     }
 
@@ -996,8 +1002,8 @@ void http_send_reply(
     bool preflight) 
 {
     ecs_strbuf_t hdrs = ECS_STRBUF_INIT;
+    int32_t content_length = reply->body.length;
     char *content = ecs_strbuf_get(&reply->body);
-    int32_t content_length = reply->body.length - 1;
 
     /* Use asynchronous send queue for outgoing data so send operations won't
      * hold up main thread */
@@ -1013,8 +1019,8 @@ void http_send_reply(
 
     http_append_send_headers(&hdrs, reply->code, reply->status, 
         reply->content_type, &reply->headers, content_length, preflight);
-    char *headers = ecs_strbuf_get(&hdrs);
     ecs_size_t headers_length = ecs_strbuf_written(&hdrs);
+    char *headers = ecs_strbuf_get(&hdrs);
 
     if (!req) {
         ecs_size_t written = http_send(conn->sock, headers, headers_length, 0);
@@ -1079,7 +1085,7 @@ void http_recv_connection(
                     if (entry) {
                         ecs_http_reply_t reply;
                         reply.body = ECS_STRBUF_INIT;
-                        reply.code = 200;
+                        reply.code = entry->code;
                         reply.content_type = "application/json";
                         reply.headers = ECS_STRBUF_INIT;
                         reply.status = "OK";
@@ -1153,7 +1159,7 @@ http_conn_res_t http_init_connection(
 }
 
 static
-void http_accept_connections(
+int http_accept_connections(
     ecs_http_server_t* srv, 
     const struct sockaddr* addr, 
     ecs_size_t addr_len) 
@@ -1167,7 +1173,7 @@ void http_accept_connections(
         if (result) {
             ecs_warn("http: WSAStartup failed with GetLastError = %d\n", 
                 GetLastError());
-            return;
+            return 0;
         }
     } else {
         http_close(&testsocket);
@@ -1177,6 +1183,8 @@ void http_accept_connections(
     /* Resolve name + port (used for logging) */
     char addr_host[256];
     char addr_port[20];
+
+    int ret = 0; /* 0 = ok, 1 = port occupied */
 
     ecs_http_socket_t sock = HTTP_SOCKET_INVALID;
     ecs_assert(srv->sock == HTTP_SOCKET_INVALID, ECS_INTERNAL_ERROR, NULL);
@@ -1220,8 +1228,15 @@ void http_accept_connections(
 
         result = http_bind(sock, addr, addr_len);
         if (result) {
-            ecs_err("http: failed to bind to '%s:%s': %s", 
-                addr_host, addr_port, ecs_os_strerror(errno));
+            if (errno == EADDRINUSE) {
+                ret = 1;
+                ecs_warn("http: address '%s:%s' in use, retrying with port %u", 
+                    addr_host, addr_port, srv->port + 1);
+            } else {
+                ecs_err("http: failed to bind to '%s:%s': %s", 
+                    addr_host, addr_port, ecs_os_strerror(errno));
+            }
+
             ecs_os_mutex_unlock(srv->lock);
             goto done;
         }
@@ -1273,6 +1288,8 @@ done:
 
     ecs_trace("http: no longer accepting connections on '%s:%s'",
         addr_host, addr_port);
+
+    return ret;
 }
 
 static
@@ -1281,6 +1298,9 @@ void* http_server_thread(void* arg) {
     struct sockaddr_in addr;
     ecs_os_zeromem(&addr);
     addr.sin_family = AF_INET;
+
+    int retries = 0;
+retry:
     addr.sin_port = htons(srv->port);
 
     if (!srv->ipaddr) {
@@ -1289,7 +1309,18 @@ void* http_server_thread(void* arg) {
         inet_pton(AF_INET, srv->ipaddr, &(addr.sin_addr));
     }
 
-    http_accept_connections(srv, (struct sockaddr*)&addr, ECS_SIZEOF(addr));
+    if (http_accept_connections(
+        srv, (struct sockaddr*)&addr, ECS_SIZEOF(addr)) == 1) 
+    {
+        srv->port ++;
+        retries ++;
+        if (retries < 10) {
+            goto retry;
+        } else {
+            ecs_err("http: failed to connect (retried 10 times)");
+        }
+    }
+
     return NULL;
 }
 
@@ -1299,6 +1330,10 @@ void http_do_request(
     ecs_http_reply_t *reply,
     const ecs_http_request_impl_t *req)
 {
+    ecs_check(srv != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(srv->callback != NULL, ECS_INVALID_OPERATION, 
+        "missing request handler for server");
+
     if (srv->callback(ECS_CONST_CAST(ecs_http_request_t*, req), reply, 
         srv->ctx) == false) 
     {
@@ -1312,6 +1347,8 @@ void http_do_request(
             ecs_os_linc(&ecs_http_request_handled_ok_count);
         }
     }
+error:
+    return;
 }
 
 static
@@ -1357,7 +1394,7 @@ void http_purge_request_cache(
     bool fini)
 {
     ecs_time_t t = {0, 0};
-    ecs_ftime_t time = (ecs_ftime_t)ecs_time_measure(&t);
+    double time = ecs_time_measure(&t);
     ecs_map_iter_t it = ecs_map_iter(&srv->request_cache.impl);
     while (ecs_map_next(&it)) {
         ecs_hm_bucket_t *bucket = ecs_map_ptr(&it);
@@ -1366,7 +1403,7 @@ void http_purge_request_cache(
         ecs_http_request_entry_t *entries = ecs_vec_first(&bucket->values);
         for (i = count - 1; i >= 0; i --) {
             ecs_http_request_entry_t *entry = &entries[i];
-            if (fini || ((time - entry->time) > ECS_HTTP_CACHE_PURGE_TIMEOUT)) {
+            if (fini || ((time - entry->time) > srv->cache_purge_timeout)) {
                 ecs_http_request_key_t *key = &keys[i];
                 /* Safe, code owns the value */
                 ecs_os_free(ECS_CONST_CAST(char*, key->array));
@@ -1457,6 +1494,15 @@ ecs_http_server_t* ecs_http_server_init(
     srv->should_run = false;
     srv->initialized = true;
 
+    srv->cache_timeout = desc->cache_timeout;
+    srv->cache_purge_timeout = desc->cache_purge_timeout;
+
+    if (!ECS_EQZERO(srv->cache_timeout) && 
+         ECS_EQZERO(srv->cache_purge_timeout)) 
+    {
+        srv->cache_purge_timeout = srv->cache_timeout * 10;
+    }
+
     srv->callback = desc->callback;
     srv->ctx = desc->ctx;
     srv->port = desc->port;
@@ -1533,8 +1579,10 @@ void ecs_http_server_stop(
     ecs_http_server_t* srv) 
 {
     ecs_check(srv != NULL, ECS_INVALID_PARAMETER, NULL);
-    ecs_check(srv->initialized, ECS_INVALID_OPERATION, NULL);
-    ecs_check(srv->should_run, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(srv->initialized, ECS_INVALID_OPERATION, 
+        "cannot stop HTTP server: not initialized");
+    ecs_check(srv->should_run, ECS_INVALID_PARAMETER, 
+        "cannot stop HTTP server: already stopped/stopping");
 
     /* Stop server thread */
     ecs_dbg("http: shutting down server thread");
@@ -1637,8 +1685,27 @@ int ecs_http_server_http_request(
         return -1;
     }
 
-    http_do_request(srv, reply_out, &request);
+    ecs_http_request_entry_t *entry = 
+        http_find_request_entry(srv, request.res, request.req_len);
+    if (entry) {
+        reply_out->body = ECS_STRBUF_INIT;
+        reply_out->code = entry->code;
+        reply_out->content_type = "application/json";
+        reply_out->headers = ECS_STRBUF_INIT;
+        reply_out->status = "OK";
+        ecs_strbuf_appendstrn(&reply_out->body, 
+            entry->content, entry->content_length);
+    } else {
+        http_do_request(srv, reply_out, &request);
+
+        if (request.pub.method == EcsHttpGet) {
+            http_insert_request_entry(srv, &request, reply_out);
+        }
+    }
+
     ecs_os_free(res);
+
+    http_purge_request_cache(srv, false);
 
     return (reply_out->code >= 400) ? -1 : 0;
 }
@@ -1649,15 +1716,29 @@ int ecs_http_server_request(
     const char *req,
     ecs_http_reply_t *reply_out)
 {
-    ecs_strbuf_t reqbuf = ECS_STRBUF_INIT;
-    ecs_strbuf_appendstr_zerocpy_const(&reqbuf, method);
-    ecs_strbuf_appendlit(&reqbuf, " ");
-    ecs_strbuf_appendstr_zerocpy_const(&reqbuf, req);
-    ecs_strbuf_appendlit(&reqbuf, " HTTP/1.1\r\n\r\n");
-    int32_t len = ecs_strbuf_written(&reqbuf);
-    char *reqstr = ecs_strbuf_get(&reqbuf);
+    const char *http_ver = " HTTP/1.1\r\n\r\n";
+    int32_t method_len = ecs_os_strlen(method);
+    int32_t req_len = ecs_os_strlen(req);
+    int32_t http_ver_len = ecs_os_strlen(http_ver);
+    char reqbuf[1024], *reqstr = reqbuf;
+
+    int32_t len = method_len + req_len + http_ver_len + 1;
+    if (method_len + req_len + http_ver_len >= 1024) {
+        reqstr = ecs_os_malloc(len + 1);
+    }
+
+    char *ptr = reqstr;
+    ecs_os_memcpy(ptr, method, method_len); ptr += method_len;
+    ptr[0] = ' '; ptr ++;
+    ecs_os_memcpy(ptr, req, req_len); ptr += req_len;
+    ecs_os_memcpy(ptr, http_ver, http_ver_len); ptr += http_ver_len;
+    ptr[0] = '\n';
+
     int result = ecs_http_server_http_request(srv, reqstr, len, reply_out);
-    ecs_os_free(reqstr);
+    if (reqbuf != reqstr) {
+        ecs_os_free(reqstr);
+    }
+
     return result;
 }
 

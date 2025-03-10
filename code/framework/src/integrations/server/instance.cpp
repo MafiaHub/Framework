@@ -13,16 +13,19 @@
 #include "networking/messages/client_connection_finalized.h"
 #include "networking/messages/client_handshake.h"
 #include "networking/messages/client_initialise_player.h"
+#include "networking/messages/client_request_streamer.h"
+#include "networking/messages/client_ready_assets.h"
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
 #include "../shared/modules/mod.hpp"
 
 #include "utils/version.h"
+#include "utils/path.h"
 
 #include "cxxopts.hpp"
 
-#include "scripting/builtins/node/entity.h"
+#include "scripting/builtins/entity.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -109,8 +112,9 @@ namespace Framework::Integrations::Server {
 
         /*if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to contact masterlist server: Push key is empty");
-        }*/
-        else if (!_opts.bindPublicServer) {
+        }
+        else */
+        if (!_opts.bindPublicServer) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
@@ -144,9 +148,13 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
+        // Initialize asset streamer
+        InitAssetStreamer();
+
         // Load the gamemode
         _scriptingEngine->GetServerEngine()->LoadScript();
 
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
@@ -222,7 +230,7 @@ namespace Framework::Integrations::Server {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
         net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for player {}", msg->GetPlayerName());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for incoming player guid {}", guid.g);
 
             // Make sure handshake payload was correctly formatted
             if (!msg->Valid()) {
@@ -273,6 +281,28 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
+            // Let the client know they can ask for client-side assets now.
+            ClientReadyAssets readyMsg;
+            net->Send(readyMsg, guid);
+        });
+
+        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
+            const auto guid = packet->guid;
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
+
+            const auto e = _worldEngine->GetEntityByGUID(guid.g);
+            if (e.is_valid()) {
+                if (_onPlayerDisconnectCallback)
+                    _onPlayerDisconnectCallback(e, guid.g);
+
+                _worldEngine->RemoveEntity(e);
+            }
+
+            net->GetPeer()->CloseConnection(guid, true);
+        });
+
+        
+        net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](SLNet::RakNetGUID guid, ClientRequestStreamer *msg) {
             // Create player entity and add on world
             const auto newPlayer = _worldEngine->CreateEntity();
             _streamingFactory->SetupServer(newPlayer, guid.g);
@@ -292,22 +322,6 @@ namespace Framework::Integrations::Server {
             net->Send(answer, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
-            const auto guid = packet->guid;
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
-
-            const auto e = _worldEngine->GetEntityByGUID(guid.g);
-
-            if (e.is_valid()) {
-                if (_onPlayerDisconnectCallback)
-                    _onPlayerDisconnectCallback(e, guid.g);
-
-                _worldEngine->RemoveEntity(e);
-            }
-
-            net->GetPeer()->CloseConnection(guid, true);
-        });
-
         net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
             const auto e = _worldEngine->GetEntityByGUID(guid.g);
             if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
@@ -317,6 +331,27 @@ namespace Framework::Integrations::Server {
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
+    }
+
+    void Instance::InitAssetStreamer() {
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up asset streamer...");
+        const auto net      = GetNetworkingEngine()->GetNetworkServer();
+        const auto streamer = net->GetAssetStreamer();
+
+        const auto scripting   = GetScriptingEngine();
+        const auto gamemodePath = scripting->GetMainPath();
+        const auto clientPath = fmt::format("{}\\client", gamemodePath);
+        const auto clientFiles  = scripting->GetClientFiles();
+        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(clientPath);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client assets directory: {}", assetsPath);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+
+        streamer->SetApplicationDirectory(assetsPath.c_str());
+        
+        for (const auto& fileName : clientFiles) {
+            streamer->AddFile(fmt::format("{}\\{}", assetsPath, fileName).c_str(), fileName.c_str());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName);
+        }
     }
 
     ServerError Instance::Shutdown() {
@@ -369,7 +404,7 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
-                // info.gameMode       = _scriptingEngine->GetGameModeName();
+                info.gameMode       = _scriptingEngine->GetServerEngine()->GetScriptName();
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();

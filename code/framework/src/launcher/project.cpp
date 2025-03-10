@@ -606,24 +606,24 @@ namespace Framework::Launcher {
         gImagePath = _gamePath.c_str();
         gDllName   = _config.destinationDllName.c_str();
 
-        const HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        const HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) {
-            MessageBox(nullptr, "Failed to find executable image", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, "Failed to find executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // determine file length
-        DWORD dwFileLength = SetFilePointer(hFile, 0, nullptr, FILE_END);
-        if (dwFileLength == INVALID_SET_FILE_POINTER) {
+        DWORD dwFileLength = GetFileSize(hFile, nullptr);
+        if (dwFileLength == INVALID_FILE_SIZE) {
             CloseHandle(hFile);
-            MessageBox(nullptr, "Could not inquire executable image size", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, "Could not inquire executable image size", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         const HANDLE hMapping = CreateFileMappingW(hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
         if (hMapping == INVALID_HANDLE_VALUE) {
             CloseHandle(hFile);
-            MessageBox(nullptr, "Could not map executable image", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, "Could not map executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -631,7 +631,7 @@ namespace Framework::Launcher {
         if (!data) {
             CloseHandle(hMapping);
             CloseHandle(hFile);
-            MessageBox(nullptr, "Could not map view of executable image", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, "Could not map view of executable image", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
@@ -722,11 +722,24 @@ namespace Framework::Launcher {
 
         hook::set_base(reinterpret_cast<uintptr_t>(base));
 
-        if (_preLaunchFunctor)
-            _preLaunchFunctor();
+        try {
+            if (_preLaunchFunctor) {
+                _preLaunchFunctor();
+            }
 
-        InvokeEntryPoint(entry_point);
-        return true;
+            InvokeEntryPoint(entry_point);
+            return true;
+        }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Exception caught: {}", ex.what());
+
+            UnmapViewOfFile(data);
+            CloseHandle(hMapping);
+            CloseHandle(hFile);
+
+            MessageBoxA(nullptr, "Failed to launch game", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
     }
 
     void Project::InvokeEntryPoint(void (*entryPoint)()) {

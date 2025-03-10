@@ -25,8 +25,8 @@
     }
 
 namespace Framework::World::Modules {
-    void Base::SetupServerEmitters(Streamable *streamable) {
-        streamable->events.spawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+    void Base::SetupServerEmitters(Streamable& streamable) {
+        streamable.events.spawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             if (tr)
@@ -37,7 +37,7 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.despawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+        streamable.events.despawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             CALL_CUSTOM_PROC(despawnProc);
             Framework::Networking::Messages::GameSyncEntityDespawn entityDespawn;
             entityDespawn.SetServerID(e.id());
@@ -45,7 +45,7 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+        streamable.events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntitySelfUpdate entitySelfUpdate;
             entitySelfUpdate.SetServerID(e.id());
             peer->Send(entitySelfUpdate, guid);
@@ -53,7 +53,7 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+        streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
@@ -65,7 +65,7 @@ namespace Framework::World::Modules {
             return true;
         };
 
-        streamable->events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+        streamable.events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
@@ -77,8 +77,8 @@ namespace Framework::World::Modules {
             return true;
         };
     }
-    void Base::SetupClientEmitters(Streamable *streamable) {
-        streamable->events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+    void Base::SetupClientEmitters(Streamable& streamable) {
+        streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
             Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr  = e.get<Framework::World::Modules::Base::Transform>();
             const auto sid = e.get<Framework::World::Modules::Base::ServerID>();
@@ -130,6 +130,7 @@ namespace Framework::World::Modules {
             const auto e = worldEngine->CreateEntity(msg->GetServerID());
             streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
 
+            e.add<World::Modules::Base::Transform>();
             const auto tr = e.get_mut<World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });

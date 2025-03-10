@@ -33,9 +33,9 @@ set(FRAMEWORK_SRC
 set(FRAMEWORK_SERVER_SRC
     src/scripting/client_engine.cpp
     src/scripting/engine.cpp
-    src/scripting/events.cpp
     src/scripting/module.cpp
     src/scripting/server_engine.cpp
+    src/scripting/types/events.cpp
 
     src/http/webserver.cpp
 
@@ -49,6 +49,7 @@ set(FRAMEWORK_SERVER_SRC
 set(FRAMEWORK_CLIENT_SRC
     src/graphics/renderer.cpp
     src/graphics/renderio.cpp
+    src/graphics/types.cpp
 
     src/networking/network_client.cpp
 
@@ -56,10 +57,19 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/discord/wrapper.cpp
     src/external/imgui/wrapper.cpp
 
+    src/external/imgui/widgets/ui_base.cpp
+
     src/external/imgui/widgets/console.cpp
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
+
+    src/gui/manager.cpp
+    src/gui/clipboard.cpp
+    src/gui/view.cpp
+    src/gui/sdk.cpp
+    src/gui/backend/renderer_d3d11.cpp
+    src/gui/backend/view_d3d11.cpp
 )
 
 # Append the platform-dependent files to the related lists
@@ -153,9 +163,9 @@ target_link_libraries(FrameworkServer libsig Lua54)
 # Platform-dependent post processing
 if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
-    target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv)
+    target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv shlwapi)
 
-    target_link_libraries(FrameworkClient DiscordSDK DearImGUI UltralightSDK)
+    target_link_libraries(FrameworkClient DiscordSDK DearImGUI)
 
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
@@ -168,7 +178,7 @@ if(WIN32)
     if(NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else()
-        target_link_libraries(FrameworkClient)
+        target_link_libraries(FrameworkClient UltralightSDK JavaScriptCorePP)
         target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
     endif()
 endif()

@@ -1,0 +1,79 @@
+name: Version Release
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # Runs at 04:00 UTC every day
+  workflow_dispatch:      # Allows manual triggering
+
+jobs:
+  bump-semver:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0  # Ensure full history for diff comparisons
+
+      - name: Run bump semver script
+        run: |
+          chmod +x ./.github/bump_version.sh
+          ./.github/bump_version.sh
+
+      - name: Commit version bump
+        run: |
+          git config user.name "MafiaHub CI"
+          git config user.email "${{ secrets.MHCI_MAIL }}"
+          git add VERSION || true
+          git diff-index --quiet HEAD || git commit -m "ci: bump version to $(cat VERSION) [skip ci]" || true
+          git push origin HEAD:develop --follow-tags || true
+
+  evaluate-release:
+    runs-on: ubuntu-latest
+    needs: bump-semver
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0  # Get full history for tag comparison
+
+      - name: Read raw version
+        id: version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "raw_version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Get previous tag
+        id: previous-tag
+        run: |
+          git fetch --tags
+          # Default to v0.0.0 if no tags exist
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+          echo "prev_version=${PREV_TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        id: version-check
+        run: |
+          NEW_VERSION=${{ steps.version.outputs.raw_version }}
+          PREV_VERSION=${{ steps.previous-tag.outputs.prev_version }}
+          
+          if [ "$NEW_VERSION" = "$PREV_VERSION" ]; then
+            echo "No new version detected, skipping build"
+          else
+            echo "RELEASE_NEEDED=true" >> $GITHUB_ENV
+            echo "new_tag=v${NEW_VERSION}" >> $GITHUB_ENV
+          fi
+
+      - name: Create semver tag and release
+        if: env.RELEASE_NEEDED == 'true'
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ env.new_tag }}
+          release_name: ${{ env.new_tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

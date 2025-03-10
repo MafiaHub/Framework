@@ -11,7 +11,7 @@ void meta_test_enum(
     test_int(ct->size, ECS_SIZEOF(ecs_i32_t));
     test_int(ct->alignment, ECS_ALIGNOF(ecs_i32_t));
 
-    const EcsMetaType *mt = ecs_get(world, t, EcsMetaType);
+    const EcsType *mt = ecs_get(world, t, EcsType);
     test_assert(mt != NULL);
     test_assert(mt->kind == EcsEnumType);
 
@@ -48,7 +48,7 @@ void meta_test_constant(
         if (!ecs_os_strcmp(c->name, name)) {
             test_int(c->value, value);
 
-            const ecs_i32_t *vptr = ecs_get_pair_object(world, c->constant, 
+            const ecs_i32_t *vptr = ecs_get_pair_second(world, c->constant, 
                 EcsConstant, ecs_i32_t);
             if (vptr) {
                 test_int(*vptr, value);
@@ -183,7 +183,7 @@ void EnumTypes_zero_initialized(void) {
     test_assert(e != 0);
     test_assert(ecs_has(world, e, EcsComponent));
 
-    ecs_entity_t ent = ecs_new_id(world);
+    ecs_entity_t ent = ecs_new(world);
     ecs_add_id(world, ent, e);
 
     const int32_t *ptr = ecs_get_id(world, ent, e);
@@ -209,7 +209,7 @@ void EnumTypes_enum_relation(void) {
     test_assert(e != 0);
     test_assert(ecs_has(world, e, EcsComponent));
     test_assert(ecs_has_id(world, e, EcsExclusive));
-    test_assert(ecs_has_id(world, e, EcsTag));
+    test_assert(ecs_has_id(world, e, EcsPairIsTag));
 
     ecs_entity_t red = ecs_lookup_child(world, e, "Red");
     ecs_entity_t green = ecs_lookup_child(world, e, "Green");
@@ -221,7 +221,7 @@ void EnumTypes_enum_relation(void) {
 
     test_assert(ecs_get_typeid(world, ecs_pair(e, red)) == 0);
 
-    ecs_entity_t ent = ecs_new_id(world);
+    ecs_entity_t ent = ecs_new(world);
     ecs_add_pair(world, ent, e, red);
     test_assert( ecs_has_pair(world, ent, e, red));
 
@@ -262,4 +262,52 @@ void EnumTypes_constant_w_type_prefix(void) {
 
 void EnumTypes_constant_w_name_type_prefix(void) {
     // Implement testcase
+}
+
+
+int enum_modified_calls = 0;
+
+static
+void enum_modified(ecs_iter_t *it) {
+    enum_modified_calls ++;
+}
+
+/* Checks that observers watching enum changes are notified */
+void EnumTypes_enum_modified_event(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_observer(world, {
+        .query.terms[0] = { .id = ecs_id(EcsEnum) },
+        .events = {EcsOnSet},
+        .callback = enum_modified
+    });
+
+    ecs_entity_t e = ecs_enum_init(world, &(ecs_enum_desc_t){
+        .constants = {
+            {"Red"}, {"Blue"}
+        }
+    });
+
+    test_assert(e != 0);
+    /* must receive two calls, one for each enum member added */
+    test_int(enum_modified_calls, 2); 
+
+    /* run-time add a new member constant to the enum: */
+    ecs_entity_t old_scope = ecs_set_scope(world, e);
+    ecs_entity_t c = ecs_entity(world, {
+        .name = "Orange"
+    });
+    ecs_add_id(world, c, EcsConstant);
+    ecs_set_scope(world, old_scope);
+
+    /* check if observer was called after adding */
+    /* a new member constant */
+    test_int(enum_modified_calls, 3); 
+
+    meta_test_enum(world, e, 3);
+    meta_test_constant(world, e, "Red", 0);
+    meta_test_constant(world, e, "Blue", 1);
+    meta_test_constant(world, e, "Orange", 2);
+
+    ecs_fini(world);
 }

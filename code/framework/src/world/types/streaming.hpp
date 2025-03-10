@@ -18,9 +18,9 @@ namespace Framework::World::Archetypes {
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
             e.add<Framework::World::Modules::Base::Transform>();
 
-            const auto streamable             = e.get_mut<Framework::World::Modules::Base::Streamable>();
-            streamable->owner                 = guid;
-            streamable->defaultUpdateInterval = CoreModules::GetTickRate() * 1000.0f; // we need ms here
+            auto &streamable                 = e.ensure<Framework::World::Modules::Base::Streamable>();
+            streamable.owner                 = guid;
+            streamable.defaultUpdateInterval = CoreModules::GetTickRate() * 1000.0f; // we need ms here
 
             e.add<Framework::World::Modules::Base::TickRateRegulator>();
         }
@@ -29,14 +29,17 @@ namespace Framework::World::Archetypes {
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            const auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
             Framework::World::Modules::Base::SetupClientEmitters(streamable);
+
+            auto ass = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            (void)ass;
         }
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
 
-            const auto streamable = e.get_mut<Framework::World::Modules::Base::Streamable>();
+            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
             Framework::World::Modules::Base::SetupServerEmitters(streamable);
         }
     };

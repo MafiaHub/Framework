@@ -18,9 +18,7 @@
 
 #include "flecs.h"
 #include "storage/entity_index.h"
-#include "datastructures/stack_allocator.h"
-#include "flecs/private/bitset.h"
-#include "flecs/private/switch_list.h"
+#include "flecs/datastructures/bitset.h"
 #include "storage/table.h"
 
 /* Used in id records to keep track of entities used with id flags */
@@ -36,9 +34,6 @@ extern const ecs_entity_t EcsFlag;
 #define ecs_world_t_tag     invalid
 #define ecs_stage_t_tag     invalid
 #define ecs_query_t_tag     EcsQuery
-#define ecs_rule_t_tag      EcsQuery
-#define ecs_table_t_tag     invalid
-#define ecs_filter_t_tag    EcsQuery
 #define ecs_observer_t_tag  EcsObserver
 
 /* Mixin kinds */
@@ -46,7 +41,6 @@ typedef enum ecs_mixin_kind_t {
     EcsMixinWorld,
     EcsMixinEntity,
     EcsMixinObservable,
-    EcsMixinIterable,
     EcsMixinDtor,
     EcsMixinMax
 } ecs_mixin_kind_t;
@@ -63,9 +57,7 @@ struct ecs_mixins_t {
 /* Mixin tables */
 extern ecs_mixins_t ecs_world_t_mixins;
 extern ecs_mixins_t ecs_stage_t_mixins;
-extern ecs_mixins_t ecs_filter_t_mixins;
 extern ecs_mixins_t ecs_query_t_mixins;
-extern ecs_mixins_t ecs_trigger_t_mixins;
 extern ecs_mixins_t ecs_observer_t_mixins;
 
 /* Types that have no mixins */
@@ -81,14 +73,6 @@ typedef struct ecs_hashed_string_t {
     uint64_t hash;
 } ecs_hashed_string_t;
 
-/** Must appear as first member in payload of table cache */
-typedef struct ecs_table_cache_hdr_t {
-    struct ecs_table_cache_t *cache;
-    ecs_table_t *table;
-    struct ecs_table_cache_hdr_t *prev, *next;
-    bool empty;
-} ecs_table_cache_hdr_t;
-
 /** Linked list of tables in table cache */
 typedef struct ecs_table_cache_list_t {
     ecs_table_cache_hdr_t *first;
@@ -102,194 +86,6 @@ typedef struct ecs_table_cache_t {
     ecs_table_cache_list_t tables;
     ecs_table_cache_list_t empty_tables;
 } ecs_table_cache_t;
-
-/* Sparse query term */
-typedef struct flecs_switch_term_t {
-    ecs_switch_t *sw_column;
-    ecs_entity_t sw_case; 
-    int32_t signature_column_index;
-} flecs_switch_term_t;
-
-/* Bitset query term */
-typedef struct flecs_bitset_term_t {
-    ecs_bitset_t *bs_column;
-    int32_t column_index;
-} flecs_bitset_term_t;
-
-typedef struct flecs_flat_monitor_t {
-    int32_t table_state;
-    int32_t monitor;
-} flecs_flat_monitor_t;
-
-/* Flat table term */
-typedef struct flecs_flat_table_term_t {
-    int32_t field_index; /* Iterator field index */
-    ecs_term_t *term;
-    ecs_vec_t monitor;
-} flecs_flat_table_term_t;
-
-/* Entity filter. This filters the entities of a matched table, for example when
- * it has disabled components or union relationships (switch). */
-typedef struct ecs_entity_filter_t {
-    ecs_vec_t sw_terms;              /* Terms with switch (union) entity filter */
-    ecs_vec_t bs_terms;              /* Terms with bitset (toggle) entity filter */
-    ecs_vec_t ft_terms;              /* Terms with components from flattened tree */
-    int32_t flat_tree_column;
-} ecs_entity_filter_t;
-
-typedef struct ecs_entity_filter_iter_t {
-    ecs_entity_filter_t *entity_filter;
-    ecs_iter_t *it;
-    int32_t *columns;
-    ecs_table_t *prev;
-    ecs_table_range_t range;
-    int32_t bs_offset;
-    int32_t sw_offset;
-    int32_t sw_smallest;
-    int32_t flat_tree_offset;
-    int32_t target_count;
-} ecs_entity_filter_iter_t;
-
-/** Table match data.
- * Each table matched by the query is represented by a ecs_query_table_match_t
- * instance, which are linked together in a list. A table may match a query
- * multiple times (due to wildcard queries) with different columns being matched
- * by the query. */
-struct ecs_query_table_match_t {
-    ecs_query_table_match_t *next, *prev;
-    ecs_table_t *table;              /* The current table. */
-    int32_t offset;                  /* Starting point in table  */
-    int32_t count;                   /* Number of entities to iterate in table */
-    int32_t *columns;                /* Mapping from query fields to table columns */
-    int32_t *storage_columns;        /* Mapping from query fields to storage columns */
-    ecs_id_t *ids;                   /* Resolved (component) ids for current table */
-    ecs_entity_t *sources;           /* Subjects (sources) of ids */
-    ecs_vec_t refs;                  /* Cached components for non-this terms */
-    uint64_t group_id;               /* Value used to organize tables in groups */
-    int32_t *monitor;                /* Used to monitor table for changes */
-    ecs_entity_filter_t *entity_filter; /* Entity specific filters */
-
-    /* Next match in cache for same table (includes empty tables) */
-    ecs_query_table_match_t *next_match;
-};
-
-/** Table record type for query table cache. A query only has one per table. */
-typedef struct ecs_query_table_t {
-    ecs_table_cache_hdr_t hdr;       /* Header for ecs_table_cache_t */
-    ecs_query_table_match_t *first;  /* List with matches for table */
-    ecs_query_table_match_t *last;   /* Last discovered match for table */
-    uint64_t table_id;
-    int32_t rematch_count;           /* Track whether table was rematched */
-} ecs_query_table_t;
-
-/** Points to the beginning & ending of a query group */
-typedef struct ecs_query_table_list_t {
-    ecs_query_table_match_t *first;
-    ecs_query_table_match_t *last;
-    ecs_query_group_info_t info;
-} ecs_query_table_list_t;
-
-/* Query event type for notifying queries of world events */
-typedef enum ecs_query_eventkind_t {
-    EcsQueryTableMatch,
-    EcsQueryTableRematch,
-    EcsQueryTableUnmatch,
-    EcsQueryOrphan
-} ecs_query_eventkind_t;
-
-typedef struct ecs_query_event_t {
-    ecs_query_eventkind_t kind;
-    ecs_table_t *table;
-    ecs_query_t *parent_query;
-} ecs_query_event_t;
-
-/* Query level block allocators have sizes that depend on query field count */
-typedef struct ecs_query_allocators_t {
-    ecs_block_allocator_t columns;
-    ecs_block_allocator_t ids;
-    ecs_block_allocator_t sources;
-    ecs_block_allocator_t monitors;
-} ecs_query_allocators_t;
-
-/** Query that is automatically matched against tables */
-struct ecs_query_t {
-    ecs_header_t hdr;
-
-    /* Query filter */
-    ecs_filter_t filter;
-
-    /* Tables matched with query */
-    ecs_table_cache_t cache;
-
-    /* Linked list with all matched non-empty tables, in iteration order */
-    ecs_query_table_list_t list;
-
-    /* Contains head/tail to nodes of query groups (if group_by is used) */
-    ecs_map_t groups;
-
-    /* Table sorting */
-    ecs_entity_t order_by_component;
-    ecs_order_by_action_t order_by;
-    ecs_sort_table_action_t sort_table;
-    ecs_vec_t table_slices;
-    int32_t order_by_term;
-
-    /* Table grouping */
-    ecs_entity_t group_by_id;
-    ecs_group_by_action_t group_by;
-    ecs_group_create_action_t on_group_create;
-    ecs_group_delete_action_t on_group_delete;
-    void *group_by_ctx;
-    ecs_ctx_free_t group_by_ctx_free;
-
-    /* Subqueries */
-    ecs_query_t *parent;
-    ecs_vec_t subqueries;
-
-    /* Flags for query properties */
-    ecs_flags32_t flags;
-
-    /* Monitor generation */
-    int32_t monitor_generation;
-
-    int32_t cascade_by;              /* Identify cascade term */
-    int32_t match_count;             /* How often have tables been (un)matched */
-    int32_t prev_match_count;        /* Track if sorting is needed */
-    int32_t rematch_count;           /* Track which tables were added during rematch */
-
-    /* User context */
-    void *ctx;                       /* User context to pass to callback */
-    void *binding_ctx;               /* Context to be used for language bindings */
-     
-    ecs_ctx_free_t ctx_free;         /** Callback to free ctx */
-    ecs_ctx_free_t binding_ctx_free; /** Callback to free binding_ctx */
-
-    /* Mixins */
-    ecs_iterable_t iterable;
-    ecs_poly_dtor_t dtor;
-
-    /* Query-level allocators */
-    ecs_query_allocators_t allocators;
-};
-
-/** All observers for a specific (component) id */
-typedef struct ecs_event_id_record_t {
-    /* Triggers for Self */
-    ecs_map_t self;                  /* map<trigger_id, trigger_t> */
-    ecs_map_t self_up;               /* map<trigger_id, trigger_t> */
-    ecs_map_t up;                    /* map<trigger_id, trigger_t> */
-
-    ecs_map_t observers;             /* map<trigger_id, trigger_t> */
-
-    /* Triggers for SuperSet, SubSet */
-    ecs_map_t set_observers;         /* map<trigger_id, trigger_t> */
-
-    /* Triggers for Self with non-This subject */
-    ecs_map_t entity_observers;      /* map<trigger_id, trigger_t> */
-
-    /* Number of active observers for (component) id */
-    int32_t observer_count;
-} ecs_event_id_record_t;
 
 /* World level allocators are for operations that are not multithreaded */
 typedef struct ecs_world_allocators_t {
@@ -314,6 +110,8 @@ typedef struct ecs_stage_allocators_t {
     ecs_stack_t iter_stack;
     ecs_stack_t deser_stack;
     ecs_block_allocator_t cmd_entry_chunk;
+    ecs_block_allocator_t query_impl;
+    ecs_block_allocator_t query_cache;
 } ecs_stage_allocators_t;
 
 /** Types for deferred operations */
@@ -324,7 +122,7 @@ typedef enum ecs_cmd_kind_t {
     EcsCmdRemove,   
     EcsCmdSet,
     EcsCmdEmplace,
-    EcsCmdMut,
+    EcsCmdEnsure,
     EcsCmdModified,
     EcsCmdModifiedNoHook,
     EcsCmdAddModified,
@@ -345,7 +143,7 @@ typedef struct ecs_cmd_entry_t {
 } ecs_cmd_entry_t;
 
 typedef struct ecs_cmd_1_t {
-    void *value;                     /* Component value (used by set / get_mut) */
+    void *value;                     /* Component value (used by set / ensure) */
     ecs_size_t size;                 /* Size of value */
     bool clone_value;                /* Clone entity with value (used for clone) */ 
 } ecs_cmd_1_t;
@@ -367,6 +165,8 @@ typedef struct ecs_cmd_t {
         ecs_cmd_1_t _1;              /* Data for single entity operation */
         ecs_cmd_n_t _n;              /* Data for multi entity operation */
     } is;
+
+    ecs_entity_t system;             /* System that enqueued the command */
 } ecs_cmd_t;
 
 /* Data structures that store the command queue */
@@ -376,10 +176,22 @@ typedef struct ecs_commands_t {
     ecs_sparse_t entries;       /* <entity, op_entry_t> - command batching */
 } ecs_commands_t;
 
+/** Callback used to capture commands of a frame */
+typedef void (*ecs_on_commands_action_t)(
+    const ecs_stage_t *stage,
+    const ecs_vec_t *commands,
+    void *ctx);
+
 /** A stage is a context that allows for safely using the API from multiple 
  * threads. Stage pointers can be passed to the world argument of API 
  * operations, which causes the operation to be ran on the stage instead of the
- * world. */
+ * world. The features provided by a stage are:
+ * 
+ *  - A command queue for deferred ECS operations and events
+ *  - Thread specific allocators
+ *  - Thread specific world state (like current scope, with, current system)
+ *  - Thread specific buffers for preventing allocations
+ */
 struct ecs_stage_t {
     ecs_header_t hdr;
 
@@ -408,22 +220,26 @@ struct ecs_stage_t {
     ecs_entity_t base;               /* Currently instantiated top-level base */
     const ecs_entity_t *lookup_path; /* Search path used by lookup operations */
 
-    /* Properties */
-    bool auto_merge;                 /* Should this stage automatically merge? */
-    bool async;                      /* Is stage asynchronous? (write only) */
+    /* Running system */
+    ecs_entity_t system;
 
     /* Thread specific allocators */
     ecs_stage_allocators_t allocators;
     ecs_allocator_t allocator;
 
-    /* Caches for rule creation */
+    /* Caches for query creation */
     ecs_vec_t variables;
     ecs_vec_t operations;
+
+    /* Temporary token storage for DSL parser. This allows for parsing and 
+     * interpreting a term without having to do allocations. */
+    char parser_tokens[1024];
+    char *parser_token; /* Pointer to next token */
 };
 
 /* Component monitor */
 typedef struct ecs_monitor_t {
-    ecs_vec_t queries;               /* vector<ecs_query_t*> */
+    ecs_vec_t queries;               /* vector<ecs_query_cache_t*> */
     bool is_dirty;                   /* Should queries be rematched? */
 } ecs_monitor_t;
 
@@ -445,7 +261,7 @@ typedef struct ecs_store_t {
     /* Entity lookup */
     ecs_entity_index_t entity_index;
 
-    /* Table lookup by id */
+    /* Tables */
     ecs_sparse_t tables;             /* sparse<table_id, ecs_table_t> */
 
     /* Table lookup by hash */
@@ -454,15 +270,19 @@ typedef struct ecs_store_t {
     /* Root table */
     ecs_table_t root;
 
+    /* Observers */
+    ecs_sparse_t observers;          /* sparse<table_id, ecs_table_t> */
+
     /* Records cache */
     ecs_vec_t records;
 
-    /* Stack of ids being deleted. */
+    /* Stack of ids being deleted during cleanup action. */
     ecs_vec_t marked_ids;            /* vector<ecs_marked_ids_t> */
-    
-    /* Entity ids associated with depth (for flat hierarchies) */
-    ecs_vec_t depth_ids;
-    ecs_map_t entity_to_depth; /* What it says */
+
+    /* Components deleted during cleanup action. Used to delay cleaning up of
+     * type info so it's guaranteed that this data is available while the 
+     * storage is cleaning up tables. */
+    ecs_vec_t deleted_components;    /* vector<ecs_entity_t> */
 } ecs_store_t;
 
 /* fini actions */
@@ -495,7 +315,6 @@ struct ecs_world_t {
     /* -- Mixins -- */
     ecs_world_t *self;
     ecs_observable_t observable;
-    ecs_iterable_t iterable;
 
     /* Unique id per generated event used to prevent duplicate notifications */
     int32_t event_id;
@@ -521,8 +340,17 @@ struct ecs_world_t {
     ecs_hashmap_t symbols;
 
     /* -- Staging -- */
-    ecs_stage_t *stages;             /* Stages */
+    ecs_stage_t **stages;            /* Stages */
     int32_t stage_count;             /* Number of stages */
+
+    /* Internal callback for command inspection. Only one callback can be set at
+     * a time. After assignment the action will become active at the start of 
+     * the next frame, set by ecs_frame_begin, and will be reset by 
+     * ecs_frame_end. */
+    ecs_on_commands_action_t on_commands;
+    ecs_on_commands_action_t on_commands_active;
+    void *on_commands_ctx;
+    void *on_commands_ctx_active;
 
     /* -- Multithreading -- */
     ecs_os_cond_t worker_cond;       /* Signal that worker threads can start */
@@ -543,6 +371,9 @@ struct ecs_world_t {
 
     /* -- World flags -- */
     ecs_flags32_t flags;
+
+    /* -- Default query flags -- */
+    ecs_flags32_t default_query_flags;
 
     /* Count that increases when component monitors change */
     int32_t monitor_generation;

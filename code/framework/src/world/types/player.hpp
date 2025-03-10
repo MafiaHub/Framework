@@ -18,8 +18,8 @@ namespace Framework::World::Archetypes {
     class PlayerFactory {
       private:
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
-            const auto streamer = e.get_mut<World::Modules::Base::Streamer>();
-            streamer->guid      = guid;
+            auto &streamer = e.ensure<World::Modules::Base::Streamer>();
+            streamer.guid      = guid;
         }
 
       public:
@@ -30,14 +30,15 @@ namespace Framework::World::Archetypes {
         inline void SetupServer(flecs::entity e, uint64_t guid, uint16_t playerIndex, const std::string &nickname) {
             SetupDefaults(e, guid);
 
-            const auto streamable       = e.get_mut<World::Modules::Base::Streamable>();
-            streamable->assignOwnerProc = [](flecs::entity, World::Modules::Base::Streamable &) {
+            auto &streamable           = e.ensure<World::Modules::Base::Streamable>();
+            streamable.assignOwnerProc = [](flecs::entity, World::Modules::Base::Streamable &) {
                 return true; /* always keep current owner */
             };
 
-            const auto streamer   = e.get_mut<World::Modules::Base::Streamer>();
-            streamer->nickname    = nickname;
-            streamer->playerIndex = playerIndex;
+            auto &streamer       = e.ensure<World::Modules::Base::Streamer>();
+            streamer.nickname    = nickname;
+            streamer.playerIndex = playerIndex;
+            streamer.guid        = guid;
         }
     };
 } // namespace Framework::World::Archetypes

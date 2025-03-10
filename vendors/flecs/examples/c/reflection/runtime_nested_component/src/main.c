@@ -20,8 +20,8 @@ int main(int argc, char *argv[]) {
     });
 
     // Create entity, set value of position using reflection API
-    ecs_entity_t ent = ecs_new_entity(ecs, "ent");
-    void *ptr = ecs_get_mut_id(ecs, ent, Line);
+    ecs_entity_t ent = ecs_entity(ecs, { .name = "ent" });
+    void *ptr = ecs_ensure_id(ecs, ent, Line);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(ecs, Line, ptr);
     ecs_meta_push(&cur);          // {

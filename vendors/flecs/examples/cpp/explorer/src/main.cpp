@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
     flecs::world world(argc, argv);
 
     world.import<flecs::units>();
-    world.import<flecs::monitor>(); // Collect statistics periodically
+    world.import<flecs::stats>(); // Collect statistics periodically
 
     // Mass component
     world.component<Mass>()
@@ -32,6 +32,6 @@ int main(int argc, char *argv[]) {
     // Run application with REST interface. When the application is running,
     // navigate to https://flecs.dev/explorer to inspect it!
     //
-    // See docs/RestApi.md#explorer for more information.
-    return world.app().enable_rest().run();
+    // See docs/FlecsRemoteApi.md#explorer for more information.
+    // return world.app().enable_rest().run();
 }

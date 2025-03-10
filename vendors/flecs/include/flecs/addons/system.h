@@ -11,9 +11,9 @@
 
 /**
  * @defgroup c_addons_system System
- * @brief Systems are a query + function that can be ran manually or by a pipeline.
- * 
- * \ingroup c_addons
+ * @ingroup c_addons
+ * Systems are a query + function that can be ran manually or by a pipeline.
+ *
  * @{
  */
 
@@ -34,7 +34,7 @@ typedef struct EcsTickSource {
     ecs_ftime_t time_elapsed;  /**< Time elapsed since last tick */
 } EcsTickSource;
 
-/** Use with ecs_system_init */
+/** Use with ecs_system_init() to create or update a system. */
 typedef struct ecs_system_desc_t {
     int32_t _canary;
 
@@ -44,37 +44,42 @@ typedef struct ecs_system_desc_t {
     /** System query parameters */
     ecs_query_desc_t query;
 
-    /** Callback that is invoked when a system is ran. 
-     * When left to NULL, the default system runner is used, which calls the 
-     * "callback" action for each result returned from the system's query. 
-     * 
-     * It should not be assumed that the input iterator can always be iterated
-     * with ecs_query_next. When a system is multithreaded and/or paged, the
-     * iterator can be either a worker or paged iterator. Future use cases may
-     * introduce additional inputs for a system, such as rules and filters. The
-     * correct function to use for iteration is ecs_iter_next.
-     * 
-     * An implementation can test whether the iterator is a query iterator by
-     * testing whether the it->next value is equal to ecs_query_next. */
-    ecs_run_action_t run;
-
     /** Callback that is ran for each result returned by the system's query. This
      * means that this callback can be invoked multiple times per system per
      * frame, typically once for each matching table. */
     ecs_iter_action_t callback;
 
+    /** Callback that is invoked when a system is ran.
+     * When left to NULL, the default system runner is used, which calls the
+     * "callback" action for each result returned from the system's query.
+     *
+     * It should not be assumed that the input iterator can always be iterated
+     * with ecs_query_next(). When a system is multithreaded and/or paged, the
+     * iterator can be either a worker or paged iterator. The correct function 
+     * to use for iteration is ecs_iter_next().
+     *
+     * An implementation can test whether the iterator is a query iterator by
+     * testing whether the it->next value is equal to ecs_query_next(). */
+    ecs_run_action_t run;
+
     /** Context to be passed to callback (as ecs_iter_t::param) */
     void *ctx;
 
-    /** Binding context, for when system is implemented in other language */
-    void *binding_ctx;
-
-    /** Functions that are invoked during system cleanup to free context data.
-     * When set, functions are called unconditionally, even when the ctx
-     * pointers are NULL. */
+    /** Callback to free ctx. */
     ecs_ctx_free_t ctx_free;
-    ecs_ctx_free_t binding_ctx_free;
 
+    /** Context associated with callback (for language bindings). */
+    void *callback_ctx;
+
+    /** Callback to free callback ctx. */
+    ecs_ctx_free_t callback_ctx_free;
+
+    /** Context associated with run (for language bindings). */
+    void *run_ctx;
+
+    /** Callback to free run ctx. */
+    ecs_ctx_free_t run_ctx_free;
+    
     /** Interval in seconds at which the system should run */
     ecs_ftime_t interval;
 
@@ -89,7 +94,7 @@ typedef struct ecs_system_desc_t {
 
     /** If true, system will have access to the actual world. Cannot be true at the
      * same time as multi_threaded. */
-    bool no_readonly;
+    bool immediate;
 } ecs_system_desc_t;
 
 /** Create a system */
@@ -98,35 +103,119 @@ ecs_entity_t ecs_system_init(
     ecs_world_t *world,
     const ecs_system_desc_t *desc);
 
+/** System type, get with ecs_system_get() */
+typedef struct ecs_system_t {
+    ecs_header_t hdr;
+
+    /** See ecs_system_desc_t */
+    ecs_run_action_t run;
+
+    /** See ecs_system_desc_t */
+    ecs_iter_action_t action;
+
+    /** System query */
+    ecs_query_t *query;
+
+    /** Entity associated with query */
+    ecs_entity_t query_entity;
+
+    /** Tick source associated with system */
+    ecs_entity_t tick_source;
+
+    /** Is system multithreaded */
+    bool multi_threaded;
+
+    /** Is system ran in immediate mode */
+    bool immediate;
+
+    /** Cached system name (for perf tracing) */
+    const char *name;
+
+    /** Userdata for system */
+    void *ctx;
+
+    /** Callback language binding context */
+    void *callback_ctx;
+
+    /** Run language binding context */
+    void *run_ctx;
+
+    /** Callback to free ctx. */
+    ecs_ctx_free_t ctx_free;
+
+    /** Callback to free callback ctx. */
+    ecs_ctx_free_t callback_ctx_free;
+
+    /** Callback to free run ctx. */
+    ecs_ctx_free_t run_ctx_free;
+
+    /** Time spent on running system */
+    ecs_ftime_t time_spent;
+
+    /** Time passed since last invocation */
+    ecs_ftime_t time_passed;
+
+    /** Last frame for which the system was considered */
+    int64_t last_frame;
+
+    /* Mixins */
+    ecs_world_t *world;
+    ecs_entity_t entity;
+    flecs_poly_dtor_t dtor;      
+} ecs_system_t;
+
+/** Get system object.
+ * Returns the system object. Can be used to access various information about
+ * the system, like the query and context.
+ *
+ * @param world The world.
+ * @param system The system.
+ * @return The system object.
+ */
+FLECS_API
+const ecs_system_t* ecs_system_get(
+    const ecs_world_t *world,
+    ecs_entity_t system);
+
 #ifndef FLECS_LEGACY
 
 /** Forward declare a system. */
 #define ECS_SYSTEM_DECLARE(id) ecs_entity_t ecs_id(id)
 
 /** Define a forward declared system.
- * 
+ *
  * Example:
- *   ECS_SYSTEM_DEFINE(world, Move, EcsOnUpdate, Position, Velocity);
+ *
+ * @code
+ * ECS_SYSTEM_DEFINE(world, Move, EcsOnUpdate, Position, Velocity);
+ * @endcode
  */
 #define ECS_SYSTEM_DEFINE(world, id_, phase, ...) \
     { \
         ecs_system_desc_t desc = {0}; \
         ecs_entity_desc_t edesc = {0}; \
+        ecs_id_t add_ids[3] = {\
+            ((phase) ? ecs_pair(EcsDependsOn, (phase)) : 0), \
+            (phase), \
+            0 \
+        };\
         edesc.id = ecs_id(id_);\
         edesc.name = #id_;\
-        edesc.add[0] = ((phase) ? ecs_pair(EcsDependsOn, (phase)) : 0); \
-        edesc.add[1] = (phase); \
+        edesc.add = add_ids;\
         desc.entity = ecs_entity_init(world, &edesc);\
-        desc.query.filter.expr = #__VA_ARGS__; \
+        desc.query.expr = #__VA_ARGS__; \
         desc.callback = id_; \
         ecs_id(id_) = ecs_system_init(world, &desc); \
     } \
-    ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, NULL)
+    ecs_assert(ecs_id(id_) != 0, ECS_INVALID_PARAMETER, "failed to create system %s", #id_)
 
 /** Declare & define a system.
- * 
+ *
  * Example:
- *   ECS_SYSTEM(world, Move, EcsOnUpdate, Position, Velocity);
+ *
+ * @code
+ * ECS_SYSTEM(world, Move, EcsOnUpdate, Position, Velocity);
+ * @endcode
  */
 #define ECS_SYSTEM(world, id, phase, ...) \
     ecs_entity_t ecs_id(id) = 0; ECS_SYSTEM_DEFINE(world, id, phase, __VA_ARGS__);\
@@ -134,20 +223,23 @@ ecs_entity_t ecs_system_init(
     (void)ecs_id(id);\
     (void)id
 
-/** Shorthand for creating a system with ecs_system_init.
+/** Shorthand for creating a system with ecs_system_init().
  *
  * Example:
- *   ecs_system(world, {
- *     .entity = ecs_entity(world, {
- *       .name = "MyEntity",
- *       .add = { ecs_dependson(EcsOnUpdate) }
- *     }),
- *     .query.filter.terms = {
- *       { ecs_id(Position) },
- *       { ecs_id(Velocity) }
- *     },
- *     .callback = Move
- *   });
+ *
+ * @code
+ * ecs_system(world, {
+ *   .entity = ecs_entity(world, {
+ *     .name = "MyEntity",
+ *     .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
+ *   }),
+ *   .query.terms = {
+ *     { ecs_id(Position) },
+ *     { ecs_id(Velocity) }
+ *   },
+ *   .callback = Move
+ * });
+ * @endcode
  */
 #define ecs_system(world, ...)\
     ecs_system_init(world, &(ecs_system_desc_t) __VA_ARGS__ )
@@ -159,7 +251,7 @@ ecs_entity_t ecs_system_init(
  * invoke logic on a set of entities, as manual systems are only matched to
  * tables at creation time or after creation time, when a new table is created.
  *
- * Manual systems are useful to evaluate lists of prematched entities at
+ * Manual systems are useful to evaluate lists of pre-matched entities at
  * application defined times. Because none of the matching logic is evaluated
  * before the system is invoked, manual systems are much more efficient than
  * manually obtaining a list of entities and retrieving their components.
@@ -188,8 +280,8 @@ ecs_entity_t ecs_run(
     ecs_ftime_t delta_time,
     void *param);
 
-/** Same as ecs_run, but subdivides entities across number of provided stages.
- * 
+/** Same as ecs_run(), but subdivides entities across number of provided stages.
+ *
  * @param world The world.
  * @param system The system to run.
  * @param stage_current The id of the current stage.
@@ -207,76 +299,14 @@ ecs_entity_t ecs_run_worker(
     ecs_ftime_t delta_time,
     void *param);
 
-/** Run system with offset/limit and type filter.
- * This operation is the same as ecs_run, but filters the entities that will be
- * iterated by the system.
- * 
- * Entities can be filtered in two ways. Offset and limit control the range of
- * entities that is iterated over. The range is applied to all entities matched
- * with the system, thus may cover multiple archetypes.
- * 
- * The type filter controls which entity types the system will evaluate. Only
- * types that contain all components in the type filter will be iterated over. A
- * type filter is only evaluated once per table, which makes filtering cheap if
- * the number of entities is large and the number of tables is small, but not as
- * cheap as filtering in the system signature.
+/** System module import function.
+ * Usage:
+ * @code
+ * ECS_IMPORT(world, FlecsSystem)
+ * @endcode
  * 
  * @param world The world.
- * @param system The system to invoke.
- * @param delta_time The time passed since the last system invocation.
- * @param param A user-defined parameter to pass to the system.
- * @return handle to last evaluated entity if system was interrupted.
  */
-FLECS_API
-ecs_entity_t ecs_run_w_filter(
-    ecs_world_t *world,
-    ecs_entity_t system,
-    ecs_ftime_t delta_time,
-    int32_t offset,
-    int32_t limit,
-    void *param);
-
-/** Get the query object for a system.
- * Systems use queries under the hood. This enables an application to get access
- * to the underlying query object of a system. This can be useful when, for 
- * example, an application needs to enable sorting for a system.
- *
- * @param world The world.
- * @param system The system from which to obtain the query.
- * @return The query.
- */
-FLECS_API
-ecs_query_t* ecs_system_get_query(
-    const ecs_world_t *world,
-    ecs_entity_t system);
-
-/** Get system context.
- * This operation returns the context pointer set for the system. If
- * the provided entity is not a system, the function will return NULL.
- *
- * @param world The world.
- * @param system The system from which to obtain the context.
- * @return The context.
- */
-FLECS_API
-void* ecs_system_get_ctx(
-    const ecs_world_t *world,
-    ecs_entity_t system);
-
-/** Get system binding context.
- * The binding context is a context typically used to attach any language 
- * binding specific data that is needed when invoking a callback that is 
- * implemented in another language.
- *
- * @param world The world.
- * @param system The system from which to obtain the context.
- * @return The context.
- */
-FLECS_API
-void* ecs_system_get_binding_ctx(
-    const ecs_world_t *world,
-    ecs_entity_t system);
-
 FLECS_API
 void FlecsSystemImport(
     ecs_world_t *world);

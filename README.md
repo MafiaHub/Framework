@@ -9,7 +9,7 @@
 
 <br />
 <div align="center">
-  Opionated suite of tools and libraries to accelerate build multi-player modifications for AAA games.
+  Opinionated suite of tools and libraries to accelerate build multi-player modifications for AAA games.
 </div>
 
 <div align="center">
@@ -47,17 +47,12 @@ If you're interested in development, please read our [Contribution Guidelines](.
 
 We use **CMake** to build our projects so that you can use any of the supported build systems. We currently support **Windows**, **Linux**, and **MacOS** operating systems. You can follow this guide to get started:
 
-First make sure your Git client supports LFS objects, visit [Git LFS page](https://git-lfs.github.com/) for more info.
-
 ```sh
 # Clone the repo
 git clone https://github.com/MafiaHub/Framework.git
 cd Framework
 
-# Pull LFS objects
-git lfs pull
 ```
-**Note:** If you have issues cloning the repository (Git LFS-related errors), first ensure you have Git LFS support enabled. If you do, and this looks to be a server issue, please get in touch with [@ZaKlaus](https://github.com/zpl-zak) on our [Discord](https://discord.gg/eBQ4QHX) server to investigate it.
 
 ### Build on macOS/Linux
 ```

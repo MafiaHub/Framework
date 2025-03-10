@@ -92,6 +92,7 @@ namespace Framework::Integrations::Server {
         void InitEndpoints();
         void InitModules() const;
         void InitNetworkingMessages() const;
+        void InitAssetStreamer();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::ServerEngine *);
 

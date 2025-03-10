@@ -98,9 +98,8 @@ flecs::entity get_container(flecs::entity container) {
 // Iterate all items in an inventory
 template <typename Func>
 void for_each_item(flecs::entity container, const Func& func) {
-    container.world().filter_builder()
+    container.world().query_builder()
         .with<ContainedBy>(container)
-        .build()
         .each(func);
 }
 
@@ -141,8 +140,8 @@ void transfer_item(flecs::entity container, flecs::entity item) {
         flecs::entity dst_item = find_item_w_kind(container, ik);
         if (dst_item) {
             // If a matching item was found, increase its amount
-            Amount *dst_amt = dst_item.get_mut<Amount>();
-            dst_amt->value += amt->value;
+            Amount& dst_amt = dst_item.ensure<Amount>();
+            dst_amt.value += amt->value;
             item.destruct(); // Remove the src item
             return;
         } else {
@@ -218,24 +217,24 @@ void attack(flecs::entity player, flecs::entity weapon) {
     }
 
     // For each usage of the weapon, subtract one from its health
-    Health *weapon_health = weapon.get_mut<Health>();
-    if (!--weapon_health->value) {
+    Health& weapon_health = weapon.ensure<Health>();
+    if (!--weapon_health.value) {
         std::cout << " - " << item_name(weapon) << " is destroyed!\n";
         weapon.destruct();
     } else {
         std::cout << " - " << item_name(weapon) << " has " 
-            << weapon_health->value << " uses left";
+            << weapon_health.value << " uses left";
     }
 
     // If armor didn't counter the whole attack, subtract from the player health
     if (att_value) {
-        Health *player_health = player.get_mut<Health>();
-        if (!(player_health->value -= att_value)) {
+        Health& player_health = player.ensure<Health>();
+        if (!(player_health.value -= att_value)) {
             std::cout << " - " << player.name() << " died!\n";
             player.destruct();
         } else {
             std::cout << " - " << player.name() << " has " 
-                << player_health->value << " health left after taking " 
+                << player_health.value << " health left after taking " 
                 << att_value << " damage\n";
         }
     }
@@ -289,17 +288,17 @@ int main(int, char *[]) {
     // Register item prefabs
     ecs.prefab<WoodenSword>().add<Sword>()
         .set<Attack>({ 1 })
-        .set_override<Health>({ 5 }); // copy to instance, don't share
+        .set_auto_override<Health>({ 5 }); // copy to instance, don't share
 
     ecs.prefab<IronSword>().add<Sword>()
         .set<Attack>({ 2 })
-        .set_override<Health>({ 10 });
+        .set_auto_override<Health>({ 10 });
 
     ecs.prefab<WoodenArmor>().add<Armor>()
-        .set_override<Health>({ 10 });
+        .set_auto_override<Health>({ 10 });
 
     ecs.prefab<IronArmor>().add<Armor>()
-        .set_override<Health>({ 20 });
+        .set_auto_override<Health>({ 20 });
 
     // Create a loot box with items
     flecs::entity loot_box = ecs.entity("Chest").add<Container>().with<ContainedBy>([&]{

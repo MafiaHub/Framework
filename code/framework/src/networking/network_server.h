@@ -26,13 +26,15 @@ namespace Framework::Networking {
       private:
         Messages::PacketCallback _onPlayerConnectCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
+        SLNet::FileListTransfer _fileListTransfer;
+
         bool SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, SLNet::RakNetGUID excludeGUID = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
             PacketReliability reliability = RELIABLE_ORDERED) const;
 
       public:
         NetworkServer(): NetworkPeer() {}
 
-        ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "") const;
+        ServerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
         ServerError Shutdown() const;
 
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;

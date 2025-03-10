@@ -22,14 +22,19 @@ Make sure to check out the code examples in the repository:
 
  - [relationships (C)](https://github.com/SanderMertens/flecs/tree/master/examples/c/relationships)
  - [relationships (C++)](https://github.com/SanderMertens/flecs/tree/master/examples/cpp/relationships)
+ - [relationships (C#)](https://github.com/BeanCheeseBurrito/Flecs.NET/tree/main/src/Flecs.NET.Examples/Cpp/Relationships)
 
 ## Introduction
 The following code is a simple example that uses relationships:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t Likes = ecs_new_id(world);
-ecs_entity_t Bob = ecs_new_id(world);
-ecs_entity_t Alice = ecs_new_id(world);
+ecs_entity_t Likes = ecs_new(world);
+ecs_entity_t Bob = ecs_new(world);
+ecs_entity_t Alice = ecs_new(world);
 
 // Bob Likes Alice
 ecs_add_pair(world, Bob, Likes, Alice);
@@ -37,6 +42,10 @@ ecs_add_pair(world, Bob, Likes, Alice);
 // Bob Likes Alice no more
 ecs_remove_pair(world, Bob, Likes, Alice);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto Likes = world.entity();
 auto Bob = world.entity();
@@ -49,15 +58,53 @@ Bob.add(Likes, Alice);
 Bob.remove(Likes, Alice);
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity Likes = world.Entity();
+Entity Bob = world.Entity();
+Entity Alice = world.Entity();
+
+// Bob Likes Alice
+Bob.Add(Likes, Alice);
+
+// Bob Likes Alice no more
+Bob.Remove(Likes, Alice);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let likes = world.entity();
+let bob = world.entity();
+let alice = world.entity();
+
+// bob likes alice
+bob.add_id((likes, alice));
+
+// bob likes alice no more
+bob.remove_id((likes, alice));
+```
+
+</li>
+</ul>
+</div>
+
 In this example, we refer to `Bob` as the "source", `Likes` as the "relationship" and `Alice` as the "target". A relationship when combined with an target is called a "relationship pair".
 
 The same relationship can be added multiple times to an entity, as long as its target is different:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t Bob = ecs_new_id(world);
-ecs_entity_t Eats = ecs_new_id(world);
-ecs_entity_t Apples = ecs_new_id(world);
-ecs_entity_t Pears = ecs_new_id(world);
+ecs_entity_t Bob = ecs_new(world);
+ecs_entity_t Eats = ecs_new(world);
+ecs_entity_t Apples = ecs_new(world);
+ecs_entity_t Pears = ecs_new(world);
 
 ecs_add_pair(world, Bob, Eats, Apples);
 ecs_add_pair(world, Bob, Eats, Pears);
@@ -65,6 +112,10 @@ ecs_add_pair(world, Bob, Eats, Pears);
 ecs_has_pair(world, Bob, Eats, Apples); // true
 ecs_has_pair(world, Bob, Eats, Pears); // true
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto Bob = world.entity();
 auto Eats = world.entity();
@@ -78,35 +129,126 @@ Bob.has(Eats, Apples); // true
 Bob.has(Eats, Pears); // true
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity Bob = world.Entity();
+Entity Eats = world.Entity();
+Entity Apples = world.Entity();
+Entity Pears = world.Entity();
+
+Bob.Add(Eats, Apples);
+Bob.Add(Eats, Pears);
+
+Bob.Has(Eats, Apples); // true
+Bob.Has(Eats, Pears); // true
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let bob = world.entity();
+
+let eats = world.entity();
+let apples = world.entity();
+let pears = world.entity();
+
+bob.add_id((eats, apples));
+bob.add_id((eats, pears));
+
+bob.has_id((eats, apples)); // true
+bob.has_id((eats, pears)); // true
+```
+
+</li>
+</ul>
+</div>
+
 An application can query for relationships with the `(Relationship, Target)` notation:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Find all entities that eat apples
-ecs_query_t *q = ecs_query_new(world, "(Eats, Apples)");
+ecs_query_t *q = ecs_query(world, { .expr = "(Eats, Apples)" });
 
 // Find all entities that eat anything
-ecs_query_t *q = ecs_query_new(world, "(Eats, *)");
+ecs_query_t *q = ecs_query(world, { .expr = "(Eats, *)" });
 
-// Or with the ecs_query_init function:
-ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t){
-    .filter.terms = {{ecs_pair(Eats, Apples)}}
+// Or with the ecs_query_cache_init function:
+ecs_query_t *q = ecs_query(world, {
+    .terms = {{ecs_pair(Eats, Apples)}}
 });
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Find all entities that eat apples
-auto q = world.query("(Eats, Apples)");
+auto q = world.query_builder<>()
+  .expr("(Eats, Apples)")
+  .build();
 
 // Find all entities that eat anything
-auto q = world.query("(Eats, *)");
+auto q = world.query_builder<>()
+  .expr("(Eats, *)")
+  .build();
 
 // With the query builder API:
 auto q = world.query_builder<>()
-  .term(Eats, Apples)
+  .with(Eats, Apples)
   .build();
 
 // Or when using pair types, when both relationship & target are compile time types:
 auto q = world.query<flecs::pair<Eats, Apples>>();
 ```
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Find all entities that eat apples
+Query q = world.QueryBuilder()
+    .Expr("(Eats, Apples)")
+    .Build();
+
+// Find all entities that eat anything
+Query q = world.QueryBuilder()
+    .Expr("(Eats, *)")
+    .Build();
+
+// With the query builder API:
+Query q = world.QueryBuilder()
+    .Expr(Eats, Apples)
+    .Build();
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Find all entities that eat apples
+let q = world.query::<()>().expr("(Eats, Apples)").build();
+
+// Find all entities that eat anything
+let q = world.query::<()>().expr("(Eats, *)").build();
+
+// With the query builder API:
+let q = world.query::<()>().with_id((eats, apples)).build();
+
+// Or when using pair types, when both relationship & target are compile time types, they can be represented as a tuple:
+
+let q = world.new_query::<&(Eats, Apples)>();
+```
+
+</li>
+</ul>
+</div>
 
 This example just shows a simple relationship query. Relationship queries are much more powerful than this as they provide the ability to match against entity graphs of arbitrary size. For more information on relationship queries see the [query manual](Queries.md).
 
@@ -114,44 +256,168 @@ This example just shows a simple relationship query. Relationship queries are mu
 There are a number of ways an application can query for relationships. The following kinds of queries are available for all (unidirectional) relationships, and are all constant time:
 
 ### Test if entity has a relationship pair
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 ecs_has_pair(world, Bob, Eats, Apples);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 Bob.has(Eats, Apples);
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Bob.Has(Eats, Apples);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+bob.has_id((eats, apples));
+```
+
+</li>
+</ul>
+</div>
+
 ### Test if entity has a relationship wildcard
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 ecs_has_pair(world, Bob, Eats, EcsWildcard);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 Bob.has(Eats, flecs::Wildcard);
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Bob.Has(Eats, Ecs.Wildcard);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+bob.has_id((eats, flecs::Wildcard::ID));
+```
+
+</li>
+</ul>
+</div>
+
 ### Get parent for entity
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 ecs_entity_t parent = ecs_get_parent(world, Bob);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 flecs::entity parent = Bob.parent();
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity parent = Bob.Parent();
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let parent = bob.parent();
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let parent = bob.parent();
+```
+
+</li>
+</ul>
+</div>
+
 ### Find first target of a relationship for entity
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 ecs_entity_t food = ecs_get_target(world, Bob, Eats, 0);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 flecs::entity food = Bob.target(Eats);
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity food = Bob.Target(Eats);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let food = bob.target_id(eats, 0); // first target
+```
+
+</li>
+</ul>
+</div>
+
 ### Find all targets of a relationship for entity
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 int32_t index = 0;
 while ((food = ecs_get_target(world, Bob, Eats, index ++))) {
   // ...
 }
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 int32_t index = 0;
 while ((food = Bob.target(Eats, index ++))) {
@@ -159,15 +425,72 @@ while ((food = Bob.target(Eats, index ++))) {
 }
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+int index = 0;
+while ((food = Bob.Target(Eats, index++)) != 0)
+{
+  // ...
+}
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let mut index = 0;
+while bob.target_id(eats, index).is_some() {
+    index += 1;
+}
+```
+
+</li>
+</ul>
+</div>
+
 ### Find target of a relationship with component
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 ecs_entity_t parent = ecs_get_target_for(world, Bob, EcsChildOf, Position);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 flecs::entity parent = Bob.target_for<Position>(flecs::ChildOf);
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity parent = Bob.TargetFor<Position>(Ecs.ChildOf);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let parent = bob.target_for::<Position>(flecs::ChildOf::ID);
+```
+
+</li>
+</ul>
+</div>
+
 ### Iterate all pairs for entity
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 const ecs_type_t *type = ecs_get_type(world, Bob);
 for (int i = 0; i < type->count; i ++) {
@@ -178,67 +501,189 @@ for (int i = 0; i < type->count; i ++) {
   }
 }
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 Bob.each([](flecs::id id) {
   if (id.is_pair()) {
-    flecs::entity first = id.pair().first();
-    flecs::entity second = id.pair().second();
+    flecs::entity first = id.first();
+    flecs::entity second = id.second();
   }
 });
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Bob.Each((Id id) =>
+{
+    if (id.IsPair())
+    {
+        Entity first = id.First();
+        Entity second = id.Second();
+    }
+});
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+bob.each_component(|id| {
+    if id.is_pair() {
+        let first = id.first_id();
+        let second = id.second_id();
+    }
+});
+```
+
+</li>
+</ul>
+</div>
+
 ### Find all entities with a pair
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_filter_t *f = ecs_filter(world, {
+ecs_query_t *f = ecs_query(world, {
   .terms[0] = ecs_pair(Eats, Apples)
 });
 
-ecs_iter_t it = ecs_filter_iter(world, f);
-while (ecs_filter_next(&it)) {
+ecs_iter_t it = ecs_query_iter(world, f);
+while (ecs_query_next(&it)) {
   for (int i = 0; i < it.count; i ++) {
     // Iterate as usual
   }
 }
 
-ecs_filter_fini(f);
+ecs_query_fini(f);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
-world.filter_builder()
-  .term(Eats, Apples)
+world.query_builder()
+  .with(Eats, Apples)
   .build()
   .each([](flecs::entity e) {
     // Iterate as usual
   });
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.FilterBuilder()
+    .With(Eats, Apples)
+    .Build()
+    .Each((Entity e) =>
+    {
+        // Iterate as usual
+    });
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .query::<()>()
+    .with_id((eats, apples))
+    .build()
+    .each_entity(|e, _| {
+        // Iterate as usual
+    });
+```
+
+</li>
+</ul>
+</div>
+
 ### Find all entities with a pair wildcard
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_filter_t *f = ecs_filter(world, {
+ecs_query_t *f = ecs_query(world, {
   .terms[0] = ecs_pair(Eats, EcsWildcard)
 });
 
-ecs_iter_t it = ecs_filter_iter(world, f);
-while (ecs_filter_next(&it)) {
-  ecs_id_t pair_id = ecs_field_id(&it, 1);
+ecs_iter_t it = ecs_query_iter(world, f);
+while (ecs_query_next(&it)) {
+  ecs_id_t pair_id = ecs_field_id(&it, 0);
   ecs_entity_t food = ecs_pair_second(world, pair_id); // Apples, ...
   for (int i = 0; i < it.count; i ++) {
     // Iterate as usual
   }
 }
-ecs_filter_fini(f);
+ecs_query_fini(f);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
-world.filter_builder()
-  .term(Eats, flecs::Wildcard)
+world.query_builder()
+  .with(Eats, flecs::Wildcard)
   .build()
   .each([](flecs::iter& it, size_t i) {
-    flecs::entity food = it.pair(1).second(); // Apples, ...
+    flecs::entity food = it.pair(0).second(); // Apples, ...
     flecs::entity e = it.entity(i);
     // Iterate as usual
   });
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+world.FilterBuilder()
+    .With(Eats, Ecs.Wildcard)
+    .Build()
+    .Each((Iter it, int i) =>
+    {
+        Entity food = it.Pair(1).Second(); // Apples, ...
+        Entity e = it.Entity(i);
+        // Iterate as usual
+    });
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+world
+    .query::<()>()
+    .with_id((eats, flecs::Wildcard::ID))
+    .build()
+    .each_iter(|it, i, _| {
+        let food = it.pair(0).unwrap().second_id(); // Apples, ...
+        let e = it.entity(i);
+        // Iterate as usual
+    });
+```
+
+</li>
+
+</ul>
+</div>
+
 ### Iterate all children for a parent
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 ecs_iter_t it = ecs_children(world, parent);
 while (ecs_children_next(&it)) {
@@ -248,23 +693,54 @@ while (ecs_children_next(&it)) {
   }
 }
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 parent.children([](flecs::entity child) {
    // ...
 });
 ```
 
-More advanced queries are possible with filters, queries and rules. See the [Queries manual](Queries.md) for more details.
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+parent.Children((Entity child) =>
+{
+    // ...
+});
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+parent.each_child(|child| {
+    // ...
+});
+```
+
+</li>
+</ul>
+</div>
+
+More advanced queries are possible with Flecs queries. See the [Queries manual](Queries.md) for more details.
 
 ## Relationship components
 Relationship pairs, just like regular component, can be associated with data. To associate data with a relationship pair, at least one of its elements needs to be a component. A pair can be associated with at most one type. To determine which type is associated with a relationship pair, the following rules are followed in order:
 
 - If neither the first nor second elements are a type, the pair is a tag
-- If the first element has the [tag](Relationships.md#tag-property) property, the pair is a tag
+- If the first element has the [PairIsTag](https://www.flecs.dev/flecs/md_docs_2ComponentTraits.html#pairistag-trait) trait, the pair is a tag
 - If the first element is a type, the pair type is the first element
 - If the second element is a type, the pair type is the second element
 
 The following examples show how these rules can be used:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 typedef struct {
@@ -280,12 +756,12 @@ ECS_COMPONENT(world, Position);
 ECS_COMPONENT(world, Eats);
 
 // Tags
-ecs_entity_t Likes = ecs_new_id(world);
-ecs_entity_t Begin = ecs_new_id(world);
-ecs_entity_t End = ecs_new_id(world);
-ecs_entity_t Apples = ecs_new_id(world);
+ecs_entity_t Likes = ecs_new(world);
+ecs_entity_t Begin = ecs_new(world);
+ecs_entity_t End = ecs_new(world);
+ecs_entity_t Apples = ecs_new(world);
 
-ecs_entity_t e = ecs_new_id(world);
+ecs_entity_t e = ecs_new(world);
 
 // Both Likes and Apples are tags, so (Likes, Apples) is a tag
 ecs_add_pair(world, e, Likes, Apples);
@@ -301,6 +777,10 @@ ecs_set_pair_second(world, e, End, Position, {10, 20});  // same for End
 // does not assume the Position type
 ecs_add_pair(world, e, EcsChildOf, Position);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 struct Position {
   float x, y;
@@ -335,8 +815,82 @@ e.set<End, Position>({10, 20}); // Same for End
 e.add(flecs::ChildOf, world.id<Position>());
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+public record struct Position(float X, float Y);
+public record struct Eats(float Amount);
+
+// Empty types (types without members) are automatically interpreted as tags
+public struct Begin { }
+public struct End { }
+
+// Tags
+Entity Likes = world.Entity();
+Entity Apples = world.Entity();
+
+Entity e = world.Entity();
+
+// Both Likes and Apples are tags, so (Likes, Apples) is a tag
+e.Add(Likes, Apples);
+
+// Eats is a type and Apples is a tag, so (Eats, Apples) has type Eats
+e.Set<Eats>(Apples, new Eats(1));
+
+// Begin is a tags and Position is a type, so (Begin, Position) has type Position
+e.Set<Begin, Position>(new Position(0, 0));
+e.Set<End, Position>(new Position(10, 20)); // Same for End
+
+// ChildOf has the Tag property, so even though Position is a type, the pair
+// does not assume the Position type
+e.Add(Ecs.ChildOf, world.Id<Position>());
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Empty types (types without members) are letmatically interpreted as tags
+
+#[derive(Component)]
+struct Begin;
+
+#[derive(Component)]
+struct End;
+
+// Tags
+let likes = world.entity();
+let apples = world.entity();
+
+let e = world.entity();
+
+// Both likes and Apples are tags, so (likes, Apples) is a tag
+e.add_id((likes, apples));
+
+// Eats is a type and Apples is a tag, so (Eats, Apples) has type Eats
+e.set_pair::<Eats, Apples>(Eats { amount: 1 });
+
+// Begin is a tags and Position is a type, so (Begin, Position) has type Position
+e.set_pair::<Begin, Position>(Position { x: 10.0, y: 20.0 });
+e.set_pair::<End, Position>(Position { x: 100.0, y: 20.0 }); // Same for End
+
+// ChildOf has the Tag property, so even though Position is a type, the pair
+// does not assume the Position type
+e.add_id((flecs::ChildOf::ID, world.component_id::<Position>()));
+e.add::<(flecs::ChildOf, Position)>();
+```
+
+</li>
+</ul>
+</div>
+
 ### Using relationships to add components multiple times
 A limitation of components is that they can only be added once to an entity. Relationships make it possible to get around this limitation, as a component _can_ be added multiple times, as long as the pair is unique. Pairs can be constructed on the fly from new entity identifiers, which means this is possible:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 typedef struct {
@@ -344,17 +898,21 @@ typedef struct {
   float y;
 } Position;
 
-ecs_entity_t e = ecs_new_id(world);
+ecs_entity_t e = ecs_new(world);
 
-ecs_entity_t first = ecs_new_id(world);
-ecs_entity_t second = ecs_new_id(world);
-ecs_entity_t third = ecs_new_id(world);
+ecs_entity_t first = ecs_new(world);
+ecs_entity_t second = ecs_new(world);
+ecs_entity_t third = ecs_new(world);
 
 // Add component position 3 times, for 3 different objects
 ecs_add_pair(world, e, Position, first, {1, 2});
 ecs_add_pair(world, e, Position, second, {3, 4});
 ecs_add_pair(world, e, Position, third, {5, 6});
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 struct Position {
   float x;
@@ -373,12 +931,54 @@ e.set<Position>(second, {3, 4});
 e.set<Position>(third, {5, 6});
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+public record struct Position(float X, float Y);
+
+Entity e = world.Entity();
+
+Entity first = world.Entity();
+Entity second = world.Entity();
+Entity third = world.Entity();
+
+// Add component position 3 times, for 3 different objects
+e.Set<Position>(first, new(1, 2));
+e.Set<Position>(second, new(3, 4));
+e.Set<Position>(third, new(5, 6));
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let e = world.entity();
+
+let first = world.entity();
+let second = world.entity();
+let third = world.entity();
+
+// Add component position 3 times, for 3 different objects
+e.set_first::<Position>(Position { x: 1.0, y: 2.0 }, first);
+e.set_first::<Position>(Position { x: 3.0, y: 4.0 }, second);
+e.set_first::<Position>(Position { x: 5.0, y: 6.0 }, third);
+```
+
+</li>
+</ul>
+</div>
+
 ## Relationship wildcards
 When querying for relationship pairs, it is often useful to be able to find all instances for a given relationship or target. To accomplish this, an application can use wildcard expressions. Consider the following example, that queries for all entities with a `Likes` relationship:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t){
-  .filter.terms = {
+ecs_query_t *q = ecs_query(world, {
+  .terms = {
     {ecs_pair(Likes, EcsWildcard)}
   }
 });
@@ -386,7 +986,7 @@ ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t){
 ecs_iter_t it = ecs_query_iter(world, q);
 
 while (ecs_query_next(&it)) {
-  ecs_id_t id = ecs_field_id(&it, 1); // Obtain pair id
+  ecs_id_t id = ecs_field_id(&it, 0); // Obtain pair id
 
   // Get relationship & target
   ecs_entity_t rel = ecs_pair_first(world, id);
@@ -400,32 +1000,98 @@ while (ecs_query_next(&it)) {
   }
 }
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto q = world.query_builder()
-  .term(Likes, flecs::Wildcard)
+  .with(Likes, flecs::Wildcard)
   .build();
 
-q.iter([](flecs::iter& it) {
-  auto id = it.pair(1);
-
-  for (auto i : it) {
-    cout << "entity " << it.entity(i) << " has relationship "
-      << id.first().name() << ", "
-      << id.second().name() << endl;
-  }
+q.each([](flecs::iter& it, size_t i) {
+  cout << "entity " << it.entity(i) << " has relationship "
+    << it.pair(0).first().name() << ", "
+    << it.pair(0).second().name() << endl;
 });
 ```
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Query q = world.QueryBuilder()
+    .With(Likes, Ecs.Wildcard)
+    .Build();
+
+q.Iter((Iter it) =>
+{
+    Id id = it.Pair(1);
+
+    foreach (int i in it)
+        Console.WriteLine($"entity {it.Entity(i)} has relationship {id.First()}, {id.Second()}");
+});
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let q = world
+    .query::<()>()
+    .with_id((likes, flecs::Wildcard::ID))
+    .build();
+
+q.each_iter(|it, i, _| {
+    println!(
+        "entity {} has relationship {} {}",
+        it.entity(i),
+        it.pair(0).unwrap().first_id().name(),
+        it.pair(0).unwrap().second_id().name()
+    );
+});
+```
+
+</li>
+</ul>
+</div>
 
 Wildcards may appear in query expressions, using the `*` character:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_query_t *q = ecs_query_init(world, &(ecs_query_desc_t){
-  .filter.expr = "(Likes, *)"
+ecs_query_t *q = ecs_query(world, {
+  .query.expr = "(Likes, *)"
 });
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
-auto q = world.query("(Likes, *)");
+auto q = world.query_builder<>().expr("(Likes, *)").build();
 ```
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Query q = world.QueryBuilder().Expr("(Likes, *)").Build();
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let q = world.query::<()>().expr("(likes, *)").build();
+```
+
+</li>
+</ul>
+</div>
 
 Wildcards may used for the relationship or target part of a pair, or both:
 
@@ -438,13 +1104,17 @@ Wildcards may used for the relationship or target part of a pair, or both:
 ## Inspecting relationships
 An application can use pair wildcard expressions to find all instances of a relationship for an entity. The following example shows how to find all `Eats` relationships for an entity:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
 // Bob eats apples and pears
-ecs_entity_t Eats = ecs_new_entity(world, "Eats");
-ecs_entity_t Apples = ecs_new_entity(world, "Apples");
-ecs_entity_t Pears = ecs_new_entity(world, "Pears");
+ecs_entity_t Eats = ecs_entity(world, { .name = "Eats" });
+ecs_entity_t Apples = ecs_entity(world, { .name = "Apples" });
+ecs_entity_t Pears = ecs_entity(world, { .name = "Pears" });
 
-ecs_entity_t Bob = ecs_new_id(world);
+ecs_entity_t Bob = ecs_new(world);
 ecs_add_pair(world, Bob, Eats, Apples);
 ecs_add_pair(world, Bob, Eats, Pears);
 
@@ -460,6 +1130,10 @@ while (-1 != (cur = ecs_search_offset(world, bob_table, cur + 1, wildcard, 0))){
   printf("Bob eats %s\n", ecs_get_name(world, obj));
 }
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Bob eats apples and pears
 auto Bob = world.entity();
@@ -481,56 +1155,194 @@ bob.each(Eats, [](flecs::entity obj) {
 })
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Bob eats apples and pears
+Entity Bob = world.Entity();
+Entity Eats = world.Entity();
+Entity Apples = world.Entity();
+Entity Pears = world.Entity();
+
+Bob.Add(Eats, Apples);
+Bob.Add(Eats, Pears);
+
+// For target wildcard pairs, each() can be used:
+bob.Each(Eats, (Entity obj) =>
+{
+    Console.WriteLine($"Bob eats {obj}");
+})
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// bob eats apples and pears
+let bob = world.entity();
+
+let eats = world.entity();
+let apples = world.entity();
+let pears = world.entity();
+
+bob.add_id((eats, apples));
+bob.add_id((eats, pears));
+
+// Find all (Eats, *) relationships in bob's type
+bob.each_pair(eats, flecs::Wildcard::ID, |id| {
+    println!("bob eats {}", id.second_id().name());
+});
+
+// For target wildcard pairs, each_target_id() can be used:
+bob.each_target_id(eats, |entity| {
+    println!("bob eats {}", entity.name());
+});
+```
+
+</li>
+</ul>
+</div>
+
 ## Builtin relationships
 Flecs comes with a few builtin relationships that have special meaning within the framework. While they are implemented as regular relationships and therefore obey the same rules as any custom relationship, they are used to enhance the features of different parts of the framework. The following two sections describe the builtin relationships of Flecs.
 
 ### The IsA relationship
 The `IsA` relationship is a builtin relationship that allows applications to express that one entity is equivalent to another. This relationship is at the core of component sharing and plays a large role in queries. The `IsA` relationship can be used like any other relationship, as is shown here:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t Apple = ecs_new_id(world);
-ecs_entity_t Fruit = ecs_new_id(world);
+ecs_entity_t Apple = ecs_new(world);
+ecs_entity_t Fruit = ecs_new(world);
 ecs_add_pair(world, Apple, EcsIsA, Fruit);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto Apple = world.entity();
 auto Fruit = world.entity();
 Apple.add(flecs::IsA, Fruit);
 ```
 
-In C++, adding an `IsA` relationship has a shortcut:
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity Apple = world.Entity();
+Entity Fruit = world.Entity();
+Apple.Add(Ecs.IsA, Fruit);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let apple = world.entity();
+let fruit = world.entity();
+
+apple.add_id((flecs::IsA::ID, fruit));
+```
+
+</li>
+</ul>
+</div>
+
+In C++ and C#, adding an `IsA` relationship has a shortcut:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C++</b>
 
 ```cpp
 Apple.is_a(Fruit);
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Apple.IsA(Fruit);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+apple.is_a_id(fruit);
+```
+
+</li>
+</ul>
+</div>
+
 This indicates to Flecs that an `Apple` is equivalent to a `Fruit` and should be treated as such. This equivalence is one-way, as a `Fruit` is not equivalent to an `Apple`. Another way to think about this is that `IsA` allows an application to express subsets and supersets. An `Apple` is a subset of `Fruit`. `Fruit` is a superset of `Apple`.
 
 We can also add `IsA` relationships to `Apple`:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t GrannySmith = ecs_new_id(world);
+ecs_entity_t GrannySmith = ecs_new(world);
 ecs_add_pair(world, GrannySmith, EcsIsA, Apple);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto GrannySmith = world.entity();
 GrannySmith.add(flecs::IsA, Apple);
 ```
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity GrannySmith = world.Entity();
+GrannySmith.Add(Ecs.IsA, Apple);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let granny_smith = world.entity();
+granny_smith.add_id((flecs::IsA::ID, apple));
+```
+
+</li>
+</ul>
+</div>
 
 This specifies that `GrannySmith` is a subset of `Apple`. A key thing to note here is that because `Apple` is a subset of `Fruit`, `GrannySmith` is a subset of `Fruit` as well. This means that if an application were to query for `(IsA, Fruit)` it would both match `Apple` and `GrannySmith`. This property of the `IsA` relationship is called "transitivity" and it is a feature that can be applied to any relationship. See the [section on Transitivity](#transitive-property) for more details.
 
 #### Component sharing
 An entity with an `IsA` relationship to another entity is equivalent to the other entity. So far the examples showed how querying for an `IsA` relationship will find the subsets of the thing that was queried for. In order for entities to be treated as true equivalents though, everything the superset contains (its components, tags, relationships) must also be found on the subsets. Consider:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t Spaceship = ecs_new_id(world);
+ecs_entity_t Spaceship = ecs_new(world);
 ecs_set(world, Spaceship, MaxSpeed, {100});
 ecs_set(world, SpaceShip, Defense, {50});
 
-ecs_entity_t Frigate = ecs_new_id(world);
+ecs_entity_t Frigate = ecs_new(world);
 ecs_add(world, Frigate, EcsIsA, Spaceship);
 ecs_set(world, Frigate, Defense, {100});
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto Spaceship = world.entity()
   .set<MaxSpeed>({100})
@@ -541,36 +1353,133 @@ auto Frigate = world.entity()
   .set<Defense>({75});
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity Spaceship = world.Entity()
+    .Set<MaxSpeed>(new(100))
+    .Set<Defense>(new(50));
+
+Entity Frigate = world.Entity()
+    .IsA(SpaceShip) // shorthand for .Add(Ecs.IsA, Spaceship)
+    .Set<Defense>(new(75));
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let spaceship = world
+    .entity()
+    .set(MaxSpeed { value: 100 })
+    .set(Defense { value: 50 });
+
+let frigate = world
+    .entity()
+    .is_a_id(spaceship) // shorthand for .add(flecs::IsA, Spaceship)
+    .set(Defense { value: 75 });
+```
+
+</li>
+</ul>
+</div>
+
 Here, the `Frigate` "inherits" the contents of `SpaceShip`. Even though `MaxSpeed` was never added directly to `Frigate`, an application can do this:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Obtain the inherited component from Spaceship
 const MaxSpeed *v = ecs_get(world, Frigate, MaxSpeed);
 v->value == 100; // true
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Obtain the inherited component from Spaceship
 const MaxSpeed *v = Frigate.get<MaxSpeed>();
 v->value == 100; // true
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Obtain the inherited component from Spaceship
+ref readonly MaxSpeed v = ref Frigate.Get<MaxSpeed>();
+v.Value == 100; // true
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Obtain the inherited component from Spaceship
+let is_100 = frigate.map::<&mut MaxSpeed, _>(|v| {
+    v.value == 100 // True
+});
+```
+
+</li>
+</ul>
+</div>
+
 While the `Frigate` entity also inherited the `Defense` component, it overrode this with its own value, so that the following example works:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Obtain the overridden component from Frigate
 const Defense *v = ecs_get(world, Frigate, Defense);
 v->value == 75; // true
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 // Obtain the overridden component from Frigate
 const Defense *v = Frigate.get<Defense>();
 v->value == 75; // true
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+ref readonly Defense v = ref Frigate.get<Defense>();
+v.Value == 75; // true
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Obtain the overridden component from Frigate
+let is_75 = frigate.map::<&mut Defense, _>(|v| {
+    v.value == 75 // True
+});
+```
+
+</li>
+</ul>
+</div>
+
 The ability to share components is also applied transitively, so `Frigate` could be specialized further into a `FastFrigate`:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t FastFrigate = ecs_new_id(world);
+ecs_entity_t FastFrigate = ecs_new(world);
 ecs_add(world, FastFrigate, EcsIsA, Frigate);
 ecs_set(world, FastFrigate, MaxSpeed, {200});
 
@@ -582,6 +1491,10 @@ s->value == 200; // true
 const Defense *d = Frigate.get<Defense>();
 d->value == 75; // true
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto FastFrigate = world.entity()
   .is_a(Frigate)
@@ -596,17 +1509,63 @@ const Defense *d = Frigate.get<Defense>();
 d->value == 75; // true
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity FastFrigate = world.Entity()
+    .IsA(Frigate)
+    .Set<MaxSpeed>(new(200));
+
+// Obtain the overridden component from FastFrigate
+ref readonly MaxSpeed s = ref Frigate.Get<MaxSpeed>();
+s.Value == 200; // true
+
+// Obtain the inherited component from Frigate
+ref readonly Defense d = ref Frigate.Get<Defense>();
+d.Value == 75; // true
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let fast_frigate = world.entity().is_a_id(frigate).set(MaxSpeed { value: 200 });
+
+// Obtain the overridden component from FastFrigate
+let is_200 = fast_frigate.map::<&mut MaxSpeed, _>(|v| {
+    v.value == 200 // True
+});
+
+// Obtain the inherited component from Frigate
+let is_75 = fast_frigate.map::<&mut Defense, _>(|v| {
+    v.value == 75 // True
+});
+```
+
+</li>
+</ul>
+</div>
+
 This ability to inherit and override components is one of the key enabling features of Flecs prefabs, and is further explained in the [Inheritance section](Manual.md#Inheritance) of the manual.
 
 ### The ChildOf relationship
 The `ChildOf` relationship is the builtin relationship that allows for the creation of entity hierarchies. The following example shows how hierarchies can be created with `ChildOf`:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t Spaceship = ecs_new_id(world);
-ecs_entity_t Cockpit = ecs_new_id(world);
+ecs_entity_t Spaceship = ecs_new(world);
+ecs_entity_t Cockpit = ecs_new(world);
 
 ecs_add_pair(world, Cockpit, EcsChildOf, Spaceship);
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto Spaceship = world.entity();
 auto Cockpit = world.entity();
@@ -614,11 +1573,56 @@ auto Cockpit = world.entity();
 Cockpit.add(flecs::ChildOf, Spaceship);
 ```
 
-In C++, adding a `ChildOf` relationship has a shortcut:
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity Spaceship = world.Entity();
+Entity Cockpit = world.Entity();
+
+Cockpit.Add(Ecs.ChildOf, Spaceship);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let spaceship = world.entity();
+let cockpit = world.entity();
+cockpit.add_id((flecs::ChildOf::ID, spaceship));
+```
+
+</li>
+</ul>
+</div>
+
+In C++, C# and Rust, adding a `ChildOf` relationship has a shortcut:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C++</b>
 
 ```cpp
 Cockpit.child_of(Spaceship);
 ```
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Cockpit.ChildOf(Spaceship);
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+cockpit.child_of_id(spaceship);
+```
+
+</li>
+</ul>
+</div>
 
 The `ChildOf` relationship is defined so that when a parent is deleted, its children are also deleted. For more information on specifying cleanup behavior for relationships, see the [Relationship cleanup properties](#cleanup-properties) section.
 
@@ -626,6 +1630,10 @@ The `ChildOf` relationship is defined as a regular relationship in Flecs. There 
 
 #### Namespacing
 Entities in flecs can have names, and name lookups can be relative to a parent. Relative name lookups can be used as a namespacing mechanism to prevent clashes between entity names. This example shows a few examples of name lookups in combination with hierarchies:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
 
 ```c
 // Create two entities with a parent/child name
@@ -640,9 +1648,13 @@ ecs_entity_t child = ecs_entity(world, {
 // Create the hierarchy
 ecs_add_pair(world, child, EcsChildOf, parent);
 
-child = ecs_lookup_fullpath(world, "Parent::Child"); // true
-child = ecs_lookup_path(world, parent, "Child"); // true
+child = ecs_lookup(world, "Parent::Child"); // true
+child = ecs_lookup_from(world, parent, "Child"); // true
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto parent = world.entity("Parent");
 auto child = world.entity("Child")
@@ -652,17 +1664,48 @@ child == world.lookup("Parent::Child"); // true
 child == parent.lookup("Child"); // true
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity parent = world.Entity("Parent");
+Entity child = world.Entity("Child")
+    .ChildOf(parent);
+
+child == world.Lookup("Parent.Child"); // true
+child == parent.Lookup("Child"); // true
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let parent = world.entity_named("Parent");
+let child = world.entity_named("Child").child_of_id(parent);
+
+child == world.lookup("Parent::Child"); // true
+child == parent.lookup("Child"); // true
+```
+
+</li>
+</ul>
+</div>
+
 #### Scoping
 In some scenarios a number of entities all need to be created with the same parent. Rather than adding the relationship to each entity, it is possible to configure the parent as a scope, which ensures that all entities created afterwards are created in the scope. The following example shows how:
 
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
 ```c
-ecs_entity_t parent = ecs_new_id(world);
+ecs_entity_t parent = ecs_new(world);
 ecs_entity_t prev = ecs_set_scope(world, parent);
 
 // Note that we're not using the ecs_new_id function for the children. This
 // function only generates a new id, and does not add the scope to the entity.
-ecs_entity_t child_a = ecs_new(world, 0);
-ecs_entity_t child_b = ecs_new(world, 0);
+ecs_entity_t child_a = ecs_new(world);
+ecs_entity_t child_b = ecs_new(world);
 
 // Restore the previous scope
 ecs_set_scope(world, prev);
@@ -670,6 +1713,10 @@ ecs_set_scope(world, prev);
 ecs_has_pair(world, child_a, EcsChildOf, parent); // true
 ecs_has_pair(world, child_b, EcsChildOf, parent); // true
 ```
+
+</li>
+<li><b class="tab-title">C++</b>
+
 ```cpp
 auto parent = world.entity();
 auto prev = world.set_scope(parent);
@@ -684,7 +1731,50 @@ child_a.has(flecs::ChildOf, parent); // true
 child_b.has(flecs::ChildOf, parent); // true
 ```
 
-Scopes in C++ can also be used with the `scope` function on an entity, which accepts a (typically lambda) function:
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity parent = world.Entity();
+Entity prev = world.SetScope(parent);
+
+Entity childA = world.Entity();
+Entity childB = world.Entity();
+
+// Restore the previous scope
+world.SetScope(prev);
+
+childA.Has(Ecs.ChildOf, parent); // true
+childB.Has(Ecs.ChildOf, parent); // true
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+let parent = world.entity();
+
+let prev = world.set_scope_id(parent);
+
+let child_a = world.entity();
+let child_b = world.entity();
+
+// Restore the previous scope
+world.set_scope_id(prev);
+
+child_a.has_id((flecs::ChildOf::ID, parent)); // true
+child_b.has_id((flecs::ChildOf::ID, parent)); // true
+```
+
+</li>
+</ul>
+</div> 
+
+Scopes in C++, C# and Rust can also be used with the `scope`/`Scope`/`run_in_scope` function on an entity, which accepts a (typically lambda) function:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C++</b>
 
 ```cpp
 auto parent = world.entity().scope([&]{
@@ -696,621 +1786,37 @@ auto parent = world.entity().scope([&]{
 });
 ```
 
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+Entity parent = world.Entity().Scope(() =>
+{
+    Entity childA = world.Entity();
+    Entity childB = world.Entity();
+
+    childA.Has(Ecs.ChildOf, parent); // true
+    childB.Has(Ecs.ChildOf, parent); // true
+});
+```
+
+</li>
+<<li><b class="tab-title">Rust</b>
+
+```rust
+let parent = world.entity().run_in_scope(|| {
+    let child_a = world.entity();
+    let child_b = world.entity();
+    child_a.has_id((flecs::ChildOf::ID, parent)); // true
+    child_b.has_id((flecs::ChildOf::ID, parent)); // true
+});
+```
+
+</li>
+</ul>
+</div>
+
 Scopes are the mechanism that ensure contents of a module are created as children of the module, without having to explicitly add the module as a parent.
-
-## Cleanup properties
-When entities that are used as tags, components, relationships or relationship targets are deleted, cleanup policies ensure that the store does not contain any dangling references. Any cleanup policy provides this guarantee, so while they are configurable, applications cannot configure policies that allows for dangling references.
-
-**Note**: this only applies to entities (like tags, components, relationships) that are added _to_ other entities. It does not apply to components that store an entity value, so:
-
-```c
-struct MyComponent {
-  entity e; // not covered by cleanup policies
-}
-```
-```c
-e.add(ChildOf, parent); // covered by cleanup policies
-```
-
-The default policy is that any references to the entity will be **removed**. For example, when the tag `Archer` is deleted, it will be removed from all entities that  have it, which is similar to invoking the `remove_all` operation:
-
-```c
-ecs_remove_all(world, Archer);
-```
-```cpp
-world.remove_all(Archer);
-```
-
-Since entities can be used in relationship pairs, just calling `remove_all` on just the entity itself does not guarantee that no dangling references are left. A more comprehensive description of what happens is:
-
-```c
-ecs_remove_all(world, Archer);
-ecs_remove_all(world, ecs_pair(Archer, EcsWildcard));
-ecs_remove_all(world, ecs_pair(EcsWildcard, Archer));
-```
-```cpp
-world.remove_all(Archer);
-world.remove_all(Archer, flecs::Wildcard);
-world.remove_all(flecs::Wildcard, Archer);
-```
-
-This succeeds in removing all possible references to `Archer`. Sometimes this behavior is not what we want however. Consider a parent-child hierarchy, where we want to delete the child entities when the parent is deleted. Instead of removing `(ChildOf, parent)` from all children, we need to _delete_ the children.
-
-We also want to specify this per relationship. If an entity has `(Likes, parent)` we may not want to delete that entity, meaning the cleanup we want to perform for `Likes` and `ChildOf` may not be the same.
-
-This is what cleanup policies are for: to specify which action needs to be executed under which condition. They are applied _to_ entities that have a reference to the entity being deleted: if I delete the `Archer` tag I remove the tag _from_ all entities that have it.
-
-To configure a cleanup policy for an entity, a `(Condition, Action)` pair can be added to it. If no policy is specified, the default cleanup action (`Remove`) is performed.
-
-There are three cleanup actions:
-
-- `Remove`: as if doing `remove_all(entity)` (default)
-- `Delete`: as if doing `delete_with(entity)`
-- `Panic`: throw a fatal error (default for components)
-
-There are two cleanup conditions:
-
-- `OnDelete`: the component, tag or relationship is deleted
-- `OnDeleteTarget`: a target used with the relationship is deleted
-
-Policies apply to both regular and pair instances, so to all entities with `T` as well as `(T, *)`. 
-
-### Examples
-The following examples show how to use cleanup policies
-
-**(OnDelete, Remove)**
-```c
-// Remove Archer from entities when Archer is deleted
-ECS_TAG(world, Archer);
-ecs_add_pair(world, Archer, EcsOnDelete, EcsRemove);
-
-ecs_entity_t e = ecs_new_w_id(world, Archer);
-
-// This will remove Archer from e
-ecs_delete(world, Archer);
-```
-```cpp
-// Remove Archer from entities when Archer is deleted
-world.component<Archer>()
-  .add(flecs::OnDelete, flecs::Remove);
-
-auto e = world.entity().add<Archer>();
-
-// This will remove Archer from e
-world.component<Archer>().destruct();
-```
-
-**(OnDelete, Delete)**
-```c
-// Delete entities with Archer when Archer is deleted
-ECS_TAG(world, Archer);
-ecs_add_pair(world, Archer, EcsOnDelete, EcsDelete);
-
-ecs_entity_t e = ecs_new_w_id(world, Archer);
-
-// This will delete e
-ecs_delete(world, Archer);
-```
-```cpp
-// Delete entities with Archer when Archer is deleted
-world.component<Archer>()
-  .add(flecs::OnDelete, flecs::Delete);
-
-auto e = world.entity().add<Archer>();
-
-// This will delete e
-world.component<Archer>().destruct();
-```
-
-**(OnDeleteTarget, Delete)**
-```c
-// Delete children when deleting parent
-ECS_TAG(world, ChildOf);
-ecs_add_pair(world, ChildOf, EcsOnDeleteTarget, EcsDelete);
-
-ecs_entity_t p = ecs_new_id(world);
-ecs_entity_t e = ecs_new_w_pair(world, ChildOf, p);
-
-// This will delete both p and e
-ecs_delete(world, p);
-```
-```cpp
-// Delete children when deleting parent
-world.component<ChildOf>()
-  .add(flecs::OnDeleteTarget, flecs::Delete);
-
-auto p = world.entity();
-auto e = world.entity().add<ChildOf>(p);
-
-// This will delete both p and e
-p.destruct();
-```
-
-### Cleanup order
-While cleanup actions allow for specifying what needs to happen when a particular entity is deleted, or when an entity used with a particular relationship is deleted, they do not enforce a strict cleanup _order_. The reason for this is that there can be many orderings that satisfy the cleanup policies.
-
-This is important to consider especially when writing `OnRemove` triggers or hooks, as the order in which they are invoked highly depends on the order in which entities are cleaned up.
-
-Take an example with a parent and a child that both have the `Node` tag:
-
-```cpp
-world.observer<Node>()
-  .event(flecs::OnRemove)
-  .each([](flecs::entity e) { });
-
-flecs::entity p = world.entity().add<Node>();
-flecs::entity c = world.entity().add<Node>().child_of(p);
-```
-
-In this example, when calling `p.destruct()` the observer is first invoked for the child, and then for the parent, which is to be expected as the child is deleted before the parent. Cleanup policies do not however guarantee that this is always the case.
-
-An application could also call `world.component<Node>().destruct()` which would delete the `Node` component and all of its instances. In this scenario the cleanup policies for the `ChildOf` relationship are not considered, and therefore the ordering is undefined. Another typical scenario in which ordering is undefined is when an application has cyclical relationships with a `Delete` cleanup action.
-
-#### Cleanup order during world teardown
-Cleanup issues often show up during world teardown as the ordering in which entities are deleted is controlled by the application. While world teardown respects cleanup policies, there can be many entity delete orderings that are valid according to the cleanup policies, but not all of them are equally useful. There are ways to organize entities that helps world cleanup to do the right thing. These are:
-
-**Organize components, triggers, observers and systems in modules.**
-Storing these entities in modules ensures that they stay alive for as long as possible. This leads to more predictable cleanup ordering as components will be deleted as their entities are, vs. when the component is deleted. It also ensures that triggers and observers are not deleted while matching events are still being generated.
-
-**Avoid organizing components, triggers, observers and systems under entities that are not modules**. If a non-module entity with children is stored in the root, it will get cleaned up along with other regular entities. If you have entities such as these organized in a non-module scope, consider adding the `EcsModule`/`flecs::Module` tag to the root of that scope.
-
-The next section goes into more detail on why this improves cleanup behavior and what happens during world teardown.
-
-#### World teardown sequence
-To understand why some ways to organize entities work better than others, having an overview of what happens during world teardown is useful. Here is a list of the steps that happen when a world is deleted:
-
-1. **Find all root entities**
-World teardown starts by finding all root entities, which are entities that do not have the builtin `ChildOf` relationship. Note that empty entities (entities without any components) are not found during this step.
-
-2. **Filter out modules, components, observers and systems**
-This ensures that components are not cleaned up before the entities that use them, and triggers, observers and systems are not cleaned up while there are still conditions under which they could be invoked.
-
-3. **Filter out entities that have no children**
-If entities have no children they cannot cause complex cleanup logic. This also decreases the likelihood of initiating cleanup actions that could impact other entities.
-
-4. **Delete root entities**
-The root entities that were not filtered out will be deleted.
-
-5. **Delete everything else**
-The last step will delete all remaining entities. At this point cleanup policies are no longer considered and cleanup order is undefined.
-
-## Relationship properties
-Relationship properties are tags that can be added to relationships to modify their behavior.
-
-### Tag property
-A relationship can be marked as a tag in which case it will never contain data. By default the data associated with a pair is determined by whether either the relationship or target are components. For some relationships however, even if the target is a component, no data should be added to the relationship. Consider the following example:
-
-```c
-typedef struct {
-  float x;
-  float y;
-} Position;
-
-ECS_TAG(world, Serializable);
-ECS_COMPONENT(world, Position);
-
-ecs_entity_t e = ecs_new_id(world);
-ecs_set(world, e, Position, {10, 20});
-ecs_add_pair(world, e, Serializable, ecs_id(Position));
-
-// Gets value from Position component
-const Position *p = ecs_get(world, e, Position);
-
-// Gets (unintended) value from (Serializable, Position) pair
-const Position *p = ecs_get_pair_object(world, e, Serializable, Position);
-```
-```cpp
-struct Serializable { }; // Tag, contains no data
-
-struct Position {
-  float x, y;
-};
-
-auto e = ecs.entity()
-  .set<Position>({10, 20})
-  .add<Serializable, Position>(); // Because Serializable is a tag, the pair
-                                  // has a value of type Position
-
-// Gets value from Position component
-const Position *p = e.get<Position>();
-
-// Gets (unintended) value from (Serializable, Position) pair
-const Position *p = e.get<Serializable, Position>();
-```
-
-To prevent data from being associated with pairs that can apply to components, the `Tag` property can be added to relationships:
-
-```c
-// Ensure that Serializable never contains data
-ecs_add_id(world, Serializable, EcsTag);
-
-// Because Serializable is marked as a Tag, no data is added for the pair
-// even though Position is a component
-ecs_add_pair(world, e, Serializable, ecs_id(Position));
-
-// This is still OK
-const Position *p = ecs_get(world, e, Position);
-
-// This no longer works, the pair has no data
-const Position *p = ecs_get_pair_object(world, e, Serializable, Position);
-```
-```cpp
-// Ensure that Serializable never contains data
-ecs.component<Serializable>()
-  .add<flecs::Tag>();
-
-auto e = ecs.entity()
-  .set<Position>({10, 20})
-  .add<Serializable, Position>(); // Because Serializable marked as a Tag, no
-                                  // data is added for the pair even though
-                                  // Position is a component
-
-// Gets value from Position component
-const Position *p = e.get<Position>();
-
-// This no longer works, the pair has no data
-const Position *p = e.get<Serializable, Position>();
-```
-
-The `Tag` property is only interpreted when it is added to the relationship part of a pair.
-
-### Final property
-Entities can be annotated with the `Final` property, which prevents using them with `IsA` relationship. This is similar to the concept of a final class as something that cannot be extended. The following example shows how use `Final`:
-
-```c
-ecs_entity_t e = ecs_new_id(world);
-ecs_add_id(world, e, EcsFinal);
-
-ecs_entity_t i = ecs_new_id(world);
-ecs_add_pair(world, e, i, EcsIsA, e); // not allowed
-```
-```cpp
-auto e = ecs.entity()
-  .add(flecs::Final);
-
-auto i = ecs.entity()
-  .is_a(e); // not allowed
-```
-
-Queries may use the final property to optimize, as they do not have to explore subsets of a final entity. For more information on how queries interpret final, see the [Query manual](Queries.md). By default, all components are created as final.
-
-### DontInherit property
-The `DontInherit` property prevents inheriting a component from a base entity (`IsA` target). Consider the following example:
-
-```c
-ecs_entity_t TagA = ecs_new_id(world);
-ecs_entity_t TagB = ecs_new_id(world);
-ecs_add_id(world, TagB, EcsDontInherit);
-
-ecs_entity_t base = ecs_new_id(world);
-ecs_add_id(world, base, TagA);
-ecs_add_id(world, base, TagB);
-
-ecs_entity_t inst = ecs_new_w_pair(world, base);
-ecs_has_id(world, inst, TagA); // true
-ecs_has_id(world, inst, TagB); // false
-```
-```cpp
-struct TagA = { };
-struct TagB = { };
-
-world.component<TagB>().add(flecs::DontInherit);
-
-auto base = world.entity()
-  .add<TagA>()
-  .add<TagB>();
-
-auto inst = world.entity().is_a(base);
-inst.has<TagA>(); // true
-inst.has<TagB>(); // false
-```
-
-The builtin `Prefab`, `Disabled`, `Identifier` and `ChildOf` tags/relationships are marked as `DontInherit`.
-
-### AlwaysOverride property
-The `AlwaysOverride` property ensures that a component is always automatically overridden when an inheritance (`IsA`) relationship is added. The behavior of this property is as if `OVERRIDE | Component` is always added together with `Component`.
-
-```c
-ECS_COMPONENT(world, Position);
-ECS_COMPONENT(world, Velocity);
-
-ecs_add_id(world, ecs_id(Position), EcsAlwaysOverride);
-
-ecs_entity_t base = ecs_new_id(world);
-ecs_set(world, base, Position, {10, 20});
-ecs_set(world, base, Velocity, {1, 2});
-
-ecs_entity_t inst = ecs_new_w_pair(world, base);
-ecs_has(world, inst, Position); // true
-ecs_has(world, inst, Velocity); // true
-ecs_owns(world, inst, Position); // true
-ecs_owns(world, inst, Velocity); // false
-```
-```cpp
-world.component<Position>().add(flecs::AlwaysOverride);
-
-auto base = world.entity()
-  .set<Position>({10, 20})
-  .add<Velocity>({1, 2})
-
-auto inst = world.entity().is_a(base);
-inst.has<Position>(); // true
-inst.has<Velocity>(); // true
-inst.owns<Position>(); // true
-inst.owns<Velocity>(); // false
-```
-
-### Transitive property
-Relationships can be marked as transitive. A formal-ish definition if transitivity in the context of relationships is:
-
-```
-If Relationship(EntityA, EntityB) And Relationship(EntityB, EntityC) Then Relationship(EntityA, EntityC)
-```
-
-What this means becomes more obvious when translated to a real-life example:
-
-```
-If Manhattan is located in New York, and New York is located in the USA, then Manhattan is located in the USA.
-```
-
-In this example, `LocatedIn` is the relationship and `Manhattan`, `New York` and `USA` are entities `A`, `B` and `C`. Another common example of transitivity is found in OOP inheritance:
-
-```
-If a Square is a Rectangle and a Rectangle is a Shape, then a Square is a Shape.
-```
-
-In this example `IsA` is the relationship and `Square`, `Rectangle` and `Shape` are the entities.
-
-When relationships in Flecs are marked as transitive, queries can follow the transitive relationship to see if an entity matches. Consider this example dataset:
-
-```c
-ecs_entity_t LocatedIn = ecs_new_id(world);
-ecs_entity_t Manhattan = ecs_new_id(world);
-ecs_entity_t NewYork = ecs_new_id(world);
-ecs_entity_t USA = ecs_new_id(world);
-
-ecs_add_pair(world, Manhattan, LocatedIn, NewYork);
-ecs_add_pair(world, NewYork, LocatedIn, USA);
-```
-```cpp
-auto LocatedIn = world.entity();
-auto Manhattan = world.entity();
-auto NewYork = world.entity();
-auto USA = world.entity();
-
-Manhattan.add(LocatedIn, NewYork);
-NewYork.add(LocatedIn, USA);
-```
-
-If we were now to query for `(LocatedIn, USA)` we would only match `NewYork`, because we never added `(LocatedIn, USA)` to `Manhattan`. To make sure queries `Manhattan` as well we have to make the `LocatedIn` relationship transitive. We can simply do this by adding the transitive property to the relationship entity:
-
-```c
-ecs_add_id(world, LocatedIn, Transitive);
-```
-```cpp
-LocatedIn.add(flecs::Transitive);
-```
-
-When now querying for `(LocatedIn, USA)`, the query will follow the `LocatedIn` relationship and return both `NewYork` and `Manhattan`. For more details on how queries use transitivity, see the [Transitive Relationships section in the query manual](Queries.md#transitive-relationships).
-
-### Reflexive property
-A relationship can be marked reflexive which means that a query like `Relationship(Entity, Entity)` should evaluate to true. The utility of `Reflexive` becomes more obvious with an example:
-
-Given this dataset:
-```
-IsA(Oak, Tree)
-```
-
-we can ask whether an oak is a tree:
-```
-IsA(Oak, Tree)
-- Yes, an Oak is a tree (Oak has (IsA, Tree))
-```
-
-We can also ask whether a tree is a tree, which it obviously is:
-```
-IsA(Tree, Tree)
-- Yes, even though Tree does not have (IsA, Tree)
-```
-
-However, this does not apply to all relationships. Consider a dataset with a `LocatedIn` relationship:
-
-```
-LocatedIn(SanFrancisco, UnitedStates)
-```
-
-we can now ask whether SanFrancisco is located in SanFrancisco, which it is not:
-```
-LocatedIn(SanFrancisco, SanFrancisco)
-- No
-```
-
-In these examples, `IsA` is a reflexive relationship, whereas `LocatedIn` is not.
-
-### Acyclic property
-A relationship can be marked with the `Acyclic` property to indicate that it cannot contain cycles. Both the builtin `ChildOf` and `IsA` relationships are marked acyclic. Knowing whether a relationship is acyclic allows the storage to detect and throw errors when a cyclic relationship is introduced by accident.
-
-Note that because cycle detection requires expensive algorithms, adding `Acyclic` to a relationship does not guarantee that an error will be thrown when a cycle is accidentally introduced. While detection may improve over time, an application that runs without errors is no guarantee that it does not contain acyclic relationships with cycles.
-
-### Traversable property
-Traversable relationships are allowed to be traversed automatically by queries, for example using the `up` bitflag (upwards traversal, see [query traversal flags](Queries.md#traversal-flags)). Traversable relationships are also marked as `Acyclic`, which ensures a query won't accidentally attempt to traverse a relationship that contains cycles.
-
-Events are propagated along the edges of traversable relationships. A typical example of this is when a component value is changed on a prefab. The event of this change will be propagated by traversing the `IsA` relationship downwards, for all instances of the prefab. Event propagation does not happen for relationships that are not marked with `Traversable`.
-
-### Exclusive property
-The `Exclusive` property enforces that an entity can have only a single instance of a relationship. When a second instance is added, it replaces the first instance. An example of a relationship with the `Exclusive` property is the builtin `ChildOf` relationship:
-
-```c
-ecs_add_pair(world, child, EcsChildOf, parent_a);
-ecs_add_pair(world, child, EcsChildOf, parent_b); // replaces (ChildOf, parent_a)
-```
-```cpp
-e.child_of(parent_a);
-e.child_of(parent_b); // replaces (ChildOf, parent_a)
-```
-
-To create a custom exclusive relationship, add the `Exclusive` property:
-```c
-ecs_entity_t MarriedTo = ecs_new_id(world);
-ecs_add_id(world, MarriedTo, EcsExclusive);
-```
-```cpp
-flecs::entity MarriedTo = world.entity()
-  .add(flecs::Exclusive);
-```
-
-### Union property
-The `Union` is similar to `Exclusive` in that it enforces that an entity can have only a single instance of a relationship. The difference between `Exclusive` and `Union` is that `Union` combines different relationship targets in a single table. This reduces table fragmentation, and as a result speeds up add/remove operations. This increase in add/remove speed does come at a cost: iterating a query with union terms is more expensive than iterating a regular relationship.
-
-The API for using the `Union` property is similar to regular relationships, as this example shows:
-
-```c
-ecs_entity_t Movement = ecs_new_id(world);
-ecs_add_id(world, Movement, EcsUnion);
-
-ecs_entity_t Walking = ecs_new_id(world);
-ecs_entity_t Running = ecs_new_id(world);
-
-ecs_entity_t e = ecs_new_id(world);
-ecs_add_pair(world, e, Movement, Running);
-ecs_add_pair(world, e, Movement, Walking); // replaces (Movement, Running)
-```
-```cpp
-flecs::entity Movement = world.entity().add(flecs::Union);
-flecs::entity Walking = world.entity();
-flecs::entity Running = world.entity();
-
-flecs::entity e = world.entity().add(Movement, Running);
-e.add(Movement, Walking); // replaces (Movement, Running)
-```
-
-When compared to regular relationships, union relationships have some differences and limitations:
-- Relationship cleanup does not work yet for union relationships
-- Removing a union relationship removes any target, even if the specified target is different
-- Filters and rules do not support union relationships
-- Union relationships cannot have data
-- Union relationship query terms can use only the `And` operator
-- Queries with a `(R, *)` term will return `(R, *)` as term id for each entity
-
-### Symmetric property
-The `Symmetric` property enforces that when a relationship `(R, Y)` is added to entity `X`, the relationship `(R, X)` will be added to entity `Y`. The reverse is also true, if relationship `(R, Y)` is removed from `X`, relationship `(R, X)` will be removed from `Y`.
-
-The symmetric property is useful for relationships that do not make sense unless they are bidirectional. Examples of such relationships are `AlliesWith`, `MarriedTo`, `TradingWith` and so on. An example:
-
-```c
-ecs_entity_t MarriedTo = ecs_new_w_id(world, EcsSymmetric);
-ecs_entity_t Bob = ecs_new_id(world);
-ecs_entity_t Alice = ecs_new_id(world);
-ecs_add_pair(world, Bob, MarriedTo, Alice); // Also adds (MarriedTo, Bob) to Alice
-```
-```cpp
-auto MarriedTo = world.entity().add(flecs::Symmetric);
-auto Bob = ecs.entity();
-auto Alice = ecs.entity();
-Bob.add(MarriedTo, Alice); // Also adds (MarriedTo, Bob) to Alice
-```
-
-### With property
-The `With` relationship can be added to components to indicate that it must always come together with another component. The following example shows how `With` can be used with regular components/tags:
-
-```c
-ecs_entity_t Responsibility = ecs_new_id(world);
-ecs_entity_t Power = ecs_new_w_pair(world, EcsWith, Responsibility);
-
-// Create new entity that has both Power and Responsibility
-ecs_entity_t e = ecs_new_w_id(world, Power);
-```
-```cpp
-auto Responsibility = world.entity();
-auto Power = world.entity().add(flecs::With, Responsibility);
-
-// Create new entity that has both Power and Responsibility
-auto e = world.entity().add(Power);
-```
-
-When the `With` relationship is added to a relationship, the additional id added to the entity will be a relationship pair as well, with the same target as the original relationship:
-
-```c
-ecs_entity_t Likes = ecs_new_id(world);
-ecs_entity_t Loves = ecs_new_w_pair(world, EcsWith, Likes);
-ecs_entity_t Pears = ecs_new_id(world);
-
-// Create new entity with both (Loves, Pears) and (Likes, Pears)
-ecs_entity_t e = ecs_new_w_pair(world, Loves, Pears);
-```
-```cpp
-auto Likes = world.entity();
-auto Loves = world.entity().add(flecs::With, Likes);
-auto Pears = world.entity();
-
-// Create new entity with both (Loves, Pears) and (Likes, Pears)
-auto e = world.entity().add(Loves, Pears);
-```
-
-### OneOf property
-The `OneOf` property enforces that the target of the relationship is a child of a specified entity. `OneOf` can be used to indicate that the target needs to be either a child of the relationship (common for enum relationships), or of another entity.
-
-The following example shows how to constrain the relationship target to a child of the relationship:
-
-```c
-ecs_entity_t Food = ecs_new_id(world);
-
-// Enforce that target of relationship is child of Food
-ecs_add_id(world, Food, EcsOneOf);
-
-ecs_entity_t Apples = ecs_new_w_pair(world, EcsChildOf, Food);
-ecs_entity_t Fork = ecs_new_id(world);
-
-// This is ok, Apples is a child of Food
-ecs_entity_t a = ecs_new_w_pair(world, Food, Apples);
-
-// This is not ok, Fork is not a child of Food
-ecs_entity_t b = ecs_new_w_pair(world, Food, Fork);
-```
-```cpp
-// Enforce that target of relationship is child of Food
-auto Food = world.entity().add(flecs::OneOf);
-auto Apples = world.entity().child_of(Food);
-auto Fork = world.entity();
-
-// This is ok, Apples is a child of Food
-auto a = world.entity().add(Food, Apples);
-
-// This is not ok, Fork is not a child of Food
-auto b = world.entity().add(Food, Fork);
-```
-
-The following example shows how `OneOf` can be used to enforce that the relationship target is the child of an entity other than the relationship:
-
-```c
-ecs_entity_t Food = ecs_new_id(world);
-ecs_entity_t Eats = ecs_new_id(world);
-
-// Enforce that target of relationship is child of Food
-ecs_add_pair(world, Eats, EcsOneOf, Food);
-
-ecs_entity_t Apples = ecs_new_w_pair(world, EcsChildOf, Food);
-ecs_entity_t Fork = ecs_new_id(world);
-
-// This is ok, Apples is a child of Food
-ecs_entity_t a = ecs_new_w_pair(world, Eats, Apples);
-
-// This is not ok, Fork is not a child of Food
-ecs_entity_t b = ecs_new_w_pair(world, Eats, Fork);
-```
-```cpp
-// Enforce that target of relationship is child of Food
-auto Food = world.entity();
-auto Eats = world.entity().add(flecs::OneOf, Food);
-auto Apples = world.entity().child_of(Food);
-auto Fork = world.entity();
-
-// This is ok, Apples is a child of Food
-auto a = world.entity().add(Eats, Apples);
-
-// This is not ok, Fork is not a child of Food
-auto b = world.entity().add(Eats, Fork);
-```
 
 ## Relationship performance
 This section goes over the performance implications of using relationships.
@@ -1333,11 +1839,11 @@ Because of this, adding/removing relationships to entities has the same performa
 ECS_COMPONENT(world, Position);
 
 // Tags
-ecs_entity_t Likes = ecs_new_id(world);
-ecs_entity_t Apples = ecs_new_id(world);
-ecs_entity_t Npc = ecs_new_id(world);
+ecs_entity_t Likes = ecs_new(world);
+ecs_entity_t Apples = ecs_new(world);
+ecs_entity_t Npc = ecs_new(world);
 
-ecs_entity_t e = ecs_new_id(world);
+ecs_entity_t e = ecs_new(world);
 
 // The ecs_add_id function can be used to add one id to another
 ecs_add_id(world, e, Npc);
@@ -1371,19 +1877,6 @@ Fragmentation is a property of archetype-based ECS implementations where entitie
 Applications that make extensive use of relationships might observe high levels of fragmentation, as relationships can introduce many different combinations of components. While the Flecs storage is optimized for supporting large amounts (hundreds of thousands) of tables, fragmentation is a factor to consider when using relationships.
 
 Fragmentation can be reduced by using [union relationships](#union-property). There are additional storage improvements on the roadmap that will decrease the overhead of fragmentation introduced by relationships.
-
-### Relationship flattening
-To reduce fragmentation, a relationship can be flattened by calling the `ecs_flatten` operation. This combines entities from different relationship targets in the same table, provided that they otherwise have the same components. The operation is recursive, meaning that for a specified relationship, the entire subtree is flattened.
-
-Flattening a subtree can be done with or without preserving depth information of the original tree. Preserving depth information ensures that features like `cascade` still work as usual, whereas not preserving depth information further decreases fragmentation. 
-
-The flattening operation by default removes names of the flattened entities. This behavior can be overridden with an option. When flattening for the builtin `ChildOf` relationship, flattening with preservation of names can cause the operation to fail, if entities from different subtrees have the same name.
-
-After the flatten operation, entities for the same target are stored in contiguous slices in the new table. The new table will have a `(Target, Relationship)` pair, which contains data about the original target, and the start and number of entities in the contiguous block. This information is used by queries when iterating to ensure entities for the same target can still be iterated in bulk.
-
-Relationship flattening is an experimental feature, and some limitations apply for the current implementation. After a subtree has been flattened, the entities in that subtree can no longer be individually deleted from a target, and cannot be moved to another parent. Additionally, no components can be added/removed to entities in a flattened subtree. Relationship flattening is currently supported only for exclusive, acyclic relationships.
-
-For additional information, see the API documentation for the `ecs_flatten` operation.
 
 ### Table Creation
 When an id added to an entity is deleted, all references to that id are deleted from the storage (see [cleanup properties](#cleanup-properties)). For example, when the component `Position` is deleted it is removed from all entities, and all tables with the `Position` component are deleted. While not unique to relationships, it is more common for relationships to trigger cleanup actions, as relationship pairs contain regular entities.

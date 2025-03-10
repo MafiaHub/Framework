@@ -72,51 +72,51 @@ MODULE(state_machine, {
     IT("can register and transition between states", {
         auto machine = std::make_unique<Machine>();
         machine->RegisterState<InitialState>();
-        
+
         EQUALS(machine->GetCurrentState(), nullptr);
-        
-        // Request initial state
-        EQUALS(machine->RequestNextState(1), true);
-        machine->Update(); // Enter InitialState
-        
+
+        bool nextStateResult = machine->RequestNextState(1);
+        EQUALS(nextStateResult, true);
+        machine->Update();
+
         auto state = machine->GetCurrentState();
         EQUALS(state != nullptr, true);
         EQUALS(state->GetId(), 1);
-        EQUALS(state->GetName(), "Initial");
+        STREQUALS(state->GetName(), "Initial");
     });
 
     IT("handles invalid state transitions gracefully", {
         auto machine = std::make_unique<Machine>();
         machine->RegisterState<InitialState>();
-        
-        // Try to request non-existent state
-        EQUALS(machine->RequestNextState(999), false);
-        
-        // Request valid state
-        EQUALS(machine->RequestNextState(1), true);
-        
-        // Try to request another state while transition is pending
-        EQUALS(machine->RequestNextState(1), false);
+
+        bool nextStateResult = machine->RequestNextState(999);
+        EQUALS(nextStateResult, false);
+
+        nextStateResult = machine->RequestNextState(1);
+        EQUALS(nextStateResult, true);
+
+        nextStateResult = machine->RequestNextState(1);
+        EQUALS(nextStateResult, false);
     });
 
     IT("executes state lifecycle correctly", {
         auto machine = std::make_unique<Machine>();
         ProcessingState::ResetCounter();
-        
+
         machine->RegisterState<InitialState>();
         machine->RegisterState<ProcessingState>();
-        
-        // Start Initial state
-        EQUALS(machine->RequestNextState(1), true);
-        machine->Update(); // Enter
+
+        bool nextStateResult = machine->RequestNextState(1);
+        EQUALS(nextStateResult, true);
+        machine->Update();
         EQUALS(machine->GetCurrentState()->GetId(), 1);
-        
-        // Request transition while in Initial state
-        EQUALS(machine->RequestNextState(2), true);
-        machine->Update(); // Should move to Exit state since we requested next
-        machine->Update(); // Should move to Next state
-        machine->Update(); // Should Enter ProcessingState
-        
+
+        nextStateResult = machine->RequestNextState(2);
+        EQUALS(nextStateResult, true);
+        machine->Update();
+        machine->Update();
+        machine->Update();
+
         EQUALS(ProcessingState::GetCounter(), 1);
         EQUALS(machine->GetCurrentState()->GetId(), 2);
     });
@@ -124,44 +124,45 @@ MODULE(state_machine, {
     IT("handles failing states properly", {
         auto machine = std::make_unique<Machine>();
         FailingState::ResetFailures();
-        
+
         machine->RegisterState<InitialState>();
         machine->RegisterState<FailingState>();
-        
-        // Initial state
-        EQUALS(machine->RequestNextState(1), true);
-        machine->Update(); // Enter
-        machine->Update(); // Update
-        
-        // Transition to failing state
-        EQUALS(machine->RequestNextState(3), true);
-        machine->Update(); // Exit Initial
-        machine->Update(); // Enter Failing
-        machine->Update(); // Update Failing (should increment counter and request exit)
-        machine->Update(); // Exit Failing
-        
+
+        bool nextStateResult = machine->RequestNextState(1);
+        EQUALS(nextStateResult, true);
+        machine->Update();
+        machine->Update();
+
+        nextStateResult = machine->RequestNextState(3);
+        EQUALS(nextStateResult, true);
+        machine->Update();
+        machine->Update();
+        machine->Update();
+        machine->Update();
+
         EQUALS(FailingState::GetFailures(), 1);
     });
 
     IT("can handle rapid state transitions", {
         auto machine = std::make_unique<Machine>();
         ProcessingState::ResetCounter();
-        
+
         machine->RegisterState<InitialState>();
         machine->RegisterState<ProcessingState>();
-        
-        // Perform rapid transitions
-        for(int i = 0; i < 1000; i++) {
-            machine->RequestNextState(1);
-            machine->Update(); // Enter
-            machine->Update(); // Update
-            
-            machine->RequestNextState(2);
-            machine->Update(); // Exit Initial
-            machine->Update(); // Enter Processing
-            machine->Update(); // Update Processing
+
+        for (int i = 0; i < 1000; i++) {
+            bool nextStateResult = machine->RequestNextState(1);
+            EQUALS(nextStateResult, true);
+            machine->Update();
+            machine->Update();
+
+            nextStateResult = machine->RequestNextState(2);
+            EQUALS(nextStateResult, true);
+            machine->Update();
+            machine->Update();
+            machine->Update();
         }
-        
+
         EQUALS(ProcessingState::GetCounter(), 1000);
     });
 
@@ -169,32 +170,33 @@ MODULE(state_machine, {
         auto machine = std::make_unique<Machine>();
         ProcessingState::ResetCounter();
         std::atomic<bool> running = true;
-        
+
         machine->RegisterState<InitialState>();
         machine->RegisterState<ProcessingState>();
-        
-        // Thread constantly updating the state machine
+
         std::thread updater([&]() {
-            while(running) {
+            while (running) {
                 machine->Update();
                 std::this_thread::yield();
             }
         });
-        
-        // Thread requesting state transitions
+
         std::thread requester([&]() {
-            for(int i = 0; i < 100; i++) {
-                machine->RequestNextState(1);
+            for (int i = 0; i < 100; i++) {
+                bool nextStateResult = machine->RequestNextState(1);
+                EQUALS(nextStateResult, true);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                machine->RequestNextState(2);
+
+                nextStateResult = machine->RequestNextState(2);
+                EQUALS(nextStateResult, true);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         });
-        
+
         requester.join();
         running = false;
         updater.join();
-        
+
         EQUALS(ProcessingState::GetCounter() > 0, true);
     });
 
@@ -202,7 +204,6 @@ MODULE(state_machine, {
         auto machine = std::make_unique<Machine>();
         ProcessingState::ResetCounter();
 
-        // Create a state that tries to perform state machine operations during callbacks
         class RecursiveState: public Framework::Utils::States::IState {
           public:
             const char *GetName() const override {
@@ -212,7 +213,6 @@ MODULE(state_machine, {
                 return 4;
             }
             bool OnEnter(Machine *machine) override {
-                // Try recursive update
                 machine->Update();
                 return true;
             }
@@ -227,9 +227,10 @@ MODULE(state_machine, {
         machine->RegisterState<ProcessingState>();
         machine->RegisterState<RecursiveState>();
 
-        // This should not deadlock
-        EQUALS(machine->RequestNextState(4), true);
+        bool nextStateResult = machine->RequestNextState(4);
+        EQUALS(nextStateResult, true);
         machine->Update();
         machine->Update();
     });
 });
+

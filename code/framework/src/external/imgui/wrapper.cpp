@@ -15,6 +15,10 @@
 #include <backends/imgui_impl_dx9.h>
 #include <backends/imgui_impl_win32.h>
 
+#include "graphics/backend/d3d11.h"
+#include "graphics/backend/d3d12.h"
+#include "graphics/backend/d3d9.h"
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace Framework::External::ImGUI {
@@ -161,6 +165,10 @@ namespace Framework::External::ImGUI {
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         if (_config.windowBackend != Graphics::PlatformBackend::PLATFORM_WIN32) {
             return InputState::ERROR_MISMATCH;
+        }
+
+        if (!_processEventEnabled) {
+            return InputState::PASS;
         }
 
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {

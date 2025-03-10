@@ -66,27 +66,31 @@ int main() {
     // The query cache now looks like this:
     //  - group First:
     //     - table [Position, (Group, First)]
-    //     - table [Postion, Tag, (Group, First)]
+    //     - table [Position, Tag, (Group, First)]
     //
     //  - group Second:
     //     - table [Position, (Group, Second)]
-    //     - table [Postion, Tag, (Group, Second)]
+    //     - table [Position, Tag, (Group, Second)]
     //  
     //  - group Third:
     //     - table [Position, (Group, Third)]
-    //     - table [Postion, Tag, (Group, Third)]
+    //     - table [Position, Tag, (Group, Third)]
     //
 
-    q.iter([&](flecs::iter& it, Position *p) {
-        flecs::entity group = ecs.entity(it.group_id());
-        std::cout << " - group " << group.path() << ": table ["
-            << it.table().str() << "]\n";
+    q.run([&](flecs::iter& it) {
+        while (it.next()) {
+            auto p = it.field<Position>(0);
 
-        for (auto i : it) {
-            std::cout << "     {" << p[i].x << ", " << p[i].y << "}\n";
+            flecs::entity group = ecs.entity(it.group_id());
+            std::cout << " - group " << group.path() << ": ["
+                << "table [" << it.table().str() << "]\n";
+
+            for (auto i : it) {
+                std::cout << "     {" << p[i].x << ", " << p[i].y << "}\n";
+            }
+
+            std::cout << "\n";
         }
-
-        std::cout << "\n";
     });
 
     // Output:

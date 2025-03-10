@@ -1,5 +1,5 @@
 /**
- * @file table_cache.h
+ * @file storage/table_cache.h
  * @brief Data structure for fast table iteration/lookups.
  */
 
@@ -17,6 +17,12 @@ void ecs_table_cache_insert(
     ecs_table_cache_t *cache,
     const ecs_table_t *table,
     ecs_table_cache_hdr_t *result);
+
+void ecs_table_cache_insert_w_empty(
+    ecs_table_cache_t *cache,
+    const ecs_table_t *table,
+    ecs_table_cache_hdr_t *result,
+    bool is_empty);
 
 void ecs_table_cache_replace(
     ecs_table_cache_t *cache,
@@ -42,6 +48,7 @@ bool ecs_table_cache_is_empty(
 
 #define flecs_table_cache_count(cache) (cache)->tables.count
 #define flecs_table_cache_empty_count(cache) (cache)->empty_tables.count
+#define flecs_table_cache_all_count(cache) ((cache)->tables.count + (cache)->empty_tables.count)
 
 bool flecs_table_cache_iter(
     ecs_table_cache_t *cache,

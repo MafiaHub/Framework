@@ -1,18 +1,10 @@
 /**
- * @file id_index.h
+ * @file storage/id_index.h
  * @brief Index for looking up tables by (component) id.
  */
 
 #ifndef FLECS_ID_INDEX_H
 #define FLECS_ID_INDEX_H
-
-/* Payload for id cache */
-struct ecs_table_record_t {
-    ecs_table_cache_hdr_t hdr;  /* Table cache header */
-    int16_t index;              /* First type index where id occurs in table */
-    int16_t count;              /* Number of times id occurs in table */
-    int16_t column;             /* First column index where id occurs */
-};
 
 /* Linked list of id records */
 typedef struct ecs_id_record_elem_t {
@@ -35,7 +27,7 @@ typedef struct ecs_reachable_cache_t {
     ecs_vec_t ids; /* vec<reachable_elem_t> */
 } ecs_reachable_cache_t;
 
-/* Payload for id index which contains all datastructures for an id. */
+/* Payload for id index which contains all data structures for an id. */
 struct ecs_id_record_t {
     /* Cache with all tables that contain the id. Must be first member. */
     ecs_table_cache_t cache; /* table_cache<ecs_table_record_t> */
@@ -51,6 +43,9 @@ struct ecs_id_record_t {
 
     /* Name lookup index (currently only used for ChildOf pairs) */
     ecs_hashmap_t *name_index;
+
+    /* Storage for sparse components or union relationships */
+    void *sparse;
 
     /* Lists for all id records that match a pair wildcard. The wildcard id
      * record is at the head of the list. */
@@ -69,19 +64,12 @@ struct ecs_id_record_t {
      * queried for. */
     int32_t keep_alive;
 
-    /* Cache invalidation counter */
+    /* Cache for finding components that are reachable through a relationship */
     ecs_reachable_cache_t reachable;
 };
 
 /* Get id record for id */
 ecs_id_record_t* flecs_id_record_get(
-    const ecs_world_t *world,
-    ecs_id_t id);
-
-/* Get id record for id for searching.
- * Same as flecs_id_record_get, but replaces (R, *) with (Union, R) if R is a
- * union relationship. */
-ecs_id_record_t* flecs_query_id_record_get(
     const ecs_world_t *world,
     ecs_id_t id);
 
@@ -136,6 +124,11 @@ ecs_table_record_t* flecs_id_record_get_table(
     const ecs_id_record_t *idr,
     const ecs_table_t *table);
 
+/* Init sparse storage */
+void flecs_id_record_init_sparse(
+    ecs_world_t *world,
+    ecs_id_record_t *idr);
+
 /* Bootstrap cached id records */
 void flecs_init_id_records(
     ecs_world_t *world);
@@ -143,5 +136,10 @@ void flecs_init_id_records(
 /* Cleanup all id records in world */
 void flecs_fini_id_records(
     ecs_world_t *world);
+
+/* Return flags for matching id records */
+ecs_flags32_t flecs_id_flags_get(
+    ecs_world_t *world,
+    ecs_id_t id);
 
 #endif

@@ -523,8 +523,8 @@ void OpaqueTypes_deser_entity_from_json(void) {
         .type.assign_entity = Opaque_entity_set
     });
 
-    ecs_entity_t e1 = ecs_new_entity(world, "e1");
-    ecs_entity_t e2 = ecs_new_entity(world, "e2");
+    ecs_entity_t e1 = ecs_entity(world, { .name = "e1" });
+    ecs_entity_t e2 = ecs_entity(world, { .name = "e2" });
 
     Opaque_entity v = { 0 };
     {
@@ -597,8 +597,8 @@ void OpaqueTypes_ser_deser_entity(void) {
         .type.assign_entity = Entity_assign
     });
 
-    ecs_entity_t e1 = ecs_new_entity(world, "ent1");
-    ecs_entity_t e2 = ecs_new_entity(world, "ent2");
+    ecs_entity_t e1 = ecs_entity(world, { .name = "ent1" });
+    ecs_entity_t e2 = ecs_entity(world, { .name = "ent2" });
 
     Entity v = { e1 };
     char *json = ecs_ptr_to_json(world, ecs_id(Entity), &v);
@@ -628,7 +628,7 @@ void OpaqueTypes_ser_deser_0_entity(void) {
     Entity v = { 0 };
     char *json = ecs_ptr_to_json(world, ecs_id(Entity), &v);
     test_assert(json != NULL);
-    test_str(json, "0");
+    test_str(json, "\"#0\"");
 
     const char *r = ecs_ptr_from_json(world, ecs_id(Entity), &v, json, NULL);
     test_str(r, "");
@@ -636,4 +636,52 @@ void OpaqueTypes_ser_deser_0_entity(void) {
     ecs_os_free(json);
 
     ecs_fini(world);
+}
+
+
+void OpaqueTypes_const_string(void) {
+
+    typedef struct test_string_struct {
+        const char *value;
+    } test_string_struct;
+
+    const char *test_string = "Const String. Don't try to free me!";
+
+    ecs_world_t *world = ecs_init();
+
+    // Lookup const string type:
+    ecs_entity_t const_string = ecs_lookup(world, "flecs.core.const_string_t");
+
+    // Create a reflection interface for `test_struct`:
+    ecs_entity_t test_struct = ecs_struct(world, {
+    .entity = ecs_entity(world, {
+        .name = "test_struct", .root_sep = ""}),
+        .members = {
+            {
+                .name = "value",
+                .type = const_string },
+            }
+    });
+
+    ecs_entity_t e = ecs_entity(world, {.name = "MyEntity"});
+    test_string_struct *st = (test_string_struct *) ecs_ensure_id(world, e, test_struct);
+    st->value = test_string;
+
+    // we should be able to retrieve the string with a cursor:
+    ecs_meta_cursor_t cursor = ecs_meta_cursor(world, test_struct, st);
+    ecs_meta_push(&cursor);
+    ecs_meta_member(&cursor, "value");
+
+    const char *retrieved_string = ecs_meta_get_string(&cursor);
+
+    test_assert(!ecs_os_strcmp(retrieved_string, test_string));
+
+    // When deleting the entity, Flecs must not try to free the above const string,
+    // otherwise the below will segfault:
+    ecs_delete(world, e);
+
+    test_assert(true);  // If we get to this point without a crash, we're good.
+
+    ecs_fini(world);
+
 }

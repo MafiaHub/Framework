@@ -40,13 +40,13 @@ int main(int argc, char *argv[]) {
 
     // Grouped query
     ecs_query_t *q = ecs_query(ecs, {
-        .filter.terms = {
+        .terms = {
             { .id = ecs_id(Position) }
         },
         // Group tables by the relationship target of the "Group" relationship.
         // A custom group_by function can be provided to derive a group id from
         // a table, see the group_by_custom example for more details.
-        .group_by_id = Group
+        .group_by = Group
     });
 
     // Create entities in 6 different tables with 3 group ids
@@ -74,23 +74,23 @@ int main(int argc, char *argv[]) {
     // The query cache now looks like this:
     //  - group First:
     //     - table [Position, (Group, First)]
-    //     - table [Postion, Tag, (Group, First)]
+    //     - table [Position, Tag, (Group, First)]
     //
     //  - group Second:
     //     - table [Position, (Group, Second)]
-    //     - table [Postion, Tag, (Group, Second)]
+    //     - table [Position, Tag, (Group, Second)]
     //  
     //  - group Third:
     //     - table [Position, (Group, Third)]
-    //     - table [Postion, Tag, (Group, Third)]
+    //     - table [Position, Tag, (Group, Third)]
     //
 
     // Iterate query, print position & table components
     ecs_iter_t it = ecs_query_iter(ecs, q);
     while (ecs_query_next(&it)) {
-        Position *p = ecs_field(&it, Position, 1);
+        Position *p = ecs_field(&it, Position, 0);
         char *table_str = ecs_table_str(ecs, it.table);
-        char *group_str = ecs_get_fullpath(ecs, it.group_id);
+        char *group_str = ecs_get_path(ecs, it.group_id);
 
         printf(" - group %s: table [%s]\n", group_str, table_str);
 

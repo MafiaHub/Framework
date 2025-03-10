@@ -454,7 +454,7 @@ void Cursor_set_entity_as_signed(void) {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t value = 0;
-    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t e = ecs_new(world);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(ecs_entity_t), &value);
     test_ok( ecs_meta_set_int(&cur, (int64_t)e) );
@@ -468,7 +468,7 @@ void Cursor_set_entity_as_unsigned(void) {
     ecs_world_t *world = ecs_init();
 
     ecs_entity_t value = 0;
-    ecs_entity_t e = ecs_new_id(world);
+    ecs_entity_t e = ecs_new(world);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(ecs_entity_t), &value);
     test_ok( ecs_meta_set_uint(&cur, e) );
@@ -496,7 +496,7 @@ void Cursor_set_id_as_signed(void) {
     ecs_world_t *world = ecs_init();
 
     ecs_id_t value = 0;
-    ecs_id_t e = ecs_new_id(world);
+    ecs_id_t e = ecs_new(world);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(ecs_id_t), &value);
     test_ok( ecs_meta_set_int(&cur, (int64_t)e) );
@@ -510,7 +510,7 @@ void Cursor_set_id_as_unsigned(void) {
     ecs_world_t *world = ecs_init();
 
     ecs_id_t value = 0;
-    ecs_id_t e = ecs_new_id(world);
+    ecs_id_t e = ecs_new(world);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(ecs_id_t), &value);
     test_ok( ecs_meta_set_uint(&cur, e) );
@@ -2249,7 +2249,7 @@ void Cursor_struct_pop_after_dotmember(void) {
         }
     });
 
-    T value = {{0}};
+    T value = {{{0, 0},{0, 0}}, {{0, 0},{0, 0}}};
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, t, &value);
     test_ok( ecs_meta_push(&cur) );
@@ -2941,7 +2941,14 @@ void Cursor_opaque_set_float(void) {
     ecs_fini(world);
 }
 
-void Cursor_opaque_set_string(void) {
+static
+int const_string_t_serialize(const ecs_serializer_t *ser, const void *ptr) {
+    char **data = ECS_CONST_CAST(char**, ptr);
+    ser->value(ser, ecs_id(ecs_string_t), data);
+    return 0;
+}
+
+void Cursor_opaque_get_set_string(void) {
     ecs_world_t *world = ecs_init();
 
     ECS_COMPONENT(world, Opaque_const_string_t);
@@ -2949,7 +2956,8 @@ void Cursor_opaque_set_string(void) {
     ecs_opaque(world, {
         .entity = ecs_id(Opaque_const_string_t),
         .type.as_type = ecs_id(ecs_string_t),
-        .type.assign_string = const_string_t_set
+        .type.assign_string = const_string_t_set,
+        .type.serialize = const_string_t_serialize
     });
 
     Opaque_const_string_t v = { 0 };
@@ -2957,6 +2965,9 @@ void Cursor_opaque_set_string(void) {
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(Opaque_const_string_t), &v);
     test_int(0, ecs_meta_set_string(&cur, "Hello World"));
     test_str(v.value, "Hello World");
+
+    const char* str = ecs_meta_get_string(&cur);
+    test_str(str, "Hello World");
 
     ecs_fini(world);
 }
@@ -2973,8 +2984,8 @@ void Cursor_opaque_set_entity(void) {
     });
 
     Opaque_entity v = { 0 };
-    ecs_entity_t e1 = ecs_new_id(world);
-    ecs_entity_t e2 = ecs_new_id(world);
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(Opaque_entity), &v);
     test_int(0, ecs_meta_set_entity(&cur, e1));
@@ -2997,8 +3008,8 @@ void Cursor_opaque_set_id(void) {
     });
 
     Opaque_id v = { 0 };
-    ecs_entity_t e1 = ecs_new_id(world);
-    ecs_entity_t e2 = ecs_new_id(world);
+    ecs_entity_t e1 = ecs_new(world);
+    ecs_entity_t e2 = ecs_new(world);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, ecs_id(Opaque_id), &v);
     test_int(0, ecs_meta_set_id(&cur, e1));
@@ -4557,10 +4568,10 @@ void Cursor_get_member_id(void) {
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, t, &value);
     test_ok( ecs_meta_push(&cur) );
     test_assert(ecs_meta_get_member_id(&cur) != 0);
-    test_assert(ecs_meta_get_member_id(&cur) == ecs_lookup_fullpath(world, "T.x"));
+    test_assert(ecs_meta_get_member_id(&cur) == ecs_lookup(world, "T.x"));
     test_ok( ecs_meta_next(&cur) );
     test_assert(ecs_meta_get_member_id(&cur) != 0);
-    test_assert(ecs_meta_get_member_id(&cur) == ecs_lookup_fullpath(world, "T.y"));
+    test_assert(ecs_meta_get_member_id(&cur) == ecs_lookup(world, "T.y"));
     test_ok( ecs_meta_pop(&cur) );
 
     ecs_fini(world);

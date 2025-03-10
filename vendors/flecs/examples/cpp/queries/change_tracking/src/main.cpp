@@ -5,9 +5,8 @@
 // is a cheap way of eliminating redundant work, as many entities can be skipped
 // with a single check. 
 // 
-// This example shows how to use change tracking in combination with a few other
-// techniques, like using prefabs to store a single dirty state for multiple
-// entities and instanced queries.
+// This example shows how to use change tracking in combination with using 
+// prefabs to store a single dirty state for multiple entities.
 
 struct Dirty {
     bool value;
@@ -20,18 +19,22 @@ struct Position {
 int main(int, char *[]) {
     flecs::world ecs;
 
+    // Make Dirty inheritable so that queries can match it on prefabs
+    ecs.component<Dirty>().add(flecs::OnInstantiate, flecs::Inherit);
+
     // Create a query that just reads a component. We'll use this query for
     // change tracking. Change tracking for a query is automatically enabled
     // when query::changed() is called.
     // Each query has its own private dirty state which is reset only when the
     // query is iterated.
-    flecs::query<const Position> q_read = ecs.query<const Position>();
+    flecs::query<const Position> q_read = ecs.query_builder<const Position>()
+        .cached()
+        .build();
 
     // Create a query that writes the component based on a Dirty state.
     flecs::query<const Dirty, Position> q_write = 
         ecs.query_builder<const Dirty, Position>()
-            .term_at(1).up()     // Only match Dirty from prefab
-            .instanced()         // Instanced iteration is faster (see example)
+            .term_at(0).up(flecs::IsA) // Only match Dirty from prefab
             .build();
 
     // Create two prefabs with a Dirty component. We can use this to share a
@@ -60,13 +63,15 @@ int main(int, char *[]) {
     std::cout << "q_read.changed(): " << q_read.changed() << "\n";
 
     // The changed state will remain true until we have iterated each table.
-    q_read.iter([](flecs::iter& it) {
-        // With the it.changed() function we can check if the table we're
-        // currently iterating has changed since last iteration.
-        // Because this is the first time the query is iterated, all tables
-        // will show up as changed.
-        std::cout << "it.changed() for table [" << it.type().str() << "]: "
-            << it.changed() << "\n";
+    q_read.run([](flecs::iter& it) {
+        while (it.next()) {
+            // With the it.changed() function we can check if the table we're
+            // currently iterating has changed since last iteration.
+            // Because this is the first time the query is iterated, all tables
+            // will show up as changed.
+            std::cout << "it.changed() for table [" << it.type().str() << "]: "
+                << it.changed() << "\n";
+        }
     });
 
     // Now that we have iterated all tables, the dirty state is reset.
@@ -74,23 +79,31 @@ int main(int, char *[]) {
 
     // Iterate the write query. Because the Position term is InOut (default)
     // iterating the query will write to the dirty state of iterated tables.
-    q_write.iter([](flecs::iter& it, const Dirty *dirty, Position *p) {
-        std::cout << "iterate table [" << it.type().str() << "]\n";
+    q_write.run([](flecs::iter& it) {
+        while (it.next()) {
+            auto dirty = it.field<const Dirty>(0);
+            auto p = it.field<Position>(1);
 
-        // Because we enforced that Dirty is a shared component, we can check
-        // a single value for the entire table.
-        if (!dirty->value) {
-            // If the dirty flag is false, skip the table. This way the table's
-            // dirty state is not updated by the query.
-            it.skip();
-            std::cout << "it.skip() for table [" << it.type().str() << "]\n";
-            return;
-        }
+            std::cout << "iterate table [" << it.type().str() << "]\n";
 
-        // For all other tables the dirty state will be set.
-        for (auto i : it) {
-            p[i].x ++;
-            p[i].y ++;
+            // Because we enforced that Dirty is a shared component, we can check
+            // a single value for the entire table.
+            if (!dirty->value) {
+                // If the dirty flag is false, skip the table. This way the table's
+                // dirty state is not updated by the query.
+                it.skip();
+
+                // Cleanup iterator resources since iterator wasn't done yet
+                it.fini();
+                std::cout << "it.skip() for table [" << it.type().str() << "]\n";
+                break;
+            }
+
+            // For all other tables the dirty state will be set.
+            for (auto i : it) {
+                p[i].x ++;
+                p[i].y ++;
+            }
         }
     });
 
@@ -98,10 +111,12 @@ int main(int, char *[]) {
     std::cout << "\nq_read.changed(): " << q_read.changed() << "\n";
 
     // When we iterate the read query, we'll see that one table has changed.
-    q_read.iter([](flecs::iter& it) {
-        std::cout << "it.changed() for table [" << it.type().str() << "]: "
-            << it.changed() << "\n";
-    }); 
+    q_read.run([](flecs::iter& it) {
+        while (it.next()) {
+            std::cout << "it.changed() for table [" << it.type().str() << "]: "
+                << it.changed() << "\n";
+        }
+    });
 
     // Output:
     //  q_read.changed(): 1

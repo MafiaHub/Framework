@@ -8,6 +8,10 @@
 
 #include "renderer.h"
 
+#include "backend/d3d11.h"
+#include "backend/d3d12.h"
+#include "backend/d3d9.h"
+
 namespace Framework::Graphics {
     RendererError Renderer::Init(RendererConfiguration config) {
         if (_initialized) {
@@ -58,6 +62,30 @@ namespace Framework::Graphics {
         }
         else if (_d3d12Backend) {
             _d3d12Backend->Update();
+        }
+    }
+
+    void Renderer::Render() {
+        if (_d3d11Backend) {
+            _d3d11Backend->Render();
+        }
+        else if (_d3d9Backend) {
+            _d3d9Backend->Render();
+        }
+        else if (_d3d12Backend) {
+            _d3d12Backend->Render();
+        }
+    }
+    
+    void Renderer::Paint() {
+        if (_d3d11Backend) {
+            _d3d11Backend->Paint();
+        }
+        else if (_d3d9Backend) {
+            _d3d9Backend->Paint();
+        }
+        else if (_d3d12Backend) {
+            _d3d12Backend->Paint();
         }
     }
 } // namespace Framework::Graphics

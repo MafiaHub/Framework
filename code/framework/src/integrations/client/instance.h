@@ -17,6 +17,7 @@
 #include <graphics/renderio.h>
 
 #include "networking/engine.h"
+#include <FileListTransferCBInterface.h>
 
 #include <function2.hpp>
 #include <memory>
@@ -31,6 +32,23 @@
 namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
     using NetworkConnectionClosedCallback    = fu2::function<void() const>;
+    using AssetsDownloadFinishedCallback     = fu2::function<void(bool success) const>;
+
+    class Instance;
+
+    class AssetDownloadFileProgress final: public SLNet::FileListTransferCBInterface {
+      private:
+        Instance *_instance = nullptr;
+
+      public:
+        AssetDownloadFileProgress(Instance *instance): _instance(instance) {}
+
+        bool OnFile(SLNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) override;
+
+        void OnFileProgress(SLNet::FileListTransferCBInterface::FileProgressStruct *fps) override;
+
+        bool OnDownloadComplete(DownloadCompleteStruct *dcs) override;
+    };
 
     struct InstanceOptions {
         int64_t discordAppId                = 0;
@@ -55,6 +73,12 @@ namespace Framework::Integrations::Client {
         std::string _nickname;
     };
 
+    struct AssetDownloadStatus {
+        float progress {0.0f};
+        bool downloading;
+        uint16_t setID;
+    };
+
     class Instance {
       private:
         bool _initialized       = false;
@@ -74,12 +98,20 @@ namespace Framework::Integrations::Client {
         CurrentState _currentState;
         NetworkConnectionFinalizedCallback _onConnectionFinalized;
         NetworkConnectionClosedCallback _onConnectionClosed;
+        AssetsDownloadFinishedCallback _onAssetsDownloadFinished;
 
         // Entity factories
         std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
         std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
-        void InitNetworkingMessages() const;
+        // assets
+        AssetDownloadStatus _downloadStatus {};
+        std::string _assetDownloadPath;
+        bool _initialDownloadDone {};
+
+        void InitNetworkingMessages();
+        void InitAssetDownloader();
+        void OnAssetsDownloaded(bool success);
 
       public:
         Instance();
@@ -97,6 +129,8 @@ namespace Framework::Integrations::Client {
         virtual void PostRender()  = 0;
 
         ClientError RenderInit();
+
+        void DownloadsAssetsFromConnectedServer();
 
         InstanceOptions *GetOptions() {
             return &_opts;
@@ -120,6 +154,10 @@ namespace Framework::Integrations::Client {
 
         void SetOnConnectionClosedCallback(NetworkConnectionClosedCallback cb) {
             _onConnectionClosed = std::move(cb);
+        }
+
+        void SetOnAssetsDownloadFinishedCallback(AssetsDownloadFinishedCallback cb) {
+            _onAssetsDownloadFinished = std::move(cb);
         }
 
         Networking::Engine *GetNetworkingEngine() const {
@@ -153,5 +191,20 @@ namespace Framework::Integrations::Client {
         World::Archetypes::StreamingFactory *GetStreamingFactory() const {
             return _streamingFactory.get();
         }
+
+        AssetDownloadStatus &GetAssetDownloadStatus() {
+            return _downloadStatus;
+        }
+
+        void SetAssetCachePath(const std::string &path) {
+            _assetDownloadPath = path;
+        }
+
+        const std::string &GetAssetCachePath() const {
+            return _assetDownloadPath;
+        }
+
+        friend class AssetDownloadFileProgress;
+        friend class AssetFileTransfer;
     };
 } // namespace Framework::Integrations::Client

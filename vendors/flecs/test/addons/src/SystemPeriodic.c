@@ -2,19 +2,19 @@
 
 static
 void Iter(ecs_iter_t *it) {
-    Position *p = ecs_field(it, Position, 1);
+    Position *p = ecs_field(it, Position, 0);
     Velocity *v = NULL;
     Mass *m = NULL;
 
     if (it->field_count >= 2) {
-        if (ecs_field_size(it, 2) == sizeof(Velocity)) {
-            v = ecs_field(it, Velocity, 2);
+        if (ecs_field_size(it, 1) == sizeof(Velocity)) {
+            v = ecs_field(it, Velocity, 1);
         }
     }
 
     if (it->field_count >= 3) {
-        if (ecs_field_size(it, 3) == sizeof(Mass)) {
-            m = ecs_field(it, Mass, 3);
+        if (ecs_field_size(it, 2) == sizeof(Mass)) {
+            m = ecs_field(it, Mass, 2);
         }
     }
 
@@ -560,10 +560,10 @@ void SystemPeriodic_4_type_1_and_1_or(void) {
     ECS_ENTITY(world, e3, Position, Position_1, Velocity);
     ECS_ENTITY(world, e4, Velocity);
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position || Position_1, Velocity);
-
     ecs_set(world, e3, Position_1, {0, 0});
     ecs_set(world, e4, Velocity, {0, 0});
+
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position || Position_1, Velocity);
 
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -577,18 +577,18 @@ void SystemPeriodic_4_type_1_and_1_or(void) {
     test_null(ctx.param);
 
     test_int(ctx.e[0], e1);
-    test_int(ctx.e[1], e2);
-    test_int(ctx.e[2], e3);
+    test_int(ctx.e[1], e3);
+    test_int(ctx.e[2], e2);
 
     test_int(ctx.c[0][0], ecs_id(Position));
     test_int(ctx.s[0][0], 0);
     test_int(ctx.c[0][1], ecs_id(Velocity));
     test_int(ctx.s[0][1], 0);
-    test_int(ctx.c[1][0], ecs_id(Position_1));
+    test_int(ctx.c[1][0], ecs_id(Position));
     test_int(ctx.s[1][0], 0);
     test_int(ctx.c[1][1], ecs_id(Velocity));
     test_int(ctx.s[1][1], 0);
-    test_int(ctx.c[2][0], ecs_id(Position));
+    test_int(ctx.c[2][0], ecs_id(Position_1));
     test_int(ctx.s[2][0], 0);
     test_int(ctx.c[2][1], ecs_id(Velocity));
     test_int(ctx.s[2][1], 0);
@@ -626,18 +626,18 @@ void SystemPeriodic_4_type_1_and_1_or_of_3(void) {
     test_null(ctx.param);
 
     test_int(ctx.e[0], e1);
-    test_int(ctx.e[1], e2);
-    test_int(ctx.e[2], e3);
+    test_int(ctx.e[1], e3);
+    test_int(ctx.e[2], e2);
 
     test_int(ctx.c[0][0], ecs_id(Position));
     test_int(ctx.s[0][0], 0);
     test_int(ctx.c[0][1], ecs_id(Velocity));
     test_int(ctx.s[0][1], 0);
-    test_int(ctx.c[1][0], ecs_id(Position_2));
+    test_int(ctx.c[1][0], ecs_id(Position_1));
     test_int(ctx.s[1][0], 0);
     test_int(ctx.c[1][1], ecs_id(Velocity));
     test_int(ctx.s[1][1], 0);
-    test_int(ctx.c[2][0], ecs_id(Position_1));
+    test_int(ctx.c[2][0], ecs_id(Position_2));
     test_int(ctx.s[2][0], 0);
     test_int(ctx.c[2][1], ecs_id(Velocity));
     test_int(ctx.s[2][1], 0);
@@ -972,8 +972,8 @@ void SystemPeriodic_match_2_systems_w_populated_table(void) {
 }
 
 void TestOptional_w_column(ecs_iter_t *it) {
-    Position *p = ecs_field(it, Position, 1);
-    Velocity *v = ecs_field(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 0);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     test_assert(p != NULL);
     test_assert(v == NULL);
@@ -982,8 +982,8 @@ void TestOptional_w_column(ecs_iter_t *it) {
 }
 
 void TestOptional_w_shared(ecs_iter_t *it) {
-    Position *p = ecs_field(it, Position, 1);
-    Velocity *v = ecs_field(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 0);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
     test_assert(p != NULL);
     test_assert(v == NULL);
@@ -1027,7 +1027,7 @@ void SystemPeriodic_ensure_optional_is_null_shared(void) {
 
     ECS_ENTITY(world, e, Position);
 
-    ECS_SYSTEM(world, TestOptional_w_shared, EcsOnUpdate, Position, ?Velocity(parent));
+    ECS_SYSTEM(world, TestOptional_w_shared, EcsOnUpdate, Position, ?Velocity(up));
     
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -1236,11 +1236,11 @@ void SystemPeriodic_disabled_nested_feature(void) {
 }
 
 void TwoRefs(ecs_iter_t *it) {
-    Position *p = ecs_field(it, Position, 1);
-    Velocity *v = ecs_field(it, Velocity, 2);
+    Position *p = ecs_field(it, Position, 0);
+    Velocity *v = ecs_field(it, Velocity, 1);
 
+    test_assert(!ecs_field_is_self(it, 0));
     test_assert(!ecs_field_is_self(it, 1));
-    test_assert(!ecs_field_is_self(it, 2));
 
     (void)p;
     (void)v;
@@ -1419,7 +1419,7 @@ void SystemPeriodic_match_prefab_and_normal(void) {
 
 static
 void TestIsSharedOnNotSet(ecs_iter_t *it) {
-    test_assert(ecs_field_is_self(it, 2) != false);
+    test_assert(ecs_field_is_self(it, 1) != false);
 }
 
 void SystemPeriodic_is_shared_on_column_not_set(void) {
@@ -1444,6 +1444,10 @@ void SystemPeriodic_owned_column(void) {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
+
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+    ecs_add_pair(world, ecs_id(Mass), EcsOnInstantiate, EcsInherit);
 
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, Velocity);
@@ -1473,6 +1477,9 @@ void SystemPeriodic_owned_not_column(void) {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
+
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
 
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, Velocity);
@@ -1508,6 +1515,10 @@ void SystemPeriodic_owned_or_column(void) {
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
 
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+    ecs_add_pair(world, ecs_id(Mass), EcsOnInstantiate, EcsInherit);
+
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, Velocity);
     ECS_ENTITY(world, e2, Position, Mass);
@@ -1542,13 +1553,14 @@ void SystemPeriodic_shared_column(void) {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
 
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, Velocity);
     ECS_ENTITY(world, e2, Position, (IsA, base));
     ECS_ENTITY(world, e3, Position);
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, Velocity(up));
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, Velocity(up IsA));
 
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -1572,12 +1584,13 @@ void SystemPeriodic_shared_not_column(void) {
 
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
 
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, Velocity);
     ECS_ENTITY(world, e2, Position, (IsA, base));
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, !Velocity(up));
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, !Velocity(up IsA));
 
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -1607,6 +1620,9 @@ void SystemPeriodic_shared_or_column(void) {
     ECS_COMPONENT(world, Velocity);
     ECS_COMPONENT(world, Mass);
 
+    ecs_add_pair(world, ecs_id(Mass), EcsOnInstantiate, EcsInherit);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+
     ECS_ENTITY(world, base1, Velocity);
     ECS_ENTITY(world, base2, Mass);
     ECS_ENTITY(world, e1, Position, Velocity);
@@ -1614,7 +1630,7 @@ void SystemPeriodic_shared_or_column(void) {
     ECS_ENTITY(world, e3, Position, (IsA, base1));
     ECS_ENTITY(world, e4, Position, (IsA, base2));
 
-    ECS_SYSTEM(world, SharedOr, EcsOnUpdate, Position, Velocity(up) || Mass(up));
+    ECS_SYSTEM(world, SharedOr, EcsOnUpdate, Position, Velocity(up IsA) || Mass(up IsA));
 
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -1644,11 +1660,13 @@ void SystemPeriodic_container_dont_match_inheritance(void) {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, (IsA, base));
     ECS_ENTITY(world, e2, Position, (ChildOf, base));
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, Velocity(parent));
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, Velocity(up));
 
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -1673,11 +1691,13 @@ void SystemPeriodic_cascade_dont_match_inheritance(void) {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+
     ECS_ENTITY(world, base, Velocity);
     ECS_ENTITY(world, e1, Position, (IsA, base));
     ECS_ENTITY(world, e2, Position, (ChildOf, base));
 
-    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Velocity(parent|cascade));
+    ECS_SYSTEM(world, Iter, EcsOnUpdate, Position, ?Velocity(cascade));
 
     Probe ctx = {0};
     ecs_set_ctx(world, &ctx, NULL);
@@ -1749,7 +1769,7 @@ void SystemPeriodic_sys_context(void) {
         .ctx = &param
     });
 
-    test_assert(ecs_system_get_ctx(world, TestContext) == &param);
+    test_assert(ecs_system_get(world, TestContext)->ctx == &param);
 
     ecs_fini(world);
 }
@@ -1792,7 +1812,7 @@ void SystemPeriodic_owned_only(void) {
 
     ECS_SYSTEM(world, Dummy, EcsOnUpdate, Position(self));
 
-    ecs_entity_t e = ecs_new(world, Position);
+    ecs_entity_t e = ecs_new_w(world, Position);
 
     ecs_progress(world, 0);
 
@@ -1805,7 +1825,7 @@ static void AssertReadonly(ecs_iter_t *it) {
     test_assert(dummy_invoked == 0);
     dummy_invoked = it->entities[0];
 
-    test_assert( ecs_field_is_readonly(it, 1) == true);
+    test_assert( ecs_field_is_readonly(it, 0) == true);
 }
 
 void SystemPeriodic_shared_only(void) {
@@ -1813,9 +1833,11 @@ void SystemPeriodic_shared_only(void) {
 
     ECS_COMPONENT(world, Position);
 
-    ECS_SYSTEM(world, AssertReadonly, EcsOnUpdate, Position(up));
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
 
-    ecs_entity_t base = ecs_new(world, Position);
+    ECS_SYSTEM(world, AssertReadonly, EcsOnUpdate, Position(up IsA));
+
+    ecs_entity_t base = ecs_new_w(world, Position);
     ecs_entity_t e = ecs_new_w_pair(world, EcsIsA, base);
 
     ecs_progress(world, 0);
@@ -1832,7 +1854,7 @@ void SystemPeriodic_is_in_readonly(void) {
 
     ECS_SYSTEM(world, AssertReadonly, EcsOnUpdate, [in] Position);
 
-    ecs_entity_t e = ecs_new(world, Position);
+    ecs_entity_t e = ecs_new_w(world, Position);
 
     ecs_progress(world, 0);
 
@@ -1866,10 +1888,10 @@ void SystemPeriodic_and_type(void) {
     ECS_COMPONENT(world, Velocity);
     ECS_PREFAB(world, MyType, Position, Velocity);
 
-    ECS_SYSTEM(world, TypeSystem, EcsOnUpdate, AND | MyType);
+    ECS_SYSTEM(world, TypeSystem, EcsOnUpdate, and | MyType);
 
-    ecs_new(world, Position);
-    ecs_new(world, Velocity);
+    ecs_new_w(world, Position);
+    ecs_new_w(world, Velocity);
     ECS_ENTITY(world, e, Position, Velocity);
 
     Probe ctx = {0};
@@ -1897,11 +1919,11 @@ void SystemPeriodic_or_type(void) {
     ECS_COMPONENT(world, Velocity);
     ECS_PREFAB(world, MyType, Position, Velocity);
 
-    ECS_SYSTEM(world, TypeSystem, EcsOnUpdate, OR | MyType);
+    ECS_SYSTEM(world, TypeSystem, EcsOnUpdate, or | MyType);
 
-    ecs_entity_t e1 = ecs_new(world, Position);
-    ecs_entity_t e2 = ecs_new(world, Velocity);
-    ecs_entity_t e3 = ecs_new(world, Position);
+    ecs_entity_t e1 = ecs_new_w(world, Position);
+    ecs_entity_t e2 = ecs_new_w(world, Velocity);
+    ecs_entity_t e3 = ecs_new_w(world, Position);
     ecs_add(world, e3, Velocity);
 
     Probe ctx = {0};
@@ -1918,9 +1940,9 @@ void SystemPeriodic_or_type(void) {
     test_int(ctx.e[0], e1);
     test_int(ctx.e[1], e2);
     test_int(ctx.e[2], e3);
-    test_int(ctx.c[0][0], ecs_id(Position));
-    test_int(ctx.c[1][0], ecs_id(Velocity));
-    test_int(ctx.c[2][0], ecs_id(Position));
+    test_int(ctx.c[0][0], MyType);
+    test_int(ctx.c[1][0], MyType);
+    test_int(ctx.c[2][0], MyType);
     test_int(ctx.s[0][0], 0);
 
     ecs_fini(world);
