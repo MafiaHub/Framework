@@ -11,10 +11,7 @@
 static ultralight::IndexType patternCW[]  = {0, 1, 3, 1, 2, 3};
 static ultralight::IndexType patternCCW[] = {0, 3, 1, 1, 3, 2};
 
-struct ID3D11CommandList;
-
 Framework::GUI::RendererD3D11 *rendererBackend {};
-ID3D11CommandList *commandList {};
 
 namespace Framework::GUI {
     ViewD3D11::ViewD3D11(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): View(renderer, graphicsRenderer) {
