@@ -28,7 +28,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D11::UpdateGeometry() {
-        const auto driver = rendererBackend->GetDriver();
+        const auto driver = rendererBackend;
         
         bool is_new = false;
 
@@ -172,23 +172,22 @@ namespace Framework::GUI {
 
         // Update texture data for CPU renderer
         if (!_gpuAccelerated && _internalView->surface()) {
-            const auto driver = rendererBackend->GetDriver();
+            const auto driver = rendererBackend;
             auto bitmap       = ((ultralight::BitmapSurface *)_internalView->surface())->bitmap();
             
             if (!_renderTextureID) {
-                _renderTextureID = driver->NextTextureId();
-                driver->CreateTexture(_renderTextureID, bitmap);
+                _renderTextureID = rendererBackend->NextTextureId();
+                rendererBackend->CreateTexture(_renderTextureID, bitmap);
             }
             else {
-                driver->UpdateTexture(_renderTextureID, bitmap);
+                rendererBackend->UpdateTexture(_renderTextureID, bitmap);
             }
 
             _gpuState.texture_1_id = _renderTextureID;
         }
 
         // Issue a view render
-        const auto driver = rendererBackend->GetDriver();
-        driver->DrawGeometry(_geometryID, 6, 0, _gpuState);
+        rendererBackend->DrawGeometry(_geometryID, 6, 0, _gpuState);
     }
 
     void ViewD3D11::InitRenderer(Framework::Graphics::Renderer *graphicsRenderer) {
@@ -196,7 +195,7 @@ namespace Framework::GUI {
             rendererBackend = new RendererD3D11();
             rendererBackend->Init(graphicsRenderer);
 
-            ultralight::Platform::instance().set_gpu_driver(rendererBackend->GetDriver());
+            ultralight::Platform::instance().set_gpu_driver(rendererBackend);
         }
     }
 
@@ -205,21 +204,19 @@ namespace Framework::GUI {
             return;
         }
 
-        const auto driver = rendererBackend->GetDriver();
-
-        if (driver->HasCommandsPending()) {
-            driver->DrawCommandList();
+        if (rendererBackend->HasCommandsPending()) {
+            rendererBackend->DrawCommandList();
         }
 
         ID3D11CommandList *cc;
-        driver->context_->deferred_context()->FinishCommandList(false, &cc);
+        rendererBackend->GetBackend()->GetDeferredContext()->FinishCommandList(false, &cc);
 
         if (commandList)
             commandList->Release();
         commandList = cc;
 
         if (cc) {
-            driver->context_->immediate_context()->ExecuteCommandList(cc, true);
+            rendererBackend->GetBackend()->GetDeferredContext()->ExecuteCommandList(cc, true);
         }
     }
 } // namespace Framework::GUI

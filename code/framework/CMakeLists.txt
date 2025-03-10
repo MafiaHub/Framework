@@ -70,9 +70,6 @@ set(FRAMEWORK_CLIENT_SRC
     src/gui/sdk.cpp
     src/gui/backend/renderer_d3d11.cpp
     src/gui/backend/view_d3d11.cpp
-    src/gui/backend/d3d11/context.cpp
-    src/gui/backend/d3d11/driver.cpp
-    src/gui/backend/d3d11/driver_impl.cpp
 )
 
 # Append the platform-dependent files to the related lists

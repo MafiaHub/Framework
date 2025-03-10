@@ -38,5 +38,9 @@ namespace Framework::Graphics {
         void CreateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {};
         void UpdateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {};
         void DestroyGeometry(uint32_t geometry_id) {};
+        void SetViewport(uint32_t width, uint32_t height) {};
+        glm::mat4 ApplyProjection(const glm::mat4 &transform, float screen_width, float screen_height) {
+            return {};
+        };
     };
 } // namespace Framework::Graphics

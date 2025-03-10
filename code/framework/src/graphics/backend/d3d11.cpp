@@ -511,6 +511,13 @@ namespace Framework::Graphics {
         GetContext()->RSSetState(_rsState.Get());
     }
 
+    void D3D11Backend::BeginDrawing() {
+
+    }
+    void D3D11Backend::EndDrawing() {
+
+    }
+
     void D3D11Backend::LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout) {
         HRESULT hr;
 
@@ -738,12 +745,12 @@ namespace Framework::Graphics {
 
         Uniforms uniforms;
         uniforms.State      = {0.0f, screen_width, screen_height, (float)1.0f};
-        uniforms.Transform  = DirectX::XMMATRIX(ConvertGLMMatrixToXMMatrix(model_view_projection));
+        uniforms.Transform  = ConvertGLMMatrixToXMMatrix(model_view_projection);
         uniforms.Scalar4[0] = {state.uniform_scalar[0], state.uniform_scalar[1], state.uniform_scalar[2], state.uniform_scalar[3]};
         uniforms.Scalar4[1] = {state.uniform_scalar[4], state.uniform_scalar[5], state.uniform_scalar[6], state.uniform_scalar[7]};
         for (size_t i = 0; i < 8; ++i) uniforms.Vector[i] = DirectX::XMFLOAT4(state.uniform_vector[i].x, state.uniform_vector[i].y, state.uniform_vector[i].z, state.uniform_vector[i].w);
         uniforms.ClipSize = state.clip_size;
-        for (size_t i = 0; i < state.clip_size; ++i) uniforms.Clip[i] = DirectX::XMMATRIX(ConvertGLMMatrixToXMMatrix(state.clip[i]));
+        for (size_t i = 0; i < state.clip_size; ++i) uniforms.Clip[i] = ConvertGLMMatrixToXMMatrix(state.clip[i]);
 
         D3D11_MAPPED_SUBRESOURCE res;
         GetContext()->Map(buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &res);
