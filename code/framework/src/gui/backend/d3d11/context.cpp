@@ -103,17 +103,6 @@ namespace ultralight {
         if (device_) {
             if (deferred_context_)
                 deferred_context_->ClearState();
-                // immediate_context_->ClearState(); // no, because here we don't own it
-
-#ifdef _DEBUG
-            ID3D11Debug *debug;
-            HRESULT result = device_.Get()->QueryInterface(__uuidof(ID3D11Debug), reinterpret_cast<void **>(&debug));
-
-            if (SUCCEEDED(result)) {
-                debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
-                debug->Release();
-            }
-#endif
         }
     }
 

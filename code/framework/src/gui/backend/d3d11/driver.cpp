@@ -68,30 +68,6 @@ namespace {
         return hr;
     }
 
-#if 0
-HRESULT CompileShaderFromFile(const char* path, LPCSTR szEntryPoint, LPCSTR szShaderModel, ID3DBlob** ppBlobOut)
-{
-	auto fs = ultralight::Platform::instance().file_system();
-
-	if (!fs)
-	{
-		OutputDebugStringA("Could not load shaders, null FileSystem instance.");
-		return E_FAIL;
-	}
-
-	ultralight::RefPtr<ultralight::Buffer> buffer = fs->OpenFile(path);
-
-	if (!buffer)
-	{
-		OutputDebugStringA("Could not load shaders, file not found.");
-		return E_FAIL;
-	}
-
-	return CompileShaderFromSource((char*)buffer->data(), buffer->size(), path, szEntryPoint,
-																 szShaderModel, ppBlobOut);
-}
-#endif
-
 } // namespace
 
 namespace ultralight {
@@ -118,8 +94,6 @@ namespace ultralight {
         desc.Height    = bitmap->height();
         desc.MipLevels = desc.ArraySize = 1;
         desc.Format                     = bitmap->format() == BitmapFormat::BGRA8_UNORM_SRGB ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_A8_UNORM;
-        //desc.Format                     = bitmap->format() == BitmapFormat::BGRA8_UNORM_SRGB ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_A8_UNORM;
-        //desc.Format                     = DXGI_FORMAT_B8G8R8A8_UNORM;
         desc.SampleDesc.Count           = 1;
         desc.Usage                      = D3D11_USAGE_DYNAMIC;
         desc.BindFlags                  = D3D11_BIND_SHADER_RESOURCE;
@@ -129,8 +103,7 @@ namespace ultralight {
         auto &texture_entry = textures_[texture_id];
         HRESULT hr;
 
-        if (bitmap->IsEmpty() /*|| bitmap->size() == 0*/) {
-            // spdlog::info("GPUDriverD3D11::CreateTexture path 1");
+        if (bitmap->IsEmpty()) {
             desc.BindFlags      = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
             desc.Usage          = D3D11_USAGE_DEFAULT;
             desc.CPUAccessFlags = 0;
@@ -144,7 +117,6 @@ namespace ultralight {
             hr = context_->device()->CreateTexture2D(&desc, NULL, texture_entry.texture.GetAddressOf());
         }
         else {
-            // spdlog::info("GPUDriverD3D11::CreateTexture path 2, size:{} ptr:{}", bitmap->size(), (void*)bitmap->raw_pixels());
             if (bitmap->size() == 0 && bitmap->raw_pixels() == nullptr)
                 spdlog::error("GPUDriverD3D11::CreateTexture fault, size:{} ptr:{}", bitmap->size(), (void *)bitmap->raw_pixels());
             D3D11_SUBRESOURCE_DATA tex_data;
@@ -159,7 +131,6 @@ namespace ultralight {
 
         if (FAILED(hr)) {
             spdlog::error("GPUDriverD3D11::CreateTexture, unable to create texture. hr:{}, w:{}, h:{}, size:{}", hr, desc.Width, desc.Height, bitmap->size());
-            MessageBoxW(nullptr, L"GPUDriverD3D11::CreateTexture, unable to create texture.", L"Error", MB_OK);
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
@@ -172,8 +143,6 @@ namespace ultralight {
         hr = context_->device()->CreateShaderResourceView(texture_entry.texture.Get(), &srv_desc, texture_entry.texture_srv.GetAddressOf());
 
         if (FAILED(hr))
-            MessageBoxW(nullptr, L"GPUDriverD3D11::CreateTexture, unable to create shader resource view for texture.", L"Error", MB_OK);
-
 #if ENABLE_MSAA
         if (texture_entry.is_msaa_render_target) {
             // Create resolve texture and shader resource view
@@ -201,7 +170,6 @@ namespace ultralight {
     void GPUDriverD3D11::UpdateTexture(uint32_t texture_id, RefPtr<Bitmap> bitmap) {
         auto i = textures_.find(texture_id);
         if (i == textures_.end()) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::UpdateTexture, texture id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -231,9 +199,7 @@ namespace ultralight {
     GPUDriverD3D11::TextureEntry &GPUDriverD3D11::GetTexture(uint32_t texture_id) {
         auto i = textures_.find(texture_id);
         if (i == textures_.end()) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::GetTexture, texture id doesn't exist.", L"Error", MB_OK);
             throw new std::runtime_error("GPUDriverD3D11::GetTexture, texture id doesn't exist.");
-            // return;
         }
 
         return i->second;
@@ -273,9 +239,8 @@ namespace ultralight {
         HRESULT hr                  = context_->device()->CreateRenderTargetView(tex.Get(), &renderTargetViewDesc, render_target_entry.render_target_view.GetAddressOf());
 
         render_target_entry.render_target_texture_id = buffer.texture_id;
-
         if (FAILED(hr))
-            MessageBoxW(nullptr, L"GPUDriverD3D11::CreateRenderBuffer, unable to create render target.", L"Error", MB_OK);
+            throw new std::runtime_error("GPUDriverD3D11::CreateRenderBuffer, unable to create render target.");
     }
 
     void GPUDriverD3D11::DestroyRenderBuffer(uint32_t render_buffer_id) {
@@ -333,7 +298,6 @@ namespace ultralight {
     void GPUDriverD3D11::UpdateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {
         auto i = geometry_.find(geometry_id);
         if (i == geometry_.end()) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::UpdateGeometry, geometry id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -363,7 +327,6 @@ namespace ultralight {
     void GPUDriverD3D11::BindTexture(uint8_t texture_unit, uint32_t texture_id) {
         auto i = textures_.find(texture_id);
         if (i == textures_.end()) {
-            //MessageBoxW(nullptr, L"GPUDriverD3D11::BindTexture, texture id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -395,7 +358,6 @@ namespace ultralight {
 
         ID3D11RenderTargetView *target = GetRenderTargetView(render_buffer_id);
         if (!target) {
-            //MessageBoxW(nullptr, L"GPUDriverD3D11::BindRenderBuffer, render buffer id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -410,7 +372,6 @@ namespace ultralight {
 
         ID3D11RenderTargetView *target = GetRenderTargetView(render_buffer_id);
         if (!target) {
-            //MessageBoxW(nullptr, L"GPUDriverD3D11::ClearRenderBuffer, render buffer id doesn't exist.", L"Error", MB_OK);
             return;
         }
 
@@ -459,64 +420,6 @@ namespace ultralight {
         ctx->DrawIndexed(indices_count, indices_offset, 0);
         batch_count_++;
     }
-
-#if 0
-void GPUDriverD3D11::LoadVertexShader(const char* path,
-										ID3D11VertexShader** ppVertexShader,
-										const D3D11_INPUT_ELEMENT_DESC* pInputElementDescs,
-										UINT NumElements,
-										ID3D11InputLayout** ppInputLayout)
-{
-	HRESULT hr;
-	ComPtr<ID3DBlob> vs_blob;
-	hr = CompileShaderFromFile(path, "VS", "vs_4_0", vs_blob.GetAddressOf());
-
-	// Create the vertex shader
-	hr = context_->device()->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(),
-													nullptr, ppVertexShader);
-
-	if (FAILED(hr))
-	{
-		MessageBoxW(nullptr,
-						L"GPUDriverD3D11::LoadVertexShader, Vertex shader could not be compiled. Check "
-						L"your working directory.",
-						L"Error", MB_OK);
-		return;
-	}
-
-	// Create the input layout
-	hr = context_->device()->CreateInputLayout(pInputElementDescs, NumElements, vs_blob->GetBufferPointer(),
-													vs_blob->GetBufferSize(), ppInputLayout);
-
-	if (FAILED(hr))
-	{
-		MessageBoxW(nullptr, L"GPUDriverD3D11::LoadVertexShader, Could not create vertex input layout.",
-								L"Error", MB_OK);
-		return;
-	}
-}
-
-void GPUDriverD3D11::LoadPixelShader(const char* path, ID3D11PixelShader** ppPixelShader)
-{
-	HRESULT hr;
-
-	ComPtr<ID3DBlob> ps_blob;
-	hr = CompileShaderFromFile(path, "PS", "ps_4_0", ps_blob.GetAddressOf());
-
-	// Create the pixel shader
-	hr = context_->device()->CreatePixelShader(ps_blob->GetBufferPointer(),
-								ps_blob->GetBufferSize(), nullptr, ppPixelShader);
-
-	if (FAILED(hr))
-	{
-		MessageBoxW(nullptr,
-						L"GPUDriverD3D11::LoadPixelShader, Pixel shader could not be compiled. Check your "
-						L"working directory.",
-						L"Error", MB_OK);
-		return;
-	}
-}
-#endif
 
     void GPUDriverD3D11::LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout) {
         HRESULT hr;
@@ -567,20 +470,8 @@ void GPUDriverD3D11::LoadPixelShader(const char* path, ID3D11PixelShader** ppPix
         };
 
         auto &shader_fill_path = shaders_[ShaderType::FillPath];
-#if 0
-	if (App::instance()->settings().load_shaders_from_file_system)
-	{
-		LoadVertexShader("shaders/hlsl/vs/v2f_c4f_t2f.hlsl", shader_fill_path.first.GetAddressOf(),
-										 layout_2f_4ub_2f, ARRAYSIZE(layout_2f_4ub_2f),
-										 vertex_layout_2f_4ub_2f_.GetAddressOf());
-		LoadPixelShader("shaders/hlsl/ps/fill_path.hlsl", shader_fill_path.second.GetAddressOf());
-	}
-	else
-#endif
-        {
-            LoadCompiledVertexShader(v2f_c4f_t2f_fxc, v2f_c4f_t2f_fxc_len, shader_fill_path.first.GetAddressOf(), layout_2f_4ub_2f, ARRAYSIZE(layout_2f_4ub_2f), vertex_layout_2f_4ub_2f_.GetAddressOf());
-            LoadCompiledPixelShader(fill_path_fxc, fill_path_fxc_len, shader_fill_path.second.GetAddressOf());
-        }
+        LoadCompiledVertexShader(v2f_c4f_t2f_fxc, v2f_c4f_t2f_fxc_len, shader_fill_path.first.GetAddressOf(), layout_2f_4ub_2f, ARRAYSIZE(layout_2f_4ub_2f), vertex_layout_2f_4ub_2f_.GetAddressOf());
+        LoadCompiledPixelShader(fill_path_fxc, fill_path_fxc_len, shader_fill_path.second.GetAddressOf());
 
         //
 
@@ -599,19 +490,8 @@ void GPUDriverD3D11::LoadPixelShader(const char* path, ID3D11PixelShader** ppPix
         };
 
         auto &shader_fill = shaders_[ShaderType::Fill];
-#if 0
-	if (App::instance()->settings().load_shaders_from_file_system) {
-		LoadVertexShader("shaders/hlsl/vs/v2f_c4f_t2f_t2f_d28f.hlsl", shader_fill.first.GetAddressOf(),
-										 layout_2f_4ub_2f_2f_28f, ARRAYSIZE(layout_2f_4ub_2f_2f_28f),
-										 vertex_layout_2f_4ub_2f_2f_28f_.GetAddressOf());
-		LoadPixelShader("shaders/hlsl/ps/fill.hlsl", shader_fill.second.GetAddressOf());
-	}
-	else
-#endif
-        {
-            LoadCompiledVertexShader(v2f_c4f_t2f_t2f_d28f_fxc, v2f_c4f_t2f_t2f_d28f_fxc_len, shader_fill.first.GetAddressOf(), layout_2f_4ub_2f_2f_28f, ARRAYSIZE(layout_2f_4ub_2f_2f_28f), vertex_layout_2f_4ub_2f_2f_28f_.GetAddressOf());
-            LoadCompiledPixelShader(fill_fxc, fill_fxc_len, shader_fill.second.GetAddressOf());
-        }
+        LoadCompiledVertexShader(v2f_c4f_t2f_t2f_d28f_fxc, v2f_c4f_t2f_t2f_d28f_fxc_len, shader_fill.first.GetAddressOf(), layout_2f_4ub_2f_2f_28f, ARRAYSIZE(layout_2f_4ub_2f_2f_28f), vertex_layout_2f_4ub_2f_2f_28f_.GetAddressOf());
+        LoadCompiledPixelShader(fill_fxc, fill_fxc_len, shader_fill.second.GetAddressOf());
     }
 
     void GPUDriverD3D11::BindShader(ShaderType shader) {
@@ -712,9 +592,6 @@ void GPUDriverD3D11::LoadPixelShader(const char* path, ID3D11PixelShader** ppPix
         sampler_desc.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
         sampler_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
         sampler_desc.MinLOD         = 0;
-        // sampler_desc.MaxLOD = D3D11_FLOAT32_MAX;
-        // sampler_desc.MaxAnisotropy = 16;
-        // sampler_desc.MaxLOD = 0;
         HRESULT hr = context_->device()->CreateSamplerState(&sampler_desc, &sampler_state_);
 
         if (FAILED(hr))
