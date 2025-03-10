@@ -30,19 +30,20 @@ namespace Framework::GUI {
     class Manager {
       private:
         ViewportConfiguration _viewportConfiguration;
-        ultralight::RefPtr<ultralight::Renderer> _renderer;
+        ultralight::RefPtr<ultralight::Renderer> _ultralightRenderer;
 
         std::recursive_mutex _renderMutex;
 
         std::vector<std::unique_ptr<View>> _views;
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer* _graphicsRenderer;
+        bool _gpuAccelerated = false;
 
       public:
         Manager();
         ~Manager();
 
-        bool Init(const std::string&, ViewportConfiguration, Graphics::Renderer*);
+        bool Init(const std::string&, ViewportConfiguration, Graphics::Renderer*, bool gpu_accelerated = false);
 
         int CreateView(std::string, int, int);
         bool DestroyView(int);

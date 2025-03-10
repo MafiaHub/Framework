@@ -35,7 +35,10 @@ namespace Framework::GUI {
 
         SDK *_sdk = nullptr;
 
+        // CPU renderer
         uint8_t *_pixelData;
+
+        bool _gpuAccelerated = false;
         int _width;
         int _height;
         bool _shouldDisplay = false;
@@ -54,7 +57,7 @@ namespace Framework::GUI {
         View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
         virtual ~View();
 
-        virtual bool Init(std::string &, int, int);
+        virtual bool Init(std::string &, int, int, bool gpu_accelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;
@@ -69,12 +72,14 @@ namespace Framework::GUI {
 
             if (enable) {
                 _internalView->Focus();
-                ShowCursor(true);
             }
             else {
                 _internalView->Unfocus();
-                ShowCursor(false);
             }
+        }
+
+        bool HasFocus() const {
+            return _internalView->HasFocus();
         }
 
         void Display(bool enable) {
@@ -83,6 +88,10 @@ namespace Framework::GUI {
 
         bool ShouldDisplay() const {
             return _shouldDisplay;
+        }
+
+        ultralight::Cursor GetCursor() const {
+            return _cursor;
         }
 
         inline void AddEventListener(std::string eventName, const EventCallbackProc &proc) {

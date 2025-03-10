@@ -141,7 +141,7 @@ template<typename T> class RefPtr {
     : instance_(other.LeakRef())
   {
   }
-
+  
   ///
   /// Destroy RefPtr (wll decrement ref-count by one)
   ///

@@ -16,6 +16,8 @@
 #include "errors.h"
 #include "types.h"
 
+#include <dxgi.h>
+
 namespace Framework::Graphics {
     struct RendererConfiguration {
         RendererBackend backend;
@@ -28,6 +30,7 @@ namespace Framework::Graphics {
         struct {
             ID3D11Device *device;
             ID3D11DeviceContext *deviceContext;
+            IDXGISwapChain *swapChain;
         } d3d11;
 
         struct {
