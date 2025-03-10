@@ -49,6 +49,14 @@ namespace Framework::Graphics {
         void End();
         int NumFramesInFlight() const;
 
+        // TODO: Backend not implemented yet
+        void BeginDrawing() {}
+        void EndDrawing() {}
+        void BindTexture(uint8_t texture_unit, uint32_t texture_id) {}
+        void BindRenderBuffer(uint32_t render_buffer_id) {}
+        void ClearRenderBuffer(uint32_t render_buffer_id) {}
+        void DrawGeometry(uint32_t geometry_id, uint32_t indices_count, uint32_t indices_offset, const GPUState &state) {}
+
         ID3D12DescriptorHeap *GetSRVHeap() const {
             return _srvHeap;
         }
