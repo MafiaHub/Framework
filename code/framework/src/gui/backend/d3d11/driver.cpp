@@ -207,22 +207,19 @@ namespace ultralight {
 
     void GPUDriverD3D11::CreateRenderBuffer(uint32_t render_buffer_id, const RenderBuffer &buffer) {
         if (render_buffer_id == 0) {
-            MessageBoxW(nullptr,
-                L"GPUDriverD3D11::CreateRenderBuffer, render buffer ID 0 is reserved for default "
-                L"render target view.",
-                L"Error", MB_OK);
+            throw new std::runtime_error("GPUDriverD3D11::CreateRenderBuffer, render buffer ID 0 is reserved for default ");
             return;
         }
 
         auto i = render_targets_.find(render_buffer_id);
         if (i != render_targets_.end()) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::CreateRenderBuffer, render buffer id already exists.", L"Error", MB_OK);
+            throw new std::runtime_error("GPUDriverD3D11::CreateRenderBuffer, render buffer id already exists.");
             return;
         }
 
         auto tex_entry = textures_.find(buffer.texture_id);
         if (tex_entry == textures_.end()) {
-            MessageBoxW(nullptr, L"GPUDriverD3D11::CreateRenderBuffer, texture id doesn't exist.", L"Error", MB_OK);
+            throw new std::runtime_error("GPUDriverD3D11::CreateRenderBuffer, texture id doesn't exist.");
             return;
         }
 
