@@ -157,7 +157,7 @@ namespace Framework::GUI {
     }
     Framework::Graphics::RenderBuffer RendererD3D11::Convert(ultralight::RenderBuffer renderBuffer) {
         Framework::Graphics::RenderBuffer newRenderBuffer;
-        newRenderBuffer.has_depth_buffer = renderBuffer.has_depth_buffer;
+        newRenderBuffer.has_depth_buffer   = renderBuffer.has_depth_buffer;
         newRenderBuffer.has_stencil_buffer = renderBuffer.has_stencil_buffer;
         newRenderBuffer.width              = renderBuffer.width;
         newRenderBuffer.height             = renderBuffer.height;
@@ -185,9 +185,9 @@ namespace Framework::GUI {
     }
     glm::mat4 RendererD3D11::Convert(ultralight::Matrix4x4 mat) {
         return glm::mat4(
-            mat.data[0], mat.data[4], mat.data[8], mat.data[12],
-            mat.data[1], mat.data[5], mat.data[9], mat.data[13],
-            mat.data[2], mat.data[6], mat.data[10], mat.data[14],
-            mat.data[3], mat.data[7], mat.data[11], mat.data[15]);
+            mat.data[0], mat.data[1], mat.data[2], mat.data[3],
+            mat.data[4], mat.data[5], mat.data[6], mat.data[7],
+            mat.data[8], mat.data[9], mat.data[10], mat.data[11],
+            mat.data[12], mat.data[13], mat.data[14], mat.data[15]);
     }
 } // namespace Framework::GUI
