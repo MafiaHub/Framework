@@ -120,7 +120,8 @@ namespace Framework::Graphics {
             _device->CreateRasterizerState(&scissor_rasterizer_desc, _scissoredRsState.GetAddressOf());
         }
 
-        _device->CreateDeferredContext(0, _deferredContext.GetAddressOf());
+        // Disabled, since we only render stuff on Render thread
+        //_device->CreateDeferredContext(0, _deferredContext.GetAddressOf());
 
         return true;
     }

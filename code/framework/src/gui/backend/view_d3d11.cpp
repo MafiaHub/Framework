@@ -208,7 +208,8 @@ namespace Framework::GUI {
             rendererBackend->DrawCommandList();
         }
 
-        ID3D11CommandList *cc;
+        // TODO figure out rendering done on a different thread than a render thread
+        /*ID3D11CommandList *cc;
         rendererBackend->GetBackend()->GetDeferredContext()->FinishCommandList(false, &cc);
 
         if (commandList)
@@ -218,6 +219,6 @@ namespace Framework::GUI {
         ID3D11DeviceContext *ctx = rendererBackend->GetBackend()->GetImmediateContext();
         if (cc && ctx) {
             ctx->ExecuteCommandList(cc, true);
-        }
+        }*/
     }
 } // namespace Framework::GUI
