@@ -639,7 +639,7 @@ namespace Framework::Graphics {
 #if ENABLE_MSAA
             auto j = _textures.find(i->second.render_target_texture_id);
             if (j == _textures.end()) {
-                MessageBoxW(nullptr, L"D3D11Backend::BindRenderBuffer, render target texture id doesn't exist.", L"Error", MB_OK);
+                throw new std::runtime_error("D3D11Backend::BindRenderBuffer, render target texture id doesn't exist.");
                 return nullptr;
             }
 
