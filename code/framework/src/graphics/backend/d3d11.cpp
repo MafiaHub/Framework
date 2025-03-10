@@ -176,8 +176,8 @@ namespace Framework::Graphics {
             hr = _device->CreateTexture2D(&desc, nullptr, texture_entry.texture.GetAddressOf());
         }
         else {
-            /*if (bitmap.size == 0 && bitmap.pixels == nullptr)
-                throw std::runtime_error("D3D11Backend::CreateTexture fault, size:{} ptr:{}", bitmap.size(), (void *)bitmap.raw_pixels());*/
+            if (bitmap.size == 0 && bitmap.pixels == nullptr)
+                throw std::runtime_error(fmt::format("D3D11Backend::CreateTexture fault, size:{} ptr:{}", bitmap.size, (void *)bitmap.pixels));
             D3D11_SUBRESOURCE_DATA tex_data;
             ZeroMemory(&tex_data, sizeof(tex_data));
             tex_data.pSysMem          = bitmap.pixels;
@@ -188,7 +188,7 @@ namespace Framework::Graphics {
         }
 
         if (FAILED(hr)) {
-            // spdlog::error("D3D11Backend::CreateTexture, unable to create texture. hr:{}, w:{}, h:{}, size:{}", hr, desc.Width, desc.Height, bitmap.size());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateTexture, unable to create texture. hr:{}, w:{}, h:{}, size:{}", hr, desc.Width, desc.Height, bitmap.size);
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
@@ -210,17 +210,15 @@ namespace Framework::Graphics {
                 hr                      = _device->CreateTexture2D(&desc, NULL, texture_entry.resolve_texture.GetAddressOf());
 
                 if (FAILED(hr))
-                    MessageBoxW(nullptr, L"D3D11Backend::CreateTexture, unable to create MSAA resolve texture.", L"Error", MB_OK);
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateTexture, unable to create MSAA resolve texture.");
 
                 srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 
                 hr = _device->CreateShaderResourceView(texture_entry.resolve_texture.Get(), &srv_desc, texture_entry.resolve_texture_srv.GetAddressOf());
 
                 if (FAILED(hr))
-                    MessageBoxW(nullptr,
-                        L"D3D11Backend::CreateTexture, unable to create shader resource view for MSAA "
-                        L"resolve texture.",
-                        L"Error", MB_OK);
+                    Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)
+                        ->error("D3D11Backend::CreateTexture, unable to create shader resource view for MSAA ");
         }
 #endif
     }
@@ -312,7 +310,7 @@ namespace Framework::Graphics {
         }
     }
 
-    void D3D11Backend::CreateGeometry(uint32_t geometry_id, const VertexBuffer& vertices, const IndexBuffer& indices) {
+    void D3D11Backend::CreateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {
         BindVertexLayout(vertices.format);
 
         if (_geometry.find(geometry_id) != _geometry.end())
@@ -350,8 +348,10 @@ namespace Framework::Graphics {
         index_data.pSysMem = indices.data;
 
         hr = _device->CreateBuffer(&index_desc, &index_data, geometry.indexBuffer.GetAddressOf());
-        if (FAILED(hr))
+        if (FAILED(hr)) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D11Backend::CreateBuffer, could not create a geometry!");
             return;
+        }
 
         _geometry.insert({geometry_id, std::move(geometry)});
     }
@@ -526,19 +526,14 @@ namespace Framework::Graphics {
         hr = _device->CreateVertexShader(data, len, nullptr, ppVertexShader);
 
         if (FAILED(hr)) {
-            MessageBoxW(nullptr,
-                L"D3D11Backend::LoadCompiledVertexShader, Vertex shader could not be compiled. Check "
-                L"your working directory.",
-                L"Error", MB_OK);
-            return;
+            throw new std::runtime_error("D3D11Backend::LoadCompiledVertexShader, Vertex shader could not be compiled.Check ");
         }
 
         // Create the input layout
         hr = _device->CreateInputLayout(pInputElementDescs, NumElements, data, len, ppInputLayout);
 
         if (FAILED(hr)) {
-            MessageBoxW(nullptr, L"D3D11Backend::LoadCompiledVertexShader, Could not create vertex input layout.", L"Error", MB_OK);
-            return;
+            throw new std::runtime_error("D3D11Backend::LoadCompiledVertexShader, Could not create vertex input layout.");
         }
     }
 
@@ -549,11 +544,7 @@ namespace Framework::Graphics {
         hr = _device->CreatePixelShader(data, len, nullptr, ppPixelShader);
 
         if (FAILED(hr)) {
-            MessageBoxW(nullptr,
-                L"D3D11Backend::LoadCompiledPixelShader, Pixel shader could not be compiled. Check your "
-                L"working directory.",
-                L"Error", MB_OK);
-            return;
+            throw new std::runtime_error("D3D11Backend::LoadCompiledPixelShader, Pixel shader could not be compiled.");
         }
     }
 
@@ -625,7 +616,6 @@ namespace Framework::Graphics {
         auto i = _geometry.find(id);
         if (i == _geometry.end()) {
             throw std::runtime_error("Geometry id not found!");
-            return;
         }
 
         auto immediate_ctx = GetContext();
@@ -693,7 +683,7 @@ namespace Framework::Graphics {
         HRESULT hr                  = _device->CreateSamplerState(&sampler_desc, &_samplerState);
 
         if (FAILED(hr))
-            MessageBoxW(nullptr, L"D3D11Backend::GetSamplerState, unable to create sampler state.", L"Error", MB_OK);
+            throw new std::runtime_error("D3D11Backend::GetSamplerState, unable to create sampler state.");
 
         return _samplerState;
     }
@@ -711,7 +701,7 @@ namespace Framework::Graphics {
 
         HRESULT hr = _device->CreateBuffer(&desc, nullptr, _constantBuffer.GetAddressOf());
         if (FAILED(hr))
-            MessageBoxW(nullptr, L"D3D11Backend::GetConstantBuffer, unable to create constant buffer.", L"Error", MB_OK);
+            throw new std::runtime_error("D3D11Backend::GetConstantBuffer, unable to create constant buffer.");
 
         return _constantBuffer;
     }
@@ -732,8 +722,11 @@ namespace Framework::Graphics {
         // GLM matrices are stored in column-major order, same as DirectX::XMMATRIX
         // So we can map the elements directly with proper casting
 
-        return DirectX::XMMATRIX(glmMatrix[0][0], glmMatrix[0][1], glmMatrix[0][2], glmMatrix[0][3], glmMatrix[1][0], glmMatrix[1][1], glmMatrix[1][2], glmMatrix[1][3], glmMatrix[2][0], glmMatrix[2][1], glmMatrix[2][2], glmMatrix[2][3], glmMatrix[3][0], glmMatrix[3][1],
-            glmMatrix[3][2], glmMatrix[3][3]);
+        return DirectX::XMMATRIX(
+            glmMatrix[0][0], glmMatrix[0][1], glmMatrix[0][2], glmMatrix[0][3], 
+            glmMatrix[1][0], glmMatrix[1][1], glmMatrix[1][2], glmMatrix[1][3], 
+            glmMatrix[2][0], glmMatrix[2][1], glmMatrix[2][2], glmMatrix[2][3], 
+            glmMatrix[3][0], glmMatrix[3][1], glmMatrix[3][2], glmMatrix[3][3]);
     }
 
     void D3D11Backend::UpdateConstantBuffer(const GPUState &state) {
