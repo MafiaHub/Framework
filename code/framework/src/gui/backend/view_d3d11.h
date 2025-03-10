@@ -59,6 +59,5 @@ namespace Framework::GUI {
         void Render() override;
 
         static void InitRenderer(Framework::Graphics::Renderer *);
-        static void UpdateRenderer();
     };
 } // namespace Framework::GUI

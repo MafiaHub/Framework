@@ -1,22 +1,17 @@
 #include "view_d3d11.h"
 #include "logging/logger.h"
 
-// DirectX
-#include <d3d11.h>
-#include <d3dcompiler.h>
 #include <stdio.h>
 
 #include <unordered_map>
 
 #include "gui/backend/renderer_d3d11.h"
+#include "graphics/backend/d3d11.h"
 
 static ultralight::IndexType patternCW[]  = {0, 1, 3, 1, 2, 3};
 static ultralight::IndexType patternCCW[] = {0, 3, 1, 1, 3, 2};
 
-struct ID3D11CommandList;
-
 Framework::GUI::RendererD3D11 *rendererBackend {};
-ID3D11CommandList *commandList {};
 
 namespace Framework::GUI {
     ViewD3D11::ViewD3D11(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): View(renderer, graphicsRenderer) {
@@ -28,7 +23,7 @@ namespace Framework::GUI {
     }
 
     void ViewD3D11::UpdateGeometry() {
-        const auto driver = rendererBackend->GetDriver();
+        const auto driver = rendererBackend;
         
         bool is_new = false;
 
@@ -172,23 +167,22 @@ namespace Framework::GUI {
 
         // Update texture data for CPU renderer
         if (!_gpuAccelerated && _internalView->surface()) {
-            const auto driver = rendererBackend->GetDriver();
+            const auto driver = rendererBackend;
             auto bitmap       = ((ultralight::BitmapSurface *)_internalView->surface())->bitmap();
             
             if (!_renderTextureID) {
-                _renderTextureID = driver->NextTextureId();
-                driver->CreateTexture(_renderTextureID, bitmap);
+                _renderTextureID = rendererBackend->NextTextureId();
+                rendererBackend->CreateTexture(_renderTextureID, bitmap);
             }
             else {
-                driver->UpdateTexture(_renderTextureID, bitmap);
+                rendererBackend->UpdateTexture(_renderTextureID, bitmap);
             }
 
             _gpuState.texture_1_id = _renderTextureID;
         }
 
         // Issue a view render
-        const auto driver = rendererBackend->GetDriver();
-        driver->DrawGeometry(_geometryID, 6, 0, _gpuState);
+        rendererBackend->DrawGeometry(_geometryID, 6, 0, _gpuState);
     }
 
     void ViewD3D11::InitRenderer(Framework::Graphics::Renderer *graphicsRenderer) {
@@ -196,30 +190,7 @@ namespace Framework::GUI {
             rendererBackend = new RendererD3D11();
             rendererBackend->Init(graphicsRenderer);
 
-            ultralight::Platform::instance().set_gpu_driver(rendererBackend->GetDriver());
-        }
-    }
-
-    void ViewD3D11::UpdateRenderer() {
-        if (!rendererBackend) {
-            return;
-        }
-
-        const auto driver = rendererBackend->GetDriver();
-
-        if (driver->HasCommandsPending()) {
-            driver->DrawCommandList();
-        }
-
-        ID3D11CommandList *cc;
-        driver->context_->deferred_context()->FinishCommandList(false, &cc);
-
-        if (commandList)
-            commandList->Release();
-        commandList = cc;
-
-        if (cc) {
-            driver->context_->immediate_context()->ExecuteCommandList(cc, true);
+            ultralight::Platform::instance().set_gpu_driver(rendererBackend);
         }
     }
 } // namespace Framework::GUI

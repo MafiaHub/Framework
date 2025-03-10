@@ -15,6 +15,10 @@
 #include <backends/imgui_impl_dx9.h>
 #include <backends/imgui_impl_win32.h>
 
+#include "graphics/backend/d3d11.h"
+#include "graphics/backend/d3d12.h"
+#include "graphics/backend/d3d9.h"
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace Framework::External::ImGUI {

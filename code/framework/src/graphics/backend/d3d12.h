@@ -11,15 +11,6 @@
 #include "backend.h"
 
 #include <memory>
-
-#ifdef WIN32
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#else
-#define ID3D12Device void
-#endif
-#define ID3D12DeviceContext void
-
 #include <vector>
 
 namespace Framework::Graphics {
@@ -42,13 +33,32 @@ namespace Framework::Graphics {
         D3D12_RESOURCE_BARRIER _barrier {};
 
       public:
-        bool Init(ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *) override;
+        bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         bool Shutdown() override;
         void Update() override;
         void Begin();
         void End();
         int NumFramesInFlight() const;
 
+        // TODO: Backend not implemented yet
+        void BeginDrawing() {}
+        void EndDrawing() {}
+        void BindTexture(uint8_t texture_unit, uint32_t texture_id) {}
+        void BindRenderBuffer(uint32_t render_buffer_id) {}
+        void ClearRenderBuffer(uint32_t render_buffer_id) {}
+        void DrawGeometry(uint32_t geometry_id, uint32_t indices_count, uint32_t indices_offset, const GPUState &state) {}
+        void CreateTexture(uint32_t texture_id, Bitmap bitmap) {};
+        void UpdateTexture(uint32_t texture_id, Bitmap bitmap) {};
+        void DestroyTexture(uint32_t texture_id) {};
+        void CreateRenderBuffer(uint32_t render_buffer_id, const RenderBuffer &buffer) {};
+        void DestroyRenderBuffer(uint32_t render_buffer_id) {};
+        void CreateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {};
+        void UpdateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {};
+        void DestroyGeometry(uint32_t geometry_id) {};
+        void SetViewport(uint32_t width, uint32_t height) {};
+        glm::mat4 ApplyProjection(const glm::mat4 &transform, float screen_width, float screen_height) {
+            return {};
+        };
         ID3D12DescriptorHeap *GetSRVHeap() const {
             return _srvHeap;
         }
