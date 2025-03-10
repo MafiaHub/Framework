@@ -8,6 +8,10 @@
 
 #include "renderer.h"
 
+#include "backend/d3d11.h"
+#include "backend/d3d12.h"
+#include "backend/d3d9.h"
+
 namespace Framework::Graphics {
     RendererError Renderer::Init(RendererConfiguration config) {
         if (_initialized) {

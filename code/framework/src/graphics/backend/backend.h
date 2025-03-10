@@ -9,6 +9,7 @@
 #pragma once
 
 #include "graphics/types.h"
+#include "graphics/renderer.h"
 
 namespace Framework::Graphics {
     template <typename TDevice, typename TContext, typename TSwapChain, typename TCommandQueue>
@@ -25,8 +26,8 @@ namespace Framework::Graphics {
       public:
         Backend() = default;
 
-        virtual bool Init(TDevice device, TContext context, TSwapChain swapChain, TCommandQueue commandList) = 0;
-        virtual bool Shutdown()                                                                              = 0;
+        virtual bool Init(const Framework::Graphics::RendererConfiguration &opts) = 0;
+        virtual bool Shutdown()                                                   = 0;
 
         virtual void Update() = 0;
 

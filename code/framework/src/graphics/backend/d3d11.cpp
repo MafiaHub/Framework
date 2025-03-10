@@ -25,10 +25,10 @@
 namespace Framework::Graphics {
     using namespace Microsoft::WRL;
 
-    bool D3D11Backend::Init(ID3D11Device *device, ID3D11DeviceContext *context, IDXGISwapChain *swapChain, void *) {
-        _device    = device;
-        _context   = context;
-        _swapChain = swapChain;
+    bool D3D11Backend::Init(const Framework::Graphics::RendererConfiguration &opts) {
+        _device    = opts.d3d11.device;
+        _context   = opts.d3d11.deviceContext;
+        _swapChain = opts.d3d11.swapChain;
 
         {
             // Create Enabled Blend State
@@ -120,8 +120,8 @@ namespace Framework::Graphics {
             _device->CreateRasterizerState(&scissor_rasterizer_desc, _scissoredRsState.GetAddressOf());
         }
 
-        // Disabled, since we only render stuff on Render thread
-        //_device->CreateDeferredContext(0, _deferredContext.GetAddressOf());
+        if (opts.d3d11.useDeferredContext)
+            _device->CreateDeferredContext(0, _deferredContext.GetAddressOf());
 
         return true;
     }

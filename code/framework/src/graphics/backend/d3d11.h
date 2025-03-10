@@ -29,7 +29,7 @@
 namespace Framework::Graphics {
     class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *> {
       public:
-        bool Init(ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *) override;
+        bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         bool Shutdown() override;
         void Update() override;
 

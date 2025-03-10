@@ -11,15 +11,6 @@
 #include "backend.h"
 
 #include <memory>
-
-#ifdef WIN32
-#include <d3d12.h>
-#include <dxgi1_4.h>
-#else
-#define ID3D12Device void
-#endif
-#define ID3D12DeviceContext void
-
 #include <vector>
 
 namespace Framework::Graphics {
@@ -42,7 +33,7 @@ namespace Framework::Graphics {
         D3D12_RESOURCE_BARRIER _barrier {};
 
       public:
-        bool Init(ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *) override;
+        bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         bool Shutdown() override;
         void Update() override;
         void Begin();

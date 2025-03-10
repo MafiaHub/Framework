@@ -10,34 +10,49 @@
 
 #include "utils/safe_win32.h"
 
-#include "backend/d3d11.h"
-#include "backend/d3d12.h"
-#include "backend/d3d9.h"
 #include "errors.h"
 #include "types.h"
 
 #include <dxgi.h>
 
+#ifdef WIN32
+#include <d3d9.h>
+#include <d3d11.h>
+#include <d3d12.h>
+#include <dxgi1_4.h>
+#else
+#define ID3D12Device void
+#define IDirect3D9   void
+#define ID3D11Device        void
+#define ID3D11DeviceContext void
+#endif
+#define ID3D12DeviceContext void
+
 namespace Framework::Graphics {
+    class D3D9Backend;
+    class D3D11Backend;
+    class D3D12Backend;
+
     struct RendererConfiguration {
-        RendererBackend backend;
-        PlatformBackend platform;
-        HWND windowHandle;
+        RendererBackend backend {};
+        PlatformBackend platform {};
+        HWND windowHandle {};
 
         struct {
-            IDirect3DDevice9 *device;
+            IDirect3DDevice9 *device {};
         } d3d9;
         struct {
-            ID3D11Device *device;
-            ID3D11DeviceContext *deviceContext;
-            IDXGISwapChain *swapChain;
+            ID3D11Device *device {};
+            ID3D11DeviceContext *deviceContext {};
+            IDXGISwapChain *swapChain {};
+            bool useDeferredContext {}; // TODO
         } d3d11;
 
         struct {
-            ID3D12Device *device             = nullptr;
-            IDXGISwapChain3 *swapchain       = nullptr;
-            ID3D12CommandQueue *commandQueue = nullptr;
-            // todo
+            ID3D12Device *device {};
+            ID3D12DeviceContext *deviceContext {};
+            IDXGISwapChain3 *swapchain {};
+            ID3D12CommandQueue *commandQueue {};
         } d3d12;
     };
 

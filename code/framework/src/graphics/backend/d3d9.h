@@ -19,7 +19,7 @@
 namespace Framework::Graphics {
     class D3D9Backend: public Backend<IDirect3DDevice9 *, void *, void *, void *> {
       public:
-        bool Init(IDirect3DDevice9 *, void *, void *, void *) override;
+        bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
         bool Shutdown() override;
         void Update() override;
 
