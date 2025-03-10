@@ -49,6 +49,7 @@ set(FRAMEWORK_SERVER_SRC
 set(FRAMEWORK_CLIENT_SRC
     src/graphics/renderer.cpp
     src/graphics/renderio.cpp
+    src/graphics/types.cpp
 
     src/networking/network_client.cpp
 

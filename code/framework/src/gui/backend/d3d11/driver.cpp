@@ -6,11 +6,6 @@
 #include <directxcolors.h>
 #include <d3dcompiler.h>
 
-#include "ultralight/shaders/hlsl/bin/fill_fxc.h"
-#include "ultralight/shaders/hlsl/bin/fill_path_fxc.h"
-#include "ultralight/shaders/hlsl/bin/v2f_c4f_t2f_fxc.h"
-#include "ultralight/shaders/hlsl/bin/v2f_c4f_t2f_t2f_d28f_fxc.h"
-
 #include <logging/logger.h>
 
 namespace {

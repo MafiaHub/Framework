@@ -40,6 +40,29 @@ namespace Framework::Graphics {
         FillPath,
     };
 
+    enum class VertexBufferFormat : uint8_t {
+        _2f_4ub_2f,
+        _2f_4ub_2f_2f_28f,
+    };
+
+    struct VertexBuffer {
+        VertexBufferFormat format;
+        uint32_t size;
+        uint8_t *data;
+    };
+
+    typedef uint32_t IndexType;
+
+    struct IndexBuffer {
+        uint32_t size;
+        uint8_t *data;
+    };
+
+    enum class BitmapFormat : uint8_t {
+        A8,
+        BGRA8,
+    };
+
     struct IntRect {
         int left, top, right, bottom;
 
@@ -163,6 +186,25 @@ namespace Framework::Graphics {
         friend inline bool operator!=(const IntRect &a, const IntRect &b) {
             return !(a == b);
         }
+    };
+
+    struct Bitmap {
+        BitmapFormat format;
+        uint32_t width;
+        uint32_t height;
+        uint32_t pitch;
+        uint32_t size;
+        uint8_t *pixels;
+
+        bool DrawBitmap(IntRect src_rect, IntRect dest_rect, Bitmap src, bool pad_repeat);
+    };
+
+    struct RenderBuffer {
+        uint32_t texture_id;     // The backing texture for this RenderBuffer
+        uint32_t width;          // The width of the RenderBuffer texture
+        uint32_t height;         // The height of the RenderBuffer texture
+        bool has_stencil_buffer; // Currently unused, always false.
+        bool has_depth_buffer;   // Currently unsued, always false.
     };
 
     struct GPUState {
