@@ -45,7 +45,7 @@ namespace Framework::Graphics {
             ID3D11Device *device {};
             ID3D11DeviceContext *deviceContext {};
             IDXGISwapChain *swapChain {};
-            bool useDeferredContext {}; // TODO
+            bool useDeferredContext {};
         } d3d11;
 
         struct {

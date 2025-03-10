@@ -1,14 +1,12 @@
 #include "view_d3d11.h"
 #include "logging/logger.h"
 
-// DirectX
-#include <d3d11.h>
-#include <d3dcompiler.h>
 #include <stdio.h>
 
 #include <unordered_map>
 
 #include "gui/backend/renderer_d3d11.h"
+#include "graphics/backend/d3d11.h"
 
 static ultralight::IndexType patternCW[]  = {0, 1, 3, 1, 2, 3};
 static ultralight::IndexType patternCCW[] = {0, 3, 1, 1, 3, 2};
@@ -199,7 +197,7 @@ namespace Framework::GUI {
         }
     }
 
-    void ViewD3D11::UpdateRenderer() {
+    void ViewD3D11::RenderViews() {
         if (!rendererBackend) {
             return;
         }
@@ -207,9 +205,16 @@ namespace Framework::GUI {
         if (rendererBackend->HasCommandsPending()) {
             rendererBackend->DrawCommandList();
         }
+    }
 
-        // TODO figure out rendering done on a different thread than a render thread
-        /*ID3D11CommandList *cc;
+    void ViewD3D11::Paint() {
+        // If there is no deferred context initialised
+        // we have rendered all our resources already.
+        if (!rendererBackend->GetBackend()->GetDeferredContext()) {
+            return;
+        }
+
+        ID3D11CommandList *cc;
         rendererBackend->GetBackend()->GetDeferredContext()->FinishCommandList(false, &cc);
 
         if (commandList)
@@ -219,6 +224,6 @@ namespace Framework::GUI {
         ID3D11DeviceContext *ctx = rendererBackend->GetBackend()->GetImmediateContext();
         if (cc && ctx) {
             ctx->ExecuteCommandList(cc, true);
-        }*/
+        }
     }
 } // namespace Framework::GUI

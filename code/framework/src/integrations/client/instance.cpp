@@ -166,17 +166,17 @@ namespace Framework::Integrations::Client {
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
-        }
 
-        if (_opts.useImGUI) {
-            // Init the ImGui internal instance
-            External::ImGUI::Config imguiConfig;
-            imguiConfig.renderBackend = _opts.rendererOptions.backend;
-            imguiConfig.windowBackend = _opts.rendererOptions.platform;
-            imguiConfig.renderer      = _renderer.get();
-            imguiConfig.windowHandle  = _renderer->GetWindow();
-            if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
-                Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init");
+            if (_opts.useImGUI) {
+                // Init the ImGui internal instance
+                External::ImGUI::Config imguiConfig;
+                imguiConfig.renderBackend = _opts.rendererOptions.backend;
+                imguiConfig.windowBackend = _opts.rendererOptions.platform;
+                imguiConfig.renderer      = _renderer.get();
+                imguiConfig.windowHandle  = _renderer->GetWindow();
+                if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
+                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init");
+                }
             }
         }
 

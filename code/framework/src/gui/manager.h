@@ -50,6 +50,7 @@ namespace Framework::GUI {
 
         void Update();
         void Render();
+        void Paint(); // called on Render thread
 
         void ProcessMouseEvent(HWND, UINT, WPARAM, LPARAM) const;
         void ProcessKeyboardEvent(HWND, UINT, WPARAM, LPARAM) const;

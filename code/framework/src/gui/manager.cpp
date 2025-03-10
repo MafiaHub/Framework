@@ -85,7 +85,15 @@ namespace Framework::GUI {
 
         // Process all render requests
         switch (_graphicsRenderer->GetBackendType()) {
-            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::UpdateRenderer(); break;
+            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::RenderViews(); break;
+            default: break;
+        }
+    }
+
+    void Manager::Paint() {
+        // Paint views
+        switch (_graphicsRenderer->GetBackendType()) {
+            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::Paint(); break;
             default: break;
         }
     }
