@@ -78,7 +78,6 @@ namespace Framework::Graphics {
         
       protected:
         IDXGISwapChain *_swapChain {};
-        Microsoft::WRL::ComPtr<ID3D11DeviceContext> _immediateContext;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> _deferredContext;
 
         Microsoft::WRL::ComPtr<ID3D11BlendState> _blendState;

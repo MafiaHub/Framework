@@ -480,7 +480,7 @@ namespace Framework::Graphics {
     }
 
     ID3D11DeviceContext *D3D11Backend::GetImmediateContext() const {
-        return _immediateContext.Get();
+        return _context;
     }
 
     ID3D11DeviceContext *D3D11Backend::GetDeferredContext() const {
@@ -488,7 +488,7 @@ namespace Framework::Graphics {
     }
 
     ID3D11DeviceContext *D3D11Backend::GetContext() const {
-        return _deferredContext.Get() ? _deferredContext.Get() : _immediateContext.Get();
+        return _deferredContext != nullptr ? GetDeferredContext() : GetImmediateContext();
     }
 
     IDXGISwapChain *D3D11Backend::GetSwapChain() const {

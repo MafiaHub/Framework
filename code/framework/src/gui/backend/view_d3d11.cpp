@@ -215,8 +215,9 @@ namespace Framework::GUI {
             commandList->Release();
         commandList = cc;
 
-        if (cc) {
-            rendererBackend->GetBackend()->GetDeferredContext()->ExecuteCommandList(cc, true);
+        ID3D11DeviceContext *ctx = rendererBackend->GetBackend()->GetImmediateContext();
+        if (cc && ctx) {
+            ctx->ExecuteCommandList(cc, true);
         }
     }
 } // namespace Framework::GUI
