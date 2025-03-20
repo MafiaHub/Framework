@@ -15,6 +15,7 @@
 #include <function2.hpp>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
+#include <scripting/client_engine.h>
 
 #include "networking/engine.h"
 #include <FileListTransferCBInterface.h>
@@ -90,6 +91,7 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Graphics::Renderer> _renderer;
         std::unique_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
+        std::unique_ptr<Scripting::ClientEngine> _scriptingEngine;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -202,6 +204,10 @@ namespace Framework::Integrations::Client {
 
         const std::string &GetAssetCachePath() const {
             return _assetDownloadPath;
+        }
+
+        Scripting::ClientEngine *GetScriptingEngine() const {
+            return _scriptingEngine.get();
         }
 
         friend class AssetDownloadFileProgress;

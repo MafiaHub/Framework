@@ -74,9 +74,13 @@ namespace Framework::Integrations::Client {
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
+        _scriptingEngine  = std::make_unique<Scripting::ClientEngine>();
     }
 
     Instance::~Instance() {
+        if (_scriptingEngine) {
+            _scriptingEngine->Shutdown();
+        }
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {
@@ -115,6 +119,15 @@ namespace Framework::Integrations::Client {
             _worldEngine->GetWorld()->import <Shared::Modules::Mod>();
 
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Core ecs modules have been imported!");
+        }
+        
+        // Initialize the scripting engine
+        if (_scriptingEngine) {
+            if (_scriptingEngine->Init(nullptr) != Framework::Scripting::EngineError::ENGINE_NONE) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
+                return ClientError::CLIENT_ENGINES_ERROR;
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
         }
 
         InitNetworkingMessages();
@@ -223,6 +236,10 @@ namespace Framework::Integrations::Client {
 
         if (_worldEngine) {
             _worldEngine->Update();
+        }
+        
+        if (_scriptingEngine) {
+            _scriptingEngine->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -370,6 +387,37 @@ namespace Framework::Integrations::Client {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
+            
+            // Setup client scripting with downloaded scripts
+            auto scriptingEngine = GetScriptingEngine();
+            if (scriptingEngine) {
+                auto clientEngine = scriptingEngine->GetClientEngine();
+                if (clientEngine) {
+                    // Set script cache path to the asset download path
+                    clientEngine->SetScriptCachePath(_assetDownloadPath + "/scripts");
+                    
+                    // Look for Lua script files in the download path
+                    auto scriptsDir = cppfs::fs::open(_assetDownloadPath + "/scripts");
+                    if (scriptsDir.exists() && scriptsDir.isDirectory()) {
+                        scriptsDir.traverse([clientEngine](const cppfs::FilePath & path) {
+                            if (path.extension() == ".lua") {
+                                std::string relativePath = path.stripped().toString();
+                                clientEngine->AddScript(relativePath);
+                            }
+                        });
+                        
+                        // Load all the scripts
+                        bool scriptsLoaded = clientEngine->LoadScripts();
+                        if (scriptsLoaded) {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
+                        } else {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
+                        }
+                    } else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
+                    }
+                }
+            }
         }
         else {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
@@ -387,9 +435,6 @@ namespace Framework::Integrations::Client {
         }
         
         _downloadStatus = {};
-
-        // TODO grab client entry point from the message
-        // GetClientEntryPoint() and only set client scripting up if it's specified and file is present
 
         // Let the mod-level know assets have just been finished processing
         if (_onAssetsDownloadFinished)
