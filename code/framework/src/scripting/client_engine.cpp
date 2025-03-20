@@ -44,24 +44,24 @@ namespace Framework::Scripting {
         // Sandbox the Lua environment by replacing unsafe functions
         void sandboxLuaEnvironment(sol::state &lua) {
             // Remove unsafe libraries and functions
-            lua["os"]["execute"] = sol::nil;
-            lua["os"]["exit"] = sol::nil;
-            lua["os"]["getenv"] = sol::nil;
-            lua["os"]["remove"] = sol::nil;
-            lua["os"]["rename"] = sol::nil;
-            lua["os"]["setlocale"] = sol::nil;
-            lua["os"]["tmpname"] = sol::nil;
+            lua["os"]["execute"] = nullptr;
+            lua["os"]["exit"] = nullptr;
+            lua["os"]["getenv"] = nullptr;
+            lua["os"]["remove"] = nullptr;
+            lua["os"]["rename"] = nullptr;
+            lua["os"]["setlocale"] = nullptr;
+            lua["os"]["tmpname"] = nullptr;
             
-            lua["package"]["loadlib"] = sol::nil;
-            lua["package"]["searchpath"] = sol::nil;
-            lua["package"]["cpath"] = sol::nil;
-            lua["package"]["config"] = sol::nil;
-            lua["package"]["preload"] = sol::nil;
+            lua["package"]["loadlib"] = nullptr;
+            lua["package"]["searchpath"] = nullptr;
+            lua["package"]["cpath"] = nullptr;
+            lua["package"]["config"] = nullptr;
+            lua["package"]["preload"] = nullptr;
             
-            lua["io"]["popen"] = sol::nil;
-            lua["io"]["open"] = sol::nil;
-            lua["io"]["tmpfile"] = sol::nil;
-            lua["io"]["close"] = sol::nil;
+            lua["io"]["popen"] = nullptr;
+            lua["io"]["open"] = nullptr;
+            lua["io"]["tmpfile"] = nullptr;
+            lua["io"]["close"] = nullptr;
             
             // Replace dofile with a safe version that only loads from the script cache path
             sol::function original_dofile = lua["dofile"];
@@ -79,7 +79,7 @@ namespace Framework::Scripting {
         }
     }
 
-    EngineError ClientEngine::Init(SDKRegisterCallback cb) {
+    EngineError ClientEngine::Init(SDKClientRegisterCallback cb) {
         // Setup error handling
         _luaEngine.set_exception_handler(&exception_handler);
         
