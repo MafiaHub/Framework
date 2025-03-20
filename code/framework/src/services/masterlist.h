@@ -22,6 +22,8 @@ namespace Framework::Services {
     // Default URL constants
     static const std::string DEFAULT_API_URL = "https://api.mafiahub.dev";
     static const std::string DEFAULT_MASTERLIST_URL = "https://masterlist.mafia.mp";
+    // Time constants (in milliseconds)
+    static const int64_t REAUTH_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 1 day in milliseconds
 
     struct ServerInfo {
         std::string gameMode;

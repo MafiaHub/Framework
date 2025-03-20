@@ -65,6 +65,7 @@ namespace Framework::Services {
         _isInitialized = true;
         _pingThread    = std::thread(&MasterlistConnector::PingThread, this);
         _lastPingAt    = Utils::Time::GetTimePoint();
+        _lastAuthAt    = Utils::Time::GetTimePoint();
         return true;
     }
 
@@ -89,12 +90,13 @@ namespace Framework::Services {
                 std::lock_guard lock(_mutex);
 
                 // Check if token is about to expire (re-auth if less than 1 day left)
-                if (Utils::Time::GetDifference(_tokenExpirationTime, Utils::Time::GetTimePoint()) < 24 * 60 * 60 * 1000) {
+                if (Utils::Time::GetDifference(_tokenExpirationTime, Utils::Time::GetTimePoint()) < REAUTH_THRESHOLD_MS) {
                     if (!Authenticate()) {
                         // If authentication fails, try again later
                         _lastPingAt = Utils::Time::GetTimePoint();
                         continue;
                     }
+                    _lastAuthAt = Utils::Time::GetTimePoint();
                 }
                 
                 // Update the last ping time
@@ -121,6 +123,18 @@ namespace Framework::Services {
                 const auto res = masterlistClient->Post("/ping", params);
                 if (!res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {}", res.error());
+                }
+                else if (res->status == 403) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Received 403 from masterlist, JWT token may be expired or invalid");
+                    
+                    // Add cooldown to prevent auth spam (at most once every 10 seconds)
+                    if (Utils::Time::GetDifference(Utils::Time::GetTimePoint(), _lastAuthAt) > 10000) {
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Re-authenticating with masterlist");
+                        if (Authenticate()) {
+                            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Successfully re-authenticated with masterlist");
+                            _lastAuthAt = Utils::Time::GetTimePoint();
+                        }
+                    }
                 }
                 else if (res->status != 200 && res->status != 201) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {} {}", res->status, res->body);
