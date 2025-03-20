@@ -38,6 +38,7 @@ namespace Framework::Services {
         std::string _pushKey {};
         ServerInfo _storedInfo {};
         Utils::Time::TimePoint _lastPingAt {};
+        Utils::Time::TimePoint _lastAuthAt {};
         bool _isInitialized {false};
 
         // URLs for API and masterlist
