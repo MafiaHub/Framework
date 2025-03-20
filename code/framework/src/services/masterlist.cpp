@@ -20,13 +20,13 @@ namespace Framework::Services {
     bool MasterlistConnector::Authenticate() {
         _client->set_default_headers({{"X-API-KEY", _pushKey}, {"Content-Type", "application/json"}});
 
-        const auto res = _client->Get("/rcon/auth");
+        const auto res = _client->Post("/rcon/auth");
         if (!res) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to authenticate with masterlist: {}", res.error());
             return false;
         }
 
-        if (res->status != 200) {
+        if (res->status != 200 && res->status != 201) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to authenticate with masterlist: {} {}", res->status, res->body);
             return false;
         }
@@ -112,15 +112,16 @@ namespace Framework::Services {
                 });
 
                 // Build the payload
-                httplib::Params params {
+                nlohmann::json payload = {
                     {"gamemode", _storedInfo.gameMode},
                     {"version", _storedInfo.version},
-                    {"max_players", std::to_string(_storedInfo.maxPlayers)},
-                    {"current_players", std::to_string(_storedInfo.currentPlayers)},
+                    {"max_players", _storedInfo.maxPlayers},
+                    {"current_players", _storedInfo.currentPlayers},
+                    {"name", "MafiaHub Integration Server"}
                 };
 
                 // Send the request to the masterlist
-                const auto res = masterlistClient->Post("/ping", params);
+                const auto res = masterlistClient->Post("/ping", payload.dump(), "application/json");
                 if (!res) {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ping masterlist server: {}", res.error());
                 }

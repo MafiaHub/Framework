@@ -110,11 +110,7 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
-        /*if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to contact masterlist server: Push key is empty");
-        }
-        else */
-        if (!_opts.bindPublicServer) {
+        if (_opts.bindPublicServer && !_masterlist->Init(_opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
