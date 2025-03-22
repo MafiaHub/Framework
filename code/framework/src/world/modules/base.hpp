@@ -127,11 +127,11 @@ namespace Framework::World::Modules {
             Events events;
 
           public:
-            Events GetBaseEvents() const {
+            Events& GetBaseEvents() {
                 return events;
             }
 
-            [[maybe_unused]] Events GetModEvents() const {
+            [[maybe_unused]] Events& GetModEvents() {
                 return modEvents;
             }
         };
