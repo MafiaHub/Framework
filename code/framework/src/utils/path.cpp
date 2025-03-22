@@ -11,6 +11,16 @@
 
 #ifdef WIN32
 #include <Shlwapi.h>
+#else
+#include <climits>
+#include <cstdlib>
+#include <unistd.h>
+#include <libgen.h>
+#include <string.h>
+#include <limits.h>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 #endif
 
 namespace Framework::Utils {
@@ -32,7 +42,10 @@ namespace Framework::Utils {
         PathCanonicalizeW(final_buf, buf);
         return final_buf;
 #else
-        return NULL;
+        // On Linux/Mac, use the ASCII version and convert
+        std::string relativeA(relative.begin(), relative.end());
+        std::string resultA = GetAbsolutePathA(relativeA);
+        return std::wstring(resultA.begin(), resultA.end());
 #endif
     }
 
@@ -54,7 +67,52 @@ namespace Framework::Utils {
         PathCanonicalizeA(final_buf, buf);
         return final_buf;
 #else
-        return NULL;
+        static char executable_path[PATH_MAX] = {'\0'};
+
+        if (executable_path[0] == '\0') {
+            char buf[PATH_MAX];
+            
+            #if defined(__APPLE__) || defined(__linux__)
+            ssize_t count = readlink("/proc/self/exe", buf, PATH_MAX);
+            if (count == -1) {
+                // On macOS, try an alternative approach
+                #if defined(__APPLE__)
+                uint32_t bufsize = PATH_MAX;
+                if (_NSGetExecutablePath(buf, &bufsize) != 0) {
+                    return "";
+                }
+                // Get the real path if it's a symbolic link
+                char resolvedPath[PATH_MAX];
+                if (realpath(buf, resolvedPath) != nullptr) {
+                    strcpy(buf, resolvedPath);
+                }
+                #else
+                return "";
+                #endif
+            }
+            else {
+                buf[count] = '\0';
+            }
+            #endif
+            
+            // Get directory part of the path
+            char* dir = dirname(buf);
+            strcpy(executable_path, dir);
+            strcat(executable_path, "/");
+        }
+
+        // Combine executable path with relative path
+        char combined_path[PATH_MAX];
+        strcpy(combined_path, executable_path);
+        strcat(combined_path, relative.c_str());
+        
+        // Canonicalize path (resolve "..", ".", etc.)
+        char final_path[PATH_MAX];
+        if (realpath(combined_path, final_path) != nullptr) {
+            return final_path;
+        }
+        
+        return combined_path; // If realpath fails, return the combined path
 #endif
     }
 } // namespace Framework::Utils
