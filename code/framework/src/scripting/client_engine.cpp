@@ -186,9 +186,28 @@ namespace Framework::Scripting {
             return false;
         }
         
+        // First notify that we are unloading
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
-        _scriptsLoaded = false;
+
+        // Clear the Lua environment by creating a new table and setting it as the global environment
+        _luaEngine.globals().clear();
         
+        // Re-initialize the necessary libraries
+        // TODO: move that part on a higher level
+        {
+            _luaEngine.open_libraries(sol::lib::base, sol::lib::table, sol::lib::string, sol::lib::math, sol::lib::coroutine, sol::lib::utf8);
+
+            // Reconfigure paths
+            if (!_scriptCachePath.empty()) {
+                setLuaPath(_luaEngine.lua_state(), std::string(_scriptCachePath + "/?.lua").c_str());
+                setLuaPath(_luaEngine.lua_state(), std::string(_scriptCachePath + "/?/init.lua").c_str());
+            }
+        }
+        
+        // Clear the loaded scripts list
+        _loadedScripts.clear();
+
+        _scriptsLoaded = false;
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Unloaded client scripts");
         return true;
     }
