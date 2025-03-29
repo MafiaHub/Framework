@@ -14,7 +14,7 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
-#include "scripting/server.h"
+#include "scripting/module.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
 #include "world/server.h"
@@ -82,7 +82,7 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        std::shared_ptr<Scripting::ServerEngine> _scriptingEngine;
+        std::shared_ptr<Scripting::ServerScriptingModule> _scriptingModule;
         std::shared_ptr<Networking::Engine> _networkingEngine;
         std::shared_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
@@ -146,8 +146,8 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Scripting::ServerEngine> GetScriptingEngine() const {
-            return _scriptingEngine;
+        std::shared_ptr<Scripting::ServerScriptingModule> GetScriptingModule() const {
+            return _scriptingModule;
         }
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {

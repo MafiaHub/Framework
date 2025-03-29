@@ -11,6 +11,7 @@
 #include <atomic>
 #include <map>
 #include <vector>
+#include <string>
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileWatcher.h>
@@ -28,9 +29,13 @@ namespace Framework::Scripting {
         Utils::Time::TimePoint _nextFileWatchUpdate;
         int32_t _fileWatchUpdatePeriod = 1000;
 
+        std::vector<std::string> _clientFiles;
+        std::vector<std::string> _serverFiles;
+
         // Package
         std::string _scriptName;
-        std::string _executionPath;
+        std::string _mainGamemodePath;
+        std::string _mainGamemodeServerPath;
         std::atomic<bool> _packageLoaded = false;
 
         // Gamemode
@@ -40,6 +45,8 @@ namespace Framework::Scripting {
         EngineError Init(SDKRegisterCallback) override;
         EngineError Shutdown() override;
         void Update() override;
+
+        EngineError LoadManifest();
 
         bool LoadScript();
         bool UnloadScript();
@@ -56,8 +63,25 @@ namespace Framework::Scripting {
             _scriptName = name;
         }
 
-        void SetExecutionPath(const std::string &path) {
-            _executionPath = path;
+        std::string GetMainGamemodePath() const {
+            return _mainGamemodePath;
+        }
+
+        void SetMainGamemodePath(const std::string &path) {
+            _mainGamemodePath = path;
+            _mainGamemodeServerPath = fmt::format("{}\\server", path);
+        }
+
+        std::string GetMainGamemodeServerPath() const {
+            return _mainGamemodeServerPath;
+        }
+
+        std::vector<std::string> GetClientFiles() const {
+            return _clientFiles;
+        }
+
+        std::vector<std::string> GetServerFiles() const {
+            return _serverFiles;
         }
     };
 } // namespace Framework::Scripting::Engines::Node

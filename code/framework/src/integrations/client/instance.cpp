@@ -28,6 +28,7 @@
 
 #include <logging/logger.h>
 
+#include "utils/path.h"
 #include "utils/version.h"
 
 #include "core_modules.h"
@@ -70,16 +71,16 @@ namespace Framework::Integrations::Client {
         _presence         = std::make_unique<External::Discord::Wrapper>();
         _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
         _renderer         = std::make_unique<Graphics::Renderer>();
-        _worldEngine      = std::make_unique<World::ClientEngine>();
+        _worldEngine      = std::make_shared<World::ClientEngine>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
-        _scriptingEngine  = std::make_unique<Scripting::ClientEngine>();
+        _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
     }
 
     Instance::~Instance() {
-        if (_scriptingEngine) {
-            _scriptingEngine->Shutdown();
+        if (_scriptingModule) {
+            _scriptingModule->GetEngine()->Shutdown();
         }
     }
 
@@ -122,8 +123,8 @@ namespace Framework::Integrations::Client {
         }
         
         // Initialize the scripting engine
-        if (_scriptingEngine) {
-            if (_scriptingEngine->Init(nullptr) != Framework::Scripting::EngineError::ENGINE_NONE) {
+        if (_scriptingModule) {
+            if (!_scriptingModule->Init(nullptr)) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
@@ -149,11 +150,17 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::InitAssetDownloader() {
-        cppfs::fs::open("cache").createDirectory();
+        InitCacheAssetFolders();
 
         GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
             this->OnAssetsDownloaded(false);
         });
+    }
+
+    void Instance::InitCacheAssetFolders() {
+        const auto appDataPath = Framework::Utils::GetAppDataPathA();
+        cppfs::fs::open(fmt::format("{}\\MafiaMP", appDataPath)).createDirectory();
+        cppfs::fs::open(fmt::format("{}\\MafiaMP\\servers", appDataPath)).createDirectory();
     }
 
     ClientError Instance::RenderInit() {
@@ -238,8 +245,8 @@ namespace Framework::Integrations::Client {
             _worldEngine->Update();
         }
         
-        if (_scriptingEngine) {
-            _scriptingEngine->Update();
+        if (_scriptingModule) {
+            _scriptingModule->GetEngine()->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -351,12 +358,16 @@ namespace Framework::Integrations::Client {
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
-        const auto serverHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
-        const auto cacheDir   = fmt::format("cache\\{}", serverHash);
-        const auto streamer   = net->GetAssetStreamer();
+        const auto streamer = net->GetAssetStreamer();
+
+        // Compute the destination path
+        const auto appDataPath = Framework::Utils::GetAppDataPathA();
+        const auto cacheDir   = fmt::format("{}\\MafiaMP\\servers\\{}", appDataPath, _currentState._serverIDHash); // TODO: fix path to use mod name
+
+        // Let the system know where our scripts are stored
         SetAssetCachePath(cacheDir);
         streamer->SetApplicationDirectory(cacheDir.c_str());
-        auto folderHandle = cppfs::fs::open(cacheDir);
+        auto cacheDirHandle = cppfs::fs::open(cacheDir);
 
         // Ensure we stop existing downloads since the server has pushed new changes already
         if (_downloadStatus.downloading) {
@@ -364,9 +375,9 @@ namespace Framework::Integrations::Client {
             _downloadStatus = {};
         }
 
-        if (!folderHandle.exists()) {
-            if (folderHandle.createDirectory()) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", serverHash);
+        if (!cacheDirHandle.exists()) {
+            if (cacheDirHandle.createDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", _currentState._serverIDHash);
             }
             else {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not create folder for client asset cache: {}", cacheDir);
@@ -389,30 +400,35 @@ namespace Framework::Integrations::Client {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
             
             // Setup client scripting with downloaded scripts
-            auto scriptingEngine = GetScriptingEngine();
-            if (scriptingEngine) {
-                // Set script cache path to the asset download path
-                scriptingEngine->SetScriptCachePath(_assetDownloadPath + "/scripts");
-                    
-                // Look for Lua script files in the download path
-                auto scriptsDir = cppfs::fs::open(_assetDownloadPath + "/scripts");
-                if (scriptsDir.exists() && scriptsDir.isDirectory()) {
-                    scriptsDir.traverse([scriptingEngine](cppfs::FileHandle &fh) -> bool {
-                        // if (fh. == ".lua") {
-                            scriptingEngine->AddScript(fh.path());
-                        //}
-                        return true;
-                    });
-                        
-                    // Load all the scripts
-                    bool scriptsLoaded = scriptingEngine->LoadScripts();
-                    if (scriptsLoaded) {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
-                    } else {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
+            auto scriptingModule = GetScriptingModule();
+            if (scriptingModule) {
+                auto scriptingEngine = scriptingModule->GetEngine();
+                if (scriptingEngine) {
+                    // Set script cache path to the asset download path
+                    scriptingEngine->SetScriptCachePath(GetAssetCachePath());
+
+                    // Look for Lua script files in the download path
+                    auto scriptsDir = cppfs::fs::open(GetAssetCachePath());
+                    if (scriptsDir.exists() && scriptsDir.isDirectory()) {
+                        scriptsDir.traverse([scriptingEngine](cppfs::FileHandle &fh) -> bool {
+                            if (Utils::GetFileExtensionA(fh.fileName()) == ".lua") {
+                                scriptingEngine->AddScript(fh.path());
+                            }
+                            return true;
+                        });
+
+                        // Load all the scripts
+                        bool scriptsLoaded = scriptingEngine->LoadScripts();
+                        if (scriptsLoaded) {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
+                        }
+                        else {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
+                        }
                     }
-                } else {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
+                    else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
+                    }
                 }
             }
         }
@@ -434,7 +450,8 @@ namespace Framework::Integrations::Client {
         _downloadStatus = {};
 
         // Let the mod-level know assets have just been finished processing
-        if (_onAssetsDownloadFinished)
+        if (_onAssetsDownloadFinished) {
             _onAssetsDownloadFinished(success);
+        }
     }
 } // namespace Framework::Integrations::Client

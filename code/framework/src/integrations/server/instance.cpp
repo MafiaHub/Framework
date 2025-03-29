@@ -39,7 +39,7 @@ namespace Framework::Integrations::Server {
         _webServer        = std::make_shared<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
+        _scriptingModule  = std::make_shared<Scripting::ServerScriptingModule>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
@@ -137,9 +137,9 @@ namespace Framework::Integrations::Server {
         };
 
         // Initialize the scripting engine
-        _scriptingEngine->SetMainPath("gamemode");
-        _scriptingEngine->LoadManifest();
-        if (_scriptingEngine->InitServerEngine(sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
+        _scriptingModule->GetEngine()->SetMainGamemodePath("gamemode");
+        _scriptingModule->GetEngine()->LoadManifest();
+        if (!_scriptingModule->Init(sdkCallback)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
@@ -148,7 +148,7 @@ namespace Framework::Integrations::Server {
         InitAssetStreamer();
 
         // Load the gamemode
-        _scriptingEngine->GetServerEngine()->LoadScript();
+        _scriptingModule->GetEngine()->LoadScript();
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
@@ -334,10 +334,10 @@ namespace Framework::Integrations::Server {
         const auto net      = GetNetworkingEngine()->GetNetworkServer();
         const auto streamer = net->GetAssetStreamer();
 
-        const auto scripting   = GetScriptingEngine();
-        const auto gamemodePath = scripting->GetMainPath();
+        const auto scripting   = GetScriptingModule();
+        const auto gamemodePath = scripting->GetEngine()->GetMainGamemodePath();
         const auto clientPath = fmt::format("{}\\client", gamemodePath);
-        const auto clientFiles  = scripting->GetClientFiles();
+        const auto clientFiles  = scripting->GetEngine()->GetClientFiles();
         const std::string assetsPath = Framework::Utils::GetAbsolutePathA(clientPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client assets directory: {}", assetsPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
@@ -361,8 +361,8 @@ namespace Framework::Integrations::Server {
             _networkingEngine->Shutdown();
         }
 
-        if (_scriptingEngine) {
-            _scriptingEngine->Shutdown();
+        if (_scriptingModule) {
+            _scriptingModule->GetEngine()->Shutdown();
         }
 
         if (_webServer) {
@@ -390,8 +390,8 @@ namespace Framework::Integrations::Server {
                 _networkingEngine->Update();
             }
 
-            if (_scriptingEngine) {
-                _scriptingEngine->Update();
+            if (_scriptingModule) {
+                _scriptingModule->GetEngine()->Update();
             }
 
             if (_worldEngine) {
@@ -400,7 +400,7 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
-                info.gameMode       = _scriptingEngine->GetServerEngine()->GetScriptName();
+                info.gameMode       = _scriptingModule->GetEngine()->GetScriptName();
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();

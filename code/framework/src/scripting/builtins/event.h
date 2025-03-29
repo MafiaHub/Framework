@@ -2,17 +2,16 @@
 
 #include "core_modules.h"
 
-#include "../module.h"
-#include "../types/events.h"
+#include "../engine.h"
 
 namespace Framework::Scripting::Builtins {
     class Event final {
         static void On(const std::string name, const sol::function fnc) {
-            Framework::CoreModules::GetScriptingModule()->GetEngine()->ListenEvent(name, fnc);
+            Framework::CoreModules::GetScriptingEngine()->ListenEvent(name, fnc);
         }
 
         static void Emit(const std::string name, sol::variadic_args args) {
-            Framework::CoreModules::GetScriptingModule()->GetEngine()->InvokeEvent(name, args);
+            Framework::CoreModules::GetScriptingEngine()->InvokeEvent(name, args);
         }
 
       public:

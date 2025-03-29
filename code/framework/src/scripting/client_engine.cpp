@@ -147,16 +147,14 @@ namespace Framework::Scripting {
         bool success = true;
         
         // Attempt to load each script
-        for (const auto &scriptPath : _loadedScripts) {
-            std::string fullPath = _scriptCachePath + "/" + scriptPath;
-            
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Loading client script: {}", fullPath);
+        for (const auto &scriptPath : _loadedScripts) {            
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Loading client script: {}", scriptPath);
             
             // First we load the file
-            auto lr = _luaEngine.load_file(fullPath);
+            auto lr = _luaEngine.load_file(scriptPath);
             if (!lr.valid()) {
                 sol::error err = lr;
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to load script {}: {}", fullPath, err.what());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to load script {}: {}", scriptPath, err.what());
                 success = false;
                 continue;
             }
@@ -165,7 +163,7 @@ namespace Framework::Scripting {
             sol::protected_function_result result = lr();
             if (!result.valid()) {
                 sol::error err = result;
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to execute script {}: {}", fullPath, err.what());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to execute script {}: {}", scriptPath, err.what());
                 success = false;
                 continue;
             }
