@@ -73,7 +73,7 @@ namespace Framework::World {
                 for (auto i : it) {
                     const auto &es = &rs[i];
 
-                    if (es->GetBaseEvents().updateProc && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
+                    if (es->GetBaseEvents().updateProc && es->performTickUpdates && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
                         es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
                     }
                 }

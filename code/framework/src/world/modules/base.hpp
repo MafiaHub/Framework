@@ -116,6 +116,10 @@ namespace Framework::World::Modules {
             HeuristicMode isVisibleHeuristic = HeuristicMode::ADD;
             IsVisibleProc isVisibleProc;
 
+            // Controls whether this entity gets to be updated continuously or not
+            // When set to false, we only stream spawn and despawn events, useful for immovable objects
+            bool performTickUpdates = true;
+
             // Framework-level events.
             friend Base;
 
@@ -123,11 +127,11 @@ namespace Framework::World::Modules {
             Events events;
 
           public:
-            Events GetBaseEvents() const {
+            Events& GetBaseEvents() {
                 return events;
             }
 
-            [[maybe_unused]] Events GetModEvents() const {
+            [[maybe_unused]] Events& GetModEvents() {
                 return modEvents;
             }
         };

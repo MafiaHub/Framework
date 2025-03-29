@@ -191,7 +191,7 @@ namespace Framework::World {
                                 return;
 
                             // Let streamer send an update to self if an event is assigned.
-                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc) {
+                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc && rs[i].performTickUpdates) {
                                 rs[i].GetBaseEvents().selfUpdateProc(_networkPeer, s[i].guid, e);
                                 return;
                             }
@@ -214,7 +214,7 @@ namespace Framework::World {
                                 else if (rs[i].owner != otherS.owner) {
                                     auto &data = map_it->second;
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (otherS.GetBaseEvents().updateProc)
+                                        if (otherS.GetBaseEvents().updateProc && rs[i].performTickUpdates)
                                             otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }

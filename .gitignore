@@ -57,3 +57,5 @@ vendors/**/.gitmodules
 IGNORE
 vendors/directxtk/MakeSpriteFont/obj/Debug/MakeSpriteFont.csproj.AssemblyReference.cache
 vendors/directxtk/MakeSpriteFont/obj/Release/MakeSpriteFont.csproj.AssemblyReference.cache
+/vendors/directxtk/MakeSpriteFont/obj
+/vendors/directxtk/MakeSpriteFont/obj
