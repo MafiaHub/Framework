@@ -391,31 +391,28 @@ namespace Framework::Integrations::Client {
             // Setup client scripting with downloaded scripts
             auto scriptingEngine = GetScriptingEngine();
             if (scriptingEngine) {
-                auto clientEngine = scriptingEngine->GetClientEngine();
-                if (clientEngine) {
-                    // Set script cache path to the asset download path
-                    clientEngine->SetScriptCachePath(_assetDownloadPath + "/scripts");
+                // Set script cache path to the asset download path
+                scriptingEngine->SetScriptCachePath(_assetDownloadPath + "/scripts");
                     
-                    // Look for Lua script files in the download path
-                    auto scriptsDir = cppfs::fs::open(_assetDownloadPath + "/scripts");
-                    if (scriptsDir.exists() && scriptsDir.isDirectory()) {
-                        scriptsDir.traverse([clientEngine](const cppfs::FilePath & path) {
-                            if (path.extension() == ".lua") {
-                                std::string relativePath = path.stripped().toString();
-                                clientEngine->AddScript(relativePath);
-                            }
-                        });
+                // Look for Lua script files in the download path
+                auto scriptsDir = cppfs::fs::open(_assetDownloadPath + "/scripts");
+                if (scriptsDir.exists() && scriptsDir.isDirectory()) {
+                    scriptsDir.traverse([scriptingEngine](cppfs::FileHandle &fh) -> bool {
+                        // if (fh. == ".lua") {
+                            scriptingEngine->AddScript(fh.path());
+                        //}
+                        return true;
+                    });
                         
-                        // Load all the scripts
-                        bool scriptsLoaded = clientEngine->LoadScripts();
-                        if (scriptsLoaded) {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
-                        } else {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
-                        }
+                    // Load all the scripts
+                    bool scriptsLoaded = scriptingEngine->LoadScripts();
+                    if (scriptsLoaded) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
                     } else {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
                     }
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
                 }
             }
         }
