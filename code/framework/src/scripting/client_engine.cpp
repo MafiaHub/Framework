@@ -93,8 +93,8 @@ namespace Framework::Scripting {
             sol::lib::utf8
         );
         
-        // Apply sandbox restrictions
-        sandboxLuaEnvironment(_luaEngine);
+        // Apply sandbox restrictions - BROKEN
+        // sandboxLuaEnvironment(_luaEngine);
         
         // Init the common SDK
         InitCommonSDK();

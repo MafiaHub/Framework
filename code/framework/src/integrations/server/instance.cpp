@@ -132,7 +132,7 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
     
-        const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::ServerEngine> sdk) {
+        const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::Engine> sdk) {
             this->RegisterScriptingBuiltins(sdk.GetEngine());
         };
 
@@ -437,7 +437,7 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::ServerEngine *engine) {
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
         // Register the entity builtin
         Framework::Integrations::Scripting::Entity::Register(engine->GetLuaEngine());
 

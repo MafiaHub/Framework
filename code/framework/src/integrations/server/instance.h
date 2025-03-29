@@ -94,7 +94,7 @@ namespace Framework::Integrations::Server {
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
         bool LoadConfigFromJSON();
-        void RegisterScriptingBuiltins(Framework::Scripting::ServerEngine *);
+        void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
 
         // managers
         flecs::entity _weatherManager;
@@ -120,7 +120,7 @@ namespace Framework::Integrations::Server {
 
         virtual void PreShutdown() {}
 
-        virtual void ModuleRegister(Framework::Scripting::ServerEngine *engine) {
+        virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
         }
 
