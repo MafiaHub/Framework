@@ -28,6 +28,7 @@ namespace Framework::Launcher::Loaders {
 
       private:
         const uint8_t *_origBinary;
+        size_t _totalBinarySize;
         HMODULE _module {};
         uintptr_t _loadLimit;
 
@@ -50,6 +51,7 @@ namespace Framework::Launcher::Loaders {
 #endif
 
         void LoadImports(IMAGE_NT_HEADERS *ntHeader);
+        void LoadDelayImports(IMAGE_NT_HEADERS *ntHeader);
 
         HMODULE ResolveLibrary(const char *name) const;
 
@@ -64,7 +66,7 @@ namespace Framework::Launcher::Loaders {
         }
 
       public:
-        ExecutableLoader(const uint8_t *origBinary);
+        ExecutableLoader(const uint8_t *origBinary, size_t binarySize);
 
         inline void SetLoadLimit(uintptr_t loadLimit) {
             _loadLimit = loadLimit;

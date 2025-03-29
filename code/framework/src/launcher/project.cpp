@@ -639,8 +639,17 @@ namespace Framework::Launcher {
 
         auto base = GetModuleHandle(nullptr);
 
+        // Get file size
+        DWORD fileSize = GetFileSize(hFile, NULL);
+        if (fileSize == INVALID_FILE_SIZE) {
+            CloseHandle(hMapping);
+            CloseHandle(hFile);
+            MessageBoxA(nullptr, "Failed to get file size of the game executable", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+
         // Create the loader instance
-        Loaders::ExecutableLoader loader(data);
+        Loaders::ExecutableLoader loader(data, fileSize);
         loader.SetLoadLimit(_config.loadLimit);
         loader.SetLibraryLoader([this](const char *library) -> HMODULE {
             if (_libraryLoader) {

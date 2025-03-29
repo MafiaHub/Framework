@@ -14,15 +14,17 @@
 
 #include "exe_ldr.h"
 
-#include "logging/logger.h"
+#include <delayimp.h>
 
+#include "logging/logger.h"
 #include <utils/hooking/hooking.h>
 
 namespace Framework::Launcher::Loaders {
-    ExecutableLoader::ExecutableLoader(const uint8_t *origBinary) {
+    ExecutableLoader::ExecutableLoader(const uint8_t *origBinary, size_t binarySize) {
         hook::set_base();
 
         _origBinary = origBinary;
+        _totalBinarySize = binarySize;
         _loadLimit  = SIZE_MAX;
 
         SetLibraryLoader([](const char *name) {
@@ -115,13 +117,19 @@ namespace Framework::Launcher::Loaders {
             return;
         }
 
+        // Check if section data exceeds binary size
+        if (section->PointerToRawData + section->SizeOfRawData > _totalBinarySize) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Section data exceeds binary size");
+            return;
+        }
+
         const void *sourceAddress = _origBinary + section->PointerToRawData;
         if (!sourceAddress) {
             return;
         }
 
         // Calculate the size of data to be copied
-        const uint32_t sizeOfData = std::min(section->SizeOfRawData, section->Misc.VirtualSize);
+        const uint32_t sizeOfData = (section->SizeOfRawData < section->Misc.VirtualSize) ? section->SizeOfRawData : section->Misc.VirtualSize;
 
         // Copy the data
         memcpy(targetAddress, sourceAddress, sizeOfData);
@@ -208,6 +216,77 @@ namespace Framework::Launcher::Loaders {
         }
     }
 #endif
+
+    void ExecutableLoader::LoadDelayImports(IMAGE_NT_HEADERS *ntHeader) {
+        const IMAGE_DATA_DIRECTORY *delayImportDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
+        
+        // Check if there are any delay imports
+        if (delayImportDirectory->VirtualAddress == 0 || delayImportDirectory->Size == 0) {
+            return;
+        }
+        
+        // Get the first delay import descriptor
+        auto descriptor = GetTargetRVA<IMAGE_DELAYLOAD_DESCRIPTOR>(delayImportDirectory->VirtualAddress);
+        
+        while (descriptor->DllNameRVA != 0) {
+            const char *name = GetTargetRVA<char>(descriptor->DllNameRVA);
+            
+            HMODULE module = ResolveLibrary(name);
+            
+            if (!module) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load delayed dependent module {}. Error code was {}.", name, GetLastError());
+                // Continue anyway, delay-loaded DLLs are optional at load time
+                descriptor++;
+                continue;
+            }
+            
+            // "don't load"
+            if (reinterpret_cast<uintptr_t>(module) == 0xFFFFFFFF) {
+                descriptor++;
+                continue;
+            }
+            
+            // Load each import name and function
+            auto nameArray = GetTargetRVA<IMAGE_THUNK_DATA>(descriptor->ImportNameTableRVA);
+            auto addressArray = GetTargetRVA<IMAGE_THUNK_DATA>(descriptor->ImportAddressTableRVA);
+            
+            // Process each import in the array
+            for (size_t i = 0; nameArray[i].u1.AddressOfData != 0; i++) {
+                FARPROC function;
+                const char *functionName;
+                
+                // Check if this is an ordinal import
+                if (IMAGE_SNAP_BY_ORDINAL(nameArray[i].u1.Ordinal)) {
+                    WORD ordinal = IMAGE_ORDINAL(nameArray[i].u1.Ordinal);
+                    function = GetProcAddress(module, (LPCSTR)(ULONG_PTR)ordinal);
+                    
+                    static char ordinalNameBuf[32];
+                    sprintf_s(ordinalNameBuf, "#%u", ordinal);
+                    functionName = ordinalNameBuf;
+                } else {
+                    // Get the function name from the import by name structure
+                    auto importByName = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(nameArray[i].u1.AddressOfData);
+                    functionName = importByName->Name;
+                    
+                    // Resolve the function
+                    function = (FARPROC)_functionResolver(module, functionName);
+                }
+                
+                if (!function) {
+                    char pathName[MAX_PATH];
+                    GetModuleFileNameA(module, pathName, sizeof(pathName));
+                    
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load delayed function {} in dependent module {} ({}).", functionName, name, pathName);
+                }
+                
+                // Store the function address
+                addressArray[i].u1.Function = reinterpret_cast<DWORD_PTR>(function);
+            }
+            
+            descriptor++;
+        }
+    }
+
     void ExecutableLoader::LoadIntoModule(HMODULE module) {
         _module = module;
 
@@ -234,6 +313,7 @@ namespace Framework::Launcher::Loaders {
 
         LoadSections(ntHeader);
         LoadImports(ntHeader);
+        LoadDelayImports(ntHeader);
 
         uint32_t tlsIndex = 0;
         void *tlsInit     = nullptr;
@@ -259,7 +339,7 @@ namespace Framework::Launcher::Loaders {
             auto tlsBase = (LPVOID *)__readgsqword(0x58);
 #endif
 
-            if (sourceTls->StartAddressOfRawData && tlsInit != nullptr) {
+            if (sourceTls && sourceTls->StartAddressOfRawData && sourceTls->EndAddressOfRawData > sourceTls->StartAddressOfRawData && tlsInit != nullptr && tlsBase != nullptr && tlsIndex < TLS_MINIMUM_AVAILABLE) {
                 DWORD oldProtect;
 
                 VirtualProtect(tlsInit, sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE, &oldProtect);
@@ -320,7 +400,7 @@ namespace Framework::Launcher::Loaders {
 
                 void *addr = GetTargetRVA<void>(rva);
                 DWORD oldProtect;
-                VirtualProtect(addr, 4, PAGE_EXECUTE_READWRITE, &oldProtect);
+                VirtualProtect(addr, (type == IMAGE_REL_BASED_DIR64) ? 8 : 4, PAGE_EXECUTE_READWRITE, &oldProtect);
 
                 if (type == IMAGE_REL_BASED_HIGHLOW) {
                     *reinterpret_cast<int32_t *>(addr) += relocOffset;
@@ -332,7 +412,7 @@ namespace Framework::Launcher::Loaders {
                     return false;
                 }
 
-                VirtualProtect(addr, 4, oldProtect, &oldProtect);
+                VirtualProtect(addr, (type == IMAGE_REL_BASED_DIR64) ? 8 : 4, oldProtect, &oldProtect);
             }
 
             // on to the next one!
