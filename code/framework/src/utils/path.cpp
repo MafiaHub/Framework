@@ -11,6 +11,7 @@
 
 #ifdef WIN32
 #include <Shlwapi.h>
+#include <ShlObj.h>
 #else
 #include <climits>
 #include <cstdlib>
@@ -113,6 +114,42 @@ namespace Framework::Utils {
         }
         
         return combined_path; // If realpath fails, return the combined path
+#endif
+    }
+
+    std::wstring GetAppDataPathW() {
+#ifdef WIN32
+        wchar_t path[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+            return std::wstring(path);
+        }
+        return std::wstring();
+#else
+        // On non-Windows platforms, return an empty string or implement equivalent
+        return std::wstring();
+#endif
+    }
+
+    std::string GetAppDataPathA() {
+#ifdef WIN32
+        char path[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+            return std::string(path);
+        }
+        return std::string();
+#else
+        // On non-Windows platforms, typically use $HOME/.config or $XDG_CONFIG_HOME
+        const char* configDir = getenv("XDG_CONFIG_HOME");
+        if (configDir) {
+            return std::string(configDir);
+        }
+        
+        const char* homeDir = getenv("HOME");
+        if (homeDir) {
+            return std::string(homeDir) + "/.config";
+        }
+        
+        return std::string();
 #endif
     }
 } // namespace Framework::Utils

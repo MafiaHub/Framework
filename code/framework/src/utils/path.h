@@ -13,4 +13,6 @@
 namespace Framework::Utils {
     std::wstring GetAbsolutePathW(const std::wstring &);
     std::string GetAbsolutePathA(const std::string &);
+    std::wstring GetAppDataPathW();
+    std::string GetAppDataPathA();
 } // namespace Framework::Utils
