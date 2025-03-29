@@ -19,8 +19,6 @@ namespace Framework::Integrations::Server::Scripting {
             _serverEngine.reset();
             return false;
         }
-        // TODO: fix this one
-        // _serverEngine->SetExecutionPath(_mainPath + "/server");
         return true;
     }
 }
