@@ -27,15 +27,16 @@ set(FRAMEWORK_SRC
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
+    src/scripting/engine.cpp
+    src/scripting/types/events.cpp
+
     src/services/masterlist.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
     src/scripting/client_engine.cpp
-    src/scripting/engine.cpp
     src/scripting/module.cpp
     src/scripting/server_engine.cpp
-    src/scripting/types/events.cpp
 
     src/http/webserver.cpp
 
@@ -60,6 +61,8 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/imgui/widgets/ui_base.cpp
 
     src/external/imgui/widgets/console.cpp
+
+    src/scripting/client_engine.cpp
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
