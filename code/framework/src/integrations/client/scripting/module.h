@@ -16,6 +16,8 @@ namespace Framework::Integrations::Client::Scripting {
 
         bool Init(Framework::Scripting::SDKRegisterCallback);
 
+        bool Shutdown();
+
         std::shared_ptr<Framework::Scripting::ClientEngine> GetEngine() const {
             return _clientEngine;
         }

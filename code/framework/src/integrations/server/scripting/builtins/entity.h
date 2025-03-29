@@ -193,8 +193,8 @@ namespace Framework::Integrations::Scripting {
             Framework::World::ServerEngine::RemoveEntity(_ent);
         }
 
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<Entity> cls = luaEngine.new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<Entity> cls = luaEngine->new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
             cls["id"] = sol::property([](const Entity& self) { return self.GetID(); });
             cls["name"] = sol::property([](const Entity& self) { return self.GetName(); });
             cls["nickname"] = sol::property([](const Entity& self) { return self.GetNickname(); });

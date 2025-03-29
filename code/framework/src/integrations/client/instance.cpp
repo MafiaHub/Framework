@@ -121,15 +121,6 @@ namespace Framework::Integrations::Client {
 
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Core ecs modules have been imported!");
         }
-        
-        // Initialize the scripting engine
-        if (_scriptingModule) {
-            if (!_scriptingModule->Init(nullptr)) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
-                return ClientError::CLIENT_ENGINES_ERROR;
-            }
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
-        }
 
         InitNetworkingMessages();
         InitAssetDownloader();
@@ -341,6 +332,9 @@ namespace Framework::Integrations::Client {
             if (_onConnectionClosed) {
                 _onConnectionClosed();
             }
+
+            // Request the scripting engine to clean up loaded scripts
+            _scriptingModule->Shutdown();
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
@@ -357,6 +351,10 @@ namespace Framework::Integrations::Client {
             return;
         }
 
+        // Unload the scripts before redownloading
+        _scriptingModule->Shutdown();
+
+        // Setup the asset downloader
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
         const auto streamer = net->GetAssetStreamer();
 
@@ -399,9 +397,17 @@ namespace Framework::Integrations::Client {
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
             
-            // Setup client scripting with downloaded scripts
             auto scriptingModule = GetScriptingModule();
             if (scriptingModule) {
+                // Initialize the scripting module, but force disconnect if it failed to init
+                if (!scriptingModule->Init(nullptr)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
+                    net->Disconnect();
+                    return;
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
+
+                // Load the scripts
                 auto scriptingEngine = scriptingModule->GetEngine();
                 if (scriptingEngine) {
                     // Set script cache path to the asset download path
@@ -433,6 +439,7 @@ namespace Framework::Integrations::Client {
             }
         }
         else {
+            net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();

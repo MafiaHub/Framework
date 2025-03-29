@@ -15,4 +15,9 @@ namespace Framework::Integrations::Client::Scripting {
         }
         return true;
     }
+
+    bool ClientScriptingModule::Shutdown() {
+        _clientEngine->Shutdown();
+        return true;
+    }
 }

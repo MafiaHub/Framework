@@ -44,6 +44,8 @@ namespace Framework::Scripting {
     }
 
     EngineError ServerEngine::Init(SDKRegisterCallback cb) {
+        _luaEngine = new sol::state();
+
         // Make sure we have at least one server file to load
         if (_serverFiles.empty()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("No server files to load");
@@ -51,12 +53,12 @@ namespace Framework::Scripting {
         }
         
         // Base setup for the lua state
-        _luaEngine.set_exception_handler(&my_exception_handler);
-        _luaEngine.open_libraries(sol::lib::base, sol::lib::table, sol::lib::package, sol::lib::coroutine, sol::lib::string, sol::lib::io, sol::lib::math, sol::lib::debug, sol::lib::os, sol::lib::utf8);
+        _luaEngine->set_exception_handler(&my_exception_handler);
+        _luaEngine->open_libraries(sol::lib::base, sol::lib::table, sol::lib::package, sol::lib::coroutine, sol::lib::string, sol::lib::io, sol::lib::math, sol::lib::debug, sol::lib::os, sol::lib::utf8);
 
         // Configure the lua paths
-        setLuaPath(_luaEngine.lua_state(), std::string(_mainGamemodeServerPath + "\\?.lua").c_str());
-        setLuaPath(_luaEngine.lua_state(), std::string(_mainGamemodeServerPath + "\\?\\?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?\\?.lua").c_str());
 
         // Init the common SDK
         InitCommonSDK();
@@ -94,7 +96,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        auto lr = _luaEngine.load_file(_mainGamemodeServerPath + "/" + _scriptName);
+        auto lr = _luaEngine->load_file(_mainGamemodeServerPath + "/" + _scriptName);
         if (!lr.valid()) { // This checks the syntax of your script, but does not execute it
             sol::error err   = lr;
             std::string what = err.what();

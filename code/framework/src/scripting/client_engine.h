@@ -24,7 +24,7 @@ namespace Framework::Scripting {
         // Script management
         std::vector<std::string> _loadedScripts;
         std::string _scriptCachePath;
-        std::atomic<bool> _scriptsLoaded = false;
+        std::atomic<bool> _shutdownInProgress = false;
 
       public:
         ClientEngine() = default;
@@ -36,12 +36,8 @@ namespace Framework::Scripting {
 
         // Script management
         bool LoadScripts();
-        bool UnloadScripts();
         bool AddScript(const std::string &path);
 
-        bool AreScriptsLoaded() const {
-            return _scriptsLoaded;
-        }
 
         void SetScriptCachePath(const std::string &path) {
             _scriptCachePath = path;

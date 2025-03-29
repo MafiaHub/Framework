@@ -15,8 +15,8 @@ namespace Framework::Scripting::Builtins {
         }
 
       public:
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<Event> cls = luaEngine.new_usertype<Event>("Event");
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<Event> cls = luaEngine->new_usertype<Event>("Event");
             cls["on"]                = &Event::On;
             cls["emit"]              = &Event::Emit;
         }

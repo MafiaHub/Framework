@@ -22,7 +22,7 @@ namespace Framework::Scripting {
     using EventHandler = std::vector<sol::function>;
     class Engine {
       public:
-        sol::state _luaEngine;
+        sol::state* _luaEngine = nullptr;
 
         std::map<std::string, EventHandler> _eventHandlers = {};
 
@@ -33,7 +33,7 @@ namespace Framework::Scripting {
 
         bool InitCommonSDK();
 
-        sol::state &GetLuaEngine() {
+        sol::state *GetLuaEngine() {
             return _luaEngine;
         }
 
