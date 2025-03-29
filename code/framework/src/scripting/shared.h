@@ -12,8 +12,7 @@
 #include <string>
 
 namespace Framework::Scripting {
-    class ServerEngine;
-    class ClientEngine;
+    class Engine;
 
     template <typename EngineKind>
     class SDKRegisterWrapper final {
@@ -27,6 +26,5 @@ namespace Framework::Scripting {
             return _engine;
         }
     };
-    using SDKRegisterCallback = fu2::function<void(SDKRegisterWrapper<ServerEngine>)>;
-    using SDKClientRegisterCallback = fu2::function<void(SDKRegisterWrapper<ClientEngine>)>;
+    using SDKRegisterCallback = fu2::function<void(SDKRegisterWrapper<Engine>)>;
 }

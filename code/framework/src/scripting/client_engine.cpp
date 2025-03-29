@@ -79,7 +79,7 @@ namespace Framework::Scripting {
         }
     }
 
-    EngineError ClientEngine::Init(SDKClientRegisterCallback cb) {
+    EngineError ClientEngine::Init(SDKRegisterCallback cb) {
         // Setup error handling
         _luaEngine.set_exception_handler(&exception_handler);
         
@@ -107,7 +107,7 @@ namespace Framework::Scripting {
         
         // Initialize mod-level scripting layer if callback provided
         if (cb) {
-            cb(Framework::Scripting::SDKRegisterWrapper<ClientEngine>(this));
+            cb(Framework::Scripting::SDKRegisterWrapper<Engine>(this));
         }
         
         return EngineError::ENGINE_NONE;

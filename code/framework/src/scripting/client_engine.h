@@ -30,7 +30,7 @@ namespace Framework::Scripting {
         ClientEngine() = default;
         ~ClientEngine() = default;
 
-        EngineError Init(SDKClientRegisterCallback) override;
+        EngineError Init(SDKRegisterCallback) override;
         EngineError Shutdown() override;
         void Update() override;
 
