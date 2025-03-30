@@ -29,11 +29,9 @@ namespace Framework::Scripting {
         Utils::Time::TimePoint _nextFileWatchUpdate;
         int32_t _fileWatchUpdatePeriod = 1000;
 
-        std::vector<std::string> _clientFiles;
-        std::vector<std::string> _serverFiles;
-
         // Package
-        std::string _scriptName;
+        std::vector<std::string> _scripts;
+        std::string _gamemodeName;
         std::string _mainGamemodePath;
         std::string _mainGamemodeServerPath;
         std::atomic<bool> _packageLoaded = false;
@@ -46,8 +44,6 @@ namespace Framework::Scripting {
         EngineError Shutdown() override;
         void Update() override;
 
-        EngineError LoadManifest();
-
         bool LoadScript();
         bool UnloadScript();
 
@@ -55,12 +51,12 @@ namespace Framework::Scripting {
             return _packageLoaded;
         }
 
-        std::string GetScriptName() const {
-            return _scriptName;
+        std::string GetGamemodeName() const {
+            return _gamemodeName;
         }
 
-        void SetScriptName(const std::string &name) {
-            _scriptName = name;
+        void SetGamemodeName(const std::string &name) {
+            _gamemodeName = name;
         }
 
         std::string GetMainGamemodePath() const {
@@ -76,12 +72,16 @@ namespace Framework::Scripting {
             return _mainGamemodeServerPath;
         }
 
-        std::vector<std::string> GetClientFiles() const {
-            return _clientFiles;
+        std::vector<std::string> GetScripts() const {
+            return _scripts;
         }
 
-        std::vector<std::string> GetServerFiles() const {
-            return _serverFiles;
+        void AddScript(std::string name) {
+            _scripts.push_back(name);
+        }
+
+        void AddScripts(std::vector<std::string> names) {
+            _scripts.insert(_scripts.end(), names.begin(), names.end());
         }
     };
 } // namespace Framework::Scripting::Engines::Node

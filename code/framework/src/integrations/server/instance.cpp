@@ -137,8 +137,8 @@ namespace Framework::Integrations::Server {
         };
 
         // Initialize the scripting engine
-        _scriptingModule->GetEngine()->SetMainGamemodePath("gamemode");
-        _scriptingModule->GetEngine()->LoadManifest();
+        _scriptingModule->SetMainGamemodePath("gamemode");
+        _scriptingModule->LoadManifest();
         if (!_scriptingModule->Init(sdkCallback)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
@@ -337,7 +337,7 @@ namespace Framework::Integrations::Server {
         const auto scripting   = GetScriptingModule();
         const auto gamemodePath = scripting->GetEngine()->GetMainGamemodePath();
         const auto clientPath = fmt::format("{}\\client", gamemodePath);
-        const auto clientFiles  = scripting->GetEngine()->GetClientFiles();
+        const auto clientFiles       = scripting->GetClientFiles();
         const std::string assetsPath = Framework::Utils::GetAbsolutePathA(clientPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client assets directory: {}", assetsPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
@@ -400,7 +400,7 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
-                info.gameMode       = _scriptingModule->GetEngine()->GetScriptName();
+                info.gameMode       = _scriptingModule->GetEngine()->GetGamemodeName();
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
