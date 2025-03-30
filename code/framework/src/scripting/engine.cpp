@@ -15,6 +15,7 @@
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
+#include "builtins/json.h"
 
 namespace Framework::Scripting {
     bool Engine::InitCommonSDK() {
@@ -23,6 +24,7 @@ namespace Framework::Scripting {
         Builtins::ColorRGB::Register(_luaEngine);
         Builtins::ColorRGBA::Register(_luaEngine);
         Builtins::Event::Register(_luaEngine);
+        Builtins::JSON::Register(_luaEngine);
         Builtins::Quaternion::Register(_luaEngine);
         Builtins::Vector3::Register(_luaEngine);
         Builtins::Vector2::Register(_luaEngine);
