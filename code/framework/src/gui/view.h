@@ -109,5 +109,13 @@ namespace Framework::GUI {
 
             _sdk->RemoveEventListener(eventName);
         }
+
+        inline void EvaluateScript(const std::string& script) {
+            if (!_internalView) {
+                return;
+            }
+
+            _internalView->EvaluateScript(ultralight::String(script.c_str()));
+        }
     };
 } // namespace Framework::GUI
