@@ -150,8 +150,8 @@ namespace Framework::Integrations::Client {
 
     void Instance::InitCacheAssetFolders() {
         const auto appDataPath = Framework::Utils::GetAppDataPathA();
-        cppfs::fs::open(fmt::format("{}\\MafiaMP", appDataPath)).createDirectory();
-        cppfs::fs::open(fmt::format("{}\\MafiaMP\\servers", appDataPath)).createDirectory();
+        cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration", appDataPath)).createDirectory();
+        cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration\\servers", appDataPath)).createDirectory();
     }
 
     ClientError Instance::RenderInit() {
