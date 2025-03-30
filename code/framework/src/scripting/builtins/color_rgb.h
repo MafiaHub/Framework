@@ -63,6 +63,12 @@ namespace Framework::Scripting::Builtins {
             return (_data.r << 16) | (_data.g << 8) | _data.b;
         }
 
+        void FromInt() {
+            _data.r = (_data.r >> 16) & 0xFF;
+            _data.g = (_data.g >> 8) & 0xFF;
+            _data.b = _data.b & 0xFF;
+        }
+
         void Add(int r, int g, int b) {
             const glm::ivec3 newVec(r, g, b);
             _data += newVec;
@@ -95,6 +101,7 @@ namespace Framework::Scripting::Builtins {
             cls["toString"] = &ColorRGB::ToString;
             cls["toArray"]  = &ColorRGB::ToArray;
             cls["toInteger"] = &ColorRGB::ToInt; // Or toNumber?
+            cls["fromInteger"] = &ColorRGB::FromInt;
             cls["add"]     = &ColorRGB::Add;
             cls["sub"]     = &ColorRGB::Sub;
             cls["mul"]     = &ColorRGB::Mul;
