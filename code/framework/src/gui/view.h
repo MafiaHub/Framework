@@ -24,10 +24,18 @@
 #include "sdk.h"
 
 namespace Framework::GUI {
+    using OnConsoleMessageCallback     = fu2::function<void(std::string,uint32_t,uint32_t,std::string)>;
+    using OnDOMReadyCallback           = fu2::function<void(uint64_t, bool, std::string)>;
+    using OnWindowObjectReadyCallback  = fu2::function<void(uint64_t, bool, std::string)>;
 
     class View
         : public ultralight::ViewListener
         , ultralight::LoadListener {
+      private:
+        OnConsoleMessageCallback _onConsoleMessageCallback;
+        OnDOMReadyCallback _onDOMReadyCallback;
+        OnWindowObjectReadyCallback _onWindowObjectReadyCallback;
+
       protected:
         ultralight::RefPtr<ultralight::Renderer> _renderer;
         ultralight::RefPtr<ultralight::View> _internalView = nullptr;
@@ -116,6 +124,18 @@ namespace Framework::GUI {
             }
 
             return _internalView->EvaluateScript(ultralight::String(script.c_str())).utf8().data();
+        }
+
+        inline void SetOnConsoleMessageCallback(OnConsoleMessageCallback proc) {
+            _onConsoleMessageCallback = std::move(proc);
+        }
+
+        inline void SetOnDOMReadyCallback(OnDOMReadyCallback proc) {
+            _onDOMReadyCallback = std::move(proc);
+        }
+
+        inline void SetOnWindowObjectReadyCallback(OnWindowObjectReadyCallback proc) {
+            _onWindowObjectReadyCallback = std::move(proc);
         }
     };
 } // namespace Framework::GUI
