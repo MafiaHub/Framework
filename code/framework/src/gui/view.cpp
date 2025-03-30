@@ -8,6 +8,7 @@
 namespace Framework::GUI {
     View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _pixelData(nullptr), _width(0), _height(0) {
         _sdk = new SDK;
+        _isMouseDown = false;
     }
 
     View::~View() {
@@ -93,35 +94,42 @@ namespace Framework::GUI {
 
         ev.x = GET_X_LPARAM(lParam);
         ev.y = GET_Y_LPARAM(lParam);
-        
+
         switch (msg) {
         case WM_MOUSEMOVE: {
-            ev.type    = ultralight::MouseEvent::kType_MouseMoved;
-            ev.button  = ultralight::MouseEvent::kButton_None;
+            if (_isMouseDown) {
+                ev.type = ultralight::MouseEvent::kType_MouseMoved;
+                ev.button = ultralight::MouseEvent::kButton_Left;
+            } else {
+                ev.type = ultralight::MouseEvent::kType_MouseMoved;
+                ev.button = ultralight::MouseEvent::kButton_None;
+            }
             _cursorPos = {ev.x, ev.y};
         } break;
         case WM_LBUTTONDOWN: {
-            ev.type   = ultralight::MouseEvent::kType_MouseDown;
+            ev.type = ultralight::MouseEvent::kType_MouseDown;
             ev.button = ultralight::MouseEvent::kButton_Left;
+            _isMouseDown = true;
         } break;
         case WM_LBUTTONUP: {
-            ev.type   = ultralight::MouseEvent::kType_MouseUp;
+            ev.type = ultralight::MouseEvent::kType_MouseUp;
             ev.button = ultralight::MouseEvent::kButton_Left;
+            _isMouseDown = false;
         } break;
         case WM_RBUTTONDOWN: {
-            ev.type   = ultralight::MouseEvent::kType_MouseDown;
+            ev.type = ultralight::MouseEvent::kType_MouseDown;
             ev.button = ultralight::MouseEvent::kButton_Right;
         } break;
         case WM_RBUTTONUP: {
-            ev.type   = ultralight::MouseEvent::kType_MouseUp;
+            ev.type = ultralight::MouseEvent::kType_MouseUp;
             ev.button = ultralight::MouseEvent::kButton_Right;
         } break;
         case WM_MBUTTONDOWN: {
-            ev.type   = ultralight::MouseEvent::kType_MouseDown;
+            ev.type = ultralight::MouseEvent::kType_MouseDown;
             ev.button = ultralight::MouseEvent::kButton_Middle;
         } break;
         case WM_MBUTTONUP: {
-            ev.type   = ultralight::MouseEvent::kType_MouseUp;
+            ev.type = ultralight::MouseEvent::kType_MouseUp;
             ev.button = ultralight::MouseEvent::kButton_Middle;
         } break;
         }

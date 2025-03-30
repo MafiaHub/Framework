@@ -54,6 +54,7 @@ namespace Framework::GUI {
         std::recursive_mutex _renderMutex;
         ultralight::Cursor _cursor = ultralight::kCursor_Pointer;
         glm::vec2 _cursorPos {};
+        bool _isMouseDown = false;
 
       protected:
         void OnAddConsoleMessage(ultralight::View *caller, const ultralight::ConsoleMessage &message) override;
