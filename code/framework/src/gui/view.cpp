@@ -1,6 +1,7 @@
 #include "view.h"
 #include "logging/logger.h"
 #include <Windows.h>
+#include <WindowsX.h>
 
 #include <unordered_map>
 
@@ -89,8 +90,10 @@ namespace Framework::GUI {
 
         // Handle other classic mouse events
         ultralight::MouseEvent ev;
-        ev.x = LOWORD(lParam); // TODO: revamp this because it fails on multiple monitors setups
-        ev.y = HIWORD(lParam); // TODO: revamp this because it fails on multiple monitors setups
+
+        ev.x = GET_X_LPARAM(lParam);
+        ev.y = GET_Y_LPARAM(lParam);
+        
         switch (msg) {
         case WM_MOUSEMOVE: {
             ev.type    = ultralight::MouseEvent::kType_MouseMoved;
