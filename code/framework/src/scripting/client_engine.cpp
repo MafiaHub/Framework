@@ -55,6 +55,24 @@ namespace Framework::Scripting {
         
         // Init the common SDK
         InitCommonSDK();
+
+        // Bind the custom package loader
+        _luaEngine->add_package_loader([this](const std::string &fileName) {
+            auto path   = _scriptCachePath + fileName + ".lua";
+            auto result = _luaEngine->load_file(path, sol::load_mode::text);
+            if (result.valid()) {
+                return result.get<sol::object>();
+            }
+            else {
+                // Get the error message string directly from the load_result
+                std::string err_msg = result.status() == sol::load_status::syntax ?
+                    "syntax error: " + result.get<std::string>() :
+                    "error loading module '" + fileName + "'";
+                
+                // Create an error object using sol::make_object with proper parameters
+                return sol::make_object(*_luaEngine, err_msg);
+            }
+        });
         
         // Initialize mod-level scripting layer if callback provided
         if (cb) {
