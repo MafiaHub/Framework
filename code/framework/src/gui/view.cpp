@@ -97,13 +97,8 @@ namespace Framework::GUI {
 
         switch (msg) {
         case WM_MOUSEMOVE: {
-            if (_isMouseDown) {
-                ev.type = ultralight::MouseEvent::kType_MouseMoved;
-                ev.button = ultralight::MouseEvent::kButton_Left;
-            } else {
-                ev.type = ultralight::MouseEvent::kType_MouseMoved;
-                ev.button = ultralight::MouseEvent::kButton_None;
-            }
+            ev.type = ultralight::MouseEvent::kType_MouseMoved;
+            ev.button = _isMouseDown ? ultralight::MouseEvent::kButton_Left : ultralight::MouseEvent::kButton_None;
             _cursorPos = {ev.x, ev.y};
         } break;
         case WM_LBUTTONDOWN: {
