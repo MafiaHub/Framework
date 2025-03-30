@@ -102,6 +102,9 @@ namespace Framework::Scripting {
         delete _luaEngine;
         _luaEngine = nullptr;
 
+        // Clear the loaded scripts
+        _loadedScripts.clear();
+
         _shutdownInProgress = false;
         return EngineError::ENGINE_NONE;
     }
