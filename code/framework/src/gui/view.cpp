@@ -169,10 +169,16 @@ namespace Framework::GUI {
 
     void View::OnAddConsoleMessage(ultralight::View *caller, const ultralight::ConsoleMessage &message) {
         Framework::Logging::GetLogger("Web")->debug("Console message: {}:{}:{}:{}", message.message().utf8().data(), message.line_number(), message.column_number(), message.source_id().utf8().data());
+        if (_onConsoleMessageCallback) {
+            _onConsoleMessageCallback(std::string(message.message().utf8().data()), message.line_number(), message.column_number(), std::string(message.source_id().utf8().data()));
+        }
     }
 
     void View::OnDOMReady(ultralight::View *caller, uint64_t frame_id, bool is_main_frame, const ultralight::String &url) {
         Framework::Logging::GetLogger("Web")->debug("DOM ready");
+        if (_onDOMReadyCallback) {
+            _onDOMReadyCallback(frame_id, is_main_frame, std::string(url.utf8().data()));
+        }
     }
 
     void View::OnWindowObjectReady(ultralight::View *caller, uint64_t frame_id, bool is_main_frame, const ultralight::String &url) {
@@ -180,6 +186,10 @@ namespace Framework::GUI {
 
         // Bind the SDK
         _sdk->Init(caller);
+
+        if (_onWindowObjectReadyCallback) {
+            _onWindowObjectReadyCallback(frame_id, is_main_frame, std::string(url.utf8().data()));
+        }
     }
 
     void View::OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) {
