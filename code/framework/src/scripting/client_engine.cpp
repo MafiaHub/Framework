@@ -17,15 +17,19 @@
 namespace Framework::Scripting {
     namespace {
         // Handle Lua errors
-        int exception_handler(lua_State *L, sol::optional<const std::exception &> maybe_exception, sol::string_view description) {
+        int exception_handler(lua_State *L, sol::optional<const std::exception &> maybeException, sol::string_view description) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Lua error: {}", description);
             
-            if (maybe_exception) {
-                const std::exception &ex = *maybe_exception;
+            if (maybeException) {
+                const std::exception &ex = *maybeException;
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Exception: {}", ex.what());
             }
             
             return sol::stack::push(L, description);
+        }
+
+        int disabled_function(lua_State *L) {
+            return luaL_error(L, "Function disabled");
         }
     }
 
@@ -42,8 +46,12 @@ namespace Framework::Scripting {
             sol::lib::string,
             sol::lib::math,
             sol::lib::coroutine,
-            sol::lib::utf8
+            sol::lib::utf8,
+            sol::lib::os
         );
+
+        // Sandbox the environment
+        SandboxEnvironment();
         
         // Init the common SDK
         InitCommonSDK();
@@ -54,6 +62,27 @@ namespace Framework::Scripting {
         }
         
         return EngineError::ENGINE_NONE;
+    }
+
+    void ClientEngine::SandboxEnvironment() {
+        if (!_luaEngine) {
+            return;
+        }
+
+        (*_luaEngine)["os"]["execute"] = &disabled_function;
+        (*_luaEngine)["os"]["rename"]  = &disabled_function;
+        (*_luaEngine)["os"]["remove"]  = &disabled_function;
+        (*_luaEngine)["os"]["exit"]    = &disabled_function;
+        (*_luaEngine)["os"]["getenv"]  = &disabled_function;
+        (*_luaEngine)["os"]["tmpname"] = &disabled_function;
+        (*_luaEngine)["os"]["setlocale"] = &disabled_function;
+
+        (*_luaEngine)["dofile"]   = &disabled_function;
+        (*_luaEngine)["loadfile"] = &disabled_function;
+        (*_luaEngine)["require"]  = &disabled_function;
+        (*_luaEngine)["loadlib"]  = &disabled_function;
+        (*_luaEngine)["getfenv"]  = &disabled_function;
+        (*_luaEngine)["newproxy"] = &disabled_function;
     }
 
     EngineError ClientEngine::Shutdown() {

@@ -38,6 +38,8 @@ namespace Framework::Scripting {
         bool LoadScripts();
         bool AddScript(const std::string &path);
 
+        void SandboxEnvironment();
+
 
         void SetScriptCachePath(const std::string &path) {
             _scriptCachePath = path;
