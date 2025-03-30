@@ -110,12 +110,12 @@ namespace Framework::GUI {
             _sdk->RemoveEventListener(eventName);
         }
 
-        inline void EvaluateScript(const std::string& script) {
+        inline std::string EvaluateScript(const std::string& script) {
             if (!_internalView) {
-                return;
+                return "";
             }
 
-            _internalView->EvaluateScript(ultralight::String(script.c_str()));
+            return _internalView->EvaluateScript(ultralight::String(script.c_str())).utf8().data();
         }
     };
 } // namespace Framework::GUI
