@@ -152,15 +152,16 @@ namespace Framework::Integrations::Server::Scripting {
             return;
         }
 
-        // Reload the manifest first to pick up any new/removed files
-        if (LoadManifest()) {
-            _serverEngine->UnloadScript();
-            _serverEngine->LoadScript();
-                                
-            // Notify callback if set
-            if (_onReloadCallback) {
-                _onReloadCallback();
-            }
+        // Unload and clear the state, then reload
+        _serverEngine->UnloadScript();
+        _serverEngine->ClearScripts();
+        _serverEngine->ClearEventHandlers();
+        LoadManifest();
+        _serverEngine->LoadScript();
+
+        // Notify callback if set
+        if (_onReloadCallback) {
+            _onReloadCallback();
         }
     }
 

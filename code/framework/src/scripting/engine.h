@@ -55,5 +55,9 @@ namespace Framework::Scripting {
                 }
             }
         }
+
+        void ClearEventHandlers() {
+            _eventHandlers.clear();
+        }
     };
 } // namespace Framework::Scripting

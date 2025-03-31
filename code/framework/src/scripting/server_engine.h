@@ -75,5 +75,9 @@ namespace Framework::Scripting {
         void AddScripts(std::vector<std::string> names) {
             _scripts.insert(_scripts.end(), names.begin(), names.end());
         }
+
+        void ClearScripts() {
+            _scripts.clear();
+        }
     };
 } // namespace Framework::Scripting::Engines::Node
