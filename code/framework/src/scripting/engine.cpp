@@ -19,7 +19,6 @@
 
 namespace Framework::Scripting {
     bool Engine::InitCommonSDK() {
-        // Bind the builtins
         Builtins::Console::Register(_luaEngine);
         Builtins::ColorRGB::Register(_luaEngine);
         Builtins::ColorRGBA::Register(_luaEngine);
@@ -28,7 +27,6 @@ namespace Framework::Scripting {
         Builtins::Quaternion::Register(_luaEngine);
         Builtins::Vector3::Register(_luaEngine);
         Builtins::Vector2::Register(_luaEngine);
-
         return true;
     }
 }

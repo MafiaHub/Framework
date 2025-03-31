@@ -360,7 +360,7 @@ namespace Framework::Integrations::Client {
 
         // Compute the destination path
         const auto appDataPath = Framework::Utils::GetAppDataPathA();
-        const auto cacheDir   = fmt::format("{}\\MafiaMP\\servers\\{}", appDataPath, _currentState._serverIDHash); // TODO: fix path to use mod name
+        const auto cacheDir   = fmt::format("{}\\MafiaHubIntegration\\servers\\{}", appDataPath, _currentState._serverIDHash); // TODO: fix path to use mod name
 
         // Let the system know where our scripts are stored
         SetAssetCachePath(cacheDir);
