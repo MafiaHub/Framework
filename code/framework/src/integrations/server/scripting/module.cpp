@@ -83,7 +83,9 @@ namespace Framework::Integrations::Server::Scripting {
     }
     
     void ServerScriptingModule::SetupWatchPath(const std::string &path) {
-        if (!_watcher) return;
+        if (!_watcher) {
+            return;
+        }
         
         try {
             // Open directory
@@ -146,23 +148,18 @@ namespace Framework::Integrations::Server::Scripting {
     }
 
     void ServerScriptingModule::ReloadScriptingEngine() {
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("File changes detected, reloading scripting engine...");
-        
-        if (_serverEngine) {
-            // Reload the manifest first to pick up any new/removed files
-            if (LoadManifest()) {
-                _serverEngine->UnloadScript();
-                _serverEngine->LoadScript();
-                
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Scripting engine reloaded successfully");
-                
-                // Notify callback if set
-                if (_onReloadCallback) {
-                    _onReloadCallback();
-                }
-            }
-            else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to reload manifest during script reload");
+        if (!_serverEngine) {
+            return;
+        }
+
+        // Reload the manifest first to pick up any new/removed files
+        if (LoadManifest()) {
+            _serverEngine->UnloadScript();
+            _serverEngine->LoadScript();
+                                
+            // Notify callback if set
+            if (_onReloadCallback) {
+                _onReloadCallback();
             }
         }
     }
