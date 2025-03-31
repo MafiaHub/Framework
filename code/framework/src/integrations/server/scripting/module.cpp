@@ -9,6 +9,7 @@
 #include "module.h"
 
 #include <nlohmann/json.hpp>
+#include <logging/logger.h>
 
 namespace Framework::Integrations::Server::Scripting {
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world), _watcher(nullptr) {
@@ -19,6 +20,7 @@ namespace Framework::Integrations::Server::Scripting {
     ServerScriptingModule::~ServerScriptingModule() {
         if (_watcher) {
             delete _watcher;
+            _watcher = nullptr;
         }
     }
 
@@ -29,21 +31,43 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         // Initialize file watcher
-        _watcher = new cppfs::FileWatcher();
-        _watcher->addCallback([](cppfs::FileHandle &file, cppfs::FileWatcher::Event event) {
-            if (event == cppfs::FileWatcher::Event::FileModified) {
-                // Get the module from the callback context
-                auto module = static_cast<ServerScriptingModule*>(file.watcher()->userData());
-                if (module) {
-                    module->_shouldReloadWatcher = true;
-                }
+        try {
+            _watcher = new cppfs::FileWatcher();
+            
+            // Register event handler
+            _watcher->addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent event) {
+                // Log event for debugging
+                std::string type = (fh.isDirectory() ? "directory" : "file");
+                std::string operation = ((event & cppfs::FileEvent::FileCreated) ? "created" :
+                                       ((event & cppfs::FileEvent::FileRemoved) ? "removed" :
+                                       ((event & cppfs::FileEvent::FileAttrChanged) ? "attributes changed" :
+                                       "modified")));
+                
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("File watch event: {} '{}' was {}", type, fh.path(), operation);
+                
+                // Mark for reload
+                _shouldReloadWatcher = true;
+            });
+            
+            // Set up for first update
+            _nextFileWatchUpdate = std::chrono::high_resolution_clock::now();
+            _fileWatchUpdatePeriod = 1000;
+            
+            // If we already have a path, set up watching
+            if (!_mainGamemodePath.empty()) {
+                SetupWatchPath(_mainGamemodePath);
             }
-        });
-        _watcher->setUserData(this);
-        _nextFileWatchUpdate = std::chrono::high_resolution_clock::now();
-        _fileWatchUpdatePeriod = 1000;
-
-        return true;
+            
+            return true;
+        }
+        catch (const std::exception &e) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize file watcher: {}", e.what());
+            if (_watcher) {
+                delete _watcher;
+                _watcher = nullptr;
+            }
+            return false;
+        }
     }
 
     void ServerScriptingModule::SetMainGamemodePath(const std::string &path) {
@@ -54,8 +78,33 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Set up file watching for the gamemode path
         if (_watcher) {
-            _watcher->removeWatch(_mainGamemodePath);
-            _watcher->addWatch(_mainGamemodePath, cppfs::FileWatcher::WatchRecursive);
+            SetupWatchPath(path);
+        }
+    }
+    
+    void ServerScriptingModule::SetupWatchPath(const std::string &path) {
+        if (!_watcher) return;
+        
+        try {
+            // Open directory
+            cppfs::FileHandle dir = cppfs::fs::open(path);
+            if (dir.isDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Setting up file watching for '{}'", path);
+                
+                // Add directory to watcher with events and recursive mode
+                _watcher->add(dir, 
+                            cppfs::FileEvent::FileCreated | 
+                            cppfs::FileEvent::FileRemoved | 
+                            cppfs::FileEvent::FileModified | 
+                            cppfs::FileEvent::FileAttrChanged, 
+                            cppfs::RecursiveMode::Recursive);
+            }
+            else {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("'{}' is not a valid directory for file watching", path);
+            }
+        }
+        catch (const std::exception &e) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to setup file watching for '{}': {}", path, e.what());
         }
     }
 
@@ -78,24 +127,42 @@ namespace Framework::Integrations::Server::Scripting {
         if (_serverEngine) {
             _serverEngine->Shutdown();
         }
+        
+        if (_watcher) {
+            delete _watcher;
+            _watcher = nullptr;
+        }
+        
+        return true;
     }
 
     void ServerScriptingModule::UpdateFileWatcher() {
         const auto now = std::chrono::high_resolution_clock::now();
         if (now >= _nextFileWatchUpdate) {
-            _watcher->update();
+            // Use a timeout to prevent blocking
+            _watcher->watch(100); // Poll with 100ms timeout
             _nextFileWatchUpdate = now + std::chrono::milliseconds(_fileWatchUpdatePeriod);
         }
     }
 
     void ServerScriptingModule::ReloadScriptingEngine() {
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("File changes detected, reloading scripting engine...");
+        
         if (_serverEngine) {
-            _serverEngine->UnloadScript();
-            _serverEngine->LoadScript();
-            
-            // Notify callback if set
-            if (_onReloadCallback) {
-                _onReloadCallback();
+            // Reload the manifest first to pick up any new/removed files
+            if (LoadManifest()) {
+                _serverEngine->UnloadScript();
+                _serverEngine->LoadScript();
+                
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Scripting engine reloaded successfully");
+                
+                // Notify callback if set
+                if (_onReloadCallback) {
+                    _onReloadCallback();
+                }
+            }
+            else {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to reload manifest during script reload");
             }
         }
     }
@@ -149,6 +216,7 @@ namespace Framework::Integrations::Server::Scripting {
             
             // Add the scripts to the lua engine
             if (_serverEngine != nullptr) {
+                // Clear existing scripts and add the new ones
                 _serverEngine->AddScripts(_serverFiles);
             }
         }

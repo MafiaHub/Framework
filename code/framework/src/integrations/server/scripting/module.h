@@ -11,9 +11,11 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <chrono>
 
 #include <cppfs/FileWatcher.h>
 #include <cppfs/fs.h>
+#include <cppfs/FileHandle.h>
 
 #include <scripting/server_engine.h>
 #include <world/server.h>
@@ -30,8 +32,8 @@ namespace Framework::Integrations::Server::Scripting {
         std::string _mainGamemodePath;
 
         // File watching
-        cppfs::FileWatcher *_watcher;
-        Utils::Time::TimePoint _nextFileWatchUpdate;
+        cppfs::FileWatcher *_watcher = nullptr;
+        std::chrono::time_point<std::chrono::high_resolution_clock> _nextFileWatchUpdate;
         int32_t _fileWatchUpdatePeriod = 1000;
         bool _shouldReloadWatcher = false;
         std::function<void()> _onReloadCallback;
@@ -71,5 +73,6 @@ namespace Framework::Integrations::Server::Scripting {
       private:
         void UpdateFileWatcher();
         void ReloadScriptingEngine();
+        void SetupWatchPath(const std::string &path);
     };
-} // namespace Framework::Integrations::Scripting
+} // namespace Framework::Integrations::Server::Scripting
