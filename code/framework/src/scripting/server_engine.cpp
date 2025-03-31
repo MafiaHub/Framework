@@ -79,7 +79,7 @@ namespace Framework::Scripting {
     }
 
     void ServerEngine::Update() {
-        if(!IsPackageLoaded()){
+        if(!IsGamemodeLoaded()){
             return;
         }
 
@@ -87,7 +87,7 @@ namespace Framework::Scripting {
     }
 
     bool ServerEngine::LoadScript() {
-        if(IsPackageLoaded()){
+        if (IsGamemodeLoaded()) {
             return false;
         }
 
@@ -108,17 +108,17 @@ namespace Framework::Scripting {
         }
 
         InvokeEvent(Events[EventIDs::GAMEMODE_LOADED]);
-        _packageLoaded = true;
+        SetGamemodeLoaded(true);
         return true;
     }
 
     bool ServerEngine::UnloadScript() {
-        if(!IsPackageLoaded()){
+        if(!IsGamemodeLoaded()){
             return false;
         }
 
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
-        _packageLoaded = false;
+        SetGamemodeLoaded(false);
         return true;
     }
 } // namespace Framework::Scripting

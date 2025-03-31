@@ -25,7 +25,7 @@ namespace Framework::Scripting {
         std::string _gamemodeName;
         std::string _mainGamemodePath;
         std::string _mainGamemodeServerPath;
-        std::atomic<bool> _packageLoaded = false;
+        std::atomic<bool> _gamemodeLoaded = false;
         
       public:
         EngineError Init(SDKRegisterCallback) override;
@@ -35,8 +35,12 @@ namespace Framework::Scripting {
         bool LoadScript();
         bool UnloadScript();
 
-        bool IsPackageLoaded() const {
-            return _packageLoaded;
+        bool IsGamemodeLoaded() const {
+            return _gamemodeLoaded;
+        }
+
+        void SetGamemodeLoaded(bool loaded) {
+            _gamemodeLoaded = loaded;
         }
 
         std::string GetGamemodeName() const {
