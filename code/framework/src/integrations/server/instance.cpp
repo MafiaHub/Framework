@@ -144,6 +144,11 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
+        // Set up reload callback
+        _scriptingModule->SetOnReloadCallback([this]() {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Gamemode reloaded");
+        });
+
         // Initialize asset streamer
         InitAssetStreamer();
 
@@ -362,7 +367,7 @@ namespace Framework::Integrations::Server {
         }
 
         if (_scriptingModule) {
-            _scriptingModule->GetEngine()->Shutdown();
+            _scriptingModule->Shutdown();
         }
 
         if (_webServer) {
@@ -391,7 +396,7 @@ namespace Framework::Integrations::Server {
             }
 
             if (_scriptingModule) {
-                _scriptingModule->GetEngine()->Update();
+                _scriptingModule->Update();
             }
 
             if (_worldEngine) {

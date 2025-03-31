@@ -10,6 +10,10 @@
 
 #include <vector>
 #include <string>
+#include <functional>
+
+#include <cppfs/FileWatcher.h>
+#include <cppfs/fs.h>
 
 #include <scripting/server_engine.h>
 #include <world/server.h>
@@ -25,13 +29,25 @@ namespace Framework::Integrations::Server::Scripting {
 
         std::string _mainGamemodePath;
 
+        // File watching
+        cppfs::FileWatcher *_watcher;
+        Utils::Time::TimePoint _nextFileWatchUpdate;
+        int32_t _fileWatchUpdatePeriod = 1000;
+        bool _shouldReloadWatcher = false;
+        std::function<void()> _onReloadCallback;
+
       public:
         ServerScriptingModule(std::shared_ptr<World::ServerEngine>);
-
-        ~ServerScriptingModule() = default;
+        ~ServerScriptingModule();
 
         bool Init(Framework::Scripting::SDKRegisterCallback);
+        bool Shutdown();
         bool LoadManifest();
+        void Update();
+
+        void SetOnReloadCallback(std::function<void()> callback) {
+            _onReloadCallback = callback;
+        }
 
         std::shared_ptr<Framework::Scripting::ServerEngine> GetEngine() const {
             return _serverEngine;
@@ -41,12 +57,8 @@ namespace Framework::Integrations::Server::Scripting {
             return _world;
         }
 
-        void SetMainGamemodePath(const std::string &path) {
-            _mainGamemodePath = path;
-            if (_serverEngine != nullptr) {
-                _serverEngine->SetMainGamemodePath(path);
-            }
-        }
+        void SetMainGamemodePath(const std::string &path);
+        std::string GetMainGamemodePath() const { return _mainGamemodePath; }
 
         std::vector<std::string> GetClientFiles() const {
             return _clientFiles;
@@ -55,5 +67,9 @@ namespace Framework::Integrations::Server::Scripting {
         std::vector<std::string> GetServerFiles() const {
             return _serverFiles;
         }
+
+      private:
+        void UpdateFileWatcher();
+        void ReloadScriptingEngine();
     };
 } // namespace Framework::Integrations::Scripting

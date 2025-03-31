@@ -13,10 +13,6 @@
 #include <vector>
 #include <string>
 
-#include <cppfs/FileHandle.h>
-#include <cppfs/FileWatcher.h>
-#include <cppfs/fs.h>
-
 #include <logging/logger.h>
 #include <utils/time.h>
 
@@ -24,20 +20,12 @@
 namespace Framework::Scripting {
     class ServerEngine : public Engine {
       private:
-        // Global
-        cppfs::FileWatcher *_watcher;
-        Utils::Time::TimePoint _nextFileWatchUpdate;
-        int32_t _fileWatchUpdatePeriod = 1000;
-
         // Package
         std::vector<std::string> _scripts;
         std::string _gamemodeName;
         std::string _mainGamemodePath;
         std::string _mainGamemodeServerPath;
         std::atomic<bool> _packageLoaded = false;
-
-        // Gamemode
-        bool _shouldReloadWatcher               = false;
         
       public:
         EngineError Init(SDKRegisterCallback) override;

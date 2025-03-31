@@ -11,17 +11,93 @@
 #include <nlohmann/json.hpp>
 
 namespace Framework::Integrations::Server::Scripting {
-    ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world) {
+    ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world), _watcher(nullptr) {
         _serverEngine = std::make_unique<Framework::Scripting::ServerEngine>();
         CoreModules::SetScriptingEngine(_serverEngine.get());
-    };
+    }
+
+    ServerScriptingModule::~ServerScriptingModule() {
+        if (_watcher) {
+            delete _watcher;
+        }
+    }
 
     bool ServerScriptingModule::Init(Framework::Scripting::SDKRegisterCallback cb) {
         if (_serverEngine->Init(cb) != Framework::Scripting::EngineError::ENGINE_NONE) {
             _serverEngine.reset();
             return false;
         }
+
+        // Initialize file watcher
+        _watcher = new cppfs::FileWatcher();
+        _watcher->addCallback([](cppfs::FileHandle &file, cppfs::FileWatcher::Event event) {
+            if (event == cppfs::FileWatcher::Event::FileModified) {
+                // Get the module from the callback context
+                auto module = static_cast<ServerScriptingModule*>(file.watcher()->userData());
+                if (module) {
+                    module->_shouldReloadWatcher = true;
+                }
+            }
+        });
+        _watcher->setUserData(this);
+        _nextFileWatchUpdate = std::chrono::high_resolution_clock::now();
+        _fileWatchUpdatePeriod = 1000;
+
         return true;
+    }
+
+    void ServerScriptingModule::SetMainGamemodePath(const std::string &path) {
+        _mainGamemodePath = path;
+        if (_serverEngine != nullptr) {
+            _serverEngine->SetMainGamemodePath(path);
+        }
+
+        // Set up file watching for the gamemode path
+        if (_watcher) {
+            _watcher->removeWatch(_mainGamemodePath);
+            _watcher->addWatch(_mainGamemodePath, cppfs::FileWatcher::WatchRecursive);
+        }
+    }
+
+    void ServerScriptingModule::Update() {
+        if (_serverEngine) {
+            _serverEngine->Update();
+        }
+
+        if (_watcher) {
+            UpdateFileWatcher();
+
+            if (_shouldReloadWatcher) {
+                ReloadScriptingEngine();
+                _shouldReloadWatcher = false;
+            }
+        }
+    }
+
+    bool ServerScriptingModule::Shutdown() {
+        if (_serverEngine) {
+            _serverEngine->Shutdown();
+        }
+    }
+
+    void ServerScriptingModule::UpdateFileWatcher() {
+        const auto now = std::chrono::high_resolution_clock::now();
+        if (now >= _nextFileWatchUpdate) {
+            _watcher->update();
+            _nextFileWatchUpdate = now + std::chrono::milliseconds(_fileWatchUpdatePeriod);
+        }
+    }
+
+    void ServerScriptingModule::ReloadScriptingEngine() {
+        if (_serverEngine) {
+            _serverEngine->UnloadScript();
+            _serverEngine->LoadScript();
+            
+            // Notify callback if set
+            if (_onReloadCallback) {
+                _onReloadCallback();
+            }
+        }
     }
 
     bool ServerScriptingModule::LoadManifest() {
