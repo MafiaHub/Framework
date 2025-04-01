@@ -53,7 +53,7 @@ namespace Framework::Integrations::Scripting {
                 throw std::runtime_error(fmt::format("Entity handle '{}' is invalid!", _ent.id()));
             }
 
-            const auto st = _ent.get_mut<Framework::World::Modules::Base::Streamer>();
+            const auto st = _ent.get<Framework::World::Modules::Base::Streamer>();
             if (!st) {
                 throw std::runtime_error(fmt::format("Entity '{}' is not a valid peer!", _ent.id()));
             }
