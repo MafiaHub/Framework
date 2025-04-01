@@ -18,7 +18,7 @@ MODULE(scripting_module, {
 
         // Init the engine and make sure everything went fine
         EQUALS(pEngine->Init(NULL), EngineError::ENGINE_NONE);
-        NEQUALS(pEngine->GetLuaEngine().lua_state(), nullptr);
+        NEQUALS(pEngine->GetLuaEngine()->lua_state(), nullptr);
 
         // Shutdown the engine and make sure everything went down
         EQUALS(pEngine->Shutdown(), EngineError::ENGINE_NONE);
