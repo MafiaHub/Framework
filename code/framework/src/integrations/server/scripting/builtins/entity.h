@@ -22,9 +22,13 @@
 #include "world/game_rpc/set_frame.h"
 #include "world/game_rpc/set_transform.h"
 
+#include "integrations/shared/rpc/emit_lua_event.h"
+
 #include <iomanip>
 #include <list>
 #include <sstream>
+
+#include "scripting/utils/table_conversions.h"
 
 #include "core_modules.h"
 
@@ -41,6 +45,27 @@ namespace Framework::Integrations::Scripting {
             const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
             if (!st) {
                 throw std::runtime_error(fmt::format("Entity '{}' is protected!", _ent.id()));
+            }
+        }
+
+        void EmitEvent(std::string eventName, sol::object payload) {
+            if (!_ent.is_valid() || !_ent.is_alive()) {
+                throw std::runtime_error(fmt::format("Entity handle '{}' is invalid!", _ent.id()));
+            }
+
+            const auto st = _ent.get_mut<Framework::World::Modules::Base::Streamer>();
+            if (!st) {
+                throw std::runtime_error(fmt::format("Entity '{}' is not a valid peer!", _ent.id()));
+            }
+
+            Framework::Integrations::Shared::RPC::EmitLuaEvent rpc;
+            try {
+                nlohmann::json jsonPayload = Framework::Scripting::Utils::SolToJson(payload);
+                rpc.FromParameters(eventName, jsonPayload.dump());
+                CoreModules::GetNetworkPeer()->SendRPC(rpc, SLNet::RakNetGUID(st->guid));
+            }
+            catch (const std::exception &e) {
+                throw std::runtime_error(fmt::format("Error in EventsClient::EmitEvent: {}", e.what()));
             }
         }
       public:

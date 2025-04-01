@@ -116,6 +116,7 @@ namespace Framework::Integrations::Client {
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);
         void InitCacheAssetFolders();
+        void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
 
       public:
         Instance();

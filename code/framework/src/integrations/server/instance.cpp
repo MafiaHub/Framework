@@ -18,6 +18,8 @@
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
+#include "integrations/shared/rpc/emit_lua_event.h"
+
 #include "../shared/modules/mod.hpp"
 
 #include "utils/version.h"
@@ -25,7 +27,10 @@
 
 #include "cxxopts.hpp"
 
+#include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/entity.h"
+
+#include "scripting/utils/table_conversions.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -329,6 +334,24 @@ namespace Framework::Integrations::Server {
                 _onPlayerConnectCallback(e, guid.g);
         });
 
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+            if (!rpc->Valid())
+                return;
+            
+            const auto eventName = rpc->GetEventName();
+            const auto payloadStr = rpc->GetPayload();
+            sol::object payload {};
+            try {
+                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
+            }
+            catch (const std::exception &ex) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
+                return;
+            }
+            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
+        });
+
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
@@ -445,6 +468,7 @@ namespace Framework::Integrations::Server {
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
         // Register the entity builtin
         Framework::Integrations::Scripting::Entity::Register(engine->GetLuaEngine());
+        Framework::Integrations::Scripting::EventsServer::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
         ModuleRegister(engine);

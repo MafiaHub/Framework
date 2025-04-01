@@ -17,7 +17,13 @@
 
 #include <world/game_rpc/set_transform.h>
 
+#include "integrations/shared/rpc/emit_lua_event.h"
+
 #include "../shared/modules/mod.hpp"
+
+#include "scripting/utils/table_conversions.h"
+
+#include "scripting/builtins/events_lua.h"
 
 #include "networking/state.h"
 
@@ -337,6 +343,23 @@ namespace Framework::Integrations::Client {
             _scriptingModule->Shutdown();
         });
 
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+            if (!rpc->Valid())
+                return;
+            const auto eventName  = rpc->GetEventName();
+            const auto payloadStr = rpc->GetPayload();
+            sol::object payload {};
+            try {
+                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
+            }
+            catch (const std::exception &ex) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
+                return;
+            }
+            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
+        });
+
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
@@ -423,6 +446,9 @@ namespace Framework::Integrations::Client {
                             return true;
                         });
 
+                        // Register builtins
+                        RegisterScriptingBuiltins(scriptingEngine.get());
+
                         // Load all the scripts
                         bool scriptsLoaded = scriptingEngine->LoadScripts();
                         if (scriptsLoaded) {
@@ -460,5 +486,9 @@ namespace Framework::Integrations::Client {
         if (_onAssetsDownloadFinished) {
             _onAssetsDownloadFinished(success);
         }
+    }
+
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *luaEngine) {
+        Framework::Integrations::Scripting::EventsClient::Register(luaEngine->GetLuaEngine());
     }
 } // namespace Framework::Integrations::Client
