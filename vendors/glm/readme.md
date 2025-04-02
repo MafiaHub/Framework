@@ -15,10 +15,9 @@ This library works perfectly with *[OpenGL](https://www.opengl.org)* but it also
 - [*Apple Clang 6.0*](https://developer.apple.com/library/mac/documentation/CompilerTools/Conceptual/LLVMCompilerOverview/index.html) and higher
 - [*Visual C++*](http://www.visualstudio.com/) 2013 and higher
 - [*CUDA*](https://developer.nvidia.com/about-cuda) 9.0 and higher (experimental)
-- [*SYCL*](https://www.khronos.org/sycl/) (experimental: only [ComputeCpp](https://codeplay.com/products/computesuite/computecpp) implementation has been tested).
 - Any C++11 compiler
 
-For more information about *GLM*, please have a look at the [manual](manual.md) and the [API reference documentation](http://glm.g-truc.net/0.9.8/api/index.html).
+For more information about *GLM*, please have a look at the [manual](manual.md) and the [API reference documentation](http://glm.g-truc.net/0.9.9/api/modules.html).
 The source code and the documentation are licensed under either the [Happy Bunny License (Modified MIT) or the MIT License](manual.md#section0).
 
 Thanks for contributing to the project by [submitting pull requests](https://github.com/g-truc/glm/pulls).
@@ -42,23 +41,98 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 }
 ```
 
-## [Lastest release](https://github.com/g-truc/glm/releases/latest)
+## [Latest release](https://github.com/g-truc/glm/releases/latest)
 
 ## Project Health
 
-| Service | System | Compiler | Status |
-| ------- | ------ | -------- | ------ |
-| [Travis CI](https://travis-ci.org/g-truc/glm)| MacOSX, Linux 64 bits | Clang 3.6, Clang 5.0, GCC 4.9, GCC 7.3 | [![Travis CI](https://travis-ci.org/g-truc/glm.svg?branch=master)](https://travis-ci.org/g-truc/glm)
-| [AppVeyor](https://ci.appveyor.com/project/Groovounet/glm)| Windows 32 and 64 | Visual Studio 2013, Visual Studio 2015, Visual Studio 2017 | [![AppVeyor](https://ci.appveyor.com/api/projects/status/32r7s2skrgm9ubva?svg=true)](https://ci.appveyor.com/project/Groovounet/glm)
+| Service | Status |
+| ------- | ------ |
+| [GitHub actions](https://github.com/g-truc/glm/actions)| [![.github/workflows/ci.yml](https://github.com/g-truc/glm/actions/workflows/ci.yml/badge.svg)](https://github.com/g-truc/glm/actions/workflows/ci.yml)
+
+## Build and Install
+
+```shell
+cd /path/to/glm
+cmake \
+    -DGLM_BUILD_TESTS=OFF \
+    -DBUILD_SHARED_LIBS=OFF \
+    -B build .
+cmake --build build -- all
+cmake --build build -- install
+```
+
+Passing `-DBUILD_SHARED_LIBS=ON` to build shared library
+
+And then in your `CMakeLists.txt`:
+
+```cmake
+find_package(glm CONFIG REQUIRED)
+target_link_libraries(main PRIVATE glm::glm)
+```
+
+If your prefer to use header-only version of GLM
+
+```cmake
+find_package(glm CONFIG REQUIRED)
+target_link_libraries(main PRIVATE glm::glm-header-only)
+```
+
+## Vcpkg
+
+```shell
+vcpkg install glm
+```
+
+## CMake using FetchContent
+You can add glm to your CMake project to be built together.
+
+Add to the `CMakeLists.txt` file:
+```cmake
+cmake_minimum_required(VERSION 3.11) # FetchContent is new in version 3.11.
+
+include(FetchContent)
+
+FetchContent_Declare(
+	glm
+	GIT_REPOSITORY	https://github.com/g-truc/glm.git
+	GIT_TAG 	bf71a834948186f4097caa076cd2663c69a10e1e #refs/tags/1.0.1
+)
+
+FetchContent_MakeAvailable(glm)
+
+target_link_libraries(main PRIVATE glm::glm)
+```
 
 ## Release notes
 
-### [GLM 0.9.9.9](https://github.com/g-truc/glm/releases/tag/0.9.9.9) - 2020-XX-XX
+### [GLM 1.0.2](https://github.com/g-truc/glm/tree/master) - 2025-0X-XX
+
+#### Improvements:
+- Unit tests are not build by default, `GLM_BUILD_TESTS` set to `ON` required.
+
+### [GLM 1.0.1](https://github.com/g-truc/glm/releases/tag/1.0.1) - 2024-02-26
+
+#### Features:
+- Added C++17 [[nodiscard]] support
+
+#### Improvements:
+- Enables only warnings as errors while building unit tests
+- Added aligned_*vec3 simd support #1245
+
+#### Fixes:
+- Fixed C++ language auto detection build, disable C++98 warnings with Clang #1235, #1231
+- Fixed `GTX_color_space` missing <glm/ext/scalar_constants.hpp> include #1233 #1238
+- Fixed `EXT_matrix_transform` `shear` implementation #1140 #1182
+- Fixed `smoothstep` SIMD implementation #1222
+
+### [GLM 1.0.0](https://github.com/g-truc/glm/releases/tag/1.0.0) - 2024-01-24
 #### Features:
 - Added *GLM_EXT_scalar_reciprocal* with tests
 - Added *GLM_EXT_vector_reciprocal* with tests
 - Added `glm::iround` and `glm::uround` to *GLM_EXT_scalar_common* and *GLM_EXT_vector_common*
 - Added *GLM_EXT_matrix_integer* with tests
+- Added Github Actions
+- Added GLM_FORCE_UNRESTRICTED_FLOAT to prevent static asserts when using other scalar types with function expecting floats. 
 
 #### Improvements:
 - Added `constexpr` qualifier for `cross` product #1040
@@ -81,7 +155,7 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 - Added *GLM_EXT_matrix_intX* and *GLM_EXT_matrix_uintX* extensions
 
 #### Improvements:
-- Added `glm::clamp`, `glm::repeat`, `glm::mirrorClamp` and `glm::mirrorRepeat` function to `GLM_EXT_scalar_commond` and `GLM_EXT_vector_commond` extensions with tests
+- Added `glm::clamp`, `glm::repeat`, `glm::mirrorClamp` and `glm::mirrorRepeat` function to `GLM_EXT_scalar_common` and `GLM_EXT_vector_common` extensions with tests
 
 #### Fixes:
 - Fixed unnecessary warnings from `matrix_projection.inl` #995
@@ -124,7 +198,7 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 - Fixed `glm::ldexp` and `glm::frexp` declaration #895
 - Fixed missing const to quaternion conversion operators #890
 - Fixed *GLM_EXT_scalar_ulp* and *GLM_EXT_vector_ulp* API coding style
-- Fixed quaternion componant order: `w, {x, y, z}` #916
+- Fixed quaternion component order: `w, {x, y, z}` #916
 - Fixed `GLM_HAS_CXX11_STL` broken on Clang with Linux #926
 - Fixed *Clang* or *GCC* build due to wrong `GLM_HAS_IF_CONSTEXPR` definition #907
 - Fixed *CUDA* 9 build #910
@@ -193,8 +267,8 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 - Redesigned constexpr support which excludes both SIMD and `constexpr` #783
 - Added detection of *Visual C++ 2017* toolsets
 - Added identity functions #765
-- Splitted headers into EXT extensions to improve compilation time #670
-- Added separated performance tests
+- Split headers into EXT extensions to improve compilation time #670
+- Added separate performance tests
 - Clarified refract valid range of the indices of refraction, between -1 and 1 inclusively #806
 
 #### Fixes:
@@ -225,7 +299,7 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 - Added *GLM_EXT_vector_relational*: `glm::openBounded` and `glm::closeBounded`
 - Added *GLM_EXT_vec1*: `*vec1` types
 - Added *GLM_GTX_texture*: `levels` function
-- Added spearate functions to use both nagative one and zero near clip plans #680
+- Added separate functions to use both negative one and zero near clip plans #680
 - Added `GLM_FORCE_SINGLE_ONLY` to use *GLM* on platforms that don't support double #627
 - Added *GLM_GTX_easing* for interpolation functions #761
 
@@ -262,7 +336,7 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 - Fixed `glm::axisAngle` NaN #638
 - Fixed integer pow from *GLM_GTX_integer* with null exponent #658
 - Fixed `quat` `normalize` build error #656
-- Fixed *Visual C++ 2017.2* warning regarding `__has_feature` definision #655
+- Fixed *Visual C++ 2017.2* warning regarding `__has_feature` definition #655
 - Fixed documentation warnings
 - Fixed `GLM_HAS_OPENMP` when *OpenMP* is not enabled
 - Fixed Better follow GLSL `min` and `max` specification #372
@@ -430,7 +504,7 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 #### Fixes:
 - Fixed asinh and atanh warning with C++98 STL #484
 - Fixed polar coordinates function latitude #485
-- Fixed outerProduct defintions and operator signatures for mat2x4 and vec4 #475
+- Fixed outerProduct definitions and operator signatures for mat2x4 and vec4 #475
 - Fixed eulerAngles precision error, returns NaN  #451
 - Fixed undefined reference errors #489
 - Fixed missing GLM_PLATFORM_CYGWIN declaration #495
@@ -601,8 +675,8 @@ glm::mat4 camera(float Translate, glm::vec2 const& Rotate)
 - Optimized bitfieldReverse and bitCount functions
 - Optimized findLSB and findMSB functions.
 - Optimized matrix-vector multiple performance with Cuda #257, #258
-- Reduced integer type redifinitions #233
-- Rewrited of GTX_fast_trigonometry #264 #265
+- Reduced integer type redefinitions #233
+- Rewrote GTX_fast_trigonometry #264 #265
 - Made types trivially copyable #263
 - Removed <iostream> in GLM tests
 - Used std features within GLM without redeclaring
@@ -884,7 +958,7 @@ generation distribution
 - Added GLM_GTX_constants: provides useful constants
 - Added extension versioning
 - Removed many unused namespaces
-- Fixed half based type contructors
+- Fixed half based type constructors
 - Added GLSL core noise functions
 
 ---
@@ -1121,7 +1195,7 @@ generation distribution
 
 ---
 ### GLM 0.7.6 final - 2008-08-08
-- Improved C++ standard comformance
+- Improved C++ standard conformance
 - Added Static assert for types checking
 
 ---
@@ -1182,7 +1256,7 @@ generation distribution
 
 ---
 ### GLM 0.5.0 - 2007-01-06
-- Upgrated to GLSL 1.2
+- Upgraded to GLSL 1.2
 - Added swizzle operators
 - Added setup settings
 

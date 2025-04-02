@@ -42,13 +42,10 @@
 #include "../glm.hpp"
 #include "../ext/scalar_relational.hpp"
 
-
-#if GLM_MESSAGES == GLM_ENABLE && !defined(GLM_EXT_INCLUDED)
-#	ifndef GLM_ENABLE_EXPERIMENTAL
-#		pragma message("GLM: GLM_GTX_pca is an experimental extension and may change in the future. Use #define GLM_ENABLE_EXPERIMENTAL before including it, if you really want to use it.")
-#	else
-#		pragma message("GLM: GLM_GTX_pca extension included")
-#	endif
+#ifndef GLM_ENABLE_EXPERIMENTAL
+#	error "GLM: GLM_GTX_pca is an experimental extension and may change in the future. Use #define GLM_ENABLE_EXPERIMENTAL before including it, if you really want to use it."
+#elif GLM_MESSAGES == GLM_ENABLE && !defined(GLM_EXT_INCLUDED)
+#	pragma message("GLM: GLM_GTX_pca extension included")
 #endif
 
 namespace glm {
@@ -97,17 +94,17 @@ namespace glm {
 	/// Sorts a group of Eigenvalues&Eigenvectors, for largest Eigenvalue to smallest Eigenvalue.
 	/// The data in `outEigenvalues` and `outEigenvectors` are assumed to be matching order, i.e. `outEigenvector[i]` is the Eigenvector of the Eigenvalue `outEigenvalue[i]`.
 	template<typename T, qualifier Q>
-	GLM_INLINE void sortEigenvalues(vec<2, T, Q>& eigenvalues, mat<2, 2, T, Q>& eigenvectors);
+	GLM_FUNC_DISCARD_DECL void sortEigenvalues(vec<2, T, Q>& eigenvalues, mat<2, 2, T, Q>& eigenvectors);
 
 	/// Sorts a group of Eigenvalues&Eigenvectors, for largest Eigenvalue to smallest Eigenvalue.
 	/// The data in `outEigenvalues` and `outEigenvectors` are assumed to be matching order, i.e. `outEigenvector[i]` is the Eigenvector of the Eigenvalue `outEigenvalue[i]`.
 	template<typename T, qualifier Q>
-	GLM_INLINE void sortEigenvalues(vec<3, T, Q>& eigenvalues, mat<3, 3, T, Q>& eigenvectors);
+	GLM_FUNC_DISCARD_DECL void sortEigenvalues(vec<3, T, Q>& eigenvalues, mat<3, 3, T, Q>& eigenvectors);
 
 	/// Sorts a group of Eigenvalues&Eigenvectors, for largest Eigenvalue to smallest Eigenvalue.
 	/// The data in `outEigenvalues` and `outEigenvectors` are assumed to be matching order, i.e. `outEigenvector[i]` is the Eigenvector of the Eigenvalue `outEigenvalue[i]`.
 	template<typename T, qualifier Q>
-	GLM_INLINE void sortEigenvalues(vec<4, T, Q>& eigenvalues, mat<4, 4, T, Q>& eigenvectors);
+	GLM_FUNC_DISCARD_DECL void sortEigenvalues(vec<4, T, Q>& eigenvalues, mat<4, 4, T, Q>& eigenvectors);
 
 	/// @}
 }//namespace glm

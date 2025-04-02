@@ -1,11 +1,14 @@
 #include "view.h"
 #include "logging/logger.h"
+#include <Windows.h>
+#include <WindowsX.h>
 
 #include <unordered_map>
 
 namespace Framework::GUI {
     View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _pixelData(nullptr), _width(0), _height(0) {
         _sdk = new SDK;
+        _isMouseDown = false;
     }
 
     View::~View() {
@@ -88,36 +91,40 @@ namespace Framework::GUI {
 
         // Handle other classic mouse events
         ultralight::MouseEvent ev;
-        ev.x = LOWORD(lParam); // TODO: revamp this because it fails on multiple monitors setups
-        ev.y = HIWORD(lParam); // TODO: revamp this because it fails on multiple monitors setups
+
+        ev.x = GET_X_LPARAM(lParam);
+        ev.y = GET_Y_LPARAM(lParam);
+
         switch (msg) {
         case WM_MOUSEMOVE: {
-            ev.type    = ultralight::MouseEvent::kType_MouseMoved;
-            ev.button  = ultralight::MouseEvent::kButton_None;
+            ev.type = ultralight::MouseEvent::kType_MouseMoved;
+            ev.button = _isMouseDown ? ultralight::MouseEvent::kButton_Left : ultralight::MouseEvent::kButton_None;
             _cursorPos = {ev.x, ev.y};
         } break;
         case WM_LBUTTONDOWN: {
-            ev.type   = ultralight::MouseEvent::kType_MouseDown;
+            ev.type = ultralight::MouseEvent::kType_MouseDown;
             ev.button = ultralight::MouseEvent::kButton_Left;
+            _isMouseDown = true;
         } break;
         case WM_LBUTTONUP: {
-            ev.type   = ultralight::MouseEvent::kType_MouseUp;
+            ev.type = ultralight::MouseEvent::kType_MouseUp;
             ev.button = ultralight::MouseEvent::kButton_Left;
+            _isMouseDown = false;
         } break;
         case WM_RBUTTONDOWN: {
-            ev.type   = ultralight::MouseEvent::kType_MouseDown;
+            ev.type = ultralight::MouseEvent::kType_MouseDown;
             ev.button = ultralight::MouseEvent::kButton_Right;
         } break;
         case WM_RBUTTONUP: {
-            ev.type   = ultralight::MouseEvent::kType_MouseUp;
+            ev.type = ultralight::MouseEvent::kType_MouseUp;
             ev.button = ultralight::MouseEvent::kButton_Right;
         } break;
         case WM_MBUTTONDOWN: {
-            ev.type   = ultralight::MouseEvent::kType_MouseDown;
+            ev.type = ultralight::MouseEvent::kType_MouseDown;
             ev.button = ultralight::MouseEvent::kButton_Middle;
         } break;
         case WM_MBUTTONUP: {
-            ev.type   = ultralight::MouseEvent::kType_MouseUp;
+            ev.type = ultralight::MouseEvent::kType_MouseUp;
             ev.button = ultralight::MouseEvent::kButton_Middle;
         } break;
         }
@@ -143,13 +150,56 @@ namespace Framework::GUI {
             ev.type = ultralight::KeyEvent::kType_KeyUp;
         } break;
         case WM_CHAR: {
-            char key[2]        = {(char)wParam, 0};
-            ev.type            = ultralight::KeyEvent::kType_Char;
-            ev.text            = key;
-            ev.unmodified_text = ev.text;
+            ev.type = ultralight::KeyEvent::kType_Char;
+            
+            // Handle UTF-16 input (including emojis which are surrogate pairs)
+            static std::wstring utf16Buffer;
+            wchar_t currentChar = static_cast<wchar_t>(wParam);
+            
+            // Check if this is a surrogate pair
+            if (IS_HIGH_SURROGATE(currentChar)) {
+                // Start collecting a new surrogate pair
+                utf16Buffer = currentChar;
+                return; // Wait for the low surrogate
+            }
+            else if (IS_LOW_SURROGATE(currentChar) && !utf16Buffer.empty()) {
+                // Complete the surrogate pair
+                utf16Buffer += currentChar;
+                
+                // Convert from UTF-16 to UTF-8
+                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), 
+                                                    static_cast<int>(utf16Buffer.length()),
+                                                    nullptr, 0, nullptr, nullptr);
+                
+                std::string utf8Text(utf8Length, 0);
+                WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), 
+                                   static_cast<int>(utf16Buffer.length()),
+                                   &utf8Text[0], utf8Length, nullptr, nullptr);
+                
+                // reverse the string
+                std::reverse(utf8Text.begin(), utf8Text.end());
+
+                ev.text = utf8Text.c_str();
+                ev.unmodified_text = ev.text;
+                utf16Buffer.clear();
+            }
+            else {
+                // Regular UTF-16 character (not a surrogate pair)
+                utf16Buffer.clear();
+                
+                // Convert from UTF-16 to UTF-8
+                wchar_t wc = static_cast<wchar_t>(wParam);
+                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, nullptr, 0, nullptr, nullptr);
+                
+                std::string utf8Text(utf8Length, 0);
+                WideCharToMultiByte(CP_UTF8, 0, &wc, 1, &utf8Text[0], utf8Length, nullptr, nullptr);
+                
+                ev.text = utf8Text.c_str();
+                ev.unmodified_text = ev.text;
+            }
 
             // Make sure that pressing enter does not trigger this event
-            if (key[0] == 13) {
+            if (wParam == 13) {
                 return;
             }
         } break;
