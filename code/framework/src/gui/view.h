@@ -47,6 +47,8 @@ namespace Framework::GUI {
         uint8_t *_pixelData;
 
         bool _gpuAccelerated = false;
+        int _x;
+        int _y;
         int _width;
         int _height;
         bool _shouldDisplay = false;
@@ -66,7 +68,7 @@ namespace Framework::GUI {
         View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
         virtual ~View();
 
-        virtual bool Init(std::string &, int, int, bool gpu_accelerated = false);
+        virtual bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;
@@ -97,6 +99,15 @@ namespace Framework::GUI {
 
         bool ShouldDisplay() const {
             return _shouldDisplay;
+        }
+
+        void SetPosition(int x, int y) {
+            _x = x;
+            _y = y;
+        }
+
+        glm::vec2 GetPosition() const {
+            return {_x, _y};
         }
 
         ultralight::Cursor GetCursor() const {

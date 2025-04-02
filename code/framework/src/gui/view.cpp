@@ -22,7 +22,7 @@ namespace Framework::GUI {
         }
     }
 
-    bool View::Init(std::string &path, int width, int height, bool gpu_accelerated) {
+    bool View::Init(std::string &path, int width, int height, int offset_x, int offset_y, bool gpu_accelerated) {
         // Initialize a view configuration
         ultralight::ViewConfig config;
         config.is_accelerated = gpu_accelerated;
@@ -46,6 +46,10 @@ namespace Framework::GUI {
         // Store the width/height
         _width  = width;
         _height = height;
+
+        // Store the offsets
+        _x = offset_x;
+        _y = offset_y;
         return true;
     }
 
@@ -92,8 +96,8 @@ namespace Framework::GUI {
         // Handle other classic mouse events
         ultralight::MouseEvent ev;
 
-        ev.x = GET_X_LPARAM(lParam);
-        ev.y = GET_Y_LPARAM(lParam);
+        ev.x = GET_X_LPARAM(lParam) - _x;
+        ev.y = GET_Y_LPARAM(lParam) - _y;
 
         switch (msg) {
         case WM_MOUSEMOVE: {
