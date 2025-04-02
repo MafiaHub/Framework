@@ -13,7 +13,7 @@
 
 namespace Framework::Integrations::Server::Scripting {
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world), _watcher(nullptr) {
-        _serverEngine = std::make_unique<Framework::Scripting::ServerEngine>();
+        _serverEngine = std::make_shared<Framework::Scripting::ServerEngine>();
         CoreModules::SetScriptingEngine(_serverEngine.get());
     }
 
