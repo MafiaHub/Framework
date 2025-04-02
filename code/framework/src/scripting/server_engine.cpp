@@ -11,6 +11,9 @@
 #include "server_engine.h"
 #include "types/events.h"
 
+#include <core_modules.h>
+#include <world/engine.h>
+
 namespace Framework::Scripting {
     int my_exception_handler(lua_State *L, sol::optional<const std::exception &> maybe_exception, sol::string_view description) {
         std::cout << "Lua error: ";
@@ -117,6 +120,10 @@ namespace Framework::Scripting {
             return false;
         }
 
+        // Destroy all server-spawned entities
+        CoreModules::GetWorldEngine()->PurgeAllGameModeEntities();
+
+        // Unload the script
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
         SetGamemodeLoaded(false);
         return true;
