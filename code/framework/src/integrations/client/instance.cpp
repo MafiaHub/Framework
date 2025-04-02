@@ -86,7 +86,7 @@ namespace Framework::Integrations::Client {
 
     Instance::~Instance() {
         if (_scriptingModule) {
-            _scriptingModule->GetEngine()->Shutdown();
+            _scriptingModule->Shutdown();
         }
     }
 
