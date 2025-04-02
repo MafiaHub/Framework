@@ -179,9 +179,6 @@ namespace Framework::GUI {
                 WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), 
                                    static_cast<int>(utf16Buffer.length()),
                                    &utf8Text[0], utf8Length, nullptr, nullptr);
-                
-                // reverse the string
-                std::reverse(utf8Text.begin(), utf8Text.end());
 
                 ev.text = utf8Text.c_str();
                 ev.unmodified_text = ev.text;
