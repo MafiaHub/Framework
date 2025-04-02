@@ -44,6 +44,7 @@ namespace Framework::GUI {
         SDK *_sdk = nullptr;
 
         // CPU renderer
+        int _pixelSize;
         uint8_t *_pixelData;
 
         bool _gpuAccelerated = false;

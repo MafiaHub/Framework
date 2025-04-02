@@ -64,9 +64,12 @@ namespace Framework::GUI {
         if (!_gpuAccelerated) {
             auto surface = (ultralight::BitmapSurface *)_internalView->surface();
             void *pixels = surface->LockPixels();
-            int size     = surface->size(); // TODO: calc from res
-            // TODO: Realloc if size changes
-            if (!_pixelData) {
+            int size     = surface->size();
+            if (_pixelSize != size) {
+                if (_pixelData) {
+                    delete[] _pixelData;
+                }
+                _pixelSize = size;
                 _pixelData = new uint8_t[size];
             }
             memcpy(_pixelData, pixels, size);
