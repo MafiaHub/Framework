@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 namespace Framework::GUI {
-    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _pixelData(nullptr), _width(0), _height(0) {
+    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _width(0), _height(0), _x(0), _y(0) {
         _sdk = new SDK;
         _isMouseDown = false;
     }
@@ -62,17 +62,14 @@ namespace Framework::GUI {
 
         // Update the view content (CPU renderer)
         if (!_gpuAccelerated) {
-            auto surface = (ultralight::BitmapSurface *)_internalView->surface();
+            auto surface = dynamic_cast<ultralight::BitmapSurface *>(_internalView->surface());
             void *pixels = surface->LockPixels();
             int size     = surface->size();
-            if (_pixelSize != size) {
-                if (_pixelData) {
-                    delete[] _pixelData;
-                }
-                _pixelSize = size;
-                _pixelData = new uint8_t[size];
+            if (_pixelData.size() != size) {
+                _pixelData.clear();
+                _pixelData.resize(size);
             }
-            memcpy(_pixelData, pixels, size);
+            std::memcpy(_pixelData.data(), pixels, size);
             surface->UnlockPixels();
         }
     }

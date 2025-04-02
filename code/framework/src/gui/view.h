@@ -23,6 +23,8 @@
 #include "graphics/renderer.h"
 #include "sdk.h"
 
+#include <vector>
+
 namespace Framework::GUI {
     using OnConsoleMessageCallback     = fu2::function<void(std::string,uint32_t,uint32_t,std::string)>;
     using OnDOMReadyCallback           = fu2::function<void(uint64_t, bool, std::string)>;
@@ -44,8 +46,7 @@ namespace Framework::GUI {
         SDK *_sdk = nullptr;
 
         // CPU renderer
-        int _pixelSize;
-        uint8_t *_pixelData;
+        std::vector<uint8_t> _pixelData;
 
         bool _gpuAccelerated = false;
         int _x;
