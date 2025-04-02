@@ -156,7 +156,10 @@ namespace Framework::Integrations::Server::Scripting {
         _serverEngine->UnloadScript();
         _serverEngine->ClearScripts();
         _serverEngine->ClearEventHandlers();
-        LoadManifest();
+        if (!LoadManifest()) {
+            Logging::GetLogger(FRAMEWORK_INTEGRATIONS_SERVER)->error("Failed to load manifest.");
+            return;
+        }
         _serverEngine->LoadScript();
 
         // Notify callback if set
