@@ -29,7 +29,7 @@ namespace Framework::Integrations::Scripting {
                 CoreModules::GetNetworkPeer()->SendRPC(rpc);
             }
             catch (const std::exception &e) {
-                throw std::runtime_error(fmt::format("Error in EventsClient::EmitEvent: {}", e.what()));
+                throw std::runtime_error(fmt::format("Error in EventsServer::EmitEvent: {}", e.what()));
             }
         }
 
