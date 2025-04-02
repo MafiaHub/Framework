@@ -354,7 +354,7 @@ namespace Framework::Integrations::Client {
                 payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
             }
             catch (const std::exception &ex) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
                 return;
             }
             _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
