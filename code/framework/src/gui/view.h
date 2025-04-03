@@ -54,6 +54,7 @@ namespace Framework::GUI {
         int _width;
         int _height;
         bool _shouldDisplay = false;
+        bool _garbageCollected = false;
 
         std::recursive_mutex _renderMutex;
         ultralight::Cursor _cursor = ultralight::kCursor_Pointer;
@@ -110,6 +111,14 @@ namespace Framework::GUI {
 
         glm::vec2 GetPosition() const {
             return {_x, _y};
+        }
+
+        void SetGarbageCollected(bool garbageCollected) {
+            _garbageCollected = garbageCollected;
+        }
+
+        bool IsGarbageCollected() const {
+            return _garbageCollected;
         }
 
         ultralight::Cursor GetCursor() const {

@@ -11,6 +11,8 @@
 #include <nlohmann/json.hpp>
 #include <logging/logger.h>
 
+#include "integrations/shared/rpc/reload_assets.h"
+
 namespace Framework::Integrations::Server::Scripting {
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world), _watcher(nullptr) {
         _serverEngine = std::make_shared<Framework::Scripting::ServerEngine>();
@@ -161,6 +163,13 @@ namespace Framework::Integrations::Server::Scripting {
             return;
         }
         _serverEngine->LoadScript();
+
+        // Notify all connected peers they should re-download assets
+        const auto net = CoreModules::GetNetworkPeer();
+        if (net) {
+            Shared::RPC::ReloadAssets reloadAssets {};
+            net->SendRPC(reloadAssets, SLNet::UNASSIGNED_RAKNET_GUID);
+        }
 
         // Notify callback if set
         if (_onReloadCallback) {

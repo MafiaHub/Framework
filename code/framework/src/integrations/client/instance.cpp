@@ -18,12 +18,14 @@
 #include <world/game_rpc/set_transform.h>
 
 #include "integrations/shared/rpc/emit_lua_event.h"
+#include "integrations/shared/rpc/reload_assets.h"
 
 #include "../shared/modules/mod.hpp"
 
 #include "scripting/utils/table_conversions.h"
 
 #include "scripting/builtins/events_lua.h"
+#include "scripting/builtins/views.h"
 
 #include "networking/state.h"
 
@@ -82,6 +84,7 @@ namespace Framework::Integrations::Client {
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
+        _webManager       = std::make_shared<Framework::GUI::Manager>();
     }
 
     Instance::~Instance() {
@@ -254,6 +257,10 @@ namespace Framework::Integrations::Client {
             _renderIO->UpdateMainThread();
         }
 
+        if (_webManager) {
+            _webManager->Update();
+        }
+
         PostUpdate();
     }
 
@@ -341,6 +348,11 @@ namespace Framework::Integrations::Client {
 
             // Request the scripting engine to clean up loaded scripts
             _scriptingModule->Shutdown();
+
+            // Destroy scriptable web views
+            if (_webManager) {
+                _webManager->CleanupViews();
+            }
         });
 
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
@@ -359,6 +371,12 @@ namespace Framework::Integrations::Client {
             }
             _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
         });
+        net->RegisterRPC<Shared::RPC::ReloadAssets>([this](SLNet::RakNetGUID guid, Shared::RPC::ReloadAssets *rpc) {
+            if (!rpc->Valid())
+                return;
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server has forced us to re-download assets...");
+            DownloadsAssetsFromConnectedServer();
+        });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
 
@@ -376,6 +394,11 @@ namespace Framework::Integrations::Client {
 
         // Unload the scripts before redownloading
         _scriptingModule->Shutdown();
+
+        // Destroy scriptable web views
+        if (_webManager) {
+            _webManager->CleanupViews();
+        }
 
         // Setup the asset downloader
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
@@ -491,6 +514,7 @@ namespace Framework::Integrations::Client {
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
         // Register the events builtin
         Framework::Integrations::Scripting::EventsClient::Register(engine->GetLuaEngine());
+        Framework::Integrations::Scripting::Views::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
         ModuleRegister(engine);
