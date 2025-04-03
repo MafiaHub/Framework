@@ -23,6 +23,8 @@
 #include "graphics/renderer.h"
 #include "sdk.h"
 
+#include <vector>
+
 namespace Framework::GUI {
     using OnConsoleMessageCallback     = fu2::function<void(std::string,uint32_t,uint32_t,std::string)>;
     using OnDOMReadyCallback           = fu2::function<void(uint64_t, bool, std::string)>;
@@ -44,16 +46,20 @@ namespace Framework::GUI {
         SDK *_sdk = nullptr;
 
         // CPU renderer
-        uint8_t *_pixelData;
+        std::vector<uint8_t> _pixelData;
 
         bool _gpuAccelerated = false;
+        int _x;
+        int _y;
         int _width;
         int _height;
         bool _shouldDisplay = false;
+        bool _garbageCollected = false;
 
         std::recursive_mutex _renderMutex;
         ultralight::Cursor _cursor = ultralight::kCursor_Pointer;
         glm::vec2 _cursorPos {};
+        bool _isMouseDown = false;
 
       protected:
         void OnAddConsoleMessage(ultralight::View *caller, const ultralight::ConsoleMessage &message) override;
@@ -65,7 +71,7 @@ namespace Framework::GUI {
         View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
         virtual ~View();
 
-        virtual bool Init(std::string &, int, int, bool gpu_accelerated = false);
+        virtual bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;
@@ -98,6 +104,23 @@ namespace Framework::GUI {
             return _shouldDisplay;
         }
 
+        void SetPosition(int x, int y) {
+            _x = x;
+            _y = y;
+        }
+
+        glm::vec2 GetPosition() const {
+            return {_x, _y};
+        }
+
+        void SetGarbageCollected(bool garbageCollected) {
+            _garbageCollected = garbageCollected;
+        }
+
+        bool IsGarbageCollected() const {
+            return _garbageCollected;
+        }
+
         ultralight::Cursor GetCursor() const {
             return _cursor;
         }
@@ -124,6 +147,14 @@ namespace Framework::GUI {
             }
 
             return _internalView->EvaluateScript(ultralight::String(script.c_str())).utf8().data();
+        }
+
+        inline ultralight::View *GetInternalView() {
+            return _internalView.get();
+        }
+
+        inline GUI::SDK *GetSDK() {
+            return _sdk;
         }
 
         inline void SetOnConsoleMessageCallback(OnConsoleMessageCallback proc) {

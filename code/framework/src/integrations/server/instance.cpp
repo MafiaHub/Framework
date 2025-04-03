@@ -18,6 +18,8 @@
 #include "networking/messages/client_kick.h"
 #include "networking/messages/messages.h"
 
+#include "integrations/shared/rpc/emit_lua_event.h"
+
 #include "../shared/modules/mod.hpp"
 
 #include "utils/version.h"
@@ -25,7 +27,10 @@
 
 #include "cxxopts.hpp"
 
+#include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/entity.h"
+
+#include "scripting/utils/table_conversions.h"
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
@@ -39,7 +44,7 @@ namespace Framework::Integrations::Server {
         _webServer        = std::make_shared<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingEngine  = std::make_shared<Scripting::ServerEngine>(_worldEngine);
+        _scriptingModule  = std::make_shared<Scripting::ServerScriptingModule>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
@@ -132,23 +137,28 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
     
-        const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::ServerEngine> sdk) {
+        const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::Engine> sdk) {
             this->RegisterScriptingBuiltins(sdk.GetEngine());
         };
 
         // Initialize the scripting engine
-        _scriptingEngine->SetMainPath("gamemode");
-        _scriptingEngine->LoadManifest();
-        if (_scriptingEngine->InitServerEngine(sdkCallback) != Framework::Scripting::ModuleError::MODULE_NONE) {
+        _scriptingModule->SetMainGamemodePath("gamemode");
+        _scriptingModule->LoadManifest();
+        if (!_scriptingModule->Init(sdkCallback)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
+
+        // Set up reload callback
+        _scriptingModule->SetOnReloadCallback([this]() {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Gamemode reloaded");
+        });
 
         // Initialize asset streamer
         InitAssetStreamer();
 
         // Load the gamemode
-        _scriptingEngine->GetServerEngine()->LoadScript();
+        _scriptingModule->GetEngine()->LoadScript();
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
@@ -324,6 +334,24 @@ namespace Framework::Integrations::Server {
                 _onPlayerConnectCallback(e, guid.g);
         });
 
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+            if (!rpc->Valid())
+                return;
+            
+            const auto eventName = rpc->GetEventName();
+            const auto payloadStr = rpc->GetPayload();
+            sol::object payload {};
+            try {
+                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
+            }
+            catch (const std::exception &ex) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
+                return;
+            }
+            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
+        });
+
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
@@ -334,10 +362,10 @@ namespace Framework::Integrations::Server {
         const auto net      = GetNetworkingEngine()->GetNetworkServer();
         const auto streamer = net->GetAssetStreamer();
 
-        const auto scripting   = GetScriptingEngine();
-        const auto gamemodePath = scripting->GetMainPath();
+        const auto scripting   = GetScriptingModule();
+        const auto gamemodePath = scripting->GetEngine()->GetMainGamemodePath();
         const auto clientPath = fmt::format("{}\\client", gamemodePath);
-        const auto clientFiles  = scripting->GetClientFiles();
+        const auto clientFiles       = scripting->GetClientFiles();
         const std::string assetsPath = Framework::Utils::GetAbsolutePathA(clientPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client assets directory: {}", assetsPath);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
@@ -361,8 +389,8 @@ namespace Framework::Integrations::Server {
             _networkingEngine->Shutdown();
         }
 
-        if (_scriptingEngine) {
-            _scriptingEngine->Shutdown();
+        if (_scriptingModule) {
+            _scriptingModule->Shutdown();
         }
 
         if (_webServer) {
@@ -390,8 +418,8 @@ namespace Framework::Integrations::Server {
                 _networkingEngine->Update();
             }
 
-            if (_scriptingEngine) {
-                _scriptingEngine->Update();
+            if (_scriptingModule) {
+                _scriptingModule->Update();
             }
 
             if (_worldEngine) {
@@ -400,7 +428,7 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
-                info.gameMode       = _scriptingEngine->GetServerEngine()->GetScriptName();
+                info.gameMode       = _scriptingModule->GetEngine()->GetGamemodeName();
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();
@@ -437,9 +465,10 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::ServerEngine *engine) {
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
         // Register the entity builtin
         Framework::Integrations::Scripting::Entity::Register(engine->GetLuaEngine());
+        Framework::Integrations::Scripting::EventsServer::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
         ModuleRegister(engine);

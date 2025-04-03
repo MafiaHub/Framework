@@ -50,6 +50,7 @@ include_directories(
     "${PROJECT_SOURCE_DIR}/vendors/ultralight/include"
     "${PROJECT_SOURCE_DIR}/vendors"
     "${PROJECT_SOURCE_DIR}/code/framework/src/"
+    "${PROJECT_SOURCE_DIR}/code/framework/src/services"
     "${PROJECT_SOURCE_DIR}/code/framework/"
 )
 

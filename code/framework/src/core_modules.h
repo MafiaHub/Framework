@@ -17,8 +17,12 @@ namespace Framework::World {
 }; // namespace Framework::World
 
 namespace Framework::Scripting {
-    class Module;
+    class Engine;
 }; // namespace Framework::Scripting
+
+namespace Framework::GUI {
+    class Manager;
+}; // namespace Framework::GUI
 
 namespace Framework {
 
@@ -32,7 +36,7 @@ namespace Framework {
         static void Reset() {
             _networkPeer     = nullptr;
             _engine          = nullptr;
-            _scriptingModule = nullptr;
+            _scriptingEngine = nullptr;
         }
 
         // Singleton setters
@@ -44,8 +48,12 @@ namespace Framework {
             _engine = engine;
         }
 
-        static void SetScriptingModule(Scripting::Module *module) {
-            _scriptingModule = module;
+        static void SetScriptingEngine(Scripting::Engine *engine) {
+            _scriptingEngine = engine;
+        }
+
+        static void SetWebManager(GUI::Manager *manager) {
+            _webManager = manager;
         }
 
         static void SetTickRate(double tickRate) {
@@ -61,8 +69,12 @@ namespace Framework {
             return _engine;
         }
 
-        static Scripting::Module *GetScriptingModule() {
-            return _scriptingModule;
+        static Scripting::Engine *GetScriptingEngine() {
+            return _scriptingEngine;
+        }
+
+        static GUI::Manager *GetGUIManager() {
+            return _webManager;
         }
 
         static double GetTickRate() {
@@ -72,7 +84,8 @@ namespace Framework {
       private:
         static inline Networking::NetworkPeer *_networkPeer {};
         static inline World::Engine *_engine {};
-        static inline Scripting::Module *_scriptingModule {};
+        static inline Scripting::Engine *_scriptingEngine {};
+        static inline GUI::Manager *_webManager {};
         static inline double _tickRate {1000 / 60.0f};
     };
 }; // namespace Framework

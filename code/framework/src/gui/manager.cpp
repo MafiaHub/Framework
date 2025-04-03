@@ -4,9 +4,15 @@
 
 #include "gui/backend/view_d3d11.h"
 
+#include <core_modules.h>
+
+
 namespace Framework::GUI {
     Manager::Manager() {
         _clipboard = std::make_unique<SystemClipboard>();
+        _updateCooldown = Utils::Time::GetTimePoint() + std::chrono::milliseconds(UPDATE_COOLDOWN_MS);
+
+        CoreModules::SetWebManager(this);
     }
 
     Manager::~Manager() {
@@ -59,6 +65,10 @@ namespace Framework::GUI {
             return;
         }
 
+        if (Utils::Time::Compare(_updateCooldown, Utils::Time::GetTimePoint()) >= 0) {
+            return;
+        }
+
         // Update the renderer
         std::lock_guard lock(_renderMutex);
         _ultralightRenderer->Update();
@@ -96,10 +106,18 @@ namespace Framework::GUI {
         }
     }
 
-    int Manager::CreateView(std::string url, int width, int height) {
+    int Manager::CreateView(std::string url, int width, int height, int offset_x, int offset_y) {
         if (!_ultralightRenderer) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Renderer is not initialized");
             return -1;
+        }
+
+        if (width == 0) {
+            width = _viewportConfiguration.width;
+        }
+
+        if (height == 0) {
+            height = _viewportConfiguration.height;
         }
 
         // Create the view
@@ -116,7 +134,7 @@ namespace Framework::GUI {
             return -1;
         }
 
-        if (!view->Init(url, width, height, _gpuAccelerated)) {
+        if (!view->Init(url, width, height, offset_x, offset_y, _gpuAccelerated)) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: initialization failed");
             return -1;
         }
@@ -152,6 +170,19 @@ namespace Framework::GUI {
 
         Framework::Logging::GetLogger("Web")->debug("Destroyed view with id {}", id);
 
+        _updateCooldown = Utils::Time::GetTimePoint() + std::chrono::milliseconds(UPDATE_COOLDOWN_MS);
+
         return true;
+    }
+
+    void Manager::CleanupViews() {
+       for (auto it = _views.begin(); it != _views.end();) {
+           if ((*it)->IsGarbageCollected()) {
+               it = _views.erase(it);
+           }
+           else {
+               ++it;
+           }
+       }
     }
 } // namespace Framework::GUI

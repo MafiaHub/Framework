@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 
 namespace Framework::Utils::States {
     class StateTransitionError : public std::runtime_error {

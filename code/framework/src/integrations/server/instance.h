@@ -14,7 +14,7 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
-#include "scripting/server.h"
+#include "scripting/module.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
 #include "world/server.h"
@@ -82,7 +82,7 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        std::shared_ptr<Scripting::ServerEngine> _scriptingEngine;
+        std::shared_ptr<Scripting::ServerScriptingModule> _scriptingModule;
         std::shared_ptr<Networking::Engine> _networkingEngine;
         std::shared_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
@@ -94,7 +94,7 @@ namespace Framework::Integrations::Server {
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
         bool LoadConfigFromJSON();
-        void RegisterScriptingBuiltins(Framework::Scripting::ServerEngine *);
+        void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
 
         // managers
         flecs::entity _weatherManager;
@@ -120,7 +120,7 @@ namespace Framework::Integrations::Server {
 
         virtual void PreShutdown() {}
 
-        virtual void ModuleRegister(Framework::Scripting::ServerEngine *engine) {
+        virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
         }
 
@@ -146,8 +146,8 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Scripting::ServerEngine> GetScriptingEngine() const {
-            return _scriptingEngine;
+        std::shared_ptr<Scripting::ServerScriptingModule> GetScriptingModule() const {
+            return _scriptingModule;
         }
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {

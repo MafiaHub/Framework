@@ -6,11 +6,13 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#include <nlohmann/json.hpp>
 
 #include "core_modules.h"
 #include "server_engine.h"
 #include "types/events.h"
+
+#include <core_modules.h>
+#include <world/engine.h>
 
 namespace Framework::Scripting {
     int my_exception_handler(lua_State *L, sol::optional<const std::exception &> maybe_exception, sol::string_view description) {
@@ -44,20 +46,31 @@ namespace Framework::Scripting {
     }
 
     EngineError ServerEngine::Init(SDKRegisterCallback cb) {
+        _luaEngine = new sol::state();
+        
         // Base setup for the lua state
-        _luaEngine.set_exception_handler(&my_exception_handler);
-        _luaEngine.open_libraries(sol::lib::base, sol::lib::table, sol::lib::package, sol::lib::coroutine, sol::lib::string, sol::lib::io, sol::lib::math, sol::lib::debug, sol::lib::os, sol::lib::utf8);
+        _luaEngine->set_exception_handler(&my_exception_handler);
+        _luaEngine->open_libraries(sol::lib::base, sol::lib::table, sol::lib::package, sol::lib::coroutine, sol::lib::string, sol::lib::io, sol::lib::math, sol::lib::debug, sol::lib::os, sol::lib::utf8);
 
         // Configure the lua paths
-        setLuaPath(_luaEngine.lua_state(), std::string(_executionPath + "\\?.lua").c_str());
-        setLuaPath(_luaEngine.lua_state(), std::string(_executionPath + "\\?\\?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?\\?.lua").c_str());
 
         // Init the common SDK
         InitCommonSDK();
 
         // Init the mod-level scripting layer
         if (cb) {
-            cb(Framework::Scripting::SDKRegisterWrapper<ServerEngine>(this));
+            cb(Framework::Scripting::SDKRegisterWrapper<Engine>(this));
+        }
+
+        // For now, always load the first in the list
+        if (_scripts.size() > 0) {
+            const std::string serverFile = _scripts[0];
+            SetGamemodeName(serverFile);
+            if (!LoadScript()) {
+                return EngineError::ENGINE_INIT_FAILED;
+            }
         }
         
         return EngineError::ENGINE_NONE;
@@ -69,7 +82,7 @@ namespace Framework::Scripting {
     }
 
     void ServerEngine::Update() {
-        if(!IsPackageLoaded()){
+        if(!IsGamemodeLoaded()){
             return;
         }
 
@@ -77,11 +90,11 @@ namespace Framework::Scripting {
     }
 
     bool ServerEngine::LoadScript() {
-        if(IsPackageLoaded()){
+        if (IsGamemodeLoaded()) {
             return false;
         }
 
-        auto lr = _luaEngine.load_file(_executionPath + "/" + _scriptName);
+        auto lr = _luaEngine->load_file(_mainGamemodeServerPath + "/" + _gamemodeName);
         if (!lr.valid()) { // This checks the syntax of your script, but does not execute it
             sol::error err   = lr;
             std::string what = err.what();
@@ -98,17 +111,21 @@ namespace Framework::Scripting {
         }
 
         InvokeEvent(Events[EventIDs::GAMEMODE_LOADED]);
-        _packageLoaded = true;
+        SetGamemodeLoaded(true);
         return true;
     }
 
     bool ServerEngine::UnloadScript() {
-        if(!IsPackageLoaded()){
+        if(!IsGamemodeLoaded()){
             return false;
         }
 
+        // Destroy all server-spawned entities
+        CoreModules::GetWorldEngine()->PurgeAllGameModeEntities();
+
+        // Unload the script
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
-        _packageLoaded = false;
+        SetGamemodeLoaded(false);
         return true;
     }
 } // namespace Framework::Scripting

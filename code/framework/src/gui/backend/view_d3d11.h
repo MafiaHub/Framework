@@ -53,7 +53,7 @@ namespace Framework::GUI {
       public:
         ViewD3D11(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
 
-        bool Init(std::string &, int, int, bool gpu_accelerated = false) override;
+        bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false) override;
 
         void Update() override;
         void Render() override;

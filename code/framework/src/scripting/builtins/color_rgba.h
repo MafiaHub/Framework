@@ -95,8 +95,8 @@ namespace Framework::Scripting::Builtins {
             return ColorRGBA(static_cast<int>(vec.r * 255.0f), static_cast<int>(vec.g * 255.0f), static_cast<int>(vec.b * 255.0f), static_cast<int>(vec.a * 255.0f));
         }
 
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<ColorRGBA> cls = luaEngine.new_usertype<ColorRGBA>("RGBA", sol::constructors<ColorRGBA(int, int, int, int)>());
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<ColorRGBA> cls = luaEngine->new_usertype<ColorRGBA>("RGBA", sol::constructors<ColorRGBA(int, int, int, int)>());
             cls["r"] = sol::property([](const ColorRGBA& self) { return self.GetR(); });
             cls["g"] = sol::property([](const ColorRGBA& self) { return self.GetG(); });
             cls["b"] = sol::property([](const ColorRGBA& self) { return self.GetB(); });

@@ -19,13 +19,16 @@
 #include "networking/engine.h"
 #include <FileListTransferCBInterface.h>
 
-#include <function2.hpp>
 #include <memory>
 #include <utility>
 #include <world/client.h>
 
+#include "scripting/module.h"
+
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
+
+#include <gui/manager.h>
 
 #include <flecs/flecs.h>
 
@@ -71,6 +74,7 @@ namespace Framework::Integrations::Client {
         std::string _host;
         int32_t _port;
         std::string _nickname;
+        uint32_t _serverIDHash;
     };
 
     struct AssetDownloadStatus {
@@ -88,8 +92,10 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<External::Discord::Wrapper> _presence;
         std::unique_ptr<Graphics::Renderer> _renderer;
-        std::unique_ptr<World::ClientEngine> _worldEngine;
+        std::shared_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
+        std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
+        std::shared_ptr<Framework::GUI::Manager> _webManager;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -106,12 +112,14 @@ namespace Framework::Integrations::Client {
 
         // assets
         AssetDownloadStatus _downloadStatus {};
-        std::string _assetDownloadPath;
+        std::string _assetCachePath;
         bool _initialDownloadDone {};
 
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);
+        void InitCacheAssetFolders();
+        void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
 
       public:
         Instance();
@@ -127,6 +135,10 @@ namespace Framework::Integrations::Client {
         virtual bool PreShutdown() = 0;
         virtual void PostUpdate()  = 0;
         virtual void PostRender()  = 0;
+
+        virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
+            (void)engine;
+        }
 
         ClientError RenderInit();
 
@@ -146,6 +158,7 @@ namespace Framework::Integrations::Client {
 
         void SetCurrentState(CurrentState state) {
             _currentState = std::move(state);
+            _currentState._serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
         }
 
         void SetOnConnectionFinalizedCallback(NetworkConnectionFinalizedCallback cb) {
@@ -176,6 +189,10 @@ namespace Framework::Integrations::Client {
             return _imguiApp.get();
         }
 
+        Framework::GUI::Manager *GetWebManager() const {
+            return _webManager.get();
+        }
+
         Graphics::Renderer *GetRenderer() const {
             return _renderer.get();
         }
@@ -197,11 +214,15 @@ namespace Framework::Integrations::Client {
         }
 
         void SetAssetCachePath(const std::string &path) {
-            _assetDownloadPath = path;
+            _assetCachePath = path;
         }
 
         const std::string &GetAssetCachePath() const {
-            return _assetDownloadPath;
+            return _assetCachePath;
+        }
+
+        Scripting::ClientScriptingModule *GetScriptingModule() const {
+            return _scriptingModule.get();
         }
 
         friend class AssetDownloadFileProgress;

@@ -11,16 +11,42 @@
 #include "shared.h"
 #include "types/errors.h"
 
+#include <atomic>
+#include <map>
+#include <string>
+#include <vector>
+
 #include "engine.h"
 
 namespace Framework::Scripting {
     class ClientEngine : public Engine {
-        public:
-            ClientEngine() = default;
-            ~ClientEngine() = default;
+      private:
+        // Script management
+        std::vector<std::string> _loadedScripts;
+        std::string _scriptCachePath;
+        std::atomic<bool> _shutdownInProgress = false;
 
-            EngineError Init(SDKRegisterCallback) override;
-            EngineError Shutdown() override;
-            void Update() override;
+      public:
+        ClientEngine() = default;
+        ~ClientEngine() = default;
+
+        EngineError Init(SDKRegisterCallback) override;
+        EngineError Shutdown() override;
+        void Update() override;
+
+        // Script management
+        bool LoadScripts();
+        bool AddScript(const std::string &path);
+
+        void SandboxEnvironment();
+
+
+        void SetScriptCachePath(const std::string &path) {
+            _scriptCachePath = path;
+        }
+
+        std::string GetScriptCachePath() const {
+            return _scriptCachePath;
+        }
     };
 }

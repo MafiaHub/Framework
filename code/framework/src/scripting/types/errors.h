@@ -11,15 +11,8 @@
 namespace Framework::Scripting {
     enum class EngineError {
         ENGINE_NONE,
-        ENGINE_NODE_INIT_FAILED,
-        ENGINE_PLATFORM_INIT_FAILED,
-        ENGINE_V8_INIT_FAILED,
-        ENGINE_UV_LOOP_INIT_FAILED,
-        ENGINE_ISOLATE_ALLOCATION_FAILED,
-        ENGINE_ISOLATE_DATA_ALLOCATION_FAILED,
-        ENGINE_PLATFORM_NULL,
-        ENGINE_ISOLATE_NULL,
-        ENGINE_NODE_SHUTDOWN_FAILED
+        ENGINE_INIT_FAILED,
+        ENGINE_MANIFEST_LOADING_FAILED
     };
 
     enum class ModuleError {

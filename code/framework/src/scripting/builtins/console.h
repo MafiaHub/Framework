@@ -28,8 +28,8 @@ namespace Framework::Scripting::Builtins {
         }
 
       public:
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<Console> cls = luaEngine.new_usertype<Console>("Console");
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<Console> cls = luaEngine->new_usertype<Console>("Console");
             cls["log"]                 = &Console::Log;
         }
     };

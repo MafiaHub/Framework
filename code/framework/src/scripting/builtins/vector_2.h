@@ -72,8 +72,8 @@ namespace Framework::Scripting::Builtins {
             _data = glm::mix(_data, newVec, static_cast<float>(f));
         }
 
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<Vector2> cls = luaEngine.new_usertype<Vector2>("Vector2", sol::constructors<Vector2(double, double)>());
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<Vector2> cls = luaEngine->new_usertype<Vector2>("Vector2", sol::constructors<Vector2(double, double)>());
             cls["x"] = sol::property([](const Vector2& self) { return self.GetX(); });
             cls["y"] = sol::property([](const Vector2& self) { return self.GetY(); });
             cls["length"] = sol::property([](const Vector2& self) { return self.GetLength(); });
