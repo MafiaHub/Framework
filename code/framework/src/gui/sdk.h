@@ -31,6 +31,14 @@ namespace Framework::GUI {
         bool Init(ultralight::View *);
         bool Shutdown();
 
+        inline JSContextRef GetContext() const {
+            return _context;
+        }
+
+        inline JSObjectRef GetGlobalObject() const {
+            return _globalObject;
+        }
+
         inline void AddEventListener(std::string eventName, EventCallbackProc proc) {
             _eventListeners[eventName] = proc;
         }

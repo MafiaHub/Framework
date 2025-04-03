@@ -20,6 +20,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <JavaScriptCorePP/JSHelper.h>
+
 namespace Framework::Integrations::Scripting {
     class ViewWrapper {
       private:
@@ -30,10 +32,126 @@ namespace Framework::Integrations::Scripting {
         sol::function _onWindowObjectReadyCallback;
         sol::function _onConsoleMessageCallback;
 
+        using EventMeta = std::pair<int, std::string>;
+
+        static inline std::map<EventMeta, Framework::Scripting::EventHandler> _eventHandlers = {};
+
       public:
         ViewWrapper(int viewId, Framework::GUI::Manager *manager): _viewId(viewId), _webManager(manager), _view(nullptr) {
             if (_webManager) {
                 _view = _webManager->GetView(_viewId);
+
+                // Hook up a window object ready callback
+                _view->SetOnWindowObjectReadyCallback([viewId](uint64_t frame_id, bool is_main_frame, std::string url) {
+                    const auto view = Framework::CoreModules::GetGUIManager()->GetView(viewId);
+                    const auto sdk  = view->GetSDK();
+
+                    // Grab the context
+                    auto context = JavaScriptCorePP::JSContext(sdk->GetContext());
+                    auto obj     = context.GetGlobalObject();
+
+                    // Set up a bootstrapped Event system
+                    const std::string eventBootstrappingModule = R"(
+                        (function() {
+                            var __mh_events = {};
+                            window.on = function(eventName, callback) {
+                                if (!__mh_events[eventName]) {
+                                    __mh_events[eventName] = [];
+                                }
+                                __mh_events[eventName].push(callback);
+                            };
+                            window.__mh_emit = function(eventName, eventPayload) {
+                                if (__mh_events[eventName]) {
+                                    for (var i = 0; i < __mh_events[eventName].length; i++) {
+                                        __mh_events[eventName][i](eventPayload);
+                                    }
+                                }
+                            };
+                        })()
+                    )";
+
+                    view->EvaluateScript(eventBootstrappingModule);
+
+                    // Bind emit function
+                    obj["emit"] = [viewId](const JavaScriptCorePP::JSContext &context, const std::vector<JavaScriptCorePP::JSValue> &args, JavaScriptCorePP::JSValue &returnValue, JavaScriptCorePP::JSValue &returnException) {
+                        // Make sure there is only two arguments
+                        if (args.size() != 2) {
+                            returnException = context.CreateString("Invalid argument count: emit(string, object | string | null)");
+                            return;
+                        }
+                        std::string eventName;
+                        std::string eventPayload;
+                        // Grab the event name - must be a string
+                        if (args[0].IsString()) {
+                            eventName = args[0].GetString();
+                        }
+                        else {
+                            returnException = context.CreateString("First argument must be a string");
+                            return;
+                        }
+
+                        const auto scriptingModule = Framework::CoreModules::GetScriptingEngine();
+
+                        sol::object payload {};
+                        if (args[1].IsObject() || args[1].IsString()) {
+                            try {
+                                std::string payloadStr;
+
+                                if (args[1].IsString()) {
+                                    payloadStr = args[1].GetString();
+                                }
+                                else if (args[1].IsObject()) {
+                                    payloadStr = args[1].ToJSON();
+                                }
+
+                                payloadStr                 = args[1].ToJSON();
+                                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+                                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(scriptingModule->GetLuaEngine()->lua_state()), payloadJson);
+                            }
+                            catch (const std::exception &ex) {
+                                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
+                                return;
+                            }
+                        }
+
+                        InvokeEvent(EventMeta(viewId, eventName), payload);
+                    };
+                });
+            }
+        }
+
+        inline void ListenEvent(std::string name, sol::function fnc) {
+            _eventHandlers[EventMeta(_viewId, name)].push_back(fnc);
+        }
+
+        template <typename... Args>
+        static inline void InvokeEvent(const EventMeta &name, Args &&...args) {
+            auto it = _eventHandlers.find(name);
+            if (it != _eventHandlers.end()) {
+                for (auto &callback : it->second) {
+                    sol::protected_function pf {callback};
+                    auto result = pf(std::forward<Args>(args)...);
+                    if (!result.valid()) {
+                        sol::error err = result;
+                        spdlog::error(err.what());
+                    }
+                }
+            }
+        }
+
+        void InvokeJSEvent(const std::string &eventName, const sol::object object) {
+            if (_view) {
+                try {
+                    // Convert the object to JSON
+                    nlohmann::json jsonPayload = Framework::Scripting::Utils::SolToJson(object);
+                    std::string eventPayload   = jsonPayload.dump();
+
+                    // Emit the event to the view
+                    _view->EvaluateScript(fmt::format("window.__mh_emit(`{}`, `{}`);", eventName, eventPayload));
+                }
+                catch (const std::exception &ex) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to emit event: {}", ex.what());
+                }
             }
         }
 
@@ -125,6 +243,8 @@ namespace Framework::Integrations::Scripting {
             viewWrapperType["getFocus"]    = &ViewWrapper::HasFocus;
             viewWrapperType["setDisplay"]  = &ViewWrapper::Display;
             viewWrapperType["getDisplay"]  = &ViewWrapper::ShouldDisplay;
+            viewWrapperType["on"]          = &ViewWrapper::ListenEvent;
+            viewWrapperType["emit"]        = &ViewWrapper::InvokeJSEvent;
             viewWrapperType["destroy"]     = &ViewWrapper::Destroy;
 
             // TODO: consider whether we want to expose raw JS calls to the user
