@@ -48,6 +48,9 @@ the build system, or the command line options of your compiler.
 
 */
 
+// APPLE loves to define nil as nullptr, but that collides with sol's internals
+#undef nil
+
 // end of sol/config.hpp
 
 #endif // SOL_SINGLE_CONFIG_HPP
