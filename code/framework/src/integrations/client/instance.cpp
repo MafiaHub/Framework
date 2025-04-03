@@ -488,7 +488,11 @@ namespace Framework::Integrations::Client {
         }
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *luaEngine) {
-        Framework::Integrations::Scripting::EventsClient::Register(luaEngine->GetLuaEngine());
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
+        // Register the events builtin
+        Framework::Integrations::Scripting::EventsClient::Register(engine->GetLuaEngine());
+
+        // mod-specific builtins
+        ModuleRegister(engine);
     }
 } // namespace Framework::Integrations::Client

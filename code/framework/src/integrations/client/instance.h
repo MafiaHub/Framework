@@ -133,6 +133,10 @@ namespace Framework::Integrations::Client {
         virtual void PostUpdate()  = 0;
         virtual void PostRender()  = 0;
 
+        virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
+            (void)engine;
+        }
+
         ClientError RenderInit();
 
         void DownloadsAssetsFromConnectedServer();
