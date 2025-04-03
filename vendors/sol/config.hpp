@@ -48,8 +48,6 @@ the build system, or the command line options of your compiler.
 
 */
 
-#define SOL_NIL 1
-
 // end of sol/config.hpp
 
 #endif // SOL_SINGLE_CONFIG_HPP
