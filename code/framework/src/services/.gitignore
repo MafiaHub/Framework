@@ -1,6 +1,3 @@
 lib/*.*
 services/*.*
 cache/
-
-!lib/.gitkeep
-!services/.gitkeep
