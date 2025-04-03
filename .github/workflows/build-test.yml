@@ -1,60 +1,61 @@
-name: Test Build
-
+name: Build MafiaHub Services
 on:
-    push:
-         branches: [ 'master' ]
-    pull_request:
-         branches: [ 'develop' ]
-    workflow_dispatch:
-
-env:
-    BUILD_TYPE: Debug
-
+  workflow_dispatch:
 jobs:
-    build:
-        env:
-            buildDir: '${{ github.workspace }}/build/'
-        strategy:
-            matrix:
-                os: [ windows-2019 ]
-            fail-fast: false
-        runs-on: ${{ matrix.os }}
+  build:
+    name: Build MafiaHubServices on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            cmake_generator: "Visual Studio 17 2022"
+            build_type: "Release"
+          - os: ubuntu-latest
+            cmake_generator: "Unix Makefiles"
+            build_type: "Release"
+          - os: macos-latest
+            cmake_generator: "Unix Makefiles"
+            build_type: "Release"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.FW_SERVICES_PAT }}
+                              
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+            xcode-version: '16.2.0'
+        if: runner.os == 'macOS'
+    
+      - name: Install tools on Ubuntu
+        run: sudo apt-get install -y ninja-build build-essential libcurl4-openssl-dev
+        if: runner.os == 'Linux'
 
-        steps:
-            -   uses: actions/checkout@v3
-                with:
-                    submodules: false
-                    
-            -   uses: maxim-lobanov/setup-xcode@v1
-                with:
-                    xcode-version: '11.2.1'
-                if: runner.os == 'macOS'
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+      
+      - name: Set up Visual Studio shell
+        if: runner.os == 'Windows'
+        uses: egor-tensin/vs-shell@v2
 
-            -   name: Install tools on Ubuntu
-                run: sudo apt-get install -y ninja-build build-essential libcurl4-openssl-dev
-                if: runner.os == 'Linux'
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
-            # Install latest CMake.
-            -   uses: lukka/get-cmake@latest
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -G "${{ matrix.cmake_generator }}" -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
-            -   name: Set up Visual Studio shell
-                if: runner.os == 'Windows'
-                uses: egor-tensin/vs-shell@v2
+      - name: Build MafiaHubServices
+        run: |
+          cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}
 
-            -   name: Configure the project (Windows)
-                if: runner.os == 'Windows'
-                run: |
-                    cmake -B build -G "Ninja"
-
-            -   name: Configure the project
-                if: runner.os != 'Windows'
-                run: |
-                    cmake -B build
-            
-            -   name: Build the project
-                run: |
-                    cmake --build build
-                    
-            -   name: Run the tests
-                run: |
-                    cmake --build build --target RunFrameworkTests
+      - name: Run the tests
+        run: |
+          cmake --build build --target RunFrameworkTests
