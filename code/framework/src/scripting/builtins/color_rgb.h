@@ -59,11 +59,11 @@ namespace Framework::Scripting::Builtins {
             return {_data.r, _data.g, _data.b};
         }
 
-        int ToInt() const {
+        int ToInteger() const {
             return (_data.r << 16) | (_data.g << 8) | _data.b;
         }
 
-        void FromInt() {
+        void FromInteger() {
             _data.r = (_data.r >> 16) & 0xFF;
             _data.g = (_data.g >> 8) & 0xFF;
             _data.b = _data.b & 0xFF;
@@ -100,8 +100,8 @@ namespace Framework::Scripting::Builtins {
             cls["b"] = sol::property([](const ColorRGB& self) { return self.GetB(); });
             cls["toString"] = &ColorRGB::ToString;
             cls["toArray"]  = &ColorRGB::ToArray;
-            cls["toInteger"] = &ColorRGB::ToInt; // Or toNumber?
-            cls["fromInteger"] = &ColorRGB::FromInt;
+            cls["toInteger"] = &ColorRGB::ToInteger;
+            cls["fromInteger"] = &ColorRGB::FromInteger;
             cls["add"]     = &ColorRGB::Add;
             cls["sub"]     = &ColorRGB::Sub;
             cls["mul"]     = &ColorRGB::Mul;
