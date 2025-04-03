@@ -1,8 +1,6 @@
-name: Update MafiaHub Services
-
+name: Build MafiaHub Services
 on:
   workflow_dispatch:
-
 jobs:
   build:
     name: Build MafiaHubServices on ${{ matrix.os }}
@@ -21,30 +19,111 @@ jobs:
           - os: macos-latest
             cmake_generator: "Unix Makefiles"
             build_type: "Release"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
           token: ${{ secrets.FW_SERVICES_PAT }}
-
+                              
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+            xcode-version: '16.2.0'
+        if: runner.os == 'macOS'
+    
+      - name: Install tools on Ubuntu
+        run: sudo apt-get install -y ninja-build build-essential libcurl4-openssl-dev
+        if: runner.os == 'Linux'
       - name: Set up CMake
         uses: lukka/get-cmake@latest
-
-      - name: Configure CMake
+      - name: Set up Visual Studio shell
+        if: runner.os == 'Windows'
+        uses: egor-tensin/vs-shell@v2
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      - name: Configure CMake (Unix)
+        if: runner.os != 'Windows'
         run: |
           cmake -G "${{ matrix.cmake_generator }}" -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-
       - name: Build MafiaHubServices
         run: |
           cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}
-
       - name: Upload MafiaHub Services
         uses: actions/upload-artifact@v4
         with:
           name: mafiahub-services-${{ matrix.os }}
           path: |
-            code/projects/framework/src/services/lib
-            code/projects/framework/src/services/services
+            ${{ github.workspace }}/code/framework/src/services/lib
+            ${{ github.workspace }}/code/framework/src/services/services
           if-no-files-found: error
+
+  release:
+    name: Create or Update Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: temp-artifacts
+          
+      - name: Create build.txt with timestamp
+        run: |
+          mkdir -p release-artifacts
+          echo $(date +%s) > release-artifacts/build.txt
+          
+      - name: Zip artifacts by platform
+        run: |
+          # Zip each platform's artifacts separately
+          for platform in temp-artifacts/*; do
+            platform_name=$(basename "$platform")
+            cd "$platform"
+            zip -r "../../release-artifacts/$platform_name.zip" .
+            cd "../.."
+          done
+      
+      - name: Check for existing release
+        id: check_release
+        run: |
+          RELEASE_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/MafiaHub-Services" | \
+            jq -r '.id // "null"')
+          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_ENV
+          if [ "$RELEASE_ID" != "null" ]; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Delete existing release assets
+        if: steps.check_release.outputs.release_exists == 'true'
+        run: |
+          # Get all assets for the release
+          assets=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/${{ env.RELEASE_ID }}/assets")
+          
+          # Delete each asset
+          for asset_id in $(echo $assets | jq -r '.[].id'); do
+            curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/assets/$asset_id"
+          done
+      
+      - name: Create or update release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: MafiaHub-Services
+          name: MafiaHub Services
+          draft: false
+          prerelease: false
+          body: "MafiaHub Services automated build from ${{ github.sha }}"
+          files: release-artifacts/*.*
+          fail_on_unmatched_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}
