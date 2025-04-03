@@ -1,6 +1,15 @@
-name: Build MafiaHub Services
+name: Test Build
+
 on:
-  workflow_dispatch:
+    push:
+         branches: [ 'master' ]
+    pull_request:
+         branches: [ 'develop' ]
+    workflow_dispatch:
+
+env:
+    BUILD_TYPE: Debug
+
 jobs:
   build:
     name: Build MafiaHubServices on ${{ matrix.os }}
@@ -12,13 +21,13 @@ jobs:
         include:
           - os: windows-latest
             cmake_generator: "Visual Studio 17 2022"
-            build_type: "Release"
+            build_type: "Debug"
           - os: ubuntu-latest
             cmake_generator: "Unix Makefiles"
-            build_type: "Release"
+            build_type: "Debug"
           - os: macos-latest
             cmake_generator: "Unix Makefiles"
-            build_type: "Release"
+            build_type: "Debug"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
