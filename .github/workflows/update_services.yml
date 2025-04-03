@@ -1,0 +1,50 @@
+name: Update MafiaHub Services
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build MafiaHubServices on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            cmake_generator: "Visual Studio 17 2022"
+            build_type: "Release"
+          - os: ubuntu-latest
+            cmake_generator: "Unix Makefiles"
+            build_type: "Release"
+          - os: macos-latest
+            cmake_generator: "Unix Makefiles"
+            build_type: "Release"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          token: ${{ secrets.FW_SERVICES_PAT }}
+
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Configure CMake
+        run: |
+          cmake -G "${{ matrix.cmake_generator }}" -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Build MafiaHubServices
+        run: |
+          cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}
+
+      - name: Upload MafiaHub Services
+        uses: actions/upload-artifact@v3
+        with:
+          name: mafiahub-services-${{ matrix.os }}
+          path: |
+            code/projects/framework/src/services/lib
+            code/projects/framework/src/services/services
+          if-no-files-found: error
