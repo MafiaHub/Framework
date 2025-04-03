@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           token: ${{ secrets.FW_SERVICES_PAT }}
@@ -41,7 +41,7 @@ jobs:
           cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}
 
       - name: Upload MafiaHub Services
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mafiahub-services-${{ matrix.os }}
           path: |
