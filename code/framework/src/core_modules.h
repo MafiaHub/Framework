@@ -20,6 +20,10 @@ namespace Framework::Scripting {
     class Engine;
 }; // namespace Framework::Scripting
 
+namespace Framework::GUI {
+    class Manager;
+}; // namespace Framework::GUI
+
 namespace Framework {
 
     /**
@@ -48,6 +52,10 @@ namespace Framework {
             _scriptingEngine = engine;
         }
 
+        static void SetWebManager(GUI::Manager *manager) {
+            _webManager = manager;
+        }
+
         static void SetTickRate(double tickRate) {
             _tickRate = tickRate;
         }
@@ -65,6 +73,10 @@ namespace Framework {
             return _scriptingEngine;
         }
 
+        static GUI::Manager *GetGUIManager() {
+            return _webManager;
+        }
+
         static double GetTickRate() {
             return _tickRate;
         }
@@ -73,6 +85,7 @@ namespace Framework {
         static inline Networking::NetworkPeer *_networkPeer {};
         static inline World::Engine *_engine {};
         static inline Scripting::Engine *_scriptingEngine {};
+        static inline GUI::Manager *_webManager {};
         static inline double _tickRate {1000 / 60.0f};
     };
 }; // namespace Framework

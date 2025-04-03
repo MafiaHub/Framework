@@ -28,6 +28,8 @@
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
 
+#include <gui/manager.h>
+
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Client {
@@ -93,6 +95,7 @@ namespace Framework::Integrations::Client {
         std::shared_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
+        std::shared_ptr<Framework::GUI::Manager> _webManager;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -184,6 +187,10 @@ namespace Framework::Integrations::Client {
 
         External::ImGUI::Wrapper *GetImGUI() const {
             return _imguiApp.get();
+        }
+
+        Framework::GUI::Manager *GetWebManager() const {
+            return _webManager.get();
         }
 
         Graphics::Renderer *GetRenderer() const {

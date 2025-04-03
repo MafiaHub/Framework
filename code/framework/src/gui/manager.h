@@ -21,6 +21,8 @@
 #include "view.h"
 #include "graphics/renderer.h"
 
+#include <utils/time.h>
+
 namespace Framework::GUI {
     struct ViewportConfiguration {
         int width;
@@ -29,15 +31,21 @@ namespace Framework::GUI {
 
     class Manager {
       private:
-        ViewportConfiguration _viewportConfiguration;
+        ViewportConfiguration _viewportConfiguration {};
         ultralight::RefPtr<ultralight::Renderer> _ultralightRenderer;
 
         std::recursive_mutex _renderMutex;
 
         std::vector<std::unique_ptr<View>> _views;
         std::unique_ptr<SystemClipboard> _clipboard;
-        Graphics::Renderer* _graphicsRenderer;
+        Graphics::Renderer *_graphicsRenderer {};
         bool _gpuAccelerated = false;
+        
+        // HACK: Ultralight tends to crash if you destroy and create views too fast.
+        // Here we put Update() on cooldown whenever a view is destroyed.
+        // UGLY UGLY HACK
+        constexpr static int64_t UPDATE_COOLDOWN_MS = 2000;
+        Utils::Time::TimePoint _updateCooldown {};
 
       public:
         Manager();
@@ -47,6 +55,8 @@ namespace Framework::GUI {
 
         int CreateView(std::string, int width, int height, int offset_x = 0, int offset_y = 0);
         bool DestroyView(int);
+
+        void CleanupViews();
 
         void Update();
         void Render();
