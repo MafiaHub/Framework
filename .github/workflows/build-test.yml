@@ -23,8 +23,7 @@ jobs:
         steps:
             -   uses: actions/checkout@v3
                 with:
-                    submodules: true
-                    token: ${{ secrets.GITHUB_TOKEN }}
+                    submodules: false
                     
             -   uses: maxim-lobanov/setup-xcode@v1
                 with:
