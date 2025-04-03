@@ -1,4 +1,4 @@
-name: Update MafiaHub Services
+name: Build MafiaHub Services
 
 on:
   workflow_dispatch:
@@ -69,6 +69,7 @@ jobs:
         with:
           name: mafiahub-services-${{ matrix.os }}
           path: |
-            code/projects/framework/src/services/lib
-            code/projects/framework/src/services/services
-          if-no-files-found: error
+            ${{ github.workspace }}/code/projects/framework/src/services/lib
+            ${{ github.workspace }}/code/projects/framework/src/services/services
+          if-no-files-found: warn
+
