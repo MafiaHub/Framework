@@ -67,6 +67,17 @@ namespace Framework::Scripting::Builtins {
             return {_data.r, _data.g, _data.b, _data.a};
         }
 
+        int ToInteger() const {
+            return (_data.r << 24) | (_data.g << 16) | (_data.b << 8) | _data.a;
+        }
+
+        void FromInteger(int color) {
+            _data.r = (color >> 24) & 0xFF;
+            _data.g = (color >> 16) & 0xFF;
+            _data.b = (color >> 8) & 0xFF;
+            _data.a = color & 0xFF;
+        }
+
         void Add(int r, int g, int b, int a) {
             const glm::ivec4 newVec(r, g, b, a);
             _data += newVec;
@@ -99,6 +110,8 @@ namespace Framework::Scripting::Builtins {
             cls["a"] = sol::property([](const ColorRGBA& self) { return self.GetA(); });
             cls["toString"] = &ColorRGBA::ToString;
             cls["toArray"]  = &ColorRGBA::ToArray;
+            cls["toInteger"]   = &ColorRGBA::ToInteger;
+            cls["fromInteger"] = &ColorRGBA::FromInteger;
             cls["add"]     = &ColorRGBA::Add;
             cls["sub"]     = &ColorRGBA::Sub;
             cls["mul"]     = &ColorRGBA::Mul;
