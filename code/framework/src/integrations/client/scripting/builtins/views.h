@@ -28,9 +28,6 @@ namespace Framework::Integrations::Scripting {
         int _viewId;
         Framework::GUI::Manager *_webManager;
         Framework::GUI::View *_view;
-        sol::function _onDOMReadyCallback;
-        sol::function _onWindowObjectReadyCallback;
-        sol::function _onConsoleMessageCallback;
 
         using EventMeta = std::pair<int, std::string>;
 
