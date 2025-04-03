@@ -124,6 +124,6 @@ jobs:
           draft: false
           prerelease: false
           body: "MafiaHub Services automated build from ${{ github.sha }}"
-          files: release-artifacts/*.zip
+          files: release-artifacts/*.*
           fail_on_unmatched_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
