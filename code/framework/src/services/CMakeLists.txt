@@ -1,0 +1,21 @@
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
+    message(STATUS "MafiaHub Services source module is present, loading the project...")
+    add_subdirectory(src)
+else()
+    message(STATUS "MafiaHub Services source module is not present, loading prebuilt library...")
+
+    if(WIN32)
+        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices.lib")
+    elseif(APPLE)
+        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices_macos.a")
+    elseif(UNIX)
+        set(MAFIA_HUB_LIB "${CMAKE_CURRENT_SOURCE_DIR}/lib/MafiaHubServices.a")
+    endif()
+    
+    if(NOT EXISTS "${MAFIA_HUB_LIB}")
+        message(FATAL_ERROR "MafiaHub Services prebuilt library not found at: ${MAFIA_HUB_LIB}")
+    endif()
+    
+    add_library(MafiaHubServices INTERFACE)
+    target_link_libraries(MafiaHubServices INTERFACE ${MAFIA_HUB_LIB})
+endif ()
