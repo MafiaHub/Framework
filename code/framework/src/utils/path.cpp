@@ -11,6 +11,7 @@
 
 #ifdef WIN32
 #include <Shlwapi.h>
+#include <ShlObj.h>
 #else
 #include <climits>
 #include <cstdlib>
@@ -114,5 +115,79 @@ namespace Framework::Utils {
         
         return combined_path; // If realpath fails, return the combined path
 #endif
+    }
+
+    std::wstring GetAppDataPathW() {
+#ifdef WIN32
+        wchar_t path[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+            return std::wstring(path);
+        }
+        return std::wstring();
+#else
+        // On non-Windows platforms, return an empty string or implement equivalent
+        return std::wstring();
+#endif
+    }
+
+    std::string GetAppDataPathA() {
+#ifdef WIN32
+        char path[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path))) {
+            return std::string(path);
+        }
+        return std::string();
+#else
+        // On non-Windows platforms, typically use $HOME/.config or $XDG_CONFIG_HOME
+        const char* configDir = getenv("XDG_CONFIG_HOME");
+        if (configDir) {
+            return std::string(configDir);
+        }
+        
+        const char* homeDir = getenv("HOME");
+        if (homeDir) {
+            return std::string(homeDir) + "/.config";
+        }
+        
+        return std::string();
+#endif
+    }
+
+    std::wstring GetFileExtensionW(const std::wstring &path) {
+        if (path.empty()) {
+            return std::wstring();
+        }
+
+        size_t pos = path.find_last_of(L'.');
+        if (pos == std::wstring::npos || pos == 0 || pos == path.length() - 1) {
+            return std::wstring(); // No extension found or only dot at the beginning/end
+        }
+
+        // Check if the last dot is actually part of a directory/filename
+        size_t lastSlash = path.find_last_of(L"/\\");
+        if (lastSlash != std::wstring::npos && lastSlash > pos) {
+            return std::wstring(); // Dot is in a directory component
+        }
+
+        return path.substr(pos); // Include the dot in the extension
+    }
+
+    std::string GetFileExtensionA(const std::string &path) {
+        if (path.empty()) {
+            return std::string();
+        }
+
+        size_t pos = path.find_last_of('.');
+        if (pos == std::string::npos || pos == 0 || pos == path.length() - 1) {
+            return std::string(); // No extension found or only dot at the beginning/end
+        }
+
+        // Check if the last dot is actually part of a directory/filename
+        size_t lastSlash = path.find_last_of("/\\");
+        if (lastSlash != std::string::npos && lastSlash > pos) {
+            return std::string(); // Dot is in a directory component
+        }
+
+        return path.substr(pos); // Include the dot in the extension
     }
 } // namespace Framework::Utils

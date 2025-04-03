@@ -11,10 +11,7 @@
 #include <atomic>
 #include <map>
 #include <vector>
-
-#include <cppfs/FileHandle.h>
-#include <cppfs/FileWatcher.h>
-#include <cppfs/fs.h>
+#include <string>
 
 #include <logging/logger.h>
 #include <utils/time.h>
@@ -23,18 +20,12 @@
 namespace Framework::Scripting {
     class ServerEngine : public Engine {
       private:
-        // Global
-        cppfs::FileWatcher *_watcher;
-        Utils::Time::TimePoint _nextFileWatchUpdate;
-        int32_t _fileWatchUpdatePeriod = 1000;
-
         // Package
-        std::string _scriptName;
-        std::string _executionPath;
-        std::atomic<bool> _packageLoaded = false;
-
-        // Gamemode
-        bool _shouldReloadWatcher               = false;
+        std::vector<std::string> _scripts;
+        std::string _gamemodeName;
+        std::string _mainGamemodePath;
+        std::string _mainGamemodeServerPath;
+        std::atomic<bool> _gamemodeLoaded = false;
         
       public:
         EngineError Init(SDKRegisterCallback) override;
@@ -44,20 +35,49 @@ namespace Framework::Scripting {
         bool LoadScript();
         bool UnloadScript();
 
-        bool IsPackageLoaded() const {
-            return _packageLoaded;
+        bool IsGamemodeLoaded() const {
+            return _gamemodeLoaded;
         }
 
-        std::string GetScriptName() const {
-            return _scriptName;
+        void SetGamemodeLoaded(bool loaded) {
+            _gamemodeLoaded = loaded;
         }
 
-        void SetScriptName(const std::string &name) {
-            _scriptName = name;
+        std::string GetGamemodeName() const {
+            return _gamemodeName;
         }
 
-        void SetExecutionPath(const std::string &path) {
-            _executionPath = path;
+        void SetGamemodeName(const std::string &name) {
+            _gamemodeName = name;
+        }
+
+        std::string GetMainGamemodePath() const {
+            return _mainGamemodePath;
+        }
+
+        void SetMainGamemodePath(const std::string &path) {
+            _mainGamemodePath = path;
+            _mainGamemodeServerPath = fmt::format("{}\\server", path);
+        }
+
+        std::string GetMainGamemodeServerPath() const {
+            return _mainGamemodeServerPath;
+        }
+
+        std::vector<std::string> GetScripts() const {
+            return _scripts;
+        }
+
+        void AddScript(std::string name) {
+            _scripts.push_back(name);
+        }
+
+        void AddScripts(std::vector<std::string> names) {
+            _scripts.insert(_scripts.end(), names.begin(), names.end());
+        }
+
+        void ClearScripts() {
+            _scripts.clear();
         }
     };
 } // namespace Framework::Scripting::Engines::Node

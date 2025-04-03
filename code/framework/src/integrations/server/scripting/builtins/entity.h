@@ -22,9 +22,13 @@
 #include "world/game_rpc/set_frame.h"
 #include "world/game_rpc/set_transform.h"
 
+#include "integrations/shared/rpc/emit_lua_event.h"
+
 #include <iomanip>
 #include <list>
 #include <sstream>
+
+#include "scripting/utils/table_conversions.h"
 
 #include "core_modules.h"
 
@@ -41,6 +45,27 @@ namespace Framework::Integrations::Scripting {
             const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
             if (!st) {
                 throw std::runtime_error(fmt::format("Entity '{}' is protected!", _ent.id()));
+            }
+        }
+
+        void EmitEvent(std::string eventName, sol::object payload) {
+            if (!_ent.is_valid() || !_ent.is_alive()) {
+                throw std::runtime_error(fmt::format("Entity handle '{}' is invalid!", _ent.id()));
+            }
+
+            const auto st = _ent.get<Framework::World::Modules::Base::Streamer>();
+            if (!st) {
+                throw std::runtime_error(fmt::format("Entity '{}' is not a valid peer!", _ent.id()));
+            }
+
+            Framework::Integrations::Shared::RPC::EmitLuaEvent rpc;
+            try {
+                nlohmann::json jsonPayload = Framework::Scripting::Utils::SolToJson(payload);
+                rpc.FromParameters(eventName, jsonPayload.dump());
+                CoreModules::GetNetworkPeer()->SendRPC(rpc, SLNet::RakNetGUID(st->guid));
+            }
+            catch (const std::exception &e) {
+                throw std::runtime_error(fmt::format("Error in Entity::EmitEvent: {}", e.what()));
             }
         }
       public:
@@ -193,8 +218,8 @@ namespace Framework::Integrations::Scripting {
             Framework::World::ServerEngine::RemoveEntity(_ent);
         }
 
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<Entity> cls = luaEngine.new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<Entity> cls = luaEngine->new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
             cls["id"] = sol::property([](const Entity& self) { return self.GetID(); });
             cls["name"] = sol::property([](const Entity& self) { return self.GetName(); });
             cls["nickname"] = sol::property([](const Entity& self) { return self.GetNickname(); });

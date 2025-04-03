@@ -17,7 +17,13 @@
 
 #include <world/game_rpc/set_transform.h>
 
+#include "integrations/shared/rpc/emit_lua_event.h"
+
 #include "../shared/modules/mod.hpp"
+
+#include "scripting/utils/table_conversions.h"
+
+#include "scripting/builtins/events_lua.h"
 
 #include "networking/state.h"
 
@@ -28,6 +34,7 @@
 
 #include <logging/logger.h>
 
+#include "utils/path.h"
 #include "utils/version.h"
 
 #include "core_modules.h"
@@ -70,13 +77,17 @@ namespace Framework::Integrations::Client {
         _presence         = std::make_unique<External::Discord::Wrapper>();
         _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
         _renderer         = std::make_unique<Graphics::Renderer>();
-        _worldEngine      = std::make_unique<World::ClientEngine>();
+        _worldEngine      = std::make_shared<World::ClientEngine>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
+        _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
     }
 
     Instance::~Instance() {
+        if (_scriptingModule) {
+            _scriptingModule->Shutdown();
+        }
     }
 
     ClientError Instance::Init(InstanceOptions &opts) {
@@ -136,11 +147,17 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::InitAssetDownloader() {
-        cppfs::fs::open("cache").createDirectory();
+        InitCacheAssetFolders();
 
         GetNetworkingEngine()->GetNetworkClient()->SetOnAssetsDownloadFailedCallback([this]() {
             this->OnAssetsDownloaded(false);
         });
+    }
+
+    void Instance::InitCacheAssetFolders() {
+        const auto appDataPath = Framework::Utils::GetAppDataPathA();
+        cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration", appDataPath)).createDirectory();
+        cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration\\servers", appDataPath)).createDirectory();
     }
 
     ClientError Instance::RenderInit() {
@@ -223,6 +240,10 @@ namespace Framework::Integrations::Client {
 
         if (_worldEngine) {
             _worldEngine->Update();
+        }
+        
+        if (_scriptingModule) {
+            _scriptingModule->GetEngine()->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -317,6 +338,26 @@ namespace Framework::Integrations::Client {
             if (_onConnectionClosed) {
                 _onConnectionClosed();
             }
+
+            // Request the scripting engine to clean up loaded scripts
+            _scriptingModule->Shutdown();
+        });
+
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+            if (!rpc->Valid())
+                return;
+            const auto eventName  = rpc->GetEventName();
+            const auto payloadStr = rpc->GetPayload();
+            sol::object payload {};
+            try {
+                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
+            }
+            catch (const std::exception &ex) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
+                return;
+            }
+            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
@@ -333,13 +374,21 @@ namespace Framework::Integrations::Client {
             return;
         }
 
+        // Unload the scripts before redownloading
+        _scriptingModule->Shutdown();
+
+        // Setup the asset downloader
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
-        const auto serverHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
-        const auto cacheDir   = fmt::format("cache\\{}", serverHash);
-        const auto streamer   = net->GetAssetStreamer();
+        const auto streamer = net->GetAssetStreamer();
+
+        // Compute the destination path
+        const auto appDataPath = Framework::Utils::GetAppDataPathA();
+        const auto cacheDir   = fmt::format("{}\\MafiaHubIntegration\\servers\\{}", appDataPath, _currentState._serverIDHash); // TODO: fix path to use mod name
+
+        // Let the system know where our scripts are stored
         SetAssetCachePath(cacheDir);
         streamer->SetApplicationDirectory(cacheDir.c_str());
-        auto folderHandle = cppfs::fs::open(cacheDir);
+        auto cacheDirHandle = cppfs::fs::open(cacheDir);
 
         // Ensure we stop existing downloads since the server has pushed new changes already
         if (_downloadStatus.downloading) {
@@ -347,9 +396,9 @@ namespace Framework::Integrations::Client {
             _downloadStatus = {};
         }
 
-        if (!folderHandle.exists()) {
-            if (folderHandle.createDirectory()) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", serverHash);
+        if (!cacheDirHandle.exists()) {
+            if (cacheDirHandle.createDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", _currentState._serverIDHash);
             }
             else {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not create folder for client asset cache: {}", cacheDir);
@@ -370,8 +419,53 @@ namespace Framework::Integrations::Client {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
+            
+            auto scriptingModule = GetScriptingModule();
+            if (scriptingModule) {
+                // Initialize the scripting module, but force disconnect if it failed to init
+                if (!scriptingModule->Init(nullptr)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
+                    net->Disconnect();
+                    return;
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
+
+                // Load the scripts
+                auto scriptingEngine = scriptingModule->GetEngine();
+                if (scriptingEngine) {
+                    // Set script cache path to the asset download path
+                    scriptingEngine->SetScriptCachePath(GetAssetCachePath());
+
+                    // Look for Lua script files in the download path
+                    auto scriptsDir = cppfs::fs::open(GetAssetCachePath());
+                    if (scriptsDir.exists() && scriptsDir.isDirectory()) {
+                        scriptsDir.traverse([scriptingEngine](cppfs::FileHandle &fh) -> bool {
+                            if (Utils::GetFileExtensionA(fh.fileName()) == ".lua") {
+                                scriptingEngine->AddScript(fh.path());
+                            }
+                            return true;
+                        });
+
+                        // Register builtins
+                        RegisterScriptingBuiltins(scriptingEngine.get());
+
+                        // Load all the scripts
+                        bool scriptsLoaded = scriptingEngine->LoadScripts();
+                        if (scriptsLoaded) {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
+                        }
+                        else {
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
+                        }
+                    }
+                    else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
+                    }
+                }
+            }
         }
         else {
+            net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
@@ -388,11 +482,17 @@ namespace Framework::Integrations::Client {
         
         _downloadStatus = {};
 
-        // TODO grab client entry point from the message
-        // GetClientEntryPoint() and only set client scripting up if it's specified and file is present
-
         // Let the mod-level know assets have just been finished processing
-        if (_onAssetsDownloadFinished)
+        if (_onAssetsDownloadFinished) {
             _onAssetsDownloadFinished(success);
+        }
+    }
+
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
+        // Register the events builtin
+        Framework::Integrations::Scripting::EventsClient::Register(engine->GetLuaEngine());
+
+        // mod-specific builtins
+        ModuleRegister(engine);
     }
 } // namespace Framework::Integrations::Client

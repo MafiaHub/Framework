@@ -109,8 +109,8 @@ namespace Framework::Scripting::Builtins {
             _data = glm::quat(glm::angleAxis(angle, glm::vec3(x, y, z)));
         }
 
-        static void Register(sol::state &luaEngine) {
-            sol::usertype<Quaternion> cls = luaEngine.new_usertype<Quaternion>("Quaternion", sol::constructors<Quaternion(float, float, float, float)>());
+        static void Register(sol::state *luaEngine) {
+            sol::usertype<Quaternion> cls = luaEngine->new_usertype<Quaternion>("Quaternion", sol::constructors<Quaternion(float, float, float, float)>());
             cls["w"] = sol::property([](const Quaternion& self) { return self.GetW(); });
             cls["x"] = sol::property([](const Quaternion& self) { return self.GetX(); });
             cls["y"] = sol::property([](const Quaternion& self) { return self.GetY(); });

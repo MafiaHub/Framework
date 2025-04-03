@@ -45,7 +45,7 @@ namespace Framework::GUI {
 
         bool Init(const std::string&, ViewportConfiguration, Graphics::Renderer*, bool gpu_accelerated = false);
 
-        int CreateView(std::string, int, int);
+        int CreateView(std::string, int width, int height, int offset_x = 0, int offset_y = 0);
         bool DestroyView(int);
 
         void Update();

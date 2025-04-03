@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 namespace Framework::GUI {
-    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _pixelData(nullptr), _width(0), _height(0) {
+    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _width(0), _height(0), _x(0), _y(0) {
         _sdk = new SDK;
         _isMouseDown = false;
     }
@@ -22,7 +22,7 @@ namespace Framework::GUI {
         }
     }
 
-    bool View::Init(std::string &path, int width, int height, bool gpu_accelerated) {
+    bool View::Init(std::string &path, int width, int height, int offset_x, int offset_y, bool gpu_accelerated) {
         // Initialize a view configuration
         ultralight::ViewConfig config;
         config.is_accelerated = gpu_accelerated;
@@ -46,6 +46,10 @@ namespace Framework::GUI {
         // Store the width/height
         _width  = width;
         _height = height;
+
+        // Store the offsets
+        _x = offset_x;
+        _y = offset_y;
         return true;
     }
 
@@ -58,14 +62,14 @@ namespace Framework::GUI {
 
         // Update the view content (CPU renderer)
         if (!_gpuAccelerated) {
-            auto surface = (ultralight::BitmapSurface *)_internalView->surface();
+            auto surface = dynamic_cast<ultralight::BitmapSurface *>(_internalView->surface());
             void *pixels = surface->LockPixels();
-            int size     = surface->size(); // TODO: calc from res
-            // TODO: Realloc if size changes
-            if (!_pixelData) {
-                _pixelData = new uint8_t[size];
+            int size     = surface->size();
+            if (_pixelData.size() != size) {
+                _pixelData.clear();
+                _pixelData.resize(size);
             }
-            memcpy(_pixelData, pixels, size);
+            std::memcpy(_pixelData.data(), pixels, size);
             surface->UnlockPixels();
         }
     }
@@ -92,8 +96,8 @@ namespace Framework::GUI {
         // Handle other classic mouse events
         ultralight::MouseEvent ev;
 
-        ev.x = GET_X_LPARAM(lParam);
-        ev.y = GET_Y_LPARAM(lParam);
+        ev.x = GET_X_LPARAM(lParam) - _x;
+        ev.y = GET_Y_LPARAM(lParam) - _y;
 
         switch (msg) {
         case WM_MOUSEMOVE: {

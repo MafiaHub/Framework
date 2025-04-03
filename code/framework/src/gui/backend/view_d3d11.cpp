@@ -18,8 +18,8 @@ namespace Framework::GUI {
         _sdk = new SDK;
     }
 
-    bool ViewD3D11::Init(std::string &path, int width, int height, bool gpu_accelerated) {
-        return View::Init(path, width, height, gpu_accelerated);
+    bool ViewD3D11::Init(std::string &path, int width, int height, int offset_x, int offset_y, bool gpu_accelerated) {
+        return View::Init(path, width, height, offset_x, offset_y, gpu_accelerated);
     }
 
     void ViewD3D11::UpdateGeometry() {
@@ -85,8 +85,8 @@ namespace Framework::GUI {
         v.color[2] = 255;
         v.color[3] = 255;
 
-        auto x_      = 0;
-        auto y_      = 0;
+        auto x_      = _x;
+        auto y_      = _y;
         float left   = static_cast<float>(x_);
         float top    = static_cast<float>(y_);
         float right  = static_cast<float>(x_ + _width);

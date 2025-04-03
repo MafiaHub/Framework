@@ -23,6 +23,8 @@
 #include "graphics/renderer.h"
 #include "sdk.h"
 
+#include <vector>
+
 namespace Framework::GUI {
     using OnConsoleMessageCallback     = fu2::function<void(std::string,uint32_t,uint32_t,std::string)>;
     using OnDOMReadyCallback           = fu2::function<void(uint64_t, bool, std::string)>;
@@ -44,9 +46,11 @@ namespace Framework::GUI {
         SDK *_sdk = nullptr;
 
         // CPU renderer
-        uint8_t *_pixelData;
+        std::vector<uint8_t> _pixelData;
 
         bool _gpuAccelerated = false;
+        int _x;
+        int _y;
         int _width;
         int _height;
         bool _shouldDisplay = false;
@@ -66,7 +70,7 @@ namespace Framework::GUI {
         View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
         virtual ~View();
 
-        virtual bool Init(std::string &, int, int, bool gpu_accelerated = false);
+        virtual bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;
@@ -97,6 +101,15 @@ namespace Framework::GUI {
 
         bool ShouldDisplay() const {
             return _shouldDisplay;
+        }
+
+        void SetPosition(int x, int y) {
+            _x = x;
+            _y = y;
+        }
+
+        glm::vec2 GetPosition() const {
+            return {_x, _y};
         }
 
         ultralight::Cursor GetCursor() const {

@@ -38,14 +38,14 @@
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
-namespace Framework::Scripting::Engines::Node {
-    class Engine;
+namespace Framework::Scripting {
+    class ServerEngine;
 }
 
 namespace Framework::World {
     class Engine {
       private:
-        friend class Framework::Scripting::Engines::Node::Engine;
+        friend class Framework::Scripting::ServerEngine;
         void PurgeAllGameModeEntities() const;
 
       protected:

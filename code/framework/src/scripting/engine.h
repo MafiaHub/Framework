@@ -22,9 +22,10 @@ namespace Framework::Scripting {
     using EventHandler = std::vector<sol::function>;
     class Engine {
       public:
-        sol::state _luaEngine;
+        sol::state* _luaEngine = nullptr;
 
         std::map<std::string, EventHandler> _eventHandlers = {};
+        std::map<std::string, EventHandler> _eventRemoteHandlers = {};
 
       public:
         virtual EngineError Init(SDKRegisterCallback) = 0;
@@ -33,12 +34,16 @@ namespace Framework::Scripting {
 
         bool InitCommonSDK();
 
-        sol::state &GetLuaEngine() {
+        sol::state *GetLuaEngine() {
             return _luaEngine;
         }
 
         void ListenEvent(std::string name, sol::function fnc) {
             _eventHandlers[name].push_back(fnc);
+        }
+
+        void ListenRemoteEvent(std::string name, sol::function fnc) {
+            _eventRemoteHandlers[name].push_back(fnc);
         }
 
         template <typename... Args>
@@ -54,6 +59,26 @@ namespace Framework::Scripting {
                     }
                 }
             }
+        }
+
+        template <typename... Args>
+        void InvokeRemoteEvent(const std::string &name, Args &&...args) {
+            auto it = _eventRemoteHandlers.find(name);
+            if (it != _eventRemoteHandlers.end()) {
+                for (auto &callback : it->second) {
+                    sol::protected_function pf {callback};
+                    auto result = pf(std::forward<Args>(args)...);
+                    if (!result.valid()) {
+                        sol::error err = result;
+                        spdlog::error(err.what());
+                    }
+                }
+            }
+        }
+
+        void ClearEventHandlers() {
+            _eventHandlers.clear();
+            _eventRemoteHandlers.clear();
         }
     };
 } // namespace Framework::Scripting

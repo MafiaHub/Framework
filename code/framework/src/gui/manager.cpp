@@ -96,7 +96,7 @@ namespace Framework::GUI {
         }
     }
 
-    int Manager::CreateView(std::string url, int width, int height) {
+    int Manager::CreateView(std::string url, int width, int height, int offset_x, int offset_y) {
         if (!_ultralightRenderer) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Renderer is not initialized");
             return -1;
@@ -116,7 +116,7 @@ namespace Framework::GUI {
             return -1;
         }
 
-        if (!view->Init(url, width, height, _gpuAccelerated)) {
+        if (!view->Init(url, width, height, offset_x, offset_y, _gpuAccelerated)) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: initialization failed");
             return -1;
         }
