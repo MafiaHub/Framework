@@ -29,8 +29,6 @@ set(FRAMEWORK_SRC
 
     src/scripting/engine.cpp
     src/scripting/types/events.cpp
-
-    src/services/masterlist.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
@@ -93,6 +91,9 @@ find_package(OpenSSL REQUIRED)
 
 # Build depending on the platform
 add_library(Framework STATIC ${FRAMEWORK_SRC})
+
+# Add services adapter to the project
+add_subdirectory(src/services)
 
 if(WIN32)
     # Build the loader and it's data
@@ -160,20 +161,20 @@ if(WIN32)
 endif()
 
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer libsig Lua54)
+target_link_libraries(FrameworkServer MafiaHubServices libsig Lua54)
 
 # Platform-dependent post processing
 if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv shlwapi)
 
-    target_link_libraries(FrameworkClient DiscordSDK DearImGUI)
+    target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK DearImGUI)
 
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
 
     link_shared_deps(FrameworkLoader)
-    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} FrameworkLoaderData ntdll sfd)
+    target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd)
     target_link_libraries(FrameworkLoaderData udis86 minhook)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
 

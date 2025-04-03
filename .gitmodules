@@ -1,0 +1,3 @@
+[submodule "services-adapter"]
+	path = code/framework/src/services/src
+	url = https://github.com/MafiaHub/services-adapter
