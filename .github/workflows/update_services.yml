@@ -127,3 +127,14 @@ jobs:
           files: release-artifacts/*.*
           fail_on_unmatched_files: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Discord Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_GIT_WEBHOOK }}
+          title: "MafiaHub Services updated! 🎉"
+          nodetail: true
+          description: |
+            Make sure your Framework repository is up-to-date to avoid any conflicts.
+          color: 0x440000
+          username: MafiaHub Services
