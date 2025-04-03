@@ -149,6 +149,14 @@ namespace Framework::GUI {
             return _internalView->EvaluateScript(ultralight::String(script.c_str())).utf8().data();
         }
 
+        inline ultralight::View *GetInternalView() {
+            return _internalView.get();
+        }
+
+        inline GUI::SDK *GetSDK() {
+            return _sdk;
+        }
+
         inline void SetOnConsoleMessageCallback(OnConsoleMessageCallback proc) {
             _onConsoleMessageCallback = std::move(proc);
         }
