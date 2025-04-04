@@ -1,10 +1,63 @@
 name: Build MafiaHub Services
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - develop
+
 jobs:
+  check_submodule:
+    name: Check for services-adapter changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      should_build: ${{ steps.check_changes.outputs.changed }}
+    steps:
+      - name: Checkout services-adapter repository
+        uses: actions/checkout@v4
+        with:
+          repository: MafiaHub/services-adapter
+          path: services-adapter-repo
+          token: ${{ secrets.FW_SERVICES_PAT }}
+          fetch-depth: 0
+      
+      - name: Get latest commits and check for changes
+        id: check_changes
+        run: |
+          cd services-adapter-repo
+          
+          # Get the timestamp of the last successful build from build.txt
+          LAST_BUILD_TIMESTAMP=$(curl -s https://github.com/MafiaHub/Framework/releases/download/MafiaHub-Services/build.txt || echo "0")
+          
+          # Convert UNIX timestamp to date format for git log (Linux format)
+          if [ "$LAST_BUILD_TIMESTAMP" -gt 0 ]; then
+            LAST_BUILD_TIME=$(date -d "@$LAST_BUILD_TIMESTAMP" "+%Y-%m-%d %H:%M:%S")
+          else
+            # Default to a very old date if build.txt doesn't exist or can't be retrieved
+            LAST_BUILD_TIME="2000-01-01 00:00:00"
+          fi
+          
+          echo "Last successful build timestamp: $LAST_BUILD_TIMESTAMP"
+          echo "Last successful build time: $LAST_BUILD_TIME"
+          
+          # Check if there are any commits after the last build time
+          RECENT_COMMITS=$(git log --since="$LAST_BUILD_TIME" --pretty=format:"%h %s" --no-merges)
+          
+          if [ -n "$RECENT_COMMITS" ]; then
+            echo "Recent commits found in services-adapter:"
+            echo "$RECENT_COMMITS"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Services adapter has changed since last build. Triggering build."
+          else
+            echo "No new commits in services-adapter since last build."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
   build:
     name: Build MafiaHubServices on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: check_submodule
+    if: github.event_name == 'workflow_dispatch' || needs.check_submodule.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -66,6 +119,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Send Discord Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+            webhook: ${{ secrets.RELEASES_WEBHOOK }}
+            title: "MafiaHub Services updating..."
+            nodetail: true
+            description: |
+              Do not sync your Framework repository until this process is finished.
+            color: 0x440000
+            username: MafiaHub Services
+
       - name: Checkout repository
         uses: actions/checkout@v4
       
