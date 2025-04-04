@@ -32,6 +32,7 @@
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
+
         std::string modSlug;
         std::string modHelpText;
         std::string modName;
@@ -48,6 +49,12 @@ namespace Framework::Integrations::Server {
         int32_t bindPort;
         std::string bindPassword;
         bool bindPublicServer = true;
+
+        // MafiaHub Services
+        struct Services {
+            std::string apiUrl = "https://api.mafiahub.dev";
+            std::string masterlistUrl = "";
+        } services;
 
         std::string webBindHost;
         int32_t webBindPort;
