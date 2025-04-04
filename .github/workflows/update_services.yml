@@ -27,10 +27,15 @@ jobs:
           cd services-adapter-repo
           
           # Get the timestamp of the last successful build from build.txt
-          LAST_BUILD_TIMESTAMP=$(curl -s -f https://github.com/MafiaHub/Framework/releases/download/MafiaHub-Services/build.txt || echo "0")
+          LAST_BUILD_TIMESTAMP=$(curl -s -f -L https://github.com/MafiaHub/Framework/releases/download/MafiaHub-Services/build.txt || echo "0")
           
-          # Make sure we have a valid number
+          echo "Raw timestamp response: '$LAST_BUILD_TIMESTAMP'"
+          
+          # Trim whitespace and make sure we have a valid number
+          LAST_BUILD_TIMESTAMP=$(echo "$LAST_BUILD_TIMESTAMP" | tr -d '[:space:]')
+          
           if ! [[ "$LAST_BUILD_TIMESTAMP" =~ ^[0-9]+$ ]]; then
+            echo "Invalid timestamp format, defaulting to 0"
             LAST_BUILD_TIMESTAMP=0
           fi
           
@@ -152,7 +157,10 @@ jobs:
       - name: Create build.txt with timestamp
         run: |
           mkdir -p release-artifacts
-          echo $(date +%s) > release-artifacts/build.txt
+          # Create a clean timestamp without newlines or whitespace
+          echo -n "$(date +%s)" > release-artifacts/build.txt
+          cat release-artifacts/build.txt
+          echo "Created build.txt with timestamp: $(cat release-artifacts/build.txt)"
           
       - name: Zip artifacts by platform
         run: |
