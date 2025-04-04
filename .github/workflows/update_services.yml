@@ -27,7 +27,12 @@ jobs:
           cd services-adapter-repo
           
           # Get the timestamp of the last successful build from build.txt
-          LAST_BUILD_TIMESTAMP=$(curl -s https://github.com/MafiaHub/Framework/releases/download/MafiaHub-Services/build.txt || echo "0")
+          LAST_BUILD_TIMESTAMP=$(curl -s -f https://github.com/MafiaHub/Framework/releases/download/MafiaHub-Services/build.txt || echo "0")
+          
+          # Make sure we have a valid number
+          if ! [[ "$LAST_BUILD_TIMESTAMP" =~ ^[0-9]+$ ]]; then
+            LAST_BUILD_TIMESTAMP=0
+          fi
           
           # Convert UNIX timestamp to date format for git log (Linux format)
           if [ "$LAST_BUILD_TIMESTAMP" -gt 0 ]; then
@@ -53,10 +58,27 @@ jobs:
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
+  notify_start:
+    name: Send Start Notification
+    needs: check_submodule
+    if: github.event_name == 'workflow_dispatch' || needs.check_submodule.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+            webhook: ${{ secrets.RELEASES_WEBHOOK }}
+            title: "MafiaHub Services updating..."
+            nodetail: true
+            description: |
+              Do not sync your Framework repository until this process is finished.
+            color: 0x440000
+            username: MafiaHub Services
+            
   build:
     name: Build MafiaHubServices on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: check_submodule
+    needs: notify_start
     if: github.event_name == 'workflow_dispatch' || needs.check_submodule.outputs.should_build == 'true'
     strategy:
       fail-fast: false
@@ -119,17 +141,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Send Discord Notification
-        uses: sarisia/actions-status-discord@v1
-        with:
-            webhook: ${{ secrets.RELEASES_WEBHOOK }}
-            title: "MafiaHub Services updating..."
-            nodetail: true
-            description: |
-              Do not sync your Framework repository until this process is finished.
-            color: 0x440000
-            username: MafiaHub Services
-
       - name: Checkout repository
         uses: actions/checkout@v4
       
