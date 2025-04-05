@@ -10,19 +10,19 @@
 
 namespace Framework::Networking {
     class NetworkPeer;
-}; // namespace Framework::Networking
+} // namespace Framework::Networking
 
 namespace Framework::World {
     class Engine;
-}; // namespace Framework::World
+} // namespace Framework::World
 
 namespace Framework::Scripting {
     class Engine;
-}; // namespace Framework::Scripting
+} // namespace Framework::Scripting
 
 namespace Framework::GUI {
     class Manager;
-}; // namespace Framework::GUI
+} // namespace Framework::GUI
 
 namespace Framework {
 
@@ -88,4 +88,4 @@ namespace Framework {
         static inline GUI::Manager *_webManager {};
         static inline double _tickRate {1000 / 60.0f};
     };
-}; // namespace Framework
+} // namespace Framework
