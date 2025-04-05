@@ -13,6 +13,7 @@
 #include "networking/messages/client_connection_finalized.h"
 #include "utils/command_listener.h"
 #include "networking/messages/client_handshake.h"
+#include "cxxopts.hpp"
 #include "networking/messages/client_initialise_player.h"
 #include "networking/messages/client_request_streamer.h"
 #include "networking/messages/client_ready_assets.h"
@@ -30,6 +31,7 @@
 
 #include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/entity.h"
+#include "integrations/server/scripting/builtins/command_listener.h"
 
 #include "scripting/utils/table_conversions.h"
 
@@ -391,84 +393,115 @@ namespace Framework::Integrations::Server {
             this->HandleCommand(command);
         });
         
+        CoreModules::SetCommandListener(_commandListener.get());
+        
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener initialized");
     }
 
     void Instance::HandleCommand(const std::string &command) {
-        // Split the command into parts
-        std::istringstream iss(command);
-        std::vector<std::string> parts;
-        std::string part;
-        
-        while (iss >> part) {
-            parts.push_back(part);
-        }
-        
-        if (parts.empty()) {
-            return;
-        }
-        
-        const auto &cmd = parts[0];
-        
-        // Handle built-in commands
-        if (cmd == "help") {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:");
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  help - Show this help message");
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  stop - Stop the server");
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  reload - Reload server scripts");
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  kickall - Kick all connected peers");
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  status - Show server status");
-            // Add more commands as needed
-        }
-        else if (cmd == "stop") {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
-            PreShutdown();
-            Shutdown();
-        }
-        else if (cmd == "reload") {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
-            if (_scriptingModule) {
-                _scriptingModule->GetEngine()->ReloadScript();
+        try {
+            std::vector<std::string> args;
+            std::istringstream iss(command);
+            std::string arg;
+            
+            while (iss >> arg) {
+                args.push_back(arg);
             }
-        }
-        else if (cmd == "kickall") {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Kicking all connected peers...");
-            if (_networkingEngine) {
-                const auto net = _networkingEngine->GetNetworkServer();
-                const auto peer = net->GetPeer();
+            
+            if (args.empty()) {
+                return;
+            }
+            
+            const auto cmd = args[0];
+            
+            std::vector<char*> argv;
+            for (auto& arg : args) {
+                argv.push_back(const_cast<char*>(arg.c_str()));
+            }
+            
+            // Handle built-in commands
+            if (cmd == "help") {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  help - Show this help message");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  stop - Stop the server");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  reload - Reload server scripts");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  kickall - Kick all connected peers");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  status - Show server status");
+                // Add more commands as needed
+            }
+            else if (cmd == "stop") {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
+                PreShutdown();
+                Shutdown();
+            }
+            else if (cmd == "reload") {
+                cxxopts::Options options("reload", "Reload server scripts");
+                options.allow_unrecognised_options();
                 
-                for (unsigned int i = 0; i < peer->NumberOfConnections(); i++) {
-                    SLNet::SystemAddress addr;
-                    peer->GetSystemAddressFromIndex(i, addr);
-                    SLNet::RakNetGUID guid = peer->GetGUIDFromSystemAddress(addr);
+                const auto result = options.parse(static_cast<int>(argv.size()), argv.data());
+                
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
+                if (_scriptingModule) {
+                    _scriptingModule->GetEngine()->ReloadScript();
+                }
+            }
+            else if (cmd == "kickall") {
+                cxxopts::Options options("kickall", "Kick all connected peers");
+                options.allow_unrecognised_options();
+                
+                const auto result = options.parse(static_cast<int>(argv.size()), argv.data());
+                
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Kicking all connected peers...");
+                if (_networkingEngine) {
+                    const auto net = _networkingEngine->GetNetworkServer();
+                    const auto peer = net->GetPeer();
                     
-                    Framework::Networking::Messages::ClientKick kick;
-                    kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::KICKED);
-                    net->Send(kick, guid);
-                    peer->CloseConnection(guid, true);
+                    for (unsigned int i = 0; i < peer->NumberOfConnections(); i++) {
+                        SLNet::SystemAddress addr;
+                        peer->GetSystemAddressFromIndex(i, addr);
+                        SLNet::RakNetGUID guid = peer->GetGUIDFromSystemAddress(addr);
+                        
+                        Framework::Networking::Messages::ClientKick kick;
+                        kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::KICKED);
+                        net->Send(kick, guid);
+                        peer->CloseConnection(guid, true);
+                    }
+                }
+            }
+            else if (cmd == "status") {
+                cxxopts::Options options("status", "Show server status");
+                options.allow_unrecognised_options();
+                
+                const auto result = options.parse(static_cast<int>(argv.size()), argv.data());
+                
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Server status:");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Name: {}", _opts.modName);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Host: {}:{}", _opts.bindHost, _opts.bindPort);
+                
+                if (_networkingEngine) {
+                    const auto net = _networkingEngine->GetNetworkServer();
+                    const auto peer = net->GetPeer();
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
+                }
+            }
+            else {
+                // Try to handle the command through the scripting engine
+                if (_scriptingModule) {
+                    const auto eventName = "onServerCommand_" + cmd;
+                    if (_scriptingModule->GetEngine()->HasEvent(eventName)) {
+                        _scriptingModule->GetEngine()->InvokeEvent(eventName, command);
+                    }
+                    else {
+                        _scriptingModule->GetEngine()->InvokeEvent("onServerCommand", command);
+                    }
+                }
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", cmd);
                 }
             }
         }
-        else if (cmd == "status") {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Server status:");
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Name: {}", _opts.modName);
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Host: {}:{}", _opts.bindHost, _opts.bindPort);
-            
-            if (_networkingEngine) {
-                const auto net = _networkingEngine->GetNetworkServer();
-                const auto peer = net->GetPeer();
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
-            }
-        }
-        else {
-            // Try to handle the command through the scripting engine
-            if (_scriptingModule) {
-                // Forward the command to the scripting engine
-                _scriptingModule->GetEngine()->InvokeEvent("onServerCommand", command);
-            }
-            else {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", cmd);
-            }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", ex.what());
         }
     }
 
@@ -571,18 +604,7 @@ namespace Framework::Integrations::Server {
         // Register the entity builtin
         Framework::Integrations::Scripting::Entity::Register(engine->GetLuaEngine());
         Framework::Integrations::Scripting::EventsServer::Register(engine->GetLuaEngine());
-
-        // Register command API for mods
-        auto lua = engine->GetLuaEngine()->lua_state();
-        lua.new_usertype<Utils::CommandListener>("CommandListener",
-            "RegisterCommand", [this](const std::string &name, sol::function callback) {
-                // Register a custom command handler
-                engine->RegisterEvent("onServerCommand_" + name, callback);
-            }
-        );
-        
-        // Expose the command listener to scripts
-        lua["Server"]["CommandListener"] = _commandListener.get();
+        Framework::Integrations::Scripting::CommandListenerBuiltin::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
         ModuleRegister(engine);
