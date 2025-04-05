@@ -17,6 +17,8 @@
 #include "scripting/module.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
+#include "utils/command_listener.h"
+#include "utils/command_processor.h"
 #include "world/server.h"
 
 #include <flecs.h>
