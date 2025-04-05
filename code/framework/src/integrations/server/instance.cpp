@@ -393,8 +393,6 @@ namespace Framework::Integrations::Server {
             this->HandleCommand(command);
         });
         
-        CoreModules::SetCommandListener(_commandListener.get());
-        
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener initialized");
     }
 
