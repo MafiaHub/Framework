@@ -96,6 +96,7 @@ namespace Framework::Integrations::Server {
         std::shared_ptr<World::ServerEngine> _worldEngine;
         std::shared_ptr<Services::MasterlistConnector> _masterlist;
         std::shared_ptr<Utils::CommandListener> _commandListener;
+        std::shared_ptr<Utils::CommandProcessor> _commandProcessor;
 
         void InitEndpoints();
         void InitModules() const;
@@ -180,6 +181,11 @@ namespace Framework::Integrations::Server {
 
         std::shared_ptr<World::Archetypes::StreamingFactory> GetStreamingFactory() const {
             return _streamingFactory;
+        }
+        
+        // Register a custom command with the command processor
+        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
+            return _commandProcessor->RegisterCommand(name, options, proc, desc);
         }
     };
 } // namespace Framework::Integrations::Server

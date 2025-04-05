@@ -11,7 +11,7 @@
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
-#include "utils/command_listener.h"
+#include "utils/command_processor.h"
 #include "networking/messages/client_handshake.h"
 #include "cxxopts.hpp"
 #include "networking/messages/client_initialise_player.h"
@@ -52,6 +52,7 @@ namespace Framework::Integrations::Server {
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
         _commandListener  = std::make_shared<Utils::CommandListener>();
+        _commandProcessor = std::make_shared<Utils::CommandProcessor>();
     }
 
     Instance::~Instance() {
@@ -386,68 +387,45 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitCommandListener() {
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener...");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
         
-        // Set the command handler
         _commandListener->SetCommandHandler([this](const std::string &command) {
             this->HandleCommand(command);
         });
         
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener initialized");
-    }
-
-    void Instance::HandleCommand(const std::string &command) {
-        try {
-            std::vector<std::string> args;
-            std::istringstream iss(command);
-            std::string arg;
+        _commandProcessor->RegisterCommand(
+            "help", {},
+            [this](cxxopts::ParseResult &) {
+                std::stringstream ss;
+                for (const auto &name : _commandProcessor->GetCommandNames()) {
+                    ss << fmt::format("{} {:>8}\n", name, _commandProcessor->GetCommandInfo(name)->options->help());
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:\n{}", ss.str());
+            },
+            "Show this help message");
             
-            while (iss >> arg) {
-                args.push_back(arg);
-            }
-            
-            if (args.empty()) {
-                return;
-            }
-            
-            const auto cmd = args[0];
-            
-            std::vector<char*> argv;
-            for (auto& arg : args) {
-                argv.push_back(const_cast<char*>(arg.c_str()));
-            }
-            
-            // Handle built-in commands
-            if (cmd == "help") {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:");
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  help - Show this help message");
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  stop - Stop the server");
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  reload - Reload server scripts");
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  status - Show server status");
-                // Add more commands as needed
-            }
-            else if (cmd == "stop") {
+        _commandProcessor->RegisterCommand(
+            "stop", {},
+            [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
                 PreShutdown();
                 Shutdown();
-            }
-            else if (cmd == "reload") {
-                cxxopts::Options options("reload", "Reload server scripts");
-                options.allow_unrecognised_options();
-                
-                const auto result = options.parse(static_cast<int>(argv.size()), argv.data());
-                
+            },
+            "Stop the server");
+            
+        _commandProcessor->RegisterCommand(
+            "reload", {},
+            [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
                 if (_scriptingModule) {
                     _scriptingModule->ReloadScriptingEngine();
                 }
-            }
-            else if (cmd == "status") {
-                cxxopts::Options options("status", "Show server status");
-                options.allow_unrecognised_options();
-                
-                const auto result = options.parse(static_cast<int>(argv.size()), argv.data());
-                
+            },
+            "Reload server scripts");
+            
+        _commandProcessor->RegisterCommand(
+            "status", {},
+            [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Server status:");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Name: {}", _opts.modName);
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Host: {}:{}", _opts.bindHost, _opts.bindPort);
@@ -457,9 +435,32 @@ namespace Framework::Integrations::Server {
                     const auto peer = net->GetPeer();
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
                 }
-            }
-            else {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", cmd);
+            },
+            "Show server status");
+        
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
+    }
+
+    void Instance::HandleCommand(const std::string &command) {
+        try {
+            auto result = _commandProcessor->ProcessCommand(command);
+            if (result.HasError()) {
+                switch (result.GetError()) {
+                    case Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
+                        break;
+                    case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", result.GetValue());
+                        break;
+                    case Utils::CommandProcessorError::ERROR_EMPTY_INPUT:
+                        break;
+                    case Utils::CommandProcessorError::ERROR_INTERNAL:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", result.GetValue());
+                        break;
+                    default:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", static_cast<int>(result.GetError()));
+                        break;
+                }
             }
         }
         catch (const std::exception &ex) {
