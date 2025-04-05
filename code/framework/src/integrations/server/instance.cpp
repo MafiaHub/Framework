@@ -31,7 +31,7 @@
 
 #include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/entity.h"
-#include "integrations/server/scripting/builtins/command_listener.h"
+
 
 #include "scripting/utils/table_conversions.h"
 
@@ -425,7 +425,6 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  help - Show this help message");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  stop - Stop the server");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  reload - Reload server scripts");
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  kickall - Kick all connected peers");
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  status - Show server status");
                 // Add more commands as needed
             }
@@ -442,30 +441,7 @@ namespace Framework::Integrations::Server {
                 
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
                 if (_scriptingModule) {
-                    _scriptingModule->GetEngine()->ReloadScript();
-                }
-            }
-            else if (cmd == "kickall") {
-                cxxopts::Options options("kickall", "Kick all connected peers");
-                options.allow_unrecognised_options();
-                
-                const auto result = options.parse(static_cast<int>(argv.size()), argv.data());
-                
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Kicking all connected peers...");
-                if (_networkingEngine) {
-                    const auto net = _networkingEngine->GetNetworkServer();
-                    const auto peer = net->GetPeer();
-                    
-                    for (unsigned int i = 0; i < peer->NumberOfConnections(); i++) {
-                        SLNet::SystemAddress addr;
-                        peer->GetSystemAddressFromIndex(i, addr);
-                        SLNet::RakNetGUID guid = peer->GetGUIDFromSystemAddress(addr);
-                        
-                        Framework::Networking::Messages::ClientKick kick;
-                        kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::KICKED);
-                        net->Send(kick, guid);
-                        peer->CloseConnection(guid, true);
-                    }
+                    _scriptingModule->ReloadScriptingEngine();
                 }
             }
             else if (cmd == "status") {
@@ -485,19 +461,7 @@ namespace Framework::Integrations::Server {
                 }
             }
             else {
-                // Try to handle the command through the scripting engine
-                if (_scriptingModule) {
-                    const auto eventName = "onServerCommand_" + cmd;
-                    if (_scriptingModule->GetEngine()->HasEvent(eventName)) {
-                        _scriptingModule->GetEngine()->InvokeEvent(eventName, command);
-                    }
-                    else {
-                        _scriptingModule->GetEngine()->InvokeEvent("onServerCommand", command);
-                    }
-                }
-                else {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", cmd);
-                }
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", cmd);
             }
         }
         catch (const std::exception &ex) {
@@ -604,7 +568,6 @@ namespace Framework::Integrations::Server {
         // Register the entity builtin
         Framework::Integrations::Scripting::Entity::Register(engine->GetLuaEngine());
         Framework::Integrations::Scripting::EventsServer::Register(engine->GetLuaEngine());
-        Framework::Integrations::Scripting::CommandListenerBuiltin::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
         ModuleRegister(engine);
