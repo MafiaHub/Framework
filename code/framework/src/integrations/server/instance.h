@@ -95,13 +95,18 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Utils::Config> _fileConfig;
         std::shared_ptr<World::ServerEngine> _worldEngine;
         std::shared_ptr<Services::MasterlistConnector> _masterlist;
+        std::shared_ptr<Utils::CommandListener> _commandListener;
 
         void InitEndpoints();
         void InitModules() const;
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
+        void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
+        
+        // Command handlers
+        void HandleCommand(const std::string &command);
 
         // managers
         flecs::entity _weatherManager;
