@@ -16,7 +16,7 @@
 namespace Framework::Integrations::Scripting {
     class CommandListenerBuiltin {
       private:
-        static void RegisterCommand(const std::string &name, sol::function callback) {
+        static void RegisterCommand(const std::string &name, const sol::function &callback) {
             if (CoreModules::GetScriptingEngine()) {
                 CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
             }
@@ -24,11 +24,8 @@ namespace Framework::Integrations::Scripting {
 
       public:
         static void Register(sol::state *luaEngine) {
-            // Create a CommandListener table in the Server namespace
-            (*luaEngine)["Server"]["CommandListener"] = luaEngine->create_table();
-            
-            // Register methods directly in the table
-            (*luaEngine)["Server"]["CommandListener"]["register"] = &CommandListenerBuiltin::RegisterCommand;
+            // Register the CommandListener functions in the Server table
+            (*luaEngine)["Server"]["RegisterCommand"] = &CommandListenerBuiltin::RegisterCommand;
         }
     };
 } // namespace Framework::Integrations::Scripting
