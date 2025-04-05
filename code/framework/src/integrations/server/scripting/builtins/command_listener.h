@@ -18,20 +18,17 @@ namespace Framework::Integrations::Scripting {
       private:
         static void RegisterCommand(const std::string &name, sol::function callback) {
             if (CoreModules::GetScriptingEngine()) {
-                CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
+🍌🍌🍌🍌                CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
             }
         }
 
       public:
         static void Register(sol::state *luaEngine) {
-            // Add the CommandListener to the Server table
-            sol::usertype<CommandListenerBuiltin> cls = luaEngine->new_usertype<CommandListenerBuiltin>("CommandListener");
-            
-            // Register methods
-            cls["register"] = &CommandListenerBuiltin::RegisterCommand;
-            
-            // Add the CommandListener to the Server table
-            (*luaEngine)["Server"]["CommandListener"] = cls;
+            // Create a CommandListener table in the Server namespace
+            (*luaEngine)["Server"]["CommandListener"] = luaEngine->create_table();
+
+            // Register methods directly in the table
+            (*luaEngine)["Server"]["CommandListener"]["register"] = &CommandListenerBuiltin::RegisterCommand;
         }
     };
 } // namespace Framework::Integrations::Scripting
