@@ -18,7 +18,7 @@ namespace Framework::Integrations::Scripting {
       private:
         static void RegisterCommand(const std::string &name, sol::function callback) {
             if (CoreModules::GetScriptingEngine()) {
-🍌🍌🍌🍌                CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
+                CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
             }
         }
 
