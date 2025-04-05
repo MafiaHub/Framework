@@ -15,6 +15,7 @@
 
 .vscode
 .vs
+.cursor
 
 *.a
 *.dylib
