@@ -18,14 +18,18 @@ namespace Framework::Integrations::Scripting {
         static void Register(sol::state *luaEngine) {
             sol::usertype<Utils::CommandListener> cls = luaEngine->new_usertype<Utils::CommandListener>("CommandListener");
             
-            // Register the command listener in the Server table
-            (*luaEngine)["Server"]["CommandListener"] = CoreModules::GetCommandListener();
-            
-            // Register the RegisterCommand function
-            (*luaEngine)["Server"]["RegisterCommand"] = [](const std::string &name, sol::function callback) {
+            // Add methods to the CommandListener usertype
+            cls["RegisterCommand"] = [](Utils::CommandListener*, const std::string &name, sol::function callback) {
                 // Register a custom command handler
-                CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
+                if (CoreModules::GetScriptingEngine()) {
+                    CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
+                }
             };
+            
+            // Register the command listener in the Server table if available
+            if (CoreModules::GetCommandListener()) {
+                (*luaEngine)["Server"]["CommandListener"] = CoreModules::GetCommandListener();
+            }
         }
     };
 } // namespace Framework::Integrations::Scripting
