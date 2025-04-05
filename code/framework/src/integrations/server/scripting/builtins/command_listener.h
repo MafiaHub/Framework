@@ -24,12 +24,11 @@ namespace Framework::Integrations::Scripting {
 
       public:
         static void Register(sol::state *luaEngine) {
-            sol::usertype<CommandListenerBuiltin> cls = luaEngine->new_usertype<CommandListenerBuiltin>("CommandListener");
+            // Create a CommandListener table in the Server namespace
+            (*luaEngine)["Server"]["CommandListener"] = luaEngine->create_table();
             
-            cls["register"] = &CommandListenerBuiltin::RegisterCommand;
-            
-            // Add the CommandListener to the Server table
-            (*luaEngine)["Server"]["CommandListener"] = cls;
+            // Register methods directly in the table
+            (*luaEngine)["Server"]["CommandListener"]["register"] = &CommandListenerBuiltin::RegisterCommand;
         }
     };
 } // namespace Framework::Integrations::Scripting
