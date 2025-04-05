@@ -444,18 +444,18 @@ namespace Framework::Integrations::Server {
     void Instance::HandleCommand(const std::string &command) {
         try {
             auto result = _commandProcessor->ProcessCommand(command);
-            if (result.HasError()) {
+            if (result.GetError() != Utils::CommandProcessorError::ERROR_NONE) {
                 switch (result.GetError()) {
                     case Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.Unwrap());
                         break;
                     case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", result.GetValue());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", result.Unwrap());
                         break;
                     case Utils::CommandProcessorError::ERROR_EMPTY_INPUT:
                         break;
                     case Utils::CommandProcessorError::ERROR_INTERNAL:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", result.GetValue());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", result.Unwrap());
                         break;
                     default:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", static_cast<int>(result.GetError()));
