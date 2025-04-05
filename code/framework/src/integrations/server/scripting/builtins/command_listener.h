@@ -9,27 +9,29 @@
 #pragma once
 
 #include <sol/sol.hpp>
+
 #include "utils/command_listener.h"
 #include "core_modules.h"
 
 namespace Framework::Integrations::Scripting {
     class CommandListenerBuiltin {
+      private:
+        static void RegisterCommand(const std::string &name, sol::function callback) {
+            if (CoreModules::GetScriptingEngine()) {
+                CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
+            }
+        }
+
       public:
         static void Register(sol::state *luaEngine) {
-            sol::usertype<Utils::CommandListener> cls = luaEngine->new_usertype<Utils::CommandListener>("CommandListener");
+            // Add the CommandListener to the Server table
+            sol::usertype<CommandListenerBuiltin> cls = luaEngine->new_usertype<CommandListenerBuiltin>("CommandListener");
             
-            // Add methods to the CommandListener usertype
-            cls["RegisterCommand"] = [](Utils::CommandListener*, const std::string &name, sol::function callback) {
-                // Register a custom command handler
-                if (CoreModules::GetScriptingEngine()) {
-                    CoreModules::GetScriptingEngine()->RegisterEvent("onServerCommand_" + name, callback);
-                }
-            };
+            // Register methods
+            cls["register"] = &CommandListenerBuiltin::RegisterCommand;
             
-            // Register the command listener in the Server table if available
-            if (CoreModules::GetCommandListener()) {
-                (*luaEngine)["Server"]["CommandListener"] = CoreModules::GetCommandListener();
-            }
+            // Add the CommandListener to the Server table
+            (*luaEngine)["Server"]["CommandListener"] = cls;
         }
     };
 } // namespace Framework::Integrations::Scripting
