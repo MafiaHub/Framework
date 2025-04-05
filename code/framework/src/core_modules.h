@@ -10,23 +10,19 @@
 
 namespace Framework::Networking {
     class NetworkPeer;
-} // namespace Framework::Networking
+}; // namespace Framework::Networking
 
 namespace Framework::World {
     class Engine;
-} // namespace Framework::World
+}; // namespace Framework::World
 
 namespace Framework::Scripting {
     class Engine;
-} // namespace Framework::Scripting
+}; // namespace Framework::Scripting
 
 namespace Framework::GUI {
     class Manager;
-} // namespace Framework::GUI
-
-namespace Framework::Utils {
-    class CommandListener;
-} // namespace Framework::Utils
+}; // namespace Framework::GUI
 
 namespace Framework {
 
@@ -41,7 +37,6 @@ namespace Framework {
             _networkPeer     = nullptr;
             _engine          = nullptr;
             _scriptingEngine = nullptr;
-            _commandListener = nullptr;
         }
 
         // Singleton setters
@@ -59,10 +54,6 @@ namespace Framework {
 
         static void SetWebManager(GUI::Manager *manager) {
             _webManager = manager;
-        }
-
-        static void SetCommandListener(Utils::CommandListener *listener) {
-            _commandListener = listener;
         }
 
         static void SetTickRate(double tickRate) {
@@ -86,10 +77,6 @@ namespace Framework {
             return _webManager;
         }
 
-        static Utils::CommandListener *GetCommandListener() {
-            return _commandListener;
-        }
-
         static double GetTickRate() {
             return _tickRate;
         }
@@ -99,7 +86,6 @@ namespace Framework {
         static inline World::Engine *_engine {};
         static inline Scripting::Engine *_scriptingEngine {};
         static inline GUI::Manager *_webManager {};
-        static inline Utils::CommandListener *_commandListener {};
         static inline double _tickRate {1000 / 60.0f};
     };
-} // namespace Framework
+}; // namespace Framework
