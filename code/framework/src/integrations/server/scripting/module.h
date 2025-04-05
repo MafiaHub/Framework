@@ -72,7 +72,9 @@ namespace Framework::Integrations::Server::Scripting {
 
       private:
         void UpdateFileWatcher();
-        void ReloadScriptingEngine();
         void SetupWatchPath(const std::string &path);
+        
+      public:
+        void ReloadScriptingEngine();
     };
 } // namespace Framework::Integrations::Server::Scripting
