@@ -29,8 +29,7 @@ namespace Framework::Integrations::Scripting {
         Framework::GUI::Manager *_webManager;
         Framework::GUI::View *_view;
 
-        sol::function _onWindowObjectReadyCallback {};
-        sol::function _onDOMReadyCallback {};
+        sol::function _onViewInit {};
 
         using EventMeta = std::pair<int, std::string>;
 
@@ -116,21 +115,12 @@ namespace Framework::Integrations::Scripting {
 
                         InvokeEvent(EventMeta(viewId, eventName), payload);
                     };
-
-                    if (_onWindowObjectReadyCallback.valid()) {
-                        sol::protected_function pf {_onWindowObjectReadyCallback};
-                        auto result = pf(viewId, frame_id, is_main_frame, url);
-                        if (!result.valid()) {
-                            sol::error err = result;
-                            spdlog::error(err.what());
-                        }
-                    }
                 });
 
                 // Hook up a DOMContentLoaded callback
                 _view->SetOnDOMReadyCallback([viewId, this](uint64_t frame_id, bool is_main_frame, std::string url) {
-                    if (_onDOMReadyCallback.valid()) {
-                        sol::protected_function pf {_onDOMReadyCallback};
+                    if (_onViewInit.valid()) {
+                        sol::protected_function pf {_onViewInit};
                         auto result = pf(viewId, frame_id, is_main_frame, url);
                         if (!result.valid()) {
                             sol::error err = result;
@@ -228,12 +218,8 @@ namespace Framework::Integrations::Scripting {
             return "";
         }
 
-        void SetOnWindowObjectReadyCallback(sol::function callback) {
-            _onWindowObjectReadyCallback = callback;
-        }
-
-        void SetOnDOMReadyCallback(sol::function callback) {
-            _onDOMReadyCallback = callback;
+        void SetOnViewInit(sol::function callback) {
+            _onViewInit = callback;
         }
     };
 
@@ -274,8 +260,7 @@ namespace Framework::Integrations::Scripting {
             viewWrapperType["getDisplay"]    = &ViewWrapper::ShouldDisplay;
             viewWrapperType["on"]            = &ViewWrapper::ListenEvent;
             viewWrapperType["emit"]          = &ViewWrapper::InvokeJSEvent;
-            viewWrapperType["onWindowReady"] = &ViewWrapper::SetOnWindowObjectReadyCallback;
-            viewWrapperType["onDOMReady"]    = &ViewWrapper::SetOnDOMReadyCallback;
+            viewWrapperType["onViewInit"] = &ViewWrapper::SetOnViewInit;
             viewWrapperType["destroy"]       = &ViewWrapper::Destroy;
 
             // TODO: consider whether we want to expose raw JS calls to the user
