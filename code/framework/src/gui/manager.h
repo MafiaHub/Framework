@@ -57,6 +57,7 @@ namespace Framework::GUI {
         bool DestroyView(int);
 
         void CleanupViews();
+        bool IsAnyViewFocused() const;
 
         void Update();
         void Render();

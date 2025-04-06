@@ -185,4 +185,14 @@ namespace Framework::GUI {
            }
        }
     }
+
+    bool Manager::IsAnyViewFocused() const {
+        for (const auto &view : _views) {
+            if (view->HasFocus()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 } // namespace Framework::GUI
