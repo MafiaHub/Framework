@@ -29,6 +29,9 @@ namespace Framework::Integrations::Scripting {
         Framework::GUI::Manager *_webManager;
         Framework::GUI::View *_view;
 
+        sol::function _onWindowObjectReadyCallback {};
+        sol::function _onDOMReadyCallback {};
+
         using EventMeta = std::pair<int, std::string>;
 
         static inline std::map<EventMeta, Framework::Scripting::EventHandler> _eventHandlers = {};
@@ -39,7 +42,7 @@ namespace Framework::Integrations::Scripting {
                 _view = _webManager->GetView(_viewId);
 
                 // Hook up a window object ready callback
-                _view->SetOnWindowObjectReadyCallback([viewId](uint64_t frame_id, bool is_main_frame, std::string url) {
+                _view->SetOnWindowObjectReadyCallback([viewId, this](uint64_t frame_id, bool is_main_frame, std::string url) {
                     const auto view = Framework::CoreModules::GetGUIManager()->GetView(viewId);
                     const auto sdk  = view->GetSDK();
 
@@ -70,9 +73,9 @@ namespace Framework::Integrations::Scripting {
                     view->EvaluateScript(eventBootstrappingModule);
 
                     // Bind emit function
-                    obj["emit"] = [viewId](const JavaScriptCorePP::JSContext &context, const std::vector<JavaScriptCorePP::JSValue> &args, JavaScriptCorePP::JSValue &returnValue, JavaScriptCorePP::JSValue &returnException) {
+                    obj["emit"] = [viewId, this](const JavaScriptCorePP::JSContext &context, const std::vector<JavaScriptCorePP::JSValue> &args, JavaScriptCorePP::JSValue &returnValue, JavaScriptCorePP::JSValue &returnException) {
                         // Make sure there is only two arguments
-                        if (args.size() != 2) {
+                        if (args.size() == 0) {
                             returnException = context.CreateString("Invalid argument count: emit(string, object | string | null)");
                             return;
                         }
@@ -92,7 +95,7 @@ namespace Framework::Integrations::Scripting {
                         sol::object payload {};
                         if (args[1].IsObject() || args[1].IsString()) {
                             try {
-                                std::string payloadStr;
+                                std::string payloadStr = "{}";
 
                                 if (args[1].IsString()) {
                                     payloadStr = args[1].GetString();
@@ -113,6 +116,27 @@ namespace Framework::Integrations::Scripting {
 
                         InvokeEvent(EventMeta(viewId, eventName), payload);
                     };
+
+                    if (_onWindowObjectReadyCallback.valid()) {
+                        sol::protected_function pf {_onWindowObjectReadyCallback};
+                        auto result = pf(viewId, frame_id, is_main_frame, url);
+                        if (!result.valid()) {
+                            sol::error err = result;
+                            spdlog::error(err.what());
+                        }
+                    }
+                });
+
+                // Hook up a DOMContentLoaded callback
+                _view->SetOnDOMReadyCallback([viewId, this](uint64_t frame_id, bool is_main_frame, std::string url) {
+                    if (_onDOMReadyCallback.valid()) {
+                        sol::protected_function pf {_onDOMReadyCallback};
+                        auto result = pf(viewId, frame_id, is_main_frame, url);
+                        if (!result.valid()) {
+                            sol::error err = result;
+                            spdlog::error(err.what());
+                        }
+                    }
                 });
             }
         }
@@ -203,11 +227,19 @@ namespace Framework::Integrations::Scripting {
             }
             return "";
         }
+
+        void SetOnWindowObjectReadyCallback(sol::function callback) {
+            _onWindowObjectReadyCallback = callback;
+        }
+
+        void SetOnDOMReadyCallback(sol::function callback) {
+            _onDOMReadyCallback = callback;
+        }
     };
 
     class Views {
       private:
-        static ViewWrapper CreateView(const std::string &url, int width = 0, int height = 0, int x = 0, int y = 0) {
+        static ViewWrapper *CreateView(const std::string &url, int width = 0, int height = 0, int x = 0, int y = 0) {
             auto guiManager = Framework::CoreModules::GetGUIManager();
             if (!guiManager) {
                 throw std::runtime_error("GUI Manager is not initialized");
@@ -225,7 +257,7 @@ namespace Framework::Integrations::Scripting {
             // ensures the view is destroyed on gamemode reload or server disconnect
             view->SetGarbageCollected(true);
 
-            return ViewWrapper(viewId, guiManager);
+            return new ViewWrapper(viewId, guiManager);
         }
 
       public:
@@ -233,16 +265,18 @@ namespace Framework::Integrations::Scripting {
             // Register the ViewWrapper class
             sol::usertype<ViewWrapper> viewWrapperType = luaEngine->new_usertype<ViewWrapper>("View", sol::no_constructor);
 
-            viewWrapperType["create"]      = &Views::CreateView;
-            viewWrapperType["getId"]       = &ViewWrapper::GetId;
-            viewWrapperType["setPosition"] = &ViewWrapper::SetPosition;
-            viewWrapperType["setFocus"]    = &ViewWrapper::Focus;
-            viewWrapperType["getFocus"]    = &ViewWrapper::HasFocus;
-            viewWrapperType["setDisplay"]  = &ViewWrapper::Display;
-            viewWrapperType["getDisplay"]  = &ViewWrapper::ShouldDisplay;
-            viewWrapperType["on"]          = &ViewWrapper::ListenEvent;
-            viewWrapperType["emit"]        = &ViewWrapper::InvokeJSEvent;
-            viewWrapperType["destroy"]     = &ViewWrapper::Destroy;
+            viewWrapperType["create"]        = &Views::CreateView;
+            viewWrapperType["getId"]         = &ViewWrapper::GetId;
+            viewWrapperType["setPosition"]   = &ViewWrapper::SetPosition;
+            viewWrapperType["setFocus"]      = &ViewWrapper::Focus;
+            viewWrapperType["getFocus"]      = &ViewWrapper::HasFocus;
+            viewWrapperType["setDisplay"]    = &ViewWrapper::Display;
+            viewWrapperType["getDisplay"]    = &ViewWrapper::ShouldDisplay;
+            viewWrapperType["on"]            = &ViewWrapper::ListenEvent;
+            viewWrapperType["emit"]          = &ViewWrapper::InvokeJSEvent;
+            viewWrapperType["onWindowReady"] = &ViewWrapper::SetOnWindowObjectReadyCallback;
+            viewWrapperType["onDOMReady"]    = &ViewWrapper::SetOnDOMReadyCallback;
+            viewWrapperType["destroy"]       = &ViewWrapper::Destroy;
 
             // TODO: consider whether we want to expose raw JS calls to the user
             // viewWrapperType["evaluateScript"]                 = &ViewWrapper::EvaluateScript;

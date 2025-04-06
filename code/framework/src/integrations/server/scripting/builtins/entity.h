@@ -68,6 +68,7 @@ namespace Framework::Integrations::Scripting {
                 throw std::runtime_error(fmt::format("Error in Entity::EmitEvent: {}", e.what()));
             }
         }
+
       public:
         Entity(flecs::entity ent) {
             _ent = ent;
@@ -220,32 +221,39 @@ namespace Framework::Integrations::Scripting {
 
         static void Register(sol::state *luaEngine) {
             sol::usertype<Entity> cls = luaEngine->new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
-            cls["id"] = sol::property([](const Entity& self) { return self.GetID(); });
-            cls["name"] = sol::property([](const Entity& self) { return self.GetName(); });
-            cls["nickname"] = sol::property([](const Entity& self) { return self.GetNickname(); });
+            cls["id"]                 = sol::property([](const Entity &self) {
+                return self.GetID();
+            });
+            cls["name"]               = sol::property([](const Entity &self) {
+                return self.GetName();
+            });
+            cls["nickname"]           = sol::property([](const Entity &self) {
+                return self.GetNickname();
+            });
 
-            cls["destroy"] = &Entity::Destroy;
-            cls["getAlwaysVisible"] = &Entity::IsAlwaysVisible;
-            cls["getModelHash"] = &Entity::GetModelHash;
-            cls["getModelName"] = &Entity::GetModelName;
-            cls["getPosition"] = &Entity::GetPosition;
-            cls["getRotation"] = &Entity::GetRotation;
-            cls["getScale"] = &Entity::GetScale;
+            cls["destroy"]           = &Entity::Destroy;
+            cls["emit"]              = &Entity::EmitEvent;
+            cls["getAlwaysVisible"]  = &Entity::IsAlwaysVisible;
+            cls["getModelHash"]      = &Entity::GetModelHash;
+            cls["getModelName"]      = &Entity::GetModelName;
+            cls["getPosition"]       = &Entity::GetPosition;
+            cls["getRotation"]       = &Entity::GetRotation;
+            cls["getScale"]          = &Entity::GetScale;
             cls["getUpdateInterval"] = &Entity::GetUpdateInterval;
-            cls["getVelocity"] = &Entity::GetVelocity;
-            cls["getVirtualWorld"] = &Entity::GetVirtualWorld;
-            cls["getVisible"] = &Entity::IsVisible;
-            cls["setAlwaysVisible"] = &Entity::SetAlwaysVisible;
-            cls["setModelHash"] = &Entity::SetModelHash;
-            cls["setModelName"] = &Entity::SetModelName;
-            cls["setPosition"] = &Entity::SetPosition;
-            cls["setRotation"] = &Entity::SetRotation;
-            cls["setScale"] = &Entity::SetScale;
+            cls["getVelocity"]       = &Entity::GetVelocity;
+            cls["getVirtualWorld"]   = &Entity::GetVirtualWorld;
+            cls["getVisible"]        = &Entity::IsVisible;
+            cls["setAlwaysVisible"]  = &Entity::SetAlwaysVisible;
+            cls["setModelHash"]      = &Entity::SetModelHash;
+            cls["setModelName"]      = &Entity::SetModelName;
+            cls["setPosition"]       = &Entity::SetPosition;
+            cls["setRotation"]       = &Entity::SetRotation;
+            cls["setScale"]          = &Entity::SetScale;
             cls["setUpdateInterval"] = &Entity::SetUpdateInterval;
-            cls["setVelocity"] = &Entity::SetVelocity;
-            cls["setVirtualWorld"] = &Entity::SetVirtualWorld;
-            cls["setVisible"] = &Entity::SetVisible;
-            cls["toString"] = &Entity::ToString;
+            cls["setVelocity"]       = &Entity::SetVelocity;
+            cls["setVirtualWorld"]   = &Entity::SetVirtualWorld;
+            cls["setVisible"]        = &Entity::SetVisible;
+            cls["toString"]          = &Entity::ToString;
         }
     };
 } // namespace Framework::Integrations::Scripting

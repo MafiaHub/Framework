@@ -14193,6 +14193,13 @@ namespace sol { namespace stack {
 	struct unqualified_getter<detail::as_value_tag<T>> {
 		static T* get_no_lua_nil(lua_State* L, int index, record& tracking) {
 			void* memory = lua_touserdata(L, index);
+
+            // zaklaus: handle nullptr case
+            if (memory == nullptr) {
+                tracking.use(1);
+                return nullptr;
+            }
+
 #if SOL_IS_ON(SOL_USE_INTEROP)
 			auto ugr = stack_detail::interop_get<T>(L, index, memory, tracking);
 			if (ugr.first) {
