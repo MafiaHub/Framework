@@ -26,6 +26,7 @@
 
 #include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/views.h"
+#include "scripting/builtins/input.h"
 
 #include "networking/state.h"
 
@@ -143,6 +144,10 @@ namespace Framework::Integrations::Client {
 
         PostInit();
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Mod subsystems initialized");
+
+        
+        // Store reference to the input system
+        CoreModules::SetInput(GetBaseInput());
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
         _initialized = true;
@@ -515,6 +520,7 @@ namespace Framework::Integrations::Client {
         // Register the events builtin
         Framework::Integrations::Scripting::EventsClient::Register(engine->GetLuaEngine());
         Framework::Integrations::Scripting::Views::Register(engine->GetLuaEngine());
+        Framework::Integrations::Scripting::Input::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
         ModuleRegister(engine);

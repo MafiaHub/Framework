@@ -10,19 +10,23 @@
 
 namespace Framework::Networking {
     class NetworkPeer;
-}; // namespace Framework::Networking
+} // namespace Framework::Networking
 
 namespace Framework::World {
     class Engine;
-}; // namespace Framework::World
+} // namespace Framework::World
 
 namespace Framework::Scripting {
     class Engine;
-}; // namespace Framework::Scripting
+} // namespace Framework::Scripting
 
 namespace Framework::GUI {
     class Manager;
-}; // namespace Framework::GUI
+} // namespace Framework::GUI
+
+namespace Framework::Input {
+    class IInput;
+} // namespace Framework::Input
 
 namespace Framework {
 
@@ -37,6 +41,8 @@ namespace Framework {
             _networkPeer     = nullptr;
             _engine          = nullptr;
             _scriptingEngine = nullptr;
+            _webManager      = nullptr;
+            _input           = nullptr;
         }
 
         // Singleton setters
@@ -54,6 +60,10 @@ namespace Framework {
 
         static void SetWebManager(GUI::Manager *manager) {
             _webManager = manager;
+        }
+
+        static void SetInput(Input::IInput *input) {
+            _input = input;
         }
 
         static void SetTickRate(double tickRate) {
@@ -77,6 +87,10 @@ namespace Framework {
             return _webManager;
         }
 
+        static Input::IInput *GetInput() {
+            return _input;
+        }
+
         static double GetTickRate() {
             return _tickRate;
         }
@@ -86,6 +100,7 @@ namespace Framework {
         static inline World::Engine *_engine {};
         static inline Scripting::Engine *_scriptingEngine {};
         static inline GUI::Manager *_webManager {};
+        static inline Input::IInput *_input {};
         static inline double _tickRate {1000 / 60.0f};
     };
-}; // namespace Framework
+} // namespace Framework
