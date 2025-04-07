@@ -191,6 +191,13 @@ namespace Framework::Integrations::Scripting {
             }
         }
 
+        int GetZIndex() const {
+            if (_view) {
+                return _view->GetZIndex();
+            }
+            return 0;
+        }
+
         void Focus(bool enable) {
             if (_view) {
                 _view->Focus(enable);
@@ -261,6 +268,7 @@ namespace Framework::Integrations::Scripting {
             viewWrapperType["getId"]         = &ViewWrapper::GetId;
             viewWrapperType["setPosition"]   = &ViewWrapper::SetPosition;
             viewWrapperType["setZIndex"]     = &ViewWrapper::SetZIndex;
+            viewWrapperType["getZIndex"]     = &ViewWrapper::GetZIndex;
             viewWrapperType["setFocus"]      = &ViewWrapper::Focus;
             viewWrapperType["getFocus"]      = &ViewWrapper::HasFocus;
             viewWrapperType["setDisplay"]    = &ViewWrapper::Display;
