@@ -8,35 +8,31 @@
 
 #include "instance.h"
 
+#include "core_modules.h"
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
 #include "networking/messages/client_handshake.h"
 #include "networking/messages/client_initialise_player.h"
-#include "networking/messages/client_request_streamer.h"
-#include "networking/messages/client_ready_assets.h"
 #include "networking/messages/client_kick.h"
+#include "networking/messages/client_ready_assets.h"
+#include "networking/messages/client_request_streamer.h"
 #include "networking/messages/messages.h"
-
 #include "integrations/shared/rpc/emit_lua_event.h"
 
-#include "../shared/modules/mod.hpp"
-
-#include "utils/version.h"
-#include "utils/path.h"
-
-#include "cxxopts.hpp"
-
-#include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/entity.h"
-
+#include "scripting/builtins/events_lua.h"
 #include "scripting/utils/table_conversions.h"
 
+#include "utils/command_processor.h"
+#include "utils/path.h"
+#include "utils/version.h"
+#include "../shared/modules/mod.hpp"
+
+#include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <csignal>
-
-#include "core_modules.h"
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false), _shuttingDown(false) {
@@ -48,6 +44,8 @@ namespace Framework::Integrations::Server {
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
+        _commandListener  = std::make_shared<Utils::CommandListener>();
+        _commandProcessor = std::make_shared<Utils::CommandProcessor>();
     }
 
     Instance::~Instance() {
@@ -133,6 +131,9 @@ namespace Framework::Integrations::Server {
 
         // Initialize default messages
         InitNetworkingMessages();
+
+        // Initialize command listener
+        InitCommandListener();
 
         // Initialize mod subsystems
         PostInit();
@@ -378,6 +379,88 @@ namespace Framework::Integrations::Server {
         }
     }
 
+    void Instance::InitCommandListener() {
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
+        
+        _commandListener->SetCommandHandler([this](const std::string &command) {
+            this->HandleCommand(command);
+        });
+        
+        _commandProcessor->RegisterCommand(
+            "help", {},
+            [this](cxxopts::ParseResult &) {
+                std::stringstream ss;
+                for (const auto &name : _commandProcessor->GetCommandNames()) {
+                    ss << fmt::format("{} {:>8}\n", name, _commandProcessor->GetCommandInfo(name)->options->help());
+                }
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Available commands:\n{}", ss.str());
+            },
+            "Show this help message");
+            
+        _commandProcessor->RegisterCommand(
+            "stop", {},
+            [this](cxxopts::ParseResult &) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
+                PreShutdown();
+                Shutdown();
+            },
+            "Stop the server");
+            
+        _commandProcessor->RegisterCommand(
+            "reload", {},
+            [this](cxxopts::ParseResult &) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
+                if (_scriptingModule) {
+                    _scriptingModule->ReloadScriptingEngine();
+                }
+            },
+            "Reload server scripts");
+            
+        _commandProcessor->RegisterCommand(
+            "status", {},
+            [this](cxxopts::ParseResult &) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Server status:");
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Name: {}", _opts.modName);
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Host: {}:{}", _opts.bindHost, _opts.bindPort);
+                
+                if (_networkingEngine) {
+                    const auto net = _networkingEngine->GetNetworkServer();
+                    const auto peer = net->GetPeer();
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("  Players: {}/{}", peer->NumberOfConnections(), _opts.maxPlayers);
+                }
+            },
+            "Show server status");
+        
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
+    }
+
+    void Instance::HandleCommand(const std::string &command) {
+        try {
+            auto result = _commandProcessor->ProcessCommand(command);
+            if (result.GetError() != Utils::CommandProcessorError::ERROR_NONE) {
+                switch (result.GetError()) {
+                    case Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.Unwrap());
+                        break;
+                    case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", result.Unwrap());
+                        break;
+                    case Utils::CommandProcessorError::ERROR_EMPTY_INPUT:
+                        break;
+                    case Utils::CommandProcessorError::ERROR_INTERNAL:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", result.Unwrap());
+                        break;
+                    default:
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", static_cast<int>(result.GetError()));
+                        break;
+                }
+            }
+        }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", ex.what());
+        }
+    }
+
     ServerError Instance::Shutdown() {
         if (_shuttingDown) {
             return ServerError::SERVER_NONE;
@@ -399,6 +482,10 @@ namespace Framework::Integrations::Server {
 
         if (_worldEngine) {
             _worldEngine->Shutdown();
+        }
+
+        if (_commandListener) {
+            _commandListener->Shutdown();
         }
 
         // Detach signal handlers
@@ -424,6 +511,10 @@ namespace Framework::Integrations::Server {
 
             if (_worldEngine) {
                 _worldEngine->Update();
+            }
+            
+            if (_commandListener) {
+                _commandListener->Update();
             }
 
             if (_masterlist->IsInitialized()) {

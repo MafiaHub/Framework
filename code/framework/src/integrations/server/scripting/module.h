@@ -69,10 +69,11 @@ namespace Framework::Integrations::Server::Scripting {
         std::vector<std::string> GetServerFiles() const {
             return _serverFiles;
         }
+        
+        void ReloadScriptingEngine();
 
       private:
         void UpdateFileWatcher();
-        void ReloadScriptingEngine();
         void SetupWatchPath(const std::string &path);
     };
 } // namespace Framework::Integrations::Server::Scripting

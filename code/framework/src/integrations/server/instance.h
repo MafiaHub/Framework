@@ -17,6 +17,8 @@
 #include "scripting/module.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
+#include "utils/command_listener.h"
+#include "utils/command_processor.h"
 #include "world/server.h"
 
 #include <flecs.h>
@@ -95,13 +97,19 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Utils::Config> _fileConfig;
         std::shared_ptr<World::ServerEngine> _worldEngine;
         std::shared_ptr<Services::MasterlistConnector> _masterlist;
+        std::shared_ptr<Utils::CommandListener> _commandListener;
+        std::shared_ptr<Utils::CommandProcessor> _commandProcessor;
 
         void InitEndpoints();
         void InitModules() const;
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
+        void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
+        
+        // Command handlers
+        void HandleCommand(const std::string &command);
 
         // managers
         flecs::entity _weatherManager;
@@ -175,6 +183,11 @@ namespace Framework::Integrations::Server {
 
         std::shared_ptr<World::Archetypes::StreamingFactory> GetStreamingFactory() const {
             return _streamingFactory;
+        }
+        
+        // Register a custom command with the command processor
+        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
+            return _commandProcessor->RegisterCommand(name, options, proc, desc);
         }
     };
 } // namespace Framework::Integrations::Server
