@@ -204,4 +204,22 @@ namespace Framework::GUI {
         return false;
     }
 
+    std::vector<GUI::View*> Manager::GetAllViews() const {
+        std::vector<GUI::View*> views;
+        for (const auto &view : _views) {
+            views.push_back(view.get());
+        }
+        return views;
+    }
+
+    std::vector<GUI::View*> Manager::GetGCViews() const {
+        std::vector<GUI::View*> views;
+        for (const auto &view : _views) {
+            if (view->IsGarbageCollected()) {
+                views.push_back(view.get());
+            }
+        }
+        return views;
+    }
+
 } // namespace Framework::GUI

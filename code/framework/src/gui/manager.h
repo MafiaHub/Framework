@@ -59,6 +59,9 @@ namespace Framework::GUI {
         void CleanupViews();
         bool IsAnyViewFocused() const; // This also includes all C++ views
         bool IsAnyGCViewFocused() const; // Check garbage collected views only (usually views created via client-side Lua)
+        
+        std::vector<GUI::View*> GetAllViews() const;
+        std::vector<GUI::View*> GetGCViews() const;
 
         void Update();
         void Render();
