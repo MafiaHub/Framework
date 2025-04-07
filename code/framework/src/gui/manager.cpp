@@ -195,4 +195,13 @@ namespace Framework::GUI {
         return false;
     }
 
+    bool Manager::IsAnyGCViewFocused() const {
+        for (const auto &view : _views) {
+            if (view->HasFocus() && view->IsGarbageCollected()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 } // namespace Framework::GUI
