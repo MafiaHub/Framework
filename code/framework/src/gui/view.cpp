@@ -3,8 +3,6 @@
 #include <Windows.h>
 #include <WindowsX.h>
 
-#include "manager.h"
-
 #include <unordered_map>
 
 namespace Framework::GUI {
@@ -251,9 +249,6 @@ namespace Framework::GUI {
 
     void View::SetZIndex(int z) {
         _z = z;
-        if (_manager) {
-            _manager->SortViews();
-        }
     }
 
 } // namespace Framework::GUI

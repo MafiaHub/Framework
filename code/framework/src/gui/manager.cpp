@@ -85,11 +85,21 @@ namespace Framework::GUI {
         if (!_ultralightRenderer) {
             return;
         }
+
+        std::vector<GUI::View *> views;
+
+        for (auto &view : _views) {
+            views.push_back(view.get());
+        }
+
+        std::sort(views.begin(), views.end(), [](GUI::View *a, GUI::View *b) {
+            return a->GetZIndex() < b->GetZIndex();
+        });
         
         std::lock_guard lock(_renderMutex);
 
         // Render the views
-        for (auto &view : _views) {
+        for (auto &view : views) {
             view->Render();
         }
     }
@@ -220,11 +230,5 @@ namespace Framework::GUI {
             }
         }
         return views;
-    }
-
-    void Manager::SortViews() {
-        std::sort(_views.begin(), _views.end(), [](const std::unique_ptr<View> &a, const std::unique_ptr<View> &b) {
-            return a->GetZIndex() < b->GetZIndex();
-        });
     }
 } // namespace Framework::GUI
