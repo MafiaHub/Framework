@@ -52,8 +52,8 @@ namespace Framework::Scripting {
         void InvokeEvent(const std::string &name, Args &&...args) {
             auto it = _eventHandlers.find(name);
             if (it != _eventHandlers.end()) {
+                std::lock_guard<std::mutex> lock(_executionMutex);
                 for (auto &callback : it->second) {
-                    std::lock_guard<std::mutex> lock(_executionMutex);
                     sol::protected_function pf {callback};
                     auto result = pf(std::forward<Args>(args)...);
                     if (!result.valid()) {
@@ -68,8 +68,8 @@ namespace Framework::Scripting {
         void InvokeRemoteEvent(const std::string &name, Args &&...args) {
             auto it = _eventRemoteHandlers.find(name);
             if (it != _eventRemoteHandlers.end()) {
+                std::lock_guard<std::mutex> lock(_executionMutex);
                 for (auto &callback : it->second) {
-                    std::lock_guard<std::mutex> lock(_executionMutex);
                     sol::protected_function pf {callback};
                     auto result = pf(std::forward<Args>(args)...);
                     if (!result.valid()) {
