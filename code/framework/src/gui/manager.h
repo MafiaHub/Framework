@@ -80,5 +80,10 @@ namespace Framework::GUI {
         View *GetView(int id) const {
             return _views[id].get();
         }
+
+      private:
+        friend class View;
+
+        void SortViews();
     };
 } // namespace Framework::GUI

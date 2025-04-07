@@ -124,7 +124,7 @@ namespace Framework::GUI {
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
         case Graphics::RendererBackend::BACKEND_D3D_11: 
-            view = std::make_unique<ViewD3D11>(_ultralightRenderer.get(), _graphicsRenderer); break;
+            view = std::make_unique<ViewD3D11>(_ultralightRenderer.get(), _graphicsRenderer, this); break;
         default: 
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
             return -1;
@@ -222,4 +222,9 @@ namespace Framework::GUI {
         return views;
     }
 
+    void Manager::SortViews() {
+        std::sort(_views.begin(), _views.end(), [](const std::unique_ptr<View> &a, const std::unique_ptr<View> &b) {
+            return a->GetZIndex() < b->GetZIndex();
+        });
+    }
 } // namespace Framework::GUI

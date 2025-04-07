@@ -30,6 +30,8 @@ namespace Framework::GUI {
     using OnDOMReadyCallback           = fu2::function<void(uint64_t, bool, std::string)>;
     using OnWindowObjectReadyCallback  = fu2::function<void(uint64_t, bool, std::string)>;
 
+    class Manager;
+
     class View
         : public ultralight::ViewListener
         , ultralight::LoadListener {
@@ -42,6 +44,7 @@ namespace Framework::GUI {
         ultralight::RefPtr<ultralight::Renderer> _renderer;
         ultralight::RefPtr<ultralight::View> _internalView = nullptr;
         Graphics::Renderer *_graphicsRenderer              = nullptr;
+        Manager *_manager                                  = nullptr;
 
         SDK *_sdk = nullptr;
 
@@ -51,6 +54,7 @@ namespace Framework::GUI {
         bool _gpuAccelerated = false;
         int _x;
         int _y;
+        int _z;
         int _width;
         int _height;
         bool _shouldDisplay = false;
@@ -68,7 +72,7 @@ namespace Framework::GUI {
         void OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) override;
 
       public:
-        View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
+        View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*, Manager*);
         virtual ~View();
 
         virtual bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false);
@@ -111,6 +115,12 @@ namespace Framework::GUI {
 
         glm::vec2 GetPosition() const {
             return {_x, _y};
+        }
+
+        void SetZIndex(int z);
+
+        int GetZIndex() const {
+            return _z;
         }
 
         void SetGarbageCollected(bool garbageCollected) {
