@@ -8,38 +8,31 @@
 
 #include "instance.h"
 
+#include "core_modules.h"
 #include "world/server.h"
 
 #include "networking/messages/client_connection_finalized.h"
-#include "utils/command_processor.h"
 #include "networking/messages/client_handshake.h"
-#include "cxxopts.hpp"
 #include "networking/messages/client_initialise_player.h"
-#include "networking/messages/client_request_streamer.h"
-#include "networking/messages/client_ready_assets.h"
 #include "networking/messages/client_kick.h"
+#include "networking/messages/client_ready_assets.h"
+#include "networking/messages/client_request_streamer.h"
 #include "networking/messages/messages.h"
-
 #include "integrations/shared/rpc/emit_lua_event.h"
 
-#include "../shared/modules/mod.hpp"
-
-#include "utils/version.h"
-#include "utils/path.h"
-
-#include "cxxopts.hpp"
-
-#include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/entity.h"
-
-
+#include "scripting/builtins/events_lua.h"
 #include "scripting/utils/table_conversions.h"
 
+#include "utils/command_processor.h"
+#include "utils/path.h"
+#include "utils/version.h"
+#include "../shared/modules/mod.hpp"
+
+#include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <csignal>
-
-#include "core_modules.h"
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false), _shuttingDown(false) {
