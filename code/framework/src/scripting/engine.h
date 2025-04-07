@@ -10,6 +10,7 @@
 
 #include <map>
 #include <vector>
+#include <mutex>
 
 #include <logging/logger.h>
 #include <utils/time.h>
@@ -23,6 +24,7 @@ namespace Framework::Scripting {
     class Engine {
       public:
         sol::state* _luaEngine = nullptr;
+        std::mutex _executionMutex;
 
         std::map<std::string, EventHandler> _eventHandlers = {};
         std::map<std::string, EventHandler> _eventRemoteHandlers = {};
@@ -51,6 +53,7 @@ namespace Framework::Scripting {
             auto it = _eventHandlers.find(name);
             if (it != _eventHandlers.end()) {
                 for (auto &callback : it->second) {
+                    std::lock_guard<std::mutex> lock(_executionMutex);
                     sol::protected_function pf {callback};
                     auto result = pf(std::forward<Args>(args)...);
                     if (!result.valid()) {
@@ -66,6 +69,7 @@ namespace Framework::Scripting {
             auto it = _eventRemoteHandlers.find(name);
             if (it != _eventRemoteHandlers.end()) {
                 for (auto &callback : it->second) {
+                    std::lock_guard<std::mutex> lock(_executionMutex);
                     sol::protected_function pf {callback};
                     auto result = pf(std::forward<Args>(args)...);
                     if (!result.valid()) {
