@@ -14,7 +14,7 @@ static ultralight::IndexType patternCCW[] = {0, 3, 1, 1, 3, 2};
 Framework::GUI::RendererD3D11 *rendererBackend {};
 
 namespace Framework::GUI {
-    ViewD3D11::ViewD3D11(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): View(renderer, graphicsRenderer) {
+    ViewD3D11::ViewD3D11(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer, Manager *manager): View(renderer, graphicsRenderer, manager) {
         _sdk = new SDK;
     }
 

@@ -3,10 +3,12 @@
 #include <Windows.h>
 #include <WindowsX.h>
 
+#include "manager.h"
+
 #include <unordered_map>
 
 namespace Framework::GUI {
-    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _width(0), _height(0), _x(0), _y(0) {
+    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer, Manager *manager): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _manager(manager), _width(0), _height(0), _x(0), _y(0), _z(0) {
         _sdk = new SDK;
         _isMouseDown = false;
     }
@@ -246,4 +248,12 @@ namespace Framework::GUI {
     void View::OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) {
         _cursor = cursor;
     }
+
+    void View::SetZIndex(int z) {
+        _z = z;
+        if (_manager) {
+            _manager->SortViews();
+        }
+    }
+
 } // namespace Framework::GUI
