@@ -51,6 +51,12 @@ the build system, or the command line options of your compiler.
 // APPLE loves to define nil as nullptr, but that collides with sol's internals
 #undef nil
 
+#define SOL_SAFE_REFERENCES 1
+#define SOL_PROPAGATE_EXCEPTIONS 1
+#define SOL_EXCEPTIONS 1
+#define SOL_EXCEPTIONS_CATCH_ALL 1
+#define SOL_SAFE_USERTYPE 1
+
 // end of sol/config.hpp
 
 #endif // SOL_SINGLE_CONFIG_HPP

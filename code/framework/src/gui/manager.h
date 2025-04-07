@@ -57,6 +57,11 @@ namespace Framework::GUI {
         bool DestroyView(int);
 
         void CleanupViews();
+        bool IsAnyViewFocused() const; // This also includes all C++ views
+        bool IsAnyGCViewFocused() const; // Check garbage collected views only (usually views created via client-side Lua)
+        
+        std::vector<GUI::View*> GetAllViews() const;
+        std::vector<GUI::View*> GetGCViews() const;
 
         void Update();
         void Render();
@@ -75,5 +80,10 @@ namespace Framework::GUI {
         View *GetView(int id) const {
             return _views[id].get();
         }
+
+      private:
+        friend class View;
+
+        void SortViews();
     };
 } // namespace Framework::GUI

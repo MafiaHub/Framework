@@ -30,6 +30,8 @@
 
 #include <gui/manager.h>
 
+#include <input/input.h>
+
 #include <flecs/flecs.h>
 
 namespace Framework::Integrations::Client {
@@ -207,6 +209,10 @@ namespace Framework::Integrations::Client {
 
         World::Archetypes::StreamingFactory *GetStreamingFactory() const {
             return _streamingFactory.get();
+        }
+
+        virtual Input::IInput *GetBaseInput() const {
+            return nullptr;
         }
 
         AssetDownloadStatus &GetAssetDownloadStatus() {

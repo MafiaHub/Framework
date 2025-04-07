@@ -51,7 +51,7 @@ namespace Framework::GUI {
         void UpdateGeometry();
 
       public:
-        ViewD3D11(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*);
+        ViewD3D11(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*, Manager*);
 
         bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false) override;
 

@@ -124,7 +124,7 @@ namespace Framework::GUI {
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
         case Graphics::RendererBackend::BACKEND_D3D_11: 
-            view = std::make_unique<ViewD3D11>(_ultralightRenderer.get(), _graphicsRenderer); break;
+            view = std::make_unique<ViewD3D11>(_ultralightRenderer.get(), _graphicsRenderer, this); break;
         default: 
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
             return -1;
@@ -184,5 +184,47 @@ namespace Framework::GUI {
                ++it;
            }
        }
+    }
+
+    bool Manager::IsAnyViewFocused() const {
+        for (const auto &view : _views) {
+            if (view->HasFocus()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool Manager::IsAnyGCViewFocused() const {
+        for (const auto &view : _views) {
+            if (view->HasFocus() && view->IsGarbageCollected()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::vector<GUI::View*> Manager::GetAllViews() const {
+        std::vector<GUI::View*> views;
+        for (const auto &view : _views) {
+            views.push_back(view.get());
+        }
+        return views;
+    }
+
+    std::vector<GUI::View*> Manager::GetGCViews() const {
+        std::vector<GUI::View*> views;
+        for (const auto &view : _views) {
+            if (view->IsGarbageCollected()) {
+                views.push_back(view.get());
+            }
+        }
+        return views;
+    }
+
+    void Manager::SortViews() {
+        std::sort(_views.begin(), _views.end(), [](const std::unique_ptr<View> &a, const std::unique_ptr<View> &b) {
+            return a->GetZIndex() < b->GetZIndex();
+        });
     }
 } // namespace Framework::GUI

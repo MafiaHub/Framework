@@ -24,6 +24,8 @@ namespace Framework::Input {
         virtual bool IsMouseVisible()                 = 0;
         virtual void SetMouseLocked(bool locked)      = 0;
         virtual bool IsMouseLocked()                  = 0;
+        virtual void SetInputLocked(bool locked)      = 0;
+        virtual bool IsInputLocked()                  = 0;
 
         virtual bool IsKeyDown(int key)     = 0;
         virtual bool IsKeyUp(int key)       = 0;
