@@ -519,6 +519,8 @@ namespace Framework::Integrations::Server {
 
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
+                info.host           = _opts.bindHost;
+                info.port           = _opts.bindPort;
                 info.gameMode       = _scriptingModule->GetEngine()->GetGamemodeName();
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
