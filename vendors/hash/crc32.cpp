@@ -8,7 +8,7 @@
 
 // big endian architectures need #define __BYTE_ORDER __BIG_ENDIAN
 #ifndef _MSC_VER
-  #if defined(OS_MACOSX)
+  #ifdef __APPLE__
     #include <machine/endian.h>
   #else
     #include <endian.h>
