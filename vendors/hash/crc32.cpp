@@ -10,7 +10,7 @@
 #ifndef _MSC_VER
   #if defined(OS_MACOSX)
     #include <machine/endian.h>
-  #elif
+  #else
     #include <endian.h>
   #endif
 #endif
