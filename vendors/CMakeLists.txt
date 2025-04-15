@@ -26,6 +26,9 @@ add_subdirectory(spdlog)
 add_subdirectory(json)
 add_subdirectory(glm)
 
+# Build Hash
+add_subdirectory(hash)
+
 # Build CPPFS
 set(OPTION_BUILD_TESTS CACHE BOOL OFF)
 add_subdirectory(cppfs)
