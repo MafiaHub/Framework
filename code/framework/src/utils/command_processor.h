@@ -55,5 +55,6 @@ namespace Framework::Utils {
 
         Result<std::string, CommandProcessorError> ProcessCommand(const std::string &input);
         Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
+        Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc = "");
     };
 } // namespace Framework::Utils

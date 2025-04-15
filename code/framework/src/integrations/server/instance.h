@@ -189,5 +189,8 @@ namespace Framework::Integrations::Server {
         Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
             return _commandProcessor->RegisterCommand(name, options, proc, desc);
         }
+        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(const std::string &name, std::vector<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
+            return _commandProcessor->RegisterCommand(name, options, proc, desc);
+        }
     };
 } // namespace Framework::Integrations::Server

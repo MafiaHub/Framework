@@ -80,4 +80,33 @@ namespace Framework::Utils {
 
         return CommandProcessorError::ERROR_NONE;
     }
+
+    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc) {
+        if (name.empty()) {
+            return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
+        }
+        if (_commands.find(name) != _commands.end()) {
+            return {CommandProcessorError::ERROR_CMD_ALREADY_EXISTS, name};
+        }
+
+        try {
+            auto cmd = std::make_unique<cxxopts::Options>(name, desc);
+
+            if (!options.empty()) {
+                for (const auto &option : options) {
+                    cmd->add_option("", option);
+                }
+            }
+
+            // default help
+            cmd->add_option("", {"h,help", "Print usage"});
+
+            _commands[name] = {std::move(cmd), proc};
+        }
+        catch (const std::exception &e) {
+            return {CommandProcessorError::ERROR_INTERNAL, e.what()};
+        }
+
+        return CommandProcessorError::ERROR_NONE;
+    }
 } // namespace Framework::Utils
