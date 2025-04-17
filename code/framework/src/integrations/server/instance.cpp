@@ -443,15 +443,15 @@ namespace Framework::Integrations::Server {
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.Unwrap());
                         break;
                     case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command: {}", result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.Unwrap());
                         break;
                     case Utils::CommandProcessorError::ERROR_EMPTY_INPUT:
                         break;
                     case Utils::CommandProcessorError::ERROR_INTERNAL:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.Unwrap());
                         break;
                     default:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command: {}", static_cast<int>(result.GetError()));
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError()));
                         break;
                 }
             }
