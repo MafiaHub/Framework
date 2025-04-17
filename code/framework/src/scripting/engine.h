@@ -63,7 +63,9 @@ namespace Framework::Scripting {
                 std::lock_guard<std::mutex> lock(_executionMutex);
 
                 if (_onInvokeEventProc) {
-                    _onInvokeEventProc(name);
+                    if (!_onInvokeEventProc(name)) {
+                        return;
+                    }
                 }
 
                 for (auto &callback : it->second) {
@@ -84,7 +86,9 @@ namespace Framework::Scripting {
                 std::lock_guard<std::mutex> lock(_executionMutex);
                 
                 if (_onInvokeEventProc) {
-                    _onInvokeEventProc(name);
+                    if (!_onInvokeEventProc(name)) {
+                        return;
+                    }
                 }
                 
                 for (auto &callback : it->second) {
