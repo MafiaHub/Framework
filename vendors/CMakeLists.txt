@@ -69,6 +69,7 @@ add_subdirectory(lua-5.4.4)
 if (WIN32)
     # Build other win32 deps
     add_subdirectory(minhook)
+    add_subdirectory(steamworks)
     add_subdirectory(udis86)
     add_subdirectory(ntdll)
     add_subdirectory(imgui)
