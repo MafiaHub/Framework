@@ -267,22 +267,6 @@ namespace Framework::Launcher {
             return false;
         }
 
-        // Load the steam runtime only if required
-        if (_config.platform == ProjectPlatform::STEAM) {
-            HMODULE steamDll {};
-
-#ifdef _M_IX86
-            steamDll = LoadLibraryW(L"fw_steam_api.dll");
-#else
-            steamDll = LoadLibraryW(L"fw_steam_api64.dll");
-#endif
-
-            if (!steamDll) {
-                MessageBox(nullptr, "Failed to inject the steam runtime DLL in the running process", _config.name.c_str(), MB_ICONERROR);
-                return false;
-            }
-        }
-
         // Use real scaling
         const auto shcore = LoadLibraryW(L"shcore.dll");
         if (shcore) {
@@ -390,22 +374,8 @@ namespace Framework::Launcher {
 
                 _config.classicGamePath = _config.classicGamePath.substr(0, _config.classicGamePath.length() - _config.executableName.length());
 
-                if (_config.promptSelectionFunctor)
+                if (_config.promptSelectionFunctor) {
                     _config.classicGamePath = _config.promptSelectionFunctor(_config.classicGamePath);
-
-                if (_config.preferSteam) {
-#ifdef _M_IX86
-                    auto steamDllName = "/steam_api.dll";
-#else
-                    auto steamDllName = "/steam_api64.dll";
-#endif
-                    const auto steamDll = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath) + steamDllName);
-
-                    if (steamDll.exists()) {
-                        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Steam dll found in the game directory, switching to steam platform");
-                        _config.platform = ProjectPlatform::STEAM;
-                        return RunInnerSteamChecks();
-                    }
                 }
             }
             else {
