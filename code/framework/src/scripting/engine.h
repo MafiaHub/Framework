@@ -21,6 +21,9 @@
 
 namespace Framework::Scripting {
     using EventHandler = std::vector<sol::function>;
+    using ScriptProc   = std::function<void()>;
+    using InvokeEventProc   = std::function<bool(std::string)>;
+
     class Engine {
       public:
         sol::state* _luaEngine = nullptr;
@@ -28,6 +31,11 @@ namespace Framework::Scripting {
 
         std::map<std::string, EventHandler> _eventHandlers = {};
         std::map<std::string, EventHandler> _eventRemoteHandlers = {};
+
+      protected:
+        ScriptProc _onLoadProc   = nullptr;
+        ScriptProc _onUnloadProc = nullptr;
+        InvokeEventProc _onInvokeEventProc = nullptr;
 
       public:
         virtual EngineError Init(SDKRegisterCallback) = 0;
@@ -53,6 +61,11 @@ namespace Framework::Scripting {
             auto it = _eventHandlers.find(name);
             if (it != _eventHandlers.end()) {
                 std::lock_guard<std::mutex> lock(_executionMutex);
+
+                if (_onInvokeEventProc) {
+                    _onInvokeEventProc(name);
+                }
+
                 for (auto &callback : it->second) {
                     sol::protected_function pf {callback};
                     auto result = pf(std::forward<Args>(args)...);
@@ -69,6 +82,11 @@ namespace Framework::Scripting {
             auto it = _eventRemoteHandlers.find(name);
             if (it != _eventRemoteHandlers.end()) {
                 std::lock_guard<std::mutex> lock(_executionMutex);
+                
+                if (_onInvokeEventProc) {
+                    _onInvokeEventProc(name);
+                }
+                
                 for (auto &callback : it->second) {
                     sol::protected_function pf {callback};
                     auto result = pf(std::forward<Args>(args)...);
@@ -83,6 +101,18 @@ namespace Framework::Scripting {
         void ClearEventHandlers() {
             _eventHandlers.clear();
             _eventRemoteHandlers.clear();
+        }
+
+        void SetOnLoadProc(ScriptProc proc) {
+            _onLoadProc = std::move(proc);
+        }
+
+        void SetOnUnloadProc(ScriptProc proc) {
+            _onUnloadProc = std::move(proc);
+        }
+
+        void SetOnInvokeEventProc(InvokeEventProc proc) {
+            _onInvokeEventProc = std::move(proc);
         }
     };
 } // namespace Framework::Scripting

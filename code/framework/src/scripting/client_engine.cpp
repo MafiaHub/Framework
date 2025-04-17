@@ -110,6 +110,11 @@ namespace Framework::Scripting {
 
         _shutdownInProgress = true;
 
+        // Notify mod-level layer
+        if (_onUnloadProc) {
+            _onUnloadProc();
+        }
+
         // First notify that we are unloading
         InvokeEvent(Events[EventIDs::GAMEMODE_UNLOADING]);
 
@@ -175,7 +180,12 @@ namespace Framework::Scripting {
         
         if (success) {
             InvokeEvent(Events[EventIDs::GAMEMODE_LOADED]);
-            
+
+            // Notify mod-level layer
+            if (_onLoadProc) {
+                _onLoadProc();
+            }
+
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("All client scripts loaded successfully");
         } else {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to load some client scripts");

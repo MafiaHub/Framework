@@ -112,12 +112,23 @@ namespace Framework::Scripting {
 
         InvokeEvent(Events[EventIDs::GAMEMODE_LOADED]);
         SetGamemodeLoaded(true);
+
+        // Notify mod-level layer
+        if (_onLoadProc) {
+            _onLoadProc();
+        }
+
         return true;
     }
 
     bool ServerEngine::UnloadScript() {
         if(!IsGamemodeLoaded()){
             return false;
+        }
+
+        // Notify mod-level layer
+        if (_onUnloadProc) {
+            _onUnloadProc();
         }
 
         // Destroy all server-spawned entities
