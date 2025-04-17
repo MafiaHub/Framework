@@ -196,7 +196,6 @@ namespace Framework::Launcher {
         std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
-        _steamWrapper = std::make_unique<External::Steam::Wrapper>();
         _minidump     = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
 
@@ -215,16 +214,14 @@ namespace Framework::Launcher {
             }
         }
 
-        // Run platform-dependent platform checks and init steps
+        // If we are launching on Steam, run the inner checks then fallback to normal ones.
         if (_config.platform == ProjectPlatform::STEAM) {
             if (!RunInnerSteamChecks()) {
                 return false;
             }
         }
-        else {
-            if (!RunInnerClassicChecks()) {
-                return false;
-            }
+        if (!RunInnerClassicChecks()) {
+            return false;
         }
 
         // Load the destination DLL
@@ -355,48 +352,6 @@ namespace Framework::Launcher {
 
             return false;
         }
-
-        // Make sure we have our required files
-        const std::vector<std::string> requiredFiles = {"fw_steam_api64.dll", "fw_steam_api.dll"};
-        if (!EnsureAtLeastOneFileExists(requiredFiles)) {
-            return false;
-        }
-
-        // If we don't have the app id file, create it
-        cppfs::FileHandle appIdFile = cppfs::fs::open("steam_appid.txt");
-        appIdFile.writeFile(std::to_string(_config.steamAppId) + "\n");
-
-        // Initialize the steam wrapper
-        const auto initResult = _steamWrapper->Init();
-        if (initResult != External::Steam::SteamError::STEAM_NONE) {
-            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? Error Code #{}", initResult).c_str(), _config.name.c_str(), MB_ICONERROR);
-            return false;
-        }
-
-        // Make sure steam has the game inside the library
-        ISteamApps *steamApps = _steamWrapper->GetContext()->SteamApps();
-        if (!steamApps->BIsAppInstalled(_config.steamAppId)) {
-            MessageBox(nullptr, "The destination game is not installed", _config.name.c_str(), MB_ICONERROR);
-            return false;
-        }
-
-        // Ask the game path from steam
-        char gamePath[_MAX_PATH] = {0};
-        steamApps->GetAppInstallDir(_config.steamAppId, gamePath, _MAX_PATH);
-
-        _gamePath = Utils::StringUtils::NormalToWide(gamePath);
-        std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
-
-        // Set classic game path to the one found by Steam just for sake of having that information stored in the config
-        // file.
-        _config.classicGamePath = _gamePath;
-
-        // Make sure Steam is aware of himself
-        const auto appId = std::to_wstring(_config.steamAppId);
-        SetEnvironmentVariableW(L"SteamAppId", appId.c_str());
-
-        // Now we have everything we want, just say goodbye
-        _steamWrapper->Shutdown();
         return true;
     }
 
@@ -818,7 +773,6 @@ namespace Framework::Launcher {
             // Retrieve fields and overwrite ProjectConfiguration defaults
             Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->info("Loading launcher settings from JSON config file...");
             _config.classicGamePath    = _fileConfig->GetDefault<std::wstring>("game_path", _config.classicGamePath);
-            _config.steamAppId         = _fileConfig->GetDefault<AppId_t>("steam_app_id", _config.steamAppId);
             _config.executableName     = _fileConfig->GetDefault<std::wstring>("game_executable_name", _config.executableName);
             _config.destinationDllName = _fileConfig->GetDefault<std::wstring>("mod_dll_name", _config.destinationDllName);
 
@@ -835,7 +789,6 @@ namespace Framework::Launcher {
 
         // Retrieve fields from ProjectConfiguration and store data into a persistent config file
         _fileConfig->Set<std::wstring>("game_path", _config.classicGamePath);
-        _fileConfig->Set<AppId_t>("steam_app_id", _config.steamAppId);
         _fileConfig->Set<std::wstring>("game_executable_name", _config.executableName);
         _fileConfig->Set<std::wstring>("mod_dll_name", _config.destinationDllName);
 

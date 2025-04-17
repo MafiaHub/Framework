@@ -50,7 +50,6 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/networking/network_client.cpp
 
-    src/external/steam/wrapper.cpp
     src/external/discord/wrapper.cpp
     src/external/imgui/wrapper.cpp
 
@@ -103,7 +102,6 @@ if(WIN32)
         src/launcher/project.cpp
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
-        src/external/steam/wrapper.cpp
         src/utils/hooking/hook_function.cpp
         src/utils/hooking/hooking_patterns.cpp
         src/utils/hooking/hooking.cpp
@@ -170,7 +168,7 @@ if(WIN32)
 
     target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK DearImGUI)
 
-    set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
+    set(CLIENT_SHARED_LIBS minhook udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
 
     link_shared_deps(FrameworkLoader)

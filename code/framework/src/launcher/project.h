@@ -10,7 +10,6 @@
 
 #include "utils/config.h"
 #include "utils/minidump.h"
-#include <external/steam/wrapper.h>
 
 #include <Windows.h>
 
@@ -52,7 +51,6 @@ namespace Framework::Launcher {
         std::string name;
         ProjectPlatform platform;
         ProjectLaunchType launchType = ProjectLaunchType::PE_LOADING;
-        AppId_t steamAppId           = 430;
         uintptr_t loadLimit          = SIZE_MAX;
 
         // allows us to load client ourselves, otherwise stick to Framework's standard loading routine
@@ -103,7 +101,6 @@ namespace Framework::Launcher {
         ProjectConfiguration _config;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::wstring _gamePath;
-        std::unique_ptr<External::Steam::Wrapper> _steamWrapper;
         std::unique_ptr<Utils::MiniDump> _minidump;
 
         LibraryLoaderProc _libraryLoader;
