@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2025 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/String.h>
@@ -14,7 +14,7 @@ namespace ultralight {
 ///
 /// The winding order for front-facing triangles. (Only used when the GPU renderer is used)
 ///
-enum class UExport FaceWinding : uint8_t {
+enum class FaceWinding : uint8_t {
   ///
   /// Clockwise Winding (Direct3D, etc.)
   ///
@@ -26,7 +26,7 @@ enum class UExport FaceWinding : uint8_t {
   CounterClockwise,
 };
 
-enum class UExport FontHinting : uint8_t {
+enum class FontHinting : uint8_t {
   ///
   /// Lighter hinting algorithm-- glyphs are slightly fuzzier but better resemble their original
   /// shape. This is achieved by snapping glyphs to the pixel grid only vertically which better
@@ -52,7 +52,7 @@ enum class UExport FontHinting : uint8_t {
   None,
 };
 
-enum class UExport EffectQuality : uint8_t {
+enum class EffectQuality : uint8_t {
   ///
   /// Fastest effect quality-- uses the lowest quality effects (half-resolution, fewer passes, etc.)
   /// 
@@ -70,10 +70,16 @@ enum class UExport EffectQuality : uint8_t {
 };
 
 ///
-/// Global config for Ultralight.
+/// Core configuration for the renderer.
 ///
-/// This can be used to configure the library by calling Platform::set_config() before creating the
-/// Renderer or App singletons.
+/// These are various configuration options that can be used to customize the behavior of the
+/// library. These options can only be set once before creating the Renderer.
+///
+/// ## Setting the Config
+/// 
+/// You should create an instance of the Config struct, set its members, and then call
+/// Platform::set_config() before creating the Renderer at the beginning of your
+/// application's lifetime.
 /// 
 /// @par Example usage
 /// ```

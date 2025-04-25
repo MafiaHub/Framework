@@ -1,14 +1,25 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
+
+///
+/// @file CAPI_Defines.h
+///
+/// Various defines and utility functions for the C API.
+///
+/// `#include <Ultralight/CAPI/CAPI_Defines.h>`
+///
+/// This file contains various defines, structures, and utility functions for the C API.
+///
 #ifndef ULTRALIGHT_CAPI_DEFINES_H
 #define ULTRALIGHT_CAPI_DEFINES_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <JavaScriptCore/JavaScript.h>
 #ifdef __OBJC__
 #import <AppKit/NSEvent.h>
@@ -62,6 +73,7 @@ typedef struct C_GamepadButtonEvent* ULGamepadButtonEvent;
 typedef struct C_Surface* ULSurface;
 typedef struct C_Surface* ULBitmapSurface;
 typedef struct C_FontFile* ULFontFile;
+typedef struct C_ImageSource* ULImageSource;
 
 typedef enum {
   kMessageSource_XML = 0,
@@ -74,15 +86,21 @@ typedef enum {
   kMessageSource_CSS,
   kMessageSource_Security,
   kMessageSource_ContentBlocker,
+  kMessageSource_Media,
+  kMessageSource_MediaSource,
+  kMessageSource_WebRTC,
+  kMessageSource_ITPDebug,
+  kMessageSource_PrivateClickMeasurement,
+  kMessageSource_PaymentRequest,
   kMessageSource_Other,
 } ULMessageSource;
 
 typedef enum {
-  kMessageLevel_Log = 1,
-  kMessageLevel_Warning = 2,
-  kMessageLevel_Error = 3,
-  kMessageLevel_Debug = 4,
-  kMessageLevel_Info = 5,
+  kMessageLevel_Log = 0,
+  kMessageLevel_Warning,
+  kMessageLevel_Error,
+  kMessageLevel_Debug,
+  kMessageLevel_Info,
 } ULMessageLevel;
 
 typedef enum {
@@ -154,11 +172,11 @@ typedef enum {
 
 typedef enum {
   ///
-  /// Key-Down event type. (Does not trigger accelerator commands in WebCore)
+  /// Key-Down event type. This type does **not** trigger accelerator commands in WebCore (eg, 
+  /// Ctrl+C for copy is an accelerator command).
   ///
-  /// @NOTE: You should probably use RawKeyDown instead when a physical key
-  ///        is pressed. This member is only here for historic compatibility
-  ///        with WebCore's key event types.
+  /// @warning  You should probably use kKeyEventType_RawKeyDown instead. This type is only here for
+  ///           historic compatibility with WebCore's key event types.
   ///
   kKeyEventType_KeyDown,
 
@@ -169,9 +187,6 @@ typedef enum {
 
   ///
   /// Raw Key-Down type. Use this when a physical key is pressed.
-  ///
-  /// @NOTE: You should use RawKeyDown for physical key presses since it
-  ///        allows WebCore to do additional command translation.
   ///
   kKeyEventType_RawKeyDown,
 
@@ -246,6 +261,15 @@ typedef struct {
   int bottom;
 } ULIntRect;
 
+///
+/// Offscreen render target, used when rendering Views via the GPU renderer.
+///
+/// When a View is rendered via the GPU renderer (see ulViewIsAccelerated()), it will be rendered to
+/// an offscreen render target (ulViewGetRenderTarget()) that you can display in your application.
+///
+/// This is intended to be used with a custom ULGPUDriver implementation in a game or similar 
+/// application (ulPlatformSetGPUDriver()).
+///
 typedef struct {
   bool is_empty;
   unsigned int width;

@@ -1,10 +1,22 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
+
+///
+/// @file CAPI_Buffer.h
+///
+/// A fixed-size container for raw byte data.
+///
+/// `#include <Ultralight/CAPI/CAPI_Buffer.h>`
+///
+/// This class is used to represent raw data buffers in Ultralight. It intelligently manages the
+/// lifetime of the data and can optionally call a user-supplied callback to deallocate the data
+/// when the Buffer is destroyed.
+///
 #ifndef ULTRALIGHT_CAPI_BUFFER_H
 #define ULTRALIGHT_CAPI_BUFFER_H
 

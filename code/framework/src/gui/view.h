@@ -32,9 +32,7 @@ namespace Framework::GUI {
 
     class Manager;
 
-    class View
-        : public ultralight::ViewListener
-        , ultralight::LoadListener {
+    class View: public ultralight::ViewListener, ultralight::LoadListener {
       private:
         OnConsoleMessageCallback _onConsoleMessageCallback;
         OnDOMReadyCallback _onDOMReadyCallback;

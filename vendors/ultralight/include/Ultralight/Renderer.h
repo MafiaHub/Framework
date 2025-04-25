@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -17,14 +17,43 @@ namespace ultralight {
 ///
 /// Core renderer singleton for the library, coordinates all library functions.
 /// 
-/// The Renderer class is responsible for creating and painting \link View Views \endlink, managing
-/// \link Session Sessions \endlink, as well as coordinating network requests, events, JavaScript
-/// execution, and more.
+/// The Renderer class is responsible for creating and painting View%s, managing Session%s, as well
+/// as coordinating network requests, events, JavaScript execution, and more.
 /// 
-/// ## Initializing the Renderer 
-/// To initialize the library, you should set up the Platform singleton and call Renderer::Create.
+/// ## Creating the Renderer
+///
+/// @note A Renderer will be created for you automatically when you call App::Create() (access it
+///       via App::renderer).
+///
+/// @note App::Create() is part of the AppCore API and automatically manages window creation, run
+///       loop, input, painting, and most platform-specific functionality. (Available on desktop
+///       platforms only)
+/// \endparblock
+///
+/// ### Defining Platform Handlers
+///
+/// Before creating the Renderer, you should define your platform handlers via the Platform
+/// singleton. This can be used to customize file loading, font loading, clipboard access, and other
+/// functionality typically provided by the OS.
+///
+/// Default implementations for most platform handlers are available in the 
+/// [AppCore repo](https://github.com/ultralight-ux/AppCore/tree/master/src). You can use these
+/// stock implementations by copying the code into your project, or you can write your own.
+///
+/// At a minimum, you should provide a FileSystem and FontLoader otherwise Renderer creation will
+/// fail.
+///
+/// ### Setting Up the Config
+///
+/// You can configure various library options by creating a Config object and passing it to
+/// `Platform::instance().set_config()`.
 /// 
-/// @par Example initialization code
+/// ### Creating the Renderer
+///
+/// Once you've set up the Platform handlers and Config, you can create the Renderer by calling
+/// `Renderer::Create()`. You should store the result in a RefPtr to keep it alive.
+///
+/// @par Example creation code
 /// ```
 ///   // Get the Platform singleton (maintains global library state)
 ///   auto& platform = Platform::instance();
@@ -68,13 +97,17 @@ namespace ultralight {
 /// ## Rendering Each Frame
 /// 
 /// When your program is ready to display a new frame (usually in synchrony with the monitor
-/// refresh rate), you should call Renderer::Render() so the library can render all active
-/// \link View Views \endlink as needed.
+/// refresh rate), you should call `Renderer::RefreshDisplay()` and `Renderer::Render()` so the
+/// library can render all active View%s as needed.
 /// 
-/// @par Example rendering code
+/// @par Example per-frame render code
 /// ```
 /// void displayFrame()
 /// {
+///     // Notify the renderer that the main display has refreshed. This will update animations,
+///     // smooth scroll, and window.requestAnimationFrame() for all Views matching the display id.
+///     renderer.RefreshDisplay(0);
+///
 ///     // Render all Views as needed
 ///     renderer.Render();
 /// 
@@ -88,12 +121,7 @@ namespace ultralight {
 ///   }
 /// }
 /// ```
-///
-/// @note The App class creates and manages its own Renderer (optional API in AppCore, available on
-///       desktop OS only).
 /// 
-/// @warning You should only create one Renderer during the lifetime of your program.
-///
 class UExport Renderer : public RefCounted {
  public:
   ///
@@ -154,8 +182,6 @@ class UExport Renderer : public RefCounted {
   /// @param  session  The session to store local data in. Pass a nullptr to use the default
   ///                  session.
   /// 
-  /// @param display_id  The display to associate with this view, @see Renderer::RefreshDisplay.
-  ///
   /// @return  Returns a ref-pointer to a new View instance.
   ///
   virtual RefPtr<View> CreateView(uint32_t width, uint32_t height, const ViewConfig& config,
@@ -210,6 +236,8 @@ class UExport Renderer : public RefCounted {
   ///
   /// Start the remote inspector server.
   /// 
+  /// @pre This feature is only available in Ultralight Pro edition and above.
+  /// 
   /// While the remote inspector is active, Views that are loaded into this renderer
   /// will be able to be remotely inspected from another Ultralight instance either locally
   /// (another app on same machine) or remotely (over the network) by navigating a View to:
@@ -217,6 +245,10 @@ class UExport Renderer : public RefCounted {
   /// \code
   ///   inspector://<ADDRESS>:<PORT>
   /// \endcode
+  ///
+  /// @param address   The address for the server to listen on (eg, "127.0.0.1")
+  ///
+  /// @param port      The port for the server to listen on (eg, 9222)
   /// 
   /// @return  Returns whether the server started successfully or not.
   /// 

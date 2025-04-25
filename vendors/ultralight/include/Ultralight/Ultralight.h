@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -26,6 +26,7 @@
 #include <Ultralight/Renderer.h>
 #include <Ultralight/Geometry.h>
 #include <Ultralight/RenderTarget.h>
+#include <Ultralight/ImageSource.h>
 #include <Ultralight/ScrollEvent.h>
 #include <Ultralight/GamepadEvent.h>
 #include <Ultralight/platform/Platform.h>

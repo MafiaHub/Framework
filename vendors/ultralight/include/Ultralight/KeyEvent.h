@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/KeyCodes.h>
@@ -16,7 +16,7 @@
 namespace ultralight {
 
 ///
-/// Generic keyboard event representing a change in keyboard state.
+/// Keyboard event representing a change in keyboard state.
 ///
 /// @see  View::FireKeyEvent
 ///
@@ -27,10 +27,11 @@ class UExport KeyEvent {
   ///
   enum Type {
     ///
-    /// Key-Down event type. (Does not trigger accelerator commands in WebCore)
+    /// Key-Down event type. This type does **not** trigger accelerator commands in WebCore (eg, 
+    /// Ctrl+C for copy is an accelerator command).
     ///
-    /// @NOTE: You should probably use RawKeyDown instead when a physical key is pressed.
-    ///        This type is only here for historic compatibility with WebCore's key event types.
+    /// @warning  You should probably use kType_RawKeyDown instead. This type is only here for
+    ///           historic compatibility with WebCore's key event types.
     ///
     kType_KeyDown,
 
@@ -41,9 +42,6 @@ class UExport KeyEvent {
 
     ///
     /// Raw Key-Down type. Use this when a physical key is pressed.
-    ///
-    /// @NOTE: You should use RawKeyDown for physical key presses since it allows the renderer to
-    ///        handle accelerator command translation.
     ///
     kType_RawKeyDown,
 
@@ -92,7 +90,7 @@ class UExport KeyEvent {
   };
 
   ///
-  // The type of this KeyEvent
+  /// The type of this KeyEvent.
   ///
   Type type;
 
@@ -149,6 +147,7 @@ class UExport KeyEvent {
   /// Whether or not the pressed key is a "system key". This is a Windows-only concept and should
   /// be "false" for all non-Windows platforms. For more information, see the following link:
   ///   <http://msdn.microsoft.com/en-us/library/ms646286(VS.85).aspx>
+  ///
   bool is_system_key;
 };
 

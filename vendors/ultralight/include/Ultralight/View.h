@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2025 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -113,22 +113,91 @@ struct UExport ViewConfig {
   String font_family_sans_serif = "Arial";
 
   ///
-  /// Default user-agent string.
+  /// Custom user-agent string. You can use this to override the default user-agent string.
+  /// 
+  /// @pre This feature is only available in Ultralight Pro edition and above.
   ///
-  String user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/615.1.18.100.1 (KHTML, like Gecko) "
-                      "Ultralight/1.4.0 Version/16.4.1 Safari/615.1.18.100.1";
+  String user_agent = ULTRALIGHT_USER_AGENT;
 };
 
 ///
-/// Web-page container rendered to an offscreen surface that you display yourself.
+/// Web-page container rendered to an offscreen surface.
 /// 
 /// The View class is responsible for loading and rendering web-pages to an offscreen surface. It
 /// is completely isolated from the OS windowing system, you must forward all input events to it
 /// from your application.
 ///
-/// @note  The API is not thread-safe, all calls must be made on the same thread that the
-///        Renderer/App was created on.
+/// ## Creating a View
+///
+/// You can create a View using Renderer::CreateView.
+///
+/// ```
+///  // Create a ViewConfig with the desired settings
+///  ViewConfig view_config;
+///  
+///  // Create a View, 500 by 500 pixels in size, using the default Session
+///  RefPtr<View> view = renderer->CreateView(500, 500, view_config, nullptr);
+/// ```
+///
+/// @note When using App::Create, the library will automatically create a View for you when you
+///       call Overlay::Create.
+///
+/// ## Loading Content into a View
+///
+/// You can load content asynchronously into a View using View::LoadURL().
+///
+/// ```
+///  // Load a URL into the View
+///  view->LoadURL("https://en.wikipedia.org/wiki/Main_Page");
+/// ```
+///
+/// ### Local File URLs
+///
+/// Local file URLs (eg, `file:///page.html`) will be loaded via FileSystem. You can provide your
+/// own FileSystem implementation so these files can be loaded from your application's resources.
+///
+/// ### Displaying Views in Your Application
+///
+/// Views are rendered either to a pixel-buffer (View::surface) or a GPU texture
+/// (View::render_target) depending on whether CPU or GPU rendering is used (see
+/// ViewConfig::is_accelerated).
+///
+/// You can use the Surface or RenderTarget to display the View in your application.
+///
+/// ```
+///  // Get the Surface for the View (assuming CPU rendering)
+///  Surface* surface = view->surface();
+///
+///  // Check if the Surface is dirty (pixels have changed)
+///  if (!surface->dirty_bounds().IsEmpty()) {
+///    // Cast to the default Surface implementation (BitmapSurface) and get
+///    // the underlying Bitmap.
+///    RefPtr<Bitmap> bitmap = static_cast<BitmapSurface*>(surface)->bitmap();
+///
+///    // Use the bitmap pixels here...
+///
+///    // Clear the dirty bounds after you're done displaying the pixels
+///    surface->ClearDirtyBounds();
+///  }
+/// ```
+///
+/// ## Input Events
+///
+/// You must forward all input events to the View from your application. This includes keyboard,
+/// mouse, and scroll events.
+///
+/// ```
+///  // Forward a mouse-move event to the View
+///  MouseEvent evt;
+///  evt.type = MouseEvent::kType_MouseMoved;
+///  evt.x = 100;
+///  evt.y = 100;
+///  evt.button = MouseEvent::kButton_None;
+///  view->FireMouseEvent(evt);
+/// ```
+///
+/// @note  The View API is not thread-safe, all calls must be made on the same thread that the
+///        Renderer or App was created on.
 ///
 class UExport View : public RefCounted {
  public:

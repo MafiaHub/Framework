@@ -1,19 +1,19 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #ifndef ULTRALIGHT_CAPI_H
 #define ULTRALIGHT_CAPI_H
 
-/******************************************************************************
+/**************************************************************************************************
  * API Note:
  *
- * You should only destroy objects that you explicitly create. Do not destroy
- * any objects returned from the API or callbacks unless otherwise noted.
- *****************************************************************************/
+ * You should only destroy objects that you explicitly create. Do not destroy any objects returned 
+ * from the API or callbacks unless otherwise noted.
+ **************************************************************************************************/
 
 #include <Ultralight/CAPI/CAPI_Defines.h>
 #include <Ultralight/CAPI/CAPI_Bitmap.h>
@@ -25,6 +25,7 @@
 #include <Ultralight/CAPI/CAPI_FontLoader.h>
 #include <Ultralight/CAPI/CAPI_Geometry.h>
 #include <Ultralight/CAPI/CAPI_GPUDriver.h>
+#include <Ultralight/CAPI/CAPI_ImageSource.h>
 #include <Ultralight/CAPI/CAPI_KeyEvent.h>
 #include <Ultralight/CAPI/CAPI_Logger.h>
 #include <Ultralight/CAPI/CAPI_MouseEvent.h>

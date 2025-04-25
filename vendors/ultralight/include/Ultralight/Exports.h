@@ -1,3 +1,10 @@
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #ifndef __ULTRALIGHT_EXPORTS_H__
 #define __ULTRALIGHT_EXPORTS_H__
 

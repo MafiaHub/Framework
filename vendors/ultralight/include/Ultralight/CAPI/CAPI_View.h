@@ -1,22 +1,39 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 
 ///
 /// @file CAPI_View.h
 ///
-/// View is a web-page container rendered to an offscreen surface that you display yourself.
+/// Web-page container rendered to an offscreen surface.
 ///
-/// The View object is responsible for loading and rendering web-pages to an offscreen surface. It
+/// `#include <Ultralight/CAPI/CAPI_View.h>`
+///
+/// The View class is responsible for loading and rendering web-pages to an offscreen surface. It
 /// is completely isolated from the OS windowing system, you must forward all input events to it
 /// from your application.
 ///
-/// @note  The API is not thread-safe, all calls must be made on the same thread that the
-///        Renderer/App was created on.
+/// ## Creating a View
+///
+/// You can create a View by calling ulCreateView():
+///
+/// ```
+/// // Create a ULViewConfig with default values
+/// ULViewConfig view_config = ulCreateViewConfig();
+///
+/// // Create a View, 500 by 500 pixels in size, using the default Session
+/// ULView view = ulCreateView(renderer, 500, 500, view_config, NULL);
+///
+/// // Clean up the ULViewConfig
+/// ulDestroyViewConfig(view_config);
+/// ```
+///
+/// @note When using ulCreateApp(), the library will automatically create a View for you when you
+///       call ulCreateOverlay().
 ///
 #ifndef ULTRALIGHT_CAPI_VIEW_H
 #define ULTRALIGHT_CAPI_VIEW_H
@@ -42,7 +59,20 @@ ULExport ULViewConfig ulCreateViewConfig();
 ULExport void ulDestroyViewConfig(ULViewConfig config);
 
 ///
-/// Whether to render using the GPU renderer (accelerated) or the CPU renderer (unaccelerated).
+/// Set a user-generated id of the display (monitor, TV, or screen) that the View will be shown on.
+/// 
+/// Animations are driven based on the physical refresh rate of the display. Multiple Views can
+/// share the same display.
+/// 
+/// 
+/// @note This is automatically managed for you when ulCreateApp() is used.
+/// 
+/// @see ulRefreshDisplay()
+/// 
+ULExport void ulViewConfigSetDisplayId(ULViewConfig config, unsigned int display_id);
+
+///
+/// Set whether to render using the GPU renderer (accelerated) or the CPU renderer (unaccelerated).
 ///
 /// This option is only valid if you're managing the Renderer yourself (eg, you've previously
 /// called ulCreateRenderer() instead of ulCreateApp()).
@@ -62,7 +92,7 @@ ULExport void ulViewConfigSetIsAccelerated(ULViewConfig config, bool is_accelera
 ULExport void ulViewConfigSetIsTransparent(ULViewConfig config, bool is_transparent);
 
 ///
-/// The initial device scale, ie. the amount to scale page units to screen pixels. This should be
+/// Set the initial device scale, ie. the amount to scale page units to screen pixels. This should be
 /// set to the scaling factor of the device that the View is displayed on. (Default = 1.0)
 ///
 /// @note 1.0 is equal to 100% zoom (no scaling), 2.0 is equal to 200% zoom (2x scaling)
@@ -70,7 +100,7 @@ ULExport void ulViewConfigSetIsTransparent(ULViewConfig config, bool is_transpar
 ULExport void ulViewConfigSetInitialDeviceScale(ULViewConfig config, double initial_device_scale);
 
 ///
-/// Whether or not the View should initially have input focus. (Default = True)
+/// Set whether or not the View should initially have input focus. (Default = True)
 ///
 ULExport void ulViewConfigSetInitialFocus(ULViewConfig config, bool is_focused);
 
@@ -120,7 +150,7 @@ ULExport void ulViewConfigSetUserAgent(ULViewConfig config, ULString agent_strin
 /// @note  You can pass null to 'session' to use the default session.
 ///
 ULExport ULView ulCreateView(ULRenderer renderer, unsigned int width, unsigned int height,
-                             ULViewConfig view_config, ULSession session, unsigned int display_id);
+                             ULViewConfig view_config, ULSession session);
 
 ///
 /// Destroy a View.
@@ -151,8 +181,16 @@ ULExport unsigned int ulViewGetWidth(ULView view);
 ///
 ULExport unsigned int ulViewGetHeight(ULView view);
 
+///
+// Get the display id of the View.
+///
 ULExport unsigned int ulViewGetDisplayId(ULView view);
 
+///
+/// Set the display id of the View.
+/// 
+/// This should be called when the View is moved to another display.
+/// 
 ULExport void ulViewSetDisplayId(ULView view, unsigned int display_id);
 
 ///

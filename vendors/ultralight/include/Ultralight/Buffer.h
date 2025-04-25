@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -12,8 +12,8 @@
 namespace ultralight {
 
 ///
-/// Function signature for a user-defined destruction callback to be optionally called when Buffer
-/// is destroyed.
+/// Function signature for a user-defined destruction callback to optionally be called when Buffer
+/// is destroyed. Users can use this to deallocate any data associated with the Buffer.
 ///
 /// @param  user_data  Pointer to user-defined user-data (this will be the same value as what was
 ///                    passed to Buffer::Create, if any)
@@ -23,7 +23,11 @@ namespace ultralight {
 typedef void (*DestroyBufferCallback)(void* user_data, void* data);
 
 ///
-/// A fixed-size byte container for passing data around.
+/// A fixed-size container for raw byte data.
+///
+/// This class is used to represent raw data buffers in Ultralight. It intelligently manages the
+/// lifetime of the data and can optionally call a user-supplied callback to deallocate the data
+/// when the Buffer is destroyed.
 ///
 class UExport Buffer : public RefCounted {
  public:

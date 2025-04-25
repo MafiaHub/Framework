@@ -171,14 +171,10 @@ namespace Framework::GUI {
                 utf16Buffer += currentChar;
                 
                 // Convert from UTF-16 to UTF-8
-                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), 
-                                                    static_cast<int>(utf16Buffer.length()),
-                                                    nullptr, 0, nullptr, nullptr);
+                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), static_cast<int>(utf16Buffer.length()), nullptr, 0, nullptr, nullptr);
                 
                 std::string utf8Text(utf8Length, 0);
-                WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), 
-                                   static_cast<int>(utf16Buffer.length()),
-                                   &utf8Text[0], utf8Length, nullptr, nullptr);
+                WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), static_cast<int>(utf16Buffer.length()), &utf8Text[0], utf8Length, nullptr, nullptr);
 
                 ev.text = utf8Text.c_str();
                 ev.unmodified_text = ev.text;
@@ -219,25 +215,23 @@ namespace Framework::GUI {
     }
 
     void View::OnAddConsoleMessage(ultralight::View *caller, const ultralight::ConsoleMessage &message) {
-        Framework::Logging::GetLogger("Web")->debug("Console message: {}:{}:{}:{}", message.message().utf8().data(), message.line_number(), message.column_number(), message.source_id().utf8().data());
+        const auto msg = std::string(message.message().utf8().data());
+        const auto lineNumber = message.line_number();
+        const auto columnNumber = message.column_number();
+        const auto sourceUrl = std::string(message.source_id().utf8().data());
         if (_onConsoleMessageCallback) {
-            _onConsoleMessageCallback(std::string(message.message().utf8().data()), message.line_number(), message.column_number(), std::string(message.source_id().utf8().data()));
+            _onConsoleMessageCallback(msg, lineNumber, columnNumber, sourceUrl);
         }
     }
 
     void View::OnDOMReady(ultralight::View *caller, uint64_t frame_id, bool is_main_frame, const ultralight::String &url) {
-        Framework::Logging::GetLogger("Web")->debug("DOM ready");
         if (_onDOMReadyCallback) {
             _onDOMReadyCallback(frame_id, is_main_frame, std::string(url.utf8().data()));
         }
     }
 
     void View::OnWindowObjectReady(ultralight::View *caller, uint64_t frame_id, bool is_main_frame, const ultralight::String &url) {
-        Framework::Logging::GetLogger("Web")->debug("Window object ready");
-
-        // Bind the SDK
         _sdk->Init(caller);
-
         if (_onWindowObjectReadyCallback) {
             _onWindowObjectReadyCallback(frame_id, is_main_frame, std::string(url.utf8().data()));
         }
