@@ -70,7 +70,7 @@ namespace Framework::Scripting::Utils {
     // Convert nlohmann::json to sol::object
     static inline sol::object JsonToSol(sol::this_state s, const nlohmann::json &json) {
         if (json.is_null()) {
-            return sol::nil;
+            return sol::nil_t();
         }
         else if (json.is_boolean()) {
             return sol::make_object(s, json.get<bool>());
@@ -102,6 +102,6 @@ namespace Framework::Scripting::Utils {
         }
 
         // Default case
-        return sol::nil;
+        return sol::nil_t();
     }
 }
