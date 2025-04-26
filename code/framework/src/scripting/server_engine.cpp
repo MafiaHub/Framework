@@ -31,6 +31,14 @@ namespace Framework::Scripting {
         return sol::stack::push(L, description);
     }
 
+    // Path normalization function for cross-platform Lua path handling
+    static std::string normalizeLuaPath(const std::string &path) {
+        std::string normalized = path;
+        // Lua prefers forward slashes in package.path across all platforms
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        return normalized;
+    }
+
     // https://stackoverflow.com/questions/4125971/setting-the-global-lua-path-variable-from-c-c
     static inline int setLuaPath(lua_State *L, const char *path) {
         lua_getglobal(L, "package");
@@ -52,9 +60,9 @@ namespace Framework::Scripting {
         _luaEngine->set_exception_handler(&my_exception_handler);
         _luaEngine->open_libraries(sol::lib::base, sol::lib::table, sol::lib::package, sol::lib::coroutine, sol::lib::string, sol::lib::io, sol::lib::math, sol::lib::debug, sol::lib::os, sol::lib::utf8);
 
-        // Configure the lua paths
-        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?.lua").c_str());
-        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?\\?.lua").c_str());
+        // Configure the lua paths using normalized paths for cross-platform compatibility
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/?/?.lua").c_str());
 
         // Init the common SDK
         InitCommonSDK();
@@ -94,7 +102,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        auto lr = _luaEngine->load_file(_mainGamemodeServerPath + "/" + _gamemodeName);
+        auto lr = _luaEngine->load_file(normalizeLuaPath(_mainGamemodeServerPath + "/" + _gamemodeName).c_str());
         if (!lr.valid()) { // This checks the syntax of your script, but does not execute it
             sol::error err   = lr;
             std::string what = err.what();
