@@ -63,6 +63,10 @@ namespace Framework::Scripting {
         // Configure the lua paths using normalized paths for cross-platform compatibility
         setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/?.lua").c_str());
         setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/?/?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "/?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "/?/?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "../?.lua").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "../?/?.lua").c_str());
 
         // Init the common SDK
         InitCommonSDK();
