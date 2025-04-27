@@ -14,6 +14,7 @@
 
 #include <steam_api.h>
 #include <string>
+#include <memory>
 
 namespace Framework::External::Steam {
     struct AuthTicket {
@@ -36,7 +37,7 @@ namespace Framework::External::Steam {
     };
     class Wrapper final {
       private:
-        CSteamAPIContext *_ctx = nullptr;
+        std::unique_ptr<CSteamAPIContext> _ctx;
         AuthTicket _authTicket;
         bool _overlayActive = false;
 
@@ -57,7 +58,7 @@ namespace Framework::External::Steam {
         }
 
         const CSteamAPIContext *GetContext() const {
-            return _ctx;
+            return _ctx.get();
         };
 
         STEAM_CALLBACK(Wrapper, OnGameOverlayActivated, GameOverlayActivated_t);

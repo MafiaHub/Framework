@@ -27,8 +27,7 @@ namespace Framework::External::Steam {
             return SteamError::STEAM_USER_NOT_LOGGED_ON;
         }
 
-        const auto ctx = new CSteamAPIContext();
-        _ctx           = ctx;
+        _ctx = std::make_unique<CSteamAPIContext>();
 
         if (!_ctx) {
             Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to create steam api context");
