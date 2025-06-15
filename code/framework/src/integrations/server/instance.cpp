@@ -565,4 +565,11 @@ namespace Framework::Integrations::Server {
         // mod-specific builtins
         ModuleRegister(engine);
     }
+
+    void Instance::PreShutdown() {
+        if (_scriptingModule) {
+            _scriptingModule->PreShutdown();
+        }
+    }
+
 } // namespace Framework::Integrations::Server
