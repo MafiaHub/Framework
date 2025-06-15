@@ -58,6 +58,7 @@ namespace Framework::Integrations::Server {
             std::string masterlistUrl = "";
         } services;
 
+        bool webServerEnabled = true;
         std::string webBindHost;
         int32_t webBindPort;
 
