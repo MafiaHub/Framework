@@ -155,6 +155,8 @@ namespace Framework::Integrations::Server {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Gamemode reloaded");
         });
 
+        PostScriptInit();
+
         // Initialize asset streamer
         InitAssetStreamer();
 

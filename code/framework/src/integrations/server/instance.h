@@ -132,6 +132,8 @@ namespace Framework::Integrations::Server {
         virtual void PostInit() {}
         
         virtual void PostScriptInit() {}
+        
+        virtual void PostScriptInit() {}
 
         virtual void PostUpdate() {}
 
