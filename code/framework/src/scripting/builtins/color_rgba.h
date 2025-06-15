@@ -57,6 +57,11 @@ namespace Framework::Scripting::Builtins {
             return static_cast<float>(_data.a) / 255.0f;
         }
 
+        ColorRGBA Random() const {
+            // TODO: Replace with a better rand library
+            return ColorRGBA(rand() % 255, rand() % 255, rand() % 255, rand() % 255);
+        }
+
         std::string ToString() const {
             std::ostringstream ss;
             ss << "RGBA{ r: " << _data.r << ", g: " << _data.g << ", b: " << _data.b << ", a: " << _data.a << " }";
@@ -112,10 +117,15 @@ namespace Framework::Scripting::Builtins {
             cls["toArray"]  = &ColorRGBA::ToArray;
             cls["toInteger"]   = &ColorRGBA::ToInteger;
             cls["fromInteger"] = &ColorRGBA::FromInteger;
+            cls["random"]      = &ColorRGBA::Random;
             cls["add"]     = &ColorRGBA::Add;
             cls["sub"]     = &ColorRGBA::Sub;
             cls["mul"]     = &ColorRGBA::Mul;
             cls["div"]     = &ColorRGBA::Div;
+            cls["getFloatR"]             = &ColorRGBA::GetFloatR;
+            cls["getFloatG"]             = &ColorRGBA::GetFloatG;
+            cls["getFloatB"]             = &ColorRGBA::GetFloatB;
+            cls["getFloatA"]             = &ColorRGBA::GetFloatA;
         }
     };
 } // namespace Framework::Scripting::Engines::Node::Builtins
