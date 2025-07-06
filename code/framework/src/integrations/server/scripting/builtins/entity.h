@@ -219,6 +219,10 @@ namespace Framework::Integrations::Scripting {
             Framework::World::ServerEngine::RemoveEntity(_ent);
         }
 
+        bool operator==(const Entity &other) const {
+            return this->_ent == other._ent;
+        }
+
         static void Register(sol::state *luaEngine) {
             sol::usertype<Entity> cls = luaEngine->new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
             cls["id"]                 = sol::property([](const Entity &self) {
