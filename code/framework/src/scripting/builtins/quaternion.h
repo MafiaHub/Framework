@@ -62,6 +62,17 @@ namespace Framework::Scripting::Builtins {
             return {_data.w, _data.x, _data.y, _data.z};
         }
 
+        std::list<float> ToEulerRadians() const {
+            glm::vec3 eulerRadians = glm::eulerAngles(_data);
+            return { eulerRadians.x, eulerRadians.y, eulerRadians.z };
+        }
+
+        std::list<float> ToEulerDegrees() const {
+            glm::vec3 eulerRadians = glm::eulerAngles(_data);
+            glm::vec3 eulerDegrees = glm::degrees(eulerRadians);
+            return { eulerDegrees.x, eulerDegrees.y, eulerDegrees.z };
+        }
+        
         void Add(float w, float x, float y, float z) {
             const glm::quat newQuat(w, x, y, z);
             _data += newQuat;
@@ -101,7 +112,18 @@ namespace Framework::Scripting::Builtins {
             _data = glm::inverse(_data);
         }
 
-        void FromEuler(float x, float y, float z) {
+        static Quaternion FromEulerRadians(float x, float y, float z) {
+            auto data = glm::quat(glm::vec3(x, y, z));
+            return Quaternion(data.w, data.x, data.y, data.z);
+        }
+
+        static Quaternion FromEulerDegrees(float x, float y, float z) {
+            auto radians = glm::radians(glm::vec3(x, y, z));
+            auto data = glm::quat(radians);
+            return Quaternion(data.w, data.x, data.y, data.z);
+        }
+
+        void SetEuler(float x, float y, float z) {
             _data = glm::quat(glm::vec3(x, y, z));
         }
 
@@ -116,8 +138,10 @@ namespace Framework::Scripting::Builtins {
             cls["y"] = sol::property([](const Quaternion& self) { return self.GetY(); });
             cls["z"] = sol::property([](const Quaternion& self) { return self.GetZ(); });
             cls["length"] = sol::property([](const Quaternion& self) { return self.GetLength(); });
-            cls["toString"] = &Quaternion::ToString;
+            cls["__tostring"] = &Quaternion::ToString;
             cls["toArray"]  = &Quaternion::ToArray;
+            cls["toEulerRadians"]  = &Quaternion::ToEulerRadians;
+            cls["toEulerDegrees"]  = &Quaternion::ToEulerDegrees;
             cls["add"]     = &Quaternion::Add;
             cls["sub"]     = &Quaternion::Sub;
             cls["mul"]     = &Quaternion::Mul;
@@ -126,7 +150,9 @@ namespace Framework::Scripting::Builtins {
             cls["cross"]     = &Quaternion::Cross;
             cls["dot"]     = &Quaternion::Dot;
             cls["inverse"]     = &Quaternion::Inverse;
-            cls["fromEuler"]     = &Quaternion::FromEuler;
+            cls["fromEulerRadians"]     = &Quaternion::FromEulerRadians;
+            cls["fromEulerDegrees"]     = &Quaternion::FromEulerDegrees;
+            cls["setEuler"]     = &Quaternion::SetEuler;
             cls["fromAxisAngle"]     = &Quaternion::FromAxisAngle;
         }
     };
