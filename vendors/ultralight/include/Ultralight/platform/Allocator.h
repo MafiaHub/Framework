@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #ifndef ULTRALIGHT_ALLOCATOR_H
 #define ULTRALIGHT_ALLOCATOR_H
 
@@ -16,11 +16,19 @@
 extern "C" {
 #endif
 
-//
-// Global allocator interface declaration.
-// 
-// @see ulAllocator
-//
+///
+/// User-defined allocator interface.
+///
+/// @pre This API is only available in the Pro edition when the UL_ENABLE_ALLOCATOR_OVERRIDE
+///      build option is enabled.
+///
+/// The library uses this to allocate memory. You can override the default allocator functions
+/// by setting the ulAllocator object with your own functions.
+///
+/// This should be done before calling any other library functions.
+///
+/// @see ulAllocator
+///
 typedef struct {
   //
   // Allocate a block of memory of at least |bytes| size.
@@ -62,29 +70,32 @@ typedef struct {
 
 } ULAllocator;
 
-//
-// Get the allocator interface for the library.
-//
-// The C functions set in this object will be used for allocating memory inside the library
-// when the UL_ENABLE_ALLOCATOR_OVERRIDE build option is enabled.
-// 
-// Default functions are already set for all of these but you can override them with your own.
-// 
-// Platform specific notes:
-//    * Windows: The default functions use HeapAlloc/HeapReAlloc/HeapFree.
-// 
+///
+/// Get the allocator interface object for the library.
+///
+/// @pre This API is only available in the Pro edition when the UL_ENABLE_ALLOCATOR_OVERRIDE
+///      build option is enabled.
+///
+/// The C functions set in this object will be used for allocating memory inside the library
+/// when the `UL_ENABLE_ALLOCATOR_OVERRIDE` build option is enabled.
+/// 
+/// Default functions are already set for all of these but you can override them with your own.
+/// 
+/// Platform specific notes:
+///    * __Windows__: The default functions use `HeapAlloc` / `HeapReAlloc` / `HeapFree`.
+/// 
 extern UCExport ULAllocator ulAllocator;
 
 #ifdef _WIN32
-//
-// Get the handle to the private heap used by the library.
-// 
-// This is the handle returned by HeapCreate(), you should destroy it after unloading the library
-// by calling HeapDestroy().
-// 
-// This is only valid if the UL_ENABLE_ALLOCATOR_OVERRIDE build option is enabled and the default
-// functions are set in the ulAllocator object.
-// 
+///
+/// Get the handle to the private heap used by the library.
+/// 
+/// This is the handle returned by `HeapCreate()`, you should destroy it after unloading the library
+/// by calling `HeapDestroy()`.
+/// 
+/// This is only valid if the UL_ENABLE_ALLOCATOR_OVERRIDE build option is enabled and the default
+/// functions are set in the ulAllocator object.
+/// 
 UCExport void* ulGetHeapHandle();
 #endif
 

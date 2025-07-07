@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -13,7 +13,20 @@
 namespace ultralight {
 
 ///
-/// Storage for browsing data (cookies, local storage, etc.) optionally persisted to disk.
+/// Storage for a browsing session (cookies, local storage, etc.).
+///
+/// This class stores data for a unique browsing session (cookies, local storage, application cache,
+/// indexed db. etc.). You can create multiple sessions to isolate data between different browsing
+/// contexts.
+///
+/// ## Default Session
+///
+/// The Renderer has a default session named "default" that is used if no session is specified when
+/// when creating a View.
+///
+/// ## Session Lifetime
+///
+/// Sessions can be either temporary (in-memory only) or persistent (backed to disk).
 ///
 /// @see  Renderer::CreateSession
 ///

@@ -96,7 +96,7 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
-        if (!_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir)) {
+        if (_opts.webServerEnabled && !_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
@@ -154,6 +154,8 @@ namespace Framework::Integrations::Server {
         _scriptingModule->SetOnReloadCallback([this]() {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Gamemode reloaded");
         });
+
+        PostScriptInit();
 
         // Initialize asset streamer
         InitAssetStreamer();
@@ -565,4 +567,11 @@ namespace Framework::Integrations::Server {
         // mod-specific builtins
         ModuleRegister(engine);
     }
+
+    void Instance::PreShutdown() {
+        if (_scriptingModule) {
+            _scriptingModule->PreShutdown();
+        }
+    }
+
 } // namespace Framework::Integrations::Server

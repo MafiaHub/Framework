@@ -8,15 +8,16 @@
 
 #include "engine.h"
 
-#include "builtins/console.h"
 #include "builtins/color_rgb.h"
 #include "builtins/color_rgba.h"
+#include "builtins/console.h"
+#include "builtins/environment.h"
 #include "builtins/event.h"
 #include "builtins/hash.h"
+#include "builtins/json.h"
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
-#include "builtins/json.h"
 
 namespace Framework::Scripting {
     bool Engine::InitCommonSDK() {
@@ -29,6 +30,7 @@ namespace Framework::Scripting {
         Builtins::Quaternion::Register(_luaEngine);
         Builtins::Vector3::Register(_luaEngine);
         Builtins::Vector2::Register(_luaEngine);
+        Builtins::Environment::Register(_luaEngine);
         return true;
     }
-}
+} // namespace Framework::Scripting

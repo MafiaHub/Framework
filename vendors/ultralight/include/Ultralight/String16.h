@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -30,10 +30,13 @@ typedef detail::selector<sizeof(wchar_t)>::Char16 Char16;
 #endif
 
 ///
-/// @brief  A UTF-16 string container.
+/// A null-terminated UTF-16 string container.
 ///
 class UExport String16 {
 public:
+  // Native character type
+  typedef Char16 CharType;
+
   // Make an empty String16
   String16();
 
@@ -47,10 +50,17 @@ public:
   // Make a deep copy of String16
   String16(const String16& other);
 
+  // Move constructor
+  String16(String16&& other);
+
+  // Destructor
   ~String16();
 
   // Assign a String16 to this one, deep copy is made
   String16& operator=(const String16& other);
+
+  // Move assignment operator
+  String16& operator=(String16&& other);
 
   // Append a String16 to this one.
   String16& operator+=(const String16& other);
@@ -94,6 +104,18 @@ public:
 
   // Get a UTF-32 copy of this string
   String32 utf32() const;
+
+  // Hash function
+  size_t Hash() const;
+
+  // Comparison operator
+  bool operator<(const String16& other) const;
+
+  // Equality operator
+  bool operator==(const String16& other) const;
+
+  // Inequality operator
+  bool operator!=(const String16& other) const;
 
 private:
   Char16* data_;

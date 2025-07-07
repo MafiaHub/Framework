@@ -72,8 +72,8 @@ namespace Framework::GUI {
         // Update the renderer
         std::lock_guard lock(_renderMutex);
         _ultralightRenderer->Update();
-        _ultralightRenderer->Render();
         _ultralightRenderer->RefreshDisplay(0);
+        _ultralightRenderer->Render();
 
         // Update the views
         for (auto &view : _views) {
@@ -86,12 +86,11 @@ namespace Framework::GUI {
             return;
         }
 
+        // Update the views
         std::vector<GUI::View *> views;
-
         for (auto &view : _views) {
             views.push_back(view.get());
         }
-
         std::sort(views.begin(), views.end(), [](GUI::View *a, GUI::View *b) {
             return a->GetZIndex() < b->GetZIndex();
         });

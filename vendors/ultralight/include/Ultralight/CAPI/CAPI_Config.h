@@ -1,18 +1,21 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 
 ///
 /// @file CAPI_Config.h
 ///
-/// Global config for Ultralight.
+/// Core configuration for the renderer.
 ///
-/// This can be used to configure the library when calling ulCreateRenderer() or ulCreateApp().
-/// 
+/// `#include <Ultralight/CAPI/CAPI_Config.h>`
+///
+/// These are various configuration options that can be used to customize the behavior of the
+/// library. These options can only be set once before creating the Renderer.
+///
 #ifndef ULTRALIGHT_CAPI_CONFIG_H
 #define ULTRALIGHT_CAPI_CONFIG_H
 

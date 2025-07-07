@@ -1,7 +1,11 @@
 # NOTICES 
 
-Ultralight (c) 2023 Ultralight, Inc.  All rights reserved.  Ultralight is a
+## Copyright 
+
+Ultralight (c) 2024 Ultralight, Inc.  All rights reserved.  Ultralight is a
 trademark of Ultralight, Inc.
+
+## Third-Party Notices
 
 This software may include portions under the following licenses:
 
@@ -24,14 +28,14 @@ This software may include portions under the following licenses:
 | SQLite               | Public domain      |
 | zlib                 | zlib               |
 
-** All WebKit modifications are published under LGPL 2.1 at:
+** All WebKit modifications are published open-source under LGPL 2.1 at:
    <https://github.com/ultralight-ux/WebCore>
 
 ## WebKit
 
 ### BSD LICENSE
 
-Copyright (C) 2019 Apple Inc. All rights reserved.
+Copyright (C) 2024 Apple Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:

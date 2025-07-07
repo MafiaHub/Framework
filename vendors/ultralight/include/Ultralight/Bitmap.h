@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -16,7 +16,7 @@ namespace ultralight {
 ///
 /// The various Bitmap formats.
 ///
-enum class UExport BitmapFormat : uint8_t {
+enum class BitmapFormat : uint8_t {
   ///
   /// Alpha channel only, 8-bits per pixel.
   ///
@@ -59,8 +59,26 @@ class LockedPixels;
 typedef void (*DestroyBitmapCallback)(void* user_data, void* data);
 
 ///
-/// @brief  Bitmap container with basic blitting and conversion routines.
+/// A thread-safe container for pixel data.
 ///
+/// The bitmap class is used to store pixel data in a variety of formats. It intelligently manages
+/// the lifetime of the pixel buffer and provides thread-safe access to the pixel data.
+///
+/// ## Accessing Pixel Data
+///
+/// You can access the underlying pixel data by using the LockPixelsSafe() method. An example
+/// follows:
+///
+/// ```
+/// auto bitmap = Bitmap::Create(100, 100, BitmapFormat::BGRA8_UNORM_SRGB);
+/// auto pixels = bitmap->LockPixelsSafe();
+/// if (pixels && pixels.data()) {
+///   // Zero out the pixel buffer by setting every byte to 0.
+///   memset(pixels.data(), 0, pixels.size());
+/// }
+/// 
+/// // 'pixels' is automatically unlocked when it goes out of scope.
+/// ```
 class UExport Bitmap : public RefCounted {
  public:
   ///

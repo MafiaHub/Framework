@@ -1,27 +1,115 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 
 ///
 /// @file CAPI_Renderer.h
 ///
 /// Core renderer singleton for the library, coordinates all library functions.
 ///
-/// The Renderer class is responsible for creating and painting \link CAPI_View.h Views \endlink,
-/// managing \link CAPI_Session.h Sessions \endlink, as well as coordinating network requests,
-/// events, JavaScript execution, and more.
+/// `#include <Ultralight/CAPI/CAPI_Renderer.h>`
+/// 
+/// The Renderer class is responsible for creating and painting Views, managing Sessions, as well
+/// as coordinating network requests, events, JavaScript execution, and more.
+/// 
+/// ## Creating the Renderer
 ///
-/// ## Initializing the Renderer
+/// @note A Renderer will be created for you automatically when you call ulCreateApp (access it
+///       via ulAppGetRenderer()).
+///
+/// @note ulCreateApp() is part of the AppCore API and automatically manages window creation, run
+///       loop, input, painting, and most platform-specific functionality. (Available on desktop
+///       platforms only)
+/// \endparblock
+///
+/// ### Defining Platform Handlers
+///
+/// Before creating the Renderer, you should define your platform handlers via the Platform
+/// singleton (see CAPI_Platform.h). This can be used to customize file loading, font loading,
+/// clipboard access, and other functionality typically provided by the OS.
+///
+/// Default implementations for most platform handlers are available in the 
+/// [AppCore repo](https://github.com/ultralight-ux/AppCore/tree/master/src). You can use these
+/// stock implementations by copying the code into your project, or you can write your own.
+///
+/// At a minimum, you should provide a ULFileSystem and ULFontLoader otherwise Renderer creation will
+/// fail.
 /// 
-/// To initialize the library, you should set up the \link CAPI_Platform.h Platform \endlink
-/// singleton and call ulCreateRenderer().
+/// ### Creating the Renderer
+///
+/// Once you've set up the Platform handlers you can create the Renderer by calling
+/// `ulCreateRenderer()`.
+///
+/// @par Example creation code
+/// ```
+///  // Setup our config.
+///  ULConfig config = ulCreateConfig();
+///
+///  // Use AppCore's font loader.
+///  ulEnablePlatformFontLoader();
+///
+///  // Use AppCore's file system to load file:/// URLs from the OS.
+///  ULString base_dir = ulCreateString("./assets/");
+///  ulEnablePlatformFileSystem(base_dir);
+///  ulDestroyString(base_dir);
+///
+///  // Create the renderer.
+///  ULRenderer renderer = ulCreateRenderer(config);
+///
+///  // Destroy the config.
+///  ulDestroyConfig(config);
+///
+///  // Set up Views here...
+/// ```
 /// 
-/// @note If you'd like to let the library manage window creation you can instead call
-///       ulCreateApp().
+/// ## Updating Renderer Logic
+/// 
+/// You should call ulUpdate() from your main update loop as often as possible to give the
+/// library an opportunity to dispatch events and timers:
+/// 
+/// @par Example update code
+/// ```
+/// void mainLoop()
+/// {
+///   while(true)
+///   {  
+///     // Update program logic here
+///     ulUpdate(renderer);
+///   }
+/// }
+/// ```
+/// 
+/// ## Rendering Each Frame
+/// 
+/// When your program is ready to display a new frame (usually in synchrony with the monitor
+/// refresh rate), you should call `ulRefreshDisplay()` and `ulRender` so the
+/// library can render all active Views as needed.
+/// 
+/// @par Example per-frame render code
+/// ```
+/// void displayFrame()
+/// {
+///     // Notify the renderer that the main display has refreshed. This will update animations,
+///     // smooth scroll, and window.requestAnimationFrame() for all Views matching the display id.
+///     ulRefreshDisplay(renderer, 0);
+///
+///     // Render all Views as needed
+///     ulRender(renderer);
+/// 
+///     // Each View will render to a
+///     //   - Pixel-Buffer Surface (ulViewGetSurface())
+///     //     or
+///     //   - GPU texture (ulViewGetRenderTarget())
+///     // based on whether CPU or GPU rendering is used.
+///     //
+///     // You will need to display the image data here as needed.
+///   }
+/// }
+/// ```
 /// 
 #ifndef ULTRALIGHT_CAPI_RENDERER_H
 #define ULTRALIGHT_CAPI_RENDERER_H
@@ -33,32 +121,38 @@ extern "C" {
 #endif
 
 ///
-/// Create the core renderer singleton for the library directly.
+/// Create the core renderer singleton for the library.
 ///
-/// Unlike ulCreateApp(), this does not use any native windows for drawing and allows you to manage
-/// your own runloop and painting. This method is recommended for those wishing to integrate the
-/// library into a game.
+/// You should set up the Platform singleton (see CAPI_Platform.h) before calling this function.
+/// 
+/// @note You do not need to the call this if you're using ulCreateApp() from AppCore.
 ///
-/// This singleton manages the lifetime of all Views and coordinates all painting, rendering,
-/// network requests, and event dispatch.
+/// \parblock
+/// @warning You'll need to define a ULFontLoader and ULFileSystem within the Platform singleton
+///         or else this call will fail.
+/// \endparblock
+/// 
+/// \parblock
+/// @warning You should only create one Renderer during the lifetime of your program.
+/// \endparblock
 ///
-/// You should only call this once per process lifetime.
+/// @param  config  The configuration to use for the renderer.
 ///
-/// You must set up your platform handlers before calling this. At a minimum, you must call
-/// ulPlatformSetFileSystem() and  ulPlatformSetFontLoader() before calling this.
-///
-/// @note  You should not call this if you are using ulCreateApp(), it creates its own renderer and
-///        provides default implementations for various platform handlers automatically.
+/// @return  Returns the new renderer instance.
 ///
 ULExport ULRenderer ulCreateRenderer(ULConfig config);
 
 ///
 /// Destroy the renderer.
 ///
+/// @param renderer  The renderer instance to destroy.
+///
 ULExport void ulDestroyRenderer(ULRenderer renderer);
 
 ///
 /// Update timers and dispatch internal callbacks (JavaScript and network).
+///
+/// @param  renderer  The active renderer instance.
 ///
 ULExport void ulUpdate(ULRenderer renderer);
 
@@ -68,10 +162,16 @@ ULExport void ulUpdate(ULRenderer renderer);
 /// This updates animations, smooth scroll, and window.requestAnimationFrame() for all Views
 /// matching the display id.
 ///
+/// @param  renderer  The active renderer instance.
+///
+/// @param  display_id  The display ID to refresh (0 by default).
+///
 ULExport void ulRefreshDisplay(ULRenderer renderer, unsigned int display_id);
 
 ///
-/// Render all active Views.
+/// Render all active Views to their respective surfaces and render targets.
+///
+/// @param  renderer  The active renderer instance.
 ///
 ULExport void ulRender(ULRenderer renderer);
 
@@ -79,10 +179,14 @@ ULExport void ulRender(ULRenderer renderer);
 /// Attempt to release as much memory as possible. Don't call this from any callbacks or driver
 /// code.
 ///
+/// @param  renderer  The active renderer instance.
+///
 ULExport void ulPurgeMemory(ULRenderer renderer);
 
 ///
 /// Print detailed memory usage statistics to the log. (@see ulPlatformSetLogger)
+///
+/// @param  renderer  The active renderer instance.
 ///
 ULExport void ulLogMemoryUsage(ULRenderer renderer);
 
@@ -96,6 +200,12 @@ ULExport void ulLogMemoryUsage(ULRenderer renderer);
 /// \code
 ///   inspector://<ADDRESS>:<PORT>
 /// \endcode
+///
+/// @param renderer  The active renderer instance.
+///
+/// @param address   The address for the server to listen on (eg, "127.0.0.1")
+///
+/// @param port      The port for the server to listen on (eg, 9222)
 ///
 /// @return  Returns whether the server started successfully or not.
 ///
@@ -127,6 +237,10 @@ ULExport void ulSetGamepadDetails(ULRenderer renderer, unsigned int index, ULStr
 /// @note  The gamepad should first be described via ulSetGamepadDetails before calling this
 ///        function.
 ///
+/// @param renderer  The active renderer instance.
+///
+/// @param evt       The event to fire.
+///
 /// @see <https://developer.mozilla.org/en-US/docs/Web/API/Gamepad>
 ///
 ULExport void ulFireGamepadEvent(ULRenderer renderer, ULGamepadEvent evt);
@@ -136,6 +250,10 @@ ULExport void ulFireGamepadEvent(ULRenderer renderer, ULGamepadEvent evt);
 ///
 /// @note  The gamepad should be connected via a previous call to ulFireGamepadEvent.
 ///
+/// @param renderer  The active renderer instance.
+///
+/// @param evt       The event to fire.
+///
 /// @see <https://developer.mozilla.org/en-US/docs/Web/API/Gamepad/axes>
 ///
 ULExport void ulFireGamepadAxisEvent(ULRenderer renderer, ULGamepadAxisEvent evt);
@@ -144,6 +262,10 @@ ULExport void ulFireGamepadAxisEvent(ULRenderer renderer, ULGamepadAxisEvent evt
 /// Fire a gamepad button event (to be called when a button value is changed).
 ///
 /// @note  The gamepad should be connected via a previous call to ulFireGamepadEvent.
+///
+/// @param renderer  The active renderer instance.
+///
+/// @param evt       The event to fire.
 ///
 /// @see <https://developer.mozilla.org/en-US/docs/Web/API/Gamepad/buttons>
 ///

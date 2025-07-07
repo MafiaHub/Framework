@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/String.h>
@@ -59,25 +59,29 @@ class UExport FontFile : public RefCounted {
 ///
 /// User-defined font loader interface.
 /// 
-/// The library uses this to load all system fonts.
+/// The library uses this to load a font file (eg, `Arial.ttf`) for a given font description (eg, 
+/// `font-family: Arial;`).
 ///
-/// Every operating system has its own library of installed system fonts. The FontLoader interface
-/// is used to lookup these fonts and fetch the actual font data (raw TTF/OTF file data) for a given
-/// given font description.
+/// Every OS has its own library of installed system fonts. The FontLoader interface is used to
+/// lookup these fonts and fetch the actual font data (raw TTF/OTF file data) for a given font
+/// description.
+///
+/// You can provide the library with your own font loader implementation so that you can bundle
+/// fonts with your application rather than relying on the system's installed fonts.
 /// 
-/// ## Usage
-/// 
+/// ## Default Implementation
+///
+/// A platform-specific implementation of FontLoader is provided for you when you call
+/// App::Create().
+///
+/// If you are using Renderer::Create(), you **must** provide your own. You can still use AppCore's
+/// implementation however-- see the helper functions defined in <AppCore/Platform.h>.
+///
+/// ## Setting the Font Loader
+///
 /// To provide your own custom FontLoader implementation, you should inherit from this class,
 /// handle the virtual member functions, and then pass an instance of your class to
 /// Platform::set_font_loader() before calling Renderer::Create() or App::Create().
-///
-/// @note
-/// \parblock
-/// AppCore uses a default OS-specific FontLoader implementation when you call App::Create().
-///
-/// If you are using Renderer::Create(), you can still use AppCore's implementation-- see the
-/// helper functions defined in <AppCore/Platform.h>.
-/// \endparblock
 ///
 class UExport FontLoader {
  public:

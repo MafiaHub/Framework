@@ -43,6 +43,7 @@ namespace Framework::Integrations::Server::Scripting {
         ~ServerScriptingModule();
 
         bool Init(Framework::Scripting::SDKRegisterCallback);
+        bool PreShutdown();
         bool Shutdown();
         bool LoadManifest();
         void Update();

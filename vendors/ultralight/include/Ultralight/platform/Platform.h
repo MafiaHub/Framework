@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 
@@ -23,7 +23,25 @@ class ThreadFactory;
 /// Global platform singleton, manages user-defined platform handlers and global config.
 /// 
 /// The library uses the Platform API for most platform-specific operations (eg, file access,
-/// clipboard, font loading, GPU access, etc.).
+/// clipboard, font loading, GPU access, pixel buffer transport, etc.).
+///
+/// ## Motivation
+///
+/// Ultralight is designed to work in as many platforms and environments as possible. To achieve
+/// this, we've factored out most platform-specific code into a set of interfaces that you can
+/// implement and set on the Platform singleton.
+///
+/// ## Default Implementations
+///
+/// We provide a number of default implementations for desktop platforms (eg, Windows, macOS, Linux)
+/// for you when you call App::Create(). These implementations are defined in the 
+/// [AppCore repository](https://github.com/ultralight-ux/AppCore/tree/master/src), we recommend
+/// using their source code as a starting point for your own implementations.
+///
+/// ## Required Handlers
+///
+/// When using Renderer::Create() directly, you'll need to provide your own implementations for
+/// FileSystem and FontLoader at a minimum.
 /// 
 /// @par Overview of which platform handlers are required / optional / provided:
 /// 
@@ -35,6 +53,7 @@ class ThreadFactory;
 /// | GPUDriver      |  *Optional*        | *Provided*    |
 /// | Logger         |  *Optional*        | *Provided*    |
 /// | SurfaceFactory |  *Provided*        | *Provided*    |
+/// | ThreadFactory  |  *Optional*        | *Optional*    |
 /// 
 /// @note  This singleton should be set up before creating the Renderer or App.
 ///
@@ -143,8 +162,20 @@ class UExport Platform {
   ///
   virtual SurfaceFactory* surface_factory() const = 0;
 
+  ///
+  /// Set the ThreadFactory
+  ///
+  /// This can be used to provide a platform-specific ThreadFactory implementation for the library
+  /// to use when creating threads.
+  ///
+  /// @param thread_factory A user-defined ThreadFactory implementation, ownership remains with the
+  ///                       caller.
+  ///
   virtual void set_thread_factory(ThreadFactory* thread_factory) = 0;
  
+  ///
+  /// Get the ThreadFactory
+  ///
   virtual ThreadFactory* thread_factory() const = 0;
 };
 

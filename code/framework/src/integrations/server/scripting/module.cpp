@@ -241,4 +241,13 @@ namespace Framework::Integrations::Server::Scripting {
 
         return true;
     }
+
+    bool ServerScriptingModule::PreShutdown() {
+        _serverEngine->UnloadScript();
+        _serverEngine->ClearScripts();
+        _serverEngine->ClearEventHandlers();
+
+        return true;
+    }
+
 }

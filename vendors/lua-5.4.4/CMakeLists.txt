@@ -1,5 +1,6 @@
 project(Lua C)
-add_library(Lua54 STATIC
+
+set(LUA_FILES
     src/lua54/lapi.c
     src/lua54/lauxlib.c
     src/lua54/lbaselib.c
@@ -35,5 +36,31 @@ add_library(Lua54 STATIC
     src/lua54/lzio.c
 )
 
-target_include_directories(Lua54 PUBLIC src)
-target_include_directories(Lua54 PRIVATE src/lua54)
+file(GLOB LUA_HEADERS
+    src/lua54/*.h
+)
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+# The library source files (no lua.c for static/shared libs)
+set(LUA_LIB_FILES ${LUA_FILES})
+list(REMOVE_ITEM LUA_LIB_FILES src/lua54/lua.c)
+
+# Static Library
+add_library(lua54_static STATIC ${LUA_LIB_FILES})
+add_custom_command(TARGET lua54_static POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:lua54_static>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:lua54_static>/include"
+    COMMAND ${CMAKE_COMMAND} -E copy ${LUA_HEADERS} "$<TARGET_FILE_DIR:lua54_static>/include"
+    COMMENT "Copying Lua headers to output folder"
+)
+set_target_properties(lua54_static PROPERTIES OUTPUT_NAME "lua/lua-54")
+
+# Shared Library
+add_library(lua54_shared SHARED ${LUA_LIB_FILES})
+set_target_properties(lua54_shared PROPERTIES OUTPUT_NAME "lua/lua")
+
+# Executable
+add_executable(lua54_exe ${LUA_FILES})
+set_target_properties(lua54_exe PROPERTIES OUTPUT_NAME "lua/lua54")

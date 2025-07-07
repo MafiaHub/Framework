@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 /*
 * Portions of the below code are derived from 'RefPtr.h' from Apple's WTF,
 * with the following license header:
@@ -141,7 +141,7 @@ template<typename T> class RefPtr {
     : instance_(other.LeakRef())
   {
   }
-  
+
   ///
   /// Destroy RefPtr (wll decrement ref-count by one)
   ///

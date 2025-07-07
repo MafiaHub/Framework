@@ -31,16 +31,42 @@ namespace Framework::Scripting {
         return sol::stack::push(L, description);
     }
 
+    // Path normalization function for cross-platform Lua path handling
+    static std::string normalizeLuaPath(const std::string &path) {
+        std::string normalized = path;
+        // Lua prefers forward slashes in package.path across all platforms
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        return normalized;
+    }
+
     // https://stackoverflow.com/questions/4125971/setting-the-global-lua-path-variable-from-c-c
-    static inline int setLuaPath(lua_State *L, const char *path) {
+    static inline int setLuaPath(lua_State *L, const char *c_path) {
+        const std::string path = c_path;
         lua_getglobal(L, "package");
         lua_getfield(L, -1, "path");                // get field "path" from table at top of stack (-1)
         std::string cur_path = lua_tostring(L, -1); // grab path string from top of stack
         cur_path.append(";");                       // do your path magic here
-        cur_path.append(path);
-        lua_pop(L, 1);                       // get rid of the string on the stack we just pushed on line 5
+        cur_path.append(path + ".lua");
+        lua_pop(L, 1);                       // get rid of the string on the stack we just pushed
         lua_pushstring(L, cur_path.c_str()); // push the new one
         lua_setfield(L, -2, "path");         // set the field "path" in table at -2 with value at top of stack
+        lua_pop(L, 1);                       // get rid of package table from top of stack
+        return 0;                            // all done!
+    }
+    static inline int setLuaCPath(lua_State *L, const char *c_path) {
+        const std::string path = c_path;
+        lua_getglobal(L, "package");
+        lua_getfield(L, -1, "cpath");                // get field "cpath" from table at top of stack (-1)
+        std::string cur_path = lua_tostring(L, -1); // grab path string from top of stack
+        cur_path.append(";");                       // do your path magic here
+        cur_path.append(path + ".dll");
+        cur_path.append(";");
+        cur_path.append(path + ".so");
+        cur_path.append(";");
+        cur_path.append(path + ".dylib");
+        lua_pop(L, 1);                       // get rid of the string on the stack we just pushed
+        lua_pushstring(L, cur_path.c_str()); // push the new one
+        lua_setfield(L, -2, "cpath");         // set the field "cpath" in table at -2 with value at top of stack
         lua_pop(L, 1);                       // get rid of package table from top of stack
         return 0;                            // all done!
     }
@@ -52,9 +78,15 @@ namespace Framework::Scripting {
         _luaEngine->set_exception_handler(&my_exception_handler);
         _luaEngine->open_libraries(sol::lib::base, sol::lib::table, sol::lib::package, sol::lib::coroutine, sol::lib::string, sol::lib::io, sol::lib::math, sol::lib::debug, sol::lib::os, sol::lib::utf8);
 
-        // Configure the lua paths
-        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?.lua").c_str());
-        setLuaPath(_luaEngine->lua_state(), std::string(_mainGamemodeServerPath + "\\?\\?.lua").c_str());
+        // Configure the lua paths using normalized paths for cross-platform compatibility
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/?").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/?/?").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "/?").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "/?/?").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "/../?").c_str());
+        setLuaPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodePath + "/../?/?").c_str());
+        setLuaCPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/lua_modules/lib/lua/5.4/?").c_str());
+        setLuaCPath(_luaEngine->lua_state(), normalizeLuaPath(_mainGamemodeServerPath + "/lua_modules/lib/lua/5.4/?/?").c_str());
 
         // Init the common SDK
         InitCommonSDK();
@@ -94,7 +126,7 @@ namespace Framework::Scripting {
             return false;
         }
 
-        auto lr = _luaEngine->load_file(_mainGamemodeServerPath + "/" + _gamemodeName);
+        auto lr = _luaEngine->load_file(normalizeLuaPath(_mainGamemodeServerPath + "/" + _gamemodeName).c_str());
         if (!lr.valid()) { // This checks the syntax of your script, but does not execute it
             sol::error err   = lr;
             std::string what = err.what();

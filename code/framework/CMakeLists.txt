@@ -161,7 +161,7 @@ if(WIN32)
 endif()
 
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer MafiaHubServices libsig Lua54)
+target_link_libraries(FrameworkServer MafiaHubServices libsig lua54_static)
 
 # Platform-dependent post processing
 if(WIN32)

@@ -59,6 +59,8 @@ namespace Framework::HTTP {
     }
 
     bool Webserver::Shutdown() {
+        if (!_running)
+            return true;
         _running = false;
         if (_webThread.joinable())
             _webThread.join();
@@ -67,18 +69,24 @@ namespace Framework::HTTP {
     }
 
     void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) const {
+        if (!_running)
+            return;
         if (strlen(path) > 0 && callback) {
             _server->Get(path, callback);
         }
     }
 
     void Webserver::RegisterPostRequest(const char* path, const PostCallback& callback) const {
+        if (!_running)
+            return;
         if (strlen(path) > 0 && callback) {
             _server->Post(path, callback);
         }
     }
 
     void Webserver::ServeDirectory(const std::string &dir) {
+        if (!_running)
+            return;
         _serveDir = dir;
         if (!dir.empty())
             _server->set_mount_point("/", dir.c_str());

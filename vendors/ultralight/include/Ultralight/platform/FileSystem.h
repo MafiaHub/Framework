@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/String.h>
@@ -15,24 +15,25 @@ namespace ultralight {
 ///
 /// User-defined file system interface.
 ///
-/// The library uses this to load all file URLs (eg, <file:///page.html>).
+/// The library uses this to load file data (ie, raw file bytes) for a given file URL 
+/// (eg, `file:///page.html`) .
 ///
-/// You can provide the library with your own FileSystem implementation so that file assets are
-/// loaded from your own pipeline.
+/// You can provide the library with your own FileSystem implementation so that file data is
+/// provided directly by your application (eg, from memory, from a virtual file system, etc).
 /// 
-/// ## Usage
+/// ## Default Implementation
+///
+/// A platform-specific implementation of FileSystem is provided for you when you call
+/// App::Create().
+///
+/// If you are using Renderer::Create(), you **must** provide your own. You can still use AppCore's
+/// implementation however-- see the helper functions defined in <AppCore/Platform.h>.
+///
+/// ## Setting the File System
 ///
 /// To provide your own custom FileSystem implementation, you should inherit from this class,
 /// handle the virtual member functions, and then pass an instance of your class to
 /// Platform::set_file_system() before calling Renderer::Create() or App::Create().
-/// 
-/// @note
-/// \parblock
-/// AppCore uses a default OS-specific FileSystem implementation when you call App::Create().
-///
-/// If you are using Renderer::Create(), you can still use AppCore's implementation-- see the
-/// helper functions defined in <AppCore/Platform.h>.
-/// \endparblock
 ///
 class UExport FileSystem {
  public:

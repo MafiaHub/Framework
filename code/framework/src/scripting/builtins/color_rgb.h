@@ -63,6 +63,11 @@ namespace Framework::Scripting::Builtins {
             return (_data.r << 16) | (_data.g << 8) | _data.b;
         }
 
+        ColorRGB Random() const {
+            // TODO: Replace with a better rand library
+            return ColorRGB(rand() % 255, rand() % 255, rand() % 255);
+        }
+
         void FromInteger() {
             _data.r = (_data.r >> 16) & 0xFF;
             _data.g = (_data.g >> 8) & 0xFF;
@@ -102,10 +107,14 @@ namespace Framework::Scripting::Builtins {
             cls["toArray"]  = &ColorRGB::ToArray;
             cls["toInteger"] = &ColorRGB::ToInteger;
             cls["fromInteger"] = &ColorRGB::FromInteger;
+            cls["random"]  = &ColorRGB::Random;
             cls["add"]     = &ColorRGB::Add;
             cls["sub"]     = &ColorRGB::Sub;
             cls["mul"]     = &ColorRGB::Mul;
             cls["div"]     = &ColorRGB::Div;
+            cls["getFloatR"] = &ColorRGB::GetFloatR;
+            cls["getFloatG"] = &ColorRGB::GetFloatG;
+            cls["getFloatB"] = &ColorRGB::GetFloatB;
         }
     };
 } // namespace Framework::Scripting::Engines::Node::Builtins

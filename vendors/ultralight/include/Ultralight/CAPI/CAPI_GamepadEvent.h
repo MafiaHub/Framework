@@ -1,10 +1,22 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight, an ultra-portable web-browser engine.                      *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2024 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
+
+///
+/// @file CAPI_GamepadEvent.h
+///
+/// Gamepad event interface.
+///
+/// `#include <Ultralight/CAPI/CAPI_GamepadEvent.h>`
+///
+/// This file defines the C API for gamepad events.
+///
+/// @see ulFireGamepadEvent
+///
 #ifndef ULTRALIGHT_CAPI_GAMEPADEVENT_H
 #define ULTRALIGHT_CAPI_GAMEPADEVENT_H
 

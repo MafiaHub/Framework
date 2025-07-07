@@ -1,10 +1,10 @@
-/******************************************************************************
- *  This file is a part of Ultralight, an ultra-portable web-browser engine.  *
- *                                                                            *
- *  See <https://ultralig.ht> for licensing and more.                         *
- *                                                                            *
- *  (C) 2023 Ultralight, Inc.                                                 *
- *****************************************************************************/
+/**************************************************************************************************
+ *  This file is a part of Ultralight.                                                            *
+ *                                                                                                *
+ *  See <https://ultralig.ht> for licensing and more.                                             *
+ *                                                                                                *
+ *  (C) 2025 Ultralight, Inc.                                                                     *
+ **************************************************************************************************/
 #pragma once
 #include <Ultralight/Defines.h>
 #include <Ultralight/RefPtr.h>
@@ -17,7 +17,7 @@ namespace ultralight {
 ///
 struct UExport Matrix4x4 {
   ///
-  /// Raw 4x4 matrix as an array
+  /// Raw 4x4 matrix as an array in column-major order.
   ///
   float data[16];
 
@@ -30,9 +30,12 @@ struct UExport Matrix4x4 {
 ///
 /// Transformation Matrix helper
 ///
-struct UExport alignas(16) Matrix {
+struct UExport UL_ALIGN(16) Matrix {
   typedef double Aligned4x4[4][4];
 
+  ///
+  /// Raw matrix data in column-major order (eg, `data[column][row]`)
+  ///
   Aligned4x4 data;
 
   ///

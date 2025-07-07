@@ -58,6 +58,7 @@ namespace Framework::Integrations::Server {
             std::string masterlistUrl = "";
         } services;
 
+        bool webServerEnabled = true;
         std::string webBindHost;
         int32_t webBindPort;
 
@@ -130,10 +131,12 @@ namespace Framework::Integrations::Server {
         ServerError Shutdown();
 
         virtual void PostInit() {}
-
+        
+        virtual void PostScriptInit() {}
+        
         virtual void PostUpdate() {}
 
-        virtual void PreShutdown() {}
+        virtual void PreShutdown();
 
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
