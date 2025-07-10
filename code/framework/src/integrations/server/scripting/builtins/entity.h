@@ -257,7 +257,7 @@ namespace Framework::Integrations::Scripting {
             cls["setVelocity"]       = &Entity::SetVelocity;
             cls["setVirtualWorld"]   = &Entity::SetVirtualWorld;
             cls["setVisible"]        = &Entity::SetVisible;
-            cls["toString"]          = &Entity::ToString;
+            cls["__tostring"]          = &Entity::ToString;
         }
     };
 } // namespace Framework::Integrations::Scripting

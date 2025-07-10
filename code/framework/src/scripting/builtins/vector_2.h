@@ -77,7 +77,7 @@ namespace Framework::Scripting::Builtins {
             cls["x"] = sol::property([](const Vector2& self) { return self.GetX(); });
             cls["y"] = sol::property([](const Vector2& self) { return self.GetY(); });
             cls["length"] = sol::property([](const Vector2& self) { return self.GetLength(); });
-            cls["toString"] = &Vector2::ToString;
+            cls["__tostring"] = &Vector2::ToString;
             cls["toArray"]  = &Vector2::ToArray;
             cls["add"]     = &Vector2::Add;
             cls["sub"]     = &Vector2::Sub;

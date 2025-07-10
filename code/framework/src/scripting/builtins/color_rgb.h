@@ -103,7 +103,7 @@ namespace Framework::Scripting::Builtins {
             cls["r"] = sol::property([](const ColorRGB& self) { return self.GetR(); });
             cls["g"] = sol::property([](const ColorRGB& self) { return self.GetG(); });
             cls["b"] = sol::property([](const ColorRGB& self) { return self.GetB(); });
-            cls["toString"] = &ColorRGB::ToString;
+            cls["__tostring"] = &ColorRGB::ToString;
             cls["toArray"]  = &ColorRGB::ToArray;
             cls["toInteger"] = &ColorRGB::ToInteger;
             cls["fromInteger"] = &ColorRGB::FromInteger;
