@@ -82,7 +82,7 @@ namespace Framework::Scripting::Builtins {
             cls["y"] = sol::property([](const Vector3& self) { return self.GetY(); });
             cls["z"] = sol::property([](const Vector3& self) { return self.GetZ(); });
             cls["length"] = sol::property([](const Vector3& self) { return self.GetLength(); });
-            cls["toString"] = &Vector3::ToString;
+            cls["__tostring"] = &Vector3::ToString;
             cls["toArray"]  = &Vector3::ToArray;
             cls["add"]     = &Vector3::Add;
             cls["sub"]     = &Vector3::Sub;
