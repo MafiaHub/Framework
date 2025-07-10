@@ -45,6 +45,7 @@
 #include "graphics/backend/d3d11.h"
 #include "graphics/backend/d3d12.h"
 #include "graphics/backend/d3d9.h"
+#include <tracy/Tracy.hpp>
 
 namespace Framework::Integrations::Client {
     bool AssetDownloadFileProgress::OnFile(SLNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
@@ -238,6 +239,8 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::Update() {
+        ZoneScoped;
+        
         if (_presence && _presence->IsInitialized()) {
             _presence->Update();
         }

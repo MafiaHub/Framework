@@ -33,6 +33,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <csignal>
+#include <tracy/Tracy.hpp>
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false), _shuttingDown(false) {
@@ -501,6 +502,8 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::Update() {
+        ZoneScoped;
+
         const auto start = std::chrono::high_resolution_clock::now();
         if (_nextTick <= start) {
             if (_networkingEngine) {

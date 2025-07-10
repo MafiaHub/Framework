@@ -81,3 +81,7 @@ if (WIN32)
     set(StackWalker_DISABLE_TESTS CACHE BOOL "" ON)
     add_subdirectory(StackWalker)
 endif ()
+
+#build tracy
+add_definitions(-DTRACY_ENABLE)
+add_subdirectory(tracy)
