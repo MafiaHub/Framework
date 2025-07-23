@@ -144,7 +144,7 @@ namespace Framework::Scripting::Builtins {
             cls["translate"] = &Matrix::Translate;
             cls["rotate"] = &Matrix::Rotate;
             cls["scale"] = &Matrix::Scale;
-            cls["identity"] = &Matrix::Identity;
+            cls["identity"] = sol::property(&Matrix::Identity);
             cls["translation"] = &Matrix::Translation;
             cls["rotation"] = &Matrix::Rotation;
             cls["scaling"] = &Matrix::Scaling;

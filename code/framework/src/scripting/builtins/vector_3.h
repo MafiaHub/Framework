@@ -76,6 +76,10 @@ namespace Framework::Scripting::Builtins {
             _data = glm::mix(_data, newVec, static_cast<float>(f));
         };
 
+        static Vector3 Zero() {
+            return Vector3(0.0, 0.0, 0.0);
+        }
+
         static void Register(sol::state *luaEngine) {
             sol::usertype<Vector3> cls = luaEngine->new_usertype<Vector3>("Vector3", sol::constructors<Vector3(double, double, double)>());
             cls["x"] = sol::property([](const Vector3& self) { return self.GetX(); });
@@ -89,6 +93,7 @@ namespace Framework::Scripting::Builtins {
             cls["mul"]     = &Vector3::Mul;
             cls["div"]     = &Vector3::Div;
             cls["lerp"]     = &Vector3::Lerp;
+            cls["zero"] = sol::property(&Vector3::Zero);
         }
     };
 } // namespace Framework::Scripting::Engines::Node::Builtins
