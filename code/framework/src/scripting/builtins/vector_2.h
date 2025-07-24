@@ -76,6 +76,10 @@ namespace Framework::Scripting::Builtins {
             return Vector2(0.0, 0.0);
         }
 
+        operator glm::vec2() const {
+            return _data;
+        }
+
         static void Register(sol::state *luaEngine) {
             sol::usertype<Vector2> cls = luaEngine->new_usertype<Vector2>("Vector2", sol::constructors<Vector2(double, double)>());
             cls["x"] = sol::property([](const Vector2& self) { return self.GetX(); });

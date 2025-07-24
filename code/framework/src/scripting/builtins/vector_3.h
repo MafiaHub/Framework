@@ -79,6 +79,10 @@ namespace Framework::Scripting::Builtins {
         static Vector3 Zero() {
             return Vector3(0.0, 0.0, 0.0);
         }
+        
+        operator glm::vec3() const{
+            return _data;
+        }
 
         static void Register(sol::state *luaEngine) {
             sol::usertype<Vector3> cls = luaEngine->new_usertype<Vector3>("Vector3", sol::constructors<Vector3(double, double, double)>());
