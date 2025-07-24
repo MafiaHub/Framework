@@ -129,6 +129,10 @@ namespace Framework::Scripting::Builtins {
             return mat;
         }
 
+        operator glm::mat4() const {
+            return _data;
+        }
+
         static void Register(sol::state *luaEngine) {
             sol::usertype<Matrix> cls = luaEngine->new_usertype<Matrix>("Matrix", sol::constructors<Matrix(), Matrix(double)>());
             cls["getElement"] = &Matrix::GetElement;

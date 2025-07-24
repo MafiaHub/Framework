@@ -98,6 +98,10 @@ namespace Framework::Scripting::Builtins {
             return ColorRGB(static_cast<int>(vec.r * 255.0f), static_cast<int>(vec.g * 255.0f), static_cast<int>(vec.b * 255.0f));
         }
 
+        operator glm::ivec3() const {
+            return _data;
+        }
+
         static void Register(sol::state *luaEngine) {
             sol::usertype<ColorRGB> cls = luaEngine->new_usertype<ColorRGB>("RGB", sol::constructors<ColorRGB(int, int, int)>());
             cls["r"] = sol::property([](const ColorRGB& self) { return self.GetR(); });

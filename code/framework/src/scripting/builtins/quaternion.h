@@ -134,6 +134,10 @@ namespace Framework::Scripting::Builtins {
         static Quaternion Identity() {
             return Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
         }
+        
+        operator glm::quat() const {
+            return _data;
+        }
 
         static void Register(sol::state *luaEngine) {
             sol::usertype<Quaternion> cls = luaEngine->new_usertype<Quaternion>("Quaternion", sol::constructors<Quaternion(float, float, float, float)>());
