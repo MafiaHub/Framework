@@ -15,6 +15,7 @@
 #include "builtins/event.h"
 #include "builtins/hash.h"
 #include "builtins/json.h"
+#include "builtins/matrix.h"
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
@@ -27,6 +28,7 @@ namespace Framework::Scripting {
         Builtins::Event::Register(_luaEngine);
         Builtins::Hash::Register(_luaEngine);
         Builtins::JSON::Register(_luaEngine);
+        Builtins::Matrix::Register(_luaEngine);
         Builtins::Quaternion::Register(_luaEngine);
         Builtins::Vector3::Register(_luaEngine);
         Builtins::Vector2::Register(_luaEngine);

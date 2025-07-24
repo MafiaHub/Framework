@@ -131,6 +131,10 @@ namespace Framework::Scripting::Builtins {
             _data = glm::quat(glm::angleAxis(angle, glm::vec3(x, y, z)));
         }
 
+        static Quaternion Identity() {
+            return Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
+        }
+
         static void Register(sol::state *luaEngine) {
             sol::usertype<Quaternion> cls = luaEngine->new_usertype<Quaternion>("Quaternion", sol::constructors<Quaternion(float, float, float, float)>());
             cls["w"] = sol::property([](const Quaternion& self) { return self.GetW(); });
@@ -154,6 +158,7 @@ namespace Framework::Scripting::Builtins {
             cls["fromEulerDegrees"]     = &Quaternion::FromEulerDegrees;
             cls["setEuler"]     = &Quaternion::SetEuler;
             cls["fromAxisAngle"]     = &Quaternion::FromAxisAngle;
+            cls["identity"] = sol::property(&Quaternion::Identity);
         }
     };
 } // namespace Framework::Scripting::Engines::Node::Builtins
