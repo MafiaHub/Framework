@@ -32,6 +32,10 @@ namespace Framework::Scripting::Builtins {
             _data = {w, x, y, z};
         }
 
+        Quaternion(glm::quat data) {
+            _data = data;
+        }
+
         float GetW() const {
             return _data.w;
         }
@@ -137,6 +141,10 @@ namespace Framework::Scripting::Builtins {
         
         operator glm::quat() const {
             return _data;
+        }
+        
+        operator glm::vec3() const {
+            return glm::degrees(glm::eulerAngles(_data));
         }
 
         static void Register(sol::state *luaEngine) {

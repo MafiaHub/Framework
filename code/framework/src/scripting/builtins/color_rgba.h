@@ -25,6 +25,10 @@ namespace Framework::Scripting::Builtins {
             _data = {r, g, b, a};
         }
 
+        ColorRGBA(glm::ivec4 data) {
+            _data = data;
+        }
+
         int GetR() const {
             return _data.r;
         }
@@ -57,7 +61,7 @@ namespace Framework::Scripting::Builtins {
             return static_cast<float>(_data.a) / 255.0f;
         }
 
-        ColorRGBA Random() const {
+        static ColorRGBA Random() {
             // TODO: Replace with a better rand library
             return ColorRGBA(rand() % 255, rand() % 255, rand() % 255, rand() % 255);
         }
@@ -68,8 +72,8 @@ namespace Framework::Scripting::Builtins {
             return ss.str();
         }
 
-        std::list<int> ToArray() const {
-            return {_data.r, _data.g, _data.b, _data.a};
+        sol::as_table_t<std::array<int, 4>> ToArray() const {
+            return sol::as_table(std::array<int, 4>{_data.r, _data.g, _data.b, _data.a});
         }
 
         int ToInteger() const {
