@@ -55,6 +55,26 @@ namespace Framework::Scripting::Builtins {
             return sol::as_table(std::array<double, 2>{_data.x, _data.y});
         }
         
+        void Add(double x, double y) {
+            const glm::vec2 newVec(x, y);
+            _data += newVec;
+        }
+
+        void Sub(double x, double y) {
+            const glm::vec2 newVec(x, y);
+            _data -= newVec;
+        }
+
+        void Mul(double x, double y) {
+            const glm::vec2 newVec(x, y);
+            _data *= newVec;
+        }
+
+        void Div(double x, double y) {
+            const glm::vec2 newVec(x, y);
+            _data /= newVec;
+        }
+        
         Vector2 operator+(const Vector2& other) const {
             return Vector2(_data + other._data);
         }
@@ -92,6 +112,10 @@ namespace Framework::Scripting::Builtins {
             cls["lengthSquared"] = sol::property([](const Vector2& self) { return self.GetLengthSquared(); });
             cls["__tostring"] = &Vector2::ToString;
             cls["toArray"]  = &Vector2::ToArray;
+            cls["add"]     = &Vector2::Add;
+            cls["sub"]     = &Vector2::Sub;
+            cls["mul"]     = &Vector2::Mul;
+            cls["div"]     = &Vector2::Div;
             cls[sol::meta_function::addition] = &Vector2::operator+;
             cls[sol::meta_function::subtraction] = &Vector2::operator-;
             cls[sol::meta_function::multiplication] = &Vector2::operator*;

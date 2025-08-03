@@ -59,6 +59,26 @@ namespace Framework::Scripting::Builtins {
             return sol::as_table(std::array<double, 3>{_data.x, _data.y, _data.z});
         }
 
+        void Add(double x, double y, double z) {
+            const glm::vec3 newVec(x, y, z);
+            _data += newVec;
+        }
+
+        void Sub(double x, double y, double z) {
+            const glm::vec3 newVec(x, y, z);
+            _data -= newVec;
+        }
+
+        void Mul(double x, double y, double z) {
+            const glm::vec3 newVec(x, y, z);
+            _data *= newVec;
+        }
+
+        void Div(double x, double y, double z) {
+            const glm::vec3 newVec(x, y, z);
+            _data /= newVec;
+        }
+        
         Vector3 operator+(const Vector3& other) const {
             return Vector3(_data + other._data);
         }
@@ -97,6 +117,10 @@ namespace Framework::Scripting::Builtins {
             cls["lengthSquared"] = sol::property([](const Vector3& self) { return self.GetLengthSquared(); });
             cls["__tostring"] = &Vector3::ToString;
             cls["toArray"]  = &Vector3::ToArray;
+            cls["add"]     = &Vector3::Add;
+            cls["sub"]     = &Vector3::Sub;
+            cls["mul"]     = &Vector3::Mul;
+            cls["div"]     = &Vector3::Div;
             cls[sol::meta_function::addition] = &Vector3::operator+;
             cls[sol::meta_function::subtraction] = &Vector3::operator-;
             cls[sol::meta_function::multiplication] = &Vector3::operator*;
