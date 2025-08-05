@@ -25,6 +25,10 @@ namespace Framework::Scripting::Builtins {
             _data = {r, g, b};
         }
 
+        ColorRGB(glm::ivec3 data) {
+            _data = data;
+        }
+
         int GetR() const {
             return _data.r;
         }
@@ -55,15 +59,15 @@ namespace Framework::Scripting::Builtins {
             return ss.str();
         }
 
-        std::list<int> ToArray() const {
-            return {_data.r, _data.g, _data.b};
+        sol::as_table_t<std::array<int, 3>> ToArray() const {
+            return sol::as_table(std::array<int, 3>{_data.r, _data.g, _data.b});
         }
 
         int ToInteger() const {
             return (_data.r << 16) | (_data.g << 8) | _data.b;
         }
 
-        ColorRGB Random() const {
+        static ColorRGB Random() {
             // TODO: Replace with a better rand library
             return ColorRGB(rand() % 255, rand() % 255, rand() % 255);
         }

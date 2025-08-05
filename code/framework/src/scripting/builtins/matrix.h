@@ -31,6 +31,10 @@ namespace Framework::Scripting::Builtins {
             _data = glm::mat4(static_cast<float>(value));
         }
 
+        Matrix(glm::mat4 data) {
+            _data = data;
+        }
+
         double GetElement(int row, int col) const {
             if (row >= 0 && row < 4 && col >= 0 && col < 4) {
                 return _data[col][row];
