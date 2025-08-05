@@ -14,6 +14,7 @@
 #include <spdlog/sinks/ringbuffer_sink.h>
 #include <spdlog/spdlog.h>
 #include <unordered_map>
+#include "formatters.h"
 
 #define FRAMEWORK_INNER_NETWORKING   "Networking"
 #define FRAMEWORK_INNER_SCRIPTING    "Scripting"
