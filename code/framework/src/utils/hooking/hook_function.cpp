@@ -9,6 +9,8 @@
 
 #include "hook_function.h"
 
+#include <logging/logger.h>
+
 static HookFunctionBase *g_hookFunctions;
 
 void HookFunctionBase::Register() {
@@ -34,5 +36,12 @@ void RuntimeHookFunction::Run(const char *key) {
         if (func->_key == key) {
             func->_function();
         }
+    }
+}
+
+void InitFunction::Run() {
+    if (!_disabled) {
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Running module: {}", _name);
+        _function();
     }
 }

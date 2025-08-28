@@ -11,8 +11,6 @@
 
 #include <string>
 
-#include <logging/logger.h>
-
 //
 // Initialization function that will be called after the game is loaded.
 //
@@ -43,12 +41,7 @@ class InitFunction final: public HookFunctionBase {
     InitFunction(void (*function)(), const char *name, bool disabled = false): _function(function), _name(name), _disabled(disabled) {
     }
 
-    void Run() override {
-        if (!_disabled) {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Running module: {}", _name);
-            _function();
-        }
-    }
+    void Run() override;
 };
 
 class HookFunction: public HookFunctionBase {
