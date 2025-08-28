@@ -48,8 +48,9 @@ namespace Framework::World {
             return 0;
         }
 
-        const auto serverID = entity.get<Modules::Base::ServerID>();
-        return serverID->id;
+        if(const auto serverID = entity.get<Modules::Base::ServerID>())
+            return serverID->id;
+        return 0;
     }
 
     flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) const {

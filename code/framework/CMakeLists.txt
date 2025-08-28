@@ -41,6 +41,8 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/instance.cpp
     src/integrations/server/networking/engine.cpp
     src/integrations/server/scripting/module.cpp
+    src/integrations/server/scripting/builtins/entity.cpp
+    src/integrations/server/scripting/builtins/events_lua.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
