@@ -25,12 +25,14 @@ namespace Framework::Launcher::Loaders {
       public:
         using FunctionResolverProc = fu2::function<LPVOID(HMODULE, const char *) const>;
         using LibraryLoaderProc    = fu2::function<HMODULE(const char *) const>;
+        using TLSCallbackProc      = fu2::function<void(PVOID, DWORD, PVOID)>;
 
       private:
         const uint8_t *_origBinary;
         size_t _totalBinarySize;
         HMODULE _module {};
         uintptr_t _loadLimit;
+        size_t _imageSize {};
 
         void *_entryPoint {};
 
@@ -39,10 +41,11 @@ namespace Framework::Launcher::Loaders {
 
         fu2::function<void(void **base, uint32_t *index)> _tlsInitializer;
         std::vector<std::tuple<void *, DWORD, DWORD>> _targetProtections;
+        std::vector<void *> _allocatedMemory;
 
       private:
-        void LoadSection(IMAGE_SECTION_HEADER *section);
-        void LoadSections(IMAGE_NT_HEADERS *ntHeader);
+        bool LoadSection(IMAGE_SECTION_HEADER *section);
+        bool LoadSections(IMAGE_NT_HEADERS *ntHeader);
 
         bool ApplyRelocations();
 
@@ -50,18 +53,27 @@ namespace Framework::Launcher::Loaders {
         void LoadExceptionTable(IMAGE_NT_HEADERS *ntHeader);
 #endif
 
-        void LoadImports(IMAGE_NT_HEADERS *ntHeader);
-        void LoadDelayImports(IMAGE_NT_HEADERS *ntHeader);
+        bool LoadImports(IMAGE_NT_HEADERS *ntHeader);
+        bool LoadDelayImports(IMAGE_NT_HEADERS *ntHeader);
+        bool ValidatePEHeaders(const IMAGE_NT_HEADERS *ntHeader) const;
+        void ExecuteTLSCallbacks(IMAGE_NT_HEADERS *ntHeader);
+        void CleanupOnError();
 
         HMODULE ResolveLibrary(const char *name) const;
 
         template <typename T>
         inline const T *GetRVA(uint32_t rva) {
+            if (rva >= _totalBinarySize) {
+                return nullptr;
+            }
             return (T *)(_origBinary + rva);
         }
 
         template <typename T>
         inline T *GetTargetRVA(uint32_t rva) {
+            if (rva >= _imageSize) {
+                return nullptr;
+            }
             return (T *)((uint8_t *)_module + rva);
         }
 
@@ -89,6 +101,7 @@ namespace Framework::Launcher::Loaders {
         }
 
         void Protect() const;
-        void LoadIntoModule(HMODULE module);
+        bool LoadIntoModule(HMODULE module);
+        ~ExecutableLoader();
     };
 } // namespace Framework::Launcher::Loaders

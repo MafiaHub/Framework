@@ -718,7 +718,13 @@ namespace Framework::Launcher {
             tlsExport(base, index);
         });
 
-        loader.LoadIntoModule(base);
+        if (!loader.LoadIntoModule(base)) {
+            UnmapViewOfFile(data);
+            CloseHandle(hMapping);
+            CloseHandle(hFile);
+            MessageBoxA(nullptr, "Failed to load executable into memory", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
         loader.Protect();
 
         // Once loaded, we can close handles

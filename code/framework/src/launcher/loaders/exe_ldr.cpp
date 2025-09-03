@@ -26,6 +26,7 @@ namespace Framework::Launcher::Loaders {
         _origBinary = origBinary;
         _totalBinarySize = binarySize;
         _loadLimit  = SIZE_MAX;
+        _imageSize = 0;
 
         SetLibraryLoader([](const char *name) {
             return LoadLibraryA(name);
@@ -36,19 +37,92 @@ namespace Framework::Launcher::Loaders {
         });
     }
 
-    void ExecutableLoader::LoadImports(IMAGE_NT_HEADERS *ntHeader) {
+    ExecutableLoader::~ExecutableLoader() {
+        CleanupOnError();
+    }
+
+    void ExecutableLoader::CleanupOnError() {
+        for (auto mem : _allocatedMemory) {
+            if (mem) {
+                VirtualFree(mem, 0, MEM_RELEASE);
+            }
+        }
+        _allocatedMemory.clear();
+    }
+
+    bool ExecutableLoader::ValidatePEHeaders(const IMAGE_NT_HEADERS *ntHeader) const {
+        // Validate NT signature
+        if (ntHeader->Signature != IMAGE_NT_SIGNATURE) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid NT signature: 0x{:X}", ntHeader->Signature);
+            return false;
+        }
+
+        // Validate machine type
+#ifdef _M_AMD64
+        if (ntHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid machine type for x64: 0x{:X}", ntHeader->FileHeader.Machine);
+            return false;
+        }
+#elif defined(_M_IX86)
+        if (ntHeader->FileHeader.Machine != IMAGE_FILE_MACHINE_I386) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid machine type for x86: 0x{:X}", ntHeader->FileHeader.Machine);
+            return false;
+        }
+#endif
+
+        // Validate section count (Windows limit is 96)
+        if (ntHeader->FileHeader.NumberOfSections > 96) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Too many sections: {}", ntHeader->FileHeader.NumberOfSections);
+            return false;
+        }
+
+        // Validate optional header magic
+#ifdef _M_AMD64
+        if (ntHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid optional header magic for x64: 0x{:X}", ntHeader->OptionalHeader.Magic);
+            return false;
+        }
+#elif defined(_M_IX86)
+        if (ntHeader->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid optional header magic for x86: 0x{:X}", ntHeader->OptionalHeader.Magic);
+            return false;
+        }
+#endif
+
+        // Validate data directory count
+        if (ntHeader->OptionalHeader.NumberOfRvaAndSizes > IMAGE_NUMBEROF_DIRECTORY_ENTRIES) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid number of data directories: {}", ntHeader->OptionalHeader.NumberOfRvaAndSizes);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ExecutableLoader::LoadImports(IMAGE_NT_HEADERS *ntHeader) {
         const IMAGE_DATA_DIRECTORY *importDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
+        if (importDirectory->VirtualAddress == 0 || importDirectory->Size == 0) {
+            return true; // No imports
+        }
+
         auto descriptor = GetTargetRVA<IMAGE_IMPORT_DESCRIPTOR>(importDirectory->VirtualAddress);
+        if (!descriptor) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid import descriptor RVA: 0x{:X}", importDirectory->VirtualAddress);
+            return false;
+        }
 
         while (descriptor->Name) {
             const char *name = GetTargetRVA<char>(descriptor->Name);
+            if (!name) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid import module name RVA: 0x{:X}", descriptor->Name);
+                return false;
+            }
 
             HMODULE module = ResolveLibrary(name);
 
             if (!module) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load dependent module {}. Error code was {}.", name, GetLastError());
-                exit(0);
+                return false;
             }
 
             // "don't load"
@@ -73,9 +147,9 @@ namespace Framework::Launcher::Loaders {
                 if (IMAGE_SNAP_BY_ORDINAL(*nameTableEntry)) {
                     const uint64_t ordinalId = IMAGE_ORDINAL(*nameTableEntry);
                     function                 = GetProcAddress(module, MAKEINTRESOURCEA(ordinalId));
-                    static char _backingFunctionNameBuf[4096];
-                    ::snprintf(_backingFunctionNameBuf, 4096, "#%lld", ordinalId);
-                    functionName = _backingFunctionNameBuf;
+                    thread_local char ordinalNameBuf[64];
+                    ::snprintf(ordinalNameBuf, sizeof(ordinalNameBuf), "#%lld", ordinalId);
+                    functionName = ordinalNameBuf;
                 }
                 else {
                     const auto import = GetTargetRVA<IMAGE_IMPORT_BY_NAME>(*nameTableEntry);
@@ -99,33 +173,55 @@ namespace Framework::Launcher::Loaders {
 
             descriptor++;
         }
+        return true;
     }
 
-    void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
+    bool ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
+        // Validate section virtual address and size
+        if (section->VirtualAddress + section->Misc.VirtualSize > _imageSize) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Section virtual address + size (0x{:X}) exceeds image size (0x{:X})", 
+                section->VirtualAddress + section->Misc.VirtualSize, _imageSize);
+            return false;
+        }
+
         void *targetAddress = GetTargetRVA<uint8_t>(section->VirtualAddress);
         if (!targetAddress) {
-            return;
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid target address for section at RVA 0x{:X}", section->VirtualAddress);
+            return false;
         }
 
         // Check if the target address is within the allowed bounds
         if ((uintptr_t)targetAddress >= (_loadLimit + hook::baseAddressDifference)) {
-            return;
+            return true; // Skip section but don't fail
         }
 
         // Check if the section has any data to be copied
         if (section->SizeOfRawData == 0) {
-            return;
+            return true; // No data to copy, not an error
         }
 
         // Check if section data exceeds binary size
         if (section->PointerToRawData + section->SizeOfRawData > _totalBinarySize) {
-            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Section data exceeds binary size");
-            return;
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Section data exceeds binary size: offset=0x{:X}, size=0x{:X}, binary_size=0x{:X}",
+                section->PointerToRawData, section->SizeOfRawData, _totalBinarySize);
+            return false;
+        }
+
+        // Additional validation: check for integer overflow
+        if (section->VirtualAddress > UINT32_MAX - section->Misc.VirtualSize) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Section virtual address causes overflow");
+            return false;
+        }
+        
+        if (section->PointerToRawData > UINT32_MAX - section->SizeOfRawData) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Section raw data pointer causes overflow");
+            return false;
         }
 
         const void *sourceAddress = _origBinary + section->PointerToRawData;
         if (!sourceAddress) {
-            return;
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid source address for section");
+            return false;
         }
 
         // Calculate the size of data to be copied
@@ -134,10 +230,10 @@ namespace Framework::Launcher::Loaders {
         // Copy the data
         memcpy(targetAddress, sourceAddress, sizeOfData);
 
-        // Change the protection attributes of the target address
-        DWORD oldProtect;
-        if (!VirtualProtect(targetAddress, section->Misc.VirtualSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
-            return;
+        // Zero out any remaining space in virtual size
+        if (section->Misc.VirtualSize > section->SizeOfRawData) {
+            const uint32_t remainingSize = section->Misc.VirtualSize - section->SizeOfRawData;
+            memset((uint8_t*)targetAddress + sizeOfData, 0, remainingSize);
         }
 
         DWORD protection = 0;
@@ -182,18 +278,25 @@ namespace Framework::Launcher::Loaders {
             }
         }
 
+        // Store protection information to be applied later
         if (protection) {
             _targetProtections.push_back({targetAddress, section->Misc.VirtualSize, protection});
         }
+        
+        return true;
     }
 
-    void ExecutableLoader::LoadSections(IMAGE_NT_HEADERS *ntHeader) {
+    bool ExecutableLoader::LoadSections(IMAGE_NT_HEADERS *ntHeader) {
         auto section = IMAGE_FIRST_SECTION(ntHeader);
 
         for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
-            LoadSection(section);
+            if (!LoadSection(section)) {
+                Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to load section {}", i);
+                return false;
+            }
             section++;
         }
+        return true;
     }
 
     void ExecutableLoader::Protect() const {
@@ -217,7 +320,7 @@ namespace Framework::Launcher::Loaders {
     }
 #endif
 
-    void ExecutableLoader::LoadDelayImports(IMAGE_NT_HEADERS *ntHeader) {
+    bool ExecutableLoader::LoadDelayImports(IMAGE_NT_HEADERS *ntHeader) {
         const IMAGE_DATA_DIRECTORY *delayImportDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT];
         
         // Check if there are any delay imports
@@ -285,16 +388,62 @@ namespace Framework::Launcher::Loaders {
             
             descriptor++;
         }
+        return true;
     }
 
-    void ExecutableLoader::LoadIntoModule(HMODULE module) {
+    void ExecutableLoader::ExecuteTLSCallbacks(IMAGE_NT_HEADERS *ntHeader) {
+        const IMAGE_DATA_DIRECTORY *tlsDirectory = &ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
+        
+        if (tlsDirectory->VirtualAddress == 0 || tlsDirectory->Size == 0) {
+            return; // No TLS data
+        }
+        
+        const IMAGE_TLS_DIRECTORY *tlsData = GetTargetRVA<IMAGE_TLS_DIRECTORY>(tlsDirectory->VirtualAddress);
+        if (!tlsData) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid TLS directory RVA: 0x{:X}", tlsDirectory->VirtualAddress);
+            return;
+        }
+        
+        // Execute TLS callbacks if they exist
+        if (tlsData->AddressOfCallBacks) {
+#ifdef _M_AMD64
+            typedef void (NTAPI *TLS_CALLBACK_PROC)(PVOID, DWORD, PVOID);
+            TLS_CALLBACK_PROC *callbacks = reinterpret_cast<TLS_CALLBACK_PROC *>(tlsData->AddressOfCallBacks);
+#else
+            typedef void (NTAPI *TLS_CALLBACK_PROC)(PVOID, DWORD, PVOID);
+            TLS_CALLBACK_PROC *callbacks = reinterpret_cast<TLS_CALLBACK_PROC *>(tlsData->AddressOfCallBacks);
+#endif
+            
+            for (size_t i = 0; callbacks[i] != nullptr; ++i) {
+                try {
+                    callbacks[i](_module, DLL_PROCESS_ATTACH, nullptr);
+                }
+                catch (...) {
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("TLS callback {} threw an exception", i);
+                }
+            }
+        }
+    }
+
+    bool ExecutableLoader::LoadIntoModule(HMODULE module) {
         _module = module;
 
         const auto header = (IMAGE_DOS_HEADER *)_origBinary;
 
         if (header->e_magic != IMAGE_DOS_SIGNATURE) {
-            return;
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid DOS signature: 0x{:X}", header->e_magic);
+            return false;
         }
+
+        const auto ntHeader = (IMAGE_NT_HEADERS *)(_origBinary + header->e_lfanew);
+        
+        // Validate PE headers first
+        if (!ValidatePEHeaders(ntHeader)) {
+            return false;
+        }
+        
+        // Set the image size for bounds checking
+        _imageSize = ntHeader->OptionalHeader.SizeOfImage;
 
         const auto sourceHeader          = (IMAGE_DOS_HEADER *)module;
         IMAGE_NT_HEADERS *sourceNtHeader = GetTargetRVA<IMAGE_NT_HEADERS>(sourceHeader->e_lfanew);
@@ -303,17 +452,43 @@ namespace Framework::Launcher::Loaders {
         const auto origTimeStamp = sourceNtHeader->FileHeader.TimeDateStamp;
         const auto origDebugDir  = sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
 
-        const auto ntHeader = (IMAGE_NT_HEADERS *)(_origBinary + header->e_lfanew);
-        _entryPoint         = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
+        _entryPoint = GetTargetRVA<void>(ntHeader->OptionalHeader.AddressOfEntryPoint);
+        if (!_entryPoint) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid entry point RVA: 0x{:X}", ntHeader->OptionalHeader.AddressOfEntryPoint);
+            return false;
+        }
 
         DWORD oldProtect1;
-        VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1);
+        if (!VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to change protection for NT headers");
+            return false;
+        }
+        
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-        ApplyRelocations();
+        
+        if (!ApplyRelocations()) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to apply relocations");
+            CleanupOnError();
+            return false;
+        }
 
-        LoadSections(ntHeader);
-        LoadImports(ntHeader);
-        LoadDelayImports(ntHeader);
+        if (!LoadSections(ntHeader)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to load sections");
+            CleanupOnError();
+            return false;
+        }
+        
+        if (!LoadImports(ntHeader)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to load imports");
+            CleanupOnError();
+            return false;
+        }
+        
+        if (!LoadDelayImports(ntHeader)) {
+            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to load delay imports");
+            CleanupOnError();
+            return false;
+        }
 
         uint32_t tlsIndex = 0;
         void *tlsInit     = nullptr;
@@ -360,6 +535,11 @@ namespace Framework::Launcher::Loaders {
         sourceNtHeader->FileHeader.TimeDateStamp = origTimeStamp;
 
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG] = origDebugDir;
+        
+        // Execute TLS callbacks
+        ExecuteTLSCallbacks(const_cast<IMAGE_NT_HEADERS*>(ntHeader));
+        
+        return true;
     }
 
     bool ExecutableLoader::ApplyRelocations() {
@@ -399,20 +579,63 @@ namespace Framework::Launcher::Loaders {
                 const uint32_t rva  = (relocStart[i] & 0xFFF) + relocation->VirtualAddress;
 
                 void *addr = GetTargetRVA<void>(rva);
-                DWORD oldProtect;
-                VirtualProtect(addr, (type == IMAGE_REL_BASED_DIR64) ? 8 : 4, PAGE_EXECUTE_READWRITE, &oldProtect);
-
-                if (type == IMAGE_REL_BASED_HIGHLOW) {
-                    *reinterpret_cast<int32_t *>(addr) += relocOffset;
-                }
-                else if (type == IMAGE_REL_BASED_DIR64) {
-                    *reinterpret_cast<int64_t *>(addr) += relocOffset;
-                }
-                else if (type != IMAGE_REL_BASED_ABSOLUTE) {
+                if (!addr) {
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Invalid relocation target RVA: 0x{:X}", rva);
                     return false;
                 }
+                
+                DWORD oldProtect;
+                SIZE_T relocSize = 4; // Default for most types
+                
+                switch (type) {
+                    case IMAGE_REL_BASED_ABSOLUTE:
+                        // No relocation required
+                        continue;
+                        
+                    case IMAGE_REL_BASED_HIGH:
+                        relocSize = 2;
+                        if (!VirtualProtect(addr, relocSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to change protection for HIGH relocation at 0x{:X}", rva);
+                            return false;
+                        }
+                        *reinterpret_cast<uint16_t *>(addr) += static_cast<uint16_t>((relocOffset >> 16) & 0xFFFF);
+                        break;
+                        
+                    case IMAGE_REL_BASED_LOW:
+                        relocSize = 2;
+                        if (!VirtualProtect(addr, relocSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to change protection for LOW relocation at 0x{:X}", rva);
+                            return false;
+                        }
+                        *reinterpret_cast<uint16_t *>(addr) += static_cast<uint16_t>(relocOffset & 0xFFFF);
+                        break;
+                        
+                    case IMAGE_REL_BASED_HIGHLOW:
+                        if (!VirtualProtect(addr, relocSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to change protection for HIGHLOW relocation at 0x{:X}", rva);
+                            return false;
+                        }
+                        *reinterpret_cast<int32_t *>(addr) += static_cast<int32_t>(relocOffset);
+                        break;
+                        
+                    case IMAGE_REL_BASED_DIR64:
+                        relocSize = 8;
+                        if (!VirtualProtect(addr, relocSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                            Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to change protection for DIR64 relocation at 0x{:X}", rva);
+                            return false;
+                        }
+                        *reinterpret_cast<int64_t *>(addr) += relocOffset;
+                        break;
+                        
+                    default:
+                        Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Unsupported relocation type {} at RVA 0x{:X}", type, rva);
+                        return false;
+                }
 
-                VirtualProtect(addr, (type == IMAGE_REL_BASED_DIR64) ? 8 : 4, oldProtect, &oldProtect);
+                if (!VirtualProtect(addr, relocSize, oldProtect, &oldProtect)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Failed to restore protection for relocation at 0x{:X}", rva);
+                    return false;
+                }
             }
 
             // on to the next one!
