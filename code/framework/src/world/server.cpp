@@ -298,9 +298,11 @@ namespace Framework::World {
         return streamers;
     }
 
-    void ServerEngine::RemoveEntity(flecs::entity e) {
-        if (e.is_alive()) {
+    bool ServerEngine::RemoveEntity(flecs::entity e) {
+        if (e.is_alive() && !e.has<Modules::Base::PendingRemoval>()) {
             e.add<Modules::Base::PendingRemoval>();
+            return true;
         }
+        return false;
     }
 } // namespace Framework::World
