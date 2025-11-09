@@ -23,6 +23,7 @@ namespace Framework::Scripting {
     using EventHandler = std::vector<sol::function>;
     using ScriptProc   = std::function<void()>;
     using InvokeEventProc   = std::function<bool(std::string)>;
+    using EventRegistrationCallback = std::function<void(const std::string &)>;
 
     class Engine {
       public:
@@ -35,7 +36,9 @@ namespace Framework::Scripting {
       protected:
         ScriptProc _onLoadProc   = nullptr;
         ScriptProc _onUnloadProc = nullptr;
-        InvokeEventProc _onInvokeEventProc = nullptr;
+        InvokeEventProc _onInvokeEventProc                 = nullptr;
+        EventRegistrationCallback _onFirstEventRegisteredProc = nullptr;
+        EventRegistrationCallback _onLastEventUnregisteredProc = nullptr;
 
       public:
         virtual EngineError Init(SDKRegisterCallback) = 0;
@@ -48,8 +51,36 @@ namespace Framework::Scripting {
             return _luaEngine;
         }
 
-        void ListenEvent(std::string name, sol::function fnc) {
-            _eventHandlers[name].push_back(fnc);
+        void ListenEvent(const std::string &name, sol::function fnc) {
+            auto &handlers         = _eventHandlers[name];
+            bool firstRegistration = handlers.empty();
+
+            handlers.push_back(std::move(fnc));
+
+            if (firstRegistration && _onFirstEventRegisteredProc) {
+                _onFirstEventRegisteredProc(name);
+            }
+        }
+
+        void RemoveEventListener(const std::string &name, const sol::function &fnc) {
+            auto it = _eventHandlers.find(name);
+            if (it == _eventHandlers.end())
+                return;
+
+            auto &handlers = it->second;
+
+            handlers.erase(std::remove_if(handlers.begin(), handlers.end(),
+                               [&](const sol::function &f) {
+                                   return f == fnc;
+                               }),
+                handlers.end());
+
+            if (handlers.empty()) {
+                _eventHandlers.erase(it);
+                if (_onLastEventUnregisteredProc) {
+                    _onLastEventUnregisteredProc(name);
+                }
+            }
         }
 
         void ListenRemoteEvent(std::string name, sol::function fnc) {
@@ -117,6 +148,14 @@ namespace Framework::Scripting {
 
         void SetOnInvokeEventProc(InvokeEventProc proc) {
             _onInvokeEventProc = std::move(proc);
+        }
+
+        void SetOnFirstEventRegisteredProc(EventRegistrationCallback cb) {
+            _onFirstEventRegisteredProc = std::move(cb);
+        }
+
+        void SetOnLastEventUnregisteredProc(EventRegistrationCallback cb) {
+            _onLastEventUnregisteredProc = std::move(cb);
         }
     };
 } // namespace Framework::Scripting
