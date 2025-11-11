@@ -304,6 +304,62 @@ ULExport void ulViewUnlockJSContext(ULView view);
 ULExport ULString ulViewEvaluateScript(ULView view, ULString js_string, ULString* exception);
 
 ///
+/// Lock the JS context for a specific frame
+///
+/// @param  view   The view instance
+///
+/// @param  frame  Frame name (pass empty string for main frame)
+///
+/// @return        JSContextRef or NULL if frame not found
+///
+/// @note  The lock is recusive, it's okay to call this multiple times as long as you call
+///        ulViewUnlockJSContext() the same number of times.
+///
+ULExport JSContextRef ulViewLockJSContextWithFrame(ULView view, ULString frame);
+
+///
+/// Unlock the JS context for a specific frame
+///
+/// @param  view   The view instance
+///
+/// @param  frame  Frame name (pass empty string for main frame)
+///
+/// @note  Must be called the same number of times as ulViewLockJSContextWithFrame()
+///        for the same frame name (recursive locking support).
+///
+ULExport void ulViewUnlockJSContextWithFrame(ULView view, ULString frame);
+
+///
+/// Get JavaScript VM for a specific frame
+///
+/// @param  view   The view instance
+///
+/// @param  frame  Frame name (pass empty string for main frame)
+///
+/// @return        VM pointer or NULL if frame not found
+///
+ULExport void* ulViewJavaScriptVMWithFrame(ULView view, ULString frame);
+
+///
+/// Evaluate script in a specific frame
+///
+/// @param  view       The view instance
+///
+/// @param  js_string  JavaScript to evaluate
+///
+/// @param  exception  Optional pointer to store exception string
+///
+/// @param  frame      Frame name (pass empty string for main frame)
+///
+/// @return            Result as string, or empty string if frame not found
+///
+/// @note  You must destroy the returned string and exception string (if provided) using
+///        ulDestroyString() when you're done with them.
+///
+ULExport ULString ulViewEvaluateScriptWithFrame(ULView view, ULString js_string,
+                                                 ULString* exception, ULString frame);
+
+///
 /// Check if can navigate backwards in history.
 ///
 ULExport bool ulViewCanGoBack(ULView view);

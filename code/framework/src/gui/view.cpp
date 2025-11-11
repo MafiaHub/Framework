@@ -28,6 +28,7 @@ namespace Framework::GUI {
         config.is_accelerated = gpu_accelerated;
         config.is_transparent = true;
         config.initial_focus  = false;
+        config.enable_compositor = false; // Broken for now, see later
         _gpuAccelerated       = gpu_accelerated;
 
         // Initialize the internal view

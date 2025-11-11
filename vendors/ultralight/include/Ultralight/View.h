@@ -93,6 +93,15 @@ struct UExport ViewConfig {
   bool enable_compositor = false;
 
   ///
+  /// Whether or not to enable extra compositor debug information, specifically:
+  ///  - Visualize compositor layers and tile boundaries
+  ///  - Display repaint counters for each layer
+  ///
+  /// @note  Only valid when the compositor is enabled.
+  ///
+  bool enable_compositor_debug_info = false;
+
+  ///
   /// Default font-family to use.
   ///
   String font_family_standard = "Times New Roman";
@@ -118,6 +127,8 @@ struct UExport ViewConfig {
   /// @pre This feature is only available in Ultralight Pro edition and above.
   ///
   String user_agent = ULTRALIGHT_USER_AGENT;
+
+
 };
 
 ///
@@ -321,6 +332,12 @@ class UExport View : public RefCounted {
   ///
   /// Acquire the page's JSContext for use with the JavaScriptCore API
   ///
+  /// @param  frame  The name of the frame to access. Pass an empty string (default) for the main
+  ///                frame, or the name attribute of an iframe to access a child frame.
+  ///
+  /// @return  Returns a RefPtr to the JSContext for the specified frame. Returns nullptr if the
+  ///          specified frame does not exist.
+  ///
   /// @note  You can use the underlying JSContextRef with the JavaScriptCore C API. This allows you
   ///        to marshall C/C++ objects to/from JavaScript, bind callbacks, and call JS functions
   ///        directly.
@@ -333,22 +350,33 @@ class UExport View : public RefCounted {
   ///        the returned JSContext's ref-count goes to zero. The lock is recursive, you can call
   ///        this multiple times.
   ///
-  virtual RefPtr<JSContext> LockJSContext() = 0;
+  virtual RefPtr<JSContext> LockJSContext(const String& frame = "") = 0;
 
   ///
   /// Get a handle to the internal JavaScriptCore VM.
   ///
-  virtual void* JavaScriptVM() = 0;
+  /// @param  frame  The name of the frame to access. Pass an empty string (default) for the main
+  ///                frame, or the name attribute of an iframe to access a child frame.
+  ///
+  /// @return  Returns a pointer to the JavaScriptCore VM for the specified frame. Returns nullptr
+  ///          if the specified frame does not exist.
+  ///
+  virtual void* JavaScriptVM(const String& frame = "") = 0;
 
   ///
   /// Helper function to evaluate a raw string of JavaScript and return the result as a String.
   ///
-  /// @param  script     A string of JavaScript to evaluate in the main frame.
+  /// @param  script     A string of JavaScript to evaluate.
   ///
   /// @param  exception  A string to store the exception in, if any. Pass a nullptr if you don't
   ///                    care about exceptions.
   ///
-  /// @return  Returns the JavaScript result typecast to a String.
+  /// @param  frame      The name of the frame to evaluate the script in. Pass an empty string
+  ///                    (default) for the main frame, or the name attribute of an iframe to access
+  ///                    a child frame.
+  ///
+  /// @return  Returns the JavaScript result typecast to a String. Returns an empty string if the
+  ///          specified frame does not exist or if the result is undefined/null.
   ///
   ///
   /// @note  You do not need to lock the JS context, it is done automatically.
@@ -357,7 +385,7 @@ class UExport View : public RefCounted {
   ///        the JS context and call JSEvaluateScript() in the JavaScriptCore C API.
   ///        @see <JavaScriptCore/JSBase.h>
   ///
-  virtual String EvaluateScript(const String& script, String* exception = nullptr) = 0;
+  virtual String EvaluateScript(const String& script, String* exception = nullptr, const String& frame = "") = 0;
 
   ///
   /// Whether or not we can navigate backwards in history
@@ -518,6 +546,21 @@ class UExport View : public RefCounted {
   /// currently active.
   ///
   virtual void CreateLocalInspectorView() = 0;
+
+  ///
+  /// Set whether or not to display compositor debug information, specifically:
+  ///  - Visualize compositor layers and tile boundaries
+  ///  - Display repaint counters for each layer
+  ///
+  /// @note  This is only valid when the compositor is enabled.
+  ///        @see ViewConfig::enable_compositor
+  ///
+  virtual void set_compositor_debug_info_enabled(bool enable) = 0;
+
+  ///
+  /// Whether or not compositor debug information is enabled.
+  ///
+  virtual bool compositor_debug_info_enabled() const = 0;
 
  protected:
   virtual ~View();
