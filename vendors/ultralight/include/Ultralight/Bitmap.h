@@ -283,8 +283,7 @@ class UExport Bitmap : public RefCounted {
   /// Draw another bitmap to this bitmap.
   ///
   /// @note  Formats do not need to match. Bitmap formats will be converted to one another
-  ///        automatically. Note that when converting from BGRA8 to A8, only the Blue channel will
-  ///        be used.
+  ///        automatically.
   ///
   /// @param  src_rect    The source rectangle, relative to src bitmap.
   ///

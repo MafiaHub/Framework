@@ -80,6 +80,14 @@
 #  endif
 #endif
 
+#ifndef UL_LIKELY
+#  if defined(UL_COMPILER_GCC_LIKE)
+#    define UL_LIKELY(x) __builtin_expect(!!(x), 1)
+#  else
+#    define UL_LIKELY(x) (x)
+#  endif
+#endif
+
 #ifndef UL_ALIGN
     #if defined(UL_COMPILER_GCC_LIKE) 
         #define UL_ALIGN(x) __attribute__((aligned(x)))
@@ -94,10 +102,10 @@
 
 #endif // #ifdef SWIG
 
-#define ULTRALIGHT_VERSION "1.4.0"
+#define ULTRALIGHT_VERSION "1.4.1"
 #define ULTRALIGHT_VERSION_MAJOR 1
 #define ULTRALIGHT_VERSION_MINOR 4
-#define ULTRALIGHT_VERSION_PATCH 0
+#define ULTRALIGHT_VERSION_PATCH 1
 
 #define WEBKIT_VERSION "615.1.18.100.1"
 #define WEBKIT_VERSION_MAJOR 615
@@ -108,7 +116,7 @@
 
 #define ULTRALIGHT_USER_AGENT "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " \
                               "AppleWebKit/615.1.18.100.1 (KHTML, like Gecko) " \
-                              "Ultralight/1.4.0 Version/16.4.1 Safari/615.1.18.100.1"
+                              "Ultralight/1.4.1 Version/16.4.1 Safari/615.1.18.100.1"
 
 #ifdef __cplusplus
 extern "C" {

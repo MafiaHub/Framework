@@ -124,6 +124,9 @@ struct UExport IndexBuffer {
 enum class ShaderType : uint8_t {
   Fill,     ///< Shader program for filling quad geometry.
   FillPath, ///< Shader program for filling tesselated path geometry.
+  FilterBasic, ///< Shader program for basic CSS/SVG filters.
+  FilterBlur,  ///< Shader program for blur CSS/SVG filters.
+  FilterDropShadow, ///< Shader program for drop-shadow CSS/SVG filters.
 };
 
 ///
@@ -166,6 +169,9 @@ struct UExport GPUState {
 
   /// The texture id to bind to slot #3. (Will be 0 if none)
   uint32_t texture_3_id;
+
+  /// The uniform integers (passed to the pixel shader via uniforms).
+  int32_t uniform_integer[8];
 
   /// The uniform scalars (passed to the pixel shader via uniforms).
   float uniform_scalar[8];
