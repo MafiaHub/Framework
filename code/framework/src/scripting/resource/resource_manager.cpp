@@ -39,7 +39,6 @@ namespace Framework::Scripting {
 
         cppfs::FileHandle resourcesDir = cppfs::fs::open(_config.resourcesPath);
 
-        // Check for legacy gamemode support (Phase 8.3)
         if (_config.enableLegacySupport) {
             // Look for a manifest.json directly in the resources path (legacy structure)
             std::string legacyManifestPath = _config.resourcesPath + "/manifest.json";
@@ -251,11 +250,10 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Failure(execError);
         }
 
-        // Fire onResourceLoad event (Phase 4.1)
-        // This is fired after environment is created and scripts are loaded
+        // Fire onResourceLoad event after environment is created and scripts are loaded
         FireResourceLifecycleEventInternal(name, "onResourceLoad", {});
 
-        // Check for preserved state from hot-reload (Phase 4.4)
+        // Check for preserved state from hot-reload
         sol::object preservedState = sol::nil;
         {
             std::lock_guard<std::mutex> lock(_preservedStatesMutex);
@@ -272,13 +270,11 @@ namespace Framework::Scripting {
         resource->SetLoadTimestamp();
         FireOnResourceStateChanged(name, oldState, ResourceState::Running);
 
-        // Fire onResourceStart event with optional preserved state (Phase 4.1)
         FireResourceLifecycleEventWithState(name, "onResourceStart", preservedState);
 
         // Fire C++ callback
         FireOnResourceStarted(name);
 
-        // Broadcast to other resources that this resource started (Phase 4.1)
         BroadcastResourceAwarenessEvent("onResourceStarted", name);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started resource: {}", name);
@@ -320,9 +316,7 @@ namespace Framework::Scripting {
         // Set context for lifecycle events
         SetCurrentResourceContext(name);
 
-        // Fire onResourceStop event (Phase 4.1)
-        // This allows the resource to save state and cleanup timers
-        // The handler can return a state table to be preserved for hot-reload
+        // Fire onResourceStop event - the handler can return a state table to be preserved
         sol::object preservedState = sol::nil;
         sol::environment *env      = resource->GetEnvironment();
         if (env) {
@@ -344,7 +338,6 @@ namespace Framework::Scripting {
             }
         }
 
-        // Store preserved state for potential hot-reload (Phase 4.4)
         if (preservedState.valid() && preservedState != sol::nil) {
             std::lock_guard<std::mutex> lock(_preservedStatesMutex);
             _preservedStates[name] = preservedState;
@@ -376,8 +369,7 @@ namespace Framework::Scripting {
             _messageHandlers.erase(name);
         }
 
-        // Fire onResourceUnload event (Phase 4.1)
-        // This is the final cleanup notification before environment is cleared
+        // Fire onResourceUnload event - final cleanup before environment is cleared
         if (env) {
             sol::object handlerObj = (*env)["onResourceUnload"];
             if (handlerObj.valid() && handlerObj.is<sol::protected_function>()) {
@@ -407,10 +399,8 @@ namespace Framework::Scripting {
         // Fire C++ callback
         FireOnResourceStopped(name);
 
-        // Broadcast to other resources that this resource stopped (Phase 4.1)
         BroadcastResourceAwarenessEvent("onResourceStopped", name);
 
-        // Fire onDependencyLost to running dependents (Phase 6.2)
         auto dependents = GetDependents(name);
         for (const auto &dep : dependents) {
             if (IsResourceRunning(dep)) {
@@ -505,7 +495,6 @@ namespace Framework::Scripting {
                 return startResult;
             }
 
-            // Fire onResourceReload event (Phase 4.4)
             FireResourceLifecycleEventInternal(newName, "onResourceReload", {});
         }
 
@@ -849,8 +838,6 @@ namespace Framework::Scripting {
         return GetResourceMutable(current);
     }
 
-    // Inter-Resource Communication (Phase 3)
-
     bool ResourceManager::RegisterExport(const std::string &exportName, sol::object value) {
         Resource *resource = GetCurrentResource();
         if (!resource) {
@@ -1107,8 +1094,6 @@ namespace Framework::Scripting {
         }
     }
 
-    // Lifecycle Events (Phase 4)
-
     bool ResourceManager::FireResourceLifecycleEventInternal(const std::string &resourceName, const std::string &eventName, std::vector<sol::object> args) {
         Resource *resource = GetResourceMutable(resourceName);
         if (!resource) {
@@ -1196,8 +1181,6 @@ namespace Framework::Scripting {
         }
     }
 
-    // State Preservation (Phase 4.4)
-
     bool ResourceManager::HasPreservedState(const std::string &name) const {
         std::lock_guard<std::mutex> lock(_preservedStatesMutex);
         return _preservedStates.find(name) != _preservedStates.end();
@@ -1221,8 +1204,6 @@ namespace Framework::Scripting {
         }
         return sol::nil;
     }
-
-    // Error Handling and Recovery (Phase 6)
 
     void ResourceManager::HandleResourceRuntimeError(const std::string &resourceName, const std::string &error, const std::string &stackTrace) {
         Resource *resource = GetResourceMutable(resourceName);

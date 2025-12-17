@@ -345,8 +345,6 @@ namespace Framework::Scripting {
         }
     }
 
-    // Restart tracking (Phase 6.3)
-
     int Resource::GetRestartAttemptCount() const {
         std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
 
@@ -414,8 +412,6 @@ namespace Framework::Scripting {
         return std::min(backoff, maxBackoffMs);
     }
 
-    // Health monitoring (Phase 6.3)
-
     void Resource::RegisterHealthCheck(sol::protected_function healthCheck) {
         std::lock_guard<std::mutex> lock(_healthCheckMutex);
         _healthCheck = healthCheck;
@@ -477,8 +473,6 @@ namespace Framework::Scripting {
         std::lock_guard<std::mutex> lock(_healthCheckMutex);
         return _lastHealthCheckTime;
     }
-
-    // Content hash (Phase 7.3)
 
     uint32_t Resource::GetContentHash() const {
         std::lock_guard<std::mutex> lock(_contentHashMutex);

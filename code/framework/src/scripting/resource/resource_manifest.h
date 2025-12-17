@@ -65,7 +65,6 @@ namespace Framework::Scripting {
         std::vector<std::string> serverFiles;
         std::vector<std::string> clientFiles;
 
-        // Error handling (Phase 6 preparation)
         ResourceErrorBehavior errorBehavior = ResourceErrorBehavior::Stop;
         ResourceAutoRestartConfig autoRestart;
 

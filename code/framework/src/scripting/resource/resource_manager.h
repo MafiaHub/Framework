@@ -287,8 +287,6 @@ namespace Framework::Scripting {
          */
         Resource *GetCurrentResource();
 
-        // Inter-Resource Communication (Phase 3)
-
         /**
          * Register an export from the current resource.
          * @param exportName Name of the export
@@ -356,8 +354,6 @@ namespace Framework::Scripting {
          */
         void ProcessMessageQueue();
 
-        // Lifecycle Events (Phase 4)
-
         /**
          * Fire a lifecycle event within a resource's environment.
          * These events are internal to the resource (onResourceLoad, onResourceStart, etc.)
@@ -388,8 +384,6 @@ namespace Framework::Scripting {
          * @param affectedResourceName Name of the resource that triggered the event
          */
         void BroadcastResourceAwarenessEvent(const std::string &eventName, const std::string &affectedResourceName);
-
-        // State Preservation (Phase 4.4)
 
         /**
          * Check if there is preserved state for a resource.
@@ -428,8 +422,6 @@ namespace Framework::Scripting {
          * Get the number of running resources.
          */
         size_t GetRunningResourceCount() const;
-
-        // Error Handling and Recovery (Phase 6)
 
         /**
          * Handle a runtime error in a resource.
@@ -563,15 +555,12 @@ namespace Framework::Scripting {
         // Request ID counter
         uint64_t _nextRequestId = 1;
 
-        // Preserved state for hot-reload (Phase 4.4)
-        // Maps resource name -> preserved state table
         std::map<std::string, sol::object> _preservedStates;
         mutable std::mutex _preservedStatesMutex;
 
         // Internal helper to fire lifecycle event without variadic args
         bool FireResourceLifecycleEventInternal(const std::string &resourceName, const std::string &eventName, std::vector<sol::object> args);
 
-        // Scheduled restart structure (Phase 6)
         struct ScheduledRestart {
             std::string resourceName;
             std::chrono::system_clock::time_point scheduledTime;

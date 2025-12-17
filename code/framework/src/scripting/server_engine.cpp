@@ -93,7 +93,6 @@ namespace Framework::Scripting {
         // Init the common SDK
         InitCommonSDK();
 
-        // Register server-specific Resource builtin functions (Phase 7)
         Builtins::ResourceBuiltin::RegisterServer(_luaEngine);
 
         // Init the mod-level scripting layer

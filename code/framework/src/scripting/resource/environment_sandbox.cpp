@@ -132,7 +132,6 @@ namespace Framework::Scripting {
             "Event",
             "Timer",
 
-            // Inter-resource communication (Phase 3)
             "Exports",
             "Message",
 
