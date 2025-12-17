@@ -1,11 +1,14 @@
 #include "resource.h"
 
 #include <logging/logger.h>
+#include <utils/hashing.h>
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 
 namespace Framework::Scripting {
 
@@ -473,6 +476,60 @@ namespace Framework::Scripting {
     std::chrono::system_clock::time_point Resource::GetLastHealthCheckTime() const {
         std::lock_guard<std::mutex> lock(_healthCheckMutex);
         return _lastHealthCheckTime;
+    }
+
+    // Content hash (Phase 7.3)
+
+    uint32_t Resource::GetContentHash() const {
+        std::lock_guard<std::mutex> lock(_contentHashMutex);
+
+        if (!_contentHashValid) {
+            _contentHash = CalculateContentHash();
+            _contentHashValid = true;
+        }
+
+        return _contentHash;
+    }
+
+    void Resource::InvalidateContentHash() {
+        std::lock_guard<std::mutex> lock(_contentHashMutex);
+        _contentHashValid = false;
+        _contentHash = 0;
+    }
+
+    uint32_t Resource::CalculateContentHash() const {
+        std::ostringstream combinedContent;
+
+        // Include manifest metadata in hash
+        combinedContent << _manifest.name << "|";
+        combinedContent << _manifest.version << "|";
+        combinedContent << _manifest.author << "|";
+
+        // Hash all script files
+        auto hashFiles = [&combinedContent](const std::vector<std::string> &files) {
+            for (const auto &filePath : files) {
+                std::ifstream file(filePath, std::ios::binary);
+                if (file.is_open()) {
+                    combinedContent << filePath << ":";
+                    combinedContent << file.rdbuf();
+                    combinedContent << "|";
+                }
+            }
+        };
+
+        hashFiles(_serverScriptPaths);
+        hashFiles(_clientScriptPaths);
+
+        // Also include the manifest.json file itself
+        std::string manifestPath = _path + "/manifest.json";
+        std::ifstream manifestFile(manifestPath, std::ios::binary);
+        if (manifestFile.is_open()) {
+            combinedContent << "manifest:";
+            combinedContent << manifestFile.rdbuf();
+        }
+
+        std::string content = combinedContent.str();
+        return Utils::Hashing::CalculateCRC32(content.c_str(), content.size());
     }
 
 } // namespace Framework::Scripting

@@ -272,6 +272,20 @@ namespace Framework::Scripting {
          */
         size_t GetScriptCount() const;
 
+        /**
+         * Calculate the content hash for this resource.
+         * Hash is based on manifest + all script file contents.
+         * Result is cached until InvalidateContentHash() is called.
+         * @return CRC32 hash of all resource content
+         */
+        uint32_t GetContentHash() const;
+
+        /**
+         * Invalidate the cached content hash.
+         * Call this when files have been modified.
+         */
+        void InvalidateContentHash();
+
         // State transitions (called by ResourceManager)
         friend class ResourceManager;
 
@@ -322,6 +336,14 @@ namespace Framework::Scripting {
         mutable bool _lastHealthCheckResult = true;
         mutable std::chrono::system_clock::time_point _lastHealthCheckTime;
         mutable std::mutex _healthCheckMutex;
+
+        // Content hash (Phase 7.3)
+        mutable uint32_t _contentHash = 0;
+        mutable bool _contentHashValid = false;
+        mutable std::mutex _contentHashMutex;
+
+        // Calculate and cache the content hash
+        uint32_t CalculateContentHash() const;
     };
 
 } // namespace Framework::Scripting

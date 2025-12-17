@@ -414,8 +414,7 @@ namespace Framework::Scripting::Builtins {
             const Resource *resource = manager->GetResource(resourceName);
             if (resource) {
                 version = resource->GetManifest().version;
-                // TODO: Implement content hash in Phase 7.3
-                hash = 0;
+                hash = resource->GetContentHash();
             }
 
             Framework::Networking::Messages::ResourceCommandMessage msg;
@@ -514,8 +513,7 @@ namespace Framework::Scripting::Builtins {
                 const auto &manifest = resource->GetManifest();
                 // Only include resources with client files
                 if (!manifest.clientFiles.empty()) {
-                    // TODO: Implement content hash in Phase 7.3
-                    msg.AddResource(manifest.name, manifest.version, 0);
+                    msg.AddResource(manifest.name, manifest.version, resource->GetContentHash());
                 }
             }
 

@@ -13,6 +13,7 @@
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <logging/logger.h>
+#include <scripting/resource/resource.h>
 
 namespace Framework::Integrations::Client::Scripting {
 
@@ -259,9 +260,28 @@ namespace Framework::Integrations::Client::Scripting {
             return false;
         }
 
-        // If hash is provided, we could validate it here
-        // For now, we just check existence
-        // TODO: Implement hash validation for cache invalidation (Phase 7.3)
+        // Validate hash if provided (non-zero hash means server wants validation)
+        if (hash != 0) {
+            // Create a temporary Resource to calculate the local hash
+            Framework::Scripting::Resource tempResource(resourcePath);
+            if (!tempResource.IsManifestValid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' manifest is invalid", resourceName);
+                return false;
+            }
+
+            // Check version match
+            if (!version.empty() && tempResource.GetVersion() != version) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' version mismatch: local={}, server={}", resourceName, tempResource.GetVersion(), version);
+                return false;
+            }
+
+            // Check hash match
+            uint32_t localHash = tempResource.GetContentHash();
+            if (localHash != hash) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' hash mismatch: local={}, server={}", resourceName, localHash, hash);
+                return false;
+            }
+        }
 
         return true;
     }

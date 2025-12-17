@@ -295,8 +295,7 @@ namespace Framework::Integrations::Server::Scripting {
                 ClientResourceInfo info;
                 info.name = manifest.name;
                 info.version = manifest.version;
-                // TODO: Implement content hash in Phase 7.3
-                info.hash = 0;
+                info.hash = resource->GetContentHash();
                 result.push_back(info);
             }
         }
