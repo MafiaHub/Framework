@@ -132,6 +132,10 @@ namespace Framework::Scripting {
             "Event",
             "Timer",
 
+            // Inter-resource communication (Phase 3)
+            "Exports",
+            "Message",
+
             // Math types
             "Vector2",
             "Vector3",

@@ -266,6 +266,96 @@ namespace Framework::Scripting {
          */
         sol::state *GetLuaState() const;
 
+        // Current Resource Context
+
+        /**
+         * Set the currently executing resource name.
+         * Used by the event system and builtins to know which resource is calling.
+         * @param name Resource name, or empty string to clear
+         */
+        void SetCurrentResourceContext(const std::string &name);
+
+        /**
+         * Get the currently executing resource name.
+         * @return Current resource name, or empty string if none
+         */
+        std::string GetCurrentResourceContext() const;
+
+        /**
+         * Get the currently executing resource.
+         * @return Pointer to current resource, or nullptr if none
+         */
+        Resource *GetCurrentResource();
+
+        // Inter-Resource Communication (Phase 3)
+
+        /**
+         * Register an export from the current resource.
+         * @param exportName Name of the export
+         * @param value The value to export
+         * @return True if successful
+         */
+        bool RegisterExport(const std::string &exportName, sol::object value);
+
+        /**
+         * Broadcast a global event to all running resources.
+         * @param eventName Name of the event
+         * @param args Event arguments
+         */
+        void BroadcastGlobalEvent(const std::string &eventName, sol::variadic_args args);
+
+        /**
+         * Send a targeted event to a specific resource.
+         * @param targetResource Name of the target resource
+         * @param eventName Name of the event
+         * @param args Event arguments
+         * @return True if the target resource was found and running
+         */
+        bool EmitTargetedEvent(const std::string &targetResource, const std::string &eventName, sol::variadic_args args);
+
+        /**
+         * Register a handler for global events in the current resource.
+         * @param eventName Name of the event
+         * @param handler Event handler function
+         */
+        void RegisterGlobalEventHandler(const std::string &eventName, sol::protected_function handler);
+
+        /**
+         * Register a handler for targeted events in the current resource.
+         * @param eventName Name of the event
+         * @param handler Event handler function
+         */
+        void RegisterTargetedEventHandler(const std::string &eventName, sol::protected_function handler);
+
+        /**
+         * Send a fire-and-forget message to a resource.
+         * @param targetResource Name of the target resource
+         * @param messageType Type of the message
+         * @param payload Message payload
+         */
+        void SendMessage(const std::string &targetResource, const std::string &messageType, sol::object payload);
+
+        /**
+         * Send a request message with callback.
+         * @param targetResource Name of the target resource
+         * @param messageType Type of the message
+         * @param payload Message payload
+         * @param callback Callback to invoke with response
+         */
+        void SendRequest(const std::string &targetResource, const std::string &messageType, sol::object payload, sol::protected_function callback);
+
+        /**
+         * Register a message handler for the current resource.
+         * @param messageType Type of message to handle
+         * @param handler Handler function that receives (request, reply)
+         */
+        void RegisterMessageHandler(const std::string &messageType, sol::protected_function handler);
+
+        /**
+         * Process pending message callbacks (call in update loop).
+         */
+        void ProcessMessageQueue();
+
         // Statistics
 
         /**
@@ -323,6 +413,46 @@ namespace Framework::Scripting {
         // Legacy gamemode path (for backward compatibility)
         std::string _legacyGamemodePath;
         bool _hasLegacyGamemode = false;
+
+        // Current resource context (for builtins to know which resource is calling)
+        std::string _currentResourceContext;
+        mutable std::mutex _contextMutex;
+
+        // Global event handlers: eventName -> {resourceName -> handlers}
+        std::map<std::string, std::map<std::string, std::vector<sol::protected_function>>> _globalEventHandlers;
+        mutable std::mutex _globalEventsMutex;
+
+        // Targeted event handlers: resourceName -> {eventName -> handlers}
+        std::map<std::string, std::map<std::string, std::vector<sol::protected_function>>> _targetedEventHandlers;
+        mutable std::mutex _targetedEventsMutex;
+
+        // Message handlers: resourceName -> {messageType -> handler}
+        std::map<std::string, std::map<std::string, sol::protected_function>> _messageHandlers;
+        mutable std::mutex _messageHandlersMutex;
+
+        // Pending message request structure
+        struct PendingRequest {
+            uint64_t requestId;
+            sol::protected_function callback;
+            std::string sourceResource;
+        };
+
+        // Pending message response structure
+        struct PendingResponse {
+            uint64_t requestId;
+            sol::object response;
+        };
+
+        // Pending request callbacks waiting for response
+        std::map<uint64_t, PendingRequest> _pendingRequests;
+        mutable std::mutex _pendingRequestsMutex;
+
+        // Response queue for processing in the main thread
+        std::vector<PendingResponse> _responseQueue;
+        mutable std::mutex _responseQueueMutex;
+
+        // Request ID counter
+        uint64_t _nextRequestId = 1;
     };
 
 } // namespace Framework::Scripting

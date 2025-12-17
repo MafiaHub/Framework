@@ -232,9 +232,13 @@ namespace Framework::Scripting {
         }
         resource->SetEnvironment(std::move(env));
 
+        // Set current resource context for builtins
+        SetCurrentResourceContext(name);
+
         // Execute scripts
         std::string execError;
         if (!ExecuteResourceScripts(*resource, execError)) {
+            SetCurrentResourceContext(""); // Clear context on error
             resource->SetError(execError);
             FireOnResourceError(name, execError);
             FireOnResourceStateChanged(name, ResourceState::Loading, ResourceState::Error);
@@ -636,6 +640,284 @@ namespace Framework::Scripting {
     void ResourceManager::FireOnResourceStateChanged(const std::string &name, ResourceState oldState, ResourceState newState) {
         if (_onResourceStateChanged) {
             _onResourceStateChanged(name, oldState, newState);
+        }
+    }
+
+    // Current Resource Context
+
+    void ResourceManager::SetCurrentResourceContext(const std::string &name) {
+        std::lock_guard<std::mutex> lock(_contextMutex);
+        _currentResourceContext = name;
+    }
+
+    std::string ResourceManager::GetCurrentResourceContext() const {
+        std::lock_guard<std::mutex> lock(_contextMutex);
+        return _currentResourceContext;
+    }
+
+    Resource *ResourceManager::GetCurrentResource() {
+        std::string current = GetCurrentResourceContext();
+        if (current.empty()) {
+            return nullptr;
+        }
+        return GetResourceMutable(current);
+    }
+
+    // Inter-Resource Communication (Phase 3)
+
+    bool ResourceManager::RegisterExport(const std::string &exportName, sol::object value) {
+        Resource *resource = GetCurrentResource();
+        if (!resource) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot register export '{}': no current resource context", exportName);
+            return false;
+        }
+
+        return resource->RegisterExport(exportName, value);
+    }
+
+    void ResourceManager::BroadcastGlobalEvent(const std::string &eventName, sol::variadic_args args) {
+        std::lock_guard<std::mutex> lock(_globalEventsMutex);
+
+        auto it = _globalEventHandlers.find(eventName);
+        if (it == _globalEventHandlers.end()) {
+            return;
+        }
+
+        // Iterate through all resources that have handlers for this event
+        for (auto &resourcePair : it->second) {
+            const std::string &resourceName = resourcePair.first;
+
+            // Only invoke if resource is running
+            if (!IsResourceRunning(resourceName)) {
+                continue;
+            }
+
+            // Save current context and set to the handler's resource
+            std::string previousContext = GetCurrentResourceContext();
+            SetCurrentResourceContext(resourceName);
+
+            for (auto &handler : resourcePair.second) {
+                sol::protected_function_result result = handler(args);
+                if (!result.valid()) {
+                    sol::error err = result;
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Global event '{}' handler error: {}", resourceName, eventName, err.what());
+                }
+            }
+
+            // Restore context
+            SetCurrentResourceContext(previousContext);
+        }
+    }
+
+    bool ResourceManager::EmitTargetedEvent(const std::string &targetResource, const std::string &eventName, sol::variadic_args args) {
+        if (!IsResourceRunning(targetResource)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Cannot emit targeted event '{}' to '{}': resource not running", eventName, targetResource);
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(_targetedEventsMutex);
+
+        auto resourceIt = _targetedEventHandlers.find(targetResource);
+        if (resourceIt == _targetedEventHandlers.end()) {
+            return false;
+        }
+
+        auto eventIt = resourceIt->second.find(eventName);
+        if (eventIt == resourceIt->second.end()) {
+            return false;
+        }
+
+        // Save current context and set to target resource
+        std::string previousContext = GetCurrentResourceContext();
+        SetCurrentResourceContext(targetResource);
+
+        for (auto &handler : eventIt->second) {
+            sol::protected_function_result result = handler(args);
+            if (!result.valid()) {
+                sol::error err = result;
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Targeted event '{}' handler error: {}", targetResource, eventName, err.what());
+            }
+        }
+
+        // Restore context
+        SetCurrentResourceContext(previousContext);
+        return true;
+    }
+
+    void ResourceManager::RegisterGlobalEventHandler(const std::string &eventName, sol::protected_function handler) {
+        std::string resourceName = GetCurrentResourceContext();
+        if (resourceName.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot register global event handler '{}': no current resource context", eventName);
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(_globalEventsMutex);
+        _globalEventHandlers[eventName][resourceName].push_back(handler);
+    }
+
+    void ResourceManager::RegisterTargetedEventHandler(const std::string &eventName, sol::protected_function handler) {
+        std::string resourceName = GetCurrentResourceContext();
+        if (resourceName.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot register targeted event handler '{}': no current resource context", eventName);
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(_targetedEventsMutex);
+        _targetedEventHandlers[resourceName][eventName].push_back(handler);
+    }
+
+    void ResourceManager::SendMessage(const std::string &targetResource, const std::string &messageType, sol::object payload) {
+        if (!IsResourceRunning(targetResource)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Cannot send message '{}' to '{}': resource not running", messageType, targetResource);
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(_messageHandlersMutex);
+
+        auto resourceIt = _messageHandlers.find(targetResource);
+        if (resourceIt == _messageHandlers.end()) {
+            return;
+        }
+
+        auto handlerIt = resourceIt->second.find(messageType);
+        if (handlerIt == resourceIt->second.end()) {
+            return;
+        }
+
+        // Save current context and set to target resource
+        std::string previousContext = GetCurrentResourceContext();
+        SetCurrentResourceContext(targetResource);
+
+        // For fire-and-forget, we pass a no-op reply function
+        sol::protected_function noOpReply = _luaState->load("return function() end")().get<sol::protected_function>();
+
+        sol::protected_function_result result = handlerIt->second(payload, noOpReply);
+        if (!result.valid()) {
+            sol::error err = result;
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Message handler '{}' error: {}", targetResource, messageType, err.what());
+        }
+
+        // Restore context
+        SetCurrentResourceContext(previousContext);
+    }
+
+    void ResourceManager::SendRequest(const std::string &targetResource, const std::string &messageType, sol::object payload, sol::protected_function callback) {
+        if (!IsResourceRunning(targetResource)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Cannot send request '{}' to '{}': resource not running", messageType, targetResource);
+            return;
+        }
+
+        std::string sourceResource = GetCurrentResourceContext();
+
+        // Generate request ID
+        uint64_t requestId;
+        {
+            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            requestId = _nextRequestId++;
+
+            PendingRequest pending;
+            pending.requestId      = requestId;
+            pending.callback       = callback;
+            pending.sourceResource = sourceResource;
+            _pendingRequests[requestId] = pending;
+        }
+
+        // Get the handler
+        sol::protected_function handler;
+        {
+            std::lock_guard<std::mutex> lock(_messageHandlersMutex);
+
+            auto resourceIt = _messageHandlers.find(targetResource);
+            if (resourceIt == _messageHandlers.end()) {
+                std::lock_guard<std::mutex> pendingLock(_pendingRequestsMutex);
+                _pendingRequests.erase(requestId);
+                return;
+            }
+
+            auto handlerIt = resourceIt->second.find(messageType);
+            if (handlerIt == resourceIt->second.end()) {
+                std::lock_guard<std::mutex> pendingLock(_pendingRequestsMutex);
+                _pendingRequests.erase(requestId);
+                return;
+            }
+
+            handler = handlerIt->second;
+        }
+
+        // Create a reply function that queues the response
+        // We need to capture self and requestId to queue the response
+        ResourceManager *self = this;
+        std::string replyFnName = "__reply_" + std::to_string(requestId);
+        _luaState->set_function(replyFnName,
+            [self, requestId](sol::object response) {
+                std::lock_guard<std::mutex> lock(self->_responseQueueMutex);
+                PendingResponse pendingResp;
+                pendingResp.requestId = requestId;
+                pendingResp.response  = response;
+                self->_responseQueue.push_back(pendingResp);
+            });
+        sol::function replyFn = (*_luaState)[replyFnName];
+
+        // Save current context and set to target resource
+        std::string previousContext = GetCurrentResourceContext();
+        SetCurrentResourceContext(targetResource);
+
+        sol::protected_function_result result = handler(payload, replyFn);
+        if (!result.valid()) {
+            sol::error err = result;
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Request handler '{}' error: {}", targetResource, messageType, err.what());
+        }
+
+        // Restore context
+        SetCurrentResourceContext(previousContext);
+
+        // Clean up the temporary global function
+        (*_luaState)[replyFnName] = sol::nil;
+    }
+
+    void ResourceManager::RegisterMessageHandler(const std::string &messageType, sol::protected_function handler) {
+        std::string resourceName = GetCurrentResourceContext();
+        if (resourceName.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot register message handler '{}': no current resource context", messageType);
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(_messageHandlersMutex);
+        _messageHandlers[resourceName][messageType] = handler;
+    }
+
+    void ResourceManager::ProcessMessageQueue() {
+        // Process pending responses
+        std::vector<PendingResponse> responsesToProcess;
+        {
+            std::lock_guard<std::mutex> lock(_responseQueueMutex);
+            responsesToProcess.swap(_responseQueue);
+        }
+
+        for (const auto &response : responsesToProcess) {
+            PendingRequest pending;
+            {
+                std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+                auto it = _pendingRequests.find(response.requestId);
+                if (it == _pendingRequests.end()) {
+                    continue;
+                }
+                pending = it->second;
+                _pendingRequests.erase(it);
+            }
+
+            // Set context to the source resource before invoking callback
+            std::string previousContext = GetCurrentResourceContext();
+            SetCurrentResourceContext(pending.sourceResource);
+
+            sol::protected_function_result result = pending.callback(response.response);
+            if (!result.valid()) {
+                sol::error err = result;
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Request callback error: {}", pending.sourceResource, err.what());
+            }
+
+            // Restore context
+            SetCurrentResourceContext(previousContext);
         }
     }
 

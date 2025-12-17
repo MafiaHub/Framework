@@ -13,9 +13,11 @@
 #include "builtins/console.h"
 #include "builtins/environment.h"
 #include "builtins/event.h"
+#include "builtins/exports.h"
 #include "builtins/hash.h"
 #include "builtins/json.h"
 #include "builtins/matrix.h"
+#include "builtins/message.h"
 #include "builtins/quaternion.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
@@ -26,9 +28,11 @@ namespace Framework::Scripting {
         Builtins::ColorRGB::Register(_luaEngine);
         Builtins::ColorRGBA::Register(_luaEngine);
         Builtins::Event::Register(_luaEngine);
+        Builtins::Exports::Register(_luaEngine);
         Builtins::Hash::Register(_luaEngine);
         Builtins::JSON::Register(_luaEngine);
         Builtins::Matrix::Register(_luaEngine);
+        Builtins::Message::Register(_luaEngine);
         Builtins::Quaternion::Register(_luaEngine);
         Builtins::Vector3::Register(_luaEngine);
         Builtins::Vector2::Register(_luaEngine);
