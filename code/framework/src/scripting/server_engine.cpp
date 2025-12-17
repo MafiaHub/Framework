@@ -11,6 +11,8 @@
 #include "server_engine.h"
 #include "types/events.h"
 
+#include "builtins/resource.h"
+
 #include <core_modules.h>
 #include <world/engine.h>
 
@@ -90,6 +92,9 @@ namespace Framework::Scripting {
 
         // Init the common SDK
         InitCommonSDK();
+
+        // Register server-specific Resource builtin functions (Phase 7)
+        Builtins::ResourceBuiltin::RegisterServer(_luaEngine);
 
         // Init the mod-level scripting layer
         if (cb) {

@@ -12,6 +12,9 @@
 #include <logging/logger.h>
 
 #include "integrations/shared/rpc/reload_assets.h"
+#include <networking/messages/resource_list.h>
+#include <networking/messages/resource_command.h>
+#include <scripting/resource/resource.h>
 
 namespace Framework::Integrations::Server::Scripting {
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world), _watcher(nullptr) {
@@ -20,6 +23,12 @@ namespace Framework::Integrations::Server::Scripting {
     }
 
     ServerScriptingModule::~ServerScriptingModule() {
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+            _resourceManager.reset();
+            CoreModules::SetResourceManager(nullptr);
+        }
+
         if (_watcher) {
             delete _watcher;
             _watcher = nullptr;
@@ -32,10 +41,22 @@ namespace Framework::Integrations::Server::Scripting {
             return false;
         }
 
+        // Initialize ResourceManager with server-side config
+        Framework::Scripting::ResourceManagerConfig config;
+        config.resourcesPath = _mainGamemodePath.empty() ? "gamemode" : _mainGamemodePath;
+        config.isClient = false;
+        config.enableLegacySupport = true; // Server supports legacy single-script gamemodes
+        config.cascadeStopDependents = true;
+
+        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_serverEngine->GetLuaEngine(), config);
+        CoreModules::SetResourceManager(_resourceManager.get());
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Server scripting module initialized with ResourceManager");
+
         // Initialize file watcher
         try {
             _watcher = new cppfs::FileWatcher();
-            
+
             // Register event handler
             _watcher->addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent event) {
                 // Log event for debugging
@@ -44,22 +65,22 @@ namespace Framework::Integrations::Server::Scripting {
                                        ((event & cppfs::FileEvent::FileRemoved) ? "removed" :
                                        ((event & cppfs::FileEvent::FileAttrChanged) ? "attributes changed" :
                                        "modified")));
-                
+
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("File watch event: {} '{}' was {}", type, fh.path(), operation);
-                
+
                 // Mark for reload
                 _shouldReloadWatcher = true;
             });
-            
+
             // Set up for first update
             _nextFileWatchUpdate = std::chrono::high_resolution_clock::now();
             _fileWatchUpdatePeriod = 1000;
-            
+
             // If we already have a path, set up watching
             if (!_mainGamemodePath.empty()) {
                 SetupWatchPath(_mainGamemodePath);
             }
-            
+
             return true;
         }
         catch (const std::exception &e) {
@@ -250,4 +271,116 @@ namespace Framework::Integrations::Server::Scripting {
         return true;
     }
 
-}
+    // Resource synchronization (Phase 7)
+
+    std::vector<ClientResourceInfo> ServerScriptingModule::GetClientResourceList() const {
+        std::vector<ClientResourceInfo> result;
+
+        if (!_resourceManager) {
+            return result;
+        }
+
+        // Get all running resources that have client files
+        auto resourceNames = _resourceManager->GetAllResourceNames();
+        for (const auto &name : resourceNames) {
+            const Framework::Scripting::Resource *resource = _resourceManager->GetResource(name);
+            if (!resource) {
+                continue;
+            }
+
+            const auto &manifest = resource->GetManifest();
+
+            // Only include resources that have client files
+            if (!manifest.clientFiles.empty()) {
+                ClientResourceInfo info;
+                info.name = manifest.name;
+                info.version = manifest.version;
+                // TODO: Implement content hash in Phase 7.3
+                info.hash = 0;
+                result.push_back(info);
+            }
+        }
+
+        return result;
+    }
+
+    bool ServerScriptingModule::SendResourceListToClient(SLNet::RakNetGUID guid) {
+        const auto net = CoreModules::GetNetworkPeer();
+        if (!net) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource list: NetworkPeer not available");
+            return false;
+        }
+
+        auto resources = GetClientResourceList();
+
+        Networking::Messages::ResourceListMessage msg;
+        for (const auto &resource : resources) {
+            msg.AddResource(resource.name, resource.version, resource.hash);
+        }
+
+        net->Send(msg, guid);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Sent resource list with {} resources to client {}", resources.size(), guid.ToString());
+
+        return true;
+    }
+
+    size_t ServerScriptingModule::SendResourceListToAllClients() {
+        const auto net = CoreModules::GetNetworkPeer();
+        if (!net) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource list: NetworkPeer not available");
+            return 0;
+        }
+
+        auto resources = GetClientResourceList();
+
+        Networking::Messages::ResourceListMessage msg;
+        for (const auto &resource : resources) {
+            msg.AddResource(resource.name, resource.version, resource.hash);
+        }
+
+        // Send to all connected clients (UNASSIGNED_RAKNET_GUID broadcasts)
+        net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Broadcast resource list with {} resources to all clients", resources.size());
+
+        // Return the number of connected peers
+        return net->GetPeer()->NumberOfConnections();
+    }
+
+    bool ServerScriptingModule::SendResourceCommandToClient(SLNet::RakNetGUID guid, uint8_t commandType, const std::string &resourceName, const std::string &version, uint32_t hash) {
+        const auto net = CoreModules::GetNetworkPeer();
+        if (!net) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource command: NetworkPeer not available");
+            return false;
+        }
+
+        Networking::Messages::ResourceCommandMessage msg;
+        msg.FromParameters(static_cast<Networking::Messages::ResourceCommandType>(commandType), resourceName, version, hash);
+
+        net->Send(msg, guid);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Sent resource command {} for '{}' to client {}", commandType, resourceName, guid.ToString());
+
+        return true;
+    }
+
+    size_t ServerScriptingModule::SendResourceCommandToAllClients(uint8_t commandType, const std::string &resourceName, const std::string &version, uint32_t hash) {
+        const auto net = CoreModules::GetNetworkPeer();
+        if (!net) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource command: NetworkPeer not available");
+            return 0;
+        }
+
+        Networking::Messages::ResourceCommandMessage msg;
+        msg.FromParameters(static_cast<Networking::Messages::ResourceCommandType>(commandType), resourceName, version, hash);
+
+        // Broadcast to all connected clients
+        net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Broadcast resource command {} for '{}' to all clients", commandType, resourceName);
+
+        return net->GetPeer()->NumberOfConnections();
+    }
+
+} // namespace Framework::Integrations::Server::Scripting

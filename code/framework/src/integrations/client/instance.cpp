@@ -14,6 +14,8 @@
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
+#include <networking/messages/resource_list.h>
+#include <networking/messages/resource_command.h>
 
 #include <world/game_rpc/set_transform.h>
 
@@ -251,7 +253,7 @@ namespace Framework::Integrations::Client {
         }
         
         if (_scriptingModule) {
-            _scriptingModule->GetEngine()->Update();
+            _scriptingModule->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -381,6 +383,58 @@ namespace Framework::Integrations::Client {
                 return;
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server has forced us to re-download assets...");
             DownloadsAssetsFromConnectedServer();
+        });
+
+        // Resource synchronization messages (Phase 7)
+        net->RegisterMessage<ResourceListMessage>(GameMessages::GAME_RESOURCE_LIST, [this](SLNet::RakNetGUID guid, ResourceListMessage *msg) {
+            if (!msg->Valid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Received invalid resource list message");
+                return;
+            }
+
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
+
+            // Convert to ServerResourceInfo format
+            std::vector<Client::Scripting::ServerResourceInfo> resources;
+            resources.reserve(msg->GetResourceCount());
+            for (const auto &resInfo : msg->GetResources()) {
+                Client::Scripting::ServerResourceInfo info;
+                info.name = resInfo.name;
+                info.version = resInfo.version;
+                info.hash = resInfo.hash;
+                resources.push_back(info);
+            }
+
+            // Pass to scripting module
+            if (_scriptingModule) {
+                _scriptingModule->OnServerResourceList(resources);
+            }
+        });
+
+        net->RegisterMessage<ResourceCommandMessage>(GameMessages::GAME_RESOURCE_COMMAND, [this](SLNet::RakNetGUID guid, ResourceCommandMessage *msg) {
+            if (!msg->Valid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Received invalid resource command message");
+                return;
+            }
+
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource command from server: {} {}", msg->GetCommandString(), msg->GetResourceName());
+
+            if (_scriptingModule) {
+                switch (msg->GetCommand()) {
+                case ResourceCommandType::Start:
+                    _scriptingModule->OnServerResourceStart(msg->GetResourceName(), msg->GetVersion(), msg->GetHash());
+                    break;
+                case ResourceCommandType::Stop:
+                    _scriptingModule->OnServerResourceStop(msg->GetResourceName());
+                    break;
+                case ResourceCommandType::Restart:
+                    _scriptingModule->OnServerResourceRestart(msg->GetResourceName());
+                    break;
+                case ResourceCommandType::Reload:
+                    _scriptingModule->OnServerResourceReload(msg->GetResourceName());
+                    break;
+                }
+            }
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());

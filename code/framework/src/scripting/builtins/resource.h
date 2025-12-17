@@ -4,6 +4,10 @@
 
 #include "../resource/resource_manager.h"
 
+#include <networking/messages/resource_command.h>
+#include <networking/messages/resource_list.h>
+#include <networking/network_peer.h>
+
 namespace Framework::Scripting::Builtins {
 
     /**
@@ -18,6 +22,7 @@ namespace Framework::Scripting::Builtins {
      *   -- State queries
      *   Resource.isRunning(name)            -- Returns boolean
      *   Resource.getState(name)             -- Returns "running", "stopped", etc.
+     *   Resource.isServer()                 -- Returns true if running on server
      *
      *   -- Discovery
      *   Resource.list()                     -- Returns array of all resource names
@@ -39,6 +44,13 @@ namespace Framework::Scripting::Builtins {
      *   Resource.getRestartAttempts(name)   -- Get restart attempts in time window
      *   Resource.canAutoRestart(name)       -- Check if auto-restart is allowed
      *   Resource.clearRestartAttempts(name) -- Reset restart attempt counter
+     *
+     *   -- Server-only client control (Phase 7)
+     *   Resource.clientStart(name, [guid])     -- Start a resource on client(s)
+     *   Resource.clientStop(name, [guid])      -- Stop a resource on client(s)
+     *   Resource.clientRestart(name, [guid])   -- Restart a resource on client(s)
+     *   Resource.clientReload(name, [guid])    -- Reload a resource on client(s)
+     *   Resource.sendResourceList([guid])      -- Send resource list to client(s)
      */
     class ResourceBuiltin final {
         /**
@@ -116,7 +128,7 @@ namespace Framework::Scripting::Builtins {
         static sol::object GetState(sol::state_view luaState, const std::string &name) {
             auto *manager = Framework::CoreModules::GetResourceManager();
             if (!manager || !manager->HasResource(name)) {
-                return sol::nil;
+                return sol::lua_nil;
             }
 
             return sol::make_object(luaState, ResourceStateToString(manager->GetResourceState(name)));
@@ -177,7 +189,7 @@ namespace Framework::Scripting::Builtins {
         static sol::object GetInfo(sol::state_view luaState, const std::string &name) {
             auto *manager = Framework::CoreModules::GetResourceManager();
             if (!manager) {
-                return sol::nil;
+                return sol::lua_nil;
             }
 
             sol::state &state = const_cast<sol::state &>(static_cast<const sol::state &>(luaState));
@@ -306,12 +318,12 @@ namespace Framework::Scripting::Builtins {
         static sol::object GetErrorMessage(sol::state_view luaState, const std::string &name) {
             auto *manager = Framework::CoreModules::GetResourceManager();
             if (!manager) {
-                return sol::nil;
+                return sol::lua_nil;
             }
 
             const Resource *resource = manager->GetResource(name);
             if (!resource || !resource->HasError()) {
-                return sol::nil;
+                return sol::lua_nil;
             }
 
             return sol::make_object(luaState, resource->GetErrorMessage());
@@ -376,6 +388,164 @@ namespace Framework::Scripting::Builtins {
             resource->ClearRestartAttempts();
         }
 
+        // Server-only client control functions (Phase 7)
+
+        /**
+         * Send a resource command to a specific client or all clients.
+         * Helper method used by the client control functions.
+         *
+         * @param commandType The command type (Start=0, Stop=1, Restart=2, Reload=3)
+         * @param resourceName Name of the resource
+         * @param guid Optional client GUID (0 = all clients)
+         * @return Number of clients command was sent to
+         */
+        static size_t SendResourceCommand(uint8_t commandType, const std::string &resourceName, uint64_t guid = 0) {
+            auto *manager = Framework::CoreModules::GetResourceManager();
+            auto *net = Framework::CoreModules::GetNetworkPeer();
+
+            if (!manager || !net) {
+                return 0;
+            }
+
+            // Get resource info for version and hash
+            std::string version = "";
+            uint32_t hash = 0;
+
+            const Resource *resource = manager->GetResource(resourceName);
+            if (resource) {
+                version = resource->GetManifest().version;
+                // TODO: Implement content hash in Phase 7.3
+                hash = 0;
+            }
+
+            Framework::Networking::Messages::ResourceCommandMessage msg;
+            msg.FromParameters(static_cast<Framework::Networking::Messages::ResourceCommandType>(commandType), resourceName, version, hash);
+
+            if (guid == 0) {
+                // Broadcast to all clients
+                net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+                return net->GetPeer()->NumberOfConnections();
+            }
+            else {
+                // Send to specific client
+                SLNet::RakNetGUID targetGuid;
+                targetGuid.g = guid;
+                net->Send(msg, targetGuid);
+                return 1;
+            }
+        }
+
+        /**
+         * Start a resource on clients.
+         *
+         * @param name Resource name
+         * @param guid Optional client GUID (0 or nil = all clients)
+         * @return Number of clients command was sent to
+         */
+        static size_t ClientStart(const std::string &name, sol::optional<uint64_t> guid) {
+            return SendResourceCommand(
+                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Start),
+                name, guid.value_or(0));
+        }
+
+        /**
+         * Stop a resource on clients.
+         *
+         * @param name Resource name
+         * @param guid Optional client GUID (0 or nil = all clients)
+         * @return Number of clients command was sent to
+         */
+        static size_t ClientStop(const std::string &name, sol::optional<uint64_t> guid) {
+            return SendResourceCommand(
+                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Stop),
+                name, guid.value_or(0));
+        }
+
+        /**
+         * Restart a resource on clients.
+         *
+         * @param name Resource name
+         * @param guid Optional client GUID (0 or nil = all clients)
+         * @return Number of clients command was sent to
+         */
+        static size_t ClientRestart(const std::string &name, sol::optional<uint64_t> guid) {
+            return SendResourceCommand(
+                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Restart),
+                name, guid.value_or(0));
+        }
+
+        /**
+         * Reload a resource on clients (hot-reload without restart).
+         *
+         * @param name Resource name
+         * @param guid Optional client GUID (0 or nil = all clients)
+         * @return Number of clients command was sent to
+         */
+        static size_t ClientReload(const std::string &name, sol::optional<uint64_t> guid) {
+            return SendResourceCommand(
+                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Reload),
+                name, guid.value_or(0));
+        }
+
+        /**
+         * Send the current resource list to clients.
+         *
+         * @param guid Optional client GUID (0 or nil = all clients)
+         * @return Number of clients the list was sent to
+         */
+        static size_t SendResourceList(sol::optional<uint64_t> guid) {
+            auto *net = Framework::CoreModules::GetNetworkPeer();
+            auto *manager = Framework::CoreModules::GetResourceManager();
+
+            if (!net || !manager) {
+                return 0;
+            }
+
+            // Build resource list message
+            Framework::Networking::Messages::ResourceListMessage msg;
+            auto resourceNames = manager->GetAllResourceNames();
+
+            for (const auto &name : resourceNames) {
+                const Resource *resource = manager->GetResource(name);
+                if (!resource) {
+                    continue;
+                }
+
+                const auto &manifest = resource->GetManifest();
+                // Only include resources with client files
+                if (!manifest.clientFiles.empty()) {
+                    // TODO: Implement content hash in Phase 7.3
+                    msg.AddResource(manifest.name, manifest.version, 0);
+                }
+            }
+
+            if (guid.value_or(0) == 0) {
+                // Broadcast to all clients
+                net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+                return net->GetPeer()->NumberOfConnections();
+            }
+            else {
+                // Send to specific client
+                SLNet::RakNetGUID targetGuid;
+                targetGuid.g = guid.value();
+                net->Send(msg, targetGuid);
+                return 1;
+            }
+        }
+
+        /**
+         * Check if the current context is server-side.
+         *
+         * @return True if running on server
+         */
+        static bool IsServer() {
+            auto *manager = Framework::CoreModules::GetResourceManager();
+            if (!manager) {
+                return false;
+            }
+            return !manager->GetConfig().isClient;
+        }
+
       public:
         static void Register(sol::state *luaEngine) {
             sol::usertype<ResourceBuiltin> cls = luaEngine->new_usertype<ResourceBuiltin>("Resource");
@@ -409,6 +579,27 @@ namespace Framework::Scripting::Builtins {
             cls["getRestartAttempts"]   = &ResourceBuiltin::GetRestartAttempts;
             cls["canAutoRestart"]       = &ResourceBuiltin::CanAutoRestart;
             cls["clearRestartAttempts"] = &ResourceBuiltin::ClearRestartAttempts;
+
+            // Context check
+            cls["isServer"] = &ResourceBuiltin::IsServer;
+        }
+
+        /**
+         * Register server-only functions for client resource control.
+         * Call this after Register() on server-side only.
+         *
+         * @param luaEngine Pointer to the Lua state
+         */
+        static void RegisterServer(sol::state *luaEngine) {
+            // Get the existing Resource table
+            sol::table resourceTable = (*luaEngine)["Resource"];
+
+            // Add server-only client control functions (Phase 7)
+            resourceTable["clientStart"]       = &ResourceBuiltin::ClientStart;
+            resourceTable["clientStop"]        = &ResourceBuiltin::ClientStop;
+            resourceTable["clientRestart"]     = &ResourceBuiltin::ClientRestart;
+            resourceTable["clientReload"]      = &ResourceBuiltin::ClientReload;
+            resourceTable["sendResourceList"]  = &ResourceBuiltin::SendResourceList;
         }
     };
 

@@ -18,6 +18,7 @@
 #include "networking/messages/client_ready_assets.h"
 #include "networking/messages/client_request_streamer.h"
 #include "networking/messages/messages.h"
+#include "networking/messages/resource_list.h"
 #include "integrations/shared/rpc/emit_lua_event.h"
 
 #include "scripting/builtins/entity.h"
@@ -293,6 +294,11 @@ namespace Framework::Integrations::Server {
             // Let the client know they can ask for client-side assets now.
             ClientReadyAssets readyMsg;
             net->Send(readyMsg, guid);
+
+            // Send resource list to the client (Phase 7)
+            if (_scriptingModule) {
+                _scriptingModule->SendResourceListToClient(guid);
+            }
         });
 
         net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
