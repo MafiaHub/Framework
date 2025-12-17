@@ -356,6 +356,67 @@ namespace Framework::Scripting {
          */
         void ProcessMessageQueue();
 
+        // Lifecycle Events (Phase 4)
+
+        /**
+         * Fire a lifecycle event within a resource's environment.
+         * These events are internal to the resource (onResourceLoad, onResourceStart, etc.)
+         *
+         * @param resourceName Name of the resource
+         * @param eventName Name of the lifecycle event
+         * @param args Optional arguments to pass to the handler
+         * @return True if the event handler was found and executed successfully
+         */
+        bool FireResourceLifecycleEvent(const std::string &resourceName, const std::string &eventName, sol::variadic_args args);
+
+        /**
+         * Fire a lifecycle event within a resource with a preserved state table.
+         * Used during hot-reload to pass preserved state.
+         *
+         * @param resourceName Name of the resource
+         * @param eventName Name of the lifecycle event
+         * @param state The preserved state table (or nil)
+         * @return True if the event handler was found and executed successfully
+         */
+        bool FireResourceLifecycleEventWithState(const std::string &resourceName, const std::string &eventName, sol::object state);
+
+        /**
+         * Broadcast a resource awareness event to all running resources.
+         * These events notify resources about other resources (onResourceStarted, onResourceStopped)
+         *
+         * @param eventName Name of the event (e.g., "onResourceStarted")
+         * @param affectedResourceName Name of the resource that triggered the event
+         */
+        void BroadcastResourceAwarenessEvent(const std::string &eventName, const std::string &affectedResourceName);
+
+        // State Preservation (Phase 4.4)
+
+        /**
+         * Check if there is preserved state for a resource.
+         * @param name Resource name
+         * @return True if preserved state exists
+         */
+        bool HasPreservedState(const std::string &name) const;
+
+        /**
+         * Clear preserved state for a specific resource.
+         * Use this if you want to discard saved state before a restart.
+         * @param name Resource name
+         */
+        void ClearPreservedState(const std::string &name);
+
+        /**
+         * Clear all preserved states.
+         */
+        void ClearAllPreservedStates();
+
+        /**
+         * Get the preserved state for a resource (without removing it).
+         * @param name Resource name
+         * @return The preserved state object, or nil if none
+         */
+        sol::object GetPreservedState(const std::string &name) const;
+
         // Statistics
 
         /**
@@ -453,6 +514,14 @@ namespace Framework::Scripting {
 
         // Request ID counter
         uint64_t _nextRequestId = 1;
+
+        // Preserved state for hot-reload (Phase 4.4)
+        // Maps resource name -> preserved state table
+        std::map<std::string, sol::object> _preservedStates;
+        mutable std::mutex _preservedStatesMutex;
+
+        // Internal helper to fire lifecycle event without variadic args
+        bool FireResourceLifecycleEventInternal(const std::string &resourceName, const std::string &eventName, std::vector<sol::object> args);
     };
 
 } // namespace Framework::Scripting

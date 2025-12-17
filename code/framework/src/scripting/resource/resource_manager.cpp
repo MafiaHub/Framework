@@ -245,12 +245,35 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Failure(execError);
         }
 
+        // Fire onResourceLoad event (Phase 4.1)
+        // This is fired after environment is created and scripts are loaded
+        FireResourceLifecycleEventInternal(name, "onResourceLoad", {});
+
+        // Check for preserved state from hot-reload (Phase 4.4)
+        sol::object preservedState = sol::nil;
+        {
+            std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+            auto it = _preservedStates.find(name);
+            if (it != _preservedStates.end()) {
+                preservedState = it->second;
+                _preservedStates.erase(it);
+            }
+        }
+
         // Transition to Running state
         oldState = resource->GetState();
         resource->TransitionTo(ResourceState::Running);
         resource->SetLoadTimestamp();
         FireOnResourceStateChanged(name, oldState, ResourceState::Running);
+
+        // Fire onResourceStart event with optional preserved state (Phase 4.1)
+        FireResourceLifecycleEventWithState(name, "onResourceStart", preservedState);
+
+        // Fire C++ callback
         FireOnResourceStarted(name);
+
+        // Broadcast to other resources that this resource started (Phase 4.1)
+        BroadcastResourceAwarenessEvent("onResourceStarted", name);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started resource: {}", name);
         return ResourceOperationResult::Success({name});
@@ -288,23 +311,98 @@ namespace Framework::Scripting {
         }
         FireOnResourceStateChanged(name, oldState, ResourceState::Stopping);
 
-        // Clear event handlers
+        // Set context for lifecycle events
+        SetCurrentResourceContext(name);
+
+        // Fire onResourceStop event (Phase 4.1)
+        // This allows the resource to save state and cleanup timers
+        // The handler can return a state table to be preserved for hot-reload
+        sol::object preservedState = sol::nil;
+        sol::environment *env      = resource->GetEnvironment();
+        if (env) {
+            sol::object handlerObj = (*env)["onResourceStop"];
+            if (handlerObj.valid() && handlerObj.is<sol::protected_function>()) {
+                sol::protected_function handler = handlerObj.as<sol::protected_function>();
+                sol::protected_function_result result = handler();
+                if (result.valid()) {
+                    // Check if handler returned a state table
+                    sol::object returnValue = result;
+                    if (returnValue.valid() && returnValue.is<sol::table>()) {
+                        preservedState = returnValue;
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] onResourceStop returned state for preservation", name);
+                    }
+                } else {
+                    sol::error err = result;
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] onResourceStop error: {}", name, err.what());
+                }
+            }
+        }
+
+        // Store preserved state for potential hot-reload (Phase 4.4)
+        if (preservedState.valid() && preservedState != sol::nil) {
+            std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+            _preservedStates[name] = preservedState;
+        }
+
+        // Clear event handlers owned by this resource
         resource->ClearEventHandlers();
 
-        // Clear exports
+        // Clear exports from this resource
         resource->ClearExports();
 
+        // Remove global event handlers for this resource
+        {
+            std::lock_guard<std::mutex> lock(_globalEventsMutex);
+            for (auto &eventPair : _globalEventHandlers) {
+                eventPair.second.erase(name);
+            }
+        }
+
+        // Remove targeted event handlers for this resource
+        {
+            std::lock_guard<std::mutex> lock(_targetedEventsMutex);
+            _targetedEventHandlers.erase(name);
+        }
+
+        // Remove message handlers for this resource
+        {
+            std::lock_guard<std::mutex> lock(_messageHandlersMutex);
+            _messageHandlers.erase(name);
+        }
+
+        // Fire onResourceUnload event (Phase 4.1)
+        // This is the final cleanup notification before environment is cleared
+        if (env) {
+            sol::object handlerObj = (*env)["onResourceUnload"];
+            if (handlerObj.valid() && handlerObj.is<sol::protected_function>()) {
+                sol::protected_function handler = handlerObj.as<sol::protected_function>();
+                sol::protected_function_result result = handler();
+                if (!result.valid()) {
+                    sol::error err = result;
+                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] onResourceUnload error: {}", name, err.what());
+                }
+            }
+        }
+
         // Clear environment
-        if (resource->GetEnvironment()) {
-            EnvironmentSandbox::ClearEnvironment(*resource->GetEnvironment());
+        if (env) {
+            EnvironmentSandbox::ClearEnvironment(*env);
         }
         resource->SetEnvironment(nullptr);
+
+        // Clear context
+        SetCurrentResourceContext("");
 
         // Transition to Stopped state
         oldState = resource->GetState();
         resource->TransitionTo(ResourceState::Stopped);
         FireOnResourceStateChanged(name, oldState, ResourceState::Stopped);
+
+        // Fire C++ callback
         FireOnResourceStopped(name);
+
+        // Broadcast to other resources that this resource stopped (Phase 4.1)
+        BroadcastResourceAwarenessEvent("onResourceStopped", name);
 
         stopped.push_back(name);
 
@@ -322,9 +420,81 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::ReloadResource(const std::string &name) {
-        // For now, reload is the same as restart
-        // Future: implement state preservation
-        return RestartResource(name);
+        // Phase 4.4: Hot-reload with state preservation
+
+        Resource *resource = GetResourceMutable(name);
+        if (!resource) {
+            return ResourceOperationResult::Failure("Resource not found: " + name);
+        }
+
+        // Store the resource path before stopping
+        std::string resourcePath = resource->GetPath();
+        bool wasRunning          = resource->IsRunning();
+
+        // Stop the resource (this will preserve state via onResourceStop)
+        if (wasRunning) {
+            auto stopResult = StopResource(name);
+            if (!stopResult.success) {
+                return stopResult;
+            }
+        }
+
+        // Re-read the manifest from disk
+        // Remove old resource and re-discover it
+        {
+            std::lock_guard<std::mutex> lock(_resourcesMutex);
+            _resources.erase(name);
+        }
+
+        // Re-discover the resource (will re-parse manifest)
+        auto newResource = std::make_unique<Resource>(resourcePath);
+        if (!newResource->IsManifestValid()) {
+            // Try to restore the old resource
+            auto oldResource = std::make_unique<Resource>(resourcePath);
+            {
+                std::lock_guard<std::mutex> lock(_resourcesMutex);
+                _resources[name] = std::move(oldResource);
+            }
+            return ResourceOperationResult::Failure("Failed to reload resource '" + name + "': invalid manifest");
+        }
+
+        // Check if the name changed in the manifest
+        std::string newName = newResource->GetName();
+        if (newName != name) {
+            // Clear preserved state for the old name since name changed
+            {
+                std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+                auto stateIt = _preservedStates.find(name);
+                if (stateIt != _preservedStates.end()) {
+                    _preservedStates[newName] = stateIt->second;
+                    _preservedStates.erase(stateIt);
+                }
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Resource name changed during reload: '{}' -> '{}'", name, newName);
+        }
+
+        // Add the new resource to the registry
+        {
+            std::lock_guard<std::mutex> lock(_resourcesMutex);
+            _resources[newName] = std::move(newResource);
+        }
+
+        // Rebuild dependency graph
+        BuildDependencyGraph();
+
+        // Restart the resource if it was running
+        if (wasRunning) {
+            auto startResult = StartResource(newName);
+            if (!startResult.success) {
+                return startResult;
+            }
+
+            // Fire onResourceReload event (Phase 4.4)
+            FireResourceLifecycleEventInternal(newName, "onResourceReload", {});
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Reloaded resource: {}", newName);
+        return ResourceOperationResult::Success({newName});
     }
 
     // Registry Queries
@@ -919,6 +1089,121 @@ namespace Framework::Scripting {
             // Restore context
             SetCurrentResourceContext(previousContext);
         }
+    }
+
+    // Lifecycle Events (Phase 4)
+
+    bool ResourceManager::FireResourceLifecycleEventInternal(const std::string &resourceName, const std::string &eventName, std::vector<sol::object> args) {
+        Resource *resource = GetResourceMutable(resourceName);
+        if (!resource) {
+            return false;
+        }
+
+        sol::environment *env = resource->GetEnvironment();
+        if (!env) {
+            return false;
+        }
+
+        // Look for the event handler in the resource's environment
+        sol::object handlerObj = (*env)[eventName];
+        if (!handlerObj.valid() || !handlerObj.is<sol::protected_function>()) {
+            // No handler registered, that's okay
+            return true;
+        }
+
+        sol::protected_function handler = handlerObj.as<sol::protected_function>();
+
+        // Save and set context
+        std::string previousContext = GetCurrentResourceContext();
+        SetCurrentResourceContext(resourceName);
+
+        // Call the handler with provided arguments
+        sol::protected_function_result result;
+        switch (args.size()) {
+        case 0: result = handler(); break;
+        case 1: result = handler(args[0]); break;
+        case 2: result = handler(args[0], args[1]); break;
+        case 3: result = handler(args[0], args[1], args[2]); break;
+        default:
+            // For more arguments, use sol's table unpacking
+            sol::table argsTable = _luaState->create_table();
+            for (size_t i = 0; i < args.size(); ++i) {
+                argsTable[i + 1] = args[i];
+            }
+            result = handler(sol::as_args(argsTable));
+            break;
+        }
+
+        // Restore context
+        SetCurrentResourceContext(previousContext);
+
+        if (!result.valid()) {
+            sol::error err = result;
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Lifecycle event '{}' error: {}", resourceName, eventName, err.what());
+            return false;
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] Fired lifecycle event '{}'", resourceName, eventName);
+        return true;
+    }
+
+    bool ResourceManager::FireResourceLifecycleEvent(const std::string &resourceName, const std::string &eventName, sol::variadic_args args) {
+        std::vector<sol::object> argsVec;
+        for (auto arg : args) {
+            argsVec.push_back(arg);
+        }
+        return FireResourceLifecycleEventInternal(resourceName, eventName, argsVec);
+    }
+
+    bool ResourceManager::FireResourceLifecycleEventWithState(const std::string &resourceName, const std::string &eventName, sol::object state) {
+        std::vector<sol::object> args;
+        if (state.valid() && state != sol::nil) {
+            args.push_back(state);
+        }
+        return FireResourceLifecycleEventInternal(resourceName, eventName, args);
+    }
+
+    void ResourceManager::BroadcastResourceAwarenessEvent(const std::string &eventName, const std::string &affectedResourceName) {
+        // Get all running resources
+        std::vector<std::string> runningResources = GetRunningResourceNames();
+
+        for (const auto &resourceName : runningResources) {
+            // Don't notify the resource about itself
+            if (resourceName == affectedResourceName) {
+                continue;
+            }
+
+            // Fire the event with the affected resource name as argument
+            std::vector<sol::object> args;
+            args.push_back(sol::make_object(*_luaState, affectedResourceName));
+            FireResourceLifecycleEventInternal(resourceName, eventName, args);
+        }
+    }
+
+    // State Preservation (Phase 4.4)
+
+    bool ResourceManager::HasPreservedState(const std::string &name) const {
+        std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+        return _preservedStates.find(name) != _preservedStates.end();
+    }
+
+    void ResourceManager::ClearPreservedState(const std::string &name) {
+        std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+        _preservedStates.erase(name);
+    }
+
+    void ResourceManager::ClearAllPreservedStates() {
+        std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+        _preservedStates.clear();
+    }
+
+    sol::object ResourceManager::GetPreservedState(const std::string &name) const {
+        std::lock_guard<std::mutex> lock(_preservedStatesMutex);
+        auto it = _preservedStates.find(name);
+        if (it != _preservedStates.end()) {
+            return it->second;
+        }
+        return sol::nil;
     }
 
 } // namespace Framework::Scripting
