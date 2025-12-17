@@ -116,6 +116,74 @@ namespace Framework::Scripting {
          */
         std::chrono::system_clock::time_point GetLoadTimestamp() const;
 
+        // Restart tracking (Phase 6.3)
+
+        /**
+         * Get the number of restart attempts within the configured time window.
+         */
+        int GetRestartAttemptCount() const;
+
+        /**
+         * Check if an auto-restart is allowed based on policy.
+         * Considers max attempts and time window from manifest config.
+         * @return True if restart is allowed
+         */
+        bool CanAutoRestart() const;
+
+        /**
+         * Record a restart attempt timestamp.
+         * Called by ResourceManager when attempting to restart.
+         */
+        void RecordRestartAttempt();
+
+        /**
+         * Clear restart attempt history.
+         * Called after a successful sustained run or manual reset.
+         */
+        void ClearRestartAttempts();
+
+        /**
+         * Get the backoff delay for the next restart attempt.
+         * Uses exponential backoff based on attempt count and config.
+         * @return Delay in milliseconds
+         */
+        int GetRestartBackoffMs() const;
+
+        // Health monitoring (Phase 6.3)
+
+        /**
+         * Register a health check function for this resource.
+         * The function should return true if healthy, false otherwise.
+         * @param healthCheck The health check function
+         */
+        void RegisterHealthCheck(sol::protected_function healthCheck);
+
+        /**
+         * Unregister the health check function.
+         */
+        void UnregisterHealthCheck();
+
+        /**
+         * Check if a health check is registered.
+         */
+        bool HasHealthCheck() const;
+
+        /**
+         * Invoke the health check and return the result.
+         * @return True if healthy or no health check registered, false if unhealthy
+         */
+        bool CheckHealth() const;
+
+        /**
+         * Get the last health check result.
+         */
+        bool GetLastHealthCheckResult() const;
+
+        /**
+         * Get the timestamp of the last health check.
+         */
+        std::chrono::system_clock::time_point GetLastHealthCheckTime() const;
+
         // Environment access (for ResourceManager to set up)
         sol::environment *GetEnvironment();
         const sol::environment *GetEnvironment() const;
@@ -244,6 +312,16 @@ namespace Framework::Scripting {
         // Script paths (resolved from manifest)
         std::vector<std::string> _serverScriptPaths;
         std::vector<std::string> _clientScriptPaths;
+
+        // Restart tracking (Phase 6.3)
+        std::vector<std::chrono::system_clock::time_point> _restartAttempts;
+        mutable std::mutex _restartAttemptsMutex;
+
+        // Health monitoring (Phase 6.3)
+        std::optional<sol::protected_function> _healthCheck;
+        mutable bool _lastHealthCheckResult = true;
+        mutable std::chrono::system_clock::time_point _lastHealthCheckTime;
+        mutable std::mutex _healthCheckMutex;
     };
 
 } // namespace Framework::Scripting

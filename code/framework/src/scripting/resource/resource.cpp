@@ -70,7 +70,8 @@ namespace Framework::Scripting {
         , _eventHandlers(std::move(other._eventHandlers))
         , _exports(std::move(other._exports))
         , _serverScriptPaths(std::move(other._serverScriptPaths))
-        , _clientScriptPaths(std::move(other._clientScriptPaths)) {
+        , _clientScriptPaths(std::move(other._clientScriptPaths))
+        , _restartAttempts(std::move(other._restartAttempts)) {
         other._manifestValid = false;
         other._state         = ResourceState::Unloaded;
     }
@@ -89,6 +90,7 @@ namespace Framework::Scripting {
             _exports           = std::move(other._exports);
             _serverScriptPaths = std::move(other._serverScriptPaths);
             _clientScriptPaths = std::move(other._clientScriptPaths);
+            _restartAttempts   = std::move(other._restartAttempts);
 
             other._manifestValid = false;
             other._state         = ResourceState::Unloaded;
@@ -338,6 +340,139 @@ namespace Framework::Scripting {
 
         default: return false;
         }
+    }
+
+    // Restart tracking (Phase 6.3)
+
+    int Resource::GetRestartAttemptCount() const {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+
+        if (!_manifest.autoRestart.enabled) {
+            return 0;
+        }
+
+        // Count attempts within the time window
+        auto now         = std::chrono::system_clock::now();
+        auto windowStart = now - std::chrono::seconds(_manifest.autoRestart.timeWindowSeconds);
+
+        int count = 0;
+        for (const auto &timestamp : _restartAttempts) {
+            if (timestamp >= windowStart) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    bool Resource::CanAutoRestart() const {
+        if (!_manifest.autoRestart.enabled) {
+            return false;
+        }
+
+        return GetRestartAttemptCount() < _manifest.autoRestart.maxAttempts;
+    }
+
+    void Resource::RecordRestartAttempt() {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+
+        auto now = std::chrono::system_clock::now();
+        _restartAttempts.push_back(now);
+
+        // Clean up old attempts outside the time window
+        auto windowStart = now - std::chrono::seconds(_manifest.autoRestart.timeWindowSeconds);
+        _restartAttempts.erase(
+            std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
+                [&windowStart](const auto &timestamp) {
+                    return timestamp < windowStart;
+                }),
+            _restartAttempts.end());
+    }
+
+    void Resource::ClearRestartAttempts() {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        _restartAttempts.clear();
+    }
+
+    int Resource::GetRestartBackoffMs() const {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+
+        int attemptCount = static_cast<int>(_restartAttempts.size());
+        if (attemptCount == 0) {
+            return 0;
+        }
+
+        // Exponential backoff: base * 2^(attempts-1)
+        int baseMs = _manifest.autoRestart.backoffBaseMilliseconds;
+        int backoff = baseMs * (1 << (attemptCount - 1));
+
+        // Cap at 60 seconds
+        const int maxBackoffMs = 60000;
+        return std::min(backoff, maxBackoffMs);
+    }
+
+    // Health monitoring (Phase 6.3)
+
+    void Resource::RegisterHealthCheck(sol::protected_function healthCheck) {
+        std::lock_guard<std::mutex> lock(_healthCheckMutex);
+        _healthCheck = healthCheck;
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' registered health check", _manifest.name);
+    }
+
+    void Resource::UnregisterHealthCheck() {
+        std::lock_guard<std::mutex> lock(_healthCheckMutex);
+        _healthCheck.reset();
+    }
+
+    bool Resource::HasHealthCheck() const {
+        std::lock_guard<std::mutex> lock(_healthCheckMutex);
+        return _healthCheck.has_value();
+    }
+
+    bool Resource::CheckHealth() const {
+        std::lock_guard<std::mutex> lock(_healthCheckMutex);
+
+        _lastHealthCheckTime = std::chrono::system_clock::now();
+
+        if (!_healthCheck.has_value()) {
+            // No health check registered, assume healthy
+            _lastHealthCheckResult = true;
+            return true;
+        }
+
+        try {
+            sol::protected_function_result result = (*_healthCheck)();
+            if (result.valid()) {
+                // Check if result is a boolean true
+                sol::object returnValue = result;
+                if (returnValue.is<bool>()) {
+                    _lastHealthCheckResult = returnValue.as<bool>();
+                } else {
+                    // Non-boolean return treated as healthy if truthy
+                    _lastHealthCheckResult = returnValue.valid() && returnValue != sol::nil;
+                }
+            } else {
+                // Error during health check, treat as unhealthy
+                sol::error err = result;
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Health check error: {}", _manifest.name, err.what());
+                _lastHealthCheckResult = false;
+            }
+        } catch (const std::exception &e) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Health check exception: {}", _manifest.name, e.what());
+            _lastHealthCheckResult = false;
+        }
+
+        return _lastHealthCheckResult;
+    }
+
+    bool Resource::GetLastHealthCheckResult() const {
+        std::lock_guard<std::mutex> lock(_healthCheckMutex);
+        return _lastHealthCheckResult;
+    }
+
+    std::chrono::system_clock::time_point Resource::GetLastHealthCheckTime() const {
+        std::lock_guard<std::mutex> lock(_healthCheckMutex);
+        return _lastHealthCheckTime;
     }
 
 } // namespace Framework::Scripting

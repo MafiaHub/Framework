@@ -38,6 +38,25 @@ namespace Framework::Scripting {
         return std::nullopt;
     }
 
+    bool ResourceManifest::IsDependencyOptional(const std::string &resourceName) const {
+        auto dep = GetDependency(resourceName);
+        return dep.has_value() && dep->optional;
+    }
+
+    std::vector<ResourceDependency> ResourceManifest::GetRequiredDependencies() const {
+        std::vector<ResourceDependency> required;
+        std::copy_if(dependencies.begin(), dependencies.end(), std::back_inserter(required),
+            [](const ResourceDependency &dep) { return !dep.optional; });
+        return required;
+    }
+
+    std::vector<ResourceDependency> ResourceManifest::GetOptionalDependencies() const {
+        std::vector<ResourceDependency> optional;
+        std::copy_if(dependencies.begin(), dependencies.end(), std::back_inserter(optional),
+            [](const ResourceDependency &dep) { return dep.optional; });
+        return optional;
+    }
+
     // ResourceManifestParser implementation
 
     ManifestParseResult ResourceManifestParser::Parse(const std::string &jsonString) {
@@ -202,12 +221,18 @@ namespace Framework::Scripting {
         if (!dep.version.empty()) {
             j["version"] = dep.version;
         }
+        if (dep.optional) {
+            j["optional"] = dep.optional;
+        }
     }
 
     void from_json(const nlohmann::json &j, ResourceDependency &dep) {
         j.at("name").get_to(dep.name);
         if (j.contains("version")) {
             j.at("version").get_to(dep.version);
+        }
+        if (j.contains("optional")) {
+            j.at("optional").get_to(dep.optional);
         }
     }
 

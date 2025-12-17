@@ -429,6 +429,54 @@ namespace Framework::Scripting {
          */
         size_t GetRunningResourceCount() const;
 
+        // Error Handling and Recovery (Phase 6)
+
+        /**
+         * Handle a runtime error in a resource.
+         * Behavior depends on the resource's errorBehavior setting in manifest.
+         *
+         * @param resourceName Name of the resource that encountered the error
+         * @param error Error message
+         * @param stackTrace Optional stack trace
+         */
+        void HandleResourceRuntimeError(const std::string &resourceName, const std::string &error, const std::string &stackTrace = "");
+
+        /**
+         * Schedule an auto-restart for a resource.
+         * Uses exponential backoff based on restart attempts.
+         *
+         * @param resourceName Name of the resource to restart
+         * @return True if restart was scheduled, false if not allowed
+         */
+        bool ScheduleAutoRestart(const std::string &resourceName);
+
+        /**
+         * Process scheduled restart tasks.
+         * Should be called periodically from the update loop.
+         */
+        void ProcessScheduledRestarts();
+
+        /**
+         * Run health checks on all resources that have them registered.
+         * Should be called periodically.
+         */
+        void RunHealthChecks();
+
+        /**
+         * Check if a specific resource is healthy.
+         * @param name Resource name
+         * @return True if healthy or no health check registered
+         */
+        bool IsResourceHealthy(const std::string &name) const;
+
+        /**
+         * Register a health check function for a resource.
+         * Called from Lua via the Resource builtin.
+         *
+         * @param healthCheck The health check function
+         */
+        void RegisterHealthCheck(sol::protected_function healthCheck);
+
       private:
         // Internal resource access (mutable)
         Resource *GetResourceMutable(const std::string &name);
@@ -522,6 +570,16 @@ namespace Framework::Scripting {
 
         // Internal helper to fire lifecycle event without variadic args
         bool FireResourceLifecycleEventInternal(const std::string &resourceName, const std::string &eventName, std::vector<sol::object> args);
+
+        // Scheduled restart structure (Phase 6)
+        struct ScheduledRestart {
+            std::string resourceName;
+            std::chrono::system_clock::time_point scheduledTime;
+        };
+
+        // Scheduled restarts queue
+        std::vector<ScheduledRestart> _scheduledRestarts;
+        mutable std::mutex _scheduledRestartsMutex;
     };
 
 } // namespace Framework::Scripting

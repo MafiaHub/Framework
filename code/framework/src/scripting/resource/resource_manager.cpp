@@ -204,13 +204,19 @@ namespace Framework::Scripting {
         }
 
         // Check dependencies are running
-        auto deps = GetDependencies(name);
-        for (const auto &dep : deps) {
-            if (!IsResourceRunning(dep)) {
+        const auto &manifest = resource->GetManifest();
+        for (const auto &dep : manifest.dependencies) {
+            if (!IsResourceRunning(dep.name)) {
                 // Try to start the dependency first
-                auto depResult = StartResource(dep);
+                auto depResult = StartResource(dep.name);
                 if (!depResult.success) {
-                    return ResourceOperationResult::Failure("Failed to start dependency '" + dep + "' for resource '" + name + "': " + depResult.error);
+                    if (dep.optional) {
+                        // Optional dependency failed, notify but continue
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Optional dependency '{}' not available: {}", name, dep.name, depResult.error);
+                    } else {
+                        // Required dependency failed
+                        return ResourceOperationResult::Failure("Failed to start dependency '" + dep.name + "' for resource '" + name + "': " + depResult.error);
+                    }
                 }
             }
         }
@@ -403,6 +409,16 @@ namespace Framework::Scripting {
 
         // Broadcast to other resources that this resource stopped (Phase 4.1)
         BroadcastResourceAwarenessEvent("onResourceStopped", name);
+
+        // Fire onDependencyLost to running dependents (Phase 6.2)
+        auto dependents = GetDependents(name);
+        for (const auto &dep : dependents) {
+            if (IsResourceRunning(dep)) {
+                std::vector<sol::object> args;
+                args.push_back(sol::make_object(*_luaState, name));
+                FireResourceLifecycleEventInternal(dep, "onDependencyLost", args);
+            }
+        }
 
         stopped.push_back(name);
 
@@ -1204,6 +1220,195 @@ namespace Framework::Scripting {
             return it->second;
         }
         return sol::nil;
+    }
+
+    // Error Handling and Recovery (Phase 6)
+
+    void ResourceManager::HandleResourceRuntimeError(const std::string &resourceName, const std::string &error, const std::string &stackTrace) {
+        Resource *resource = GetResourceMutable(resourceName);
+        if (!resource) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot handle error for unknown resource: {}", resourceName);
+            return;
+        }
+
+        // Log the error with resource tag
+        if (stackTrace.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}", resourceName, error);
+        } else {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Runtime error: {}\n    Stack trace:\n{}", resourceName, error, stackTrace);
+        }
+
+        // Fire error callback
+        FireOnResourceError(resourceName, error);
+
+        // Handle based on error behavior from manifest
+        const auto &manifest = resource->GetManifest();
+        switch (manifest.errorBehavior) {
+        case ResourceErrorBehavior::Continue:
+            // Just log the error, keep resource running
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] Error behavior: continue - resource keeps running", resourceName);
+            break;
+
+        case ResourceErrorBehavior::Stop:
+            // Stop the resource
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] Error behavior: stop - stopping resource", resourceName);
+            StopResource(resourceName);
+            break;
+
+        case ResourceErrorBehavior::Restart:
+            // Stop and schedule restart
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] Error behavior: restart - scheduling auto-restart", resourceName);
+            StopResource(resourceName);
+            ScheduleAutoRestart(resourceName);
+            break;
+        }
+    }
+
+    bool ResourceManager::ScheduleAutoRestart(const std::string &resourceName) {
+        Resource *resource = GetResourceMutable(resourceName);
+        if (!resource) {
+            return false;
+        }
+
+        // Check if auto-restart is allowed
+        if (!resource->CanAutoRestart()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Auto-restart denied: max attempts exceeded in time window", resourceName);
+
+            // Fire onDependencyLost to dependents since we're not restarting
+            auto dependents = GetDependents(resourceName);
+            for (const auto &dep : dependents) {
+                if (IsResourceRunning(dep)) {
+                    std::vector<sol::object> args;
+                    args.push_back(sol::make_object(*_luaState, resourceName));
+                    FireResourceLifecycleEventInternal(dep, "onDependencyLost", args);
+                }
+            }
+
+            return false;
+        }
+
+        // Record the restart attempt
+        resource->RecordRestartAttempt();
+
+        // Calculate backoff delay
+        int backoffMs = resource->GetRestartBackoffMs();
+
+        // Schedule the restart
+        auto restartTime = std::chrono::system_clock::now() + std::chrono::milliseconds(backoffMs);
+
+        {
+            std::lock_guard<std::mutex> lock(_scheduledRestartsMutex);
+
+            // Remove any existing scheduled restart for this resource
+            _scheduledRestarts.erase(
+                std::remove_if(_scheduledRestarts.begin(), _scheduledRestarts.end(),
+                    [&resourceName](const ScheduledRestart &sr) {
+                        return sr.resourceName == resourceName;
+                    }),
+                _scheduledRestarts.end());
+
+            // Add new scheduled restart
+            ScheduledRestart sr;
+            sr.resourceName  = resourceName;
+            sr.scheduledTime = restartTime;
+            _scheduledRestarts.push_back(sr);
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] Auto-restart scheduled in {}ms (attempt {})",
+            resourceName, backoffMs, resource->GetRestartAttemptCount());
+
+        return true;
+    }
+
+    void ResourceManager::ProcessScheduledRestarts() {
+        auto now = std::chrono::system_clock::now();
+        std::vector<std::string> resourcesToRestart;
+
+        {
+            std::lock_guard<std::mutex> lock(_scheduledRestartsMutex);
+
+            // Find restarts that are due
+            for (auto it = _scheduledRestarts.begin(); it != _scheduledRestarts.end();) {
+                if (it->scheduledTime <= now) {
+                    resourcesToRestart.push_back(it->resourceName);
+                    it = _scheduledRestarts.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        // Process the restarts outside the lock
+        for (const auto &resourceName : resourcesToRestart) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] Executing scheduled auto-restart", resourceName);
+
+            auto result = StartResource(resourceName);
+            if (result.success) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] Auto-restart successful", resourceName);
+
+                // Clear restart attempts on successful start
+                Resource *resource = GetResourceMutable(resourceName);
+                if (resource) {
+                    resource->ClearRestartAttempts();
+                }
+            } else {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Auto-restart failed: {}", resourceName, result.error);
+
+                // Try to reschedule if allowed
+                ScheduleAutoRestart(resourceName);
+            }
+        }
+    }
+
+    void ResourceManager::RunHealthChecks() {
+        std::vector<std::string> runningResources = GetRunningResourceNames();
+
+        for (const auto &resourceName : runningResources) {
+            Resource *resource = GetResourceMutable(resourceName);
+            if (!resource || !resource->HasHealthCheck()) {
+                continue;
+            }
+
+            // Set context for health check execution
+            std::string previousContext = GetCurrentResourceContext();
+            SetCurrentResourceContext(resourceName);
+
+            bool isHealthy = resource->CheckHealth();
+
+            // Restore context
+            SetCurrentResourceContext(previousContext);
+
+            if (!isHealthy) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Health check failed", resourceName);
+
+                // Handle as a runtime error
+                HandleResourceRuntimeError(resourceName, "Health check failed");
+            }
+        }
+    }
+
+    bool ResourceManager::IsResourceHealthy(const std::string &name) const {
+        const Resource *resource = GetResource(name);
+        if (!resource) {
+            return false;
+        }
+
+        if (!resource->HasHealthCheck()) {
+            // No health check means assumed healthy
+            return true;
+        }
+
+        return resource->GetLastHealthCheckResult();
+    }
+
+    void ResourceManager::RegisterHealthCheck(sol::protected_function healthCheck) {
+        Resource *resource = GetCurrentResource();
+        if (!resource) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot register health check: no current resource context");
+            return;
+        }
+
+        resource->RegisterHealthCheck(healthCheck);
     }
 
 } // namespace Framework::Scripting

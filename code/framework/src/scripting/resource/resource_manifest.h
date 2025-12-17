@@ -14,9 +14,10 @@ namespace Framework::Scripting {
     struct ResourceDependency {
         std::string name;
         std::string version; // Semantic version constraint (e.g., ">=1.0.0")
+        bool optional = false; // If true, resource can start without this dependency
 
         bool operator==(const ResourceDependency &other) const {
-            return name == other.name && version == other.version;
+            return name == other.name && version == other.version && optional == other.optional;
         }
     };
 
@@ -88,6 +89,21 @@ namespace Framework::Scripting {
          * Returns nullopt if not a dependency.
          */
         std::optional<ResourceDependency> GetDependency(const std::string &resourceName) const;
+
+        /**
+         * Check if a dependency is optional.
+         */
+        bool IsDependencyOptional(const std::string &resourceName) const;
+
+        /**
+         * Get all required (non-optional) dependencies.
+         */
+        std::vector<ResourceDependency> GetRequiredDependencies() const;
+
+        /**
+         * Get all optional dependencies.
+         */
+        std::vector<ResourceDependency> GetOptionalDependencies() const;
     };
 
     /**
