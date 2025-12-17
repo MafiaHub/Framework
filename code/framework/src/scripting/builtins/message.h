@@ -8,16 +8,6 @@ namespace Framework::Scripting::Builtins {
 
     /**
      * Message builtin for async inter-resource communication.
-     *
-     * Lua API:
-     *   -- Fire and forget
-     *   Message.send(resource, type, payload)
-     *
-     *   -- Request/response
-     *   Message.request(resource, type, payload, callback)
-     *
-     *   -- Handling messages
-     *   Message.handle(type, function(request, reply) end)
      */
     class Message final {
         /**

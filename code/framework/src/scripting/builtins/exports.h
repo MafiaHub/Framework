@@ -8,11 +8,6 @@ namespace Framework::Scripting::Builtins {
 
     /**
      * Exports builtin for inter-resource communication.
-     *
-     * Lua API:
-     *   Exports.register(name, value)              -- Register an export from current resource
-     *   Exports.get(resourceName, exportName)      -- Get an export from another resource
-     *   Exports.list(resourceName)                 -- List exports from a resource
      */
     class Exports final {
         /**

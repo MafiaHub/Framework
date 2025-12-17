@@ -12,45 +12,6 @@ namespace Framework::Scripting::Builtins {
 
     /**
      * Resource builtin for resource lifecycle control and queries.
-     *
-     * Lua API:
-     *   -- Lifecycle control
-     *   Resource.start(name)                -- Load and start a resource
-     *   Resource.stop(name)                 -- Stop a running resource
-     *   Resource.restart(name)              -- Stop then start
-     *
-     *   -- State queries
-     *   Resource.isRunning(name)            -- Returns boolean
-     *   Resource.getState(name)             -- Returns "running", "stopped", etc.
-     *   Resource.isServer()                 -- Returns true if running on server
-     *
-     *   -- Discovery
-     *   Resource.list()                     -- Returns array of all resource names
-     *   Resource.getRunning()               -- Returns array of running resource names
-     *   Resource.getInfo(name)              -- Returns manifest metadata table
-     *
-     *   -- Self-reference
-     *   Resource.getCurrent()               -- Returns current resource's name
-     *   Resource.getPath()                  -- Returns current resource's directory path
-     *
-     *   -- Permissions
-     *   Resource.hasPermission(permission)  -- Check if current resource has permission
-     *   Resource.getPermissions(name)       -- Get all permissions for a resource
-     *
-     *   -- Error handling and recovery (Phase 6)
-     *   Resource.setHealthCheck(fn)         -- Register health check function for current resource
-     *   Resource.isHealthy(name)            -- Check if resource is healthy
-     *   Resource.getErrorMessage(name)      -- Get error message if in error state
-     *   Resource.getRestartAttempts(name)   -- Get restart attempts in time window
-     *   Resource.canAutoRestart(name)       -- Check if auto-restart is allowed
-     *   Resource.clearRestartAttempts(name) -- Reset restart attempt counter
-     *
-     *   -- Server-only client control (Phase 7)
-     *   Resource.clientStart(name, [guid])     -- Start a resource on client(s)
-     *   Resource.clientStop(name, [guid])      -- Stop a resource on client(s)
-     *   Resource.clientRestart(name, [guid])   -- Restart a resource on client(s)
-     *   Resource.clientReload(name, [guid])    -- Reload a resource on client(s)
-     *   Resource.sendResourceList([guid])      -- Send resource list to client(s)
      */
     class ResourceBuiltin final {
         /**
@@ -277,7 +238,6 @@ namespace Framework::Scripting::Builtins {
             return result;
         }
 
-        // Error Handling and Recovery (Phase 6)
 
         /**
          * Register a health check function for the current resource.
@@ -388,7 +348,6 @@ namespace Framework::Scripting::Builtins {
             resource->ClearRestartAttempts();
         }
 
-        // Server-only client control functions (Phase 7)
 
         /**
          * Send a resource command to a specific client or all clients.
@@ -570,7 +529,6 @@ namespace Framework::Scripting::Builtins {
             cls["hasPermission"]  = &ResourceBuiltin::HasPermission;
             cls["getPermissions"] = &ResourceBuiltin::GetPermissions;
 
-            // Error handling and recovery (Phase 6)
             cls["setHealthCheck"]       = &ResourceBuiltin::SetHealthCheck;
             cls["isHealthy"]            = &ResourceBuiltin::IsHealthy;
             cls["getErrorMessage"]      = &ResourceBuiltin::GetErrorMessage;
@@ -592,7 +550,6 @@ namespace Framework::Scripting::Builtins {
             // Get the existing Resource table
             sol::table resourceTable = (*luaEngine)["Resource"];
 
-            // Add server-only client control functions (Phase 7)
             resourceTable["clientStart"]       = &ResourceBuiltin::ClientStart;
             resourceTable["clientStop"]        = &ResourceBuiltin::ClientStop;
             resourceTable["clientRestart"]     = &ResourceBuiltin::ClientRestart;

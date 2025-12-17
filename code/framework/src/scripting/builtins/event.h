@@ -9,19 +9,6 @@ namespace Framework::Scripting::Builtins {
 
     /**
      * Event builtin for local and cross-resource events.
-     *
-     * Lua API:
-     *   -- Local events (current behavior, isolated to resource or legacy mode)
-     *   Event.on(name, handler)               -- Register local event handler
-     *   Event.emit(name, ...)                 -- Emit local event
-     *
-     *   -- Global events (all resources can subscribe)
-     *   Event.onGlobal(name, handler)         -- Register global event handler
-     *   Event.broadcast(name, ...)            -- Broadcast global event to all resources
-     *
-     *   -- Targeted events (sent to specific resource)
-     *   Event.onTargeted(name, handler)       -- Register targeted event handler
-     *   Event.emitTo(resource, name, ...)     -- Emit event to specific resource
      */
     class Event final {
         /**
@@ -84,15 +71,12 @@ namespace Framework::Scripting::Builtins {
         static void Register(sol::state *luaEngine) {
             sol::usertype<Event> cls = luaEngine->new_usertype<Event>("Event");
 
-            // Local events (legacy behavior)
             cls["on"]   = &Event::On;
             cls["emit"] = &Event::Emit;
 
-            // Global events (Phase 3)
             cls["onGlobal"]  = &Event::OnGlobal;
             cls["broadcast"] = &Event::Broadcast;
 
-            // Targeted events (Phase 3)
             cls["onTargeted"] = &Event::OnTargeted;
             cls["emitTo"]     = &Event::EmitTo;
         }

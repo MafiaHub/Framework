@@ -116,8 +116,6 @@ namespace Framework::Scripting {
          */
         std::chrono::system_clock::time_point GetLoadTimestamp() const;
 
-        // Restart tracking (Phase 6.3)
-
         /**
          * Get the number of restart attempts within the configured time window.
          */
