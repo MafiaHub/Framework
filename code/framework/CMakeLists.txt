@@ -29,6 +29,9 @@ set(FRAMEWORK_SRC
 
     src/scripting/engine.cpp
     src/scripting/types/events.cpp
+
+    src/scripting/resource/resource.cpp
+    src/scripting/resource/resource_manifest.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
