@@ -32,6 +32,9 @@ set(FRAMEWORK_SRC
 
     src/scripting/resource/resource.cpp
     src/scripting/resource/resource_manifest.cpp
+    src/scripting/resource/dependency_graph.cpp
+    src/scripting/resource/environment_sandbox.cpp
+    src/scripting/resource/resource_manager.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
