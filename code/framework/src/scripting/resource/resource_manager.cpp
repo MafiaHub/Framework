@@ -428,20 +428,24 @@ namespace Framework::Scripting {
         }
 
         // Re-read the manifest from disk
-        // Remove old resource and re-discover it
+        // Preserve the original resource before removing it from the map
+        std::unique_ptr<Resource> preservedResource;
         {
             std::lock_guard<std::mutex> lock(_resourcesMutex);
-            _resources.erase(name);
+            auto it = _resources.find(name);
+            if (it != _resources.end()) {
+                preservedResource = std::move(it->second);
+                _resources.erase(it);
+            }
         }
 
         // Re-discover the resource (will re-parse manifest)
         auto newResource = std::make_unique<Resource>(resourcePath);
         if (!newResource->IsManifestValid()) {
-            // Try to restore the old resource
-            auto oldResource = std::make_unique<Resource>(resourcePath);
-            {
+            // Restore the original resource
+            if (preservedResource) {
                 std::lock_guard<std::mutex> lock(_resourcesMutex);
-                _resources[name] = std::move(oldResource);
+                _resources[name] = std::move(preservedResource);
             }
             return ResourceOperationResult::Failure("Failed to reload resource '" + name + "': invalid manifest");
         }
