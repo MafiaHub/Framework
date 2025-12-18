@@ -341,9 +341,7 @@ namespace Framework::Scripting {
         }
     }
 
-    int Resource::GetRestartAttemptCount() const {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
-
+    int Resource::GetRestartAttemptCountUnlocked() const {
         if (!_manifest.autoRestart.enabled) {
             return 0;
         }
@@ -362,12 +360,18 @@ namespace Framework::Scripting {
         return count;
     }
 
+    int Resource::GetRestartAttemptCount() const {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        return GetRestartAttemptCountUnlocked();
+    }
+
     bool Resource::CanAutoRestart() const {
         if (!_manifest.autoRestart.enabled) {
             return false;
         }
 
-        return GetRestartAttemptCount() < _manifest.autoRestart.maxAttempts;
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        return GetRestartAttemptCountUnlocked() < _manifest.autoRestart.maxAttempts;
     }
 
     void Resource::RecordRestartAttempt() {

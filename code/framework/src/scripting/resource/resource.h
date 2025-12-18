@@ -294,6 +294,9 @@ namespace Framework::Scripting {
         // Check if a state transition is valid
         static bool IsValidTransition(ResourceState from, ResourceState to);
 
+        // Get restart attempt count without locking (caller must hold _restartAttemptsMutex)
+        int GetRestartAttemptCountUnlocked() const;
+
         // Path to resource directory
         std::string _path;
 
