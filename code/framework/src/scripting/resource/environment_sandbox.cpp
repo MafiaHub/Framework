@@ -2,10 +2,14 @@
 
 #include <logging/logger.h>
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
 namespace Framework::Scripting {
+
+    std::vector<std::string> EnvironmentSandbox::_builtinNames;
+    std::mutex EnvironmentSandbox::_builtinNamesMutex;
 
     std::unique_ptr<sol::environment> EnvironmentSandbox::CreateEnvironment(sol::state &luaState, const std::string &resourceName) {
         // Create a new environment with the global table as a fallback
@@ -124,28 +128,15 @@ namespace Framework::Scripting {
     }
 
     std::vector<std::string> EnvironmentSandbox::GetFrameworkBuiltinNames() {
-        return {
-            // Framework builtins
-            "Console",
-            "JSON",
-            "Hash",
-            "Event",
-            "Timer",
+        std::lock_guard<std::mutex> lock(_builtinNamesMutex);
+        return _builtinNames;
+    }
 
-            "Exports",
-            "Message",
-
-            // Math types
-            "Vector2",
-            "Vector3",
-            "Quaternion",
-            "Matrix",
-            "ColorRGB",
-            "ColorRGBA",
-
-            // Environment info
-            "Environment",
-        };
+    void EnvironmentSandbox::RegisterBuiltinName(const std::string &name) {
+        std::lock_guard<std::mutex> lock(_builtinNamesMutex);
+        if (std::find(_builtinNames.begin(), _builtinNames.end(), name) == _builtinNames.end()) {
+            _builtinNames.push_back(name);
+        }
     }
 
     void EnvironmentSandbox::DisableDangerousFunctions(sol::environment &env) {

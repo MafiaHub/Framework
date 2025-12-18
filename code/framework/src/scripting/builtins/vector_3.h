@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../resource/environment_sandbox.h"
+
 #include <glm/glm.hpp>
 #include <sol/sol.hpp>
 
@@ -127,6 +129,7 @@ namespace Framework::Scripting::Builtins {
             cls[sol::meta_function::division] = &Vector3::operator/;
             cls["lerp"]     = &Vector3::Lerp;
             cls["zero"] = sol::property(&Vector3::Zero);
+            EnvironmentSandbox::RegisterBuiltinName("Vector3");
         }
     };
-} // namespace Framework::Scripting::Engines::Node::Builtins
+} // namespace Framework::Scripting::Builtins

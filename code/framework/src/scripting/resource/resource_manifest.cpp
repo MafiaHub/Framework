@@ -4,6 +4,7 @@
 
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
+#include <semver.h>
 
 #include <algorithm>
 #include <fstream>
@@ -193,10 +194,7 @@ namespace Framework::Scripting {
     }
 
     bool ResourceManifestParser::IsValidVersionString(const std::string &version) {
-        // Semantic versioning: MAJOR.MINOR.PATCH with optional prerelease and build metadata
-        static const std::regex semverPattern(
-            R"(^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$)");
-        return std::regex_match(version, semverPattern);
+        return semver_is_valid(version.c_str()) != 0;
     }
 
     bool ResourceManifestParser::IsValidVersionConstraint(const std::string &constraint) {
@@ -205,9 +203,26 @@ namespace Framework::Scripting {
         }
 
         // Version constraint formats: ">=1.0.0", "^1.0.0", "~1.0.0", "1.0.0", etc.
-        static const std::regex constraintPattern(
-            R"(^([<>=~^]{0,2})(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$)");
-        return std::regex_match(constraint, constraintPattern);
+        // Strip the operator prefix and validate the version part
+        std::string versionPart = constraint;
+        size_t pos              = 0;
+
+        // Skip operator characters at the beginning
+        while (pos < constraint.size() && (constraint[pos] == '<' || constraint[pos] == '>' || constraint[pos] == '=' || constraint[pos] == '~' || constraint[pos] == '^')) {
+            pos++;
+        }
+
+        // Operator can be at most 2 characters (e.g., >=, <=)
+        if (pos > 2) {
+            return false;
+        }
+
+        versionPart = constraint.substr(pos);
+        if (versionPart.empty()) {
+            return false;
+        }
+
+        return semver_is_valid(versionPart.c_str()) != 0;
     }
 
     // JSON serialization

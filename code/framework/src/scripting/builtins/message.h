@@ -2,6 +2,7 @@
 
 #include "core_modules.h"
 
+#include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
 namespace Framework::Scripting::Builtins {
@@ -59,6 +60,7 @@ namespace Framework::Scripting::Builtins {
             cls["send"]                = &Message::Send;
             cls["request"]             = &Message::Request;
             cls["handle"]              = &Message::Handle;
+            EnvironmentSandbox::RegisterBuiltinName("Message");
         }
     };
 

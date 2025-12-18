@@ -2,6 +2,7 @@
 
 #include "core_modules.h"
 
+#include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
 namespace Framework::Scripting::Builtins {
@@ -74,6 +75,7 @@ namespace Framework::Scripting::Builtins {
             cls["register"]            = &Exports::RegisterExport;
             cls["get"]                 = &Exports::Get;
             cls["list"]                = &Exports::List;
+            EnvironmentSandbox::RegisterBuiltinName("Exports");
         }
     };
 

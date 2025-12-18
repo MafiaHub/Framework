@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../resource/environment_sandbox.h"
+
 #include <glm/ext.hpp>
 #include <glm/ext/matrix_relational.hpp>
 #include <glm/ext/scalar_relational.hpp>
@@ -171,6 +173,7 @@ namespace Framework::Scripting::Builtins {
             cls["setEuler"]     = &Quaternion::SetEuler;
             cls["fromAxisAngle"]     = &Quaternion::FromAxisAngle;
             cls["identity"] = sol::property(&Quaternion::Identity);
+            EnvironmentSandbox::RegisterBuiltinName("Quaternion");
         }
     };
-} // namespace Framework::Scripting::Engines::Node::Builtins
+} // namespace Framework::Scripting::Builtins

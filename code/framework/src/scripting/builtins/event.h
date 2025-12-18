@@ -3,6 +3,7 @@
 #include "core_modules.h"
 
 #include "../engine.h"
+#include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
 namespace Framework::Scripting::Builtins {
@@ -79,6 +80,7 @@ namespace Framework::Scripting::Builtins {
 
             cls["onTargeted"] = &Event::OnTargeted;
             cls["emitTo"]     = &Event::EmitTo;
+            EnvironmentSandbox::RegisterBuiltinName("Event");
         }
     };
 

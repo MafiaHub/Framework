@@ -1,4 +1,6 @@
-#include <string>
+#pragma once
+
+#include "../resource/environment_sandbox.h"
 
 #include <sol/sol.hpp>
 
@@ -62,6 +64,7 @@ namespace Framework::Scripting::Builtins {
             cls.set_function("toSHA1", &Hash::toSHA1);
             cls.set_function("toSHA256", &Hash::ToSHA256);
             cls.set_function("toSHA3", &Hash::ToSHA3);
+            EnvironmentSandbox::RegisterBuiltinName("Hash");
         }
     };
 } // namespace Framework::Scripting::Builtins

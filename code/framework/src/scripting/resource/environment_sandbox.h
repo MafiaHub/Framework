@@ -2,6 +2,7 @@
 
 #include <sol/sol.hpp>
 
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -76,6 +77,12 @@ namespace Framework::Scripting {
         static std::vector<std::string> GetFrameworkBuiltinNames();
 
         /**
+         * Register a builtin name to be shared with sandboxed environments.
+         * Call this when registering a new builtin usertype.
+         */
+        static void RegisterBuiltinName(const std::string &name);
+
+        /**
          * Disable dangerous Lua functions in an environment.
          * This should be called for client-side resources.
          *
@@ -129,8 +136,10 @@ namespace Framework::Scripting {
         static void ClearEnvironment(sol::environment &env);
 
       private:
-        // Disabled function placeholder
         static int DisabledFunction(lua_State *L);
+
+        static std::vector<std::string> _builtinNames;
+        static std::mutex _builtinNamesMutex;
     };
 
 } // namespace Framework::Scripting

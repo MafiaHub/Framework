@@ -3,6 +3,7 @@
 #include "core_modules.h"
 
 #include "../engine.h"
+#include "../resource/environment_sandbox.h"
 
 namespace Framework::Scripting::Builtins {
     class Environment final {
@@ -39,6 +40,7 @@ namespace Framework::Scripting::Builtins {
             cls["platform"]                = &Environment::Platform;
             cls["build"]                   = &Environment::Build;
             cls["release"]                 = &Environment::Release;
+            EnvironmentSandbox::RegisterBuiltinName("Environment");
         }
     };
 } // namespace Framework::Scripting::Builtins

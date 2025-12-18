@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../resource/environment_sandbox.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -156,6 +158,7 @@ namespace Framework::Scripting::Builtins {
             cls["translation"] = &Matrix::Translation;
             cls["rotation"] = &Matrix::Rotation;
             cls["scaling"] = &Matrix::Scaling;
+            EnvironmentSandbox::RegisterBuiltinName("Matrix");
         }
     };
 } // namespace Framework::Scripting::Builtins

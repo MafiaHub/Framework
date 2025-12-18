@@ -2,6 +2,7 @@
 
 #include "core_modules.h"
 
+#include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
 #include <networking/messages/resource_command.h>
@@ -485,6 +486,7 @@ namespace Framework::Scripting::Builtins {
 
             // Context check
             cls["isServer"] = &ResourceBuiltin::IsServer;
+            EnvironmentSandbox::RegisterBuiltinName("Resource");
         }
 
         /**
