@@ -1120,17 +1120,21 @@ namespace Framework::Scripting {
         std::string previousContext = GetCurrentResourceContext();
         SetCurrentResourceContext(targetResource);
 
+        // RAII guard to ensure cleanup on all exit paths (normal return or exception)
+        auto cleanupGuard = [luaState = _luaState, replyFnName, previousContext, this]() {
+            (*luaState)[replyFnName] = sol::nil;
+            SetCurrentResourceContext(previousContext);
+        };
+        struct ScopeGuard {
+            std::function<void()> cleanup;
+            ~ScopeGuard() { cleanup(); }
+        } guard{cleanupGuard};
+
         sol::protected_function_result result = handler(payload, replyFn);
         if (!result.valid()) {
             sol::error err = result;
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Request handler '{}' error: {}", targetResource, messageType, err.what());
         }
-
-        // Restore context
-        SetCurrentResourceContext(previousContext);
-
-        // Clean up the temporary global function
-        (*_luaState)[replyFnName] = sol::nil;
     }
 
     void ResourceManager::RegisterMessageHandler(const std::string &messageType, sol::protected_function handler) {
