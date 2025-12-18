@@ -258,6 +258,9 @@ namespace Framework::Scripting {
 
         BroadcastResourceAwarenessEvent("onResourceStarted", name);
 
+        // Clear the resource context now that startup is complete
+        SetCurrentResourceContext("");
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started resource: {}", name);
         return ResourceOperationResult::Success({name});
     }
