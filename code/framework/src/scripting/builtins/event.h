@@ -2,30 +2,15 @@
 
 #include "core_modules.h"
 
-#include "../engine.h"
 #include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Event builtin for local and cross-resource events.
+     * Event builtin for cross-resource events.
      */
     class Event final {
-        /**
-         * Register a local event handler (legacy behavior).
-         */
-        static void On(const std::string &name, const sol::function fnc) {
-            Framework::CoreModules::GetScriptingEngine()->ListenEvent(name, fnc);
-        }
-
-        /**
-         * Emit a local event (legacy behavior).
-         */
-        static void Emit(const std::string &name, sol::variadic_args args) {
-            Framework::CoreModules::GetScriptingEngine()->InvokeEvent(name, args);
-        }
-
         /**
          * Register a global event handler.
          * This handler will be invoked when any resource broadcasts this event.
@@ -71,9 +56,6 @@ namespace Framework::Scripting::Builtins {
       public:
         static void Register(sol::state *luaEngine) {
             sol::usertype<Event> cls = luaEngine->new_usertype<Event>("Event");
-
-            cls["on"]   = &Event::On;
-            cls["emit"] = &Event::Emit;
 
             cls["onGlobal"]  = &Event::OnGlobal;
             cls["broadcast"] = &Event::Broadcast;
