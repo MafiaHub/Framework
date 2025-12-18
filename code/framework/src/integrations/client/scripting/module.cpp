@@ -285,6 +285,9 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     std::string ClientScriptingModule::GetResourcePath(const std::string &resourceName) const {
+        if (_resourceCachePath.empty()) {
+            return resourceName;
+        }
         return _resourceCachePath + "/" + resourceName;
     }
 
