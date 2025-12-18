@@ -212,12 +212,15 @@ namespace Framework::Scripting {
       private:
         /**
          * Perform DFS to detect cycles starting from a node.
-         * @param start Starting node
-         * @param visited Nodes visited in current path
+         * @param node Current node being visited
+         * @param visited Nodes that have been fully processed
+         * @param onStack Nodes currently in the recursion stack (for back-edge detection)
+         * @param path Current path for cycle reconstruction
          * @param cycle Output: the cycle path if found
          * @return True if a cycle was detected
          */
-        bool DetectCycle(const std::string &start, std::set<std::string> &visited, std::vector<std::string> &cycle) const;
+        bool DetectCycle(const std::string &node, std::set<std::string> &visited, std::set<std::string> &onStack, std::vector<std::string> &path,
+                         std::vector<std::string> &cycle) const;
 
         /**
          * Kahn's algorithm for topological sort.

@@ -75,13 +75,15 @@ namespace Framework::Scripting {
         if (WouldCreateCycle(dependent, dependency)) {
             // Find and report the cycle
             std::set<std::string> visited;
+            std::set<std::string> onStack;
+            std::vector<std::string> path;
             std::vector<std::string> cycle;
 
             // Temporarily add the edge to find the cycle path
             depIt->second.dependencies.insert(dependency);
             depOnIt->second.dependents.insert(dependent);
 
-            DetectCycle(dependent, visited, cycle);
+            DetectCycle(dependent, visited, onStack, path, cycle);
 
             // Remove the temporary edge
             depIt->second.dependencies.erase(dependency);
@@ -289,27 +291,42 @@ namespace Framework::Scripting {
         return allValid;
     }
 
-    bool DependencyGraph::DetectCycle(const std::string &start, std::set<std::string> &visited, std::vector<std::string> &cycle) const {
-        if (visited.find(start) != visited.end()) {
-            // Found cycle, reconstruct path
-            cycle.push_back(start);
-            return true;
+    bool DependencyGraph::DetectCycle(const std::string &node, std::set<std::string> &visited, std::set<std::string> &onStack, std::vector<std::string> &path,
+                                       std::vector<std::string> &cycle) const {
+        // Skip nodes that have already been fully processed
+        if (visited.find(node) != visited.end()) {
+            return false;
         }
 
-        visited.insert(start);
-        cycle.push_back(start);
+        // Add to current recursion stack and path
+        onStack.insert(node);
+        path.push_back(node);
 
-        auto it = _nodes.find(start);
+        auto it = _nodes.find(node);
         if (it != _nodes.end()) {
             for (const auto &dep : it->second.dependencies) {
-                if (DetectCycle(dep, visited, cycle)) {
+                // Back-edge detected: dependency is already in current recursion stack
+                if (onStack.find(dep) != onStack.end()) {
+                    // Reconstruct cycle by finding where the dependency first appears in path
+                    auto cycleStart = std::find(path.begin(), path.end(), dep);
+                    cycle.assign(cycleStart, path.end());
+                    cycle.push_back(dep); // Close the loop
                     return true;
+                }
+
+                // Recurse into unvisited nodes
+                if (visited.find(dep) == visited.end()) {
+                    if (DetectCycle(dep, visited, onStack, path, cycle)) {
+                        return true;
+                    }
                 }
             }
         }
 
-        cycle.pop_back();
-        visited.erase(start);
+        // Done processing this node: remove from stack, add to visited, pop from path
+        onStack.erase(node);
+        visited.insert(node);
+        path.pop_back();
         return false;
     }
 
