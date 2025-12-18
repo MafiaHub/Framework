@@ -504,6 +504,12 @@ namespace Framework::Scripting {
          */
         void RegisterHealthCheck(sol::protected_function healthCheck);
 
+        /**
+         * Clear restart attempts for a resource, resetting the backoff counter.
+         * @param name Resource name
+         */
+        void ClearResourceRestartAttempts(const std::string &name);
+
       private:
         // Internal resource access (mutable)
         Resource *GetResourceMutable(const std::string &name);

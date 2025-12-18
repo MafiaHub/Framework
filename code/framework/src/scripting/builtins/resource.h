@@ -291,12 +291,7 @@ namespace Framework::Scripting::Builtins {
                 return;
             }
 
-            Resource *resource = const_cast<Resource *>(manager->GetResource(name));
-            if (!resource) {
-                return;
-            }
-
-            resource->ClearRestartAttempts();
+            manager->ClearResourceRestartAttempts(name);
         }
 
 

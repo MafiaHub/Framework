@@ -1452,4 +1452,12 @@ namespace Framework::Scripting {
         resource->RegisterHealthCheck(healthCheck);
     }
 
+    void ResourceManager::ClearResourceRestartAttempts(const std::string &name) {
+        Resource *resource = GetResourceMutable(name);
+        if (!resource) {
+            return;
+        }
+        resource->ClearRestartAttempts();
+    }
+
 } // namespace Framework::Scripting
