@@ -32,88 +32,97 @@ namespace Framework::Scripting {
     // Discovery
 
     size_t ResourceManager::DiscoverResources() {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        size_t resourceCount = 0;
 
-        _resources.clear();
-        _dependencyGraph.Clear();
+        {
+            std::lock_guard<std::mutex> lock(_resourcesMutex);
 
-        cppfs::FileHandle resourcesDir = cppfs::fs::open(_config.resourcesPath);
+            _resources.clear();
 
-        // Scan for resources in subdirectories
-        if (resourcesDir.exists() && resourcesDir.isDirectory()) {
-            for (auto it = resourcesDir.begin(); it != resourcesDir.end(); ++it) {
-                std::string entryName = *it;
-                std::string entryPath = _config.resourcesPath + "/" + entryName;
+            cppfs::FileHandle resourcesDir = cppfs::fs::open(_config.resourcesPath);
 
-                cppfs::FileHandle entry = cppfs::fs::open(entryPath);
-                if (entry.isDirectory()) {
-                    // Check for manifest.json in the directory
-                    std::string manifestPath = entryPath + "/manifest.json";
-                    cppfs::FileHandle manifest = cppfs::fs::open(manifestPath);
+            // Scan for resources in subdirectories
+            if (resourcesDir.exists() && resourcesDir.isDirectory()) {
+                for (auto it = resourcesDir.begin(); it != resourcesDir.end(); ++it) {
+                    std::string entryName = *it;
+                    std::string entryPath = _config.resourcesPath + "/" + entryName;
 
-                    if (manifest.exists() && manifest.isFile()) {
-                        auto resource = std::make_unique<Resource>(entryPath);
-                        if (resource->IsManifestValid()) {
-                            std::string name = resource->GetName();
+                    cppfs::FileHandle entry = cppfs::fs::open(entryPath);
+                    if (entry.isDirectory()) {
+                        // Check for manifest.json in the directory
+                        std::string manifestPath = entryPath + "/manifest.json";
+                        cppfs::FileHandle manifest = cppfs::fs::open(manifestPath);
 
-                            // Check for duplicate names
-                            if (_resources.find(name) != _resources.end()) {
-                                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Duplicate resource name '{}' found at: {}", name, entryPath);
-                                continue;
+                        if (manifest.exists() && manifest.isFile()) {
+                            auto resource = std::make_unique<Resource>(entryPath);
+                            if (resource->IsManifestValid()) {
+                                std::string name = resource->GetName();
+
+                                // Check for duplicate names
+                                if (_resources.find(name) != _resources.end()) {
+                                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Duplicate resource name '{}' found at: {}", name, entryPath);
+                                    continue;
+                                }
+
+                                _resources[name] = std::move(resource);
+                                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered resource: {} ({})", name, entryPath);
+                            } else {
+                                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Invalid manifest in: {}", entryPath);
                             }
-
-                            _resources[name] = std::move(resource);
-                            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered resource: {} ({})", name, entryPath);
-                        } else {
-                            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Invalid manifest in: {}", entryPath);
                         }
                     }
                 }
+            } else {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resources directory not found: {}", _config.resourcesPath);
             }
-        } else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resources directory not found: {}", _config.resourcesPath);
+
+            resourceCount = _resources.size();
         }
 
-        // Build dependency graph
+        // Build dependency graph (acquires its own locks)
         BuildDependencyGraph();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} resources", _resources.size());
-        return _resources.size();
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} resources", resourceCount);
+        return resourceCount;
     }
 
     bool ResourceManager::DiscoverResource(const std::string &path) {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::string name;
 
-        cppfs::FileHandle dir = cppfs::fs::open(path);
-        if (!dir.exists() || !dir.isDirectory()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource path not found: {}", path);
-            return false;
+        {
+            std::lock_guard<std::mutex> lock(_resourcesMutex);
+
+            cppfs::FileHandle dir = cppfs::fs::open(path);
+            if (!dir.exists() || !dir.isDirectory()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource path not found: {}", path);
+                return false;
+            }
+
+            std::string manifestPath = path + "/manifest.json";
+            cppfs::FileHandle manifest = cppfs::fs::open(manifestPath);
+
+            if (!manifest.exists() || !manifest.isFile()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("No manifest.json found in: {}", path);
+                return false;
+            }
+
+            auto resource = std::make_unique<Resource>(path);
+            if (!resource->IsManifestValid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Invalid manifest in: {}", path);
+                return false;
+            }
+
+            name = resource->GetName();
+
+            if (_resources.find(name) != _resources.end()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource '{}' already exists", name);
+                return false;
+            }
+
+            _resources[name] = std::move(resource);
         }
 
-        std::string manifestPath = path + "/manifest.json";
-        cppfs::FileHandle manifest = cppfs::fs::open(manifestPath);
-
-        if (!manifest.exists() || !manifest.isFile()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("No manifest.json found in: {}", path);
-            return false;
-        }
-
-        auto resource = std::make_unique<Resource>(path);
-        if (!resource->IsManifestValid()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Invalid manifest in: {}", path);
-            return false;
-        }
-
-        std::string name = resource->GetName();
-
-        if (_resources.find(name) != _resources.end()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Resource '{}' already exists", name);
-            return false;
-        }
-
-        _resources[name] = std::move(resource);
-
-        // Update dependency graph
+        // Update dependency graph (acquires its own locks)
         BuildDependencyGraph();
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered resource: {}", name);
@@ -749,7 +758,9 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::BuildDependencyGraph() {
-        std::lock_guard<std::mutex> lock(_graphMutex);
+        // Lock both mutexes using scoped_lock to ensure consistent lock ordering
+        // and avoid potential deadlocks. scoped_lock uses a deadlock-avoidance algorithm.
+        std::scoped_lock lock(_resourcesMutex, _graphMutex);
         _dependencyGraph.Clear();
 
         // Add all resources as nodes
