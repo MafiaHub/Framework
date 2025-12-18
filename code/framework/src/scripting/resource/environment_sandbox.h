@@ -136,8 +136,6 @@ namespace Framework::Scripting {
         static void ClearEnvironment(sol::environment &env);
 
       private:
-        static int DisabledFunction(lua_State *L);
-
         static std::vector<std::string> _builtinNames;
         static std::mutex _builtinNamesMutex;
     };

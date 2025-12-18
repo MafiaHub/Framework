@@ -140,37 +140,42 @@ namespace Framework::Scripting {
     }
 
     void EnvironmentSandbox::DisableDangerousFunctions(sol::environment &env) {
-        // Disable dangerous global functions
-        env.set("dofile", sol::nil);
-        env.set("loadfile", sol::nil);
-        env.set("load", sol::nil);
-        env.set("loadstring", sol::nil);
-        env.set("require", sol::nil);
+        // Create a disabled function that reports a clear error using sol2's variadic args
+        auto disabledFunc = [](sol::variadic_args) -> sol::object {
+            throw sol::error("This function is disabled in this environment");
+        };
+
+        // Disable dangerous global functions with clear error messages
+        env.set("dofile", disabledFunc);
+        env.set("loadfile", disabledFunc);
+        env.set("load", disabledFunc);
+        env.set("loadstring", disabledFunc);
+        env.set("require", disabledFunc);
 
         // Disable dangerous os functions if os table exists
         sol::object osTable = env["os"];
         if (osTable.valid() && osTable.is<sol::table>()) {
-            sol::table os = osTable;
-            os["execute"] = sol::nil;
-            os["exit"]    = sol::nil;
-            os["remove"]  = sol::nil;
-            os["rename"]  = sol::nil;
-            os["setlocale"] = sol::nil;
-            os["tmpname"]   = sol::nil;
-            os["getenv"]    = sol::nil;
+            sol::table os   = osTable;
+            os["execute"]   = disabledFunc;
+            os["exit"]      = disabledFunc;
+            os["remove"]    = disabledFunc;
+            os["rename"]    = disabledFunc;
+            os["setlocale"] = disabledFunc;
+            os["tmpname"]   = disabledFunc;
+            os["getenv"]    = disabledFunc;
         }
 
         // Disable dangerous io functions if io table exists
         sol::object ioTable = env["io"];
         if (ioTable.valid() && ioTable.is<sol::table>()) {
-            env.set("io", sol::nil);
+            env.set("io", disabledFunc);
         }
 
         // Disable debug library
-        env.set("debug", sol::nil);
+        env.set("debug", disabledFunc);
 
         // Disable package library (prevents require workarounds)
-        env.set("package", sol::nil);
+        env.set("package", disabledFunc);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Disabled dangerous functions in environment");
     }
@@ -220,10 +225,6 @@ namespace Framework::Scripting {
         for (const auto &key : keys) {
             env.set(key, sol::nil);
         }
-    }
-
-    int EnvironmentSandbox::DisabledFunction(lua_State *L) {
-        return luaL_error(L, "This function is disabled in this environment");
     }
 
 } // namespace Framework::Scripting
