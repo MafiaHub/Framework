@@ -532,7 +532,7 @@ namespace Framework::Scripting {
         return it->second.get();
     }
 
-    sol::table ResourceManager::GetResourceInfo(sol::state &luaState, const std::string &name) const {
+    sol::table ResourceManager::GetResourceInfo(sol::state_view luaState, const std::string &name) const {
         const Resource *resource = GetResource(name);
         if (!resource) {
             return sol::nil;

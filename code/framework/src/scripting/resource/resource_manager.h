@@ -209,7 +209,7 @@ namespace Framework::Scripting {
          * Get resource info as a table (for Lua API).
          * Returns manifest data plus runtime state.
          */
-        sol::table GetResourceInfo(sol::state &luaState, const std::string &name) const;
+        sol::table GetResourceInfo(sol::state_view luaState, const std::string &name) const;
 
         // Dependency Queries
 

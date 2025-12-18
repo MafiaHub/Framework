@@ -154,8 +154,7 @@ namespace Framework::Scripting::Builtins {
                 return sol::lua_nil;
             }
 
-            sol::state &state = const_cast<sol::state &>(static_cast<const sol::state &>(luaState));
-            return manager->GetResourceInfo(state, name);
+            return manager->GetResourceInfo(luaState, name);
         }
 
         /**
