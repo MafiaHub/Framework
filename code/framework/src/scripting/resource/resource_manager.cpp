@@ -618,7 +618,25 @@ namespace Framework::Scripting {
         if (!resource || !resource->IsRunning()) {
             return sol::nil;
         }
-        return resource->GetExport(exportName);
+
+        // Track the export call chain for debugging
+        std::string caller = GetCurrentResourceContext();
+        if (!caller.empty()) {
+            // Check for potential infinite loop
+            if (!PushExportCall(caller, resourceName, exportName)) {
+                // Cycle detected or max depth reached - error was already logged
+                return sol::nil;
+            }
+        }
+
+        sol::object result = resource->GetExport(exportName);
+
+        // Pop the call from the chain if we pushed it
+        if (!caller.empty()) {
+            PopExportCall();
+        }
+
+        return result;
     }
 
     std::vector<std::string> ResourceManager::ListExports(const std::string &resourceName) const {
@@ -627,6 +645,86 @@ namespace Framework::Scripting {
             return {};
         }
         return resource->GetRegisteredExportNames();
+    }
+
+    // Export Call Chain Tracking
+
+    bool ResourceManager::PushExportCall(const std::string &callerResource, const std::string &targetResource, const std::string &exportName) const {
+        std::lock_guard<std::mutex> lock(_exportCallChainMutex);
+
+        // Check for max depth
+        if (_exportCallChain.size() >= kMaxExportCallDepth) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Export call depth exceeded maximum ({}) - possible infinite loop detected.\nCall chain:\n{}",
+                kMaxExportCallDepth, FormatExportCallChain());
+            return false;
+        }
+
+        // Check for cycle (same target+export already in chain indicates recursion)
+        if (HasCycleInExportCallChain(targetResource, exportName)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Infinite export loop detected! '{}' is calling '{}:{}' which creates a cycle.\nCall chain:\n{}",
+                callerResource, targetResource, exportName, FormatExportCallChain());
+            return false;
+        }
+
+        _exportCallChain.push_back({callerResource, targetResource, exportName});
+        return true;
+    }
+
+    void ResourceManager::PopExportCall() const {
+        std::lock_guard<std::mutex> lock(_exportCallChainMutex);
+        if (!_exportCallChain.empty()) {
+            _exportCallChain.pop_back();
+        }
+    }
+
+    bool ResourceManager::HasCycleInExportCallChain(const std::string &targetResource, const std::string &exportName) const {
+        // Check if this target+export combination already exists in the call chain
+        // This would indicate a cycle (A calls B calls C calls A scenario)
+        for (const auto &entry : _exportCallChain) {
+            if (entry.targetResource == targetResource && entry.exportName == exportName) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::string ResourceManager::GetExportCaller() const {
+        std::lock_guard<std::mutex> lock(_exportCallChainMutex);
+        if (_exportCallChain.empty()) {
+            return "";
+        }
+        return _exportCallChain.back().callerResource;
+    }
+
+    std::vector<ExportCallEntry> ResourceManager::GetExportCallChain() const {
+        std::lock_guard<std::mutex> lock(_exportCallChainMutex);
+        return _exportCallChain;
+    }
+
+    size_t ResourceManager::GetExportCallDepth() const {
+        std::lock_guard<std::mutex> lock(_exportCallChainMutex);
+        return _exportCallChain.size();
+    }
+
+    bool ResourceManager::IsInExportCall() const {
+        std::lock_guard<std::mutex> lock(_exportCallChainMutex);
+        return !_exportCallChain.empty();
+    }
+
+    std::string ResourceManager::FormatExportCallChain() const {
+        // Note: Caller must hold _exportCallChainMutex or call this from a context where it's safe
+        if (_exportCallChain.empty()) {
+            return "  (empty)";
+        }
+
+        std::string result;
+        for (size_t i = 0; i < _exportCallChain.size(); ++i) {
+            const auto &entry = _exportCallChain[i];
+            result += fmt::format("  [{}] {} -> {}:{}\n", i + 1, entry.callerResource, entry.targetResource, entry.exportName);
+        }
+        return result;
     }
 
     // Event Callbacks

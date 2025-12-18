@@ -68,6 +68,27 @@ namespace Framework::Scripting {
     using ResourceStateCallback     = std::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState)>;
 
     /**
+     * Represents a single entry in the export call chain.
+     * Used for debugging and detecting infinite loops when exports call each other.
+     */
+    struct ExportCallEntry {
+        std::string callerResource;   // Resource that made the export call
+        std::string targetResource;   // Resource that owns the export
+        std::string exportName;       // Name of the export being called
+
+        bool operator==(const ExportCallEntry &other) const {
+            return callerResource == other.callerResource &&
+                   targetResource == other.targetResource &&
+                   exportName == other.exportName;
+        }
+    };
+
+    /**
+     * Maximum depth for export call chain before considering it an infinite loop.
+     */
+    constexpr size_t kMaxExportCallDepth = 64;
+
+    /**
      * Central manager for all resources.
      *
      * Responsibilities:
@@ -233,6 +254,38 @@ namespace Framework::Scripting {
          * @return Vector of export names
          */
         std::vector<std::string> ListExports(const std::string &resourceName) const;
+
+        // Export Call Chain Tracking
+
+        /**
+         * Get the resource name that called the current export.
+         * @return Caller resource name, or empty string if not in an export call
+         */
+        std::string GetExportCaller() const;
+
+        /**
+         * Get the full export call chain for debugging.
+         * @return Vector of call entries, from oldest to newest
+         */
+        std::vector<ExportCallEntry> GetExportCallChain() const;
+
+        /**
+         * Get the current export call depth.
+         * @return Number of nested export calls
+         */
+        size_t GetExportCallDepth() const;
+
+        /**
+         * Check if we're currently inside an export call.
+         * @return True if inside an export call
+         */
+        bool IsInExportCall() const;
+
+        /**
+         * Format the export call chain as a readable string for debugging.
+         * @return Formatted call chain string
+         */
+        std::string FormatExportCallChain() const;
 
         // Event Callbacks
 
@@ -515,6 +568,16 @@ namespace Framework::Scripting {
         // Current resource context (for builtins to know which resource is calling)
         std::string _currentResourceContext;
         mutable std::mutex _contextMutex;
+
+        // Export call chain stack for tracking nested export calls
+        // Used for debugging infinite loops and knowing who called an export
+        mutable std::vector<ExportCallEntry> _exportCallChain;
+        mutable std::mutex _exportCallChainMutex;
+
+        // Helper methods for export call chain management
+        bool PushExportCall(const std::string &callerResource, const std::string &targetResource, const std::string &exportName) const;
+        void PopExportCall() const;
+        bool HasCycleInExportCallChain(const std::string &targetResource, const std::string &exportName) const;
 
         // Global event handlers: eventName -> {resourceName -> handlers}
         std::map<std::string, std::map<std::string, std::vector<sol::protected_function>>> _globalEventHandlers;
