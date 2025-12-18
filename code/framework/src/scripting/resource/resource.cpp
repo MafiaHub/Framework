@@ -403,13 +403,18 @@ namespace Framework::Scripting {
             return 0;
         }
 
-        // Exponential backoff: base * 2^(attempts-1)
-        int baseMs = _manifest.autoRestart.backoffBaseMilliseconds;
-        int backoff = baseMs * (1 << (attemptCount - 1));
-
         // Cap at 60 seconds
-        const int maxBackoffMs = 60000;
-        return std::min(backoff, maxBackoffMs);
+        constexpr int64_t maxBackoffMs = 60000;
+
+        // Exponential backoff: base * 2^(attempts-1)
+        // Clamp exponent to prevent undefined behavior from large shifts
+        constexpr int maxShift = 30;
+        int exponent = std::min(attemptCount - 1, maxShift);
+
+        int64_t baseMs = _manifest.autoRestart.backoffBaseMilliseconds;
+        int64_t backoff = baseMs * (static_cast<int64_t>(1) << exponent);
+
+        return static_cast<int>(std::min(backoff, maxBackoffMs));
     }
 
     void Resource::RegisterHealthCheck(sol::protected_function healthCheck) {
