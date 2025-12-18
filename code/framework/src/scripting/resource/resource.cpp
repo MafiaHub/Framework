@@ -129,10 +129,6 @@ namespace Framework::Scripting {
         return _manifest;
     }
 
-    bool Resource::HasPermission(const std::string &permission) const {
-        return _manifest.HasPermission(permission);
-    }
-
     bool Resource::HasExport(const std::string &exportName) const {
         return _manifest.HasExport(exportName);
     }

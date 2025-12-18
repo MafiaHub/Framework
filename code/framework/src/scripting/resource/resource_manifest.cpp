@@ -14,10 +14,6 @@ namespace Framework::Scripting {
 
     // ResourceManifest implementation
 
-    bool ResourceManifest::HasPermission(const std::string &permission) const {
-        return std::find(permissions.begin(), permissions.end(), permission) != permissions.end();
-    }
-
     bool ResourceManifest::HasExport(const std::string &exportName) const {
         return std::find(exports.begin(), exports.end(), exportName) != exports.end();
     }
@@ -251,9 +247,6 @@ namespace Framework::Scripting {
         if (!manifest.exports.empty()) {
             j["exports"] = manifest.exports;
         }
-        if (!manifest.permissions.empty()) {
-            j["permissions"] = manifest.permissions;
-        }
         if (manifest.priority != 0) {
             j["priority"] = manifest.priority;
         }
@@ -280,9 +273,6 @@ namespace Framework::Scripting {
         }
         if (j.contains("exports")) {
             j.at("exports").get_to(manifest.exports);
-        }
-        if (j.contains("permissions")) {
-            j.at("permissions").get_to(manifest.permissions);
         }
         if (j.contains("priority")) {
             j.at("priority").get_to(manifest.priority);

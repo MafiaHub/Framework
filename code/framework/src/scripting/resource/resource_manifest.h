@@ -42,7 +42,6 @@ namespace Framework::Scripting {
 
     /**
      * Resource manifest containing all metadata and configuration for a resource.
-     * Maps to manifest.json schema defined in Phase 1.2.
      */
     struct ResourceManifest {
         // Identity
@@ -55,9 +54,6 @@ namespace Framework::Scripting {
         std::vector<ResourceDependency> dependencies;
         std::vector<std::string> exports;
 
-        // Permissions
-        std::vector<std::string> permissions;
-
         // Load order
         int priority = 0;
 
@@ -67,11 +63,6 @@ namespace Framework::Scripting {
 
         ResourceErrorBehavior errorBehavior = ResourceErrorBehavior::Stop;
         ResourceAutoRestartConfig autoRestart;
-
-        /**
-         * Check if this resource has a specific permission.
-         */
-        bool HasPermission(const std::string &permission) const;
 
         /**
          * Check if this resource exports a specific name.

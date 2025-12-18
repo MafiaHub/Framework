@@ -75,10 +75,7 @@ namespace Framework::Scripting {
      * - Dependency Resolution: Build and maintain dependency graph
      * - Lifecycle Management: Load, start, stop, and unload resources
      * - Registry: Track all discovered and running resources
-     *
-     * Phase 8 Considerations:
      * - Backward Compatibility: Supports legacy single-script gamemodes
-     * - Integration: Works with existing Engine classes
      */
     class ResourceManager final {
       public:

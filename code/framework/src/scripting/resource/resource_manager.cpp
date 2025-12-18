@@ -426,8 +426,6 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::ReloadResource(const std::string &name) {
-        // Phase 4.4: Hot-reload with state preservation
-
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
             return ResourceOperationResult::Failure("Resource not found: " + name);
@@ -592,14 +590,6 @@ namespace Framework::Scripting {
             exports[i++] = exp;
         }
         info["exports"] = exports;
-
-        // Permissions
-        sol::table perms = luaState.create_table();
-        i                = 1;
-        for (const auto &perm : resource->GetManifest().permissions) {
-            perms[i++] = perm;
-        }
-        info["permissions"] = perms;
 
         // Load timestamp
         auto loadTime              = resource->GetLoadTimestamp();

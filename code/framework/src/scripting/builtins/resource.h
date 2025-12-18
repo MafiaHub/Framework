@@ -142,7 +142,7 @@ namespace Framework::Scripting::Builtins {
         /**
          * Get detailed information about a resource.
          * Returns a table with: name, version, author, description, state, path,
-         * scriptCount, dependencies, exports, permissions, loadTime
+         * scriptCount, dependencies, exports, loadTime
          *
          * @param name Resource name
          * @return Info table or nil if not found
@@ -189,55 +189,6 @@ namespace Framework::Scripting::Builtins {
 
             return resource->GetPath();
         }
-
-        /**
-         * Check if the current resource has a specific permission.
-         *
-         * @param permission Permission name to check
-         * @return True if the current resource has the permission
-         */
-        static bool HasPermission(const std::string &permission) {
-            auto *manager = Framework::CoreModules::GetResourceManager();
-            if (!manager) {
-                return false;
-            }
-
-            auto *resource = manager->GetCurrentResource();
-            if (!resource) {
-                return false;
-            }
-
-            return resource->HasPermission(permission);
-        }
-
-        /**
-         * Get all permissions for a resource.
-         *
-         * @param name Resource name
-         * @return Array table of permission strings, or empty table if not found
-         */
-        static sol::table GetPermissions(sol::state_view luaState, const std::string &name) {
-            auto *manager = Framework::CoreModules::GetResourceManager();
-            if (!manager) {
-                return luaState.create_table();
-            }
-
-            const Resource *resource = manager->GetResource(name);
-            if (!resource) {
-                return luaState.create_table();
-            }
-
-            sol::table result           = luaState.create_table();
-            const auto &permissions = resource->GetManifest().permissions;
-
-            int i = 1;
-            for (const auto &perm : permissions) {
-                result[i++] = perm;
-            }
-
-            return result;
-        }
-
 
         /**
          * Register a health check function for the current resource.
@@ -524,10 +475,6 @@ namespace Framework::Scripting::Builtins {
             // Self-reference
             cls["getCurrent"] = &ResourceBuiltin::GetCurrent;
             cls["getPath"]    = &ResourceBuiltin::GetPath;
-
-            // Permissions
-            cls["hasPermission"]  = &ResourceBuiltin::HasPermission;
-            cls["getPermissions"] = &ResourceBuiltin::GetPermissions;
 
             cls["setHealthCheck"]       = &ResourceBuiltin::SetHealthCheck;
             cls["isHealthy"]            = &ResourceBuiltin::IsHealthy;

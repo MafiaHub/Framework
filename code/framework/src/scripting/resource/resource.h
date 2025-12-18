@@ -86,7 +86,6 @@ namespace Framework::Scripting {
 
         // Manifest access
         const ResourceManifest &GetManifest() const;
-        bool HasPermission(const std::string &permission) const;
         bool HasExport(const std::string &exportName) const;
         bool DependsOn(const std::string &resourceName) const;
 
