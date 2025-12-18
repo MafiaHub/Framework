@@ -271,6 +271,30 @@ namespace Framework::Scripting {
         if (!manifest.clientFiles.empty()) {
             j["client_files"] = manifest.clientFiles;
         }
+
+        // Error behavior serialization (only if not default)
+        if (manifest.errorBehavior != ResourceErrorBehavior::Stop) {
+            switch (manifest.errorBehavior) {
+            case ResourceErrorBehavior::Continue:
+                j["error_behavior"] = "continue";
+                break;
+            case ResourceErrorBehavior::Restart:
+                j["error_behavior"] = "restart";
+                break;
+            default:
+                break;
+            }
+        }
+
+        // Auto-restart config serialization (only if enabled or non-default values)
+        if (manifest.autoRestart.enabled || manifest.autoRestart.maxAttempts != 3 || manifest.autoRestart.timeWindowSeconds != 60 || manifest.autoRestart.backoffBaseMilliseconds != 1000) {
+            nlohmann::json ar;
+            ar["enabled"]            = manifest.autoRestart.enabled;
+            ar["max_attempts"]       = manifest.autoRestart.maxAttempts;
+            ar["time_window_seconds"] = manifest.autoRestart.timeWindowSeconds;
+            ar["backoff_base_ms"]    = manifest.autoRestart.backoffBaseMilliseconds;
+            j["auto_restart"]        = ar;
+        }
     }
 
     void from_json(const nlohmann::json &j, ResourceManifest &manifest) {
