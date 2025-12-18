@@ -39,26 +39,6 @@ namespace Framework::Scripting {
 
         cppfs::FileHandle resourcesDir = cppfs::fs::open(_config.resourcesPath);
 
-        if (_config.enableLegacySupport) {
-            // Look for a manifest.json directly in the resources path (legacy structure)
-            std::string legacyManifestPath = _config.resourcesPath + "/manifest.json";
-            cppfs::FileHandle legacyManifest = cppfs::fs::open(legacyManifestPath);
-
-            if (legacyManifest.exists() && legacyManifest.isFile()) {
-                _hasLegacyGamemode  = true;
-                _legacyGamemodePath = _config.resourcesPath;
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Detected legacy gamemode structure at: {}", _legacyGamemodePath);
-
-                // Create a resource for the legacy gamemode
-                auto resource = std::make_unique<Resource>(_legacyGamemodePath);
-                if (resource->IsManifestValid()) {
-                    std::string name    = resource->GetName();
-                    _resources[name]    = std::move(resource);
-                    Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered legacy gamemode: {}", name);
-                }
-            }
-        }
-
         // Scan for resources in subdirectories
         if (resourcesDir.exists() && resourcesDir.isDirectory()) {
             for (auto it = resourcesDir.begin(); it != resourcesDir.end(); ++it) {
@@ -138,14 +118,6 @@ namespace Framework::Scripting {
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered resource: {}", name);
         return true;
-    }
-
-    bool ResourceManager::HasLegacyGamemode() const {
-        return _hasLegacyGamemode;
-    }
-
-    std::string ResourceManager::GetLegacyGamemodePath() const {
-        return _legacyGamemodePath;
     }
 
     // Lifecycle Management

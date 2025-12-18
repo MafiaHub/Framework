@@ -24,9 +24,6 @@ namespace Framework::Scripting {
         // Path to the resources directory
         std::string resourcesPath = "resources";
 
-        // Whether to enable legacy gamemode support (backward compatibility)
-        bool enableLegacySupport = true;
-
         // Whether this is a client-side manager (enables extra sandboxing)
         bool isClient = false;
 
@@ -96,7 +93,6 @@ namespace Framework::Scripting {
      * - Dependency Resolution: Build and maintain dependency graph
      * - Lifecycle Management: Load, start, stop, and unload resources
      * - Registry: Track all discovered and running resources
-     * - Backward Compatibility: Supports legacy single-script gamemodes
      */
     class ResourceManager final {
       public:
@@ -126,17 +122,6 @@ namespace Framework::Scripting {
          * @return True if a valid resource was discovered
          */
         bool DiscoverResource(const std::string &path);
-
-        /**
-         * Check if the legacy gamemode structure exists.
-         * Used for backward compatibility detection.
-         */
-        bool HasLegacyGamemode() const;
-
-        /**
-         * Get the path to the legacy gamemode if it exists.
-         */
-        std::string GetLegacyGamemodePath() const;
 
         // Lifecycle Management
 
@@ -560,10 +545,6 @@ namespace Framework::Scripting {
         ResourceEventCallback _onResourceStopped;
         ResourceErrorCallback _onResourceError;
         ResourceStateCallback _onResourceStateChanged;
-
-        // Legacy gamemode path (for backward compatibility)
-        std::string _legacyGamemodePath;
-        bool _hasLegacyGamemode = false;
 
         // Current resource context (for builtins to know which resource is calling)
         std::string _currentResourceContext;

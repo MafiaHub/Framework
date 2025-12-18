@@ -45,7 +45,6 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = _mainGamemodePath.empty() ? "gamemode" : _mainGamemodePath;
         config.isClient = false;
-        config.enableLegacySupport = true; // Server supports legacy single-script gamemodes
         config.cascadeStopDependents = true;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_serverEngine->GetLuaEngine(), config);

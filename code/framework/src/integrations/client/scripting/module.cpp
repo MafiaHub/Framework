@@ -36,7 +36,6 @@ namespace Framework::Integrations::Client::Scripting {
         Framework::Scripting::ResourceManagerConfig config;
         config.resourcesPath = _resourceCachePath.empty() ? "resources" : _resourceCachePath;
         config.isClient = true;
-        config.enableLegacySupport = false; // Client doesn't support legacy mode
         config.cascadeStopDependents = true;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_clientEngine->GetLuaEngine(), config);
