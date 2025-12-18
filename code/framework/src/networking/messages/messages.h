@@ -56,7 +56,6 @@ namespace Framework::Networking::Messages {
         GAME_SYNC_ENTITY_OWNER_UPDATE, // server sends data about owned entity
         GAME_SYNC_ENTITY_DESPAWN,
 
-        // Resource synchronization messages (Phase 7)
         GAME_RESOURCE_LIST,           // Server sends list of resources to client on connection
         GAME_RESOURCE_COMMAND,        // Server commands client to start/stop resources
 

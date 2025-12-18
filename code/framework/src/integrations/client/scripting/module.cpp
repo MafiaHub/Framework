@@ -83,8 +83,6 @@ namespace Framework::Integrations::Client::Scripting {
         }
     }
 
-    // Resource synchronization (Phase 7.1)
-
     void ClientScriptingModule::SetResourceCachePath(const std::string &path) {
         _resourceCachePath = path;
 

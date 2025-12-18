@@ -295,7 +295,6 @@ namespace Framework::Integrations::Server {
             ClientReadyAssets readyMsg;
             net->Send(readyMsg, guid);
 
-            // Send resource list to the client (Phase 7)
             if (_scriptingModule) {
                 _scriptingModule->SendResourceListToClient(guid);
             }

@@ -85,8 +85,6 @@ namespace Framework::Integrations::Client::Scripting {
             return _resourceManager.get();
         }
 
-        // Resource synchronization (Phase 7.1)
-
         /**
          * Set the resource cache path (where downloaded resources are stored).
          */

@@ -271,8 +271,6 @@ namespace Framework::Integrations::Server::Scripting {
         return true;
     }
 
-    // Resource synchronization (Phase 7)
-
     std::vector<ClientResourceInfo> ServerScriptingModule::GetClientResourceList() const {
         std::vector<ClientResourceInfo> result;
 

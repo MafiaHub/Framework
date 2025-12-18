@@ -385,7 +385,6 @@ namespace Framework::Integrations::Client {
             DownloadsAssetsFromConnectedServer();
         });
 
-        // Resource synchronization messages (Phase 7)
         net->RegisterMessage<ResourceListMessage>(GameMessages::GAME_RESOURCE_LIST, [this](SLNet::RakNetGUID guid, ResourceListMessage *msg) {
             if (!msg->Valid()) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Received invalid resource list message");

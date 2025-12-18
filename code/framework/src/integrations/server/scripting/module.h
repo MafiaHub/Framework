@@ -98,8 +98,6 @@ namespace Framework::Integrations::Server::Scripting {
 
         void ReloadScriptingEngine();
 
-        // Resource synchronization (Phase 7)
-
         /**
          * Get list of resources to send to clients.
          * Only includes resources with client_files defined.
