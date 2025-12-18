@@ -927,15 +927,22 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::BroadcastGlobalEvent(const std::string &eventName, sol::variadic_args args) {
-        std::lock_guard<std::mutex> lock(_globalEventsMutex);
+        // Copy handlers while holding the lock, then release before invoking
+        // This avoids deadlocks from calling IsResourceRunning/context methods under lock
+        std::map<std::string, std::vector<sol::protected_function>> handlersCopy;
+        {
+            std::lock_guard<std::mutex> lock(_globalEventsMutex);
 
-        auto it = _globalEventHandlers.find(eventName);
-        if (it == _globalEventHandlers.end()) {
-            return;
+            auto it = _globalEventHandlers.find(eventName);
+            if (it == _globalEventHandlers.end()) {
+                return;
+            }
+
+            handlersCopy = it->second;
         }
 
         // Iterate through all resources that have handlers for this event
-        for (auto &resourcePair : it->second) {
+        for (auto &resourcePair : handlersCopy) {
             const std::string &resourceName = resourcePair.first;
 
             // Only invoke if resource is running
