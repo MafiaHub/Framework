@@ -1430,57 +1430,6 @@ namespace Framework::Scripting {
         }
     }
 
-    void ResourceManager::RunHealthChecks() {
-        std::vector<std::string> runningResources = GetRunningResourceNames();
-
-        for (const auto &resourceName : runningResources) {
-            Resource *resource = GetResourceMutable(resourceName);
-            if (!resource || !resource->HasHealthCheck()) {
-                continue;
-            }
-
-            // Set context for health check execution
-            std::string previousContext = GetCurrentResourceContext();
-            SetCurrentResourceContext(resourceName);
-
-            bool isHealthy = resource->CheckHealth();
-
-            // Restore context
-            SetCurrentResourceContext(previousContext);
-
-            if (!isHealthy) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Health check failed", resourceName);
-
-                // Handle as a runtime error
-                HandleResourceRuntimeError(resourceName, "Health check failed");
-            }
-        }
-    }
-
-    bool ResourceManager::IsResourceHealthy(const std::string &name) const {
-        const Resource *resource = GetResource(name);
-        if (!resource) {
-            return false;
-        }
-
-        if (!resource->HasHealthCheck()) {
-            // No health check means assumed healthy
-            return true;
-        }
-
-        return resource->GetLastHealthCheckResult();
-    }
-
-    void ResourceManager::RegisterHealthCheck(sol::protected_function healthCheck) {
-        Resource *resource = GetCurrentResource();
-        if (!resource) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot register health check: no current resource context");
-            return;
-        }
-
-        resource->RegisterHealthCheck(healthCheck);
-    }
-
     void ResourceManager::ClearResourceRestartAttempts(const std::string &name) {
         Resource *resource = GetResourceMutable(name);
         if (!resource) {

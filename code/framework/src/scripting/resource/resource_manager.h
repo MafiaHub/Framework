@@ -484,27 +484,6 @@ namespace Framework::Scripting {
         void ProcessScheduledRestarts();
 
         /**
-         * Run health checks on all resources that have them registered.
-         * Should be called periodically.
-         */
-        void RunHealthChecks();
-
-        /**
-         * Check if a specific resource is healthy.
-         * @param name Resource name
-         * @return True if healthy or no health check registered
-         */
-        bool IsResourceHealthy(const std::string &name) const;
-
-        /**
-         * Register a health check function for a resource.
-         * Called from Lua via the Resource builtin.
-         *
-         * @param healthCheck The health check function
-         */
-        void RegisterHealthCheck(sol::protected_function healthCheck);
-
-        /**
          * Clear restart attempts for a resource, resetting the backoff counter.
          * @param name Resource name
          */

@@ -956,48 +956,6 @@ MODULE(resource_manager, {
         TestResourceManagerHelper::Cleanup();
     });
 
-    // ==================== Health Checks ====================
-
-    IT("IsResourceHealthy returns false for unknown resource", {
-        TestResourceManagerHelper::Cleanup();
-
-        sol::state luaState;
-        luaState.open_libraries(sol::lib::base, sol::lib::string, sol::lib::math, sol::lib::table);
-
-        ResourceManagerConfig config;
-        ResourceManager manager(&luaState, config);
-
-        EQUALS(manager.IsResourceHealthy("unknown"), false);
-
-        TestResourceManagerHelper::Cleanup();
-    });
-
-    IT("IsResourceHealthy returns true for resource without health check", {
-        TestResourceManagerHelper::Cleanup();
-
-        TestResourceManagerHelper::CreateTestResource("no-health-check", R"({
-            "name": "no-health-check",
-            "version": "1.0.0"
-        })");
-
-        sol::state luaState;
-        luaState.open_libraries(sol::lib::base, sol::lib::string, sol::lib::math, sol::lib::table);
-
-        ResourceManagerConfig config;
-        config.resourcesPath = TestResourceManagerHelper::GetTestResourcePath();
-
-        ResourceManager manager(&luaState, config);
-        manager.DiscoverResources();
-        manager.StartResource("no-health-check");
-
-        EQUALS(manager.IsResourceHealthy("no-health-check"), true);
-
-        // Explicitly stop before cleanup to help with destruction order
-        manager.StopAll();
-
-        TestResourceManagerHelper::Cleanup();
-    });
-
     // ==================== Statistics ====================
 
     IT("GetResourceCount returns correct count", {

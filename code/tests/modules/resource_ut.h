@@ -471,24 +471,6 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    // ==================== Health Check ====================
-
-    IT("health check is initially not registered", {
-        TestResourceHelper::CreateTestResource("health-test", R"({
-            "name": "health-test",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/health-test");
-
-        EQUALS(resource.HasHealthCheck(), false);
-        // No health check means healthy by default
-        EQUALS(resource.CheckHealth(), true);
-        EQUALS(resource.GetLastHealthCheckResult(), true);
-
-        TestResourceHelper::Cleanup();
-    });
-
     // ==================== Move Semantics ====================
 
     IT("supports move construction", {

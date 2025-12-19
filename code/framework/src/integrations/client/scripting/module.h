@@ -66,7 +66,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         /**
          * Update the scripting module (call from main loop).
-         * Processes ResourceManager updates like health checks and scheduled restarts.
+         * Processes ResourceManager updates like scheduled restarts.
          */
         void Update();
 

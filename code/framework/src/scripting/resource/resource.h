@@ -146,39 +146,6 @@ namespace Framework::Scripting {
          */
         int GetRestartBackoffMs() const;
 
-        /**
-         * Register a health check function for this resource.
-         * The function should return true if healthy, false otherwise.
-         * @param healthCheck The health check function
-         */
-        void RegisterHealthCheck(sol::protected_function healthCheck);
-
-        /**
-         * Unregister the health check function.
-         */
-        void UnregisterHealthCheck();
-
-        /**
-         * Check if a health check is registered.
-         */
-        bool HasHealthCheck() const;
-
-        /**
-         * Invoke the health check and return the result.
-         * @return True if healthy or no health check registered, false if unhealthy
-         */
-        bool CheckHealth() const;
-
-        /**
-         * Get the last health check result.
-         */
-        bool GetLastHealthCheckResult() const;
-
-        /**
-         * Get the timestamp of the last health check.
-         */
-        std::chrono::system_clock::time_point GetLastHealthCheckTime() const;
-
         // Environment access (for ResourceManager to set up)
         sol::environment *GetEnvironment();
         const sol::environment *GetEnvironment() const;
@@ -327,11 +294,6 @@ namespace Framework::Scripting {
 
         std::vector<std::chrono::system_clock::time_point> _restartAttempts;
         mutable std::mutex _restartAttemptsMutex;
-
-        std::optional<sol::protected_function> _healthCheck;
-        mutable bool _lastHealthCheckResult = true;
-        mutable std::chrono::system_clock::time_point _lastHealthCheckTime;
-        mutable std::mutex _healthCheckMutex;
 
         mutable uint32_t _contentHash = 0;
         mutable bool _contentHashValid = false;

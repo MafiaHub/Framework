@@ -76,9 +76,6 @@ namespace Framework::Integrations::Client::Scripting {
 
             // Process message queue
             _resourceManager->ProcessMessageQueue();
-
-            // Periodically run health checks (every 30 seconds would be handled by caller)
-            // The actual timing should be managed by the caller, we just expose the method
         }
     }
 

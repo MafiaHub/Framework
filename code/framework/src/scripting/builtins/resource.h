@@ -190,36 +190,6 @@ namespace Framework::Scripting::Builtins {
         }
 
         /**
-         * Register a health check function for the current resource.
-         * The function should return true if healthy, false otherwise.
-         *
-         * @param healthCheck The health check function
-         */
-        static void SetHealthCheck(sol::protected_function healthCheck) {
-            auto *manager = Framework::CoreModules::GetResourceManager();
-            if (!manager) {
-                return;
-            }
-
-            manager->RegisterHealthCheck(healthCheck);
-        }
-
-        /**
-         * Check if a resource is healthy.
-         *
-         * @param name Resource name
-         * @return True if healthy or no health check registered
-         */
-        static bool IsHealthy(const std::string &name) {
-            auto *manager = Framework::CoreModules::GetResourceManager();
-            if (!manager) {
-                return true;
-            }
-
-            return manager->IsResourceHealthy(name);
-        }
-
-        /**
          * Get the error message for a resource in error state.
          *
          * @param name Resource name
@@ -374,8 +344,6 @@ namespace Framework::Scripting::Builtins {
             cls["getCurrent"] = &ResourceBuiltin::GetCurrent;
             cls["getPath"]    = &ResourceBuiltin::GetPath;
 
-            cls["setHealthCheck"]       = &ResourceBuiltin::SetHealthCheck;
-            cls["isHealthy"]            = &ResourceBuiltin::IsHealthy;
             cls["getErrorMessage"]      = &ResourceBuiltin::GetErrorMessage;
             cls["getRestartAttempts"]   = &ResourceBuiltin::GetRestartAttempts;
             cls["canAutoRestart"]       = &ResourceBuiltin::CanAutoRestart;

@@ -417,68 +417,6 @@ namespace Framework::Scripting {
         return static_cast<int>(std::min(backoff, maxBackoffMs));
     }
 
-    void Resource::RegisterHealthCheck(sol::protected_function healthCheck) {
-        std::lock_guard<std::mutex> lock(_healthCheckMutex);
-        _healthCheck = healthCheck;
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' registered health check", _manifest.name);
-    }
-
-    void Resource::UnregisterHealthCheck() {
-        std::lock_guard<std::mutex> lock(_healthCheckMutex);
-        _healthCheck.reset();
-    }
-
-    bool Resource::HasHealthCheck() const {
-        std::lock_guard<std::mutex> lock(_healthCheckMutex);
-        return _healthCheck.has_value();
-    }
-
-    bool Resource::CheckHealth() const {
-        std::lock_guard<std::mutex> lock(_healthCheckMutex);
-
-        _lastHealthCheckTime = std::chrono::system_clock::now();
-
-        if (!_healthCheck.has_value()) {
-            // No health check registered, assume healthy
-            _lastHealthCheckResult = true;
-            return true;
-        }
-
-        try {
-            sol::protected_function_result result = (*_healthCheck)();
-            if (result.valid()) {
-                // Check if result is a boolean true
-                sol::object returnValue = result;
-                if (returnValue.is<bool>()) {
-                    _lastHealthCheckResult = returnValue.as<bool>();
-                } else {
-                    // Non-boolean return treated as healthy if truthy
-                    _lastHealthCheckResult = returnValue.valid() && returnValue != sol::nil;
-                }
-            } else {
-                // Error during health check, treat as unhealthy
-                sol::error err = result;
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Health check error: {}", _manifest.name, err.what());
-                _lastHealthCheckResult = false;
-            }
-        } catch (const std::exception &e) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] Health check exception: {}", _manifest.name, e.what());
-            _lastHealthCheckResult = false;
-        }
-
-        return _lastHealthCheckResult;
-    }
-
-    bool Resource::GetLastHealthCheckResult() const {
-        std::lock_guard<std::mutex> lock(_healthCheckMutex);
-        return _lastHealthCheckResult;
-    }
-
-    std::chrono::system_clock::time_point Resource::GetLastHealthCheckTime() const {
-        std::lock_guard<std::mutex> lock(_healthCheckMutex);
-        return _lastHealthCheckTime;
-    }
-
     uint32_t Resource::GetContentHash() const {
         std::lock_guard<std::mutex> lock(_contentHashMutex);
 
