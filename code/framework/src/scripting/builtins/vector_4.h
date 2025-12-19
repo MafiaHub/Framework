@@ -42,7 +42,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         double GetW() const {
-            return _data.z;
+            return _data.w;
         }
 
         double GetLength() const {
