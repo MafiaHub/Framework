@@ -262,14 +262,14 @@ MODULE(environment_sandbox, {
         EQUALS(afterCount - beforeCount, 1u);
     });
 
-    // ==================== DisableDangerousFunctions ====================
+    // ==================== SetupClientSandbox ====================
 
     IT("disables dofile", {
         sol::state luaState;
         luaState.open_libraries(sol::lib::base);
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
-        EnvironmentSandbox::DisableDangerousFunctions(*env);
+        EnvironmentSandbox::SetupClientSandbox(*env);
 
         std::string error;
         bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "dofile('test.lua')", "test", error);
@@ -283,7 +283,7 @@ MODULE(environment_sandbox, {
         luaState.open_libraries(sol::lib::base);
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
-        EnvironmentSandbox::DisableDangerousFunctions(*env);
+        EnvironmentSandbox::SetupClientSandbox(*env);
 
         std::string error;
         bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "loadfile('test.lua')", "test", error);
@@ -297,7 +297,7 @@ MODULE(environment_sandbox, {
         luaState.open_libraries(sol::lib::base);
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
-        EnvironmentSandbox::DisableDangerousFunctions(*env);
+        EnvironmentSandbox::SetupClientSandbox(*env);
 
         std::string error;
         bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "load('return 1')", "test", error);
@@ -311,7 +311,7 @@ MODULE(environment_sandbox, {
         luaState.open_libraries(sol::lib::base, sol::lib::package);
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
-        EnvironmentSandbox::DisableDangerousFunctions(*env);
+        EnvironmentSandbox::SetupClientSandbox(*env);
 
         std::string error;
         bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "require('os')", "test", error);
@@ -326,7 +326,7 @@ MODULE(environment_sandbox, {
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
         EnvironmentSandbox::ShareGlobals(luaState, *env, {"os"});
-        EnvironmentSandbox::DisableDangerousFunctions(*env);
+        EnvironmentSandbox::SetupClientSandbox(*env);
 
         std::string error;
         bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "os.execute('ls')", "test", error);
@@ -341,7 +341,7 @@ MODULE(environment_sandbox, {
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
         EnvironmentSandbox::ShareGlobals(luaState, *env, {"debug"});
-        EnvironmentSandbox::DisableDangerousFunctions(*env);
+        EnvironmentSandbox::SetupClientSandbox(*env);
 
         // After disabling, debug should be a function that throws when called
         std::string error;
@@ -575,5 +575,144 @@ MODULE(environment_sandbox, {
         EQUALS(f1().get<int>(), 1);
         EQUALS(f2().get<int>(), 2);
         EQUALS(f3().get<int>(), 3);
+    });
+
+    IT("client sandbox disables require (contrast with server)", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupClientSandbox(*env);
+
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "require('anything')", "test", error);
+
+        EQUALS(success, false);
+        // Client sandbox SHOULD show "disabled"
+        EQUALS(error.find("disabled") != std::string::npos, true);
+    });
+
+    // ==================== SetupServerSandbox ====================
+
+    IT("server sandbox allows require function", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        // require should be callable (not disabled)
+        // Try calling it - should fail with "module not found", not "disabled"
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "require('nonexistent')", "test", error);
+
+        EQUALS(success, false);
+        // Should NOT contain "disabled" - that would mean require was blocked
+        EQUALS(error.find("disabled") == std::string::npos, true);
+    });
+
+    IT("server sandbox disables dofile", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "dofile('test.lua')", "test", error);
+
+        EQUALS(success, false);
+    });
+
+    IT("server sandbox disables loadfile", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "loadfile('test.lua')", "test", error);
+
+        EQUALS(success, false);
+    });
+
+    IT("server sandbox disables os.execute", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::os, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::ShareGlobals(luaState, *env, {"os"});
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "os.execute('ls')", "test", error);
+
+        EQUALS(success, false);
+    });
+
+    IT("server sandbox rejects path traversal in require", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "require('../../../etc/passwd')", "test", error);
+
+        EQUALS(success, false);
+        // Error should mention path traversal
+        EQUALS(error.find("path traversal") != std::string::npos, true);
+    });
+
+    IT("server sandbox rejects absolute paths in require", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "require('/etc/passwd')", "test", error);
+
+        EQUALS(success, false);
+        // Error should mention absolute paths
+        EQUALS(error.find("absolute paths") != std::string::npos, true);
+    });
+
+    IT("server sandbox restricts package.path", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, "/test/base");
+
+        // Get the package.path from the global state (where it was modified)
+        sol::table package = luaState["package"];
+        std::string path = package["path"].get<std::string>();
+
+        // Path should only contain our base directory
+        EQUALS(path.find("/test/base") != std::string::npos, true);
+        // Should not contain system paths
+        EQUALS(path.find("/usr/") == std::string::npos, true);
+    });
+
+    IT("server sandbox disables package.loadlib", {
+        sol::state luaState;
+        luaState.open_libraries(sol::lib::base, sol::lib::package);
+
+        auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
+
+        // loadlib should be disabled
+        sol::table package = luaState["package"];
+        sol::object loadlib = package["loadlib"];
+
+        // Try to call it - should throw
+        std::string error;
+        bool success = EnvironmentSandbox::ExecuteString(luaState, *env, "package.loadlib('test.so', 'init')", "test", error);
+
+        EQUALS(success, false);
     });
 })

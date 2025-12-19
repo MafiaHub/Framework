@@ -83,12 +83,24 @@ namespace Framework::Scripting {
         static void RegisterBuiltinName(const std::string &name);
 
         /**
-         * Disable dangerous Lua functions in an environment.
-         * This should be called for client-side resources.
+         * Setup client-side sandboxing (full lockdown).
+         * Disables all dangerous functions including require, dofile, loadfile,
+         * load, os.execute, io, debug, and package.
          *
          * @param env The environment to sandbox
          */
-        static void DisableDangerousFunctions(sol::environment &env);
+        static void SetupClientSandbox(sol::environment &env);
+
+        /**
+         * Setup server-side sandboxing.
+         * Allows require but scoped to the specified base path.
+         * Disables other dangerous functions like os.execute, io, debug.
+         *
+         * @param luaState The Lua state
+         * @param env The environment to sandbox
+         * @param basePath The base path for require (typically cwd or resource path)
+         */
+        static void SetupServerSandbox(sol::state &luaState, sol::environment &env, const std::string &basePath);
 
         /**
          * Set a value in an environment.
@@ -136,6 +148,15 @@ namespace Framework::Scripting {
         static void ClearEnvironment(sol::environment &env);
 
       private:
+        /**
+         * Disable common dangerous functions (shared between client/server).
+         * Disables: dofile, loadfile, load, loadstring, os.execute, os.exit,
+         * os.remove, os.rename, os.setlocale, os.tmpname, os.getenv, io, debug.
+         *
+         * @param env The environment to sandbox
+         */
+        static void DisableCommonDangerousFunctions(sol::environment &env);
+
         static std::vector<std::string> _builtinNames;
         static std::mutex _builtinNamesMutex;
     };

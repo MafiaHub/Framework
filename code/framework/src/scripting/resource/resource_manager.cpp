@@ -864,9 +864,13 @@ namespace Framework::Scripting {
         // Share framework builtins
         EnvironmentSandbox::ShareGlobals(*_luaState, *env, EnvironmentSandbox::GetFrameworkBuiltinNames());
 
-        // Apply client-side sandboxing if needed
+        // Apply sandboxing based on context
         if (_config.isClient) {
-            EnvironmentSandbox::DisableDangerousFunctions(*env);
+            // Client: full lockdown, disable all dangerous functions including require
+            EnvironmentSandbox::SetupClientSandbox(*env);
+        } else {
+            // Server: allow require but scoped to the resources path
+            EnvironmentSandbox::SetupServerSandbox(*_luaState, *env, _config.resourcesPath);
         }
 
         return env;

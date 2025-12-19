@@ -3,6 +3,7 @@
 #include <logging/logger.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -139,18 +140,17 @@ namespace Framework::Scripting {
         }
     }
 
-    void EnvironmentSandbox::DisableDangerousFunctions(sol::environment &env) {
-        // Create a disabled function that reports a clear error using sol2's variadic args
+    void EnvironmentSandbox::DisableCommonDangerousFunctions(sol::environment &env) {
+        // Create a disabled function that reports a clear error
         auto disabledFunc = [](sol::variadic_args) -> sol::object {
             throw sol::error("This function is disabled in this environment");
         };
 
-        // Disable dangerous global functions with clear error messages
+        // Disable dangerous global functions (dofile, loadfile, load, loadstring)
         env.set("dofile", disabledFunc);
         env.set("loadfile", disabledFunc);
         env.set("load", disabledFunc);
         env.set("loadstring", disabledFunc);
-        env.set("require", disabledFunc);
 
         // Disable dangerous os functions if os table exists
         sol::object osTable = env["os"];
@@ -165,7 +165,7 @@ namespace Framework::Scripting {
             os["getenv"]    = disabledFunc;
         }
 
-        // Disable dangerous io functions if io table exists
+        // Disable io library
         sol::object ioTable = env["io"];
         if (ioTable.valid() && ioTable.is<sol::table>()) {
             env.set("io", disabledFunc);
@@ -173,11 +173,109 @@ namespace Framework::Scripting {
 
         // Disable debug library
         env.set("debug", disabledFunc);
+    }
 
-        // Disable package library (prevents require workarounds)
+    void EnvironmentSandbox::SetupClientSandbox(sol::environment &env) {
+        // Apply common restrictions
+        DisableCommonDangerousFunctions(env);
+
+        // Create a disabled function for client-specific restrictions
+        auto disabledFunc = [](sol::variadic_args) -> sol::object {
+            throw sol::error("This function is disabled in this environment");
+        };
+
+        // Disable require (clients cannot load arbitrary modules)
+        env.set("require", disabledFunc);
+
+        // Disable package library entirely (prevents require workarounds)
         env.set("package", disabledFunc);
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Disabled dangerous functions in environment");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Setup client sandbox (full lockdown)");
+    }
+
+    void EnvironmentSandbox::SetupServerSandbox(sol::state &luaState, sol::environment &env, const std::string &basePath) {
+        // Apply common restrictions
+        DisableCommonDangerousFunctions(env);
+
+        // Normalize the base path to absolute
+        std::filesystem::path baseDir;
+        try {
+            baseDir = std::filesystem::canonical(std::filesystem::path(basePath));
+        } catch (const std::filesystem::filesystem_error &) {
+            // If canonical fails, use absolute
+            baseDir = std::filesystem::absolute(std::filesystem::path(basePath));
+        }
+        std::string normalizedBase = baseDir.string();
+
+        // Create a disabled function for package restrictions
+        auto disabledFunc = [](sol::variadic_args) -> sol::object {
+            throw sol::error("This function is disabled in this environment");
+        };
+
+        // Setup restricted package paths for require
+        // Only allow loading from the base path and its subdirectories
+        sol::object packageTable = luaState["package"];
+        if (packageTable.valid() && packageTable.is<sol::table>()) {
+            sol::table package = packageTable;
+
+            // Set package.path to only include the base directory
+            std::string luaPath = normalizedBase + "/?.lua;" + normalizedBase + "/?/init.lua";
+            package["path"] = luaPath;
+
+            // Set package.cpath to only include the base directory (for native modules)
+            #ifdef _WIN32
+            std::string cPath = normalizedBase + "/?.dll";
+            #elif __APPLE__
+            std::string cPath = normalizedBase + "/?.so;" + normalizedBase + "/?.dylib";
+            #else
+            std::string cPath = normalizedBase + "/?.so";
+            #endif
+            package["cpath"] = cPath;
+
+            // Disable package.loadlib (can load arbitrary native code)
+            package["loadlib"] = disabledFunc;
+
+            // Disable package.searchpath (can probe filesystem)
+            package["searchpath"] = disabledFunc;
+        }
+
+        // Create a safe require wrapper that validates module names
+        auto safeRequire = [normalizedBase, &luaState](const std::string &moduleName) -> sol::object {
+            // Reject module names with path traversal attempts
+            if (moduleName.find("..") != std::string::npos) {
+                throw sol::error("Invalid module name: path traversal not allowed");
+            }
+
+            // Reject absolute paths
+            if (moduleName.length() > 0 && (moduleName[0] == '/' || moduleName[0] == '\\')) {
+                throw sol::error("Invalid module name: absolute paths not allowed");
+            }
+
+            #ifdef _WIN32
+            // On Windows, also check for drive letters
+            if (moduleName.length() >= 2 && moduleName[1] == ':') {
+                throw sol::error("Invalid module name: absolute paths not allowed");
+            }
+            #endif
+
+            // Call the original require
+            sol::protected_function originalRequire = luaState["require"];
+            if (!originalRequire.valid()) {
+                throw sol::error("require function not available");
+            }
+
+            sol::protected_function_result result = originalRequire(moduleName);
+            if (!result.valid()) {
+                sol::error err = result;
+                throw sol::error(err.what());
+            }
+
+            return result.get<sol::object>();
+        };
+
+        env.set("require", safeRequire);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Setup server sandbox with base path: {}", normalizedBase);
     }
 
     sol::object EnvironmentSandbox::GetValue(sol::environment &env, const std::string &key) {
