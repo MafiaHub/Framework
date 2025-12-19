@@ -293,9 +293,11 @@ namespace Framework::World {
                 // Skip if already visited (part of a cycle)
                 if (visited.find(dependentEntity.id()) != visited.end())
                     continue;
-                const auto &dependentS  = *dependentEntity.get<Modules::Base::Streamable>();
-                const auto &dependentTr = *dependentEntity.get<Modules::Base::Transform>();
-                if (IsEntityVisibleToStreamerInternal(streamerEntity, dependentEntity, lhsTr, streamer, lhsS, dependentTr, dependentS, visited)) {
+                const auto &dependentS  = dependentEntity.get<Modules::Base::Streamable>();
+                const auto &dependentTr = dependentEntity.get<Modules::Base::Transform>();
+                if (!dependentS || !dependentTr)
+                    continue;
+                if (IsEntityVisibleToStreamerInternal(streamerEntity, dependentEntity, lhsTr, streamer, lhsS, *dependentTr, *dependentS, visited)) {
                     return true;
                 }
             }
