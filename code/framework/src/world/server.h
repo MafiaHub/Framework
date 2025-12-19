@@ -16,6 +16,7 @@
 #include <function2.hpp>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #define FW_SEND_SERVER_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                               \
@@ -56,10 +57,22 @@ namespace Framework::World {
       protected:
         using IsVisibleProc = fu2::function<bool(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
             const Modules::Base::Streamable rhsS) const>;
-        IsVisibleProc _isEntityVisible;
+
+      private:
+        bool IsEntityVisibleToStreamerInternal(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
+            const Modules::Base::Streamable &rhsS, std::unordered_set<flecs::entity_t> &visited) const;
 
       public:
-        EngineError Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval);
+        struct ServerConfig {
+            float tickInterval                           = 0.016667f;
+            float streamerTickInterval                   = 0.033334f;
+            float assignOwnershipTickInterval            = 3.0f;
+            float collectRangeExemptEntitiesTickInterval = 0.066668f;
+            float removeEntitiesTickInterval             = 0.066668f;
+            float tickRegulatorInterval                  = 3.0f;
+        };
+
+        EngineError Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg);
 
         EngineError Shutdown() override;
 
@@ -71,5 +84,7 @@ namespace Framework::World {
         static void SetOwner(flecs::entity e, uint64_t guid);
         flecs::entity GetOwner(flecs::entity e) const;
         [[maybe_unused]] std::vector<flecs::entity> FindVisibleStreamers(flecs::entity e) const;
+        bool IsEntityVisibleToStreamer(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
+            const Modules::Base::Streamable &rhsS) const;
     };
 } // namespace Framework::World

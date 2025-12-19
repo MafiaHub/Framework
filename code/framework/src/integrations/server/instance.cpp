@@ -60,7 +60,7 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_INVALID_OPTIONS;
         }
 
-        CoreModules::SetTickRate(opts.tickInterval);
+        CoreModules::SetTickRate(opts.worldConfig.tickInterval);
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
@@ -108,7 +108,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize the world
-        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.streamerTickInterval) != World::EngineError::ENGINE_NONE) {
+        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig) != World::EngineError::ENGINE_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
@@ -327,7 +327,7 @@ namespace Framework::Integrations::Server {
 
             // Send the connection finalized packet
             Framework::Networking::Messages::ClientConnectionFinalized answer;
-            answer.FromParameters(_opts.tickInterval, newPlayer.id());
+            answer.FromParameters(_opts.worldConfig.tickInterval, newPlayer.id());
             net->Send(answer, guid);
         });
 
@@ -531,7 +531,7 @@ namespace Framework::Integrations::Server {
 
             PostUpdate();
 
-            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.tickInterval * 1000.0f));
+            _nextTick = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(static_cast<int64_t>(_opts.worldConfig.tickInterval * 1000.0f));
         }
         else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

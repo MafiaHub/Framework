@@ -11,7 +11,7 @@
 #include "utils/time.h"
 
 namespace Framework::World {
-    EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, float tickInterval) {
+    EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg) {
         const auto status = Engine::Init(networkPeer);
 
         if (status != EngineError::ENGINE_NONE) {
@@ -20,60 +20,8 @@ namespace Framework::World {
 
         _findAllGameModeEntities = _world->query_builder<Modules::Base::RemovedOnGameModeReload>().build();
 
-        // Set up a proc to validate entity visibility.
-        _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
-                               const Modules::Base::Streamable &rhsS) -> bool {
-            if (!e.is_valid())
-                return false;
-            if (!e.is_alive())
-                return false;
-
-            // Discard entities that we plan to remove.
-            if (e.get<Modules::Base::PendingRemoval>() != nullptr)
-                return false;
-
-            // Allow user to override visibility rules completely.
-            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE) {
-                return rhsS.isVisibleProc(streamerEntity, e);
-            }
-
-            // Entity is always visible to clients.
-            if (rhsS.alwaysVisible)
-                return true;
-
-            // Entity can be hidden from clients.
-            if (!rhsS.isVisible)
-                return false;
-
-            // Validate if the entity resides in the same virtual world client does.
-            if (lhsS.virtualWorld != rhsS.virtualWorld)
-                return false;
-
-            // Let user replace the distance check.
-            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
-                return rhsS.isVisibleProc(streamerEntity, e);
-            }
-
-            // Perform distance check.
-            const auto dist = glm::distance(lhsTr.pos, rhsTr.pos);
-            auto isVisible  = dist < streamer.range;
-
-            // If we made it this far and the entity is streaming range check exempt
-            // we override isVisible state to True.
-            if (streamer.rangeExemptEntities.find(e.id()) != streamer.rangeExemptEntities.end()) {
-                isVisible = true;
-            }
-
-            // Allow user to provide additional rules for visibility.
-            if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
-                isVisible = isVisible && rhsS.isVisibleProc(streamerEntity, e);
-            }
-
-            return isVisible;
-        };
-
         // Set up a system to remove entities we no longer need.
-        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(tickInterval * 4.0f).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
+        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
             // Remove the entity from all streamers.
             _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                 if (rhsS.entities.find(e) != rhsS.entities.end()) {
@@ -89,9 +37,9 @@ namespace Framework::World {
         });
 
         // Set up a system to assign entity owners.
-        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(flecs::PostUpdate).interval(tickInterval * 4.0f).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
+        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(flecs::PostUpdate).interval(cfg.assignOwnershipTickInterval).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
             // Let user provide custom ownership assignment.
-            if (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable)) {
+            if (streamable.assignOwnerManually || (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable))) {
                 /* no op */
             }
             else {
@@ -101,7 +49,7 @@ namespace Framework::World {
                 _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     const auto rhsTr      = rhsE.get<Modules::Base::Transform>();
                     const auto rhsRs      = rhsE.get<Modules::Base::Streamable>();
-                    const auto canBeOwner = _isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
+                    const auto canBeOwner = this->IsEntityVisibleToStreamer(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
                     if (canBeOwner) {
                         const auto dist = glm::distance(tr.pos, rhsTr->pos);
                         if (dist < closestDist) {
@@ -116,13 +64,13 @@ namespace Framework::World {
         });
 
         // Set up a system to collect stream range exempt entities.
-        _world->system<Modules::Base::Streamer>("CollectRangeExemptEntities").kind(flecs::PostUpdate).interval(tickInterval * 4.0f).each([this](flecs::entity e, Modules::Base::Streamer &streamer) {
+        _world->system<Modules::Base::Streamer>("CollectRangeExemptEntities").kind(flecs::PostUpdate).interval(cfg.collectRangeExemptEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::Streamer &streamer) {
             streamer.rangeExemptEntities.clear();
             if (streamer.collectRangeExemptEntitiesProc)
                 streamer.collectRangeExemptEntitiesProc(e, streamer);
         });
 
-        _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator").interval(3.0f).run([](flecs::iter &it) {
+        _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator").interval(cfg.tickRegulatorInterval).run([](flecs::iter &it) {
             while (it.next()) {
                 const auto tr = it.field<Modules::Base::TickRateRegulator>(0);
                 const auto t = it.field<Modules::Base::Transform>(1);
@@ -172,7 +120,7 @@ namespace Framework::World {
         // Set up a system to stream entities to clients.
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
             .kind(flecs::PostUpdate)
-            .interval(tickInterval)
+            .interval(cfg.tickInterval)
             .run([this](flecs::iter &it) {
                 while (it.next()) {
                     const auto tr = it.field<Modules::Base::Transform>(0);
@@ -198,7 +146,7 @@ namespace Framework::World {
 
                             // Figure out entity visibility.
                             const auto id      = e.id();
-                            const auto canSend = _isEntityVisible(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
+                            const auto canSend = this->IsEntityVisibleToStreamer(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
                             const auto map_it  = s[i].entities.find(id);
 
                             // Entity is already known to this streamer.
@@ -291,7 +239,7 @@ namespace Framework::World {
             const auto rhsST = rhsE.get<Modules::Base::Streamable>();
             const auto lhsTr = e.get<Modules::Base::Transform>();
 
-            if (_isEntityVisible(rhsE, e, *rhsTr, rhsS, *rhsST, *lhsTr, *es)) {
+            if (this->IsEntityVisibleToStreamer(rhsE, e, *rhsTr, rhsS, *rhsST, *lhsTr, *es)) {
                 streamers.push_back(rhsE);
             }
         });
@@ -304,5 +252,87 @@ namespace Framework::World {
             return true;
         }
         return false;
+    }
+
+    bool ServerEngine::IsEntityVisibleToStreamer(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
+        const Modules::Base::Streamable& rhsS) const
+    {
+        std::unordered_set<flecs::entity_t> visited;
+        return IsEntityVisibleToStreamerInternal(streamerEntity, e, lhsTr, streamer, lhsS, rhsTr, rhsS, visited);
+    }
+
+    bool ServerEngine::IsEntityVisibleToStreamerInternal(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
+        const Modules::Base::Streamable& rhsS, std::unordered_set<flecs::entity_t> &visited) const
+    {
+        if (!e.is_valid())
+            return false;
+        if (!e.is_alive())
+            return false;
+
+        // Discard entities that we plan to remove.
+        if (e.get<Modules::Base::PendingRemoval>() != nullptr)
+            return false;
+
+        // Allow user to override visibility rules completely.
+        if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE) {
+            return rhsS.isVisibleProc(streamerEntity, e);
+        }
+
+        // Mark this entity as visited to prevent infinite recursion in cyclic dependencies.
+        if (!visited.insert(e.id()).second) {
+            // Already visited - we're in a cycle, skip dependent check for this entity.
+            // Continue with the remaining visibility checks.
+        }
+        else {
+            // Check our dependents, if any of them are visible, we are visible as well.
+            for (const auto &dependentEntity : rhsS.dependentEntities) {
+                if (!dependentEntity.is_valid() || !dependentEntity.is_alive())
+                    continue;
+                if (e == dependentEntity)
+                    continue;
+                // Skip if already visited (part of a cycle)
+                if (visited.find(dependentEntity.id()) != visited.end())
+                    continue;
+                const auto &dependentS  = *dependentEntity.get<Modules::Base::Streamable>();
+                const auto &dependentTr = *dependentEntity.get<Modules::Base::Transform>();
+                if (IsEntityVisibleToStreamerInternal(streamerEntity, dependentEntity, lhsTr, streamer, lhsS, dependentTr, dependentS, visited)) {
+                    return true;
+                }
+            }
+        }
+
+        // Entity is always visible to clients.
+        if (rhsS.alwaysVisible)
+            return true;
+
+        // Entity can be hidden from clients.
+        if (!rhsS.isVisible)
+            return false;
+
+        // Validate if the entity resides in the same virtual world client does.
+        if (lhsS.virtualWorld != rhsS.virtualWorld)
+            return false;
+
+        // Let user replace the distance check.
+        if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
+            return rhsS.isVisibleProc(streamerEntity, e);
+        }
+
+        // Perform distance check.
+        const auto dist = glm::distance(lhsTr.pos, rhsTr.pos);
+        auto isVisible  = dist < streamer.range;
+
+        // If we made it this far and the entity is streaming range check exempt
+        // we override isVisible state to True.
+        if (streamer.rangeExemptEntities.find(e.id()) != streamer.rangeExemptEntities.end()) {
+            isVisible = true;
+        }
+
+        // Allow user to provide additional rules for visibility.
+        if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
+            isVisible = isVisible && rhsS.isVisibleProc(streamerEntity, e);
+        }
+
+        return isVisible;
     }
 } // namespace Framework::World

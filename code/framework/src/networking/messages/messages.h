@@ -28,6 +28,7 @@ namespace Framework::Networking::Messages {
         WRONG_VERSION,
         BANNED,
         KICKED,
+        KICKED_CUSTOM,
         KICKED_INVALID_PACKET,
         UNKNOWN
     };

@@ -17,6 +17,8 @@
 #include "integrations/shared/rpc/emit_lua_event.h"
 #include "scripting/utils/table_conversions.h"
 
+#include "networking/messages/client_kick.h"
+
 namespace Framework::Integrations::Scripting {
     Entity::Entity(flecs::entity ent) {
         _ent = ent;
@@ -189,6 +191,20 @@ namespace Framework::Integrations::Scripting {
         const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
         return st->updateInterval;
     }
+    void Entity::Kick(const std::string &reason) {
+        const auto st = _ent.get<Framework::World::Modules::Base::Streamer>();
+        if (st) {
+            auto net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());
+            const auto streamer = _ent.get<Framework::World::Modules::Base::Streamer>();
+            if (net && streamer) {
+                Framework::Networking::Messages::ClientKick kick;
+                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM, reason);
+                net->Send(kick, streamer->guid);
+                net->GetPeer()->CloseConnection(SLNet::RakNetGUID(streamer->guid), true);
+                return;
+            }
+        }
+    }
 
     void Entity::Register(sol::state *luaEngine) {
         sol::usertype<Entity> cls = luaEngine->new_usertype<Entity>("Entity", sol::constructors<Entity(uint64_t)>());
@@ -204,6 +220,7 @@ namespace Framework::Integrations::Scripting {
 
         cls["destroy"]           = &Entity::Destroy;
         cls["emit"]              = &Entity::EmitEvent;
+        cls["kick"]              = &Entity::Kick;
         cls["getAlwaysVisible"]  = &Entity::IsAlwaysVisible;
         cls["getModelHash"]      = &Entity::GetModelHash;
         cls["getModelName"]      = &Entity::GetModelName;
