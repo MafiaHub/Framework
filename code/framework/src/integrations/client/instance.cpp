@@ -18,7 +18,6 @@
 #include <world/game_rpc/set_transform.h>
 
 #include "integrations/shared/rpc/emit_lua_event.h"
-#include "integrations/shared/rpc/reload_assets.h"
 
 #include "../shared/modules/mod.hpp"
 
@@ -394,12 +393,6 @@ namespace Framework::Integrations::Client {
                 return;
             }
             _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
-        });
-        net->RegisterRPC<Shared::RPC::ReloadAssets>([this](SLNet::RakNetGUID guid, Shared::RPC::ReloadAssets *rpc) {
-            if (!rpc->Valid())
-                return;
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server has forced us to re-download assets...");
-            DownloadsAssetsFromConnectedServer();
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());

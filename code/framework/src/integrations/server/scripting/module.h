@@ -10,13 +10,7 @@
 
 #include <vector>
 #include <string>
-#include <functional>
-#include <chrono>
 #include <memory>
-
-#include <cppfs/FileWatcher.h>
-#include <cppfs/fs.h>
-#include <cppfs/FileHandle.h>
 
 #include <scripting/server_engine.h>
 #include <scripting/resource/resource_manager.h>
@@ -52,13 +46,6 @@ namespace Framework::Integrations::Server::Scripting {
 
         std::string _mainGamemodePath;
 
-        // File watching
-        cppfs::FileWatcher *_watcher = nullptr;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _nextFileWatchUpdate;
-        int32_t _fileWatchUpdatePeriod = 1000;
-        bool _shouldReloadWatcher = false;
-        std::function<void()> _onReloadCallback;
-
       public:
         ServerScriptingModule(std::shared_ptr<World::ServerEngine>);
         ~ServerScriptingModule();
@@ -68,10 +55,6 @@ namespace Framework::Integrations::Server::Scripting {
         bool Shutdown();
         bool LoadManifest();
         void Update();
-
-        void SetOnReloadCallback(std::function<void()> callback) {
-            _onReloadCallback = callback;
-        }
 
         std::shared_ptr<Framework::Scripting::ServerEngine> GetEngine() const {
             return _serverEngine;
@@ -96,16 +79,10 @@ namespace Framework::Integrations::Server::Scripting {
             return _serverFiles;
         }
 
-        void ReloadScriptingEngine();
-
         /**
          * Get list of resources to send to clients.
          * Only includes resources with client_files defined.
          */
         std::vector<ClientResourceInfo> GetClientResourceList() const;
-
-      private:
-        void UpdateFileWatcher();
-        void SetupWatchPath(const std::string &path);
     };
 } // namespace Framework::Integrations::Server::Scripting

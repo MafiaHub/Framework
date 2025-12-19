@@ -9,13 +9,14 @@
 #include "module.h"
 
 #include <nlohmann/json.hpp>
+#include <cppfs/fs.h>
+#include <cppfs/FileHandle.h>
 #include <logging/logger.h>
 
-#include "integrations/shared/rpc/reload_assets.h"
 #include <scripting/resource/resource.h>
 
 namespace Framework::Integrations::Server::Scripting {
-    ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world), _watcher(nullptr) {
+    ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world): _world(world) {
         _serverEngine = std::make_shared<Framework::Scripting::ServerEngine>();
         CoreModules::SetScriptingEngine(_serverEngine.get());
     }
@@ -25,11 +26,6 @@ namespace Framework::Integrations::Server::Scripting {
             _resourceManager->StopAll();
             _resourceManager.reset();
             CoreModules::SetResourceManager(nullptr);
-        }
-
-        if (_watcher) {
-            delete _watcher;
-            _watcher = nullptr;
         }
     }
 
@@ -50,44 +46,7 @@ namespace Framework::Integrations::Server::Scripting {
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Server scripting module initialized with ResourceManager");
 
-        // Initialize file watcher
-        try {
-            _watcher = new cppfs::FileWatcher();
-
-            // Register event handler
-            _watcher->addHandler([this](cppfs::FileHandle &fh, cppfs::FileEvent event) {
-                // Log event for debugging
-                std::string type = (fh.isDirectory() ? "directory" : "file");
-                std::string operation = ((event & cppfs::FileEvent::FileCreated) ? "created" :
-                                       ((event & cppfs::FileEvent::FileRemoved) ? "removed" :
-                                       ((event & cppfs::FileEvent::FileAttrChanged) ? "attributes changed" :
-                                       "modified")));
-
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("File watch event: {} '{}' was {}", type, fh.path(), operation);
-
-                // Mark for reload
-                _shouldReloadWatcher = true;
-            });
-
-            // Set up for first update
-            _nextFileWatchUpdate = std::chrono::high_resolution_clock::now();
-            _fileWatchUpdatePeriod = 1000;
-
-            // If we already have a path, set up watching
-            if (!_mainGamemodePath.empty()) {
-                SetupWatchPath(_mainGamemodePath);
-            }
-
-            return true;
-        }
-        catch (const std::exception &e) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to initialize file watcher: {}", e.what());
-            if (_watcher) {
-                delete _watcher;
-                _watcher = nullptr;
-            }
-            return false;
-        }
+        return true;
     }
 
     void ServerScriptingModule::SetMainGamemodePath(const std::string &path) {
@@ -95,53 +54,11 @@ namespace Framework::Integrations::Server::Scripting {
         if (_serverEngine != nullptr) {
             _serverEngine->SetMainGamemodePath(path);
         }
-
-        // Set up file watching for the gamemode path
-        if (_watcher) {
-            SetupWatchPath(path);
-        }
-    }
-    
-    void ServerScriptingModule::SetupWatchPath(const std::string &path) {
-        if (!_watcher) {
-            return;
-        }
-        
-        try {
-            // Open directory
-            cppfs::FileHandle dir = cppfs::fs::open(path);
-            if (dir.isDirectory()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Setting up file watching for '{}'", path);
-                
-                // Add directory to watcher with events and recursive mode
-                _watcher->add(dir, 
-                            cppfs::FileEvent::FileCreated | 
-                            cppfs::FileEvent::FileRemoved | 
-                            cppfs::FileEvent::FileModified | 
-                            cppfs::FileEvent::FileAttrChanged, 
-                            cppfs::RecursiveMode::Recursive);
-            }
-            else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("'{}' is not a valid directory for file watching", path);
-            }
-        }
-        catch (const std::exception &e) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to setup file watching for '{}': {}", path, e.what());
-        }
     }
 
     void ServerScriptingModule::Update() {
         if (_serverEngine) {
             _serverEngine->Update();
-        }
-
-        if (_watcher) {
-            UpdateFileWatcher();
-
-            if (_shouldReloadWatcher) {
-                ReloadScriptingEngine();
-                _shouldReloadWatcher = false;
-            }
         }
     }
 
@@ -149,50 +66,8 @@ namespace Framework::Integrations::Server::Scripting {
         if (_serverEngine) {
             _serverEngine->Shutdown();
         }
-        
-        if (_watcher) {
-            delete _watcher;
-            _watcher = nullptr;
-        }
-        
+
         return true;
-    }
-
-    void ServerScriptingModule::UpdateFileWatcher() {
-        const auto now = std::chrono::high_resolution_clock::now();
-        if (now >= _nextFileWatchUpdate) {
-            // Use a timeout to prevent blocking
-            _watcher->watch(100); // Poll with 100ms timeout
-            _nextFileWatchUpdate = now + std::chrono::milliseconds(_fileWatchUpdatePeriod);
-        }
-    }
-
-    void ServerScriptingModule::ReloadScriptingEngine() {
-        if (!_serverEngine) {
-            return;
-        }
-
-        // Unload and clear the state, then reload
-        _serverEngine->UnloadScript();
-        _serverEngine->ClearScripts();
-        _serverEngine->ClearEventHandlers();
-        if (!LoadManifest()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to load manifest.");
-            return;
-        }
-        _serverEngine->LoadScript();
-
-        // Notify all connected peers they should re-download assets
-        const auto net = CoreModules::GetNetworkPeer();
-        if (net) {
-            Shared::RPC::ReloadAssets reloadAssets {};
-            net->SendRPC(reloadAssets, SLNet::UNASSIGNED_RAKNET_GUID);
-        }
-
-        // Notify callback if set
-        if (_onReloadCallback) {
-            _onReloadCallback();
-        }
     }
 
     bool ServerScriptingModule::LoadManifest() {

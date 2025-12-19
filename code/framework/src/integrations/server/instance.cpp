@@ -150,11 +150,6 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
-        // Set up reload callback
-        _scriptingModule->SetOnReloadCallback([this]() {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Gamemode reloaded");
-        });
-
         PostScriptInit();
 
         // Initialize asset streamer
@@ -413,17 +408,7 @@ namespace Framework::Integrations::Server {
                 Shutdown();
             },
             "Stop the server");
-            
-        _commandProcessor->RegisterCommand(
-            "reload", {},
-            [this](cxxopts::ParseResult &) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
-                if (_scriptingModule) {
-                    _scriptingModule->ReloadScriptingEngine();
-                }
-            },
-            "Reload server scripts");
-            
+
         _commandProcessor->RegisterCommand(
             "status", {},
             [this](cxxopts::ParseResult &) {
