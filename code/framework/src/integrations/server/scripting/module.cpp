@@ -13,7 +13,6 @@
 
 #include "integrations/shared/rpc/reload_assets.h"
 #include <networking/messages/resource_list.h>
-#include <networking/messages/resource_command.h>
 #include <scripting/resource/resource.h>
 
 namespace Framework::Integrations::Server::Scripting {
@@ -341,41 +340,6 @@ namespace Framework::Integrations::Server::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Broadcast resource list with {} resources to all clients", resources.size());
 
         // Return the number of connected peers
-        return net->GetPeer()->NumberOfConnections();
-    }
-
-    bool ServerScriptingModule::SendResourceCommandToClient(SLNet::RakNetGUID guid, uint8_t commandType, const std::string &resourceName, const std::string &version, uint32_t hash) {
-        const auto net = CoreModules::GetNetworkPeer();
-        if (!net) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource command: NetworkPeer not available");
-            return false;
-        }
-
-        Networking::Messages::ResourceCommandMessage msg;
-        msg.FromParameters(static_cast<Networking::Messages::ResourceCommandType>(commandType), resourceName, version, hash);
-
-        net->Send(msg, guid);
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Sent resource command {} for '{}' to client {}", commandType, resourceName, guid.ToString());
-
-        return true;
-    }
-
-    size_t ServerScriptingModule::SendResourceCommandToAllClients(uint8_t commandType, const std::string &resourceName, const std::string &version, uint32_t hash) {
-        const auto net = CoreModules::GetNetworkPeer();
-        if (!net) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource command: NetworkPeer not available");
-            return 0;
-        }
-
-        Networking::Messages::ResourceCommandMessage msg;
-        msg.FromParameters(static_cast<Networking::Messages::ResourceCommandType>(commandType), resourceName, version, hash);
-
-        // Broadcast to all connected clients
-        net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Broadcast resource command {} for '{}' to all clients", commandType, resourceName);
-
         return net->GetPeer()->NumberOfConnections();
     }
 

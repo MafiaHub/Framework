@@ -34,10 +34,9 @@ namespace Framework::Integrations::Client::Scripting {
     /**
      * Client-side scripting module with resource management support.
      *
-     * Phase 7: Client-Side Considerations
      * - Mirrors server resource lifecycle
-     * - Handles resource synchronization from server
-     * - Supports server commands for dynamic resource control
+     * - Handles resource synchronization from server at connection time
+     * - Client runs standalone after initial resource sync
      */
     class ClientScriptingModule {
       private:
@@ -103,32 +102,6 @@ namespace Framework::Integrations::Client::Scripting {
          * @param resources List of resources the server wants the client to load
          */
         void OnServerResourceList(const std::vector<ServerResourceInfo> &resources);
-
-        /**
-         * Handle server command to start a resource.
-         * @param resourceName Name of the resource to start
-         * @param version Version of the resource
-         * @param hash Content hash for cache validation
-         */
-        void OnServerResourceStart(const std::string &resourceName, const std::string &version, uint32_t hash);
-
-        /**
-         * Handle server command to stop a resource.
-         * @param resourceName Name of the resource to stop
-         */
-        void OnServerResourceStop(const std::string &resourceName);
-
-        /**
-         * Handle server command to restart a resource.
-         * @param resourceName Name of the resource to restart
-         */
-        void OnServerResourceRestart(const std::string &resourceName);
-
-        /**
-         * Handle server command to reload a resource.
-         * @param resourceName Name of the resource to reload
-         */
-        void OnServerResourceReload(const std::string &resourceName);
 
         /**
          * Check if all server resources have been synchronized.

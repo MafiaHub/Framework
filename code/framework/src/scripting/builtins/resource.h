@@ -5,7 +5,6 @@
 #include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
-#include <networking/messages/resource_command.h>
 #include <networking/messages/resource_list.h>
 #include <networking/network_peer.h>
 
@@ -296,102 +295,6 @@ namespace Framework::Scripting::Builtins {
 
 
         /**
-         * Send a resource command to a specific client or all clients.
-         * Helper method used by the client control functions.
-         *
-         * @param commandType The command type (Start=0, Stop=1, Restart=2, Reload=3)
-         * @param resourceName Name of the resource
-         * @param guid Optional client GUID (0 = all clients)
-         * @return Number of clients command was sent to
-         */
-        static size_t SendResourceCommand(uint8_t commandType, const std::string &resourceName, uint64_t guid = 0) {
-            auto *manager = Framework::CoreModules::GetResourceManager();
-            auto *net = Framework::CoreModules::GetNetworkPeer();
-
-            if (!manager || !net) {
-                return 0;
-            }
-
-            // Get resource info for version and hash
-            std::string version = "";
-            uint32_t hash = 0;
-
-            const Resource *resource = manager->GetResource(resourceName);
-            if (resource) {
-                version = resource->GetManifest().version;
-                hash = resource->GetContentHash();
-            }
-
-            Framework::Networking::Messages::ResourceCommandMessage msg;
-            msg.FromParameters(static_cast<Framework::Networking::Messages::ResourceCommandType>(commandType), resourceName, version, hash);
-
-            if (guid == 0) {
-                // Broadcast to all clients
-                net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
-                return net->GetPeer()->NumberOfConnections();
-            }
-            else {
-                // Send to specific client
-                SLNet::RakNetGUID targetGuid;
-                targetGuid.g = guid;
-                net->Send(msg, targetGuid);
-                return 1;
-            }
-        }
-
-        /**
-         * Start a resource on clients.
-         *
-         * @param name Resource name
-         * @param guid Optional client GUID (0 or nil = all clients)
-         * @return Number of clients command was sent to
-         */
-        static size_t ClientStart(const std::string &name, sol::optional<uint64_t> guid) {
-            return SendResourceCommand(
-                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Start),
-                name, guid.value_or(0));
-        }
-
-        /**
-         * Stop a resource on clients.
-         *
-         * @param name Resource name
-         * @param guid Optional client GUID (0 or nil = all clients)
-         * @return Number of clients command was sent to
-         */
-        static size_t ClientStop(const std::string &name, sol::optional<uint64_t> guid) {
-            return SendResourceCommand(
-                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Stop),
-                name, guid.value_or(0));
-        }
-
-        /**
-         * Restart a resource on clients.
-         *
-         * @param name Resource name
-         * @param guid Optional client GUID (0 or nil = all clients)
-         * @return Number of clients command was sent to
-         */
-        static size_t ClientRestart(const std::string &name, sol::optional<uint64_t> guid) {
-            return SendResourceCommand(
-                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Restart),
-                name, guid.value_or(0));
-        }
-
-        /**
-         * Reload a resource on clients (hot-reload without restart).
-         *
-         * @param name Resource name
-         * @param guid Optional client GUID (0 or nil = all clients)
-         * @return Number of clients command was sent to
-         */
-        static size_t ClientReload(const std::string &name, sol::optional<uint64_t> guid) {
-            return SendResourceCommand(
-                static_cast<uint8_t>(Framework::Networking::Messages::ResourceCommandType::Reload),
-                name, guid.value_or(0));
-        }
-
-        /**
          * Send the current resource list to clients.
          *
          * @param guid Optional client GUID (0 or nil = all clients)
@@ -484,7 +387,7 @@ namespace Framework::Scripting::Builtins {
         }
 
         /**
-         * Register server-only functions for client resource control.
+         * Register server-only functions for resource list synchronization.
          * Call this after Register() on server-side only.
          *
          * @param luaEngine Pointer to the Lua state
@@ -493,11 +396,8 @@ namespace Framework::Scripting::Builtins {
             // Get the existing Resource table
             sol::table resourceTable = (*luaEngine)["Resource"];
 
-            resourceTable["clientStart"]       = &ResourceBuiltin::ClientStart;
-            resourceTable["clientStop"]        = &ResourceBuiltin::ClientStop;
-            resourceTable["clientRestart"]     = &ResourceBuiltin::ClientRestart;
-            resourceTable["clientReload"]      = &ResourceBuiltin::ClientReload;
-            resourceTable["sendResourceList"]  = &ResourceBuiltin::SendResourceList;
+            // Only expose resource list sending - clients sync at connection time only
+            resourceTable["sendResourceList"] = &ResourceBuiltin::SendResourceList;
         }
     };
 

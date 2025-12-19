@@ -15,7 +15,6 @@
 #include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
 #include <networking/messages/resource_list.h>
-#include <networking/messages/resource_command.h>
 
 #include <world/game_rpc/set_transform.h>
 
@@ -407,32 +406,6 @@ namespace Framework::Integrations::Client {
             // Pass to scripting module
             if (_scriptingModule) {
                 _scriptingModule->OnServerResourceList(resources);
-            }
-        });
-
-        net->RegisterMessage<ResourceCommandMessage>(GameMessages::GAME_RESOURCE_COMMAND, [this](SLNet::RakNetGUID guid, ResourceCommandMessage *msg) {
-            if (!msg->Valid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Received invalid resource command message");
-                return;
-            }
-
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource command from server: {} {}", msg->GetCommandString(), msg->GetResourceName());
-
-            if (_scriptingModule) {
-                switch (msg->GetCommand()) {
-                case ResourceCommandType::Start:
-                    _scriptingModule->OnServerResourceStart(msg->GetResourceName(), msg->GetVersion(), msg->GetHash());
-                    break;
-                case ResourceCommandType::Stop:
-                    _scriptingModule->OnServerResourceStop(msg->GetResourceName());
-                    break;
-                case ResourceCommandType::Restart:
-                    _scriptingModule->OnServerResourceRestart(msg->GetResourceName());
-                    break;
-                case ResourceCommandType::Reload:
-                    _scriptingModule->OnServerResourceReload(msg->GetResourceName());
-                    break;
-                }
             }
         });
 

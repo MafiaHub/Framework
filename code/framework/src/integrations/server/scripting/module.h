@@ -38,8 +38,8 @@ namespace Framework::Integrations::Server::Scripting {
     /**
      * Server-side scripting module with resource management support.
      *
-     * Phase 7: Supports sending resource list to clients and controlling
-     * client resources remotely.
+     * Supports sending resource list to clients at connection time.
+     * Clients run standalone after initial resource sync.
      */
     class ServerScriptingModule {
       private:
@@ -116,27 +116,6 @@ namespace Framework::Integrations::Server::Scripting {
          * @return Number of clients the message was sent to
          */
         size_t SendResourceListToAllClients();
-
-        /**
-         * Send a resource command to a specific client.
-         * @param guid The client's GUID
-         * @param commandType The command type (start/stop/restart/reload)
-         * @param resourceName Name of the resource
-         * @param version Version of the resource (for start command)
-         * @param hash Content hash (for start command)
-         * @return True if message was sent successfully
-         */
-        bool SendResourceCommandToClient(SLNet::RakNetGUID guid, uint8_t commandType, const std::string &resourceName, const std::string &version = "", uint32_t hash = 0);
-
-        /**
-         * Send a resource command to all connected clients.
-         * @param commandType The command type (start/stop/restart/reload)
-         * @param resourceName Name of the resource
-         * @param version Version of the resource (for start command)
-         * @param hash Content hash (for start command)
-         * @return Number of clients the command was sent to
-         */
-        size_t SendResourceCommandToAllClients(uint8_t commandType, const std::string &resourceName, const std::string &version = "", uint32_t hash = 0);
 
       private:
         void UpdateFileWatcher();
