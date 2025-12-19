@@ -238,6 +238,9 @@ namespace Framework::World {
             const auto rhsTr = rhsE.get<Modules::Base::Transform>();
             const auto rhsST = rhsE.get<Modules::Base::Streamable>();
             const auto lhsTr = e.get<Modules::Base::Transform>();
+            if (!rhsTr || !rhsST || !lhsTr) {
+                return;
+            }
 
             if (this->IsEntityVisibleToStreamer(rhsE, e, *rhsTr, rhsS, *rhsST, *lhsTr, *es)) {
                 streamers.push_back(rhsE);
