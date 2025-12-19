@@ -56,8 +56,6 @@ namespace Framework::Networking::Messages {
         GAME_SYNC_ENTITY_OWNER_UPDATE, // server sends data about owned entity
         GAME_SYNC_ENTITY_DESPAWN,
 
-        GAME_RESOURCE_LIST,           // Server sends list of resources to client on connection
-
         // Messages used by the mod
         GAME_NEXT_MESSAGE_ID
     };

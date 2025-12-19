@@ -12,7 +12,6 @@
 #include <logging/logger.h>
 
 #include "integrations/shared/rpc/reload_assets.h"
-#include <networking/messages/resource_list.h>
 #include <scripting/resource/resource.h>
 
 namespace Framework::Integrations::Server::Scripting {
@@ -297,50 +296,6 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         return result;
-    }
-
-    bool ServerScriptingModule::SendResourceListToClient(SLNet::RakNetGUID guid) {
-        const auto net = CoreModules::GetNetworkPeer();
-        if (!net) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource list: NetworkPeer not available");
-            return false;
-        }
-
-        auto resources = GetClientResourceList();
-
-        Networking::Messages::ResourceListMessage msg;
-        for (const auto &resource : resources) {
-            msg.AddResource(resource.name, resource.version, resource.hash);
-        }
-
-        net->Send(msg, guid);
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Sent resource list with {} resources to client {}", resources.size(), guid.ToString());
-
-        return true;
-    }
-
-    size_t ServerScriptingModule::SendResourceListToAllClients() {
-        const auto net = CoreModules::GetNetworkPeer();
-        if (!net) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Cannot send resource list: NetworkPeer not available");
-            return 0;
-        }
-
-        auto resources = GetClientResourceList();
-
-        Networking::Messages::ResourceListMessage msg;
-        for (const auto &resource : resources) {
-            msg.AddResource(resource.name, resource.version, resource.hash);
-        }
-
-        // Send to all connected clients (UNASSIGNED_RAKNET_GUID broadcasts)
-        net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Broadcast resource list with {} resources to all clients", resources.size());
-
-        // Return the number of connected peers
-        return net->GetPeer()->NumberOfConnections();
     }
 
 } // namespace Framework::Integrations::Server::Scripting

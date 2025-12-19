@@ -14,7 +14,6 @@
 #include <networking/messages/client_handshake.h>
 #include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
-#include <networking/messages/resource_list.h>
 
 #include <world/game_rpc/set_transform.h>
 
@@ -294,6 +293,25 @@ namespace Framework::Integrations::Client {
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
         net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
+            // Process resource list from the message
+            if (msg->GetResourceCount() > 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
+
+                std::vector<Client::Scripting::ServerResourceInfo> resources;
+                resources.reserve(msg->GetResourceCount());
+                for (const auto &resInfo : msg->GetResources()) {
+                    Client::Scripting::ServerResourceInfo info;
+                    info.name = resInfo.name;
+                    info.version = resInfo.version;
+                    info.hash = resInfo.hash;
+                    resources.push_back(info);
+                }
+
+                if (_scriptingModule) {
+                    _scriptingModule->OnServerResourceList(resources);
+                }
+            }
+
             DownloadsAssetsFromConnectedServer();
         });
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
@@ -382,31 +400,6 @@ namespace Framework::Integrations::Client {
                 return;
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server has forced us to re-download assets...");
             DownloadsAssetsFromConnectedServer();
-        });
-
-        net->RegisterMessage<ResourceListMessage>(GameMessages::GAME_RESOURCE_LIST, [this](SLNet::RakNetGUID guid, ResourceListMessage *msg) {
-            if (!msg->Valid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Received invalid resource list message");
-                return;
-            }
-
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
-
-            // Convert to ServerResourceInfo format
-            std::vector<Client::Scripting::ServerResourceInfo> resources;
-            resources.reserve(msg->GetResourceCount());
-            for (const auto &resInfo : msg->GetResources()) {
-                Client::Scripting::ServerResourceInfo info;
-                info.name = resInfo.name;
-                info.version = resInfo.version;
-                info.hash = resInfo.hash;
-                resources.push_back(info);
-            }
-
-            // Pass to scripting module
-            if (_scriptingModule) {
-                _scriptingModule->OnServerResourceList(resources);
-            }
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());

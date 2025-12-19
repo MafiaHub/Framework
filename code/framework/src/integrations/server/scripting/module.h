@@ -104,19 +104,6 @@ namespace Framework::Integrations::Server::Scripting {
          */
         std::vector<ClientResourceInfo> GetClientResourceList() const;
 
-        /**
-         * Send resource list to a specific client.
-         * @param guid The client's GUID
-         * @return True if message was sent successfully
-         */
-        bool SendResourceListToClient(SLNet::RakNetGUID guid);
-
-        /**
-         * Send resource list to all connected clients.
-         * @return Number of clients the message was sent to
-         */
-        size_t SendResourceListToAllClients();
-
       private:
         void UpdateFileWatcher();
         void SetupWatchPath(const std::string &path);

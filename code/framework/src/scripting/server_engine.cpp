@@ -93,8 +93,6 @@ namespace Framework::Scripting {
         // Init the common SDK
         InitCommonSDK();
 
-        Builtins::ResourceBuiltin::RegisterServer(_luaEngine);
-
         // Init the mod-level scripting layer
         if (cb) {
             cb(Framework::Scripting::SDKRegisterWrapper<Engine>(this));

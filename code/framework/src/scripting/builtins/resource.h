@@ -5,9 +5,6 @@
 #include "../resource/environment_sandbox.h"
 #include "../resource/resource_manager.h"
 
-#include <networking/messages/resource_list.h>
-#include <networking/network_peer.h>
-
 namespace Framework::Scripting::Builtins {
 
     /**
@@ -263,52 +260,6 @@ namespace Framework::Scripting::Builtins {
             manager->ClearResourceRestartAttempts(name);
         }
 
-
-        /**
-         * Send the current resource list to clients.
-         *
-         * @param guid Optional client GUID (0 or nil = all clients)
-         * @return Number of clients the list was sent to
-         */
-        static size_t SendResourceList(sol::optional<uint64_t> guid) {
-            auto *net = Framework::CoreModules::GetNetworkPeer();
-            auto *manager = Framework::CoreModules::GetResourceManager();
-
-            if (!net || !manager) {
-                return 0;
-            }
-
-            // Build resource list message
-            Framework::Networking::Messages::ResourceListMessage msg;
-            auto resourceNames = manager->GetAllResourceNames();
-
-            for (const auto &name : resourceNames) {
-                const Resource *resource = manager->GetResource(name);
-                if (!resource) {
-                    continue;
-                }
-
-                const auto &manifest = resource->GetManifest();
-                // Only include resources with client files
-                if (!manifest.clientFiles.empty()) {
-                    msg.AddResource(manifest.name, manifest.version, resource->GetContentHash());
-                }
-            }
-
-            if (guid.value_or(0) == 0) {
-                // Broadcast to all clients
-                net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
-                return net->GetPeer()->NumberOfConnections();
-            }
-            else {
-                // Send to specific client
-                SLNet::RakNetGUID targetGuid;
-                targetGuid.g = guid.value();
-                net->Send(msg, targetGuid);
-                return 1;
-            }
-        }
-
         /**
          * Check if the current context is server-side.
          *
@@ -352,20 +303,6 @@ namespace Framework::Scripting::Builtins {
             // Context check
             cls["isServer"] = &ResourceBuiltin::IsServer;
             EnvironmentSandbox::RegisterBuiltinName("Resource");
-        }
-
-        /**
-         * Register server-only functions for resource list synchronization.
-         * Call this after Register() on server-side only.
-         *
-         * @param luaEngine Pointer to the Lua state
-         */
-        static void RegisterServer(sol::state *luaEngine) {
-            // Get the existing Resource table
-            sol::table resourceTable = (*luaEngine)["Resource"];
-
-            // Only expose resource list sending - clients sync at connection time only
-            resourceTable["sendResourceList"] = &ResourceBuiltin::SendResourceList;
         }
     };
 
