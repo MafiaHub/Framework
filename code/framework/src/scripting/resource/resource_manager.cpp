@@ -129,6 +129,55 @@ namespace Framework::Scripting {
         return true;
     }
 
+    bool ResourceManager::DiscoverClientResource(const std::string &path, const std::string &name,
+                                                  const std::string &version, const std::vector<std::string> &clientFiles) {
+        std::lock_guard<std::mutex> lock(_resourcesMutex);
+
+        if (_resources.find(name) != _resources.end()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' already exists", name);
+            return true; // Already exists, not an error
+        }
+
+        // Scan directory for all .lua files if clientFiles not provided
+        std::vector<std::string> files = clientFiles;
+        if (files.empty()) {
+            cppfs::FileHandle dir = cppfs::fs::open(path);
+            if (dir.exists() && dir.isDirectory()) {
+                ScanDirectoryForScripts(path, "", files);
+            }
+        }
+
+        // Create a minimal manifest for the client resource
+        ResourceManifest manifest;
+        manifest.name = name;
+        manifest.version = version;
+        manifest.clientFiles = files;
+
+        auto resource = std::make_unique<Resource>(path, manifest);
+        _resources[name] = std::move(resource);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered client resource: {} v{} with {} scripts", name, version, files.size());
+        return true;
+    }
+
+    void ResourceManager::ScanDirectoryForScripts(const std::string &basePath, const std::string &relativePath, std::vector<std::string> &scripts) {
+        std::string fullPath = relativePath.empty() ? basePath : basePath + "/" + relativePath;
+        cppfs::FileHandle dir = cppfs::fs::open(fullPath);
+
+        for (auto it = dir.begin(); it != dir.end(); ++it) {
+            std::string entryName = *it;
+            std::string entryRelative = relativePath.empty() ? entryName : relativePath + "/" + entryName;
+            std::string entryFull = basePath + "/" + entryRelative;
+
+            cppfs::FileHandle entry = cppfs::fs::open(entryFull);
+            if (entry.isDirectory()) {
+                ScanDirectoryForScripts(basePath, entryRelative, scripts);
+            } else if (entry.isFile() && entryName.size() > 4 && entryName.substr(entryName.size() - 4) == ".lua") {
+                scripts.push_back(entryRelative);
+            }
+        }
+    }
+
     // Lifecycle Management
 
     ResourceOperationResult ResourceManager::StartAll() {

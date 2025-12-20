@@ -67,6 +67,14 @@ namespace Framework::Scripting {
          * @param path Path to the resource directory (containing manifest.json)
          */
         explicit Resource(const std::string &path);
+
+        /**
+         * Create a resource with a pre-built manifest (for client-side use).
+         * @param path Path to the resource directory
+         * @param manifest Pre-built manifest
+         */
+        Resource(const std::string &path, const ResourceManifest &manifest);
+
         ~Resource();
 
         // Non-copyable
