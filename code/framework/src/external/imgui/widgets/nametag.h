@@ -11,6 +11,7 @@
 #include <fmt/format.h>
 #include <imgui/imgui.h>
 
+#include <algorithm>
 #include <string>
 
 namespace Framework::External::ImGUI::Widgets {
