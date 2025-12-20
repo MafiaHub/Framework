@@ -5,6 +5,7 @@
 #include "resource.h"
 #include "resource_manifest.h"
 
+#include <logging/logger.h>
 #include <sol/sol.hpp>
 
 #include <functional>

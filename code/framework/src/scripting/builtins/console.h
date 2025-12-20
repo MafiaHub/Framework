@@ -10,6 +10,8 @@
 
 #include "../resource/environment_sandbox.h"
 
+#include <logging/logger.h>
+
 #include <glm/glm.hpp>
 #include <sol/sol.hpp>
 
