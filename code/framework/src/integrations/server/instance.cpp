@@ -151,17 +151,17 @@ namespace Framework::Integrations::Server {
 
         PostScriptInit();
 
-        // Initialize asset streamer
+        // Discover resources
+        _scriptingModule->GetResourceManager()->DiscoverResources();
+
+        // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
 
-        // Discover and start all resources
-        if (!_scriptingModule->StartAllResources()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources");
-            // Not a critical error, server can run without resources
+        // Start all resources
+        auto startResult = _scriptingModule->GetResourceManager()->StartAll();
+        if (!startResult.success) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.error);
         }
-
-        // Register client resources for download after resources are started
-        RegisterClientResourcesForUpload();
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
@@ -377,33 +377,24 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Resources directory: {}", assetsPath);
 
         streamer->SetApplicationDirectory(assetsPath.c_str());
-    }
 
-    void Instance::RegisterClientResourcesForUpload() {
-        const auto net      = GetNetworkingEngine()->GetNetworkServer();
-        const auto streamer = net->GetAssetStreamer();
-        const auto scripting = GetScriptingModule();
+        // Add only client files from each resource (not server scripts or manifests)
+        const auto resourceManager = scripting->GetResourceManager();
+        if (resourceManager) {
+            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+                const auto resource = resourceManager->GetResource(resourceName);
+                if (!resource) continue;
 
-        // Clear any previous uploads
-        streamer->ClearUploads();
-
-        // Get all resources with client files
-        auto clientResources = scripting->GetClientResourceList();
-        if (clientResources.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("No client resources to register for upload");
-            return;
+                const auto &manifest = resource->GetManifest();
+                for (const auto &clientFile : manifest.clientFiles) {
+                    // Path relative to resources directory: resourceName/clientFile
+                    std::string relativePath = resourceName + "/" + clientFile;
+                    streamer->AddFile(relativePath.c_str(), relativePath.c_str());
+                }
+            }
         }
 
-        // Add each resource directory for upload
-        for (const auto &resource : clientResources) {
-            // Add the resource subdirectory (e.g., "freeroam/")
-            std::string subdir = resource.name + "/";
-            streamer->AddUploadsFromSubdirectory(subdir.c_str());
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Registered resource for upload: {}", resource.name);
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Registered {} client resource(s) for upload ({} files)",
-            clientResources.size(), streamer->GetNumberOfFilesForUpload());
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} client files", streamer->GetNumberOfFilesForUpload());
     }
 
     void Instance::InitCommandListener() {
