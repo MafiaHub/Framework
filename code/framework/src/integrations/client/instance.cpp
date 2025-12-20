@@ -22,6 +22,7 @@
 #include "../shared/modules/mod.hpp"
 
 #include "scripting/utils/table_conversions.h"
+#include "scripting/resource/resource_manager.h"
 
 #include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/views.h"
@@ -388,7 +389,10 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
                 return;
             }
-            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
+            const auto resourceManager = Framework::CoreModules::GetResourceManager();
+            if (resourceManager) {
+                resourceManager->InvokeGlobalEvent(eventName, payload);
+            }
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());

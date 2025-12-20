@@ -16,6 +16,7 @@
 #include <logging/logger.h>
 
 #include "core_modules.h"
+#include "scripting/resource/resource_manager.h"
 #include <mutex>
 #include <unordered_set>
 #include <vector>
@@ -31,9 +32,10 @@ namespace Framework::Integrations::Scripting {
 
         sol::function _onViewInit {};
 
-        using EventMeta = std::pair<int, std::string>;
-
-        static inline std::map<EventMeta, Framework::Scripting::EventHandler> _eventHandlers = {};
+        // Generate unique event name for this view
+        std::string GetViewEventName(const std::string &eventName) const {
+            return fmt::format("__view:{}:{}", _viewId, eventName);
+        }
 
       public:
         ViewWrapper(int viewId, Framework::GUI::Manager *manager): _viewId(viewId), _webManager(manager), _view(nullptr) {
@@ -113,7 +115,11 @@ namespace Framework::Integrations::Scripting {
                             }
                         }
 
-                        InvokeEvent(EventMeta(viewId, eventName), payload);
+                        // Invoke via ResourceManager's global event system
+                        const auto resourceManager = Framework::CoreModules::GetResourceManager();
+                        if (resourceManager) {
+                            resourceManager->InvokeGlobalEvent(GetViewEventName(eventName), payload);
+                        }
                     };
                 });
 
@@ -131,22 +137,10 @@ namespace Framework::Integrations::Scripting {
             }
         }
 
-        inline void ListenEvent(std::string name, sol::function fnc) {
-            _eventHandlers[EventMeta(_viewId, name)].push_back(fnc);
-        }
-
-        template <typename... Args>
-        static inline void InvokeEvent(const EventMeta &name, Args &&...args) {
-            auto it = _eventHandlers.find(name);
-            if (it != _eventHandlers.end()) {
-                for (auto &callback : it->second) {
-                    sol::protected_function pf {callback};
-                    auto result = pf(std::forward<Args>(args)...);
-                    if (!result.valid()) {
-                        sol::error err = result;
-                        spdlog::error(err.what());
-                    }
-                }
+        inline void ListenEvent(std::string name, sol::protected_function fnc) {
+            const auto resourceManager = Framework::CoreModules::GetResourceManager();
+            if (resourceManager) {
+                resourceManager->RegisterGlobalEventHandler(GetViewEventName(name), fnc);
             }
         }
 

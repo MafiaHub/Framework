@@ -55,8 +55,6 @@ namespace Framework::Scripting {
             _onUnloadProc();
         }
 
-        _eventHandlers.clear();
-
         delete _luaEngine;
         _luaEngine = nullptr;
 

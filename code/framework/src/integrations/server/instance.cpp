@@ -25,6 +25,7 @@
 #include "scripting/builtins/entity.h"
 #include "scripting/builtins/events_lua.h"
 #include "scripting/utils/table_conversions.h"
+#include "scripting/resource/resource_manager.h"
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
@@ -348,7 +349,7 @@ namespace Framework::Integrations::Server {
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
             if (!rpc->Valid())
                 return;
-            
+
             const auto eventName = rpc->GetEventName();
             const auto payloadStr = rpc->GetPayload();
             sol::object payload {};
@@ -360,7 +361,10 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
                 return;
             }
-            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
+            const auto resourceManager = Framework::CoreModules::GetResourceManager();
+            if (resourceManager) {
+                resourceManager->InvokeGlobalEvent(eventName, payload);
+            }
         });
 
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
