@@ -130,6 +130,12 @@ namespace Framework::Integrations::Client::Scripting {
          */
         bool StartAllResources();
 
+        /**
+         * Stop all running resources without clearing the server resource list.
+         * Use this when preparing for a re-download/reload cycle.
+         */
+        void StopAllResources();
+
         // Callbacks
 
         /**

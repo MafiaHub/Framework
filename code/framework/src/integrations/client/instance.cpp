@@ -292,22 +292,18 @@ namespace Framework::Integrations::Client {
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
         net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
-            // Process resource list from the message
+            // Store resource list on instance (survives scripting module reset)
             if (msg->GetResourceCount() > 0) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
 
-                std::vector<Client::Scripting::ServerResourceInfo> resources;
-                resources.reserve(msg->GetResourceCount());
+                _pendingServerResources.clear();
+                _pendingServerResources.reserve(msg->GetResourceCount());
                 for (const auto &resInfo : msg->GetResources()) {
                     Client::Scripting::ServerResourceInfo info;
                     info.name = resInfo.name;
                     info.version = resInfo.version;
                     info.hash = resInfo.hash;
-                    resources.push_back(info);
-                }
-
-                if (_scriptingModule) {
-                    _scriptingModule->OnServerResourceList(resources);
+                    _pendingServerResources.push_back(info);
                 }
             }
 
@@ -409,8 +405,8 @@ namespace Framework::Integrations::Client {
             return;
         }
 
-        // Unload the scripts before redownloading
-        _scriptingModule->Shutdown();
+        // Stop running resources before redownloading (preserves server resource list)
+        _scriptingModule->StopAllResources();
 
         // Destroy scriptable web views
         if (_webManager) {
@@ -476,6 +472,11 @@ namespace Framework::Integrations::Client {
                     return;
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
+
+                // Pass the pending resource list to the scripting module
+                if (!_pendingServerResources.empty()) {
+                    scriptingModule->OnServerResourceList(_pendingServerResources);
+                }
 
                 // Start all resources via ResourceManager
                 if (!scriptingModule->StartAllResources()) {

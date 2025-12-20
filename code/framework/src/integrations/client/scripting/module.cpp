@@ -141,6 +141,22 @@ namespace Framework::Integrations::Client::Scripting {
         }
     }
 
+    void ClientScriptingModule::StopAllResources() {
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+            _resourceManager.reset();
+            CoreModules::SetResourceManager(nullptr);
+        }
+
+        if (_clientEngine) {
+            _clientEngine->Shutdown();
+        }
+
+        // Note: We intentionally do NOT clear _serverResourceList here
+        // to preserve it for StartAllResources() after re-download
+        _resourcesSynced = false;
+    }
+
     bool ClientScriptingModule::StartAllResources() {
         if (!_resourceManager) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("ResourceManager not initialized");
