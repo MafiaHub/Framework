@@ -1043,16 +1043,23 @@ namespace Framework::Scripting {
             return;
         }
 
-        std::lock_guard<std::mutex> lock(_messageHandlersMutex);
+        // Copy handler while holding the lock, then release before invoking
+        // to avoid deadlock with _contextMutex
+        sol::protected_function handlerCopy;
+        {
+            std::lock_guard<std::mutex> lock(_messageHandlersMutex);
 
-        auto resourceIt = _messageHandlers.find(targetResource);
-        if (resourceIt == _messageHandlers.end()) {
-            return;
-        }
+            auto resourceIt = _messageHandlers.find(targetResource);
+            if (resourceIt == _messageHandlers.end()) {
+                return;
+            }
 
-        auto handlerIt = resourceIt->second.find(messageType);
-        if (handlerIt == resourceIt->second.end()) {
-            return;
+            auto handlerIt = resourceIt->second.find(messageType);
+            if (handlerIt == resourceIt->second.end()) {
+                return;
+            }
+
+            handlerCopy = handlerIt->second;
         }
 
         // Save current context and set to target resource
@@ -1062,7 +1069,7 @@ namespace Framework::Scripting {
         // For fire-and-forget, we pass a no-op reply function
         sol::protected_function noOpReply = _luaState->load("return function() end")().get<sol::protected_function>();
 
-        sol::protected_function_result result = handlerIt->second(payload, noOpReply);
+        sol::protected_function_result result = handlerCopy(payload, noOpReply);
         if (!result.valid()) {
             sol::error err = result;
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Message handler '{}' error: {}", targetResource, messageType, err.what());
