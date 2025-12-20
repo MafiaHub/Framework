@@ -979,23 +979,30 @@ namespace Framework::Scripting {
             return false;
         }
 
-        std::lock_guard<std::mutex> lock(_targetedEventsMutex);
+        // Copy handlers while holding the lock, then release before invoking
+        // to avoid deadlock with _contextMutex
+        std::vector<sol::protected_function> handlersCopy;
+        {
+            std::lock_guard<std::mutex> lock(_targetedEventsMutex);
 
-        auto resourceIt = _targetedEventHandlers.find(targetResource);
-        if (resourceIt == _targetedEventHandlers.end()) {
-            return false;
-        }
+            auto resourceIt = _targetedEventHandlers.find(targetResource);
+            if (resourceIt == _targetedEventHandlers.end()) {
+                return false;
+            }
 
-        auto eventIt = resourceIt->second.find(eventName);
-        if (eventIt == resourceIt->second.end()) {
-            return false;
+            auto eventIt = resourceIt->second.find(eventName);
+            if (eventIt == resourceIt->second.end()) {
+                return false;
+            }
+
+            handlersCopy = eventIt->second;
         }
 
         // Save current context and set to target resource
         std::string previousContext = GetCurrentResourceContext();
         SetCurrentResourceContext(targetResource);
 
-        for (auto &handler : eventIt->second) {
+        for (auto &handler : handlersCopy) {
             sol::protected_function_result result = handler(args);
             if (!result.valid()) {
                 sol::error err = result;
