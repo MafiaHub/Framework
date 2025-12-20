@@ -13,6 +13,14 @@ if(FW_STANDALONE)
     include(FrameworkSetup)
 endif()
 
+if (WIN32)
+    if (MSVC)
+        add_compile_options(
+            /bigobj
+        )
+    endif()
+endif()
+
 add_subdirectory(${PROJECT_SOURCE_DIR}/vendors)
 
 # Load the global headers one by one (a few ones have relative include path, so we are forced to do so)
