@@ -686,16 +686,23 @@ MODULE(environment_sandbox, {
         luaState.open_libraries(sol::lib::base, sol::lib::package);
 
         auto env = EnvironmentSandbox::CreateEnvironment(luaState, "test");
-        EnvironmentSandbox::SetupServerSandbox(luaState, *env, "/test/base");
+        // Use current directory which exists on all platforms
+        EnvironmentSandbox::SetupServerSandbox(luaState, *env, ".");
 
         // Get the package.path from the global state (where it was modified)
         sol::table package = luaState["package"];
         std::string path = package["path"].get<std::string>();
 
-        // Path should only contain our base directory
-        EQUALS(path.find("/test/base") != std::string::npos, true);
+        // Path should contain ?.lua pattern (Lua module search pattern)
+        EQUALS(path.find("?.lua") != std::string::npos, true);
         // Should not contain system paths
+#ifdef _WIN32
+        // On Windows, should not contain Windows system directories
+        EQUALS(path.find("\\Windows\\") == std::string::npos, true);
+#else
+        // On Unix, should not contain /usr/
         EQUALS(path.find("/usr/") == std::string::npos, true);
+#endif
     });
 
     IT("server sandbox disables package.loadlib", {

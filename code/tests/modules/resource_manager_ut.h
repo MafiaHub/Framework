@@ -14,6 +14,7 @@
 #include <cppfs/fs.h>
 #include <sol/sol.hpp>
 
+#include <cstdlib>
 #include <fstream>
 #include <thread>
 
@@ -21,7 +22,14 @@
 class TestResourceManagerHelper {
   public:
     static std::string GetTestResourcePath() {
+#ifdef _WIN32
+        const char *temp = std::getenv("TEMP");
+        if (!temp) temp = std::getenv("TMP");
+        if (!temp) temp = "C:\\Temp";
+        return std::string(temp) + "\\framework_rm_test_resources";
+#else
         return "/tmp/framework_rm_test_resources";
+#endif
     }
 
     static void CreateTestResource(const std::string &name, const std::string &manifestJson) {
