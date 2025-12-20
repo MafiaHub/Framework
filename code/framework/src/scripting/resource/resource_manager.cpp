@@ -1192,14 +1192,20 @@ namespace Framework::Scripting {
             std::string previousContext = GetCurrentResourceContext();
             SetCurrentResourceContext(pending.sourceResource);
 
+            // RAII guard to ensure context is restored on all exit paths (normal return or exception)
+            auto restoreContext = [previousContext, this]() {
+                SetCurrentResourceContext(previousContext);
+            };
+            struct ScopeGuard {
+                std::function<void()> cleanup;
+                ~ScopeGuard() { cleanup(); }
+            } guard{restoreContext};
+
             sol::protected_function_result result = pending.callback(response.response);
             if (!result.valid()) {
                 sol::error err = result;
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Request callback error: {}", pending.sourceResource, err.what());
             }
-
-            // Restore context
-            SetCurrentResourceContext(previousContext);
         }
     }
 
