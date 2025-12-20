@@ -8,6 +8,8 @@
 
 #include "instance.h"
 
+#include <fstream>
+
 #include "core_modules.h"
 #include "world/server.h"
 
@@ -386,13 +388,34 @@ namespace Framework::Integrations::Server {
                 if (!resource) continue;
 
                 const auto &manifest = resource->GetManifest();
+                if (manifest.clientFiles.empty()) continue;
+
+                // Add client files
                 for (const auto &clientFile : manifest.clientFiles) {
-                    // Same pattern as develop: AddFile(fullPath, fileName)
-                    // But fileName includes resourceName to preserve directory structure
                     std::string fileName = fmt::format("{}\\{}", resourceName, clientFile);
                     std::string fullPath = fmt::format("{}\\{}", assetsPath, fileName);
                     streamer->AddFile(fullPath.c_str(), fileName.c_str());
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName);
+                }
+
+                // Create sanitized manifest (no server_files) and add it
+                Framework::Scripting::ResourceManifest clientManifest = manifest;
+                clientManifest.serverFiles.clear();
+                nlohmann::json manifestJson = clientManifest;
+                std::string manifestContent = manifestJson.dump(2);
+
+                // Write to temp file in resource directory
+                std::string manifestPath = fmt::format("{}\\{}\\manifest.json", assetsPath, resourceName);
+                std::string clientManifestPath = fmt::format("{}\\{}\\.client_manifest.json", assetsPath, resourceName);
+
+                std::ofstream outFile(clientManifestPath);
+                if (outFile.is_open()) {
+                    outFile << manifestContent;
+                    outFile.close();
+
+                    std::string manifestFileName = fmt::format("{}\\manifest.json", resourceName);
+                    streamer->AddFile(clientManifestPath.c_str(), manifestFileName.c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added sanitized manifest for: {}", resourceName);
                 }
             }
         }

@@ -55,24 +55,6 @@ namespace Framework::Scripting {
         }
     }
 
-    Resource::Resource(const std::string &path, const ResourceManifest &manifest)
-        : _path(path), _manifest(manifest), _manifestValid(true), _stateTimestamp(std::chrono::system_clock::now()) {
-        // Ensure path ends without separator
-        if (!_path.empty() && (_path.back() == '/' || _path.back() == '\\')) {
-            _path.pop_back();
-        }
-
-        // Resolve script paths from provided manifest
-        for (const auto &script : _manifest.serverFiles) {
-            _serverScriptPaths.push_back(_path + "/" + script);
-        }
-        for (const auto &script : _manifest.clientFiles) {
-            _clientScriptPaths.push_back(_path + "/" + script);
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Created resource from manifest: {} v{}", _manifest.name, _manifest.version);
-    }
-
     Resource::~Resource() {
         // Clear exports and event handlers
         ClearExports();

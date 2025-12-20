@@ -123,23 +123,6 @@ namespace Framework::Scripting {
          */
         bool DiscoverResource(const std::string &path);
 
-        /**
-         * Discover a client resource without manifest.json.
-         * Used by clients that receive resource info from the server.
-         * @param path Path to the resource directory
-         * @param name Resource name
-         * @param version Resource version
-         * @param clientFiles List of client script files to execute
-         * @return True if resource was registered
-         */
-        bool DiscoverClientResource(const std::string &path, const std::string &name,
-                                    const std::string &version, const std::vector<std::string> &clientFiles = {});
-
-      private:
-        void ScanDirectoryForScripts(const std::string &basePath, const std::string &relativePath, std::vector<std::string> &scripts);
-
-      public:
-
         // Lifecycle Management
 
         /**

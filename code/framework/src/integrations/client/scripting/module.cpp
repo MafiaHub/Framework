@@ -255,17 +255,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovering cached resource: {} at {}", resourceName, resourcePath);
 
-        // Find version from server resource list
-        std::string version = "1.0.0";
-        for (const auto &res : _serverResourceList) {
-            if (res.name == resourceName) {
-                version = res.version;
-                break;
-            }
-        }
-
-        // Use client discovery which scans for .lua files instead of requiring manifest
-        return _resourceManager->DiscoverClientResource(resourcePath, resourceName, version);
+        return _resourceManager->DiscoverResource(resourcePath);
     }
 
 } // namespace Framework::Integrations::Client::Scripting
