@@ -8,6 +8,7 @@
 
 #include "instance.h"
 
+#include <filesystem>
 #include <fstream>
 
 #include "core_modules.h"
@@ -396,10 +397,10 @@ namespace Framework::Integrations::Server {
 
                 // Add client files
                 for (const auto &clientFile : manifest.clientFiles) {
-                    std::string fileName = fmt::format("{}\\{}", resourceName, clientFile);
-                    std::string fullPath = fmt::format("{}\\{}", assetsPath, fileName);
-                    streamer->AddFile(fullPath.c_str(), fileName.c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName);
+                    std::filesystem::path fileName = std::filesystem::path(resourceName) / clientFile;
+                    std::filesystem::path fullPath = std::filesystem::path(assetsPath) / fileName;
+                    streamer->AddFile(fullPath.string().c_str(), fileName.string().c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName.string());
                 }
 
                 // Create sanitized manifest (no server_files) and add it
@@ -409,16 +410,15 @@ namespace Framework::Integrations::Server {
                 std::string manifestContent = manifestJson.dump(2);
 
                 // Write to temp file in resource directory
-                std::string manifestPath = fmt::format("{}\\{}\\manifest.json", assetsPath, resourceName);
-                std::string clientManifestPath = fmt::format("{}\\{}\\.client_manifest.json", assetsPath, resourceName);
+                std::filesystem::path clientManifestPath = std::filesystem::path(assetsPath) / resourceName / ".client_manifest.json";
 
                 std::ofstream outFile(clientManifestPath);
                 if (outFile.is_open()) {
                     outFile << manifestContent;
                     outFile.close();
 
-                    std::string manifestFileName = fmt::format("{}\\manifest.json", resourceName);
-                    streamer->AddFile(clientManifestPath.c_str(), manifestFileName.c_str());
+                    std::filesystem::path manifestFileName = std::filesystem::path(resourceName) / "manifest.json";
+                    streamer->AddFile(clientManifestPath.string().c_str(), manifestFileName.string().c_str());
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added sanitized manifest for: {}", resourceName);
                 }
             }
