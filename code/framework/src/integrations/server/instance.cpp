@@ -160,6 +160,9 @@ namespace Framework::Integrations::Server {
             // Not a critical error, server can run without resources
         }
 
+        // Register client resources for download after resources are started
+        RegisterClientResourcesForUpload();
+
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
@@ -374,9 +377,33 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Resources directory: {}", assetsPath);
 
         streamer->SetApplicationDirectory(assetsPath.c_str());
+    }
 
-        // Client assets are now handled per-resource by the ResourceManager
-        // Each resource's client files are discovered and sent to clients on connection
+    void Instance::RegisterClientResourcesForUpload() {
+        const auto net      = GetNetworkingEngine()->GetNetworkServer();
+        const auto streamer = net->GetAssetStreamer();
+        const auto scripting = GetScriptingModule();
+
+        // Clear any previous uploads
+        streamer->ClearUploads();
+
+        // Get all resources with client files
+        auto clientResources = scripting->GetClientResourceList();
+        if (clientResources.empty()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("No client resources to register for upload");
+            return;
+        }
+
+        // Add each resource directory for upload
+        for (const auto &resource : clientResources) {
+            // Add the resource subdirectory (e.g., "freeroam/")
+            std::string subdir = resource.name + "/";
+            streamer->AddUploadsFromSubdirectory(subdir.c_str());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Registered resource for upload: {}", resource.name);
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Registered {} client resource(s) for upload ({} files)",
+            clientResources.size(), streamer->GetNumberOfFilesForUpload());
     }
 
     void Instance::InitCommandListener() {

@@ -105,6 +105,7 @@ namespace Framework::Integrations::Server {
         void InitModules() const;
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
+        void RegisterClientResourcesForUpload();
         void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
