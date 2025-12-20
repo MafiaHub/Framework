@@ -41,10 +41,7 @@ namespace Framework::Integrations::Server::Scripting {
         std::shared_ptr<World::ServerEngine> _world;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
 
-        std::vector<std::string> _clientFiles;
-        std::vector<std::string> _serverFiles;
-
-        std::string _mainGamemodePath;
+        std::string _resourcesPath;
 
       public:
         ServerScriptingModule(std::shared_ptr<World::ServerEngine>);
@@ -53,7 +50,6 @@ namespace Framework::Integrations::Server::Scripting {
         bool Init(Framework::Scripting::SDKRegisterCallback);
         bool PreShutdown();
         bool Shutdown();
-        bool LoadManifest();
         void Update();
 
         std::shared_ptr<Framework::Scripting::ServerEngine> GetEngine() const {
@@ -68,21 +64,18 @@ namespace Framework::Integrations::Server::Scripting {
             return _resourceManager.get();
         }
 
-        void SetMainGamemodePath(const std::string &path);
-        std::string GetMainGamemodePath() const { return _mainGamemodePath; }
-
-        std::vector<std::string> GetClientFiles() const {
-            return _clientFiles;
-        }
-
-        std::vector<std::string> GetServerFiles() const {
-            return _serverFiles;
-        }
+        void SetResourcesPath(const std::string &path);
+        std::string GetResourcesPath() const { return _resourcesPath; }
 
         /**
          * Get list of resources to send to clients.
          * Only includes resources with client_files defined.
          */
         std::vector<ClientResourceInfo> GetClientResourceList() const;
+
+        /**
+         * Discover and start all resources using ResourceManager.
+         */
+        bool StartAllResources();
     };
 } // namespace Framework::Integrations::Server::Scripting

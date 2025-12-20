@@ -8,9 +8,6 @@
 
 #include "module.h"
 
-#include <nlohmann/json.hpp>
-#include <cppfs/fs.h>
-#include <cppfs/FileHandle.h>
 #include <logging/logger.h>
 
 #include <scripting/resource/resource.h>
@@ -37,7 +34,7 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Initialize ResourceManager with server-side config
         Framework::Scripting::ResourceManagerConfig config;
-        config.resourcesPath = _mainGamemodePath.empty() ? "gamemode" : _mainGamemodePath;
+        config.resourcesPath = _resourcesPath.empty() ? "resources" : _resourcesPath;
         config.isClient = false;
         config.cascadeStopDependents = true;
 
@@ -49,8 +46,8 @@ namespace Framework::Integrations::Server::Scripting {
         return true;
     }
 
-    void ServerScriptingModule::SetMainGamemodePath(const std::string &path) {
-        _mainGamemodePath = path;
+    void ServerScriptingModule::SetResourcesPath(const std::string &path) {
+        _resourcesPath = path;
         if (_serverEngine != nullptr) {
             _serverEngine->SetMainGamemodePath(path);
         }
@@ -70,75 +67,10 @@ namespace Framework::Integrations::Server::Scripting {
         return true;
     }
 
-    bool ServerScriptingModule::LoadManifest() {
-        // Ensure main path exists
-        cppfs::FileHandle mainFolder = cppfs::fs::open(_mainGamemodePath);
-        if (!mainFolder.exists()) {
-            if (!mainFolder.createDirectory()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to create main directory at {}", _mainGamemodePath);
-                return false;
-            }
-        }
-
-        // Check/create manifest.json
-        cppfs::FileHandle manifestFile = cppfs::fs::open(_mainGamemodePath + "/manifest.json");
-        if (!manifestFile.exists() || !manifestFile.isFile()) {
-            // Create default manifest
-            nlohmann::json defaultManifest;
-            defaultManifest["client_files"] = std::vector<std::string>();
-            defaultManifest["server_files"] = std::vector<std::string>();
-
-            try {
-                const std::string manifestContent = defaultManifest.dump(4);
-                manifestFile.writeFile(manifestContent);
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Created default manifest.json");
-
-                // Set empty arrays for initial state
-                _clientFiles.clear();
-                _serverFiles.clear();
-                return true;
-            }
-            catch (const std::exception &e) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to write manifest.json: {}", e.what());
-                return false;
-            }
-        }
-
-        // Load existing manifest
-        try {
-            std::string manifestJsonContent = manifestFile.readFile();
-            if (manifestJsonContent.empty()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode manifest.json is empty");
-                return false;
-            }
-
-            auto root    = nlohmann::json::parse(manifestJsonContent);
-            _clientFiles = root["client_files"].get<std::vector<std::string>>();
-            _serverFiles = root["server_files"].get<std::vector<std::string>>();
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Found {} client file(s) and {} server file(s)", _clientFiles.size(), _serverFiles.size());
-            
-            // Add the scripts to the lua engine
-            if (_serverEngine != nullptr) {
-                // Clear existing scripts and add the new ones
-                _serverEngine->AddScripts(_serverFiles);
-            }
-        }
-        catch (nlohmann::detail::type_error &err) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("The gamemode manifest.json is not valid:\n\t{}", err.what());
-            return false;
-        }
-        catch (const std::exception &e) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to read manifest.json: {}", e.what());
-            return false;
-        }
-
-        return true;
-    }
-
     bool ServerScriptingModule::PreShutdown() {
-        _serverEngine->UnloadScript();
-        _serverEngine->ClearScripts();
-        _serverEngine->ClearEventHandlers();
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+        }
 
         return true;
     }
@@ -171,6 +103,32 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         return result;
+    }
+
+    bool ServerScriptingModule::StartAllResources() {
+        if (!_resourceManager) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("ResourceManager not initialized");
+            return false;
+        }
+
+        // Discover all resources in the resources path
+        size_t discovered = _resourceManager->DiscoverResources();
+        if (discovered == 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("No resources discovered in: {}", _resourcesPath);
+            return true; // Not an error, just no resources
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} resource(s)", discovered);
+
+        // Start all discovered resources
+        auto result = _resourceManager->StartAll();
+        if (!result.success) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resources: {}", result.error);
+            return false;
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} resource(s)", result.affectedResources.size());
+        return true;
     }
 
 } // namespace Framework::Integrations::Server::Scripting

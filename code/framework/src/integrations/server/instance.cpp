@@ -143,8 +143,7 @@ namespace Framework::Integrations::Server {
         };
 
         // Initialize the scripting engine
-        _scriptingModule->SetMainGamemodePath("gamemode");
-        _scriptingModule->LoadManifest();
+        _scriptingModule->SetResourcesPath("resources");
         if (!_scriptingModule->Init(sdkCallback)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
@@ -155,8 +154,11 @@ namespace Framework::Integrations::Server {
         // Initialize asset streamer
         InitAssetStreamer();
 
-        // Load the gamemode
-        _scriptingModule->GetEngine()->LoadScript();
+        // Discover and start all resources
+        if (!_scriptingModule->StartAllResources()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources");
+            // Not a critical error, server can run without resources
+        }
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
@@ -366,20 +368,15 @@ namespace Framework::Integrations::Server {
         const auto net      = GetNetworkingEngine()->GetNetworkServer();
         const auto streamer = net->GetAssetStreamer();
 
-        const auto scripting   = GetScriptingModule();
-        const auto gamemodePath = scripting->GetEngine()->GetMainGamemodePath();
-        const auto clientPath = fmt::format("{}\\client", gamemodePath);
-        const auto clientFiles       = scripting->GetClientFiles();
-        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(clientPath);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client assets directory: {}", assetsPath);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+        const auto scripting     = GetScriptingModule();
+        const auto resourcesPath = scripting->GetResourcesPath();
+        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(resourcesPath);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Resources directory: {}", assetsPath);
 
         streamer->SetApplicationDirectory(assetsPath.c_str());
-        
-        for (const auto& fileName : clientFiles) {
-            streamer->AddFile(fmt::format("{}\\{}", assetsPath, fileName).c_str(), fileName.c_str());
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName);
-        }
+
+        // Client assets are now handled per-resource by the ResourceManager
+        // Each resource's client files are discovered and sent to clients on connection
     }
 
     void Instance::InitCommandListener() {
