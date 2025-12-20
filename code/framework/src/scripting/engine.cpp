@@ -22,6 +22,7 @@
 #include "builtins/resource.h"
 #include "builtins/vector_2.h"
 #include "builtins/vector_3.h"
+#include "builtins/vector_4.h"
 
 namespace Framework::Scripting {
     bool Engine::InitCommonSDK() {
@@ -36,6 +37,7 @@ namespace Framework::Scripting {
         Builtins::Message::Register(_luaEngine);
         Builtins::Quaternion::Register(_luaEngine);
         Builtins::ResourceBuiltin::Register(_luaEngine);
+        Builtins::Vector4::Register(_luaEngine);
         Builtins::Vector3::Register(_luaEngine);
         Builtins::Vector2::Register(_luaEngine);
         Builtins::Environment::Register(_luaEngine);

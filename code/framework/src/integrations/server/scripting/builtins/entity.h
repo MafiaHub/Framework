@@ -56,6 +56,7 @@ namespace Framework::Integrations::Scripting {
         int GetVirtualWorld() const;
         void SetUpdateInterval(double interval) const;
         double GetUpdateInterval() const;
+        void Kick(const std::string &reason);
         void Destroy() const;
 
         bool operator==(const Entity &other) const {

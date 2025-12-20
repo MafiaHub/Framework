@@ -93,6 +93,10 @@ namespace Framework::World::Modules {
             double updateInterval        = defaultUpdateInterval;
             uint64_t owner               = 0;
 
+            // If set to true, the owner will not be assigned automatically by the framework
+            bool assignOwnerManually = false;
+
+            // Allows custom owner assignment logic, if method returns true we bypass framework's proximity based owner assignment
             AssignOwnerProc assignOwnerProc;
 
             struct Events {
@@ -115,6 +119,10 @@ namespace Framework::World::Modules {
             // Custom visibility proc that either complements the existing heuristic or replaces it
             HeuristicMode isVisibleHeuristic = HeuristicMode::ADD;
             IsVisibleProc isVisibleProc;
+
+            // Used to specify list of entities this streamable entity relies on.
+            // If any of these entities are visible and ours is not, we force ours to be visible too.
+            std::vector<flecs::entity> dependentEntities;
 
             // Controls whether this entity gets to be updated continuously or not
             // When set to false, we only stream spawn and despawn events, useful for immovable objects
