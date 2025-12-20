@@ -39,14 +39,14 @@
     } while (0)
 
 namespace Framework::Scripting {
-    class ServerEngine;
+    class ResourceManager;
 }
 
 namespace Framework::World {
     class Engine {
       private:
-        friend class Framework::Scripting::ServerEngine;
-        void PurgeAllGameModeEntities() const;
+        friend class Framework::Scripting::ResourceManager;
+        void PurgeAllResourceEntities() const;
 
       protected:
         // NOTE: _world must be declared BEFORE queries so it's destroyed LAST.
@@ -54,7 +54,7 @@ namespace Framework::World {
         std::unique_ptr<flecs::world> _world;
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
-        flecs::query<Modules::Base::RemovedOnGameModeReload> _findAllGameModeEntities;
+        flecs::query<Modules::Base::RemovedOnResourceReload> _findAllResourceEntities;
         Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:

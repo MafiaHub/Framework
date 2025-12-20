@@ -9,5 +9,5 @@
 #include "events.h"
 
 namespace Framework::Scripting {
-    std::map<EventIDs, std::string> Events = {{EventIDs::GAMEMODE_LOADED, "onGamemodeLoaded"}, {EventIDs::GAMEMODE_UNLOADING, "onGamemodeUnloading"}, {EventIDs::GAMEMODE_UPDATED, "onGamemodeUpdated"}};
+    std::map<EventIDs, std::string> Events = {{EventIDs::RESOURCE_STARTED, "onResourceStarted"}, {EventIDs::RESOURCE_STOPPING, "onResourceStopping"}, {EventIDs::RESOURCE_UPDATED, "onResourceUpdated"}};
 } // namespace Framework::Scripting

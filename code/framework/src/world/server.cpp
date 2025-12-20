@@ -18,7 +18,7 @@ namespace Framework::World {
             return status;
         }
 
-        _findAllGameModeEntities = _world->query_builder<Modules::Base::RemovedOnGameModeReload>().build();
+        _findAllResourceEntities = _world->query_builder<Modules::Base::RemovedOnResourceReload>().build();
 
         // Set up a proc to validate entity visibility.
         _isEntityVisible = [](const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,

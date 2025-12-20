@@ -48,9 +48,6 @@ namespace Framework::Integrations::Server::Scripting {
 
     void ServerScriptingModule::SetResourcesPath(const std::string &path) {
         _resourcesPath = path;
-        if (_serverEngine != nullptr) {
-            _serverEngine->SetMainGamemodePath(path);
-        }
     }
 
     void ServerScriptingModule::Update() {

@@ -253,7 +253,7 @@ namespace Framework::Integrations::Scripting {
             view->Display(true);
             view->Focus(false);
 
-            // ensures the view is destroyed on gamemode reload or server disconnect
+            // ensures the view is destroyed on resource reload or server disconnect
             view->SetGarbageCollected(true);
 
             return new ViewWrapper(viewId, guiManager);

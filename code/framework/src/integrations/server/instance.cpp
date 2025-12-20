@@ -510,7 +510,7 @@ namespace Framework::Integrations::Server {
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
                 info.port           = _opts.bindPort;
-                info.gameMode       = _scriptingModule->GetEngine()->GetGamemodeName();
+                info.gameMode       = _opts.modName;
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();

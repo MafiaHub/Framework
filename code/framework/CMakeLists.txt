@@ -28,6 +28,7 @@ set(FRAMEWORK_SRC
     src/networking/errors.cpp
 
     src/scripting/engine.cpp
+    src/scripting/client_engine.cpp
     src/scripting/types/events.cpp
 
     src/scripting/resource/resource.cpp
@@ -65,8 +66,6 @@ set(FRAMEWORK_CLIENT_SRC
     src/external/imgui/widgets/ui_base.cpp
 
     src/external/imgui/widgets/console.cpp
-
-    src/scripting/client_engine.cpp
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp

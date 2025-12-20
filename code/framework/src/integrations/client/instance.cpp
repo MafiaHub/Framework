@@ -459,48 +459,30 @@ namespace Framework::Integrations::Client {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
-            
+
             auto scriptingModule = GetScriptingModule();
             if (scriptingModule) {
-                // Initialize the scripting module, but force disconnect if it failed to init
-                if (!scriptingModule->Init(nullptr)) {
+                // Set resource cache path before init
+                scriptingModule->SetResourceCachePath(GetAssetCachePath());
+
+                // Initialize the scripting module with builtin registration callback
+                const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::Engine> sdk) {
+                    this->RegisterScriptingBuiltins(sdk.GetEngine());
+                };
+
+                if (!scriptingModule->Init(sdkCallback)) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
                     net->Disconnect();
                     return;
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
 
-                // Load the scripts
-                auto scriptingEngine = scriptingModule->GetEngine();
-                if (scriptingEngine) {
-                    // Set script cache path to the asset download path
-                    scriptingEngine->SetScriptCachePath(GetAssetCachePath());
-
-                    // Look for Lua script files in the download path
-                    auto scriptsDir = cppfs::fs::open(GetAssetCachePath());
-                    if (scriptsDir.exists() && scriptsDir.isDirectory()) {
-                        scriptsDir.traverse([scriptingEngine](cppfs::FileHandle &fh) -> bool {
-                            if (Utils::GetFileExtensionA(fh.fileName()) == ".lua") {
-                                scriptingEngine->AddScript(fh.path());
-                            }
-                            return true;
-                        });
-
-                        // Register builtins
-                        RegisterScriptingBuiltins(scriptingEngine.get());
-
-                        // Load all the scripts
-                        bool scriptsLoaded = scriptingEngine->LoadScripts();
-                        if (scriptsLoaded) {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
-                        }
-                        else {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
-                        }
-                    }
-                    else {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
-                    }
+                // Start all resources via ResourceManager
+                if (!scriptingModule->StartAllResources()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to start client resources");
+                }
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client resources started successfully");
                 }
             }
         }
@@ -519,7 +501,7 @@ namespace Framework::Integrations::Client {
             req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
             net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
         }
-        
+
         _downloadStatus = {};
 
         // Let the mod-level know assets have just been finished processing

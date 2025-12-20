@@ -6,11 +6,12 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
-#define UNIT_MAX_MODULES 9
+#define UNIT_MAX_MODULES 10
 #include "logging/logger.h"
 #include "unit.h"
 
 /* TEST CATEGORIES */
+#include "modules/client_engine_ut.h"
 #include "modules/dependency_graph_ut.h"
 #include "modules/environment_sandbox_ut.h"
 #include "modules/interpolator_ut.h"
@@ -25,6 +26,7 @@ int main() {
 
     Framework::Logging::GetInstance()->PauseLogging(true);
 
+    UNIT_MODULE(client_engine);
     UNIT_MODULE(dependency_graph);
     UNIT_MODULE(environment_sandbox);
     UNIT_MODULE(interpolator);
