@@ -378,7 +378,7 @@ namespace Framework::Integrations::Server {
 
         streamer->SetApplicationDirectory(assetsPath.c_str());
 
-        // Add only client files from each resource (not server scripts or manifests)
+        // Add client files from each resource (same pattern as develop branch)
         const auto resourceManager = scripting->GetResourceManager();
         if (resourceManager) {
             for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
@@ -387,9 +387,12 @@ namespace Framework::Integrations::Server {
 
                 const auto &manifest = resource->GetManifest();
                 for (const auto &clientFile : manifest.clientFiles) {
-                    // Path relative to resources directory: resourceName/clientFile
-                    std::string relativePath = resourceName + "/" + clientFile;
-                    streamer->AddFile(relativePath.c_str(), relativePath.c_str());
+                    // Same pattern as develop: AddFile(fullPath, fileName)
+                    // But fileName includes resourceName to preserve directory structure
+                    std::string fileName = fmt::format("{}\\{}", resourceName, clientFile);
+                    std::string fullPath = fmt::format("{}\\{}", assetsPath, fileName);
+                    streamer->AddFile(fullPath.c_str(), fileName.c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName);
                 }
             }
         }
