@@ -15,6 +15,7 @@
 #include "integrations/shared/rpc/emit_lua_event.h"
 
 #include "scripting/utils/table_conversions.h"
+#include "scripting/resource/resource_manager.h"
 
 #include "core_modules.h"
 
@@ -33,8 +34,11 @@ namespace Framework::Integrations::Scripting {
             }
         }
 
-        static void On(const std::string name, const sol::function fnc) {
-            Framework::CoreModules::GetScriptingEngine()->ListenRemoteEvent(name, fnc);
+        static void On(const std::string name, const sol::protected_function fnc) {
+            const auto resourceManager = Framework::CoreModules::GetResourceManager();
+            if (resourceManager) {
+                resourceManager->RegisterGlobalEventHandler(name, fnc);
+            }
         }
 
       public:

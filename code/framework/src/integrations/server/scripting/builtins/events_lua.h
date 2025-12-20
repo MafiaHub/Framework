@@ -14,7 +14,7 @@ namespace Framework::Integrations::Scripting {
     class EventsServer {
       private:
         static void EmitEvent(std::string eventName, sol::object payload);
-        static void On(const std::string name, const sol::function fnc);
+        static void On(const std::string name, const sol::protected_function fnc);
       public:
         static void Register(sol::state *luaEngine);
     };

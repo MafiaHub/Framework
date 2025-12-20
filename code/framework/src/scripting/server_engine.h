@@ -8,76 +8,19 @@
 
 #pragma once
 
-#include <atomic>
 #include <map>
-#include <vector>
 #include <string>
 
 #include <logging/logger.h>
 #include <utils/time.h>
 
 #include "engine.h"
+
 namespace Framework::Scripting {
     class ServerEngine : public Engine {
-      private:
-        // Package
-        std::vector<std::string> _scripts;
-        std::string _gamemodeName;
-        std::string _mainGamemodePath;
-        std::string _mainGamemodeServerPath;
-        std::atomic<bool> _gamemodeLoaded = false;
-        
       public:
         EngineError Init(SDKRegisterCallback) override;
         EngineError Shutdown() override;
         void Update() override;
-
-        bool LoadScript();
-        bool UnloadScript();
-
-        bool IsGamemodeLoaded() const {
-            return _gamemodeLoaded;
-        }
-
-        void SetGamemodeLoaded(bool loaded) {
-            _gamemodeLoaded = loaded;
-        }
-
-        std::string GetGamemodeName() const {
-            return _gamemodeName;
-        }
-
-        void SetGamemodeName(const std::string &name) {
-            _gamemodeName = name;
-        }
-
-        std::string GetMainGamemodePath() const {
-            return _mainGamemodePath;
-        }
-
-        void SetMainGamemodePath(const std::string &path) {
-            _mainGamemodePath = path;
-            _mainGamemodeServerPath = fmt::format("{}\\server", path);
-        }
-
-        std::string GetMainGamemodeServerPath() const {
-            return _mainGamemodeServerPath;
-        }
-
-        std::vector<std::string> GetScripts() const {
-            return _scripts;
-        }
-
-        void AddScript(std::string name) {
-            _scripts.push_back(name);
-        }
-
-        void AddScripts(std::vector<std::string> names) {
-            _scripts.insert(_scripts.end(), names.begin(), names.end());
-        }
-
-        void ClearScripts() {
-            _scripts.clear();
-        }
     };
-} // namespace Framework::Scripting::Engines::Node
+} // namespace Framework::Scripting

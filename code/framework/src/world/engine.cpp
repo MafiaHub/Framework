@@ -66,9 +66,9 @@ namespace Framework::World {
         return flecs::entity(_world->get_world(), serverID);
     }
 
-    void Engine::PurgeAllGameModeEntities() const {
+    void Engine::PurgeAllResourceEntities() const {
         _world->defer_begin();
-        _findAllGameModeEntities.each([this](flecs::entity e, Modules::Base::RemovedOnGameModeReload &rhs) {
+        _findAllResourceEntities.each([this](flecs::entity e, Modules::Base::RemovedOnResourceReload &rhs) {
             if (e.is_alive())
                 e.add<Modules::Base::PendingRemoval>();
         });

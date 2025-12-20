@@ -40,6 +40,7 @@ namespace Framework::Integrations::Server {
         std::string modName;
         std::string modVersion;
         std::string modConfigFile = "server.json";
+        std::string resourcesPath = "resources";
 
         // networked game metadata (required)
         std::string gameName;

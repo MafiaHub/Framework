@@ -66,7 +66,7 @@ namespace Framework::World::Modules {
             [[maybe_unused]] uint8_t _unused;
         };
 
-        struct RemovedOnGameModeReload {
+        struct RemovedOnResourceReload {
             [[maybe_unused]] uint8_t _unused;
         };
 
@@ -168,7 +168,7 @@ namespace Framework::World::Modules {
             auto _streamable = world.component<Streamable>();
             auto _streamer   = world.component<Streamer>();
 
-            world.component<RemovedOnGameModeReload>();
+            world.component<RemovedOnResourceReload>();
             world.component<PendingRemoval>();
             world.component<ServerID>();
             world.component<TickRateRegulator>();

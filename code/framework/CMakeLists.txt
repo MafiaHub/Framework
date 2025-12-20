@@ -28,7 +28,16 @@ set(FRAMEWORK_SRC
     src/networking/errors.cpp
 
     src/scripting/engine.cpp
+    src/scripting/client_engine.cpp
     src/scripting/types/events.cpp
+
+    src/integrations/client/scripting/module.cpp
+
+    src/scripting/resource/resource.cpp
+    src/scripting/resource/resource_manifest.cpp
+    src/scripting/resource/dependency_graph.cpp
+    src/scripting/resource/environment_sandbox.cpp
+    src/scripting/resource/resource_manager.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
@@ -60,11 +69,8 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/external/imgui/widgets/console.cpp
 
-    src/scripting/client_engine.cpp
-
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
-    src/integrations/client/scripting/module.cpp
 
     src/gui/manager.cpp
     src/gui/clipboard.cpp

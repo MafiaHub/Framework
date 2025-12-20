@@ -14,16 +14,19 @@
 #include <atomic>
 #include <map>
 #include <string>
-#include <vector>
 
 #include "engine.h"
 
 namespace Framework::Scripting {
+    /**
+     * Client-side scripting engine.
+     *
+     * Note: Per-resource sandboxing is handled by ResourceManager using
+     * EnvironmentSandbox::SetupClientSandbox(). This engine just provides
+     * the base Lua state and common SDK registration.
+     */
     class ClientEngine : public Engine {
       private:
-        // Script management
-        std::vector<std::string> _loadedScripts;
-        std::string _scriptCachePath;
         std::atomic<bool> _shutdownInProgress = false;
 
       public:
@@ -33,20 +36,5 @@ namespace Framework::Scripting {
         EngineError Init(SDKRegisterCallback) override;
         EngineError Shutdown() override;
         void Update() override;
-
-        // Script management
-        bool LoadScripts();
-        bool AddScript(const std::string &path);
-
-        void SandboxEnvironment();
-
-
-        void SetScriptCachePath(const std::string &path) {
-            _scriptCachePath = path;
-        }
-
-        std::string GetScriptCachePath() const {
-            return _scriptCachePath;
-        }
     };
 }

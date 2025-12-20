@@ -18,7 +18,7 @@ namespace Framework::World {
             return status;
         }
 
-        _findAllGameModeEntities = _world->query_builder<Modules::Base::RemovedOnGameModeReload>().build();
+        _findAllResourceEntities = _world->query_builder<Modules::Base::RemovedOnResourceReload>().build();
 
         // Set up a system to remove entities we no longer need.
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
