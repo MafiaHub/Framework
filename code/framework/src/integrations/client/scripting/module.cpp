@@ -143,14 +143,11 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     void ClientScriptingModule::StopAllResources() {
+        // Stop all running resources but keep the ResourceManager and engine alive.
+        // This allows StartAllResources() to be called again without requiring
+        // a full re-initialization via Init(). Use Shutdown() for full cleanup.
         if (_resourceManager) {
             _resourceManager->StopAll();
-            _resourceManager.reset();
-            CoreModules::SetResourceManager(nullptr);
-        }
-
-        if (_clientEngine) {
-            _clientEngine->Shutdown();
         }
 
         // Note: We intentionally do NOT clear _serverResourceList here
