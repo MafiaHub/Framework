@@ -695,14 +695,11 @@ MODULE(environment_sandbox, {
 
         // Path should contain ?.lua pattern (Lua module search pattern)
         EQUALS(path.find("?.lua") != std::string::npos, true);
-        // Should not contain system paths
-#ifdef _WIN32
-        // On Windows, should not contain Windows system directories
-        EQUALS(path.find("\\Windows\\") == std::string::npos, true);
-#else
+        // Should not contain system paths (check both - each only applies to its platform)
         // On Unix, should not contain /usr/
         EQUALS(path.find("/usr/") == std::string::npos, true);
-#endif
+        // On Windows, should not contain Windows system directories
+        EQUALS(path.find("\\Windows\\") == std::string::npos, true);
     });
 
     IT("server sandbox disables package.loadlib", {
