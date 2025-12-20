@@ -11,6 +11,7 @@
 #include "core_modules.h"
 
 #include <cppfs/FileHandle.h>
+#include <cppfs/FilePath.h>
 #include <cppfs/fs.h>
 #include <logging/logger.h>
 #include <scripting/resource/resource.h>
@@ -229,7 +230,8 @@ namespace Framework::Integrations::Client::Scripting {
         if (_resourceCachePath.empty()) {
             return resourceName;
         }
-        return _resourceCachePath + "/" + resourceName;
+        cppfs::FilePath basePath(_resourceCachePath);
+        return basePath.resolve(resourceName).fullPath();
     }
 
     std::vector<ServerResourceInfo> ClientScriptingModule::GetResourcesToDownload() const {
