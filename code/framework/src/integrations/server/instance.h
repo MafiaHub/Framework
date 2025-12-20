@@ -68,8 +68,7 @@ namespace Framework::Integrations::Server {
         bool enableSignals;
 
         // update intervals
-        float tickInterval         = 0.016667f;
-        float streamerTickInterval = 0.033334f;
+        Framework::World::ServerEngine::ServerConfig worldConfig;
 
         // args
         int argc;

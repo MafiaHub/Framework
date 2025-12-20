@@ -319,6 +319,7 @@ namespace Framework::Integrations::Client {
             switch (msg->GetDisconnectionReason()) {
             case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
             case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
+            case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + msg->GetCustomReason(); break;
             case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
             case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
             case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
