@@ -793,7 +793,9 @@ namespace Framework::Scripting {
                     } else if (_config.warnOnMissingDependency) {
                         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Missing dependency '{}' for resource '{}'", dep.name, pair.first);
                     } else {
-                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Dependency error for '{}': {}", pair.first, result.error);
+                        // During incremental discovery, dependencies may not exist yet.
+                        // The real validation happens when starting resources.
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Dependency '{}' for resource '{}' not yet discovered", dep.name, pair.first);
                     }
                 }
             }

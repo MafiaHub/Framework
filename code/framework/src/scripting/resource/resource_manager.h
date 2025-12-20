@@ -333,9 +333,54 @@ namespace Framework::Scripting {
         /**
          * Broadcast a global event to all running resources.
          * @param eventName Name of the event
-         * @param args Event arguments
+         * @param args Event arguments (from Lua)
          */
         void BroadcastGlobalEvent(const std::string &eventName, sol::variadic_args args);
+
+        /**
+         * Invoke a global event from C++ code to all running resources.
+         * This is the C++ equivalent of Event.broadcast() in Lua.
+         * @param eventName Name of the event
+         * @param args Event arguments (C++ types, will be converted to Lua)
+         */
+        template <typename... Args>
+        void InvokeGlobalEvent(const std::string &eventName, Args &&...args) {
+            // Copy handlers while holding the lock, then release before invoking
+            std::map<std::string, std::vector<sol::protected_function>> handlersCopy;
+            {
+                std::lock_guard<std::mutex> lock(_globalEventsMutex);
+                auto it = _globalEventHandlers.find(eventName);
+                if (it == _globalEventHandlers.end()) {
+                    return;
+                }
+                handlersCopy = it->second;
+            }
+
+            // Iterate through all resources that have handlers for this event
+            for (auto &resourcePair : handlersCopy) {
+                const std::string &resourceName = resourcePair.first;
+
+                // Only invoke if resource is running
+                if (!IsResourceRunning(resourceName)) {
+                    continue;
+                }
+
+                // Save current context and set to the handler's resource
+                std::string previousContext = GetCurrentResourceContext();
+                SetCurrentResourceContext(resourceName);
+
+                for (auto &handler : resourcePair.second) {
+                    sol::protected_function_result result = handler(std::forward<Args>(args)...);
+                    if (!result.valid()) {
+                        sol::error err = result;
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Global event '{}' handler error: {}", resourceName, eventName, err.what());
+                    }
+                }
+
+                // Restore context
+                SetCurrentResourceContext(previousContext);
+            }
+        }
 
         /**
          * Send a targeted event to a specific resource.
