@@ -118,8 +118,6 @@ namespace Framework::Integrations::Server::Scripting {
             return true; // Not an error, just no resources
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Discovered {} resource(s)", discovered);
-
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result.success) {
