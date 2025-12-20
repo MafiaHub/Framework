@@ -118,6 +118,14 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         /**
+         * Set the server resource list directly (without triggering download logic).
+         * Use this when resources have already been downloaded.
+         */
+        void SetServerResourceList(const std::vector<ServerResourceInfo> &resources) {
+            _serverResourceList = resources;
+        }
+
+        /**
          * Mark that a resource has been downloaded and is ready to load.
          * Call this after the asset download system has downloaded a resource.
          * @param resourceName Name of the resource that was downloaded

@@ -473,9 +473,9 @@ namespace Framework::Integrations::Client {
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
 
-                // Pass the pending resource list to the scripting module
+                // Pass the pending resource list to the scripting module (without triggering download logic)
                 if (!_pendingServerResources.empty()) {
-                    scriptingModule->OnServerResourceList(_pendingServerResources);
+                    scriptingModule->SetServerResourceList(_pendingServerResources);
                 }
 
                 // Start all resources via ResourceManager
