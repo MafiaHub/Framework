@@ -147,7 +147,7 @@ namespace Framework::Integrations::Server {
         };
 
         // Initialize the scripting engine
-        _scriptingModule->SetResourcesPath("resources");
+        _scriptingModule->SetResourcesPath(_opts.resourcesPath);
         if (!_scriptingModule->Init(sdkCallback)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
