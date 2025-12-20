@@ -39,6 +39,7 @@
 
 #include "utils/path.h"
 #include "utils/version.h"
+#include "utils/hardware_id.h"
 
 #include "core_modules.h"
 
@@ -504,7 +505,7 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone = true;
 
             Framework::Networking::Messages::ClientRequestStreamer req;
-            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
+            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
             net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
         }
 

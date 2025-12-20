@@ -153,6 +153,7 @@ namespace Framework::World::Modules {
             uint64_t guid        = 0xFFFFFFFFFFFFFFFF;
             uint16_t playerIndex = 0xFFFF;
             std::string nickname;
+            std::string hardwareId;
             std::unordered_map<flecs::entity_t, StreamData> entities;
             std::unordered_set<flecs::entity_t> rangeExemptEntities;
             CollectRangeExemptEntities collectRangeExemptEntitiesProc;

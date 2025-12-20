@@ -331,9 +331,11 @@ namespace Framework::Integrations::Server {
                 nickname = nickname.substr(0, 64);
             }
 
-            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname);
+            auto hardwareId = msg->GetPlayerHardwareID();
 
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
+            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname, hardwareId);
+
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {} hwid {}", msg->GetPlayerName(), guid.g, newPlayer.id(), hardwareId);
 
             // Send the connection finalized packet
             Framework::Networking::Messages::ClientConnectionFinalized answer;

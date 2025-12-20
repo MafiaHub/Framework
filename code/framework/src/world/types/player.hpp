@@ -27,7 +27,7 @@ namespace Framework::World::Archetypes {
             SetupDefaults(e, guid);
         }
 
-        inline void SetupServer(flecs::entity e, uint64_t guid, uint16_t playerIndex, const std::string &nickname) {
+        inline void SetupServer(flecs::entity e, uint64_t guid, uint16_t playerIndex, const std::string &nickname, const std::string &hardwareId = "") {
             SetupDefaults(e, guid);
 
             auto &streamable           = e.ensure<World::Modules::Base::Streamable>();
@@ -39,6 +39,7 @@ namespace Framework::World::Archetypes {
             streamer.nickname    = nickname;
             streamer.playerIndex = playerIndex;
             streamer.guid        = guid;
+            streamer.hardwareId  = hardwareId;
         }
     };
 } // namespace Framework::World::Archetypes
