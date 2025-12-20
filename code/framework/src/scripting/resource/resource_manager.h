@@ -627,6 +627,9 @@ namespace Framework::Scripting {
         // Request ID counter
         uint64_t _nextRequestId = 1;
 
+        // Cached no-op reply function for fire-and-forget messages
+        sol::protected_function _noOpReplyFn;
+
         std::map<std::string, sol::object> _preservedStates;
         mutable std::mutex _preservedStatesMutex;
 

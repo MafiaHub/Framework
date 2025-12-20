@@ -1066,10 +1066,12 @@ namespace Framework::Scripting {
         std::string previousContext = GetCurrentResourceContext();
         SetCurrentResourceContext(targetResource);
 
-        // For fire-and-forget, we pass a no-op reply function
-        sol::protected_function noOpReply = _luaState->load("return function() end")().get<sol::protected_function>();
+        // For fire-and-forget, use cached no-op reply function
+        if (!_noOpReplyFn.valid()) {
+            _noOpReplyFn = _luaState->load("return function() end")().get<sol::protected_function>();
+        }
 
-        sol::protected_function_result result = handlerCopy(payload, noOpReply);
+        sol::protected_function_result result = handlerCopy(payload, _noOpReplyFn);
         if (!result.valid()) {
             sol::error err = result;
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Message handler '{}' error: {}", targetResource, messageType, err.what());
