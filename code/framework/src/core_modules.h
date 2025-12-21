@@ -18,6 +18,7 @@ namespace Framework::World {
 
 namespace Framework::Scripting {
     class Engine;
+    class ResourceManager;
 } // namespace Framework::Scripting
 
 namespace Framework::GUI {
@@ -38,11 +39,12 @@ namespace Framework {
     class CoreModules final {
       public:
         static void Reset() {
-            _networkPeer     = nullptr;
-            _engine          = nullptr;
-            _scriptingEngine = nullptr;
-            _webManager      = nullptr;
-            _input           = nullptr;
+            _networkPeer      = nullptr;
+            _engine           = nullptr;
+            _scriptingEngine  = nullptr;
+            _resourceManager  = nullptr;
+            _webManager       = nullptr;
+            _input            = nullptr;
         }
 
         // Singleton setters
@@ -56,6 +58,10 @@ namespace Framework {
 
         static void SetScriptingEngine(Scripting::Engine *engine) {
             _scriptingEngine = engine;
+        }
+
+        static void SetResourceManager(Scripting::ResourceManager *manager) {
+            _resourceManager = manager;
         }
 
         static void SetWebManager(GUI::Manager *manager) {
@@ -83,6 +89,10 @@ namespace Framework {
             return _scriptingEngine;
         }
 
+        static Scripting::ResourceManager *GetResourceManager() {
+            return _resourceManager;
+        }
+
         static GUI::Manager *GetGUIManager() {
             return _webManager;
         }
@@ -99,6 +109,7 @@ namespace Framework {
         static inline Networking::NetworkPeer *_networkPeer {};
         static inline World::Engine *_engine {};
         static inline Scripting::Engine *_scriptingEngine {};
+        static inline Scripting::ResourceManager *_resourceManager {};
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};
         static inline double _tickRate {1000 / 60.0f};

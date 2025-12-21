@@ -117,6 +117,9 @@ namespace Framework::Integrations::Client {
         std::string _assetCachePath;
         bool _initialDownloadDone {};
 
+        // Pending resources from server (stored here to survive scripting module reset)
+        std::vector<Client::Scripting::ServerResourceInfo> _pendingServerResources;
+
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);

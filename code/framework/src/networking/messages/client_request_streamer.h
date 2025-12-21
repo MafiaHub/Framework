@@ -18,23 +18,26 @@ namespace Framework::Networking::Messages {
         SLNet::RakString _playerName      = "";
         SLNet::RakString _playerSteamId   = "";
         SLNet::RakString _playerDiscordId = "";
+        SLNet::RakString _playerHardwareId = "";
 
       public:
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_REQUEST_STREAMER;
         }
 
-        void FromParameters(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId) {
+        void FromParameters(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId, const std::string &playerHardwareId = "") {
             Framework::Logging::GetLogger("dbg")->debug(playerName);
-            _playerName      = SLNet::RakString(playerName.c_str());
-            _playerSteamId   = SLNet::RakString(playerSteamId.c_str());
-            _playerDiscordId = SLNet::RakString(playerDiscordId.c_str());
+            _playerName       = SLNet::RakString(playerName.c_str());
+            _playerSteamId    = SLNet::RakString(playerSteamId.c_str());
+            _playerDiscordId  = SLNet::RakString(playerDiscordId.c_str());
+            _playerHardwareId = SLNet::RakString(playerHardwareId.c_str());
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _playerName);
             bs->Serialize(write, _playerSteamId);
             bs->Serialize(write, _playerDiscordId);
+            bs->Serialize(write, _playerHardwareId);
         }
 
         bool Valid() const override {
@@ -51,6 +54,10 @@ namespace Framework::Networking::Messages {
 
         std::string GetPlayerDiscordID() const {
             return _playerDiscordId.C_String();
+        }
+
+        std::string GetPlayerHardwareID() const {
+            return _playerHardwareId.C_String();
         }
     };
 } // namespace Framework::Networking::Messages

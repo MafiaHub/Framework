@@ -35,6 +35,7 @@ namespace Framework::Integrations::Scripting {
         std::string GetName() const;
 
         std::string GetNickname() const;
+        std::string GetHardwareId() const;
         virtual std::string ToString() const;
         void SetPosition(Framework::Scripting::Builtins::Vector3 v3) const;
         void SetRotation(Framework::Scripting::Builtins::Quaternion q) const;

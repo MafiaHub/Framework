@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../resource/environment_sandbox.h"
+
 #include <sol/sol.hpp>
 
 #include <scripting/utils/table_conversions.h>
@@ -39,10 +41,11 @@ namespace Framework::Scripting::Builtins {
         
         static void Register(sol::state *luaEngine) {
             sol::usertype<JSON> cls = luaEngine->new_usertype<JSON>("JSON");
-            
+
             // Register static functions
             cls.set_function("stringify", &JSON::Stringify);
             cls.set_function("parse", &JSON::Parse);
+            EnvironmentSandbox::RegisterBuiltinName("JSON");
         }
     };
 } // namespace Framework::Scripting::Builtins 

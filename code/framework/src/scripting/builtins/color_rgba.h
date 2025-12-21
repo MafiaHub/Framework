@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "../resource/environment_sandbox.h"
+
 #include <glm/glm.hpp>
 #include <sol/sol.hpp>
 
@@ -134,6 +136,7 @@ namespace Framework::Scripting::Builtins {
             cls["getFloatG"]             = &ColorRGBA::GetFloatG;
             cls["getFloatB"]             = &ColorRGBA::GetFloatB;
             cls["getFloatA"]             = &ColorRGBA::GetFloatA;
+            EnvironmentSandbox::RegisterBuiltinName("RGBA");
         }
     };
-} // namespace Framework::Scripting::Engines::Node::Builtins
+} // namespace Framework::Scripting::Builtins

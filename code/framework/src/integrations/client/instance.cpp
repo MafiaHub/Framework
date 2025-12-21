@@ -18,11 +18,11 @@
 #include <world/game_rpc/set_transform.h>
 
 #include "integrations/shared/rpc/emit_lua_event.h"
-#include "integrations/shared/rpc/reload_assets.h"
 
 #include "../shared/modules/mod.hpp"
 
 #include "scripting/utils/table_conversions.h"
+#include "scripting/resource/resource_manager.h"
 
 #include "scripting/builtins/events_lua.h"
 #include "scripting/builtins/views.h"
@@ -39,6 +39,7 @@
 
 #include "utils/path.h"
 #include "utils/version.h"
+#include "utils/hardware_id.h"
 
 #include "core_modules.h"
 
@@ -251,7 +252,7 @@ namespace Framework::Integrations::Client {
         }
         
         if (_scriptingModule) {
-            _scriptingModule->GetEngine()->Update();
+            _scriptingModule->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -293,6 +294,21 @@ namespace Framework::Integrations::Client {
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
         net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
+            // Store resource list on instance (survives scripting module reset)
+            if (msg->GetResourceCount() > 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
+
+                _pendingServerResources.clear();
+                _pendingServerResources.reserve(msg->GetResourceCount());
+                for (const auto &resInfo : msg->GetResources()) {
+                    Client::Scripting::ServerResourceInfo info;
+                    info.name = resInfo.name;
+                    info.version = resInfo.version;
+                    info.hash = resInfo.hash;
+                    _pendingServerResources.push_back(info);
+                }
+            }
+
             DownloadsAssetsFromConnectedServer();
         });
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
@@ -375,13 +391,10 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
                 return;
             }
-            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
-        });
-        net->RegisterRPC<Shared::RPC::ReloadAssets>([this](SLNet::RakNetGUID guid, Shared::RPC::ReloadAssets *rpc) {
-            if (!rpc->Valid())
-                return;
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server has forced us to re-download assets...");
-            DownloadsAssetsFromConnectedServer();
+            const auto resourceManager = Framework::CoreModules::GetResourceManager();
+            if (resourceManager) {
+                resourceManager->InvokeGlobalEvent(eventName, payload);
+            }
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
@@ -398,8 +411,8 @@ namespace Framework::Integrations::Client {
             return;
         }
 
-        // Unload the scripts before redownloading
-        _scriptingModule->Shutdown();
+        // Stop running resources before redownloading (preserves server resource list)
+        _scriptingModule->StopAllResources();
 
         // Destroy scriptable web views
         if (_webManager) {
@@ -448,48 +461,35 @@ namespace Framework::Integrations::Client {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
         if (success) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("All the assets have been downloaded!");
-            
+
             auto scriptingModule = GetScriptingModule();
             if (scriptingModule) {
-                // Initialize the scripting module, but force disconnect if it failed to init
-                if (!scriptingModule->Init(nullptr)) {
+                // Set resource cache path before init
+                scriptingModule->SetResourceCachePath(GetAssetCachePath());
+
+                // Initialize the scripting module with builtin registration callback
+                const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::Engine> sdk) {
+                    this->RegisterScriptingBuiltins(sdk.GetEngine());
+                };
+
+                if (!scriptingModule->Init(sdkCallback)) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
                     net->Disconnect();
                     return;
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
 
-                // Load the scripts
-                auto scriptingEngine = scriptingModule->GetEngine();
-                if (scriptingEngine) {
-                    // Set script cache path to the asset download path
-                    scriptingEngine->SetScriptCachePath(GetAssetCachePath());
+                // Pass the pending resource list to the scripting module (without triggering download logic)
+                if (!_pendingServerResources.empty()) {
+                    scriptingModule->SetServerResourceList(_pendingServerResources);
+                }
 
-                    // Look for Lua script files in the download path
-                    auto scriptsDir = cppfs::fs::open(GetAssetCachePath());
-                    if (scriptsDir.exists() && scriptsDir.isDirectory()) {
-                        scriptsDir.traverse([scriptingEngine](cppfs::FileHandle &fh) -> bool {
-                            if (Utils::GetFileExtensionA(fh.fileName()) == ".lua") {
-                                scriptingEngine->AddScript(fh.path());
-                            }
-                            return true;
-                        });
-
-                        // Register builtins
-                        RegisterScriptingBuiltins(scriptingEngine.get());
-
-                        // Load all the scripts
-                        bool scriptsLoaded = scriptingEngine->LoadScripts();
-                        if (scriptsLoaded) {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripts loaded successfully");
-                        }
-                        else {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to load client scripts");
-                        }
-                    }
-                    else {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("No scripts directory found in downloaded assets");
-                    }
+                // Start all resources via ResourceManager
+                if (!scriptingModule->StartAllResources()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to start client resources");
+                }
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client resources started successfully");
                 }
             }
         }
@@ -505,10 +505,10 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone = true;
 
             Framework::Networking::Messages::ClientRequestStreamer req;
-            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2");
+            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
             net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
         }
-        
+
         _downloadStatus = {};
 
         // Let the mod-level know assets have just been finished processing

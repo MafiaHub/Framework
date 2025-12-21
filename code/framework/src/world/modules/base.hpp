@@ -66,7 +66,7 @@ namespace Framework::World::Modules {
             [[maybe_unused]] uint8_t _unused;
         };
 
-        struct RemovedOnGameModeReload {
+        struct RemovedOnResourceReload {
             [[maybe_unused]] uint8_t _unused;
         };
 
@@ -153,6 +153,7 @@ namespace Framework::World::Modules {
             uint64_t guid        = 0xFFFFFFFFFFFFFFFF;
             uint16_t playerIndex = 0xFFFF;
             std::string nickname;
+            std::string hardwareId;
             std::unordered_map<flecs::entity_t, StreamData> entities;
             std::unordered_set<flecs::entity_t> rangeExemptEntities;
             CollectRangeExemptEntities collectRangeExemptEntitiesProc;
@@ -168,7 +169,7 @@ namespace Framework::World::Modules {
             auto _streamable = world.component<Streamable>();
             auto _streamer   = world.component<Streamer>();
 
-            world.component<RemovedOnGameModeReload>();
+            world.component<RemovedOnResourceReload>();
             world.component<PendingRemoval>();
             world.component<ServerID>();
             world.component<TickRateRegulator>();

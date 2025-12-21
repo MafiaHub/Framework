@@ -13,9 +13,9 @@
 
 namespace Framework::Scripting {
     enum class EventIDs {
-        GAMEMODE_LOADED,
-        GAMEMODE_UNLOADING,
-        GAMEMODE_UPDATED
+        RESOURCE_STARTED,
+        RESOURCE_STOPPING,
+        RESOURCE_UPDATED
     };
 
     extern std::map<EventIDs, std::string> Events;

@@ -8,6 +8,9 @@
 
 #include "instance.h"
 
+#include <filesystem>
+#include <fstream>
+
 #include "core_modules.h"
 #include "world/server.h"
 
@@ -23,6 +26,7 @@
 #include "scripting/builtins/entity.h"
 #include "scripting/builtins/events_lua.h"
 #include "scripting/utils/table_conversions.h"
+#include "scripting/resource/resource_manager.h"
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
@@ -143,25 +147,25 @@ namespace Framework::Integrations::Server {
         };
 
         // Initialize the scripting engine
-        _scriptingModule->SetMainGamemodePath("gamemode");
-        _scriptingModule->LoadManifest();
+        _scriptingModule->SetResourcesPath(_opts.resourcesPath);
         if (!_scriptingModule->Init(sdkCallback)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
-        // Set up reload callback
-        _scriptingModule->SetOnReloadCallback([this]() {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Gamemode reloaded");
-        });
-
         PostScriptInit();
 
-        // Initialize asset streamer
+        // Discover resources
+        _scriptingModule->GetResourceManager()->DiscoverResources();
+
+        // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
 
-        // Load the gamemode
-        _scriptingModule->GetEngine()->LoadScript();
+        // Start all resources
+        auto startResult = _scriptingModule->GetResourceManager()->StartAll();
+        if (!startResult.success) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.error);
+        }
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
@@ -291,7 +295,13 @@ namespace Framework::Integrations::Server {
             }
 
             // Let the client know they can ask for client-side assets now.
+            // Include the resource list in the message.
             ClientReadyAssets readyMsg;
+            if (_scriptingModule) {
+                for (const auto &resource : _scriptingModule->GetClientResourceList()) {
+                    readyMsg.AddResource(resource.name, resource.version, resource.hash);
+                }
+            }
             net->Send(readyMsg, guid);
         });
 
@@ -321,9 +331,11 @@ namespace Framework::Integrations::Server {
                 nickname = nickname.substr(0, 64);
             }
 
-            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname);
+            auto hardwareId = msg->GetPlayerHardwareID();
 
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {}", msg->GetPlayerName(), guid.g, newPlayer.id());
+            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname, hardwareId);
+
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {} hwid {}", msg->GetPlayerName(), guid.g, newPlayer.id(), hardwareId);
 
             // Send the connection finalized packet
             Framework::Networking::Messages::ClientConnectionFinalized answer;
@@ -340,7 +352,7 @@ namespace Framework::Integrations::Server {
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
             if (!rpc->Valid())
                 return;
-            
+
             const auto eventName = rpc->GetEventName();
             const auto payloadStr = rpc->GetPayload();
             sol::object payload {};
@@ -352,7 +364,10 @@ namespace Framework::Integrations::Server {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
                 return;
             }
-            _scriptingModule->GetEngine()->InvokeRemoteEvent(eventName, payload);
+            const auto resourceManager = Framework::CoreModules::GetResourceManager();
+            if (resourceManager) {
+                resourceManager->InvokeGlobalEvent(eventName, payload);
+            }
         });
 
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
@@ -365,20 +380,53 @@ namespace Framework::Integrations::Server {
         const auto net      = GetNetworkingEngine()->GetNetworkServer();
         const auto streamer = net->GetAssetStreamer();
 
-        const auto scripting   = GetScriptingModule();
-        const auto gamemodePath = scripting->GetEngine()->GetMainGamemodePath();
-        const auto clientPath = fmt::format("{}\\client", gamemodePath);
-        const auto clientFiles       = scripting->GetClientFiles();
-        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(clientPath);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Client assets directory: {}", assetsPath);
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
+        const auto scripting     = GetScriptingModule();
+        const auto resourcesPath = scripting->GetResourcesPath();
+        const std::string assetsPath = Framework::Utils::GetAbsolutePathA(resourcesPath);
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Resources directory: {}", assetsPath);
 
         streamer->SetApplicationDirectory(assetsPath.c_str());
-        
-        for (const auto& fileName : clientFiles) {
-            streamer->AddFile(fmt::format("{}\\{}", assetsPath, fileName).c_str(), fileName.c_str());
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName);
+
+        // Add client files from each resource (same pattern as develop branch)
+        const auto resourceManager = scripting->GetResourceManager();
+        if (resourceManager) {
+            for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
+                const auto resource = resourceManager->GetResource(resourceName);
+                if (!resource) continue;
+
+                const auto &manifest = resource->GetManifest();
+                if (manifest.clientFiles.empty()) continue;
+
+                // Add client files
+                for (const auto &clientFile : manifest.clientFiles) {
+                    std::filesystem::path fileName = std::filesystem::path(resourceName) / clientFile;
+                    std::filesystem::path fullPath = std::filesystem::path(assetsPath) / fileName;
+                    streamer->AddFile(fullPath.string().c_str(), fileName.string().c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName.string());
+                }
+
+                // Create sanitized manifest (no server_files) and add it
+                Framework::Scripting::ResourceManifest clientManifest = manifest;
+                clientManifest.serverFiles.clear();
+                nlohmann::json manifestJson = clientManifest;
+                std::string manifestContent = manifestJson.dump(2);
+
+                // Write to temp file in resource directory
+                std::filesystem::path clientManifestPath = std::filesystem::path(assetsPath) / resourceName / ".client_manifest.json";
+
+                std::ofstream outFile(clientManifestPath);
+                if (outFile.is_open()) {
+                    outFile << manifestContent;
+                    outFile.close();
+
+                    std::filesystem::path manifestFileName = std::filesystem::path(resourceName) / "manifest.json";
+                    streamer->AddFile(clientManifestPath.string().c_str(), manifestFileName.string().c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added sanitized manifest for: {}", resourceName);
+                }
+            }
         }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} client files", streamer->GetNumberOfFilesForUpload());
     }
 
     void Instance::InitCommandListener() {
@@ -407,17 +455,7 @@ namespace Framework::Integrations::Server {
                 Shutdown();
             },
             "Stop the server");
-            
-        _commandProcessor->RegisterCommand(
-            "reload", {},
-            [this](cxxopts::ParseResult &) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Reloading server scripts...");
-                if (_scriptingModule) {
-                    _scriptingModule->ReloadScriptingEngine();
-                }
-            },
-            "Reload server scripts");
-            
+
         _commandProcessor->RegisterCommand(
             "status", {},
             [this](cxxopts::ParseResult &) {
@@ -522,7 +560,7 @@ namespace Framework::Integrations::Server {
             if (_masterlist->IsInitialized()) {
                 Services::ServerInfo info {};
                 info.port           = _opts.bindPort;
-                info.gameMode       = _scriptingModule->GetEngine()->GetGamemodeName();
+                info.gameMode       = _opts.modName;
                 info.version        = Utils::Version::rel;
                 info.maxPlayers     = _opts.maxPlayers;
                 info.currentPlayers = _networkingEngine->GetNetworkServer()->GetPeer()->NumberOfConnections();

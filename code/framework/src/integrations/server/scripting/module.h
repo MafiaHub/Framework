@@ -10,33 +10,38 @@
 
 #include <vector>
 #include <string>
-#include <functional>
-#include <chrono>
-
-#include <cppfs/FileWatcher.h>
-#include <cppfs/fs.h>
-#include <cppfs/FileHandle.h>
+#include <memory>
 
 #include <scripting/server_engine.h>
+#include <scripting/resource/resource_manager.h>
 #include <world/server.h>
 
+#include <RakNetTypes.h>
+
 namespace Framework::Integrations::Server::Scripting {
+
+    /**
+     * Information about a resource for sending to clients.
+     */
+    struct ClientResourceInfo {
+        std::string name;
+        std::string version;
+        uint32_t hash = 0;
+    };
+
+    /**
+     * Server-side scripting module with resource management support.
+     *
+     * Supports sending resource list to clients at connection time.
+     * Clients run standalone after initial resource sync.
+     */
     class ServerScriptingModule {
       private:
         std::shared_ptr<Framework::Scripting::ServerEngine> _serverEngine;
         std::shared_ptr<World::ServerEngine> _world;
+        std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
 
-        std::vector<std::string> _clientFiles;
-        std::vector<std::string> _serverFiles;
-
-        std::string _mainGamemodePath;
-
-        // File watching
-        cppfs::FileWatcher *_watcher = nullptr;
-        std::chrono::time_point<std::chrono::high_resolution_clock> _nextFileWatchUpdate;
-        int32_t _fileWatchUpdatePeriod = 1000;
-        bool _shouldReloadWatcher = false;
-        std::function<void()> _onReloadCallback;
+        std::string _resourcesPath;
 
       public:
         ServerScriptingModule(std::shared_ptr<World::ServerEngine>);
@@ -45,12 +50,7 @@ namespace Framework::Integrations::Server::Scripting {
         bool Init(Framework::Scripting::SDKRegisterCallback);
         bool PreShutdown();
         bool Shutdown();
-        bool LoadManifest();
         void Update();
-
-        void SetOnReloadCallback(std::function<void()> callback) {
-            _onReloadCallback = callback;
-        }
 
         std::shared_ptr<Framework::Scripting::ServerEngine> GetEngine() const {
             return _serverEngine;
@@ -60,21 +60,22 @@ namespace Framework::Integrations::Server::Scripting {
             return _world;
         }
 
-        void SetMainGamemodePath(const std::string &path);
-        std::string GetMainGamemodePath() const { return _mainGamemodePath; }
-
-        std::vector<std::string> GetClientFiles() const {
-            return _clientFiles;
+        Framework::Scripting::ResourceManager *GetResourceManager() const {
+            return _resourceManager.get();
         }
 
-        std::vector<std::string> GetServerFiles() const {
-            return _serverFiles;
-        }
-        
-        void ReloadScriptingEngine();
+        void SetResourcesPath(const std::string &path);
+        std::string GetResourcesPath() const { return _resourcesPath; }
 
-      private:
-        void UpdateFileWatcher();
-        void SetupWatchPath(const std::string &path);
+        /**
+         * Get list of resources to send to clients.
+         * Only includes resources with client_files defined.
+         */
+        std::vector<ClientResourceInfo> GetClientResourceList() const;
+
+        /**
+         * Discover and start all resources using ResourceManager.
+         */
+        bool StartAllResources();
     };
 } // namespace Framework::Integrations::Server::Scripting

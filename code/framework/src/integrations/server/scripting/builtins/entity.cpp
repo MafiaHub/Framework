@@ -116,6 +116,11 @@ namespace Framework::Integrations::Scripting {
         return !!s ? s->nickname : "<unknown>";
     }
 
+    std::string Entity::GetHardwareId() const {
+        const auto s = _ent.get<Framework::World::Modules::Base::Streamer>();
+        return !!s ? s->hardwareId : "";
+    }
+
     std::string Entity::ToString() const {
         std::ostringstream ss;
         ss << "Entity{ id: " << _ent.id() << " }";
@@ -216,6 +221,9 @@ namespace Framework::Integrations::Scripting {
         });
         cls["nickname"]           = sol::property([](const Entity &self) {
             return self.GetNickname();
+        });
+        cls["hardwareId"]         = sol::property([](const Entity &self) {
+            return self.GetHardwareId();
         });
 
         cls["destroy"]           = &Entity::Destroy;

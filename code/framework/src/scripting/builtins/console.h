@@ -8,6 +8,10 @@
 
 #pragma once
 
+#include "../resource/environment_sandbox.h"
+
+#include <logging/logger.h>
+
 #include <glm/glm.hpp>
 #include <sol/sol.hpp>
 
@@ -31,6 +35,7 @@ namespace Framework::Scripting::Builtins {
         static void Register(sol::state *luaEngine) {
             sol::usertype<Console> cls = luaEngine->new_usertype<Console>("Console");
             cls["log"]                 = &Console::Log;
+            EnvironmentSandbox::RegisterBuiltinName("Console");
         }
     };
 } // namespace Framework::Scripting::Builtins
