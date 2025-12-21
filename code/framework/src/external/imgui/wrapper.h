@@ -69,17 +69,5 @@ namespace Framework::External::ImGUI {
         bool IsInitialized() const {
             return _initialized;
         }
-
-        /**
-         * This function allows you to enable/disable mouse and keyboard inputs.
-         * By default, process event is enable.
-         */
-        void SetProcessEventEnabled(bool enable) {
-            _processEventEnabled = enable;
-        }
-
-        bool IsProcessEventEnabled() const {
-            return _processEventEnabled;
-        }
     };
 } // namespace Framework::External::ImGUI
