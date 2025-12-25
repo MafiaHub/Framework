@@ -52,6 +52,30 @@ namespace Framework::Networking {
             return SendGameRPCInternal(bs, world, rpc.GetServerID(), guid, excludeGUID, priority, reliability);
         }
 
+        // Fluent send methods for Game RPCs
+        template <typename T, typename... Args>
+        bool sendGameRPC(Framework::World::ServerEngine* world, flecs::entity ent, Args&&... args) {
+            T rpc(std::forward<Args>(args)...);
+            rpc.SetServerID(ent.id());
+            return SendGameRPC(world, rpc);
+        }
+
+        template <typename T, typename... Args>
+        bool sendGameRPCTo(Framework::World::ServerEngine* world, SLNet::RakNetGUID guid,
+                          flecs::entity ent, Args&&... args) {
+            T rpc(std::forward<Args>(args)...);
+            rpc.SetServerID(ent.id());
+            return SendGameRPC(world, rpc, guid);
+        }
+
+        template <typename T, typename... Args>
+        bool sendGameRPCExcept(Framework::World::ServerEngine* world, SLNet::RakNetGUID exceptGuid,
+                              flecs::entity ent, Args&&... args) {
+            T rpc(std::forward<Args>(args)...);
+            rpc.SetServerID(ent.id());
+            return SendGameRPC(world, rpc, SLNet::UNASSIGNED_RAKNET_GUID, exceptGuid);
+        }
+
         int GetPing(SLNet::RakNetGUID guid) const;
 
         void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
