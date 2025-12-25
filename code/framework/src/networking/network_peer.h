@@ -21,6 +21,81 @@
 #include <vector>
 
 namespace Framework::Networking {
+    // Forward declarations for fluent router API
+    class NetworkPeer;
+
+    /**
+     * Binder for IMessage handlers. The handler instance must outlive the NetworkPeer.
+     */
+    template <typename T>
+    class MessageBinder {
+      private:
+        NetworkPeer *_peer;
+
+      public:
+        explicit MessageBinder(NetworkPeer *peer): _peer(peer) {}
+
+        template <typename Instance>
+        void handle(Instance *inst, void (Instance::*method)(SLNet::RakNetGUID, T *));
+    };
+
+    /**
+     * Binder for IRPC handlers. The handler instance must outlive the NetworkPeer.
+     */
+    template <typename T>
+    class RPCBinder {
+      private:
+        NetworkPeer *_peer;
+
+      public:
+        explicit RPCBinder(NetworkPeer *peer): _peer(peer) {}
+
+        template <typename Instance>
+        void handle(Instance *inst, void (Instance::*method)(SLNet::RakNetGUID, T *));
+    };
+
+    /**
+     * Binder for IGameRPC handlers. The handler instance must outlive the NetworkPeer.
+     */
+    template <typename T>
+    class GameRPCBinder {
+      private:
+        NetworkPeer *_peer;
+
+      public:
+        explicit GameRPCBinder(NetworkPeer *peer): _peer(peer) {}
+
+        template <typename Instance>
+        void handle(Instance *inst, void (Instance::*method)(SLNet::RakNetGUID, T *));
+    };
+
+    /**
+     * Fluent API for registering message and RPC handlers.
+     * Usage: net->router().on<MessageType>().handle(this, &Class::Handler);
+     */
+    class MessageRouter {
+      private:
+        NetworkPeer *_peer;
+
+      public:
+        explicit MessageRouter(NetworkPeer *peer): _peer(peer) {}
+
+        template <typename T>
+        MessageBinder<T> on() {
+            return MessageBinder<T>(_peer);
+        }
+
+        template <typename T>
+        RPCBinder<T> onRPC() {
+            return RPCBinder<T>(_peer);
+        }
+
+        template <typename T>
+        GameRPCBinder<T> onGameRPC() {
+            return GameRPCBinder<T>(_peer);
+        }
+    };
+
     class NetworkPeer {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
@@ -153,6 +228,54 @@ namespace Framework::Networking {
             return &_assetStreamer;
         }
 
+        MessageRouter router() {
+            return MessageRouter(this);
+        }
+
+        template <typename T, typename... Args>
+        bool send(SLNet::RakNetGUID guid, Args&&... args) {
+            T msg(std::forward<Args>(args)...);
+            return Send(msg, guid);
+        }
+
+        template <typename T, typename... Args>
+        bool send(uint64_t guid, Args&&... args) {
+            T msg(std::forward<Args>(args)...);
+            return Send(msg, guid);
+        }
+
+        template <typename T, typename... Args>
+        bool sendRPC(SLNet::RakNetGUID guid, Args&&... args) {
+            T rpc(std::forward<Args>(args)...);
+            return SendRPC(rpc, guid);
+        }
+
         static inline NetworkPeer *_networkRef = nullptr;
     };
+
+    // Binder implementations (must be after NetworkPeer is fully defined)
+    template <typename T>
+    template <typename Instance>
+    void MessageBinder<T>::handle(Instance *inst, void (Instance::*method)(SLNet::RakNetGUID, T *)) {
+        T tmp {};
+        _peer->RegisterMessage<T>(tmp.GetMessageID(), [inst, method](SLNet::RakNetGUID guid, T *msg) {
+            (inst->*method)(guid, msg);
+        });
+    }
+
+    template <typename T>
+    template <typename Instance>
+    void RPCBinder<T>::handle(Instance *inst, void (Instance::*method)(SLNet::RakNetGUID, T *)) {
+        _peer->RegisterRPC<T>([inst, method](SLNet::RakNetGUID guid, T *rpc) {
+            (inst->*method)(guid, rpc);
+        });
+    }
+
+    template <typename T>
+    template <typename Instance>
+    void GameRPCBinder<T>::handle(Instance *inst, void (Instance::*method)(SLNet::RakNetGUID, T *)) {
+        _peer->RegisterGameRPC<T>([inst, method](SLNet::RakNetGUID guid, T *rpc) {
+            (inst->*method)(guid, rpc);
+        });
+    }
 } // namespace Framework::Networking
