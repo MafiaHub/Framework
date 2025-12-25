@@ -21,15 +21,16 @@ namespace Framework::Networking::Messages {
         SLNet::RakString _gameName        = "";
 
       public:
+        ClientHandshake() = default;
+
+        ClientHandshake(const std::string &clientVersion, const std::string &fwVersion, const std::string &gameVersion, const std::string &gameName)
+            : _clientVersion(clientVersion.c_str())
+            , _fwVersion(fwVersion.c_str())
+            , _gameVersion(gameVersion.c_str())
+            , _gameName(gameName.c_str()) {}
+
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_HANDSHAKE;
-        }
-
-        void FromParameters(const std::string &clientVersion, const std::string &fwVersion, const std::string &gameVersion, const std::string &gameName) {
-            _fwVersion       = SLNet::RakString(fwVersion.c_str());
-            _clientVersion   = SLNet::RakString(clientVersion.c_str());
-            _gameVersion     = SLNet::RakString(gameVersion.c_str());
-            _gameName        = SLNet::RakString(gameName.c_str());
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

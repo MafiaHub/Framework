@@ -25,12 +25,24 @@
 
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
+#include "world/modules/base.hpp"
 
 #include <chrono>
 #include <memory>
 #include <sig.h>
 #include <string>
 #include <utility>
+
+// Forward declarations for network message handlers
+namespace Framework::Networking::Messages {
+    class ClientHandshake;
+    class ClientRequestStreamer;
+    class ClientInitPlayer;
+} // namespace Framework::Networking::Messages
+
+namespace Framework::Integrations::Shared::RPC {
+    class EmitLuaEvent;
+} // namespace Framework::Integrations::Shared::RPC
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
@@ -103,14 +115,20 @@ namespace Framework::Integrations::Server {
 
         void InitEndpoints();
         void InitModules() const;
-        void InitNetworkingMessages() const;
+        void InitNetworkingMessages();
         void InitAssetStreamer();
         void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
-        
+
         // Command handlers
         void HandleCommand(const std::string &command);
+
+        // Network message handlers
+        void OnClientHandshake(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientHandshake *msg);
+        void OnClientRequestStreamer(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientRequestStreamer *msg);
+        void OnClientInitPlayer(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientInitPlayer *msg);
+        void OnEmitLuaEvent(SLNet::RakNetGUID guid, Framework::Integrations::Shared::RPC::EmitLuaEvent *rpc);
 
         // managers
         flecs::entity _weatherManager;
@@ -118,6 +136,9 @@ namespace Framework::Integrations::Server {
         // entity factories
         std::shared_ptr<World::Archetypes::PlayerFactory> _playerFactory;
         std::shared_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
+
+        // message handler for world module receivers
+        std::unique_ptr<World::Modules::ServerReceiverHandler> _serverReceiverHandler;
 
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;

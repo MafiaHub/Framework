@@ -21,13 +21,14 @@ namespace Framework::Networking::Messages {
         flecs::entity_t _entityID = 0;
 
       public:
+        ClientConnectionFinalized() = default;
+
+        ClientConnectionFinalized(float tickRate, flecs::entity_t entityID)
+            : _serverTickRate(tickRate)
+            , _entityID(entityID) {}
+
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_FINALIZED;
-        }
-
-        void FromParameters(float tickRate, flecs::entity_t entityID) {
-            _serverTickRate = tickRate;
-            _entityID       = entityID;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

@@ -21,10 +21,9 @@
 
 namespace Framework::Integrations::Scripting {
     void EventsServer::EmitEvent(std::string eventName, sol::object payload) {
-        Framework::Integrations::Shared::RPC::EmitLuaEvent rpc;
         try {
             nlohmann::json jsonPayload = Framework::Scripting::Utils::SolToJson(payload);
-            rpc.FromParameters(eventName, jsonPayload.dump());
+            Framework::Integrations::Shared::RPC::EmitLuaEvent rpc(eventName, jsonPayload.dump());
             CoreModules::GetNetworkPeer()->SendRPC(rpc);
         }
         catch (const std::exception &e) {

@@ -21,13 +21,14 @@ namespace Framework::Networking::Messages {
         uint64_t _owner = SLNet::UNASSIGNED_RAKNET_GUID.g;
 
       public:
+        GameSyncEntityUpdate() = default;
+
+        GameSyncEntityUpdate(World::Modules::Base::Transform transform, uint64_t owner)
+            : _transform(transform)
+            , _owner(owner) {}
+
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_UPDATE;
-        }
-
-        void FromParameters(World::Modules::Base::Transform tr, uint64_t owner) {
-            _transform = tr;
-            _owner     = owner;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

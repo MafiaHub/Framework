@@ -17,9 +17,10 @@ namespace Framework::World::RPC {
         World::Modules::Base::Frame _frame;
 
       public:
-        void FromParameters(const World::Modules::Base::Frame &fr) {
-            _frame = fr;
-        }
+        SetFrame() = default;
+
+        SetFrame(const World::Modules::Base::Frame &fr)
+            : _frame(fr) {}
 
         World::Modules::Base::Frame GetFrame() {
             return _frame;

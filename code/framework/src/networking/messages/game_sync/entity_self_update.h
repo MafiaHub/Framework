@@ -17,6 +17,8 @@
 namespace Framework::Networking::Messages {
     class GameSyncEntitySelfUpdate final: public GameSyncMessage {
       public:
+        GameSyncEntitySelfUpdate() = default;
+
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_SELF_UPDATE;
         }

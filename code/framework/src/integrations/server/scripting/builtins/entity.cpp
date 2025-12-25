@@ -20,6 +20,16 @@
 #include "networking/messages/client_kick.h"
 
 namespace Framework::Integrations::Scripting {
+    namespace {
+        Framework::Networking::NetworkServer *GetNetworkServer() {
+            return reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());
+        }
+
+        Framework::World::ServerEngine *GetServerEngine() {
+            return reinterpret_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine());
+        }
+    } // namespace
+
     Entity::Entity(flecs::entity ent) {
         _ent = ent;
         ValidateEntity();
@@ -29,20 +39,24 @@ namespace Framework::Integrations::Scripting {
         _ent = flecs::entity(CoreModules::GetWorldEngine()->GetWorld()->get_world(), ent);
         ValidateEntity();
     }
-    
+
     void Entity::SetPosition(Framework::Scripting::Builtins::Vector3 v3) const {
         const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
         tr->pos       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
         tr->IncrementGeneration();
         CoreModules::GetWorldEngine()->WakeEntity(_ent);
-        FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+        if (auto net = GetNetworkServer()) {
+            net->sendGameRPC<Framework::World::RPC::SetTransform>(GetServerEngine(), _ent, *tr);
+        }
     }
 
     void Entity::SetRotation(Framework::Scripting::Builtins::Quaternion q) const {
         const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
         tr->rot       = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
         tr->IncrementGeneration();
-        FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+        if (auto net = GetNetworkServer()) {
+            net->sendGameRPC<Framework::World::RPC::SetTransform>(GetServerEngine(), _ent, *tr);
+        }
         CoreModules::GetWorldEngine()->WakeEntity(_ent);
     }
 
@@ -50,26 +64,34 @@ namespace Framework::Integrations::Scripting {
         const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
         tr->vel       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
         tr->IncrementGeneration();
-        FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetTransform, _ent, *tr);
+        if (auto net = GetNetworkServer()) {
+            net->sendGameRPC<Framework::World::RPC::SetTransform>(GetServerEngine(), _ent, *tr);
+        }
         CoreModules::GetWorldEngine()->WakeEntity(_ent);
     }
 
     void Entity::SetScale(Framework::Scripting::Builtins::Vector3 v3) const {
         const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
         fr->scale     = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-        FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
+        if (auto net = GetNetworkServer()) {
+            net->sendGameRPC<Framework::World::RPC::SetFrame>(GetServerEngine(), _ent, *fr);
+        }
     }
 
     void Entity::SetModelName(std::string name) const {
         const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
         fr->modelName = name;
-        FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
+        if (auto net = GetNetworkServer()) {
+            net->sendGameRPC<Framework::World::RPC::SetFrame>(GetServerEngine(), _ent, *fr);
+        }
     }
 
     void Entity::SetModelHash(uint64_t hash) const {
         const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
         fr->modelHash = hash;
-        FW_SEND_SERVER_COMPONENT_GAME_RPC(Framework::World::RPC::SetFrame, _ent, *fr);
+        if (auto net = GetNetworkServer()) {
+            net->sendGameRPC<Framework::World::RPC::SetFrame>(GetServerEngine(), _ent, *fr);
+        }
     }
 
     void Entity::Destroy() const {
@@ -97,10 +119,9 @@ namespace Framework::Integrations::Scripting {
             throw std::runtime_error(fmt::format("Entity '{}' is not a valid peer!", _ent.id()));
         }
 
-        Framework::Integrations::Shared::RPC::EmitLuaEvent rpc;
         try {
             nlohmann::json jsonPayload = Framework::Scripting::Utils::SolToJson(payload);
-            rpc.FromParameters(eventName, jsonPayload.dump());
+            Framework::Integrations::Shared::RPC::EmitLuaEvent rpc(eventName, jsonPayload.dump());
             CoreModules::GetNetworkPeer()->SendRPC(rpc, SLNet::RakNetGUID(st->guid));
         }
         catch (const std::exception &e) {
@@ -202,8 +223,7 @@ namespace Framework::Integrations::Scripting {
             auto net = reinterpret_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());
             const auto streamer = _ent.get<Framework::World::Modules::Base::Streamer>();
             if (net && streamer) {
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM, reason);
+                Framework::Networking::Messages::ClientKick kick(Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM, reason);
                 net->Send(kick, streamer->guid);
                 net->GetPeer()->CloseConnection(SLNet::RakNetGUID(streamer->guid), true);
                 return;

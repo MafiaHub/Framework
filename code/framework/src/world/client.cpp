@@ -108,29 +108,34 @@ namespace Framework::World {
 
         _networkPeer = nullptr;
     }
-    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) const {
-        net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
-            const auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-        });
-        net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
-            const auto fr = e.get_mut<World::Modules::Base::Frame>();
-            *fr           = msg->GetFrame();
-        });
+    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) {
+        auto r = net->router();
+        r.onGameRPC<RPC::SetTransform>().handle(this, &ClientEngine::OnSetTransform);
+        r.onGameRPC<RPC::SetFrame>().handle(this, &ClientEngine::OnSetFrame);
+    }
+
+    void ClientEngine::OnSetTransform(SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
+        if (!msg->Valid()) {
+            return;
+        }
+        const auto e = GetEntityByServerID(msg->GetServerID());
+        if (!e.is_alive()) {
+            return;
+        }
+        const auto tr = e.get_mut<World::Modules::Base::Transform>();
+        *tr           = msg->GetTransform();
+    }
+
+    void ClientEngine::OnSetFrame(SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
+        if (!msg->Valid()) {
+            return;
+        }
+        const auto e = GetEntityByServerID(msg->GetServerID());
+        if (!e.is_alive()) {
+            return;
+        }
+        const auto fr = e.get_mut<World::Modules::Base::Frame>();
+        *fr           = msg->GetFrame();
     }
 
     void ClientEngine::UpdateEntityTransform(flecs::entity entity, Modules::Base::Transform &rhs) {

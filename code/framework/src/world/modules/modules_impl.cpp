@@ -10,6 +10,7 @@
 
 #include "base.hpp"
 #include "networking/messages/game_sync/entity_messages.h"
+#include "networking/messages/game_sync/entity_owner_update.h"
 #include "networking/network_peer.h"
 #include "world/client.h"
 #include "world/engine.h"
@@ -27,10 +28,8 @@
 namespace Framework::World::Modules {
     void Base::SetupServerEmitters(Streamable& streamable) {
         streamable.events.spawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
-            if (tr)
-                entitySpawn.FromParameters(*tr);
+            Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn(tr ? *tr : Framework::World::Modules::Base::Transform{});
             entitySpawn.SetServerID(e.id());
             peer->Send(entitySpawn, guid);
             CALL_CUSTOM_PROC(spawnProc);
@@ -54,11 +53,11 @@ namespace Framework::World::Modules {
         };
 
         streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-            if (tr && es)
-                entityUpdate.FromParameters(*tr, es->owner);
+            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate(
+                (tr && es) ? *tr : Framework::World::Modules::Base::Transform{},
+                (tr && es) ? es->owner : SLNet::UNASSIGNED_RAKNET_GUID.g);
             entityUpdate.SetServerID(e.id());
             peer->Send(entityUpdate, guid);
             CALL_CUSTOM_PROC(updateProc);
@@ -66,11 +65,10 @@ namespace Framework::World::Modules {
         };
 
         streamable.events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-            if (tr && es)
-                entityUpdate.FromParameters(es->owner);
+            Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate(
+                (tr && es) ? es->owner : SLNet::UNASSIGNED_RAKNET_GUID.g);
             entityUpdate.SetServerID(e.id());
             peer->Send(entityUpdate, guid);
             CALL_CUSTOM_PROC(ownerUpdateProc);
@@ -79,11 +77,11 @@ namespace Framework::World::Modules {
     }
     void Base::SetupClientEmitters(Streamable& streamable) {
         streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr  = e.get<Framework::World::Modules::Base::Transform>();
             const auto sid = e.get<Framework::World::Modules::Base::ServerID>();
+            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate(
+                (tr && sid) ? *tr : Framework::World::Modules::Base::Transform{}, 0);
             if (tr && sid) {
-                entityUpdate.FromParameters(*tr, 0);
                 entityUpdate.SetServerID(sid->id);
             }
             peer->Send(entityUpdate, guid);
@@ -92,103 +90,124 @@ namespace Framework::World::Modules {
         };
     }
 
-    void Base::SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine) {
-        using namespace Framework::Networking::Messages;
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
+    // ServerReceiverHandler implementations
+    void ServerReceiverHandler::OnEntityUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityUpdate *msg) {
+        if (!msg->Valid()) {
+            return;
+        }
 
-            const auto e = worldEngine->WrapEntity(msg->GetServerID());
+        const auto e = _worldEngine->WrapEntity(msg->GetServerID());
 
-            if (!e.is_alive()) {
-                return;
-            }
+        if (!e.is_alive()) {
+            return;
+        }
 
-            if (!worldEngine->IsEntityOwner(e, guid.g)) {
-                return;
-            }
+        if (!_worldEngine->IsEntityOwner(e, guid.g)) {
+            return;
+        }
 
-            const auto tr         = e.get_mut<World::Modules::Base::Transform>();
-            const auto incomingTr = msg->GetTransform();
+        const auto tr         = e.get_mut<World::Modules::Base::Transform>();
+        const auto incomingTr = msg->GetTransform();
 
-            if (tr->ValidateGeneration(incomingTr)) {
-                *tr = incomingTr;
-            }
-        });
+        if (tr->ValidateGeneration(incomingTr)) {
+            *tr = incomingTr;
+        }
     }
 
-    void Base::SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory) {
+    // ClientReceiverHandler implementations
+    void ClientReceiverHandler::OnEntitySpawn(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntitySpawn *msg) {
+        (void)guid;
+        if (!msg->Valid()) {
+            return;
+        }
+        if (_worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
+            return;
+        }
+        const auto e = _worldEngine->CreateEntity(msg->GetServerID());
+        _streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
+
+        e.add<World::Modules::Base::Transform>();
+        const auto tr = e.get_mut<World::Modules::Base::Transform>();
+        *tr           = msg->GetTransform();
+    }
+
+    void ClientReceiverHandler::OnEntityDespawn(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityDespawn *msg) {
+        (void)guid;
+        if (!msg->Valid()) {
+            return;
+        }
+
+        const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+        if (!e.is_alive()) {
+            return;
+        }
+
+        e.destruct();
+    }
+
+    void ClientReceiverHandler::OnEntityUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityUpdate *msg) {
+        (void)guid;
+        if (!msg->Valid()) {
+            return;
+        }
+
+        const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+        if (!e.is_alive()) {
+            return;
+        }
+
+        const auto tr = e.get_mut<World::Modules::Base::Transform>();
+        *tr           = msg->GetTransform();
+
+        const auto es = e.get_mut<World::Modules::Base::Streamable>();
+        es->owner     = msg->GetOwner();
+    }
+
+    void ClientReceiverHandler::OnEntityOwnerUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityOwnerUpdate *msg) {
+        (void)guid;
+        if (!msg->Valid()) {
+            return;
+        }
+
+        const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+        if (!e.is_alive()) {
+            return;
+        }
+        const auto es = e.get_mut<World::Modules::Base::Streamable>();
+        es->owner     = msg->GetOwner();
+    }
+
+    void ClientReceiverHandler::OnEntitySelfUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntitySelfUpdate *msg) {
+        (void)guid;
+        if (!msg->Valid()) {
+            return;
+        }
+
+        const auto e = _worldEngine->GetEntityByServerID(msg->GetServerID());
+
+        if (!e.is_alive()) {
+            return;
+        }
+
+        // Nothing to do for now.
+    }
+
+    void Base::SetupServerReceivers(Framework::Networking::NetworkPeer *net, ServerReceiverHandler *handler) {
         using namespace Framework::Networking::Messages;
-        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [worldEngine, streamingFactory](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            if (worldEngine->GetEntityByServerID(msg->GetServerID()).is_alive()) {
-                return;
-            }
-            const auto e = worldEngine->CreateEntity(msg->GetServerID());
-            streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
+        auto r = net->router();
+        r.on<GameSyncEntityUpdate>().handle(handler, &ServerReceiverHandler::OnEntityUpdate);
+    }
 
-            e.add<World::Modules::Base::Transform>();
-            const auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-        });
-        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            e.destruct();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            const auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-
-            const auto es = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner     = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-            const auto es = e.get_mut<World::Modules::Base::Streamable>();
-            es->owner     = msg->GetOwner();
-        });
-        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-
-            const auto e = worldEngine->GetEntityByServerID(msg->GetServerID());
-
-            if (!e.is_alive()) {
-                return;
-            }
-
-            // Nothing to do for now.
-        });
+    void Base::SetupClientReceivers(Framework::Networking::NetworkPeer *net, ClientReceiverHandler *handler) {
+        using namespace Framework::Networking::Messages;
+        auto r = net->router();
+        r.on<GameSyncEntitySpawn>().handle(handler, &ClientReceiverHandler::OnEntitySpawn);
+        r.on<GameSyncEntityDespawn>().handle(handler, &ClientReceiverHandler::OnEntityDespawn);
+        r.on<GameSyncEntityUpdate>().handle(handler, &ClientReceiverHandler::OnEntityUpdate);
+        r.on<GameSyncEntityOwnerUpdate>().handle(handler, &ClientReceiverHandler::OnEntityOwnerUpdate);
+        r.on<GameSyncEntitySelfUpdate>().handle(handler, &ClientReceiverHandler::OnEntitySelfUpdate);
     }
 } // namespace Framework::World::Modules

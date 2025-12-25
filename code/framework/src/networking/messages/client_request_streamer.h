@@ -21,16 +21,16 @@ namespace Framework::Networking::Messages {
         SLNet::RakString _playerHardwareId = "";
 
       public:
+        ClientRequestStreamer() = default;
+
+        ClientRequestStreamer(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId, const std::string &playerHardwareId = "")
+            : _playerName(playerName.c_str())
+            , _playerSteamId(playerSteamId.c_str())
+            , _playerDiscordId(playerDiscordId.c_str())
+            , _playerHardwareId(playerHardwareId.c_str()) {}
+
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_REQUEST_STREAMER;
-        }
-
-        void FromParameters(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId, const std::string &playerHardwareId = "") {
-            Framework::Logging::GetLogger("dbg")->debug(playerName);
-            _playerName       = SLNet::RakString(playerName.c_str());
-            _playerSteamId    = SLNet::RakString(playerSteamId.c_str());
-            _playerDiscordId  = SLNet::RakString(playerDiscordId.c_str());
-            _playerHardwareId = SLNet::RakString(playerHardwareId.c_str());
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

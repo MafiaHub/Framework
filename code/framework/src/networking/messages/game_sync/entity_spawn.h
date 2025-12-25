@@ -20,12 +20,13 @@ namespace Framework::Networking::Messages {
         World::Modules::Base::Transform _transform {};
 
       public:
+        GameSyncEntitySpawn() = default;
+
+        GameSyncEntitySpawn(World::Modules::Base::Transform transform)
+            : _transform(transform) {}
+
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_SPAWN;
-        }
-
-        void FromParameters(World::Modules::Base::Transform tr) {
-            _transform = tr;
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

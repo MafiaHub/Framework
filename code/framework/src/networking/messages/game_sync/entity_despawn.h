@@ -17,6 +17,8 @@
 namespace Framework::Networking::Messages {
     class GameSyncEntityDespawn final: public GameSyncMessage {
       public:
+        GameSyncEntityDespawn() = default;
+
         uint8_t GetMessageID() const override {
             return GAME_SYNC_ENTITY_DESPAWN;
         }

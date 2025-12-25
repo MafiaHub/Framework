@@ -285,81 +285,34 @@ namespace Framework::Integrations::Client {
     void Instance::InitNetworkingMessages() {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
+        auto r = net->router();
+
+        // Connection callback (not a message handler)
         net->SetOnPlayerConnectedCallback([this, net](SLNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
-            ClientHandshake msg;
-            msg.FromParameters(_opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
+            ClientHandshake msg(_opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
 
             net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
         });
-        net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
-            // Store resource list on instance (survives scripting module reset)
-            if (msg->GetResourceCount() > 0) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
 
-                _pendingServerResources.clear();
-                _pendingServerResources.reserve(msg->GetResourceCount());
-                for (const auto &resInfo : msg->GetResources()) {
-                    Client::Scripting::ServerResourceInfo info;
-                    info.name = resInfo.name;
-                    info.version = resInfo.version;
-                    info.hash = resInfo.hash;
-                    _pendingServerResources.push_back(info);
-                }
-            }
+        // Register message handlers using the fluent router API
+        r.on<ClientReadyAssets>().handle(this, &Instance::OnClientReadyAssets);
+        r.on<ClientConnectionFinalized>().handle(this, &Instance::OnClientConnectionFinalized);
+        r.on<ClientKick>().handle(this, &Instance::OnClientKick);
 
-            DownloadsAssetsFromConnectedServer();
-        });
-        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
-            _worldEngine->OnConnect(net, msg->GetServerTickRate());
-            const auto guid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
+        // Register GameRPC handlers using the fluent router API
+        r.onGameRPC<Framework::World::RPC::SetTransform>().handle(this, &Instance::OnSetTransform);
 
-            const auto newPlayer = GetWorldEngine()->CreateEntity(msg->GetEntityID());
-            GetStreamingFactory()->SetupClient(newPlayer, guid.g);
-            GetPlayerFactory()->SetupClient(newPlayer, guid.g);
+        // Register RPC handlers using the fluent router API
+        r.onRPC<Shared::RPC::EmitLuaEvent>().handle(this, &Instance::OnEmitLuaEvent);
 
-            // Notify server we are ready to obtain player data
-            Framework::Networking::Messages::ClientInitPlayer initPlayer {};
-            net->Send(initPlayer, SLNet::UNASSIGNED_RAKNET_GUID);
-
-            // Notify mod-level that network integration whole process succeeded
-            if (_onConnectionFinalized) {
-                _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
-            }
-        });
-        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](SLNet::RakNetGUID guid, ClientKick *msg) {
-            std::string reason = "Unknown.";
-
-            switch (msg->GetDisconnectionReason()) {
-            case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + msg->GetCustomReason(); break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
-            case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
-            case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
-            default: break;
-            }
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
-        });
-        net->RegisterGameRPC<Framework::World::RPC::SetTransform>([this](SLNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetWorldEngine()->GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
-
-            const auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-        });
+        // Disconnection callback (not a message handler)
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
             // Reset initial asset download state
             _initialDownloadDone = false;
             _downloadStatus      = {};
-            
+
             // Request the world engine to clean up entities
             _worldEngine->OnDisconnect();
 
@@ -377,29 +330,103 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
-            if (!rpc->Valid())
-                return;
-            const auto eventName  = rpc->GetEventName();
-            const auto payloadStr = rpc->GetPayload();
-            sol::object payload {};
-            try {
-                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
-                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
-            }
-            catch (const std::exception &ex) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
-                return;
-            }
-            const auto resourceManager = Framework::CoreModules::GetResourceManager();
-            if (resourceManager) {
-                resourceManager->InvokeGlobalEvent(eventName, payload);
-            }
-        });
-
-        Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
+        // Create the handler and store it (lifetime must >= NetworkPeer)
+        _clientReceiverHandler = std::make_unique<World::Modules::ClientReceiverHandler>(_worldEngine.get(), _streamingFactory.get());
+        Framework::World::Modules::Base::SetupClientReceivers(net, _clientReceiverHandler.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
+    }
+
+    void Instance::OnClientReadyAssets(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientReadyAssets *msg) {
+        (void)guid; // Unused parameter
+        // Store resource list on instance (survives scripting module reset)
+        if (msg->GetResourceCount() > 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
+
+            _pendingServerResources.clear();
+            _pendingServerResources.reserve(msg->GetResourceCount());
+            for (const auto &resInfo : msg->GetResources()) {
+                Client::Scripting::ServerResourceInfo info;
+                info.name = resInfo.name;
+                info.version = resInfo.version;
+                info.hash = resInfo.hash;
+                _pendingServerResources.push_back(info);
+            }
+        }
+
+        DownloadsAssetsFromConnectedServer();
+    }
+
+    void Instance::OnClientConnectionFinalized(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientConnectionFinalized *msg) {
+        (void)guid; // Unused parameter
+        const auto net = _networkingEngine->GetNetworkClient();
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
+        _worldEngine->OnConnect(net, msg->GetServerTickRate());
+        const auto myGuid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
+
+        const auto newPlayer = GetWorldEngine()->CreateEntity(msg->GetEntityID());
+        GetStreamingFactory()->SetupClient(newPlayer, myGuid.g);
+        GetPlayerFactory()->SetupClient(newPlayer, myGuid.g);
+
+        // Notify server we are ready to obtain player data
+        Framework::Networking::Messages::ClientInitPlayer initPlayer {};
+        net->Send(initPlayer, SLNet::UNASSIGNED_RAKNET_GUID);
+
+        // Notify mod-level that network integration whole process succeeded
+        if (_onConnectionFinalized) {
+            _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
+        }
+    }
+
+    void Instance::OnClientKick(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientKick *msg) {
+        (void)guid; // Unused parameter
+        std::string reason = "Unknown.";
+
+        switch (msg->GetDisconnectionReason()) {
+        case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
+        case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
+        case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + msg->GetCustomReason(); break;
+        case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
+        case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
+        case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
+        default: break;
+        }
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
+    }
+
+    void Instance::OnSetTransform(SLNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
+        (void)guid; // Unused parameter
+        if (!msg->Valid()) {
+            return;
+        }
+        const auto e = GetWorldEngine()->GetEntityByServerID(msg->GetServerID());
+        if (!e.is_alive()) {
+            return;
+        }
+
+        const auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
+        *tr           = msg->GetTransform();
+    }
+
+    void Instance::OnEmitLuaEvent(SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+        (void)guid; // Unused parameter
+        if (!rpc->Valid())
+            return;
+        const auto eventName  = rpc->GetEventName();
+        const auto payloadStr = rpc->GetPayload();
+        sol::object payload {};
+        try {
+            nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+            payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
+        }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
+            return;
+        }
+        const auto resourceManager = Framework::CoreModules::GetResourceManager();
+        if (resourceManager) {
+            resourceManager->InvokeGlobalEvent(eventName, payload);
+        }
     }
 
     void Instance::DownloadsAssetsFromConnectedServer() {
@@ -504,8 +531,7 @@ namespace Framework::Integrations::Client {
         if (!_initialDownloadDone) {
             _initialDownloadDone = true;
 
-            Framework::Networking::Messages::ClientRequestStreamer req;
-            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
+            Framework::Networking::Messages::ClientRequestStreamer req(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
             net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
         }
 

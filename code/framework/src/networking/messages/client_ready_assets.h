@@ -77,12 +77,13 @@ namespace Framework::Networking::Messages {
         std::vector<ResourceInfo> _resources;
 
       public:
+        ClientReadyAssets() = default;
+
+        ClientReadyAssets(const std::string &clientEntryPoint)
+            : _clientEntryPoint(clientEntryPoint.c_str()) {}
+
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_READY_ASSETS;
-        }
-
-        void FromParameters(const std::string& clientEntryPoint) {
-            _clientEntryPoint = clientEntryPoint.c_str();
         }
 
         void AddResource(const std::string &name, const std::string &version, uint32_t hash) {

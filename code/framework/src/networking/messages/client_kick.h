@@ -21,13 +21,14 @@ namespace Framework::Networking::Messages {
         SLNet::RakString _customReason;
 
       public:
+        ClientKick() = default;
+
+        ClientKick(DisconnectionReason reason, const std::string &customReason = "")
+            : _reason(reason)
+            , _customReason(customReason.c_str()) {}
+
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_KICKED;
-        }
-
-        void FromParameters(DisconnectionReason reason, const std::string customReason = "") {
-            _reason = reason;
-            _customReason = customReason.c_str();
         }
 
         void Serialize(SLNet::BitStream *bs, bool write) override {

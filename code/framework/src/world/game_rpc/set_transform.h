@@ -17,9 +17,10 @@ namespace Framework::World::RPC {
         World::Modules::Base::Transform _transform;
 
       public:
-        void FromParameters(const World::Modules::Base::Transform &tr) {
-            _transform = tr;
-        }
+        SetTransform() = default;
+
+        SetTransform(const World::Modules::Base::Transform &tr)
+            : _transform(tr) {}
 
         World::Modules::Base::Transform GetTransform() const {
             return _transform;

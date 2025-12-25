@@ -27,12 +27,28 @@
 
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
+#include "world/modules/base.hpp"
 
 #include <gui/manager.h>
 
 #include <input/input.h>
 
 #include <flecs/flecs.h>
+
+// Forward declarations for network message handlers
+namespace Framework::Networking::Messages {
+    class ClientReadyAssets;
+    class ClientConnectionFinalized;
+    class ClientKick;
+} // namespace Framework::Networking::Messages
+
+namespace Framework::World::RPC {
+    class SetTransform;
+} // namespace Framework::World::RPC
+
+namespace Framework::Integrations::Shared::RPC {
+    class EmitLuaEvent;
+} // namespace Framework::Integrations::Shared::RPC
 
 namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
@@ -112,6 +128,9 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
         std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
+        // message handler for world module receivers
+        std::unique_ptr<World::Modules::ClientReceiverHandler> _clientReceiverHandler;
+
         // assets
         AssetDownloadStatus _downloadStatus {};
         std::string _assetCachePath;
@@ -125,6 +144,13 @@ namespace Framework::Integrations::Client {
         void OnAssetsDownloaded(bool success);
         void InitCacheAssetFolders();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
+
+        // Network message handlers
+        void OnClientReadyAssets(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientReadyAssets *msg);
+        void OnClientConnectionFinalized(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientConnectionFinalized *msg);
+        void OnClientKick(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientKick *msg);
+        void OnSetTransform(SLNet::RakNetGUID guid, Framework::World::RPC::SetTransform *rpc);
+        void OnEmitLuaEvent(SLNet::RakNetGUID guid, Framework::Integrations::Shared::RPC::EmitLuaEvent *rpc);
 
       public:
         Instance();

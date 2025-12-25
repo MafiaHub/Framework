@@ -17,6 +17,8 @@
 namespace Framework::Networking::Messages {
     class ClientInitPlayer final: public IMessage {
       public:
+        ClientInitPlayer() = default;
+
         uint8_t GetMessageID() const override {
             return GAME_INIT_PLAYER;
         }

@@ -15,8 +15,18 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <RakNetTypes.h>
+
 namespace Framework::Networking {
     class NetworkPeer;
+
+    namespace Messages {
+        class GameSyncEntitySpawn;
+        class GameSyncEntityDespawn;
+        class GameSyncEntityUpdate;
+        class GameSyncEntityOwnerUpdate;
+        class GameSyncEntitySelfUpdate;
+    } // namespace Messages
 }; // namespace Framework::Networking
 
 namespace Framework::World {
@@ -29,6 +39,40 @@ namespace Framework::World {
 } // namespace Framework::World
 
 namespace Framework::World::Modules {
+
+    /**
+     * Handler class for server-side receivers.
+     * Stores dependencies and provides instance methods for message handling.
+     */
+    class ServerReceiverHandler {
+        Engine *_worldEngine;
+
+      public:
+        explicit ServerReceiverHandler(Engine *worldEngine): _worldEngine(worldEngine) {}
+
+        void OnEntityUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityUpdate *msg);
+    };
+
+    /**
+     * Handler class for client-side receivers.
+     * Stores dependencies and provides instance methods for message handling.
+     */
+    class ClientReceiverHandler {
+        ClientEngine *_worldEngine;
+        Archetypes::StreamingFactory *_streamingFactory;
+
+      public:
+        ClientReceiverHandler(ClientEngine *worldEngine, Archetypes::StreamingFactory *streamingFactory)
+            : _worldEngine(worldEngine)
+            , _streamingFactory(streamingFactory) {}
+
+        void OnEntitySpawn(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntitySpawn *msg);
+        void OnEntityDespawn(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityDespawn *msg);
+        void OnEntityUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityUpdate *msg);
+        void OnEntityOwnerUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntityOwnerUpdate *msg);
+        void OnEntitySelfUpdate(SLNet::RakNetGUID guid, Framework::Networking::Messages::GameSyncEntitySelfUpdate *msg);
+    };
+
     struct Base {
         struct Transform {
           private:
@@ -191,7 +235,7 @@ namespace Framework::World::Modules {
 
         static void SetupServerEmitters(Streamable& streamable);
         static void SetupClientEmitters(Streamable& streamable);
-        static void SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine);
-        static void SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory);
+        static void SetupServerReceivers(Framework::Networking::NetworkPeer *net, ServerReceiverHandler *handler);
+        static void SetupClientReceivers(Framework::Networking::NetworkPeer *net, ClientReceiverHandler *handler);
     };
 } // namespace Framework::World::Modules

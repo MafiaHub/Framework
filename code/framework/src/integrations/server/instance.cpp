@@ -239,73 +239,21 @@ namespace Framework::Integrations::Server {
         return true;
     }
 
-    void Instance::InitNetworkingMessages() const {
-        using namespace Framework::Networking::Messages;
+    void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkServer();
-        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for incoming player guid {}", guid.g);
+        auto r = net->router();
 
-            // Make sure handshake payload was correctly formatted
-            if (!msg->Valid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
+        // Register message handlers using the fluent router API
+        r.on<Framework::Networking::Messages::ClientHandshake>().handle(this, &Instance::OnClientHandshake);
+        r.on<Framework::Networking::Messages::ClientRequestStreamer>().handle(this, &Instance::OnClientRequestStreamer);
+        r.on<Framework::Networking::Messages::ClientInitPlayer>().handle(this, &Instance::OnClientInitPlayer);
 
-            if (msg->GetGameName() != _opts.gameName) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
+        // Register RPC handlers using the fluent router API
+        r.onRPC<Shared::RPC::EmitLuaEvent>().handle(this, &Instance::OnEmitLuaEvent);
 
-            const auto fwVersion = msg->GetFWVersion();
-
-            if (!Utils::Version::VersionSatisfies(fwVersion.c_str(), Utils::Version::rel)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid Framework version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto clientVersion = msg->GetClientVersion();
-
-            if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), _opts.modVersion.c_str())) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto mpClientVersion = msg->GetGameVersion();
-
-            if (mpClientVersion != _opts.gameVersion) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            // Let the client know they can ask for client-side assets now.
-            // Include the resource list in the message.
-            ClientReadyAssets readyMsg;
-            if (_scriptingModule) {
-                for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    readyMsg.AddResource(resource.name, resource.version, resource.hash);
-                }
-            }
-            net->Send(readyMsg, guid);
-        });
-
-        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
+        // Connection/disconnection callbacks (not message handlers)
+        net->SetOnPlayerDisconnectCallback([this](SLNet::Packet *packet, uint32_t reason) {
+            const auto net = _networkingEngine->GetNetworkServer();
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
 
@@ -320,59 +268,126 @@ namespace Framework::Integrations::Server {
             net->GetPeer()->CloseConnection(guid, true);
         });
 
-        
-        net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](SLNet::RakNetGUID guid, ClientRequestStreamer *msg) {
-            // Create player entity and add on world
-            const auto newPlayer = _worldEngine->CreateEntity();
-            _streamingFactory->SetupServer(newPlayer, guid.g);
-
-            auto nickname = msg->GetPlayerName();
-            if (nickname.size() > 64) {
-                nickname = nickname.substr(0, 64);
-            }
-
-            auto hardwareId = msg->GetPlayerHardwareID();
-
-            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname, hardwareId);
-
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {} hwid {}", msg->GetPlayerName(), guid.g, newPlayer.id(), hardwareId);
-
-            // Send the connection finalized packet
-            Framework::Networking::Messages::ClientConnectionFinalized answer;
-            answer.FromParameters(_opts.worldConfig.tickInterval, newPlayer.id());
-            net->Send(answer, guid);
-        });
-
-        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
-            const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
-                _onPlayerConnectCallback(e, guid.g);
-        });
-
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
-            if (!rpc->Valid())
-                return;
-
-            const auto eventName = rpc->GetEventName();
-            const auto payloadStr = rpc->GetPayload();
-            sol::object payload {};
-            try {
-                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
-                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
-            }
-            catch (const std::exception &ex) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
-                return;
-            }
-            const auto resourceManager = Framework::CoreModules::GetResourceManager();
-            if (resourceManager) {
-                resourceManager->InvokeGlobalEvent(eventName, payload);
-            }
-        });
-
-        Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
+        // Create the handler and store it (lifetime must >= NetworkPeer)
+        _serverReceiverHandler = std::make_unique<World::Modules::ServerReceiverHandler>(_worldEngine.get());
+        Framework::World::Modules::Base::SetupServerReceivers(net, _serverReceiverHandler.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
+    }
+
+    void Instance::OnClientHandshake(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientHandshake *msg) {
+        using namespace Framework::Networking::Messages;
+        const auto net = _networkingEngine->GetNetworkServer();
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for incoming player guid {}", guid.g);
+
+        // Make sure handshake payload was correctly formatted
+        if (!msg->Valid()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
+            net->GetPeer()->CloseConnection(guid, true);
+            return;
+        }
+
+        if (msg->GetGameName() != _opts.gameName) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
+            ClientKick kick(DisconnectionReason::WRONG_VERSION);
+            net->Send(kick, guid);
+            net->GetPeer()->CloseConnection(guid, true);
+            return;
+        }
+
+        const auto fwVersion = msg->GetFWVersion();
+
+        if (!Utils::Version::VersionSatisfies(fwVersion.c_str(), Utils::Version::rel)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid Framework version, force-disconnecting peer");
+            ClientKick kick(DisconnectionReason::WRONG_VERSION);
+            net->Send(kick, guid);
+            net->GetPeer()->CloseConnection(guid, true);
+            return;
+        }
+
+        const auto clientVersion = msg->GetClientVersion();
+
+        if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), _opts.modVersion.c_str())) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
+            ClientKick kick(DisconnectionReason::WRONG_VERSION);
+            net->Send(kick, guid);
+            net->GetPeer()->CloseConnection(guid, true);
+            return;
+        }
+
+        const auto mpClientVersion = msg->GetGameVersion();
+
+        if (mpClientVersion != _opts.gameVersion) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
+            ClientKick kick(DisconnectionReason::WRONG_VERSION);
+            net->Send(kick, guid);
+            net->GetPeer()->CloseConnection(guid, true);
+            return;
+        }
+
+        // Let the client know they can ask for client-side assets now.
+        // Include the resource list in the message.
+        ClientReadyAssets readyMsg;
+        if (_scriptingModule) {
+            for (const auto &resource : _scriptingModule->GetClientResourceList()) {
+                readyMsg.AddResource(resource.name, resource.version, resource.hash);
+            }
+        }
+        net->Send(readyMsg, guid);
+    }
+
+    void Instance::OnClientRequestStreamer(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientRequestStreamer *msg) {
+        using namespace Framework::Networking::Messages;
+        const auto net = _networkingEngine->GetNetworkServer();
+
+        // Create player entity and add on world
+        const auto newPlayer = _worldEngine->CreateEntity();
+        _streamingFactory->SetupServer(newPlayer, guid.g);
+
+        auto nickname = msg->GetPlayerName();
+        if (nickname.size() > 64) {
+            nickname = nickname.substr(0, 64);
+        }
+
+        auto hardwareId = msg->GetPlayerHardwareID();
+
+        _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname, hardwareId);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {} hwid {}", msg->GetPlayerName(), guid.g, newPlayer.id(), hardwareId);
+
+        // Send the connection finalized packet
+        ClientConnectionFinalized answer(_opts.worldConfig.tickInterval, newPlayer.id());
+        net->Send(answer, guid);
+    }
+
+    void Instance::OnClientInitPlayer(SLNet::RakNetGUID guid, Framework::Networking::Messages::ClientInitPlayer *msg) {
+        (void)msg; // Unused parameter
+        const auto e = _worldEngine->GetEntityByGUID(guid.g);
+        if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
+            _onPlayerConnectCallback(e, guid.g);
+    }
+
+    void Instance::OnEmitLuaEvent(SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+        (void)guid; // Unused parameter
+        if (!rpc->Valid())
+            return;
+
+        const auto eventName = rpc->GetEventName();
+        const auto payloadStr = rpc->GetPayload();
+        sol::object payload {};
+        try {
+            nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
+            payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
+        }
+        catch (const std::exception &ex) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
+            return;
+        }
+        const auto resourceManager = Framework::CoreModules::GetResourceManager();
+        if (resourceManager) {
+            resourceManager->InvokeGlobalEvent(eventName, payload);
+        }
     }
 
     void Instance::InitAssetStreamer() {

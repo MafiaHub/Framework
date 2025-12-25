@@ -19,10 +19,11 @@ namespace Framework::Integrations::Shared::RPC {
         SLNet::RakString _payload;
 
       public:
-        void FromParameters(const std::string &name, const std::string &payload) {
-            _eventName = name.c_str();
-            _payload = payload.c_str();
-        }
+        EmitLuaEvent() = default;
+
+        EmitLuaEvent(const std::string &name, const std::string &payload)
+            : _eventName(name.c_str())
+            , _payload(payload.c_str()) {}
 
         void Serialize(SLNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _eventName);
