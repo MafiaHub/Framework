@@ -13,6 +13,8 @@
 #include "network_peer.h"
 #include "state.h"
 
+#include <flecs.h>
+
 #include <RakNetTypes.h>
 #include <RakPeerInterface.h>
 #include <string>
@@ -89,6 +91,14 @@ namespace Framework::Networking {
                 return false;
             }
             return true;
+        }
+
+        // Fluent send method for Game RPCs
+        template <typename T, typename... Args>
+        bool sendGameRPC(flecs::entity ent, Args&&... args) {
+            T rpc(std::forward<Args>(args)...);
+            rpc.SetServerID(ent.id());
+            return SendGameRPC(rpc);
         }
     };
 }; // namespace Framework::Networking
