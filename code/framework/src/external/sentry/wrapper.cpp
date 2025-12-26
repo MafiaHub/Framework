@@ -6,6 +6,8 @@
  * See LICENSE file in the source repository for information regarding licensing.
  */
 
+#include <utils/safe_win32.h>
+
 #include "wrapper.h"
 
 #include <cppfs/FileHandle.h>

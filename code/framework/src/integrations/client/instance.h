@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <utils/safe_win32.h>
+
 #include "errors.h"
 
 #include <external/discord/wrapper.h>
