@@ -21,26 +21,6 @@ namespace Framework::World::RPC {
     class SetFrame;
 } // namespace Framework::World::RPC
 
-#define FW_SEND_CLIENT_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                               \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc(__VA_ARGS__);                                                                                                                                                                                                                                                     \
-        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = reinterpret_cast<Framework::Networking::NetworkClient *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(s);                                                                                                                                                                                                                                                \
-        }                                                                                                                                                                                                                                                                              \
-    } while (0)
-
-#define FW_SEND_CLIENT_COMPONENT_GAME_RPC_TO(rpc, ent, guid, ...)                                                                                                                                                                                                                      \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc(__VA_ARGS__);                                                                                                                                                                                                                                                     \
-        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = reinterpret_cast<Framework::Networking::NetworkClient *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(s, guid);                                                                                                                                                                                                                                          \
-        }                                                                                                                                                                                                                                                                              \
-    } while (0)
-
 namespace Framework::World {
     class ClientEngine: public Engine {
       public:

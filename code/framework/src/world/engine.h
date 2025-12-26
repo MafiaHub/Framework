@@ -11,30 +11,11 @@
 #include "errors.h"
 #include "modules/base.hpp"
 
+#include "core_modules.h"
 #include "networking/network_peer.h"
 
 #include <flecs/flecs.h>
 #include <memory>
-
-#include "core_modules.h"
-
-#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                                                                                                                                                                                \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc(__VA_ARGS__);                                                                                                                                                                                                                                                     \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                         \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendRPC<rpc>(s);                                                                                                                                                                                                                                                    \
-        }                                                                                                                                                                                                                                                                              \
-    } while (0)
-
-#define FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)                                                                                                                                                                                                                                       \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc(__VA_ARGS__);                                                                                                                                                                                                                                                     \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                         \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendRPC<rpc>(s, guid);                                                                                                                                                                                                                                              \
-        }                                                                                                                                                                                                                                                                              \
-    } while (0)
 
 namespace Framework::Scripting {
     class ResourceManager;
