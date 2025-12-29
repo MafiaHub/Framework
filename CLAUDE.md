@@ -50,9 +50,27 @@ Both expose virtual methods (`PostInit`, `PostUpdate`, `ModuleRegister`) for gam
 
 ### Key Patterns
 
-- **RPC System**: Use `FW_SEND_COMPONENT_RPC(rpc, ...)` and `FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)` for network communication
+- **RPC System**: Use constructor-based RPC calls with direct method invocations:
+  ```cpp
+  // Construct and send an RPC
+  Framework::World::RPC::SetTransform rpc(transform);
+  net->SendRPC(rpc, guid);
+
+  // Or use templated helpers
+  net->sendRPC<Framework::World::RPC::SetTransform>(guid, transform);
+  net->sendGameRPC<Framework::World::RPC::SetFrame>(engine, entity, frame);
+  ```
+- **Message Handler Registration**: Use the fluent router API:
+  ```cpp
+  auto r = net->router();
+  r.on<ClientHandshake>().handle(this, &Instance::OnClientHandshake);
+  r.onRPC<EmitLuaEvent>().handle(this, &Instance::OnEmitLuaEvent);
+  r.onGameRPC<SetTransform>().handle(this, &Instance::OnSetTransform);
+  ```
 - **Module Registration**: Access systems via `Framework::CoreModules::Get*()` static methods
 - **Entity Factories**: Use `PlayerFactory` and `StreamingFactory` for entity creation
+
+See [docs/NETWORKING_API_MIGRATION_GUIDE.md](docs/NETWORKING_API_MIGRATION_GUIDE.md) for complete API documentation and migration details.
 
 ## Code Style
 
