@@ -45,8 +45,10 @@ namespace Framework::Integrations::Scripting {
         tr->pos       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
         tr->IncrementGeneration();
         CoreModules::GetWorldEngine()->WakeEntity(_ent);
-        if (auto net = GetNetworkServer()) {
-            net->sendGameRPC<Framework::World::RPC::SetTransform>(GetServerEngine(), _ent, *tr);
+        auto net    = GetNetworkServer();
+        auto engine = GetServerEngine();
+        if (net && engine) {
+            net->sendGameRPC<Framework::World::RPC::SetTransform>(engine, _ent, *tr);
         }
     }
 
@@ -54,8 +56,10 @@ namespace Framework::Integrations::Scripting {
         const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
         tr->rot       = glm::quat(q.GetW(), q.GetX(), q.GetY(), q.GetZ());
         tr->IncrementGeneration();
-        if (auto net = GetNetworkServer()) {
-            net->sendGameRPC<Framework::World::RPC::SetTransform>(GetServerEngine(), _ent, *tr);
+        auto net    = GetNetworkServer();
+        auto engine = GetServerEngine();
+        if (net && engine) {
+            net->sendGameRPC<Framework::World::RPC::SetTransform>(engine, _ent, *tr);
         }
         CoreModules::GetWorldEngine()->WakeEntity(_ent);
     }
@@ -64,8 +68,10 @@ namespace Framework::Integrations::Scripting {
         const auto tr = _ent.get_mut<Framework::World::Modules::Base::Transform>();
         tr->vel       = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
         tr->IncrementGeneration();
-        if (auto net = GetNetworkServer()) {
-            net->sendGameRPC<Framework::World::RPC::SetTransform>(GetServerEngine(), _ent, *tr);
+        auto net    = GetNetworkServer();
+        auto engine = GetServerEngine();
+        if (net && engine) {
+            net->sendGameRPC<Framework::World::RPC::SetTransform>(engine, _ent, *tr);
         }
         CoreModules::GetWorldEngine()->WakeEntity(_ent);
     }
@@ -73,24 +79,30 @@ namespace Framework::Integrations::Scripting {
     void Entity::SetScale(Framework::Scripting::Builtins::Vector3 v3) const {
         const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
         fr->scale     = glm::vec3(v3.GetX(), v3.GetY(), v3.GetZ());
-        if (auto net = GetNetworkServer()) {
-            net->sendGameRPC<Framework::World::RPC::SetFrame>(GetServerEngine(), _ent, *fr);
+        auto net      = GetNetworkServer();
+        auto engine   = GetServerEngine();
+        if (net && engine) {
+            net->sendGameRPC<Framework::World::RPC::SetFrame>(engine, _ent, *fr);
         }
     }
 
     void Entity::SetModelName(std::string name) const {
         const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
         fr->modelName = name;
-        if (auto net = GetNetworkServer()) {
-            net->sendGameRPC<Framework::World::RPC::SetFrame>(GetServerEngine(), _ent, *fr);
+        auto net      = GetNetworkServer();
+        auto engine   = GetServerEngine();
+        if (net && engine) {
+            net->sendGameRPC<Framework::World::RPC::SetFrame>(engine, _ent, *fr);
         }
     }
 
     void Entity::SetModelHash(uint64_t hash) const {
         const auto fr = _ent.get_mut<Framework::World::Modules::Base::Frame>();
         fr->modelHash = hash;
-        if (auto net = GetNetworkServer()) {
-            net->sendGameRPC<Framework::World::RPC::SetFrame>(GetServerEngine(), _ent, *fr);
+        auto net      = GetNetworkServer();
+        auto engine   = GetServerEngine();
+        if (net && engine) {
+            net->sendGameRPC<Framework::World::RPC::SetFrame>(engine, _ent, *fr);
         }
     }
 
