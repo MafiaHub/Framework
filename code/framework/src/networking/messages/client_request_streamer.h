@@ -26,7 +26,6 @@ namespace Framework::Networking::Messages {
         }
 
         void FromParameters(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId, const std::string &playerHardwareId = "") {
-            Framework::Logging::GetLogger("dbg")->debug(playerName);
             _playerName       = SLNet::RakString(playerName.c_str());
             _playerSteamId    = SLNet::RakString(playerSteamId.c_str());
             _playerDiscordId  = SLNet::RakString(playerDiscordId.c_str());
