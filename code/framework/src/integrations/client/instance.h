@@ -28,7 +28,9 @@
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
 
+#ifdef _WIN64
 #include <gui/manager.h>
+#endif
 
 #include <input/input.h>
 
@@ -97,7 +99,9 @@ namespace Framework::Integrations::Client {
         std::shared_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
+#ifdef _WIN64
         std::shared_ptr<Framework::GUI::Manager> _webManager;
+#endif
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -194,9 +198,11 @@ namespace Framework::Integrations::Client {
             return _imguiApp.get();
         }
 
+#ifdef _WIN64
         Framework::GUI::Manager *GetWebManager() const {
             return _webManager.get();
         }
+#endif
 
         Graphics::Renderer *GetRenderer() const {
             return _renderer.get();

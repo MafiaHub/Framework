@@ -25,7 +25,9 @@
 #include "scripting/resource/resource_manager.h"
 
 #include "scripting/builtins/events_lua.h"
+#ifdef _WIN64
 #include "scripting/builtins/views.h"
+#endif
 #include "scripting/builtins/input.h"
 
 #include "networking/state.h"
@@ -86,7 +88,9 @@ namespace Framework::Integrations::Client {
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
+#ifdef _WIN64
         _webManager       = std::make_shared<Framework::GUI::Manager>();
+#endif
     }
 
     Instance::~Instance() {
@@ -263,9 +267,11 @@ namespace Framework::Integrations::Client {
             _renderIO->UpdateMainThread();
         }
 
+#ifdef _WIN64
         if (_webManager) {
             _webManager->Update();
         }
+#endif
 
         PostUpdate();
     }
@@ -371,10 +377,12 @@ namespace Framework::Integrations::Client {
             // Request the scripting engine to clean up loaded scripts
             _scriptingModule->Shutdown();
 
+#ifdef _WIN64
             // Destroy scriptable web views
             if (_webManager) {
                 _webManager->CleanupViews();
             }
+#endif
         });
 
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
@@ -414,10 +422,12 @@ namespace Framework::Integrations::Client {
         // Stop running resources before redownloading (preserves server resource list)
         _scriptingModule->StopAllResources();
 
+#ifdef _WIN64
         // Destroy scriptable web views
         if (_webManager) {
             _webManager->CleanupViews();
         }
+#endif
 
         // Setup the asset downloader
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");
@@ -520,7 +530,9 @@ namespace Framework::Integrations::Client {
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
         // Register the events builtin
         Framework::Integrations::Scripting::EventsClient::Register(engine->GetLuaEngine());
+#ifdef _WIN64
         Framework::Integrations::Scripting::Views::Register(engine->GetLuaEngine());
+#endif
         Framework::Integrations::Scripting::Input::Register(engine->GetLuaEngine());
 
         // mod-specific builtins
