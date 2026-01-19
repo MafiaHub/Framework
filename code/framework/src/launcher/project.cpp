@@ -8,13 +8,14 @@
 
 #include "project.h"
 
+#include "hooks/win32_hooks.h"
+#include "injection/dll_injection.h"
 #include "loaders/exe_ldr.h"
 #include "logging/logger.h"
 #include "sfd.h"
 #include "utils/hashing.h"
 #include "utils/string_utils.h"
 
-#include <Psapi.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
 #include <cppfs/FileHandle.h>
@@ -52,15 +53,8 @@ char fwgame_seg[0x2500000];
 #pragma data_seg(".fwend")
 uint8_t zdata[200] = {1};
 
-static const wchar_t *gImagePath;
-static const wchar_t *gDllName;
+// TLS DLL handle - needed by PE loader
 HMODULE tlsDll {};
-static Framework::Launcher::ProjectConfiguration *gConfig = nullptr;
-
-static wchar_t gProjectDllPath[32768];
-
-// Default entry point for the client DLL
-using ClientEntryPoint = void (*)(const wchar_t *projectPath);
 
 static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     const auto result = Framework::Utils::MiniDump::ExceptionFilter(exceptionInfo);
@@ -71,128 +65,18 @@ static LONG NTAPI HandleVariant(PEXCEPTION_POINTERS exceptionInfo) {
     return result;
 }
 
-void WINAPI GetStartupInfoW_Stub(LPSTARTUPINFOW lpStartupInfo) {
-    Framework::Launcher::Project::InitialiseClientDLL();
-
-    return GetStartupInfoW(lpStartupInfo);
-}
-
-void WINAPI GetStartupInfoA_Stub(LPSTARTUPINFOA lpStartupInfo) {
-    Framework::Launcher::Project::InitialiseClientDLL();
-
-    return GetStartupInfoA(lpStartupInfo);
-}
-
-LPWSTR WINAPI GetCommandLineW_Stub() {
-    if (!gConfig->loadClientManually) {
-        Framework::Launcher::Project::InitialiseClientDLL();
-    }
-
-    static wchar_t buffer[MAX_PATH] = {0};
-    wcscpy_s(buffer, MAX_PATH, GetCommandLineW());
-    wcscat_s(buffer, MAX_PATH, gConfig->additionalLaunchArguments.c_str());
-
-    return buffer;
-}
-
-LPSTR WINAPI GetCommandLineA_Stub() {
-    if (!gConfig->loadClientManually) {
-        Framework::Launcher::Project::InitialiseClientDLL();
-    }
-    const auto args = Framework::Utils::StringUtils::WideToNormal(gConfig->additionalLaunchArguments);
-
-    static char buffer[MAX_PATH] = {0};
-    strcpy_s(buffer, MAX_PATH, GetCommandLineA());
-    strcat_s(buffer, MAX_PATH, args.c_str());
-
-    return buffer;
-}
-
-DWORD WINAPI GetModuleFileNameA_Hook(HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
-        strcpy_s(lpFilename, nSize, gamePath.c_str());
-
-        return (DWORD)gamePath.size();
-    }
-
-    return GetModuleFileNameA(hModule, lpFilename, nSize);
-}
-
-DWORD WINAPI GetModuleFileNameExA_Hook(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        const auto gamePath = Framework::Utils::StringUtils::WideToNormal(gImagePath);
-        strcpy_s(lpFilename, nSize, gamePath.c_str());
-
-        return (DWORD)gamePath.size();
-    }
-
-    return GetModuleFileNameExA(hProcess, hModule, lpFilename, nSize);
-}
-
-DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        wcscpy_s(lpFilename, nSize, gImagePath);
-
-        return (DWORD)wcslen(gImagePath);
-    }
-    const auto len = GetModuleFileNameW(hModule, lpFilename, nSize);
-    return len;
-}
-
-DWORD WINAPI GetModuleFileNameExW_Hook(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
-    if (!hModule || hModule == GetModuleHandle(nullptr)) {
-        wcscpy_s(lpFilename, nSize, gImagePath);
-
-        return (DWORD)wcslen(gImagePath);
-    }
-
-    return GetModuleFileNameExW(hProcess, hModule, lpFilename, nSize);
-}
-
-HMODULE WINAPI GetModuleHandleW_Hook(LPWSTR lpModuleName) {
-    if (lpModuleName == nullptr) {
-        return GetModuleHandle(nullptr);
-    }
-
-    return GetModuleHandleW(lpModuleName);
-}
-
-HMODULE WINAPI GetModuleHandleA_Hook(LPSTR lpModuleName) {
-    if (lpModuleName == nullptr) {
-        return GetModuleHandle(nullptr);
-    }
-
-    return GetModuleHandleA(lpModuleName);
-}
-
-BOOL WINAPI GetModuleHandleExW_Hook(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE *phModule) {
-    if (lpModuleName == nullptr) {
-        *phModule = GetModuleHandle(nullptr);
-        return TRUE;
-    }
-
-    return GetModuleHandleExW(dwFlags, lpModuleName, phModule);
-}
-
-BOOL WINAPI GetModuleHandleExA_Hook(DWORD dwFlags, LPSTR lpModuleName, HMODULE *phModule) {
-    if (lpModuleName == nullptr) {
-        *phModule = GetModuleHandle(nullptr);
-        return TRUE;
-    }
-
-    return GetModuleHandleExA(dwFlags, lpModuleName, phModule);
-}
-
 namespace Framework::Launcher {
     Project::Project(ProjectConfiguration &cfg): _config(cfg) {
-        gConfig = &_config;
+        // Initialize the hook context with our configuration
+        auto &hookContext        = Hooks::GetHookContext();
+        hookContext.config       = &_config;
+
         // Fetch the current working directory
-        GetCurrentDirectoryW(32768, gProjectDllPath);
+        GetCurrentDirectoryW(32768, hookContext.projectDllPath);
 
         Logging::GetInstance()->SetLogName(_config.name);
 
-        auto projectPath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+        auto projectPath = Utils::StringUtils::WideToNormal(hookContext.projectDllPath);
         std::replace(projectPath.begin(), projectPath.end(), '/', '\\');
         Logging::GetInstance()->SetLogFolder(projectPath + "/logs");
 
@@ -200,10 +84,12 @@ namespace Framework::Launcher {
         _minidump     = std::make_unique<Utils::MiniDump>();
         _fileConfig   = std::make_unique<Utils::Config>();
 
-        _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(gProjectDllPath));
+        _minidump->SetSymbolPath(Utils::StringUtils::WideToNormal(hookContext.projectDllPath));
     }
 
     bool Project::Launch() {
+        auto &hookContext = Hooks::GetHookContext();
+
         if (_config.allocateDeveloperConsole) {
             AllocateDeveloperConsole();
         }
@@ -253,8 +139,8 @@ namespace Framework::Launcher {
             }
 
             // add our own paths now
-            addDllDirectory(gProjectDllPath);
-            addDllDirectory((std::wstring(gProjectDllPath) + L"\\bin").c_str());
+            addDllDirectory(hookContext.projectDllPath);
+            addDllDirectory((std::wstring(hookContext.projectDllPath) + L"\\bin").c_str());
 
             if (_config.useAlternativeWorkDir) {
                 _gamePath += L"/" + _config.alternativeWorkDir;
@@ -302,7 +188,7 @@ namespace Framework::Launcher {
             GetEnvironmentVariableW(L"PATH", pathBuf, sizeof(pathBuf));
 
             // append bin & game directories
-            const std::wstring newPath = _gamePath + L";" + std::wstring(gProjectDllPath) + L";" + std::wstring(pathBuf);
+            const std::wstring newPath = _gamePath + L";" + std::wstring(hookContext.projectDllPath) + L";" + std::wstring(pathBuf);
             SetEnvironmentVariableW(L"PATH", newPath.c_str());
         }
 
@@ -401,6 +287,8 @@ namespace Framework::Launcher {
     }
 
     bool Project::RunInnerClassicChecks() {
+        auto &hookContext = Hooks::GetHookContext();
+
         cppfs::FileHandle handle = cppfs::fs::open(Utils::StringUtils::WideToNormal(_config.classicGamePath));
         if (!handle.isDirectory() && !_config.promptForGameExe) {
             MessageBoxA(nullptr, "Please specify game path", _config.name.c_str(), MB_ICONERROR);
@@ -408,7 +296,7 @@ namespace Framework::Launcher {
         }
 
         if (!handle.isDirectory()) {
-            const auto exePath = Utils::StringUtils::WideToNormal(gProjectDllPath);
+            const auto exePath = Utils::StringUtils::WideToNormal(hookContext.projectDllPath);
 
             sfd_Options sfd = {};
             sfd.path        = exePath.c_str();
@@ -420,7 +308,7 @@ namespace Framework::Launcher {
             const char *path = sfd_open_dialog(&sfd);
             if (path) {
                 // Reset working directory
-                SetCurrentDirectoryW(gProjectDllPath);
+                SetCurrentDirectoryW(hookContext.projectDllPath);
 
                 handle = cppfs::fs::open(path);
 
@@ -462,90 +350,9 @@ namespace Framework::Launcher {
         return true;
     }
 
-    DLLInjectionResults InjectLibraryIntoProcess(HANDLE hProcess, const wchar_t *szLibraryPath) {
-        DLLInjectionResults result = INJECT_LIBRARY_RESULT_OK;
-
-        // Get the length of the library path
-        const size_t sLibraryPathLen = (wcslen(szLibraryPath) + 1) * sizeof(WCHAR);
-
-        // Allocate the a block of memory in our target process for the library path
-        void *pRemoteLibraryPath = VirtualAllocEx(hProcess, NULL, sLibraryPathLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-
-        // Write our library path to the allocated block of memory
-        SIZE_T sBytesWritten     = 0;
-        const BOOL bWriteSuccess = WriteProcessMemory(hProcess, pRemoteLibraryPath, szLibraryPath, sLibraryPathLen, &sBytesWritten);
-
-        if (!bWriteSuccess || sBytesWritten != sLibraryPathLen) {
-            result = INJECT_LIBRARY_RESULT_WRITE_FAILED;
-        }
-        else {
-            // Get the handle of Kernel32.dll
-            const HMODULE hKernel32 = GetModuleHandle("kernel32.dll");
-            if (hKernel32 == NULL) {
-                result = INJECT_LIBRARY_GET_MODULE_HANDLE_FAILED;
-            }
-            else {
-                // Get the address of the LoadLibraryA function from Kernel32.dll
-                const FARPROC pfnLoadLibraryW = GetProcAddress(hKernel32, "LoadLibraryW");
-                if (pfnLoadLibraryW == NULL) {
-                    result = INJECT_LIBRARY_GET_PROC_ADDRESS_FAILED;
-                }
-                else {
-                    // Create a thread inside the target process to load our library
-                    const HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pfnLoadLibraryW, pRemoteLibraryPath, 0, NULL);
-
-                    if (hThread) {
-                        // Wait for the created thread to end
-                        WaitForSingleObject(hThread, INFINITE);
-
-                        DWORD dwExitCode = 0;
-                        if (GetExitCodeThread(hThread, &dwExitCode)) {
-                            // Should never happen as we wait for the thread to be finished.
-                            assert(dwExitCode != STILL_ACTIVE);
-                        }
-                        else {
-                            result = INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
-                        }
-
-                        // In case LoadLibrary returns handle equal to zero there was some problem.
-                        if (dwExitCode == 0) {
-                            result = INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
-                        }
-
-                        // Close our thread handle
-                        CloseHandle(hThread);
-                    }
-                    else {
-                        // Thread creation failed
-                        result = INJECT_LIBRARY_THREAD_CREATION_FAILED;
-                    }
-                }
-            }
-        }
-
-        // Free the allocated block of memory inside the target process
-        VirtualFreeEx(hProcess, pRemoteLibraryPath, 0, MEM_RELEASE);
-        return result;
-    }
-
-    DLLInjectionResults InjectLibraryIntoProcess(DWORD dwProcessId, const wchar_t *szLibraryPath) {
-        // Open our target process
-        const HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
-
-        if (!hProcess) {
-            // Failed to open the process
-            return INJECT_LIBRARY_OPEN_PROCESS_FAIL;
-        }
-
-        // Inject the library into the process
-        const DLLInjectionResults result = InjectLibraryIntoProcess(hProcess, szLibraryPath);
-
-        // Close the process handle
-        CloseHandle(hProcess);
-        return result;
-    }
-
     bool Project::RunWithDLLInjection() {
+        auto &hookContext = Hooks::GetHookContext();
+
         // Method cannot be called directly
         if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
@@ -560,9 +367,9 @@ namespace Framework::Launcher {
             _gamePath = _gamePath + L" " + _config.additionalLaunchArguments;
         }
 
-        // Compute the global variable
-        gImagePath = _gamePath.c_str();
-        gDllName   = _config.destinationDllName.c_str();
+        // Update the hook context with image path and dll name
+        hookContext.imagePath = _gamePath.c_str();
+        hookContext.dllName   = _config.destinationDllName.c_str();
 
         // Prepare startup info
         STARTUPINFOW siStartupInfo;
@@ -572,18 +379,18 @@ namespace Framework::Launcher {
         siStartupInfo.cb = sizeof(siStartupInfo);
 
         // Create the game process and suspend it
-        if (!CreateProcessW(NULL, (LPWSTR)_gamePath.c_str(), NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, gProjectDllPath, &siStartupInfo, &piProcessInfo)) {
+        if (!CreateProcessW(NULL, (LPWSTR)_gamePath.c_str(), NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, hookContext.projectDllPath, &siStartupInfo, &piProcessInfo)) {
             MessageBoxA(nullptr, "Failed to start game binary, cannot launch", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // Inject the client dll inside
-        const std::wstring completeDllPath           = gProjectDllPath + std::wstring(L"\\") + gDllName;
-        const DLLInjectionResults moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
+        const std::wstring completeDllPath           = hookContext.projectDllPath + std::wstring(L"\\") + hookContext.dllName;
+        const DLLInjectionResults moduleInjectResult = Injection::InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
 
         // Was it successfull?
         if (moduleInjectResult != INJECT_LIBRARY_RESULT_OK) {
-            MessageBoxA(nullptr, "Failed to inject module into game process", _config.name.c_str(), MB_ICONERROR);
+            MessageBoxA(nullptr, Injection::InjectLibraryResultToString(moduleInjectResult), _config.name.c_str(), MB_ICONERROR);
 
             TerminateProcess(piProcessInfo.hProcess, 0);
             return false;
@@ -596,6 +403,8 @@ namespace Framework::Launcher {
     }
 
     bool Project::RunWithPELoading() {
+        auto &hookContext = Hooks::GetHookContext();
+
         // Method cannot be called directly
         if (_gamePath.empty()) {
             MessageBoxA(nullptr, "Failed to extract game path from project", _config.name.c_str(), MB_ICONERROR);
@@ -603,8 +412,8 @@ namespace Framework::Launcher {
         }
 
         std::replace(_gamePath.begin(), _gamePath.end(), '/', '\\');
-        gImagePath = _gamePath.c_str();
-        gDllName   = _config.destinationDllName.c_str();
+        hookContext.imagePath = _gamePath.c_str();
+        hookContext.dllName   = _config.destinationDllName.c_str();
 
         const HANDLE hFile = CreateFileW(_gamePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) {
@@ -675,40 +484,40 @@ namespace Framework::Launcher {
             const auto exportName = std::string(exportFn);
 
             if (!_config.loadClientManually && exportName == "GetStartupInfoW") {
-                return reinterpret_cast<LPVOID>(GetStartupInfoW_Stub);
+                return reinterpret_cast<LPVOID>(Hooks::GetStartupInfoW_Stub);
             }
             if (!_config.loadClientManually && exportName == "GetStartupInfoA") {
-                return reinterpret_cast<LPVOID>(GetStartupInfoA_Stub);
+                return reinterpret_cast<LPVOID>(Hooks::GetStartupInfoA_Stub);
             }
             if (exportName == "GetCommandLineW") {
-                return reinterpret_cast<LPVOID>(GetCommandLineW_Stub);
+                return reinterpret_cast<LPVOID>(Hooks::GetCommandLineW_Stub);
             }
             if (exportName == "GetCommandLineA") {
-                return reinterpret_cast<LPVOID>(GetCommandLineA_Stub);
+                return reinterpret_cast<LPVOID>(Hooks::GetCommandLineA_Stub);
             }
             if (exportName == "GetModuleFileNameA") {
-                return reinterpret_cast<LPVOID>(GetModuleFileNameA_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleFileNameA_Hook);
             }
             if (exportName == "GetModuleFileNameExA") {
-                return reinterpret_cast<LPVOID>(GetModuleFileNameExA_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleFileNameExA_Hook);
             }
             if (exportName == "GetModuleFileNameW") {
-                return reinterpret_cast<LPVOID>(GetModuleFileNameW_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleFileNameW_Hook);
             }
             if (exportName == "GetModuleFileNameExW") {
-                return reinterpret_cast<LPVOID>(GetModuleFileNameExW_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleFileNameExW_Hook);
             }
             if (exportName == "GetModuleHandleA") {
-                return reinterpret_cast<LPVOID>(GetModuleHandleA_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleHandleA_Hook);
             }
             if (exportName == "GetModuleHandleExA") {
-                return reinterpret_cast<LPVOID>(GetModuleHandleExA_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleHandleExA_Hook);
             }
             if (exportName == "GetModuleHandleW") {
-                return reinterpret_cast<LPVOID>(GetModuleHandleW_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleHandleW_Hook);
             }
             if (exportName == "GetModuleHandleExW") {
-                return reinterpret_cast<LPVOID>(GetModuleHandleExW_Hook);
+                return reinterpret_cast<LPVOID>(Hooks::GetModuleHandleExW_Hook);
             }
             return static_cast<LPVOID>(GetProcAddress(hmod, exportFn));
         });
@@ -872,25 +681,5 @@ namespace Framework::Launcher {
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Game integrity failed to verify. Mod not allowed to launch (Checksum {})", checksum);
         return false;
-    }
-
-    void Project::InitialiseClientDLL() {
-        static bool init = false;
-
-        if (!init) {
-            const auto mod = LoadLibraryW(gDllName);
-
-            if (mod) {
-                const auto initFunc = reinterpret_cast<ClientEntryPoint>(GetProcAddress(mod, "InitClient"));
-                if (initFunc) {
-                    initFunc(gProjectDllPath);
-                }
-                else {
-                    MessageBoxA(nullptr, "Failed to find InitClient function in client DLL", "Error", MB_ICONERROR);
-                    ExitProcess(1);
-                }
-            }
-            init = true;
-        }
     }
 } // namespace Framework::Launcher

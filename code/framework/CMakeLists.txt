@@ -114,6 +114,8 @@ if(WIN32)
         STATIC
         src/utils/hashing.cpp
         src/launcher/project.cpp
+        src/launcher/hooks/win32_hooks.cpp
+        src/launcher/injection/dll_injection.cpp
         src/utils/minidump.cpp
         src/launcher/loaders/exe_ldr.cpp
         src/external/steam/wrapper.cpp
