@@ -38,6 +38,7 @@ cmake --build build --target RunFrameworkTests  # Run tests
 3. **Networking** (`networking/network_peer.h`) - Client-server communication via SlikeNet
 4. **Scripting** (`scripting/engine.h`) - Lua 5.4 scripting for game logic
 5. **GUI Manager** (`gui/manager.h`) - UI using Ultralight and Dear ImGui
+6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
 
 ### Integration Layer
 
@@ -72,6 +73,7 @@ Format: `Module: Brief commit description`
 ## Key Dependencies
 
 - **Flecs** - Entity Component System
+- **FTL** - Fiber Tasking Library for job system (v2.1.0)
 - **Lua 5.4** - Scripting
 - **SlikeNet** - Networking
 - **Ultralight** - Web-based UI
