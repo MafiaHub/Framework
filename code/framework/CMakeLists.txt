@@ -38,6 +38,9 @@ set(FRAMEWORK_SRC
     src/scripting/resource/dependency_graph.cpp
     src/scripting/resource/environment_sandbox.cpp
     src/scripting/resource/resource_manager.cpp
+
+    src/jobs/job_system.cpp
+    src/jobs/io_tasks.cpp
 )
 
 set(FRAMEWORK_SERVER_SRC
@@ -158,7 +161,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl)
 
     # Required libraries for windows
     if(WIN32)
