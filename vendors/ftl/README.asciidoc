@@ -1,0 +1,268 @@
+= Fiber Tasking Lib
+
+
+This is a library for enabling task-based multi-threading. It allows execution of task graphs with arbitrary dependencies. Dependencies are represented as atomic counters.
+
+Under the covers, the task graph is executed using fibers, which in turn, are run on a pool of worker threads (one thread per CPU core). This allows the scheduler to wait on dependencies without task chaining or context switches. 
+
+This library was first created as a proof of concept of the ideas presented by
+Christian Gyrling in his 2015 GDC Talk 'Parallelizing the Naughty Dog Engine Using Fibers'
+
+http://gdcvault.com/play/1022186/Parallelizing-the-Naughty-Dog-Engine[Free GDC Vault Recorded Presentation] +
+http://twvideo01.ubm-us.net/o1/vault/gdc2015/presentations/Gyrling_Christian_Parallelizing_The_Naughty.pdf[Slides]
+
+:blank: pass:[ +]
+{blank}
+
+## Example
+
+////
+I'd love to have the below be an `include::` block, so it's not possible to be out of date
+However, Github doesn't support include blocks. :(
+So we have to do it manually.
+
+!! If you update this example, make sure it matches the code in `examples/triangle_num.cpp` !!
+////
+
+[source,cc]
+----
+#include "ftl/task_scheduler.h"
+#include "ftl/wait_group.h"
+
+#include <assert.h>
+#include <stdint.h>
+
+struct NumberSubset {
+	uint64_t start;
+	uint64_t end;
+
+	uint64_t total;
+};
+
+void AddNumberSubset(ftl::TaskScheduler *taskScheduler, void *arg) {
+	(void)taskScheduler;
+	NumberSubset *subset = reinterpret_cast<NumberSubset *>(arg);
+
+	subset->total = 0;
+
+	while (subset->start != subset->end) {
+		subset->total += subset->start;
+		++subset->start;
+	}
+
+	subset->total += subset->end;
+}
+
+/**
+ * Calculates the value of a triangle number by dividing the additions up into tasks
+ *
+ * A triangle number is defined as:
+ *         Tn = 1 + 2 + 3 + ... + n
+ *
+ * The code is checked against the numerical solution which is:
+ *         Tn = n * (n + 1) / 2
+ */
+int main() {
+	// Create the task scheduler and bind the main thread to it
+	ftl::TaskScheduler taskScheduler;
+	taskScheduler.Init();
+
+	// Define the constants to test
+	constexpr uint64_t triangleNum = 47593243ULL;
+	constexpr uint64_t numAdditionsPerTask = 10000ULL;
+	constexpr uint64_t numTasks = (triangleNum + numAdditionsPerTask - 1ULL) / numAdditionsPerTask;
+
+	// Create the tasks
+	// FTL allows you to create Tasks on the stack.
+	// However, in this case, that would cause a stack overflow
+	ftl::Task *tasks = new ftl::Task[numTasks];
+	NumberSubset *subsets = new NumberSubset[numTasks];
+	uint64_t nextNumber = 1ULL;
+
+	for (uint64_t i = 0ULL; i < numTasks; ++i) {
+		NumberSubset *subset = &subsets[i];
+
+		subset->start = nextNumber;
+		subset->end = nextNumber + numAdditionsPerTask - 1ULL;
+		if (subset->end > triangleNum) {
+			subset->end = triangleNum;
+		}
+
+		tasks[i] = { AddNumberSubset, subset };
+
+		nextNumber = subset->end + 1;
+	}
+
+	// Schedule the tasks
+	ftl::WaitGroup wg(&taskScheduler);
+	taskScheduler.AddTasks(numTasks, tasks, ftl::TaskPriority::Normal, &wg);
+
+	// FTL creates its own copies of the tasks, so we can safely delete the memory
+	delete[] tasks;
+
+	// Wait for the tasks to complete
+	wg.Wait();
+
+	// Add the results
+	uint64_t result = 0ULL;
+	for (uint64_t i = 0; i < numTasks; ++i) {
+		result += subsets[i].total;
+	}
+
+	// Test
+	assert(triangleNum * (triangleNum + 1ULL) / 2ULL == result);
+	(void)result;
+
+	// Cleanup
+	delete[] subsets;
+
+	// The destructor of TaskScheduler will shut down all the worker threads
+	// and unbind the main thread
+
+	return 0;
+}
+----
+
+{blank}
+
+## How it works
+For a great introduction to fiber and the general idea, I would suggest watching Christian Gyrling's http://gdcvault.com/play/1022186/Parallelizing-the-Naughty-Dog-Engine[talk]. It's free to watch (as of the time of writing) from the GDC vault. That said, I will give an overview of how this library works below:
+
+### What are fibers
+A https://msdn.microsoft.com/en-us/library/windows/desktop/ms682661%28v=vs.85%29.aspx[fiber] consists of a stack and a small storage space for registers. It's a very lightweight execution context that runs inside a thread. You can think of it as a shell of an actual thread. 
+
+### Why go though the hassle though? What's the benefit?
+
+The beauty of fibers is that you can switch between them extremely quickly. Ultimately, a switch consists of saving out registers, then swapping the execution pointer and the stack pointer. This is much much faster than a full-on thread context switch.
+
+### How do fibers apply to task-based multithreading?
+To answer this question, let's compare to another task-based multithreading library: Intel's https://www.threadingbuildingblocks.org/[Threading Building Blocks]. TBB is an extremely well polished and successful tasking library. It can handle really complex task graphs and has an excellent scheduler. However, let's imagine a scenario:
+
+. Task A creates Tasks B, C, and D and sends them to the scheduler
+. Task A does some other work, but then it hits the dependency: B, C, and D must be finished.
+. If they aren't finished, we can do 2 things:
+ a. Spin-wait / Sleep
+ b. Ask the scheduler for a new task and start executing that
+. Let's take the second path
+. So the scheduler gives us Task G and we start executing
+. But Task G ends up needing a dependency as well, so we ask the scheduler for another new task
+. And another, and another
+. In the meantime, Tasks B, C, and D have completed
+. Task A could theoretically be continued, but it's buried in the stack under the tasks that we got while we were waiting
+. The only way we can resume A is to wait for the entire chain to unravel back to it, or suffer a context switch.
+
+Now, obviously, this is a contrived example. And as I said above, TBB has an awesome scheduler that works hard to alleviate this problem. That said, fibers can help to eliminate the problem altogether by allowing cheap switching between tasks. This allows us to isolate the execution of one task from another, preventing the 'chaining' effect described above.
+
+{blank}
+
+## The Architecture from 10,000 ft
+
+**Task Queue** - An 'ordinary' queue for holding the tasks that are waiting to be executed. In the current code, there is a "high priority" queue, and a "low priority" queue.
+
+**Fiber Pool** - A pool of fibers used for switching to new tasks while the current task is waiting on a dependency. Fibers execute the tasks
+
+**Worker Threads** - 1 per logical CPU core. These run the fibers.
+
+**Waiting Tasks** - All the fibers / tasks that are waiting for a dependency to be fufilled. Dependencies are represented with WaitGroups
+
+
+Tasks can be created on the stack. They're just a simple struct with a function pointer and an optional void *arg to be passed to the function:
+
+[source,cc]
+----
+struct Task {
+    TaskFunction Function;
+    void *ArgData;
+};
+----
+
+[source,cc]
+----
+Task tasks[10];
+for (uint i = 0; i < 10; ++i) {
+    tasks[i] = {MyFunctionPointer, myFunctionArg};
+}
+----
+
+You schedule a task for execution by calling TaskScheduler::AddTasks()
+
+[source,cc]
+----
+ftl::WaitGroup wg(taskScheduler);
+taskScheduler->AddTasks(10, tasks, ftl::TaskPriority::High, &wg);
+----
+
+The tasks get added to the queue, and other threads (or the current one, when it is finished with the current task) can start executing them when they get popped off the queue.
+
+AddTasks can optionally take a pointer to a WaitGroup. If you do, the value of the WaitGroup will incremented by the number of tasks queued. Every time a task finishes, the WaitGroup will be atomically decremented. You can use this functionality to create depencendies between tasks. You do that with the function
+
+[source,cc]
+----
+void WaitGroup::Wait();
+----
+
+This is where fibers come into play. If the value of WaitGroup == 0, the function trivially returns. If not, the scheduler will move the current fiber into a list of waiting fibers in the WaitGroup and grab a new fiber from the **Fiber Pool**. The new fiber pops a task from the **Task Queue** and starts execution with that.
+
+But what about the task/fiber we stored in the WaitGroup? When will it finish being executed? 
+
+When the WaitGroup value hits zero from decrements, we add all the waiting fibers back into the queue in the TaskScheduler. The next time a thread switches fibers (either because the current fiber finished, or because it called WaitGroup::Wait() ), the ready Task will be picked up and resumed where it left off.
+
+{blank}
+
+## Advanced Features
+
+### Fibtex
+
+Generally, you shouldn't use Mutexes in fiber code, for two reasons:
+
+1. If you take a mutex, and call WaitGroup::Wait(), when Wait() resumes, your code could be on another thread. The mutex unlock will be undefined behavior, and probably lead to a deadlock
+2. Mutex contention will block the worker threads. And since we generally don't oversubscribe the threads to the cores, this leaves cores idle.
+
+To solve this, we created Fibtex. It implements the std lockable interface, so you can use it with all your favorite wrappers (std::lock_guard, std::unique_lock, etc.)
+It's implemented behind the scenes with fiber waits, so if a Fibtex is locked, a waiter can switch to another task and do valuable work
+
+### Thread Pinning
+
+When a fiber is resumed after a WaitGroup::Wait() or a Fibtex::lock(), there is no guarantee that it will resume on the same thread that it was running on when it was suspended. For most code, this is fine. However, certain libraries have strong assumptions. For example, in DirectX, you must do the final frame submit from the same thread that created the swap chain. Thus, some code will need to guarantee that fibers are resumed on the same thread where they were running when suspended. To do this, you can use the argument `pinToCurrentThread`. When set to `true`, the scheduler will guarantee that the resumed fiber will run on the same thread. This argument is available for WaitGroup::Wait() and Fibtext::lock(). NOTE: thread pinning is more expensive than the default behavior, and can potentially result in much slower resumption of the task in question (since it requires the pinned thread to finish the task it's currently running). Therefore, it should only be used if truely necessary.
+
+
+{blank}
+
+## Dependencies
+* C++11 Compiler
+* CMake 3.2 or greater
+
+{blank}
+
+## Supported Platforms
+
+|====
+| Arch   | Windows         | Linux           | OS X            | iOS       | Android
+| arm    | Needs testing   | Fully supported | In theory       | In theory | In theory
+| arm_64 | Needs testing   | Fully supported | Needs testing   | In theory | In theory
+| x86    | Fully supported | Needs testing   | Needs testing   |           | 
+| x86_64 | Fully supported | Fully supported | Fully supported |           | 
+|====
+
+{blank}
+
+## Building
+FiberTaskingLib is a standard CMake build. However, for detailed instructions on how to build and include the library in your own project, see the https://github.com/RichieSams/FiberTaskingLib/blob/master/documentation/build_guide.asciidoc[documentation page].
+
+{blank}
+
+## License
+The library is licensed under the https://tldrlegal.com/license/apache-license-2.0-(apache-2.0)[Apache 2.0 license]. However, FiberTaskingLib distributes and uses code from other Open Source Projects that have their own licenses:
+
+ - Boost Context Fork: https://github.com/RichieSams/FiberTaskingLib/tree/master/third_party/boost_context[Boost License v1.0]
+ - Catch2: https://github.com/RichieSams/FiberTaskingLib/tree/master/third_party/catch2[Boost License v1.0]
+
+{blank}
+
+## Contributing
+Contributions are very welcome. See the https://github.com/RichieSams/FiberTaskingLib/blob/master/CONTRIBUTING.asciidoc[contributing page] for more details.
+
+{blank}
+
+## Request for Feedback
+This implementation was something I created because I thought Christian's presentation was really interesting and I wanted to explore it myself. The code is still a work in progress and I would love to hear your critiques of how I could make it better. I will continue to work on this project and improve it as best as possible.

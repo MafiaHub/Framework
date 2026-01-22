@@ -65,6 +65,13 @@ add_subdirectory(sfd)
 # Build lua
 add_subdirectory(lua-5.4.4)
 
+# Build FTL (Fiber Tasking Library)
+set(FTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(FTL_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(FTL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(FTL_CPP_17 ON CACHE BOOL "" FORCE)
+add_subdirectory(ftl)
+
 # Build OS specific libraries
 if (WIN32)
     # Build other win32 deps
