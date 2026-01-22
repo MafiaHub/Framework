@@ -25,6 +25,7 @@ namespace Framework::Networking {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
+        int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
         std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
@@ -46,8 +47,8 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredMessageCallbacks[message] = [callback, message](SLNet::Packet *p) {
-                SLNet::BitStream bs(p->data + 1, p->length, false);
+            _registeredMessageCallbacks[message] = [this, callback, message](SLNet::Packet *p) {
+                SLNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
                 T msg = {};
                 msg.SetPacket(p);
                 msg.Serialize(&bs, false);
@@ -74,8 +75,8 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()].push_back([callback, _rpc](SLNet::Packet *p) {
-                SLNet::BitStream bs(p->data + 5, p->length, false);
+            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](SLNet::Packet *p) {
+                SLNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
@@ -96,8 +97,8 @@ namespace Framework::Networking {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()].push_back([callback, _rpc](SLNet::Packet *p) {
-                SLNet::BitStream bs(p->data + 5, p->length, false);
+            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](SLNet::Packet *p) {
+                SLNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
@@ -108,7 +109,6 @@ namespace Framework::Networking {
                     }
                     else {
                         Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid() check, skipping!", _rpc.GetHashName());
-                    
                     }
                 }
                 else {
@@ -140,6 +140,10 @@ namespace Framework::Networking {
 
         SLNet::Packet *GetPacket() const {
             return _packet;
+        }
+
+        int GetPacketDataOffset() const {
+            return _packetDataOffset;
         }
 
         SLNet::RakPeerInterface *GetPeer() const {

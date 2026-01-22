@@ -19,8 +19,8 @@ namespace Framework::Networking {
         _peer = SLNet::RakPeerInterface::GetInstance();
         CoreModules::SetNetworkPeer(this);
 
-        RegisterMessage(Messages::INTERNAL_RPC, [&](SLNet::Packet *p) {
-            SLNet::BitStream bs(p->data + 1, p->length, false);
+        RegisterMessage(Messages::INTERNAL_RPC, [this](SLNet::Packet *p) {
+            SLNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
             uint32_t hashName;
             bs.Read(hashName);
 
@@ -71,15 +71,15 @@ namespace Framework::Networking {
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
-            int offset       = 0;
-            SLNet::TimeMS TS = 0;
+            _packetDataOffset = 0;
+            SLNet::TimeMS TS  = 0;
             if (_packet->data[0] == ID_TIMESTAMP) {
                 SLNet::BitStream timestamp(_packet->data + 1, sizeof(SLNet::TimeMS) + 1, false);
                 timestamp.Read(TS);
-                offset = 1 + sizeof(SLNet::TimeMS);
+                _packetDataOffset = 1 + sizeof(SLNet::TimeMS);
             }
 
-            uint8_t packetID = _packet->data[offset];
+            uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
                 if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
