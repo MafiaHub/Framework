@@ -39,6 +39,7 @@ namespace Framework::Launcher::Loaders {
 
         fu2::function<void(void **base, uint32_t *index)> _tlsInitializer;
         std::vector<std::tuple<void *, DWORD, DWORD>> _targetProtections;
+        bool _useDirectTlsSlot0 = false;
 
       private:
         void LoadSection(IMAGE_SECTION_HEADER *section);
@@ -82,6 +83,10 @@ namespace Framework::Launcher::Loaders {
 
         inline void SetTLSInitializer(const fu2::function<void(void **base, uint32_t *index)> &callback) {
             _tlsInitializer = callback;
+        }
+
+        inline void SetUseDirectTlsSlot0(bool useDirectSlot0) {
+            _useDirectTlsSlot0 = useDirectSlot0;
         }
 
         inline void *GetEntryPoint() const {

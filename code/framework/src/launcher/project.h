@@ -91,6 +91,11 @@ namespace Framework::Launcher {
         // Console allocation
         bool allocateDeveloperConsole      = false;
         std::wstring developerConsoleTitle = L"framework: dev-console";
+
+        // TLS handling for PE loading
+        // When true, copies game TLS directly to slot 0 (requires sacrificial TLS buffer in launcher EXE)
+        // When false, uses framework's allocated TLS slot (traditional approach)
+        bool useDirectTlsSlot0 = false;
     };
 
     class Project {

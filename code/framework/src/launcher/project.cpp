@@ -651,6 +651,7 @@ namespace Framework::Launcher {
         // Create the loader instance
         Loaders::ExecutableLoader loader(data, fileSize);
         loader.SetLoadLimit(_config.loadLimit);
+        loader.SetUseDirectTlsSlot0(_config.useDirectTlsSlot0);
         loader.SetLibraryLoader([this](const char *library) -> HMODULE {
             if (_libraryLoader) {
                 const auto mod = _libraryLoader(library);

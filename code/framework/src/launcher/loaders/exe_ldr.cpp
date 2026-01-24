@@ -309,46 +309,77 @@ namespace Framework::Launcher::Loaders {
         DWORD oldProtect1;
         VirtualProtect(sourceNtHeader, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtect1);
         sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] = ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-        ApplyRelocations();
 
         LoadSections(ntHeader);
+
+        // Apply relocations AFTER sections are loaded, so we can read the relocation data
+        // from the now-copied sections and apply fixups to absolute addresses
+        ApplyRelocations();
+
         LoadImports(ntHeader);
         LoadDelayImports(ntHeader);
-
-        uint32_t tlsIndex = 0;
-        void *tlsInit     = nullptr;
-
-        if (_tlsInitializer)
-            _tlsInitializer(&tlsInit, &tlsIndex);
 
 #if defined(_M_AMD64)
         LoadExceptionTable(ntHeader);
 #endif
 
+        // TLS Setup - Two approaches supported:
+        // 1. Direct slot 0: Launcher EXE has sacrificial TLS buffer claiming slot 0
+        // 2. Allocated slot: Framework allocates a TLS slot for the game via _tlsInitializer
         if (ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size) {
             const IMAGE_TLS_DIRECTORY *targetTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(sourceNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
             const IMAGE_TLS_DIRECTORY *sourceTls = GetTargetRVA<IMAGE_TLS_DIRECTORY>(ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+
+            const size_t tlsDataSize = sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData;
+
+#if defined(_M_IX86)
+            LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
+#elif defined(_M_AMD64)
+            LPVOID *tlsBase = (LPVOID *)__readgsqword(0x58);
+#endif
+
+            // Get slot 0 pointer (for direct slot 0 approach)
+            LPVOID tlsSlot0 = tlsBase ? tlsBase[0] : nullptr;
+
+            uint32_t tlsIndex = 0;
+            void *tlsInit = nullptr;
+
+            // Get allocated TLS from framework DLL (for traditional approach)
+            if (_tlsInitializer) {
+                _tlsInitializer(&tlsInit, &tlsIndex);
+            }
+
+            // Use direct slot 0 if configured (requires sacrificial TLS buffer in launcher EXE)
+            // Otherwise use the allocated slot from _tlsInitializer
+            const bool useDirectSlot0 = _useDirectTlsSlot0 && (tlsSlot0 != nullptr);
 
             if (sourceTls->AddressOfIndex) {
                 *(DWORD *)(sourceTls->AddressOfIndex) = 0;
             }
 
-#if defined(_M_IX86)
-            LPVOID *tlsBase = (LPVOID *)__readfsdword(0x2C);
-#elif defined(_M_AMD64)
-            auto tlsBase = (LPVOID *)__readgsqword(0x58);
-#endif
+            if (sourceTls->StartAddressOfRawData && tlsDataSize > 0) {
+                if (useDirectSlot0) {
+                    // Direct slot 0 approach (for launchers with sacrificial TLS buffer)
+                    DWORD oldProtect;
+                    VirtualProtect(reinterpret_cast<LPVOID>(targetTls->StartAddressOfRawData), tlsDataSize, PAGE_READWRITE, &oldProtect);
 
-            if (sourceTls && sourceTls->StartAddressOfRawData && sourceTls->EndAddressOfRawData > sourceTls->StartAddressOfRawData && tlsInit != nullptr && tlsBase != nullptr && tlsIndex < TLS_MINIMUM_AVAILABLE) {
-                DWORD oldProtect;
+                    std::memcpy(tlsSlot0, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
+                    std::memcpy(reinterpret_cast<void *>(targetTls->StartAddressOfRawData),
+                               reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
+                }
+                else if (tlsInit != nullptr && tlsBase != nullptr && tlsIndex < TLS_MINIMUM_AVAILABLE) {
+                    // Allocated slot approach (traditional, for MafiaMP etc.)
+                    DWORD oldProtect;
+                    VirtualProtect(tlsInit, tlsDataSize, PAGE_READWRITE, &oldProtect);
 
-                VirtualProtect(tlsInit, sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData, PAGE_READWRITE, &oldProtect);
-                memcpy(tlsBase[tlsIndex], reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
-                memcpy(tlsInit, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), sourceTls->EndAddressOfRawData - sourceTls->StartAddressOfRawData);
+                    memcpy(tlsBase[tlsIndex], reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
+                    memcpy(tlsInit, reinterpret_cast<void *>(sourceTls->StartAddressOfRawData), tlsDataSize);
+                }
             }
 
+            // Set final TLS index
             if (sourceTls->AddressOfIndex) {
-                hook::put(sourceTls->AddressOfIndex, tlsIndex);
+                hook::put(sourceTls->AddressOfIndex, useDirectSlot0 ? 0 : tlsIndex);
             }
         }
 
@@ -372,7 +403,11 @@ namespace Framework::Launcher::Loaders {
         IMAGE_BASE_RELOCATION *relocation = GetTargetRVA<IMAGE_BASE_RELOCATION>(relocationDirectory->VirtualAddress);
         const auto endRelocation          = reinterpret_cast<IMAGE_BASE_RELOCATION *>((char *)relocation + relocationDirectory->Size);
 
-        const intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - reinterpret_cast<intptr_t>(GetModuleHandle(NULL));
+        // Calculate relocation offset: difference between where we're loading (_module)
+        // and where the original binary was designed to load (its ImageBase)
+        const auto origDosHeader = reinterpret_cast<const IMAGE_DOS_HEADER*>(_origBinary);
+        const auto origNtHeader = reinterpret_cast<const IMAGE_NT_HEADERS*>(_origBinary + origDosHeader->e_lfanew);
+        const intptr_t relocOffset = reinterpret_cast<intptr_t>(_module) - static_cast<intptr_t>(origNtHeader->OptionalHeader.ImageBase);
 
         if (relocOffset == 0) {
             return true;
