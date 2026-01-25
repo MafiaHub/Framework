@@ -22,12 +22,27 @@ namespace Framework::Graphics {
 
         if (_config.backend == RendererBackend::BACKEND_D3D_11) {
             _d3d11Backend = new D3D11Backend;
+            if (!_d3d11Backend->Init(_config)) {
+                delete _d3d11Backend;
+                _d3d11Backend = nullptr;
+                return RendererError::RENDERER_BACKEND_INIT_FAILED;
+            }
         }
         else if (_config.backend == RendererBackend::BACKEND_D3D_9) {
             _d3d9Backend = new D3D9Backend;
+            if (!_d3d9Backend->Init(_config)) {
+                delete _d3d9Backend;
+                _d3d9Backend = nullptr;
+                return RendererError::RENDERER_BACKEND_INIT_FAILED;
+            }
         }
         else if (_config.backend == RendererBackend::BACKEND_D3D_12) {
             _d3d12Backend = new D3D12Backend;
+            if (!_d3d12Backend->Init(_config)) {
+                delete _d3d12Backend;
+                _d3d12Backend = nullptr;
+                return RendererError::RENDERER_BACKEND_INIT_FAILED;
+            }
         }
 
         _initialized = true;
