@@ -52,6 +52,18 @@ namespace Framework::World {
                 }
             });
 
+        // Observer to clear owner GUID when OwnedBy relation is removed
+        _world->observer()
+            .with<Modules::Base::OwnedBy>(flecs::Wildcard)
+            .event(flecs::OnRemove)
+            .each([](flecs::iter& it, size_t row) {
+                auto e = it.entity(row);
+                auto streamable = e.get_mut<Modules::Base::Streamable>();
+                if (streamable) {
+                    streamable->owner = 0;
+                }
+            });
+
         // Framework-level observer: Send spawn message when StreamedTo relation is added
         _world->observer("SpawnObserver")
             .with<Modules::Base::StreamedTo>(flecs::Wildcard)
