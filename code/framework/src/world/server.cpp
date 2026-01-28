@@ -67,7 +67,7 @@ namespace Framework::World {
         // Framework-level observer: Send spawn message when StreamedTo relation is added
         _world->observer("SpawnObserver")
             .with<Modules::Base::StreamedTo>(flecs::Wildcard)
-            .event(flecs::OnSet)
+            .event(flecs::OnAdd)
             .each([this](flecs::iter& it, size_t row) {
                 auto e = it.entity(row);
                 auto streamerEntity = it.pair(0).second();
