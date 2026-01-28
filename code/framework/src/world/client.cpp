@@ -69,6 +69,7 @@ namespace Framework::World {
 
         auto &sid = e.ensure<Modules::Base::ServerID>();
         sid.id        = serverID;
+        e.modified<Modules::Base::ServerID>();
         return e;
     }
 
