@@ -339,9 +339,21 @@ namespace Framework::World {
     void ServerEngine::SetOwnerRelation(flecs::entity e, flecs::entity owner) {
         // Remove any existing ownership
         e.remove<Modules::Base::OwnedBy>(flecs::Wildcard);
-        // Add new ownership
+
+        // Get the streamable component to update the owner GUID
+        const auto streamable = e.get_mut<Modules::Base::Streamable>();
+
+        // Add new ownership or clear the owner GUID
         if (owner.is_valid() && owner.is_alive()) {
             e.add<Modules::Base::OwnedBy>(owner);
+            // Update the owner GUID from the streamer component
+            if (streamable) {
+                const auto streamer = owner.get<Modules::Base::Streamer>();
+                streamable->owner   = streamer ? streamer->guid : 0;
+            }
+        } else if (streamable) {
+            // Clear the stale owner GUID when ownership is removed
+            streamable->owner = 0;
         }
     }
 
