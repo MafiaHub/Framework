@@ -52,10 +52,48 @@ namespace Framework::World {
                 }
             });
 
-        // Note: StreamedTo relation changes trigger Flecs OnAdd/OnRemove events.
-        // Games should set up their own observers to handle spawn/despawn messages
-        // for specific entity types (e.g., Human, Vehicle).
-        // The framework only manages the relation based on visibility.
+        // Framework-level observer: Send spawn message when StreamedTo relation is added
+        _world->observer("SpawnObserver")
+            .with<Modules::Base::StreamedTo>(flecs::Wildcard)
+            .event(flecs::OnSet)
+            .each([this](flecs::iter& it, size_t row) {
+                auto e = it.entity(row);
+                auto streamerEntity = it.pair(0).second();
+
+                if (!streamerEntity.is_valid() || !streamerEntity.is_alive())
+                    return;
+
+                auto streamer = streamerEntity.get<Modules::Base::Streamer>();
+                if (!streamer)
+                    return;
+
+                auto tr = e.get<Modules::Base::Transform>();
+                Networking::Messages::GameSyncEntitySpawn spawnMsg;
+                if (tr)
+                    spawnMsg.FromParameters(*tr);
+                spawnMsg.SetServerID(e.id());
+                _networkPeer->Send(spawnMsg, streamer->guid);
+            });
+
+        // Framework-level observer: Send despawn message when StreamedTo relation is removed
+        _world->observer("DespawnObserver")
+            .with<Modules::Base::StreamedTo>(flecs::Wildcard)
+            .event(flecs::OnRemove)
+            .each([this](flecs::iter& it, size_t row) {
+                auto e = it.entity(row);
+                auto streamerEntity = it.pair(0).second();
+
+                if (!streamerEntity.is_valid() || !streamerEntity.is_alive())
+                    return;
+
+                auto streamer = streamerEntity.get<Modules::Base::Streamer>();
+                if (!streamer)
+                    return;
+
+                Networking::Messages::GameSyncEntityDespawn despawnMsg;
+                despawnMsg.SetServerID(e.id());
+                _networkPeer->Send(despawnMsg, streamer->guid);
+            });
 
         // Set up a system to remove entities we no longer need.
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).run([this](flecs::iter &it) {
@@ -173,6 +211,46 @@ namespace Framework::World {
                         if (streamerEntity.get<Modules::Base::PendingRemoval>() != nullptr)
                             continue;
 
+                        // Helper lambda to handle entity updates for already-streaming entities
+                        auto handleEntityUpdate = [&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
+                            // Skip entities that don't want tick updates
+                            if (e.has<Modules::Base::NoTickUpdates>())
+                                return;
+
+                            auto* streamData = e.get_mut<Modules::Base::StreamedTo>(streamerEntity);
+                            if (!streamData)
+                                return;
+
+                            const double now = static_cast<double>(Utils::Time::GetTime());
+                            if (now - streamData->lastUpdate < otherS.updateInterval)
+                                return;
+
+                            streamData->lastUpdate = now;
+
+                            // Send update based on ownership
+                            if (otherS.owner == s[i].guid) {
+                                // Entity is owned by this streamer - send owner update
+                                Networking::Messages::GameSyncEntityOwnerUpdate ownerUpdate;
+                                ownerUpdate.FromParameters(otherS.owner);
+                                ownerUpdate.SetServerID(e.id());
+                                _networkPeer->Send(ownerUpdate, s[i].guid);
+                            }
+                            else {
+                                // Non-owner - send full transform update
+                                Networking::Messages::GameSyncEntityUpdate entityUpdate;
+                                entityUpdate.FromParameters(otherTr, otherS.owner);
+                                entityUpdate.SetServerID(e.id());
+                                _networkPeer->Send(entityUpdate, s[i].guid);
+                            }
+                        };
+
+                        // Send self-update for the streamer's own entity
+                        if (!streamerEntity.has<Modules::Base::NoTickUpdates>()) {
+                            Networking::Messages::GameSyncEntitySelfUpdate selfUpdate;
+                            selfUpdate.SetServerID(streamerEntity.id());
+                            _networkPeer->Send(selfUpdate, s[i].guid);
+                        }
+
                         // Phase 1: AlwaysVisible entities - skip distance check, always visible
                         // Uses pre-filtered query (excludes PendingRemoval, Hidden)
                         // Note: AlwaysVisible is a zero-size tag, filtered by query but not passed to callback
@@ -189,6 +267,9 @@ namespace Framework::World {
                                 Modules::Base::StreamedTo streamData;
                                 streamData.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                 e.set<Modules::Base::StreamedTo>(streamerEntity, streamData);
+                            } else {
+                                // Already streaming - send update if interval passed
+                                handleEntityUpdate(e, otherTr, otherS);
                             }
                         });
 
@@ -205,6 +286,9 @@ namespace Framework::World {
                             if (isStreaming) {
                                 if (!canSend) {
                                     e.remove<Modules::Base::StreamedTo>(streamerEntity);
+                                } else {
+                                    // Still visible - send update if interval passed
+                                    handleEntityUpdate(e, otherTr, otherS);
                                 }
                             } else if (canSend) {
                                 Modules::Base::StreamedTo streamData;
