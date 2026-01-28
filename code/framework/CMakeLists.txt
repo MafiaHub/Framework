@@ -143,6 +143,39 @@ endif()
 
 add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
 
+# Precompiled Headers (PCH) for faster builds
+# Framework base PCH - stable, frequently used headers
+# Using PUBLIC so child targets can inherit via INTERFACE_PRECOMPILE_HEADERS
+target_precompile_headers(Framework PUBLIC
+    # STL (stable, frequently used)
+    <memory>
+    <string>
+    <vector>
+    <unordered_map>
+    <functional>
+
+    # Stable vendor headers
+    <spdlog/spdlog.h>
+    <glm/glm.hpp>
+    <glm/gtc/quaternion.hpp>
+    <nlohmann/json.hpp>
+)
+
+# FrameworkServer PCH - reuses Framework PCH + adds scripting/ECS headers
+target_precompile_headers(FrameworkServer PRIVATE
+    "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
+    <sol/sol.hpp>
+    <flecs/flecs.h>
+)
+
+# FrameworkClient PCH (Windows only)
+if(WIN32)
+    target_precompile_headers(FrameworkClient PRIVATE
+        "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
+        <flecs/flecs.h>
+    )
+endif()
+
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
@@ -153,7 +186,36 @@ ENDIF()
 
 # External libraries & other stuff
 macro(link_shared_deps target_name)
-    target_include_directories(${target_name} PUBLIC "src")
+    # Framework source directories (PUBLIC for dependent projects)
+    target_include_directories(${target_name} PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    )
+
+    # Core vendor headers needed by all Framework targets (PUBLIC for API exposure)
+    target_include_directories(${target_name} PUBLIC
+        ${CMAKE_SOURCE_DIR}/vendors/glm
+        ${CMAKE_SOURCE_DIR}/vendors/json/include
+        ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
+        ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+        ${CMAKE_SOURCE_DIR}/vendors/sol                    # Lua bindings (used in scripting API)
+        ${CMAKE_SOURCE_DIR}/vendors/lua-5.4.4/src/lua54    # Lua headers (required by sol)
+        ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in world/modules/base.hpp)
+        ${CMAKE_SOURCE_DIR}/vendors/slikenet/Source        # Networking (used in messages.h)
+        ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
+        ${CMAKE_SOURCE_DIR}/vendors                        # flecs, etc.
+    )
+
+    # Implementation-only vendor headers (PRIVATE - not part of public API)
+    target_include_directories(${target_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/cppfs/source/cppfs/include
+        ${CMAKE_SOURCE_DIR}/vendors/semver
+        ${CMAKE_SOURCE_DIR}/vendors/httplib
+        ${CMAKE_SOURCE_DIR}/vendors/sentry/include
+        ${CMAKE_SOURCE_DIR}/vendors/curl/include
+        ${CMAKE_SOURCE_DIR}/vendors/ftl/include
+    )
 
     # Required libraries for apple systems
     if(APPLE)
@@ -166,6 +228,9 @@ macro(link_shared_deps target_name)
     # Required libraries for windows
     if(WIN32)
         target_link_libraries(${target_name} StackWalker)
+        target_include_directories(${target_name} PRIVATE
+            ${CMAKE_SOURCE_DIR}/vendors/StackWalker/Main/StackWalker
+        )
     endif()
 endmacro()
 
@@ -179,6 +244,11 @@ endif()
 link_shared_deps(FrameworkServer)
 target_link_libraries(FrameworkServer MafiaHubServices libsig lua54_static)
 
+# FrameworkServer-specific includes
+target_include_directories(FrameworkServer PRIVATE
+    ${CMAKE_SOURCE_DIR}/vendors/libsig
+)
+
 # Platform-dependent post processing
 if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
@@ -189,15 +259,50 @@ if(WIN32)
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
 
+    # FrameworkClient-specific includes (Windows graphics, hooking, external services)
+    target_include_directories(FrameworkClient PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/minhook/include
+        ${CMAKE_SOURCE_DIR}/vendors/imgui
+        ${CMAKE_SOURCE_DIR}/vendors/sdl2/include
+        ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
+        ${CMAKE_SOURCE_DIR}/vendors/galaxy/Include
+        ${CMAKE_SOURCE_DIR}/vendors/udis86
+        ${CMAKE_SOURCE_DIR}/vendors/discord/src
+        ${CMAKE_SOURCE_DIR}/vendors/freetype/include
+        ${CMAKE_SOURCE_DIR}/vendors/optick/src
+    )
+
     link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd)
     target_link_libraries(FrameworkLoaderData udis86 minhook)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
+
+    # FrameworkLoader-specific includes
+    target_include_directories(FrameworkLoader PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/minhook/include
+        ${CMAKE_SOURCE_DIR}/vendors/ntdll
+        ${CMAKE_SOURCE_DIR}/vendors/sfd
+        ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
+        ${CMAKE_SOURCE_DIR}/vendors/udis86
+    )
+
+    # FrameworkLoaderData includes
+    target_include_directories(FrameworkLoaderData PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/udis86
+        ${CMAKE_SOURCE_DIR}/vendors/minhook/include
+    )
 
     if(NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else()
         target_link_libraries(FrameworkClient UltralightSDK JavaScriptCorePP)
         target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
+
+        # Ultralight GUI includes (64-bit only)
+        target_include_directories(FrameworkClient PRIVATE
+            ${CMAKE_SOURCE_DIR}/vendors/ultralight/include
+            ${CMAKE_SOURCE_DIR}/vendors/directxtk
+            ${CMAKE_SOURCE_DIR}/vendors/javascriptcorepp/include
+        )
     endif()
 endif()
