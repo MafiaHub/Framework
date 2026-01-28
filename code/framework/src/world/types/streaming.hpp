@@ -23,6 +23,7 @@ namespace Framework::World::Archetypes {
             auto &streamable                 = e.ensure<Framework::World::Modules::Base::Streamable>();
             streamable.owner                 = guid;
             streamable.defaultUpdateInterval = CoreModules::GetTickRate() * 1000.0f; // we need ms here
+            streamable.updateInterval        = streamable.defaultUpdateInterval;
         }
 
       public:
