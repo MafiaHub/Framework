@@ -61,6 +61,9 @@ namespace Framework::World {
         // Cache for O(1) GUID lookups
         std::unordered_map<uint64_t, flecs::entity> _guidCache;
 
+        // Cache for virtual world entities (by ID)
+        std::unordered_map<int, flecs::entity> _virtualWorldCache;
+
       public:
         EngineError Init(Networking::NetworkPeer *networkPeer);
 
@@ -76,5 +79,11 @@ namespace Framework::World {
         flecs::world *GetWorld() const {
             return _world.get();
         }
+
+        // Virtual world management
+        flecs::entity GetOrCreateVirtualWorld(int worldId);
+        void SetEntityVirtualWorld(flecs::entity e, int worldId);
+        int GetEntityVirtualWorld(flecs::entity e) const;
+        bool AreInSameVirtualWorld(flecs::entity a, flecs::entity b) const;
     };
 } // namespace Framework::World

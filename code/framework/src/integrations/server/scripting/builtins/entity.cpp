@@ -182,13 +182,18 @@ namespace Framework::Integrations::Scripting {
     }
 
     void Entity::SetVirtualWorld(int virtualWorld) const {
-        const auto st    = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
-        st->virtualWorld = virtualWorld;
+        auto engine = Framework::CoreModules::GetWorldEngine();
+        if (engine) {
+            engine->SetEntityVirtualWorld(_ent, virtualWorld);
+        }
     }
 
     int Entity::GetVirtualWorld() const {
-        const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
-        return st->virtualWorld;
+        auto engine = Framework::CoreModules::GetWorldEngine();
+        if (engine) {
+            return engine->GetEntityVirtualWorld(_ent);
+        }
+        return 0;
     }
 
     void Entity::SetUpdateInterval(double interval) const {

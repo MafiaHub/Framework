@@ -8,6 +8,7 @@
 
 #include "server.h"
 
+#include "networking/messages/game_sync/entity_messages.h"
 #include "utils/time.h"
 
 namespace Framework::World {
@@ -19,6 +20,21 @@ namespace Framework::World {
         }
 
         _findAllResourceEntities = _world->query_builder<Modules::Base::RemovedOnResourceReload>().build();
+
+        // Specialized queries for decomposed visibility system (MP-7)
+        // AlwaysVisible entities skip distance checks entirely
+        _alwaysVisibleEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>()
+            .with<Modules::Base::AlwaysVisible>()
+            .without<Modules::Base::PendingRemoval>()
+            .without<Modules::Base::Hidden>()
+            .build();
+
+        // Normal streamable entities (excludes AlwaysVisible and Hidden)
+        _normalStreamableEntities = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>()
+            .without<Modules::Base::PendingRemoval>()
+            .without<Modules::Base::Hidden>()
+            .without<Modules::Base::AlwaysVisible>()
+            .build();
 
         // Observer to sync OwnedBy relation to owner GUID for network messages
         _world->observer()
@@ -36,25 +52,19 @@ namespace Framework::World {
                 }
             });
 
+        // Note: StreamedTo relation changes trigger Flecs OnAdd/OnRemove events.
+        // Games should set up their own observers to handle spawn/despawn messages
+        // for specific entity types (e.g., Human, Vehicle).
+        // The framework only manages the relation based on visibility.
+
         // Set up a system to remove entities we no longer need.
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).run([this](flecs::iter &it) {
             while (it.next()) {
-                auto streamables = it.field<Modules::Base::Streamable>(1);
-
                 for (auto i : it) {
                     auto e = it.entity(i);
-                    auto &streamable = streamables[i];
 
-                    // Remove the entity from all streamers.
-                    _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                        if (rhsS.entities.find(e) != rhsS.entities.end()) {
-                            rhsS.entities.erase(e);
-
-                            // Ensure we despawn the entity from the client.
-                            if (streamable.GetBaseEvents().despawnProc)
-                                streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
-                        }
-                    });
+                    // Remove all StreamedTo relations (triggers despawn observers)
+                    e.remove<Modules::Base::StreamedTo>(flecs::Wildcard);
 
                     e.destruct();
                 }
@@ -143,6 +153,10 @@ namespace Framework::World {
         });
 
         // Set up a system to stream entities to clients.
+        // This system manages StreamedTo relations based on visibility.
+        // Decomposed into phases for efficiency (MP-7):
+        // Phase 1: AlwaysVisible entities - always stream, skip distance check
+        // Phase 2: Normal entities - full visibility check
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
             .kind(flecs::PostUpdate)
             .interval(cfg.tickInterval)
@@ -153,64 +167,49 @@ namespace Framework::World {
                     const auto rs = it.field<Modules::Base::Streamable>(2);
 
                     for (auto i : it) {
+                        auto streamerEntity = it.entity(i);
+
                         // Skip streamer entities we plan to remove.
-                        if (it.entity(i).get<Modules::Base::PendingRemoval>() != nullptr)
+                        if (streamerEntity.get<Modules::Base::PendingRemoval>() != nullptr)
                             continue;
 
-                        // Grab all streamable entities.
-                        _allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
-                            // Skip dead entities.
-                            if (!e.is_alive())
+                        // Phase 1: AlwaysVisible entities - skip distance check, always visible
+                        // Uses pre-filtered query (excludes PendingRemoval, Hidden)
+                        // Note: AlwaysVisible is a zero-size tag, filtered by query but not passed to callback
+                        _alwaysVisibleEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
+                            if (!e.is_alive() || e == streamerEntity)
                                 return;
 
-                            // Let streamer send an update to self if an event is assigned.
-                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc && !e.has<Modules::Base::NoTickUpdates>()) {
-                                rs[i].GetBaseEvents().selfUpdateProc(_networkPeer, s[i].guid, e);
+                            // Only check virtual world (skip distance/custom visibility)
+                            if (!AreInSameVirtualWorld(streamerEntity, e))
                                 return;
+
+                            const auto isStreaming = e.has<Modules::Base::StreamedTo>(streamerEntity);
+                            if (!isStreaming) {
+                                Modules::Base::StreamedTo streamData;
+                                streamData.lastUpdate = static_cast<double>(Utils::Time::GetTime());
+                                e.set<Modules::Base::StreamedTo>(streamerEntity, streamData);
                             }
+                        });
 
-                            // Figure out entity visibility.
-                            const auto id      = e.id();
-                            const auto canSend = this->IsEntityVisibleToStreamer(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
-                            const auto map_it  = s[i].entities.find(id);
+                        // Phase 2: Normal entities - full visibility check
+                        // Uses pre-filtered query (excludes PendingRemoval, Hidden, AlwaysVisible)
+                        _normalStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
+                            if (!e.is_alive() || e == streamerEntity)
+                                return;
 
-                            // Entity is already known to this streamer.
-                            if (map_it != s[i].entities.end()) {
-                                // If we can't stream an entity anymore, despawn it
+                            // Full visibility check for normal entities
+                            const auto canSend = this->IsEntityVisibleToStreamer(streamerEntity, e, tr[i], s[i], rs[i], otherTr, otherS);
+                            const auto isStreaming = e.has<Modules::Base::StreamedTo>(streamerEntity);
+
+                            if (isStreaming) {
                                 if (!canSend) {
-                                    s[i].entities.erase(map_it);
-                                    if (otherS.GetBaseEvents().despawnProc)
-                                        otherS.GetBaseEvents().despawnProc(_networkPeer, s[i].guid, e);
+                                    e.remove<Modules::Base::StreamedTo>(streamerEntity);
                                 }
-
-                                // otherwise we do regular updates
-                                else if (rs[i].owner != otherS.owner) {
-                                    auto &data = map_it->second;
-                                    if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (otherS.GetBaseEvents().updateProc && !e.has<Modules::Base::NoTickUpdates>())
-                                            otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
-                                        data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
-                                    }
-                                }
-                                else {
-                                    auto &data = map_it->second;
-
-                                    // If the entity is owned by this streamer, we send a full update.
-                                    if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (otherS.GetBaseEvents().ownerUpdateProc)
-                                            otherS.GetBaseEvents().ownerUpdateProc(_networkPeer, s[i].guid, e);
-                                        data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
-                                    }
-                                }
-                            }
-
-                            // this is a new entity, spawn it unless user says otherwise
-                            else if (canSend && otherS.GetBaseEvents().spawnProc) {
-                                if (otherS.GetBaseEvents().spawnProc(_networkPeer, s[i].guid, e)) {
-                                    Modules::Base::Streamer::StreamData data;
-                                    data.lastUpdate   = static_cast<double>(Utils::Time::GetTime());
-                                    s[i].entities[id] = data;
-                                }
+                            } else if (canSend) {
+                                Modules::Base::StreamedTo streamData;
+                                streamData.lastUpdate = static_cast<double>(Utils::Time::GetTime());
+                                e.set<Modules::Base::StreamedTo>(streamerEntity, streamData);
                             }
                         });
                     }
@@ -361,7 +360,7 @@ namespace Framework::World {
             return false;
 
         // Validate if the entity resides in the same virtual world client does.
-        if (lhsS.virtualWorld != rhsS.virtualWorld)
+        if (!AreInSameVirtualWorld(streamerEntity, e))
             return false;
 
         // Let user replace the distance check.

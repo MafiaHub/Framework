@@ -18,8 +18,12 @@ namespace Framework::World::Archetypes {
     class PlayerFactory {
       private:
         inline void SetupDefaults(flecs::entity e, uint64_t guid) {
+            // Inherit from streamer prefab for efficient component allocation (LP-3)
+            // Note: StreamerEntityPrefab already inherits StreamableEntityPrefab
+            e.is_a(World::Modules::Base::StreamerEntityPrefab);
+
             auto &streamer = e.ensure<World::Modules::Base::Streamer>();
-            streamer.guid      = guid;
+            streamer.guid  = guid;
         }
 
       public:

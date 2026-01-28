@@ -10,6 +10,7 @@
 
 #include "game_rpc/set_frame.h"
 #include "game_rpc/set_transform.h"
+#include "networking/messages/game_sync/entity_messages.h"
 
 namespace Framework::World {
     EngineError ClientEngine::Init() {
@@ -82,11 +83,17 @@ namespace Framework::World {
                 const auto rs = it.field<Modules::Base::Streamable>(1);
 
                 for (auto i : it) {
-                    const auto &es = &rs[i];
                     const auto e = it.entity(i);
 
-                    if (es->GetBaseEvents().updateProc && !e.has<Modules::Base::NoTickUpdates>() && Framework::World::Engine::IsEntityOwner(e, myGUID.g)) {
-                        es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, e);
+                    // Send updates for entities we own
+                    if (!e.has<Modules::Base::NoTickUpdates>() && Framework::World::Engine::IsEntityOwner(e, myGUID.g)) {
+                        const auto sid = e.get<Modules::Base::ServerID>();
+                        if (sid) {
+                            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
+                            entityUpdate.FromParameters(tr[i], 0);
+                            entityUpdate.SetServerID(sid->id);
+                            _networkPeer->Send(entityUpdate, (SLNet::UNASSIGNED_RAKNET_GUID).g);
+                        }
                     }
                 }
             }
@@ -109,8 +116,8 @@ namespace Framework::World {
                 }
             }
 
-            if (str.modEvents.disconnectProc) {
-                str.modEvents.disconnectProc(e);
+            if (str.disconnectProc) {
+                str.disconnectProc(e);
             }
 
             e.destruct();
@@ -153,8 +160,8 @@ namespace Framework::World {
         *tr     = rhs;
 
         const auto str = entity.get_mut<Modules::Base::Streamable>();
-        if (str->modEvents.updateTransformProc) {
-            str->modEvents.updateTransformProc(entity);
+        if (str && str->updateTransformProc) {
+            str->updateTransformProc(entity);
         }
     }
 } // namespace Framework::World

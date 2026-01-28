@@ -90,4 +90,66 @@ namespace Framework::World {
         });
         _world->defer_end();
     }
+
+    flecs::entity Engine::GetOrCreateVirtualWorld(int worldId) {
+        auto it = _virtualWorldCache.find(worldId);
+        if (it != _virtualWorldCache.end() && it->second.is_alive()) {
+            return it->second;
+        }
+
+        // Create a new virtual world entity
+        std::string name = "VirtualWorld_" + std::to_string(worldId);
+        auto worldEntity = _world->entity(name.c_str());
+        worldEntity.set<Modules::Base::VirtualWorld>({worldId});
+        _virtualWorldCache[worldId] = worldEntity;
+        return worldEntity;
+    }
+
+    void Engine::SetEntityVirtualWorld(flecs::entity e, int worldId) {
+        if (!e.is_valid() || !e.is_alive())
+            return;
+
+        // Remove from any existing virtual world
+        e.remove<Modules::Base::InVirtualWorld>(flecs::Wildcard);
+
+        // Add to new virtual world (world ID 0 means no world / default)
+        if (worldId != 0) {
+            auto worldEntity = GetOrCreateVirtualWorld(worldId);
+            e.add<Modules::Base::InVirtualWorld>(worldEntity);
+        }
+
+        // Also update the legacy field for backward compatibility
+        auto streamable = e.get_mut<Modules::Base::Streamable>();
+        if (streamable) {
+            streamable->virtualWorld = worldId;
+        }
+    }
+
+    int Engine::GetEntityVirtualWorld(flecs::entity e) const {
+        if (!e.is_valid() || !e.is_alive())
+            return 0;
+
+        // Try to get from relation first
+        int worldId = 0;
+        e.each<Modules::Base::InVirtualWorld>([&worldId](flecs::entity worldEntity) {
+            auto vw = worldEntity.get<Modules::Base::VirtualWorld>();
+            if (vw) {
+                worldId = vw->id;
+            }
+        });
+
+        // Fallback to legacy field if no relation
+        if (worldId == 0) {
+            auto streamable = e.get<Modules::Base::Streamable>();
+            if (streamable) {
+                worldId = streamable->virtualWorld;
+            }
+        }
+
+        return worldId;
+    }
+
+    bool Engine::AreInSameVirtualWorld(flecs::entity a, flecs::entity b) const {
+        return GetEntityVirtualWorld(a) == GetEntityVirtualWorld(b);
+    }
 } // namespace Framework::World

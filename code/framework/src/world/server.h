@@ -58,6 +58,11 @@ namespace Framework::World {
         using IsVisibleProc = fu2::function<bool(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
             const Modules::Base::Streamable rhsS) const>;
 
+        // Specialized queries for decomposed visibility system (MP-7)
+        // AlwaysVisible is a zero-size tag, added via .with<>() in query builder
+        flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _alwaysVisibleEntities;
+        flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _normalStreamableEntities;
+
       private:
         bool IsEntityVisibleToStreamerInternal(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
             const Modules::Base::Streamable &rhsS, std::unordered_set<flecs::entity_t> &visited) const;

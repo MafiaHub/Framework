@@ -88,6 +88,23 @@ namespace Framework::World::Modules {
         // Usage: entity.add<OwnedBy>(streamerEntity)
         struct OwnedBy {};
 
+        // Relation: Entity is currently being streamed to a streamer
+        // Usage: entity.add<StreamedTo>(streamerEntity)
+        // OnAdd triggers spawn RPC, OnRemove triggers despawn RPC
+        struct StreamedTo {
+            double lastUpdate = 0.0;
+        };
+
+        // Relation: Entity exists in a virtual world
+        // Usage: entity.add<InVirtualWorld>(worldEntity)
+        // Use Engine::GetOrCreateVirtualWorld(id) to get world entities
+        struct InVirtualWorld {};
+
+        // Tag: Marks an entity as a virtual world instance
+        struct VirtualWorld {
+            int id = 0;
+        };
+
         struct ServerID {
             flecs::entity_t id;
         };
@@ -109,23 +126,6 @@ namespace Framework::World::Modules {
             // Allows custom owner assignment logic, if method returns true we bypass framework's proximity based owner assignment
             AssignOwnerProc assignOwnerProc;
 
-            struct Events {
-                using Proc = fu2::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity) const>;
-                Proc spawnProc;
-                Proc despawnProc;
-                Proc selfUpdateProc;
-                Proc updateProc;
-                Proc ownerUpdateProc;
-
-                // Events used locally for special needs
-                // These are NOT emitted through the network!
-                OnDisconnectProc disconnectProc; // called when the client disconnects from server
-                OnUpdateTransformProc updateTransformProc; // called whenever the server enforces a new transform upon the entity
-            };
-
-            // Extra set of events so mod can supply custom data.
-            Events modEvents;
-
             // Custom visibility proc for additional visibility checks
             // Use VisibilityReplace tag to completely replace framework heuristics
             // Use VisibilityReplacePosition tag to replace only distance check
@@ -136,36 +136,25 @@ namespace Framework::World::Modules {
             // If any of these entities are visible and ours is not, we force ours to be visible too.
             std::vector<flecs::entity> dependentEntities;
 
-            // Framework-level events.
-            friend Base;
-
-          private:
-            Events events;
-
-          public:
-            Events& GetBaseEvents() {
-                return events;
-            }
-
-            [[maybe_unused]] Events& GetModEvents() {
-                return modEvents;
-            }
+            // Local lifecycle callbacks (not network events)
+            OnDisconnectProc disconnectProc;       // called when the client disconnects from server
+            OnUpdateTransformProc updateTransformProc; // called whenever the server enforces a new transform upon the entity
         };
 
         struct Streamer {
             using CollectRangeExemptEntities = fu2::function<void(flecs::entity e, Streamer &streamer)>;
-            struct StreamData {
-                double lastUpdate = 0.0;
-            };
             float range          = 100.0f;
             uint64_t guid        = 0xFFFFFFFFFFFFFFFF;
             uint16_t playerIndex = 0xFFFF;
             std::string nickname;
             std::string hardwareId;
-            std::unordered_map<flecs::entity_t, StreamData> entities;
             std::unordered_set<flecs::entity_t> rangeExemptEntities;
             CollectRangeExemptEntities collectRangeExemptEntitiesProc;
         };
+
+        // Prefab entities for efficient archetype instantiation
+        static inline flecs::entity StreamableEntityPrefab;
+        static inline flecs::entity StreamerEntityPrefab;
 
         explicit Base(flecs::world &world) {
             world.module<Base>();
@@ -190,6 +179,21 @@ namespace Framework::World::Modules {
             world.component<VisibilityReplace>();
             world.component<VisibilityReplacePosition>();
             world.component<OwnedBy>();
+            world.component<StreamedTo>();
+            world.component<InVirtualWorld>();
+            world.component<VirtualWorld>();
+
+            // Entity prefabs for efficient instantiation (LP-3)
+            // StreamableEntity: base components for any streamable entity
+            StreamableEntityPrefab = world.prefab("StreamableEntityPrefab")
+                .add<Transform>()
+                .add<Streamable>()
+                .add<TickRateRegulator>();
+
+            // StreamerEntity: components for player/streamer entities
+            StreamerEntityPrefab = world.prefab("StreamerEntityPrefab")
+                .is_a(StreamableEntityPrefab)
+                .add<Streamer>();
 
 // Windows bind metadata
 #ifdef _WIN32
@@ -206,8 +210,6 @@ namespace Framework::World::Modules {
 #endif
         }
 
-        static void SetupServerEmitters(Streamable& streamable);
-        static void SetupClientEmitters(Streamable& streamable);
         static void SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine);
         static void SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory);
     };
