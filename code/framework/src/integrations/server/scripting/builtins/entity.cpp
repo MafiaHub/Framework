@@ -158,23 +158,27 @@ namespace Framework::Integrations::Scripting {
     }
 
     void Entity::SetVisible(bool visible) const {
-        const auto st = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
-        st->isVisible = visible;
+        if (visible) {
+            _ent.remove<Framework::World::Modules::Base::Hidden>();
+        } else {
+            _ent.add<Framework::World::Modules::Base::Hidden>();
+        }
     }
 
     void Entity::SetAlwaysVisible(bool visible) const {
-        const auto st     = _ent.get_mut<Framework::World::Modules::Base::Streamable>();
-        st->alwaysVisible = visible;
+        if (visible) {
+            _ent.add<Framework::World::Modules::Base::AlwaysVisible>();
+        } else {
+            _ent.remove<Framework::World::Modules::Base::AlwaysVisible>();
+        }
     }
 
     bool Entity::IsVisible() const {
-        const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
-        return st->isVisible;
+        return !_ent.has<Framework::World::Modules::Base::Hidden>();
     }
 
     bool Entity::IsAlwaysVisible() const {
-        const auto st = _ent.get<Framework::World::Modules::Base::Streamable>();
-        return st->alwaysVisible;
+        return _ent.has<Framework::World::Modules::Base::AlwaysVisible>();
     }
 
     void Entity::SetVirtualWorld(int virtualWorld) const {

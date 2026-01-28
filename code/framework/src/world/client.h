@@ -47,6 +47,9 @@ namespace Framework::World {
         flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
         OnEntityDestroyCallback _onEntityDestroyCallback;
 
+        // Cache for O(1) ServerID lookups
+        std::unordered_map<flecs::entity_t, flecs::entity> _serverIdCache;
+
       private:
         void InitRPCs(Networking::NetworkPeer *peer) const;
 

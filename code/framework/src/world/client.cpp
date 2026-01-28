@@ -21,6 +21,19 @@ namespace Framework::World {
 
         _queryGetEntityByServerID = _world->query_builder<Modules::Base::ServerID>().build();
 
+        // Observer to maintain ServerID cache
+        _world->observer<Modules::Base::ServerID>("ServerIDCacheUpdate")
+            .event(flecs::OnSet)
+            .each([this](flecs::entity e, Modules::Base::ServerID& sid) {
+                _serverIdCache[sid.id] = e;
+            });
+
+        _world->observer<Modules::Base::ServerID>("ServerIDCacheRemove")
+            .event(flecs::OnRemove)
+            .each([this](flecs::entity e, Modules::Base::ServerID& sid) {
+                _serverIdCache.erase(sid.id);
+            });
+
         return EngineError::ENGINE_NONE;
     }
 
@@ -33,14 +46,11 @@ namespace Framework::World {
     }
 
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
-        flecs::entity ent = {};
-        _queryGetEntityByServerID.each([&ent, id](flecs::entity e, Modules::Base::ServerID& rhs) {
-            if (id == rhs.id) {
-                ent = e;
-                return;
-            }
-        });
-        return ent;
+        auto it = _serverIdCache.find(id);
+        if (it != _serverIdCache.end() && it->second.is_alive()) {
+            return it->second;
+        }
+        return flecs::entity::null();
     }
 
     flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) {
@@ -73,9 +83,10 @@ namespace Framework::World {
 
                 for (auto i : it) {
                     const auto &es = &rs[i];
+                    const auto e = it.entity(i);
 
-                    if (es->GetBaseEvents().updateProc && es->performTickUpdates && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
-                        es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                    if (es->GetBaseEvents().updateProc && !e.has<Modules::Base::NoTickUpdates>() && Framework::World::Engine::IsEntityOwner(e, myGUID.g)) {
+                        es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, e);
                     }
                 }
             }

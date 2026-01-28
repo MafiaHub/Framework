@@ -15,6 +15,7 @@
 
 #include <flecs/flecs.h>
 #include <memory>
+#include <unordered_map>
 
 #include "core_modules.h"
 
@@ -56,6 +57,9 @@ namespace Framework::World {
         flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
         flecs::query<Modules::Base::RemovedOnResourceReload> _findAllResourceEntities;
         Networking::NetworkPeer *_networkPeer = nullptr;
+
+        // Cache for O(1) GUID lookups
+        std::unordered_map<uint64_t, flecs::entity> _guidCache;
 
       public:
         EngineError Init(Networking::NetworkPeer *networkPeer);

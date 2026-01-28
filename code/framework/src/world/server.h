@@ -83,6 +83,12 @@ namespace Framework::World {
 
         static void SetOwner(flecs::entity e, uint64_t guid);
         flecs::entity GetOwner(flecs::entity e) const;
+
+        // Ownership using Flecs relations
+        void SetOwnerRelation(flecs::entity e, flecs::entity owner);
+        flecs::entity GetOwnerRelation(flecs::entity e) const;
+        static bool IsOwnedBy(flecs::entity e, flecs::entity owner);
+
         [[maybe_unused]] std::vector<flecs::entity> FindVisibleStreamers(flecs::entity e) const;
         bool IsEntityVisibleToStreamer(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
             const Modules::Base::Streamable &rhsS) const;

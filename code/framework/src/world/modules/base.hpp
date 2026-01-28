@@ -62,13 +62,31 @@ namespace Framework::World::Modules {
             std::string modelName;
         };
 
-        struct PendingRemoval {
-            [[maybe_unused]] uint8_t _unused;
-        };
+        struct PendingRemoval {};
 
-        struct RemovedOnResourceReload {
-            [[maybe_unused]] uint8_t _unused;
-        };
+        struct RemovedOnResourceReload {};
+
+        // Tag: Entity is hidden from streaming (inverse of isVisible)
+        struct Hidden {};
+
+        // Tag: Entity is always visible regardless of distance
+        struct AlwaysVisible {};
+
+        // Tag: Entity does not receive tick updates (inverse of performTickUpdates)
+        struct NoTickUpdates {};
+
+        // Tag: Entity ownership is assigned manually, not by proximity
+        struct ManualOwnership {};
+
+        // Tag: Custom visibility proc completely replaces framework heuristics
+        struct VisibilityReplace {};
+
+        // Tag: Custom visibility proc replaces only position/distance check
+        struct VisibilityReplacePosition {};
+
+        // Relation: Entity is owned by a streamer entity
+        // Usage: entity.add<OwnedBy>(streamerEntity)
+        struct OwnedBy {};
 
         struct ServerID {
             flecs::entity_t id;
@@ -80,21 +98,13 @@ namespace Framework::World::Modules {
             using OnDisconnectProc      = fu2::function<void(flecs::entity e)>;
             using OnUpdateTransformProc = fu2::function<void(flecs::entity e)>;
 
-            enum class HeuristicMode {
-                ADD,
-                REPLACE,
-                REPLACE_POSITION
-            };
-
             int virtualWorld             = 0;
-            bool isVisible               = true;
-            bool alwaysVisible           = false;
+
             double defaultUpdateInterval = (1000.0 / 60.0); // 16.1667~ ms interval
             double updateInterval        = defaultUpdateInterval;
-            uint64_t owner               = 0;
 
-            // If set to true, the owner will not be assigned automatically by the framework
-            bool assignOwnerManually = false;
+            // Owner GUID for network synchronization (derived from OwnedBy relation on server)
+            uint64_t owner               = 0;
 
             // Allows custom owner assignment logic, if method returns true we bypass framework's proximity based owner assignment
             AssignOwnerProc assignOwnerProc;
@@ -116,17 +126,15 @@ namespace Framework::World::Modules {
             // Extra set of events so mod can supply custom data.
             Events modEvents;
 
-            // Custom visibility proc that either complements the existing heuristic or replaces it
-            HeuristicMode isVisibleHeuristic = HeuristicMode::ADD;
+            // Custom visibility proc for additional visibility checks
+            // Use VisibilityReplace tag to completely replace framework heuristics
+            // Use VisibilityReplacePosition tag to replace only distance check
+            // Without either tag, proc is combined with framework checks (AND)
             IsVisibleProc isVisibleProc;
 
             // Used to specify list of entities this streamable entity relies on.
             // If any of these entities are visible and ours is not, we force ours to be visible too.
             std::vector<flecs::entity> dependentEntities;
-
-            // Controls whether this entity gets to be updated continuously or not
-            // When set to false, we only stream spawn and despawn events, useful for immovable objects
-            bool performTickUpdates = true;
 
             // Framework-level events.
             friend Base;
@@ -174,6 +182,15 @@ namespace Framework::World::Modules {
             world.component<ServerID>();
             world.component<TickRateRegulator>();
 
+            // Visibility and behavior tags
+            world.component<Hidden>();
+            world.component<AlwaysVisible>();
+            world.component<NoTickUpdates>();
+            world.component<ManualOwnership>();
+            world.component<VisibilityReplace>();
+            world.component<VisibilityReplacePosition>();
+            world.component<OwnedBy>();
+
 // Windows bind metadata
 #ifdef _WIN32
             {
@@ -183,7 +200,7 @@ namespace Framework::World::Modules {
                 _quat.member<float>("w").member<float>("x").member<float>("y").member<float>("z");
                 _transform.member<glm::vec3>("pos").member<glm::quat>("rot").member<glm::vec3>("vel");
                 _frame.member<uint64_t>("modelHash").member<glm::vec3>("scale");
-                _streamable.member<int>("virtualWorld").member<bool>("isVisible").member<bool>("alwaysVisible").member<double>("updateInterval").member<uint64_t>("owner");
+                _streamable.member<int>("virtualWorld").member<double>("updateInterval").member<uint64_t>("owner");
                 _streamer.member<float>("range").member<uint64_t>("guid");
             }
 #endif

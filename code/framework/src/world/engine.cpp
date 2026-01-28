@@ -22,6 +22,19 @@ namespace Framework::World {
         _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
 
+        // Observer to maintain GUID cache
+        _world->observer<Modules::Base::Streamer>("GUIDCacheUpdate")
+            .event(flecs::OnSet)
+            .each([this](flecs::entity e, Modules::Base::Streamer& s) {
+                _guidCache[s.guid] = e;
+            });
+
+        _world->observer<Modules::Base::Streamer>("GUIDCacheRemove")
+            .event(flecs::OnRemove)
+            .each([this](flecs::entity e, Modules::Base::Streamer& s) {
+                _guidCache.erase(s.guid);
+            });
+
         return EngineError::ENGINE_NONE;
     }
 
@@ -53,13 +66,11 @@ namespace Framework::World {
     }
 
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
-        flecs::entity ourEntity = {};
-        _findAllStreamerEntities.each([&ourEntity, guid](flecs::entity e, Modules::Base::Streamer &s) {
-            if (ourEntity == flecs::entity::null() && s.guid == guid) {
-                ourEntity = e;
-            }
-        });
-        return ourEntity;
+        auto it = _guidCache.find(guid);
+        if (it != _guidCache.end() && it->second.is_alive()) {
+            return it->second;
+        }
+        return flecs::entity::null();
     }
 
     flecs::entity Engine::WrapEntity(flecs::entity_t serverID) const {
@@ -68,9 +79,14 @@ namespace Framework::World {
 
     void Engine::PurgeAllResourceEntities() const {
         _world->defer_begin();
-        _findAllResourceEntities.each([this](flecs::entity e, Modules::Base::RemovedOnResourceReload &rhs) {
-            if (e.is_alive())
-                e.add<Modules::Base::PendingRemoval>();
+        _findAllResourceEntities.run([this](flecs::iter& it) {
+            while (it.next()) {
+                for (auto i : it) {
+                    auto e = it.entity(i);
+                    if (e.is_alive())
+                        e.add<Modules::Base::PendingRemoval>();
+                }
+            }
         });
         _world->defer_end();
     }

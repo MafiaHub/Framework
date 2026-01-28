@@ -20,26 +20,51 @@ namespace Framework::World {
 
         _findAllResourceEntities = _world->query_builder<Modules::Base::RemovedOnResourceReload>().build();
 
-        // Set up a system to remove entities we no longer need.
-        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
-            // Remove the entity from all streamers.
-            _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                if (rhsS.entities.find(e) != rhsS.entities.end()) {
-                    rhsS.entities.erase(e);
-
-                    // Ensure we despawn the entity from the client.
-                    if (streamable.GetBaseEvents().despawnProc)
-                        streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+        // Observer to sync OwnedBy relation to owner GUID for network messages
+        _world->observer()
+            .with<Modules::Base::OwnedBy>(flecs::Wildcard)
+            .event(flecs::OnAdd)
+            .each([](flecs::iter& it, size_t row) {
+                auto e = it.entity(row);
+                auto owner = it.pair(0).second();
+                auto streamable = e.get_mut<Modules::Base::Streamable>();
+                if (streamable && owner.is_valid()) {
+                    auto streamer = owner.get<Modules::Base::Streamer>();
+                    if (streamer) {
+                        streamable->owner = streamer->guid;
+                    }
                 }
             });
 
-            e.destruct();
+        // Set up a system to remove entities we no longer need.
+        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).run([this](flecs::iter &it) {
+            while (it.next()) {
+                auto streamables = it.field<Modules::Base::Streamable>(1);
+
+                for (auto i : it) {
+                    auto e = it.entity(i);
+                    auto &streamable = streamables[i];
+
+                    // Remove the entity from all streamers.
+                    _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                        if (rhsS.entities.find(e) != rhsS.entities.end()) {
+                            rhsS.entities.erase(e);
+
+                            // Ensure we despawn the entity from the client.
+                            if (streamable.GetBaseEvents().despawnProc)
+                                streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+                        }
+                    });
+
+                    e.destruct();
+                }
+            }
         });
 
         // Set up a system to assign entity owners.
         _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(flecs::PostUpdate).interval(cfg.assignOwnershipTickInterval).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
             // Let user provide custom ownership assignment.
-            if (streamable.assignOwnerManually || (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable))) {
+            if (e.has<Modules::Base::ManualOwnership>() || (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable))) {
                 /* no op */
             }
             else {
@@ -139,7 +164,7 @@ namespace Framework::World {
                                 return;
 
                             // Let streamer send an update to self if an event is assigned.
-                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc && rs[i].performTickUpdates) {
+                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc && !e.has<Modules::Base::NoTickUpdates>()) {
                                 rs[i].GetBaseEvents().selfUpdateProc(_networkPeer, s[i].guid, e);
                                 return;
                             }
@@ -162,7 +187,7 @@ namespace Framework::World {
                                 else if (rs[i].owner != otherS.owner) {
                                     auto &data = map_it->second;
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (otherS.GetBaseEvents().updateProc && rs[i].performTickUpdates)
+                                        if (otherS.GetBaseEvents().updateProc && !e.has<Modules::Base::NoTickUpdates>())
                                             otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }
@@ -228,6 +253,27 @@ namespace Framework::World {
         return GetEntityByGUID(es->owner);
     }
 
+    void ServerEngine::SetOwnerRelation(flecs::entity e, flecs::entity owner) {
+        // Remove any existing ownership
+        e.remove<Modules::Base::OwnedBy>(flecs::Wildcard);
+        // Add new ownership
+        if (owner.is_valid() && owner.is_alive()) {
+            e.add<Modules::Base::OwnedBy>(owner);
+        }
+    }
+
+    flecs::entity ServerEngine::GetOwnerRelation(flecs::entity e) const {
+        flecs::entity owner = flecs::entity::null();
+        e.each<Modules::Base::OwnedBy>([&owner](flecs::entity target) {
+            owner = target;
+        });
+        return owner;
+    }
+
+    bool ServerEngine::IsOwnedBy(flecs::entity e, flecs::entity owner) {
+        return e.has<Modules::Base::OwnedBy>(owner);
+    }
+
     std::vector<flecs::entity> ServerEngine::FindVisibleStreamers(flecs::entity e) const {
         std::vector<flecs::entity> streamers;
         const auto es = e.get<Framework::World::Modules::Base::Streamable>();
@@ -277,7 +323,7 @@ namespace Framework::World {
             return false;
 
         // Allow user to override visibility rules completely.
-        if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE) {
+        if (rhsS.isVisibleProc && e.has<Modules::Base::VisibilityReplace>()) {
             return rhsS.isVisibleProc(streamerEntity, e);
         }
 
@@ -307,11 +353,11 @@ namespace Framework::World {
         }
 
         // Entity is always visible to clients.
-        if (rhsS.alwaysVisible)
+        if (e.has<Modules::Base::AlwaysVisible>())
             return true;
 
         // Entity can be hidden from clients.
-        if (!rhsS.isVisible)
+        if (e.has<Modules::Base::Hidden>())
             return false;
 
         // Validate if the entity resides in the same virtual world client does.
@@ -319,7 +365,7 @@ namespace Framework::World {
             return false;
 
         // Let user replace the distance check.
-        if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::REPLACE_POSITION) {
+        if (rhsS.isVisibleProc && e.has<Modules::Base::VisibilityReplacePosition>()) {
             return rhsS.isVisibleProc(streamerEntity, e);
         }
 
@@ -334,7 +380,8 @@ namespace Framework::World {
         }
 
         // Allow user to provide additional rules for visibility.
-        if (rhsS.isVisibleProc && rhsS.isVisibleHeuristic == Modules::Base::Streamable::HeuristicMode::ADD) {
+        // ADD mode is default when neither Replace tag is present
+        if (rhsS.isVisibleProc && !e.has<Modules::Base::VisibilityReplace>() && !e.has<Modules::Base::VisibilityReplacePosition>()) {
             isVisible = isVisible && rhsS.isVisibleProc(streamerEntity, e);
         }
 
