@@ -143,6 +143,39 @@ endif()
 
 add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
 
+# Precompiled Headers (PCH) for faster builds
+# Framework base PCH - stable, frequently used headers
+# Using PUBLIC so child targets can inherit via INTERFACE_PRECOMPILE_HEADERS
+target_precompile_headers(Framework PUBLIC
+    # STL (stable, frequently used)
+    <memory>
+    <string>
+    <vector>
+    <unordered_map>
+    <functional>
+
+    # Stable vendor headers
+    <spdlog/spdlog.h>
+    <glm/glm.hpp>
+    <glm/gtc/quaternion.hpp>
+    <nlohmann/json.hpp>
+)
+
+# FrameworkServer PCH - reuses Framework PCH + adds scripting/ECS headers
+target_precompile_headers(FrameworkServer PRIVATE
+    "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
+    <sol/sol.hpp>
+    <flecs/flecs.h>
+)
+
+# FrameworkClient PCH (Windows only)
+if(WIN32)
+    target_precompile_headers(FrameworkClient PRIVATE
+        "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
+        <flecs/flecs.h>
+    )
+endif()
+
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
