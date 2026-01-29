@@ -64,6 +64,7 @@ class Quaternion {
     // V8 Registration
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
     static v8pp::class_<Quaternion>& GetClass(v8::Isolate* isolate);
+    static v8::Local<v8::Object> NewInstance(v8::Isolate* isolate, const glm::quat& value);
 
   private:
     glm::quat _quat;

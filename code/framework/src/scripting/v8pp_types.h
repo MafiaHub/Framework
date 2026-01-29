@@ -4,9 +4,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-// Forward declare wrapper class
+// Forward declare wrapper classes
 namespace Framework::Scripting::Builtins {
+    class Vector2;
     class Vector3;
+    class Vector4;
+    class Quaternion;
 }
 
 namespace v8pp {
@@ -152,14 +155,32 @@ struct convert<glm::quat> {
 
 } // namespace v8pp
 
-// Include Vector3 header for to_v8 implementation
+// Include builtin headers for to_v8 implementations
+#include "builtins/vector2.h"
 #include "builtins/vector3.h"
+#include "builtins/vector4.h"
+#include "builtins/quaternion.h"
 
 namespace v8pp {
+
+// Implementation of glm::vec2 to_v8 using Vector2 wrapper class
+inline v8::Local<v8::Object> convert<glm::vec2>::to_v8(v8::Isolate* isolate, const glm::vec2& value) {
+    return Framework::Scripting::Builtins::Vector2::NewInstance(isolate, value);
+}
 
 // Implementation of glm::vec3 to_v8 using Vector3 wrapper class
 inline v8::Local<v8::Object> convert<glm::vec3>::to_v8(v8::Isolate* isolate, const glm::vec3& value) {
     return Framework::Scripting::Builtins::Vector3::NewInstance(isolate, value);
+}
+
+// Implementation of glm::vec4 to_v8 using Vector4 wrapper class
+inline v8::Local<v8::Object> convert<glm::vec4>::to_v8(v8::Isolate* isolate, const glm::vec4& value) {
+    return Framework::Scripting::Builtins::Vector4::NewInstance(isolate, value);
+}
+
+// Implementation of glm::quat to_v8 using Quaternion wrapper class
+inline v8::Local<v8::Object> convert<glm::quat>::to_v8(v8::Isolate* isolate, const glm::quat& value) {
+    return Framework::Scripting::Builtins::Quaternion::NewInstance(isolate, value);
 }
 
 } // namespace v8pp

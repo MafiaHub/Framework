@@ -147,4 +147,9 @@ void Vector4::Register(v8::Isolate* isolate, v8::Local<v8::Object> global) {
                 cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
 }
 
+v8::Local<v8::Object> Vector4::NewInstance(v8::Isolate* isolate, const glm::vec4& value) {
+    v8pp::class_<Vector4>& cls = GetClass(isolate);
+    return cls.import_external(isolate, new Vector4(value));
+}
+
 } // namespace Framework::Scripting::Builtins

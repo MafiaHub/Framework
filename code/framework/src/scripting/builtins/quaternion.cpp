@@ -147,4 +147,9 @@ void Quaternion::Register(v8::Isolate* isolate, v8::Local<v8::Object> global) {
                 cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
 }
 
+v8::Local<v8::Object> Quaternion::NewInstance(v8::Isolate* isolate, const glm::quat& value) {
+    v8pp::class_<Quaternion>& cls = GetClass(isolate);
+    return cls.import_external(isolate, new Quaternion(value));
+}
+
 } // namespace Framework::Scripting::Builtins

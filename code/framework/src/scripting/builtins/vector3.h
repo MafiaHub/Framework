@@ -58,6 +58,7 @@ class Vector3 {
     // V8 Registration
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
     static v8pp::class_<Vector3>& GetClass(v8::Isolate* isolate);
+    static v8::Local<v8::Object> NewInstance(v8::Isolate* isolate, const glm::vec3& value);
 
   private:
     glm::vec3 _vec;

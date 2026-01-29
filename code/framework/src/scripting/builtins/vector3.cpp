@@ -137,4 +137,9 @@ void Vector3::Register(v8::Isolate* isolate, v8::Local<v8::Object> global) {
                 cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
 }
 
+v8::Local<v8::Object> Vector3::NewInstance(v8::Isolate* isolate, const glm::vec3& value) {
+    v8pp::class_<Vector3>& cls = GetClass(isolate);
+    return cls.import_external(isolate, new Vector3(value));
+}
+
 } // namespace Framework::Scripting::Builtins

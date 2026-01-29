@@ -52,6 +52,7 @@ class Vector2 {
     // V8 Registration
     static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
     static v8pp::class_<Vector2>& GetClass(v8::Isolate* isolate);
+    static v8::Local<v8::Object> NewInstance(v8::Isolate* isolate, const glm::vec2& value);
 
   private:
     glm::vec2 _vec;
