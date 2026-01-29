@@ -28,7 +28,6 @@ set(FRAMEWORK_SRC
     src/networking/errors.cpp
 
     # JavaScript scripting (V8/Node.js)
-    src/scripting/engine.cpp
     src/scripting/v8_engine.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
