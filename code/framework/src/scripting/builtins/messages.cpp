@@ -173,6 +173,10 @@ namespace Framework::Scripting {
         v8::Local<v8::Function> handlerFn = handler.Get(isolate);
         v8::Local<v8::Value> argv[2] = {payload, replyFn};
 
+        // Save current resource context and set to target resource
+        std::string previousContext = manager->GetCurrentResourceContext();
+        manager->SetCurrentResourceContext(targetResource);
+
         v8::TryCatch tryCatch(isolate);
         v8::MaybeLocal<v8::Value> result = handlerFn->Call(context, context->Global(), 2, argv);
 
@@ -192,6 +196,9 @@ namespace Framework::Scripting {
                 }
             }
         }
+
+        // Restore previous resource context
+        manager->SetCurrentResourceContext(previousContext);
 
         args.GetReturnValue().Set(promise);
     }
@@ -215,6 +222,8 @@ namespace Framework::Scripting {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send: messageType must be a string")));
             return;
         }
+
+        ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
 
         std::string targetResource = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string messageType = v8pp::from_v8<std::string>(isolate, args[1]);
@@ -246,6 +255,12 @@ namespace Framework::Scripting {
         v8::Local<v8::Function> handlerFn = handler.Get(isolate);
         v8::Local<v8::Value> argv[2] = {payload, replyFn};
 
+        // Save current resource context and set to target resource
+        std::string previousContext = manager ? manager->GetCurrentResourceContext() : "";
+        if (manager) {
+            manager->SetCurrentResourceContext(targetResource);
+        }
+
         v8::TryCatch tryCatch(isolate);
         handlerFn->Call(context, context->Global(), 2, argv);
 
@@ -254,6 +269,11 @@ namespace Framework::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "[{}] Message handler '{}' error: {}",
                 targetResource, messageType, *error ? *error : "Unknown error");
+        }
+
+        // Restore previous resource context
+        if (manager) {
+            manager->SetCurrentResourceContext(previousContext);
         }
     }
 
