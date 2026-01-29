@@ -62,7 +62,8 @@ namespace Framework::Scripting {
         }
 
         // Check if this export is declared in the manifest
-        if (!currentResource->HasExport(exportName)) {
+        bool isInManifest = currentResource->HasExport(exportName);
+        if (!isInManifest) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
                 "[{}] Registering undeclared export '{}' - add to package.json exports array",
                 currentResource->GetName(), exportName);
@@ -72,18 +73,28 @@ namespace Framework::Scripting {
         currentResource->SetIsolate(isolate);
 
         // Register the export
-        if (!currentResource->RegisterExport(exportName, exportValue)) {
-            // If RegisterExport failed because it's not in the manifest, still allow it but warn
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
-                "[{}] Export '{}' registered (not in manifest)",
-                currentResource->GetName(), exportName);
+        bool registered = currentResource->RegisterExport(exportName, exportValue);
+        if (!registered) {
+            if (!isInManifest) {
+                // RegisterExport failed because it's not in the manifest - this is permissive
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
+                    "[{}] Export '{}' registered (not in manifest)",
+                    currentResource->GetName(), exportName);
+                args.GetReturnValue().Set(v8::True(isolate));
+            } else {
+                // Export is in manifest but RegisterExport still failed - real error (isolate issue)
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                    "[{}] Failed to register export '{}' - isolate initialization issue",
+                    currentResource->GetName(), exportName);
+                isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate,
+                    "Exports.register: failed to register export '" + exportName + "' - internal error")));
+            }
         } else {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
                 "[{}] Export '{}' registered",
                 currentResource->GetName(), exportName);
+            args.GetReturnValue().Set(v8::True(isolate));
         }
-
-        args.GetReturnValue().Set(v8::True(isolate));
     }
 
     void Exports::GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
