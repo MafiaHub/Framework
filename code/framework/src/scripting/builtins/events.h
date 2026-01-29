@@ -20,7 +20,6 @@ namespace Framework::Scripting {
      */
     struct EventHandler {
         v8::Global<v8::Function> callback;
-        v8::Isolate *isolate = nullptr;  // Track which isolate owns this handler
         std::string resourceName;
         bool once;
     };
