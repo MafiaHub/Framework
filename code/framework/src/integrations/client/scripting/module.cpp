@@ -47,7 +47,12 @@ namespace Framework::Integrations::Client::Scripting {
         RegisterFrameworkBindings();
 
         // Initialize Framework SDK in the engine
-        _v8Engine->InitFrameworkSDK();
+        if (!_v8Engine->InitFrameworkSDK()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Failed to initialize Framework SDK: {}", _v8Engine->GetLastError());
+            _resourceManager.reset();
+            return false;
+        }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
             "Client scripting module initialized with V8 engine");
