@@ -3,6 +3,7 @@
 #include <v8pp/convert.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <stdexcept>
 
 // Forward declare wrapper classes
 namespace Framework::Scripting::Builtins {

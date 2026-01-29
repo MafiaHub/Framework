@@ -2,6 +2,7 @@
 #include "builtins/messages.h"
 
 #include <fstream>
+#include <limits>
 #include <sstream>
 
 namespace Framework::Scripting {
@@ -135,6 +136,11 @@ namespace Framework::Scripting {
         v8::Context::Scope contextScope(context);
 
         v8::TryCatch tryCatch(_isolate);
+
+        if (code.length() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+            _lastError = "Code string too large";
+            return false;
+        }
 
         v8::Local<v8::String> source =
             v8::String::NewFromUtf8(_isolate, code.c_str(), v8::NewStringType::kNormal, static_cast<int>(code.length()))
