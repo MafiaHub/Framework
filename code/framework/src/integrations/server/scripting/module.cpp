@@ -165,6 +165,7 @@ namespace Framework::Integrations::Server::Scripting {
 
     bool ServerScriptingModule::Shutdown() {
         _resourceManager.reset();
+        g_resourceManager = nullptr;
 
         if (_nodeEngine) {
             _nodeEngine->Shutdown();
