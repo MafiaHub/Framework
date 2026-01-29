@@ -21,7 +21,7 @@ namespace Framework::Scripting {
      * - request(resourceName, messageType, payload) - Returns Promise
      * - send(resourceName, messageType, payload) - Fire and forget
      */
-    class Messages {
+    class Messages final {
       public:
         /**
          * Register the Framework.messages object in a context.

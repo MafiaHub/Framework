@@ -13,7 +13,7 @@ namespace Framework::Scripting::Builtins {
  * Vector2 wrapper class for V8 bindings using v8pp.
  * Provides a clean C++ interface that wraps glm::vec2.
  */
-class Vector2 {
+class Vector2 final {
   public:
     Vector2() : _vec(0.0f) {}
     Vector2(float x, float y) : _vec(x, y) {}

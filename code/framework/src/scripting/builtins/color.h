@@ -14,7 +14,7 @@ namespace Framework::Scripting::Builtins {
  * Provides a clean C++ interface that wraps glm::vec4 for RGBA colors.
  * Components are stored as floats in range [0, 1].
  */
-class Color {
+class Color final {
   public:
     Color() : _color(1.0f) {}
     Color(float r, float g, float b, float a = 1.0f) : _color(r, g, b, a) {}

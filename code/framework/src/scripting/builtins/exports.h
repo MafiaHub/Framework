@@ -6,7 +6,7 @@
 namespace Framework::Scripting {
     class ResourceManager;
 
-    class Exports {
+    class Exports final {
       public:
         static void Register(v8::Isolate *isolate,
                             v8::Local<v8::Context> context,

@@ -37,7 +37,7 @@ namespace Framework::Scripting {
      * - emitLocal(eventName, ...args) - Resource-local emit
      * - listenerCount(eventName) - Get handler count
      */
-    class Events {
+    class Events final {
       public:
         Events() = default;
         ~Events();

@@ -18,7 +18,7 @@ namespace Framework::Scripting {
      * - console.error() -> Framework logger (error level)
      * - console.debug() -> Framework logger (debug level)
      */
-    class Console {
+    class Console final {
       public:
         /**
          * Register the console override in a context.

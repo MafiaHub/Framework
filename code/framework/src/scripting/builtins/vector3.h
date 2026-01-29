@@ -13,7 +13,7 @@ namespace Framework::Scripting::Builtins {
  * Vector3 wrapper class for V8 bindings using v8pp.
  * Provides a clean C++ interface that wraps glm::vec3.
  */
-class Vector3 {
+class Vector3 final {
   public:
     Vector3() : _vec(0.0f) {}
     Vector3(float x, float y, float z) : _vec(x, y, z) {}

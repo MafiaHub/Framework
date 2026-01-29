@@ -22,7 +22,7 @@ class Vector3;
  * Provides a clean C++ interface that wraps glm::quat.
  * Uses (w, x, y, z) order internally matching GLM.
  */
-class Quaternion {
+class Quaternion final {
   public:
     Quaternion() : _quat(1.0f, 0.0f, 0.0f, 0.0f) {}
     Quaternion(float w, float x, float y, float z) : _quat(w, x, y, z) {}

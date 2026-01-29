@@ -15,7 +15,7 @@ namespace Framework::Scripting {
      * Provides Framework.imports API:
      * - get(resourceName) - Returns exports from another resource
      */
-    class Imports {
+    class Imports final {
       public:
         /**
          * Register the Framework.imports object in a context.
