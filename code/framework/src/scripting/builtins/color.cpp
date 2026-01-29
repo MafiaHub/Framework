@@ -1,8 +1,9 @@
 #include "color.h"
 
-#include <sstream>
-#include <iomanip>
+#include <algorithm>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 
 namespace Framework::Scripting::Builtins {
 
