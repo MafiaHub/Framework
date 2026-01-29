@@ -36,7 +36,7 @@ cmake --build build --target RunFrameworkTests  # Run tests
 1. **CoreModules** (`core_modules.h`) - Central singleton registry coupling all modules together
 2. **World Engine** (`world/engine.h`) - ECS-based world management using Flecs with streaming support
 3. **Networking** (`networking/network_peer.h`) - Client-server communication via SlikeNet
-4. **Scripting** (`scripting/js/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
+4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
 5. **GUI Manager** (`gui/manager.h`) - UI using Ultralight and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
 

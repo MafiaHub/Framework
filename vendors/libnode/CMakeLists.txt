@@ -104,7 +104,7 @@ else()
     if(APPLE)
         if(NOT EXISTS "${LIBNODE_LIB_DIR}/libnode.dylib")
             file(CREATE_LINK
-                "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}"
+                "${LIBNODE_LIB_NAME}"
                 "${LIBNODE_LIB_DIR}/libnode.dylib"
                 SYMBOLIC
             )
@@ -112,7 +112,7 @@ else()
     elseif(UNIX)
         if(NOT EXISTS "${LIBNODE_LIB_DIR}/libnode.so")
             file(CREATE_LINK
-                "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}"
+                "${LIBNODE_LIB_NAME}"
                 "${LIBNODE_LIB_DIR}/libnode.so"
                 SYMBOLIC
             )
