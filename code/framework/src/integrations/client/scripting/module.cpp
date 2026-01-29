@@ -147,14 +147,24 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         // Check which resources need to be downloaded
+        bool anyMissing = false;
         for (const auto &resource : resources) {
             std::string resourcePath = GetResourcePath(resource.name);
 
             // Check if resource exists locally
             if (!std::filesystem::exists(resourcePath)) {
+                anyMissing = true;
                 if (_onResourceDownloadNeeded) {
                     _onResourceDownloadNeeded(resource.name, resource.version);
                 }
+            }
+        }
+
+        // If all resources already exist locally, mark as synced immediately
+        if (!anyMissing) {
+            _resourcesSynced = true;
+            if (_onResourceSyncComplete) {
+                _onResourceSyncComplete(true);
             }
         }
     }
