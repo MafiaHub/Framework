@@ -31,18 +31,7 @@ v8pp::class_<Vector4>& Vector4::GetClass(v8::Isolate* isolate) {
             .set("normalize", &Vector4::normalize)
             .set("lerp", &Vector4::lerp)
             .set("clone", &Vector4::clone)
-            .set("toString", &Vector4::toString)
-            // Getter methods (workaround for v8pp property issues with modern V8)
-            .set("getX", &Vector4::getX)
-            .set("getY", &Vector4::getY)
-            .set("getZ", &Vector4::getZ)
-            .set("getW", &Vector4::getW)
-            .set("setX", &Vector4::setX)
-            .set("setY", &Vector4::setY)
-            .set("setZ", &Vector4::setZ)
-            .set("setW", &Vector4::setW)
-            .set("getLength", &Vector4::getLength)
-            .set("getLengthSquared", &Vector4::getLengthSquared);
+            .set("toString", &Vector4::toString);
 
         // Add properties manually using v8's SetAccessor with correct signature
         auto protoTemplate = _class->class_function_template()->PrototypeTemplate();

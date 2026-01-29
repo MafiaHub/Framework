@@ -73,16 +73,7 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
             .set("lerp", &Color::lerp)
             .set("clone", &Color::clone)
             .set("toHex", &Color::toHex)
-            .set("toString", &Color::toString)
-            // Getter/setter methods (workaround for v8pp property issues with modern V8)
-            .set("getR", &Color::getR)
-            .set("setR", &Color::setR)
-            .set("getG", &Color::getG)
-            .set("setG", &Color::setG)
-            .set("getB", &Color::getB)
-            .set("setB", &Color::setB)
-            .set("getA", &Color::getA)
-            .set("setA", &Color::setA);
+            .set("toString", &Color::toString);
 
         // Add properties manually using v8's SetAccessor with correct signature
         auto protoTemplate = _class->class_function_template()->PrototypeTemplate();

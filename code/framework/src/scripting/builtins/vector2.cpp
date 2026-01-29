@@ -32,14 +32,7 @@ v8pp::class_<Vector2>& Vector2::GetClass(v8::Isolate* isolate) {
             .set("lerp", &Vector2::lerp)
             .set("distance", &Vector2::distance)
             .set("clone", &Vector2::clone)
-            .set("toString", &Vector2::toString)
-            // Getter methods (workaround for v8pp property issues with modern V8)
-            .set("getX", &Vector2::getX)
-            .set("getY", &Vector2::getY)
-            .set("setX", &Vector2::setX)
-            .set("setY", &Vector2::setY)
-            .set("getLength", &Vector2::getLength)
-            .set("getLengthSquared", &Vector2::getLengthSquared);
+            .set("toString", &Vector2::toString);
 
         // Add properties manually using v8's SetAccessor with correct signature
         auto protoTemplate = _class->class_function_template()->PrototypeTemplate();

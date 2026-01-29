@@ -47,16 +47,7 @@ v8pp::class_<Quaternion>& Quaternion::GetClass(v8::Isolate* isolate) {
             .set("rotateVector", &Quaternion::rotateVector)
             .set("toEuler", &Quaternion::toEuler)
             .set("clone", &Quaternion::clone)
-            .set("toString", &Quaternion::toString)
-            // Getter/setter methods (workaround for v8pp property issues with modern V8)
-            .set("getW", &Quaternion::getW)
-            .set("setW", &Quaternion::setW)
-            .set("getX", &Quaternion::getX)
-            .set("setX", &Quaternion::setX)
-            .set("getY", &Quaternion::getY)
-            .set("setY", &Quaternion::setY)
-            .set("getZ", &Quaternion::getZ)
-            .set("setZ", &Quaternion::setZ);
+            .set("toString", &Quaternion::toString);
 
         // Add properties manually using v8's SetAccessor with correct signature
         auto protoTemplate = _class->class_function_template()->PrototypeTemplate();
