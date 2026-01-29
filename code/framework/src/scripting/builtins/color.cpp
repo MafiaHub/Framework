@@ -134,6 +134,23 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
                 }
             });
 
+        // toJSON method for JSON.stringify support - returns plain JS object
+        protoTemplate->Set(
+            v8pp::to_v8(isolate, "toJSON"),
+            v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
+                if (!self) return;
+
+                auto iso = info.GetIsolate();
+                auto ctx = iso->GetCurrentContext();
+                auto obj = v8::Object::New(iso);
+                obj->Set(ctx, v8pp::to_v8(iso, "r"), v8::Number::New(iso, self->getR())).Check();
+                obj->Set(ctx, v8pp::to_v8(iso, "g"), v8::Number::New(iso, self->getG())).Check();
+                obj->Set(ctx, v8pp::to_v8(iso, "b"), v8::Number::New(iso, self->getB())).Check();
+                obj->Set(ctx, v8pp::to_v8(iso, "a"), v8::Number::New(iso, self->getA())).Check();
+                info.GetReturnValue().Set(obj);
+            }));
+
         // Static methods need to be added to the js_function_template
         auto func = _class->js_function_template();
         func->Set(isolate, "fromHex", v8pp::wrap_function_template(isolate, &Color::fromHex));
