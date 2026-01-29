@@ -584,29 +584,126 @@ namespace Framework::Scripting {
             eventArgs.push_back(args[i]);
         }
 
-        // Call handlers
-        std::vector<std::string> errors;
-        for (auto &callback : handlersToCall) {
-            v8::TryCatch tryCatch(isolate);
+        // Collect all handler results/promises
+        v8::Local<v8::Array> promises = v8::Array::New(isolate, static_cast<int>(handlersToCall.size()));
+
+        for (size_t i = 0; i < handlersToCall.size(); ++i) {
+            auto &callback = handlersToCall[i];
             v8::Local<v8::Function> func = callback.Get(isolate);
 
+            v8::TryCatch tryCatch(isolate);
             std::vector<v8::Local<v8::Value>> argv(eventArgs.begin(), eventArgs.end());
-            func->Call(context, context->Global(), static_cast<int>(argv.size()),
-                       argv.empty() ? nullptr : argv.data());
+
+            v8::MaybeLocal<v8::Value> maybeResult = func->Call(context, context->Global(),
+                                                                static_cast<int>(argv.size()),
+                                                                argv.empty() ? nullptr : argv.data());
 
             if (tryCatch.HasCaught()) {
                 v8::String::Utf8Value error(isolate, tryCatch.Exception());
-                errors.push_back(*error ? *error : "Unknown error");
+                std::string errorStr = *error ? *error : "Unknown error";
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                    "[{}] Local event handler error: {}", resourceName, errorStr);
+
+                // Create rejected promise for this handler
+                v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+                errResolver->Reject(context, tryCatch.Exception()).Check();
+                promises->Set(context, static_cast<uint32_t>(i), errResolver->GetPromise()).Check();
                 tryCatch.Reset();
+            } else if (!maybeResult.IsEmpty()) {
+                v8::Local<v8::Value> result = maybeResult.ToLocalChecked();
+
+                // Wrap non-promise values in resolved promise
+                if (result->IsPromise()) {
+                    promises->Set(context, static_cast<uint32_t>(i), result).Check();
+                } else {
+                    v8::Local<v8::Promise::Resolver> valResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+                    valResolver->Resolve(context, result).Check();
+                    promises->Set(context, static_cast<uint32_t>(i), valResolver->GetPromise()).Check();
+                }
+            } else {
+                // Empty result - create resolved promise with undefined
+                v8::Local<v8::Promise::Resolver> valResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+                valResolver->Resolve(context, v8::Undefined(isolate)).Check();
+                promises->Set(context, static_cast<uint32_t>(i), valResolver->GetPromise()).Check();
             }
         }
 
-        if (!errors.empty()) {
-            resolver->Reject(context, v8::Exception::Error(
-                v8pp::to_v8(isolate, "Local event handler(s) failed"))).Check();
-        } else {
+        // Use Promise.allSettled to wait for all handlers
+        v8::Local<v8::Object> promiseConstructor = context->Global()
+            ->Get(context, v8pp::to_v8(isolate, "Promise")).ToLocalChecked().As<v8::Object>();
+        v8::Local<v8::Function> allSettled = promiseConstructor
+            ->Get(context, v8pp::to_v8(isolate, "allSettled")).ToLocalChecked().As<v8::Function>();
+
+        v8::Local<v8::Value> allSettledArgs[] = { promises };
+        v8::MaybeLocal<v8::Value> allSettledResult = allSettled->Call(context, promiseConstructor, 1, allSettledArgs);
+
+        if (allSettledResult.IsEmpty()) {
             resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            args.GetReturnValue().Set(resolver->GetPromise());
+            return;
         }
+
+        v8::Local<v8::Promise> allPromise = allSettledResult.ToLocalChecked().As<v8::Promise>();
+
+        // Store resolver in persistent handle for the callback
+        v8::Global<v8::Promise::Resolver> *persistentResolver = new v8::Global<v8::Promise::Resolver>(isolate, resolver);
+
+        v8::Local<v8::External> resolverData = v8::External::New(isolate, persistentResolver);
+
+        v8::Local<v8::Function> thenHandler = v8::Function::New(context,
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                v8::Isolate *iso = info.GetIsolate();
+                v8::Local<v8::Context> ctx = iso->GetCurrentContext();
+
+                v8::Global<v8::Promise::Resolver> *presolver =
+                    static_cast<v8::Global<v8::Promise::Resolver> *>(info.Data().As<v8::External>()->Value());
+                v8::Local<v8::Promise::Resolver> res = presolver->Get(iso);
+
+                v8::Local<v8::Array> results = info[0].As<v8::Array>();
+                std::vector<v8::Local<v8::Value>> rejections;
+
+                for (uint32_t i = 0; i < results->Length(); ++i) {
+                    v8::Local<v8::Object> item = results->Get(ctx, i).ToLocalChecked().As<v8::Object>();
+                    v8::Local<v8::Value> status = item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocalChecked();
+                    v8::String::Utf8Value statusStr(iso, status);
+
+                    if (std::string(*statusStr) == "rejected") {
+                        v8::Local<v8::Value> reason = item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocalChecked();
+                        rejections.push_back(reason);
+                    }
+                }
+
+                if (!rejections.empty()) {
+                    // Create AggregateError
+                    v8::Local<v8::Array> errArray = v8::Array::New(iso, static_cast<int>(rejections.size()));
+                    for (size_t i = 0; i < rejections.size(); ++i) {
+                        errArray->Set(ctx, static_cast<uint32_t>(i), rejections[i]).Check();
+                    }
+
+                    v8::Local<v8::String> msg = v8pp::to_v8(iso, "One or more local event handlers failed");
+                    v8::Local<v8::Value> aggArgs[] = { errArray, msg };
+                    v8::MaybeLocal<v8::Value> aggErrorCtorVal = ctx->Global()->Get(ctx, v8pp::to_v8(iso, "AggregateError"));
+
+                    if (!aggErrorCtorVal.IsEmpty() && aggErrorCtorVal.ToLocalChecked()->IsFunction()) {
+                        v8::Local<v8::Function> aggErrorCtor = aggErrorCtorVal.ToLocalChecked().As<v8::Function>();
+                        v8::MaybeLocal<v8::Object> aggErrorObj = aggErrorCtor->NewInstance(ctx, 2, aggArgs);
+                        if (!aggErrorObj.IsEmpty()) {
+                            res->Reject(ctx, aggErrorObj.ToLocalChecked()).Check();
+                        } else {
+                            res->Reject(ctx, errArray).Check();
+                        }
+                    } else {
+                        // Fallback if AggregateError not available
+                        res->Reject(ctx, errArray).Check();
+                    }
+                } else {
+                    res->Resolve(ctx, v8::Undefined(iso)).Check();
+                }
+
+                delete presolver;
+            }, resolverData).ToLocalChecked();
+
+        allPromise->Then(context, thenHandler).ToLocalChecked();
 
         args.GetReturnValue().Set(resolver->GetPromise());
     }
