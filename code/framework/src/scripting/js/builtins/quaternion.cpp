@@ -1,6 +1,7 @@
 #include "quaternion.h"
 #include "../v8_helpers.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <sstream>
@@ -71,9 +72,13 @@ namespace Framework::Scripting::JS::Builtins {
     }
 
     glm::quat *Quaternion::Unwrap(v8::Local<v8::Object> obj) {
-        v8::Local<v8::Value> field = obj->GetInternalField(0);
-        if (field.IsEmpty() || !field->IsExternal())
+        if (obj->InternalFieldCount() < 1) {
             return nullptr;
+        }
+        v8::Local<v8::Data> field = obj->GetInternalField(0);
+        if (field.IsEmpty()) {
+            return nullptr;
+        }
         return static_cast<glm::quat *>(field.As<v8::External>()->Value());
     }
 

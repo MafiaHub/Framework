@@ -62,7 +62,8 @@ namespace Framework::Scripting::JS {
         node::Environment *_env = nullptr;
         v8::Isolate *_isolate = nullptr;
         std::unique_ptr<node::IsolateData, decltype(&node::FreeIsolateData)> _isolateData;
-        std::unique_ptr<v8::ArrayBuffer::Allocator> _allocator;
+        std::shared_ptr<node::ArrayBufferAllocator> _allocator;
+        v8::Global<v8::Context> _context;
         uv_loop_t _uvLoop;
         bool _uvLoopInitialized = false;
     };

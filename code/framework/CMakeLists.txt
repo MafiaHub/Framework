@@ -39,6 +39,18 @@ set(FRAMEWORK_SRC
     src/scripting/resource/environment_sandbox.cpp
     src/scripting/resource/resource_manager.cpp
 
+    # JavaScript scripting (V8/Node.js)
+    src/scripting/js/engine.cpp
+    src/scripting/js/v8_engine.cpp
+    src/scripting/js/builtins/vector2.cpp
+    src/scripting/js/builtins/vector3.cpp
+    src/scripting/js/builtins/vector4.cpp
+    src/scripting/js/builtins/quaternion.cpp
+    src/scripting/js/builtins/color.cpp
+    src/scripting/js/resource/package_manifest.cpp
+    src/scripting/js/resource/js_resource.cpp
+    src/scripting/js/resource/js_resource_manager.cpp
+
     src/jobs/job_system.cpp
     src/jobs/io_tasks.cpp
 )
@@ -55,6 +67,9 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/scripting/module.cpp
     src/integrations/server/scripting/builtins/entity.cpp
     src/integrations/server/scripting/builtins/events_lua.cpp
+
+    # JavaScript scripting (Node.js engine for server)
+    src/scripting/js/node_engine.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
@@ -223,7 +238,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl v8)
 
     # Required libraries for windows
     if(WIN32)
@@ -242,7 +257,7 @@ if(WIN32)
 endif()
 
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer MafiaHubServices libsig lua54_static)
+target_link_libraries(FrameworkServer MafiaHubServices libsig lua54_static libnode)
 
 # FrameworkServer-specific includes
 target_include_directories(FrameworkServer PRIVATE

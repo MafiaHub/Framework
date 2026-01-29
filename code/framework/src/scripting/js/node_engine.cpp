@@ -97,11 +97,11 @@ namespace Framework::Scripting::JS {
         }
         _uvLoopInitialized = true;
 
-        // Create allocator
-        _allocator = std::unique_ptr<v8::ArrayBuffer::Allocator>(node::ArrayBufferAllocator::Create());
+        // Create allocator (use shared_ptr for Node.js API)
+        _allocator = node::ArrayBufferAllocator::Create();
 
         // Create isolate
-        _isolate = node::NewIsolate(_allocator.get(), &_uvLoop, _platform.get());
+        _isolate = node::NewIsolate(_allocator, &_uvLoop, _platform.get());
         if (!_isolate) {
             _lastError = "Failed to create Node.js isolate";
             return false;
@@ -121,6 +121,9 @@ namespace Framework::Scripting::JS {
             _lastError = "Failed to create Node.js context";
             return false;
         }
+
+        // Store context globally for later access
+        _context.Reset(_isolate, context);
 
         v8::Context::Scope contextScope(context);
 
@@ -212,8 +215,8 @@ namespace Framework::Scripting::JS {
     }
 
     v8::Local<v8::Context> NodeEngine::GetContext() const {
-        if (_env) {
-            return _env->context();
+        if (!_context.IsEmpty()) {
+            return _context.Get(_isolate);
         }
         return v8::Local<v8::Context>();
     }
