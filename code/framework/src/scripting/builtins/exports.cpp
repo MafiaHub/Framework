@@ -134,7 +134,18 @@ namespace Framework::Scripting {
             return;
         }
 
-        // Get the export value
+        // Validate isolate ownership - export values are bound to their resource's isolate
+        v8::Isolate *resourceIsolate = resource->GetIsolate();
+        if (resourceIsolate != isolate) {
+            // Cross-isolate access is not supported - V8 values cannot be shared across isolates
+            // This typically happens when resources run in separate isolates (e.g., different threads)
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate,
+                "Exports.get: cannot access export '" + exportName + "' from resource '" + resourceName +
+                "' - cross-isolate access is not supported. Both resources must share the same isolate.")));
+            return;
+        }
+
+        // Get the export value (safe since we validated isolate ownership above)
         v8::Local<v8::Value> exportValue = resource->GetExportValue(exportName);
         if (exportValue.IsEmpty()) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.get: export '" + exportName + "' not found in resource '" + resourceName + "'")));
