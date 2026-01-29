@@ -95,6 +95,12 @@ namespace Framework::Integrations::Server::Scripting {
         bool StartAllResources();
 
         /**
+         * Process event loop until ES modules finish loading.
+         * Call this after StartAllResources() to ensure async imports complete.
+         */
+        void WaitForPendingLoads();
+
+        /**
          * Register the Framework SDK bindings in the engine.
          */
         void RegisterFrameworkBindings();

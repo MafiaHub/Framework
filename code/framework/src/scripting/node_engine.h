@@ -27,10 +27,18 @@ namespace Framework::Scripting {
         bool InitFrameworkSDK() override;
 
         /**
-         * Process pending Node.js events.
+         * Process pending Node.js events (non-blocking).
          * Call this from game loop to process async operations.
          */
         void Tick();
+
+        /**
+         * Process pending Node.js events (blocking).
+         * Waits for at least one event to complete. Use during initialization
+         * to ensure async operations like ES module imports complete.
+         * Returns true if there are more events pending.
+         */
+        bool TickBlocking();
 
         /**
          * Get the Node.js environment.

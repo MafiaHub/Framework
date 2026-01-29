@@ -51,8 +51,19 @@ namespace Framework::Scripting {
         v8::Local<v8::FunctionTemplate> countTmpl = v8::FunctionTemplate::New(isolate, ListenerCountCallback, managerData);
         eventsObj->Set(context, v8pp::to_v8(isolate, "listenerCount"), countTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        // Register as global "Events" instead of "Framework.events"
+        // Register as global "Events"
         global->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
+    }
+
+    // Helper to get resource context - uses V8 stack trace as fallback for async ES modules
+    std::string GetResourceContextWithFallback(v8::Isolate *isolate, ResourceManager *manager) {
+        std::string resourceName = manager->GetCurrentResourceContext();
+        if (!resourceName.empty()) {
+            return resourceName;
+        }
+
+        // Fallback: extract resource name from V8 call stack file paths
+        return manager->GetResourceContextFromStack(isolate);
     }
 
     void Events::RegisterHandler(v8::Isolate *isolate,
@@ -60,7 +71,7 @@ namespace Framework::Scripting {
                                   const std::string &eventName,
                                   v8::Local<v8::Function> handler,
                                   bool once) {
-        std::string resourceName = manager->GetCurrentResourceContext();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(
                 v8pp::to_v8(isolate, "Events.on: must be called from within a resource")));
@@ -108,7 +119,7 @@ namespace Framework::Scripting {
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
-        std::string resourceName = manager->GetCurrentResourceContext();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(
@@ -202,8 +213,13 @@ namespace Framework::Scripting {
         }
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string resourceName = manager->GetCurrentResourceContext();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+
+        // If no resource context, we can't determine which resource to remove handlers for
+        if (resourceName.empty()) {
+            return;
+        }
 
         std::lock_guard<std::mutex> lock(_handlersMutex);
         auto it = _globalHandlers.find(eventName);
@@ -492,7 +508,7 @@ namespace Framework::Scripting {
         }
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string resourceName = manager->GetCurrentResourceContext();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(
@@ -528,7 +544,7 @@ namespace Framework::Scripting {
         }
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string resourceName = manager->GetCurrentResourceContext();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(

@@ -9,6 +9,48 @@
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/exports.h>
 
+namespace {
+    // Global pointer for internal emit callback (set during RegisterFrameworkBindings)
+    Framework::Scripting::ResourceManager *g_resourceManager = nullptr;
+
+    // Called from ES module loader after import completes to emit resourceStart event
+    void EmitResourceStartCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            return;
+        }
+
+        std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
+
+        if (g_resourceManager) {
+            g_resourceManager->SetCurrentResourceContext(resourceName);
+        }
+
+        std::vector<v8::Local<v8::Value>> eventArgs;
+        eventArgs.push_back(args[0]);
+        Framework::Scripting::Events::EmitReserved(isolate, context, "resourceStart", eventArgs);
+
+        if (g_resourceManager) {
+            g_resourceManager->SetCurrentResourceContext("");
+        }
+    }
+
+    // Register Framework.__internal.emitResourceStart for ES module lifecycle events
+    void RegisterInternalEmitResourceStart(v8::Isolate *isolate,
+                                            v8::Local<v8::Context> context,
+                                            v8::Local<v8::Object> frameworkObj) {
+        v8::Local<v8::Object> internalObj = v8::Object::New(isolate);
+        frameworkObj->Set(context, v8pp::to_v8(isolate, "__internal"), internalObj).Check();
+
+        v8::Local<v8::FunctionTemplate> emitTmpl = v8::FunctionTemplate::New(isolate, EmitResourceStartCallback);
+        internalObj->Set(context, v8pp::to_v8(isolate, "emitResourceStart"),
+                         emitTmpl->GetFunction(context).ToLocalChecked()).Check();
+    }
+} // anonymous namespace
+
 namespace Framework::Integrations::Server::Scripting {
 
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world)
@@ -93,12 +135,17 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
+
+        // Register internal function for ES module lifecycle events
+        g_resourceManager = _resourceManager.get();
+        RegisterInternalEmitResourceStart(isolate, context, frameworkObj);
     }
 
     bool ServerScriptingModule::PreShutdown() {
         if (_resourceManager) {
             _resourceManager->StopAll();
         }
+        g_resourceManager = nullptr;
         return true;
     }
 
@@ -198,6 +245,23 @@ namespace Framework::Integrations::Server::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
             "Started {} JS resource(s)", result.affectedResources.size());
         return true;
+    }
+
+    void ServerScriptingModule::WaitForPendingLoads() {
+        if (!_nodeEngine || !_nodeEngine->IsInitialized()) {
+            return;
+        }
+
+        // Process the event loop with blocking ticks to let ES module imports complete
+        // UV_RUN_ONCE will wait for I/O operations (like file reads for imports)
+        // We loop until there are no more pending events
+        int maxIterations = 100; // Safety limit
+        while (maxIterations-- > 0 && _nodeEngine->TickBlocking()) {
+            // TickBlocking returns true if there are still pending events
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(
+            "Finished processing pending ES module loads");
     }
 
 } // namespace Framework::Integrations::Server::Scripting

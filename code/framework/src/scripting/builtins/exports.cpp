@@ -54,8 +54,8 @@ namespace Framework::Scripting {
         std::string exportName = v8pp::from_v8<std::string>(isolate, args[0]);
         v8::Local<v8::Value> exportValue = args[1];
 
-        // Get the current resource context
-        Resource *currentResource = manager->GetCurrentResource();
+        // Get the current resource context (use stack fallback for async ES modules)
+        Resource *currentResource = manager->GetCurrentResourceWithStackFallback(isolate);
         if (!currentResource) {
             isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "Exports.register: no resource context")));
             return;

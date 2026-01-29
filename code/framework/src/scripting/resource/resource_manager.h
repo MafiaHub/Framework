@@ -13,6 +13,11 @@
 #include <string>
 #include <vector>
 
+// Forward declaration for V8
+namespace v8 {
+    class Isolate;
+}
+
 namespace Framework::Scripting {
 
     /**
@@ -237,10 +242,26 @@ namespace Framework::Scripting {
         std::string GetCurrentResourceContext() const;
 
         /**
+         * Get resource name from V8 call stack by examining file paths.
+         * Used as fallback when async ES modules are loading.
+         * @param isolate V8 isolate to get stack trace from
+         * @return Resource name extracted from stack, or empty string
+         */
+        std::string GetResourceContextFromStack(v8::Isolate *isolate) const;
+
+        /**
          * Get the currently executing resource.
          * @return Pointer to current resource, or nullptr if none
          */
         Resource *GetCurrentResource();
+
+        /**
+         * Get the currently executing resource with stack fallback.
+         * Uses V8 stack trace to determine resource when context isn't set.
+         * @param isolate V8 isolate for stack trace
+         * @return Pointer to current resource, or nullptr if none
+         */
+        Resource *GetCurrentResourceWithStackFallback(v8::Isolate *isolate);
 
         // Statistics
 

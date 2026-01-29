@@ -230,8 +230,9 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Failure(error);
         }
 
-        // Emit resourceStart event and wait for handlers
-        if (_jsEngine && _jsEngine->IsInitialized()) {
+        // For CommonJS modules, emit resourceStart immediately (synchronous loading)
+        // For ES modules, the event is emitted from within the async loader wrapper
+        if (!resource->GetManifest().IsESModule() && _jsEngine && _jsEngine->IsInitialized()) {
             v8::Isolate *isolate = _jsEngine->GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
@@ -351,45 +352,37 @@ namespace Framework::Scripting {
         }
 
         std::string resourceName = resource.GetName();
-        SetCurrentResourceContext(resourceName);
-
         std::filesystem::path absPath = std::filesystem::absolute(entryPoint);
         std::string absPathStr = absPath.string();
 
+        // Escape backslashes for JS string
         std::string escapedPath = absPathStr;
         for (size_t pos = 0; (pos = escapedPath.find('\\', pos)) != std::string::npos; pos += 2) {
             escapedPath.replace(pos, 1, "\\\\");
         }
 
         std::string code;
-        bool isESModule = resource.GetManifest().IsESModule();
-
-        if (isESModule) {
-            // ES Module - just import, no lifecycle function detection
+        if (resource.GetManifest().IsESModule()) {
+            // ES Module: Load asynchronously, emit resourceStart after handlers are registered
             code =
                 "(async function() {\n"
                 "    try {\n"
                 "        await import('file://" + escapedPath + "');\n"
+                "        Framework.__internal.emitResourceStart('" + resourceName + "');\n"
                 "    } catch (err) {\n"
-                "        console.error('[" + resourceName + "] Failed to load ES module:', err);\n"
+                "        console.error('[" + resourceName + "] Failed to load:', err.stack || err);\n"
                 "        throw err;\n"
                 "    }\n"
                 "})();\n";
         } else {
-            // CommonJS - just require, no lifecycle function detection
-            code =
-                "(function() {\n"
-                "    require('" + escapedPath + "');\n"
-                "})();\n";
+            // CommonJS
+            code = "(function() { require('" + escapedPath + "'); })();\n";
         }
 
         bool result = _jsEngine->Execute(code, absPathStr);
         if (!result) {
             outError = _jsEngine->GetLastError();
         }
-
-        SetCurrentResourceContext("");
-
         return result;
     }
 
@@ -498,8 +491,77 @@ namespace Framework::Scripting {
         return _currentResourceContext;
     }
 
+    std::string ResourceManager::GetResourceContextFromStack(v8::Isolate *isolate) const {
+        if (!isolate) {
+            return "";
+        }
+
+        // Get stack trace with up to 20 frames
+        v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, 20);
+        if (stackTrace.IsEmpty()) {
+            return "";
+        }
+
+        // Look for the first frame with a file path in the resources directory
+        for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
+            v8::Local<v8::StackFrame> frame = stackTrace->GetFrame(isolate, i);
+            v8::Local<v8::String> scriptName = frame->GetScriptName();
+            if (scriptName.IsEmpty()) {
+                continue;
+            }
+
+            v8::String::Utf8Value scriptPath(isolate, scriptName);
+            if (!*scriptPath) {
+                continue;
+            }
+
+            std::string path(*scriptPath);
+
+            // Check if path is in resources directory
+            // Path format: .../resources/<resource-name>/...
+            size_t resourcesPos = path.find("/resources/");
+            if (resourcesPos == std::string::npos) {
+                // Also try file:// URL format
+                resourcesPos = path.find("file:///");
+                if (resourcesPos != std::string::npos) {
+                    path = path.substr(resourcesPos + 7); // Remove "file://"
+                    resourcesPos = path.find("/resources/");
+                }
+            }
+
+            if (resourcesPos != std::string::npos) {
+                // Extract resource name
+                size_t nameStart = resourcesPos + 11; // Skip "/resources/"
+                size_t nameEnd = path.find('/', nameStart);
+                if (nameEnd != std::string::npos) {
+                    std::string resourceName = path.substr(nameStart, nameEnd - nameStart);
+                    // Verify this resource exists
+                    if (GetResource(resourceName) != nullptr) {
+                        return resourceName;
+                    }
+                }
+            }
+        }
+
+        return "";
+    }
+
     Resource *ResourceManager::GetCurrentResource() {
         std::string name = GetCurrentResourceContext();
+        if (name.empty()) {
+            return nullptr;
+        }
+        return GetResourceMutable(name);
+    }
+
+    Resource *ResourceManager::GetCurrentResourceWithStackFallback(v8::Isolate *isolate) {
+        std::string name = GetCurrentResourceContext();
+
+        // If no context set (e.g., during async ES module loading), try to get from stack
+        if (name.empty() && isolate) {
+            name = GetResourceContextFromStack(isolate);
+        }
+
         if (name.empty()) {
             return nullptr;
         }
