@@ -73,8 +73,9 @@ namespace Framework::Scripting {
                                   bool once) {
         std::string resourceName = GetResourceContextWithFallback(isolate, manager);
         if (resourceName.empty()) {
+            std::string methodName = once ? "Events.once" : "Events.on";
             isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.on: must be called from within a resource")));
+                v8pp::to_v8(isolate, methodName + ": must be called from within a resource")));
             return;
         }
 
