@@ -42,6 +42,7 @@ class Vector4 final {
 
     // Non-mutating methods
     float dot(const Vector4& other) const { return glm::dot(_vec, other._vec); }
+    float distance(const Vector4& other) const { return glm::distance(_vec, other._vec); }
     Vector4 clone() const { return Vector4(_vec); }
     std::string toString() const;
 

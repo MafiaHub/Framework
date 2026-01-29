@@ -34,6 +34,7 @@ v8pp::class_<Vector4>& Vector4::GetClass(v8::Isolate* isolate) {
         .set("mul", &Vector4::mul)
         .set("div", &Vector4::div)
         .set("dot", &Vector4::dot)
+        .set("distance", &Vector4::distance)
         .set("normalize", &Vector4::normalize)
         .set("lerp", &Vector4::lerp)
         .set("set", &Vector4::set)
