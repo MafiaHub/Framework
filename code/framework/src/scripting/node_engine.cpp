@@ -278,8 +278,10 @@ namespace Framework::Scripting {
         }
 
         // Convert to absolute path for Node.js require
+        // Use generic_string() to get forward slashes on all platforms,
+        // avoiding Windows backslash escape sequence issues in JS strings
         std::filesystem::path absPath = std::filesystem::absolute(filepath);
-        std::string absPathStr = absPath.string();
+        std::string absPathStr = absPath.generic_string();
 
         // Use Node.js require for file execution
         std::string code = "require('" + absPathStr + "');";
