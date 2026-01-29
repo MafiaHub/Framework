@@ -202,7 +202,7 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Events::Register(isolate, context, context->Global(), &manager);
+            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -211,21 +211,20 @@ MODULE(js_features, {
             typeof unsub === 'function'
         )"), true);
 
-        EQUALS(Events::GetListenerCount("testEvent"), (size_t)1);
+        EQUALS(manager.GetEvents().GetListenerCount("testEvent"), (size_t)1);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
-            Events::CleanupResource("testResource");
+            manager.GetEvents().CleanupResource("testResource");
         }
-        EQUALS(Events::GetListenerCount("testEvent"), (size_t)0);
+        EQUALS(manager.GetEvents().GetListenerCount("testEvent"), (size_t)0);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });
-
 
     IT("Events.emit blocks reserved events from JS", {
         EventsTestHelper::Setup();
@@ -245,7 +244,7 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Events::Register(isolate, context, context->Global(), &manager);
+            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -259,7 +258,7 @@ MODULE(js_features, {
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
-            Events::CleanupResource("testResource");
+            manager.GetEvents().CleanupResource("testResource");
         }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -283,7 +282,7 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Events::Register(isolate, context, context->Global(), &manager);
+            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -298,7 +297,7 @@ MODULE(js_features, {
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
-            Events::CleanupResource("testResource");
+            manager.GetEvents().CleanupResource("testResource");
         }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -322,22 +321,22 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Events::Register(isolate, context, context->Global(), &manager);
+            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
         RunJS(engine, "globalThis.unsub = Events.on('unsubTest', () => {}); 0");
-        EQUALS(Events::GetListenerCount("unsubTest"), (size_t)1);
+        EQUALS(manager.GetEvents().GetListenerCount("unsubTest"), (size_t)1);
 
         RunJS(engine, "globalThis.unsub(); 0");
-        EQUALS(Events::GetListenerCount("unsubTest"), (size_t)0);
+        EQUALS(manager.GetEvents().GetListenerCount("unsubTest"), (size_t)0);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
-            Events::CleanupResource("testResource");
+            manager.GetEvents().CleanupResource("testResource");
         }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -361,7 +360,7 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Events::Register(isolate, context, context->Global(), &manager);
+            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
             // NOT setting resource context
         }
 
@@ -389,7 +388,7 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            Events::Register(isolate, context, context->Global(), &manager);
+            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
@@ -403,7 +402,7 @@ MODULE(js_features, {
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
             v8::HandleScope handleScope(isolate);
-            Events::CleanupResource("testResource");
+            manager.GetEvents().CleanupResource("testResource");
         }
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -446,4 +445,5 @@ MODULE(js_features, {
         engine.Shutdown();
         EventsTestHelper::Cleanup();
     });
+
 });

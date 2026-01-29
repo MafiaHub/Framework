@@ -32,7 +32,9 @@ namespace {
 
         std::vector<v8::Local<v8::Value>> eventArgs;
         eventArgs.push_back(args[0]);
-        Framework::Scripting::Events::EmitReserved(isolate, context, "resourceStart", eventArgs);
+        if (g_resourceManager) {
+            g_resourceManager->GetEvents().EmitReserved(isolate, context, "resourceStart", eventArgs);
+        }
 
         if (g_resourceManager) {
             g_resourceManager->SetCurrentResourceContext("");
@@ -138,7 +140,7 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::RegisterAll(isolate, global);
 
         // Register communication APIs
-        Framework::Scripting::Events::Register(isolate, context, global, _resourceManager.get());
+        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());

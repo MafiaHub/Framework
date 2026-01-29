@@ -2,6 +2,7 @@
 
 #include "resource.h"
 #include "../engine.h"
+#include "../builtins/events.h"
 
 #include <logging/logger.h>
 
@@ -228,6 +229,11 @@ namespace Framework::Scripting {
          */
         Engine *GetJSEngine() const;
 
+        /**
+         * Get the Events instance owned by this manager.
+         */
+        Events &GetEvents();
+
         // Current Resource Context
 
         /**
@@ -371,6 +377,9 @@ namespace Framework::Scripting {
 
         // Pending ES module loads counter
         std::atomic<int> _pendingESModuleLoads{0};
+
+        // Events instance owned by this manager
+        Events _events;
     };
 
 } // namespace Framework::Scripting

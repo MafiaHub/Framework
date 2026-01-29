@@ -287,7 +287,7 @@ namespace Framework::Scripting {
             args.push_back(v8pp::to_v8(isolate, name));
 
             SetCurrentResourceContext(name);
-            Events::EmitReserved(isolate, context, "resourceStart", args);
+            _events.EmitReserved(isolate, context, "resourceStart", args);
             SetCurrentResourceContext("");
         }
 
@@ -344,7 +344,7 @@ namespace Framework::Scripting {
             args.push_back(v8pp::to_v8(isolate, name));
 
             SetCurrentResourceContext(name);
-            Events::EmitReserved(isolate, context, "resourceStop", args);
+            _events.EmitReserved(isolate, context, "resourceStop", args);
             SetCurrentResourceContext("");
         }
 
@@ -437,7 +437,7 @@ namespace Framework::Scripting {
 
     bool ResourceManager::CallResourceStop(const std::string &resourceName) {
         // Cleanup handlers before resource fully stops
-        Events::CleanupResource(resourceName);
+        _events.CleanupResource(resourceName);
         return true;
     }
 
@@ -528,6 +528,10 @@ namespace Framework::Scripting {
 
     Engine *ResourceManager::GetJSEngine() const {
         return _jsEngine;
+    }
+
+    Events &ResourceManager::GetEvents() {
+        return _events;
     }
 
     void ResourceManager::SetCurrentResourceContext(const std::string &name) {

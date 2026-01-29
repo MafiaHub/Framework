@@ -19,6 +19,7 @@ namespace Framework::Scripting {
      */
     struct EventHandler {
         v8::Global<v8::Function> callback;
+        v8::Isolate *isolate = nullptr;  // Track which isolate owns this handler
         std::string resourceName;
         bool once;
     };
@@ -38,34 +39,55 @@ namespace Framework::Scripting {
      */
     class Events {
       public:
+        Events() = default;
+        ~Events() = default;
+
+        // Non-copyable
+        Events(const Events &) = delete;
+        Events &operator=(const Events &) = delete;
+
         /**
          * Register the Events global object in a context.
          */
-        static void Register(v8::Isolate *isolate,
-                            v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> global,
-                            ResourceManager *resourceManager);
+        void Register(v8::Isolate *isolate,
+                     v8::Local<v8::Context> context,
+                     v8::Local<v8::Object> global,
+                     ResourceManager *resourceManager);
 
         /**
          * Emit a reserved event (framework-only, bypasses protection).
          * Returns a Promise that resolves when all handlers complete.
          */
-        static v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate,
-                                                    v8::Local<v8::Context> context,
-                                                    const std::string &eventName,
-                                                    const std::vector<v8::Local<v8::Value>> &args);
+        v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate,
+                                            v8::Local<v8::Context> context,
+                                            const std::string &eventName,
+                                            const std::vector<v8::Local<v8::Value>> &args);
 
         /**
          * Clean up all handlers for a resource (called on resource stop).
          */
-        static void CleanupResource(const std::string &resourceName);
+        void CleanupResource(const std::string &resourceName);
+
+        /**
+         * Clear all handlers (called on shutdown).
+         */
+        void ClearAll();
 
         /**
          * Get count of handlers for an event.
          */
-        static size_t GetListenerCount(const std::string &eventName);
+        size_t GetListenerCount(const std::string &eventName);
 
       private:
+        /**
+         * Context data passed to V8 callbacks via External.
+         * Contains both the Events instance and ResourceManager.
+         */
+        struct CallbackContext {
+            Events *events;
+            ResourceManager *resourceManager;
+        };
+
         // V8 callbacks
         static void OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OnceCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
@@ -77,30 +99,30 @@ namespace Framework::Scripting {
         static void ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
         // Internal registration helper
-        static void RegisterHandler(v8::Isolate *isolate,
-                                   ResourceManager *manager,
-                                   const std::string &eventName,
-                                   v8::Local<v8::Function> handler,
-                                   bool once);
+        void RegisterHandler(v8::Isolate *isolate,
+                            ResourceManager *manager,
+                            const std::string &eventName,
+                            v8::Local<v8::Function> handler,
+                            bool once);
 
         // Internal emit helper - returns Promise
-        static v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate,
-                                                   v8::Local<v8::Context> context,
-                                                   const std::string &eventName,
-                                                   const std::vector<v8::Local<v8::Value>> &args,
-                                                   const std::string &targetResource = "");
+        v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate,
+                                            v8::Local<v8::Context> context,
+                                            const std::string &eventName,
+                                            const std::vector<v8::Local<v8::Value>> &args,
+                                            const std::string &targetResource = "");
 
-        // Get handlers map for current isolate (creates if needed)
-        static std::map<std::string, std::vector<EventHandler>> &GetGlobalHandlers(v8::Isolate *isolate);
-        static std::map<std::string, std::map<std::string, std::vector<EventHandler>>> &GetLocalHandlers(v8::Isolate *isolate);
+        // Global handlers: eventName -> handlers (FIFO order)
+        std::map<std::string, std::vector<EventHandler>> _globalHandlers;
 
-        // Per-isolate handlers storage
-        static std::map<v8::Isolate *, std::map<std::string, std::vector<EventHandler>>> _isolateGlobalHandlers;
-        static std::map<v8::Isolate *, std::map<std::string, std::map<std::string, std::vector<EventHandler>>>> _isolateLocalHandlers;
+        // Local handlers: resourceName -> eventName -> handlers
+        std::map<std::string, std::map<std::string, std::vector<EventHandler>>> _localHandlers;
 
-        static std::mutex _handlersMutex;
-        static ResourceManager *_resourceManager;
-        static v8::Isolate *_currentIsolate;
+        std::mutex _handlersMutex;
+        ResourceManager *_resourceManager = nullptr;
+
+        // Stored callback context (lifetime tied to this Events instance)
+        std::unique_ptr<CallbackContext> _callbackContext;
     };
 
 } // namespace Framework::Scripting
