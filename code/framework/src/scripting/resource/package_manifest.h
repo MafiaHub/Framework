@@ -2,7 +2,6 @@
 
 #include <string>
 #include <vector>
-#include <optional>
 
 #include <nlohmann/json.hpp>
 
@@ -35,7 +34,7 @@ namespace Framework::Scripting {
     /**
      * Parses package.json files for JS resources.
      */
-    class PackageManifest {
+    class PackageManifest final {
       public:
         bool Parse(const std::string &filepath);
         bool ParseJson(const nlohmann::json &json);

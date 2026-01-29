@@ -35,7 +35,7 @@ namespace Framework::Integrations::Client::Scripting {
      * Uses V8 for sandboxed client-side JavaScript execution.
      * More restricted than server-side (no filesystem, no network).
      */
-    class ClientScriptingModule {
+    class ClientScriptingModule final {
       public:
         explicit ClientScriptingModule(std::shared_ptr<World::ClientEngine> world);
         ~ClientScriptingModule();

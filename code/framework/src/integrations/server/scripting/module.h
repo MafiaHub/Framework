@@ -24,7 +24,7 @@ namespace Framework::Integrations::Server::Scripting {
      * Uses Node.js for full server-side JavaScript capabilities including
      * require(), async/await, npm packages, etc.
      */
-    class ServerScriptingModule {
+    class ServerScriptingModule final {
       public:
         explicit ServerScriptingModule(std::shared_ptr<World::ServerEngine> world);
         ~ServerScriptingModule();

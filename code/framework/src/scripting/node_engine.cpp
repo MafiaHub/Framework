@@ -40,6 +40,8 @@ namespace Framework::Scripting {
     }
 
     bool NodeEngine::Init() {
+        _lastError.clear();
+
         if (_initialized) {
             return true;
         }
