@@ -75,16 +75,24 @@ namespace Framework::Scripting {
                 v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
                 // Try to get JSON representation
-                v8::Local<v8::Object> json = context->Global()
-                    ->Get(context, v8pp::to_v8(isolate, "JSON")).ToLocalChecked().As<v8::Object>();
-                v8::Local<v8::Function> stringify = json
-                    ->Get(context, v8pp::to_v8(isolate, "stringify")).ToLocalChecked().As<v8::Function>();
-
-                v8::Local<v8::Value> jsonArgs[1] = {obj};
-                v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
-
-                if (!jsonResult.IsEmpty()) {
-                    ss << v8pp::from_v8<std::string>(isolate, jsonResult.ToLocalChecked());
+                v8::Local<v8::Value> jsonValue;
+                if (context->Global()->Get(context, v8pp::to_v8(isolate, "JSON")).ToLocal(&jsonValue) &&
+                    jsonValue->IsObject()) {
+                    v8::Local<v8::Object> json = jsonValue.As<v8::Object>();
+                    v8::Local<v8::Value> stringifyValue;
+                    if (json->Get(context, v8pp::to_v8(isolate, "stringify")).ToLocal(&stringifyValue) &&
+                        stringifyValue->IsFunction()) {
+                        v8::Local<v8::Function> stringify = stringifyValue.As<v8::Function>();
+                        v8::Local<v8::Value> jsonArgs[1] = {obj};
+                        v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
+                        if (!jsonResult.IsEmpty()) {
+                            ss << v8pp::from_v8<std::string>(isolate, jsonResult.ToLocalChecked());
+                        } else {
+                            ss << "[Object]";
+                        }
+                    } else {
+                        ss << "[Object]";
+                    }
                 } else {
                     ss << "[Object]";
                 }

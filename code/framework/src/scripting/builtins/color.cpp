@@ -45,13 +45,14 @@ Color Color::fromHex(const std::string& hexInput) {
 
     float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
 
+    if (hex.length() != 6 && hex.length() != 8) {
+        return Color(r, g, b, a);
+    }
     try {
-        if (hex.length() >= 6) {
-            r = static_cast<float>(std::stoi(hex.substr(0, 2), nullptr, 16)) / 255.0f;
-            g = static_cast<float>(std::stoi(hex.substr(2, 2), nullptr, 16)) / 255.0f;
-            b = static_cast<float>(std::stoi(hex.substr(4, 2), nullptr, 16)) / 255.0f;
-        }
-        if (hex.length() >= 8) {
+        r = static_cast<float>(std::stoi(hex.substr(0, 2), nullptr, 16)) / 255.0f;
+        g = static_cast<float>(std::stoi(hex.substr(2, 2), nullptr, 16)) / 255.0f;
+        b = static_cast<float>(std::stoi(hex.substr(4, 2), nullptr, 16)) / 255.0f;
+        if (hex.length() == 8) {
             a = static_cast<float>(std::stoi(hex.substr(6, 2), nullptr, 16)) / 255.0f;
         }
     } catch (...) {
