@@ -5,6 +5,14 @@
 
 namespace Framework::Scripting {
 
+    // Context for AllSettled callback - holds resolver, error message, and owner for cleanup
+    // Defined early so destructor can access it
+    struct Events::AllSettledCallbackData {
+        v8::Global<v8::Promise::Resolver> resolver;
+        std::string errorMessage;
+        Events *owner;  // For removing from pending set on completion
+    };
+
     Events::~Events() {
         // Invalidate the callback context so any outstanding unsubscribe
         // lambdas holding a reference will safely bail out
@@ -326,13 +334,6 @@ namespace Framework::Scripting {
 
         return promises;
     }
-
-    // Context for AllSettled callback - holds resolver, error message, and owner for cleanup
-    struct Events::AllSettledCallbackData {
-        v8::Global<v8::Promise::Resolver> resolver;
-        std::string errorMessage;
-        Events *owner;  // For removing from pending set on completion
-    };
 
     void Events::RemovePendingCallback(AllSettledCallbackData *data) {
         std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
