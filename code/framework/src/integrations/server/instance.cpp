@@ -21,12 +21,6 @@
 #include "networking/messages/client_ready_assets.h"
 #include "networking/messages/client_request_streamer.h"
 #include "networking/messages/messages.h"
-#include "integrations/shared/rpc/emit_lua_event.h"
-
-#include "scripting/builtins/entity.h"
-#include "scripting/builtins/events_lua.h"
-#include "scripting/utils/table_conversions.h"
-#include "scripting/resource/resource_manager.h"
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
@@ -44,7 +38,7 @@ namespace Framework::Integrations::Server {
         _webServer        = std::make_shared<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingModule  = std::make_shared<Scripting::ServerScriptingModule>(_worldEngine);
+        _scriptingModule  = std::make_shared<Scripting::JSServerScriptingModule>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
@@ -142,8 +136,8 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
     
-        const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::Engine> sdk) {
-            this->RegisterScriptingBuiltins(sdk.GetEngine());
+        const auto sdkCallback = [this](Framework::Scripting::JS::Engine *engine) {
+            this->RegisterScriptingBuiltins(engine);
         };
 
         // Initialize the scripting engine
@@ -299,7 +293,7 @@ namespace Framework::Integrations::Server {
             ClientReadyAssets readyMsg;
             if (_scriptingModule) {
                 for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    readyMsg.AddResource(resource.name, resource.version, resource.hash);
+                    readyMsg.AddResource(resource.name, resource.version, 0); // Hash computed on demand
                 }
             }
             net->Send(readyMsg, guid);
@@ -349,26 +343,9 @@ namespace Framework::Integrations::Server {
                 _onPlayerConnectCallback(e, guid.g);
         });
 
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
-            if (!rpc->Valid())
-                return;
-
-            const auto eventName = rpc->GetEventName();
-            const auto payloadStr = rpc->GetPayload();
-            sol::object payload {};
-            try {
-                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
-                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
-            }
-            catch (const std::exception &ex) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to parse event payload: {}", ex.what());
-                return;
-            }
-            const auto resourceManager = Framework::CoreModules::GetResourceManager();
-            if (resourceManager) {
-                resourceManager->InvokeGlobalEvent(eventName, payload);
-            }
-        });
+        // Note: Client-to-server events are handled through the JS Events system
+        // The client can emit events via Framework.events.emitToServer() which uses
+        // the networking messages system to send events to the server
 
         Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
 
@@ -387,41 +364,49 @@ namespace Framework::Integrations::Server {
 
         streamer->SetApplicationDirectory(assetsPath.c_str());
 
-        // Add client files from each resource (same pattern as develop branch)
+        // Add client files from each JS resource
         const auto resourceManager = scripting->GetResourceManager();
         if (resourceManager) {
             for (const auto &resourceName : resourceManager->GetAllResourceNames()) {
                 const auto resource = resourceManager->GetResource(resourceName);
                 if (!resource) continue;
 
-                const auto &manifest = resource->GetManifest();
-                if (manifest.clientFiles.empty()) continue;
+                // Only process resources with client entry points
+                const auto clientEntry = resource->GetClientEntryPoint();
+                if (clientEntry.empty()) continue;
 
-                // Add client files
-                for (const auto &clientFile : manifest.clientFiles) {
-                    std::filesystem::path fileName = std::filesystem::path(resourceName) / clientFile;
-                    std::filesystem::path fullPath = std::filesystem::path(assetsPath) / fileName;
-                    streamer->AddFile(fullPath.string().c_str(), fileName.string().c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", fileName.string());
+                const auto resourcePath = resource->GetPath();
+
+                // Add package.json for client to parse manifest info
+                std::filesystem::path packageJsonPath = std::filesystem::path(resourcePath) / "package.json";
+                if (std::filesystem::exists(packageJsonPath)) {
+                    std::filesystem::path packageJsonName = std::filesystem::path(resourceName) / "package.json";
+                    streamer->AddFile(packageJsonPath.string().c_str(), packageJsonName.string().c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", packageJsonName.string());
                 }
 
-                // Create sanitized manifest (no server_files) and add it
-                Framework::Scripting::ResourceManifest clientManifest = manifest;
-                clientManifest.serverFiles.clear();
-                nlohmann::json manifestJson = clientManifest;
-                std::string manifestContent = manifestJson.dump(2);
+                // Add the client entry point script
+                std::filesystem::path clientEntryPath = std::filesystem::path(resourcePath) / clientEntry;
+                if (std::filesystem::exists(clientEntryPath)) {
+                    std::filesystem::path clientEntryName = std::filesystem::path(resourceName) / clientEntry;
+                    streamer->AddFile(clientEntryPath.string().c_str(), clientEntryName.string().c_str());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", clientEntryName.string());
+                }
 
-                // Write to temp file in resource directory
-                std::filesystem::path clientManifestPath = std::filesystem::path(assetsPath) / resourceName / ".client_manifest.json";
+                // If the client entry is in a subdirectory, add all JS files from that directory
+                std::filesystem::path clientDir = clientEntryPath.parent_path();
+                if (clientDir != resourcePath && std::filesystem::exists(clientDir)) {
+                    for (const auto &entry : std::filesystem::recursive_directory_iterator(clientDir)) {
+                        if (!entry.is_regular_file()) continue;
 
-                std::ofstream outFile(clientManifestPath);
-                if (outFile.is_open()) {
-                    outFile << manifestContent;
-                    outFile.close();
-
-                    std::filesystem::path manifestFileName = std::filesystem::path(resourceName) / "manifest.json";
-                    streamer->AddFile(clientManifestPath.string().c_str(), manifestFileName.string().c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added sanitized manifest for: {}", resourceName);
+                        // Add JavaScript and TypeScript files
+                        const auto ext = entry.path().extension().string();
+                        if (ext == ".js" || ext == ".mjs" || ext == ".ts" || ext == ".json") {
+                            std::filesystem::path relativePath = std::filesystem::relative(entry.path(), std::filesystem::path(assetsPath));
+                            streamer->AddFile(entry.path().string().c_str(), relativePath.string().c_str());
+                            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", relativePath.string());
+                        }
+                    }
                 }
             }
         }
@@ -597,12 +582,9 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
-        // Register the entity builtin
-        Framework::Integrations::Scripting::Entity::Register(engine->GetLuaEngine());
-        Framework::Integrations::Scripting::EventsServer::Register(engine->GetLuaEngine());
-
-        // mod-specific builtins
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::JS::Engine *engine) {
+        // JS bindings are registered by JSServerScriptingModule::RegisterFrameworkBindings
+        // This method is called to allow mod-specific customization
         ModuleRegister(engine);
     }
 

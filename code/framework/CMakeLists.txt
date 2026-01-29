@@ -27,18 +27,6 @@ set(FRAMEWORK_SRC
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
-    src/scripting/engine.cpp
-    src/scripting/client_engine.cpp
-    src/scripting/types/events.cpp
-
-    src/integrations/client/scripting/module.cpp
-
-    src/scripting/resource/resource.cpp
-    src/scripting/resource/resource_manifest.cpp
-    src/scripting/resource/dependency_graph.cpp
-    src/scripting/resource/environment_sandbox.cpp
-    src/scripting/resource/resource_manager.cpp
-
     # JavaScript scripting (V8/Node.js)
     src/scripting/js/engine.cpp
     src/scripting/js/v8_engine.cpp
@@ -60,17 +48,12 @@ set(FRAMEWORK_SRC
 )
 
 set(FRAMEWORK_SERVER_SRC
-    src/scripting/server_engine.cpp
-
     src/http/webserver.cpp
 
     src/networking/network_server.cpp
 
     src/integrations/server/instance.cpp
     src/integrations/server/networking/engine.cpp
-    src/integrations/server/scripting/module.cpp
-    src/integrations/server/scripting/builtins/entity.cpp
-    src/integrations/server/scripting/builtins/events_lua.cpp
 
     # JavaScript scripting (Node.js engine for server)
     src/scripting/js/node_engine.cpp
@@ -184,10 +167,9 @@ target_precompile_headers(Framework PUBLIC
     <nlohmann/json.hpp>
 )
 
-# FrameworkServer PCH - reuses Framework PCH + adds scripting/ECS headers
+# FrameworkServer PCH - reuses Framework PCH + adds ECS headers
 target_precompile_headers(FrameworkServer PRIVATE
     "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
-    <sol/sol.hpp>
     <flecs/flecs.h>
 )
 
@@ -222,8 +204,6 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/json/include
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-        ${CMAKE_SOURCE_DIR}/vendors/sol                    # Lua bindings (used in scripting API)
-        ${CMAKE_SOURCE_DIR}/vendors/lua-5.4.4/src/lua54    # Lua headers (required by sol)
         ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in world/modules/base.hpp)
         ${CMAKE_SOURCE_DIR}/vendors/slikenet/Source        # Networking (used in messages.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
@@ -265,7 +245,7 @@ if(WIN32)
 endif()
 
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer MafiaHubServices libsig lua54_static libnode)
+target_link_libraries(FrameworkServer MafiaHubServices libsig libnode)
 
 # FrameworkServer-specific includes
 target_include_directories(FrameworkServer PRIVATE

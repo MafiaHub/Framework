@@ -14,7 +14,7 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
-#include "scripting/module.h"
+#include "scripting/js_module.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
 #include "utils/command_listener.h"
@@ -92,7 +92,7 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        std::shared_ptr<Scripting::ServerScriptingModule> _scriptingModule;
+        std::shared_ptr<Scripting::JSServerScriptingModule> _scriptingModule;
         std::shared_ptr<Networking::Engine> _networkingEngine;
         std::shared_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
@@ -107,7 +107,7 @@ namespace Framework::Integrations::Server {
         void InitAssetStreamer();
         void InitCommandListener();
         bool LoadConfigFromJSON();
-        void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
+        void RegisterScriptingBuiltins(Framework::Scripting::JS::Engine *);
         
         // Command handlers
         void HandleCommand(const std::string &command);
@@ -138,7 +138,7 @@ namespace Framework::Integrations::Server {
 
         virtual void PreShutdown();
 
-        virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
+        virtual void ModuleRegister(Framework::Scripting::JS::Engine *engine) {
             (void)engine;
         }
 
@@ -164,7 +164,7 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Scripting::ServerScriptingModule> GetScriptingModule() const {
+        std::shared_ptr<Scripting::JSServerScriptingModule> GetScriptingModule() const {
             return _scriptingModule;
         }
 

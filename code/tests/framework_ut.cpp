@@ -11,30 +11,26 @@
 #include "unit.h"
 
 /* TEST CATEGORIES */
-#include "modules/client_engine_ut.h"
-#include "modules/dependency_graph_ut.h"
-#include "modules/environment_sandbox_ut.h"
 #include "modules/interpolator_ut.h"
-#include "modules/resource_manager_ut.h"
-#include "modules/resource_manifest_ut.h"
-#include "modules/resource_ut.h"
-#include "modules/scripting_module_ut.h"
 #include "modules/state_machine_ut.h"
+
+// JavaScript scripting tests
+#include "modules/js_engine_ut.h"
+#include "modules/js_resource_ut.h"
+#include "modules/js_resource_manager_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
 
     Framework::Logging::GetInstance()->PauseLogging(true);
 
-    UNIT_MODULE(client_engine);
-    UNIT_MODULE(dependency_graph);
-    UNIT_MODULE(environment_sandbox);
     UNIT_MODULE(interpolator);
-    UNIT_MODULE(resource_manager);
-    UNIT_MODULE(resource_manifest);
-    UNIT_MODULE(resource);
-    UNIT_MODULE(scripting_module);
     UNIT_MODULE(state_machine);
+
+    // JavaScript scripting tests
+    UNIT_MODULE(js_engine);
+    UNIT_MODULE(js_resource);
+    UNIT_MODULE(js_resource_manager);
 
     return UNIT_RUN();
 }

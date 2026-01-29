@@ -6,12 +6,11 @@
 namespace Framework::Scripting::JS {
 
     std::unique_ptr<node::MultiIsolatePlatform> NodeEngine::_platform = nullptr;
+    std::shared_ptr<node::InitializationResult> NodeEngine::_initResult = nullptr;
     bool NodeEngine::_platformInitialized = false;
     std::vector<std::string> NodeEngine::_nodeArgs = {"mafiahub-server"};
 
-    NodeEngine::NodeEngine()
-        : _isolateData(nullptr, node::FreeIsolateData) {
-    }
+    NodeEngine::NodeEngine() = default;
 
     NodeEngine::~NodeEngine() {
         Shutdown();
@@ -35,27 +34,35 @@ namespace Framework::Scripting::JS {
     }
 
     void NodeEngine::Shutdown() {
-        if (!_initialized) {
+        if (!_initialized || !_setup) {
+            _initialized = false;
             return;
         }
 
-        if (_env) {
-            node::Stop(_env);
-            node::FreeEnvironment(_env);
-            _env = nullptr;
-        }
+        // Following Node.js embedtest.cc pattern exactly:
+        // 1. V8 scopes in a block for any final JS operations
+        // 2. Scopes exit when block ends
+        // 3. node::Stop() called AFTER scopes are released
+        // 4. CommonEnvironmentSetup destructor runs last
+        {
+            v8::Locker locker(_isolate);
+            v8::Isolate::Scope isolate_scope(_isolate);
+            v8::HandleScope handle_scope(_isolate);
+            v8::Context::Scope context_scope(_setup->context());
 
-        _isolateData.reset();
-
-        if (_isolate) {
-            _isolate->Dispose();
-            _isolate = nullptr;
+            // Any final JS cleanup can happen here if needed
         }
+        // All V8 scopes have now exited
 
-        if (_uvLoopInitialized) {
-            uv_loop_close(&_uvLoop);
-            _uvLoopInitialized = false;
-        }
+        // Stop Node.js environment AFTER scopes are released (per embedtest.cc)
+        node::Stop(_env);
+
+        // Clear our references before destroying setup
+        _env = nullptr;
+        _isolate = nullptr;
+
+        // CommonEnvironmentSetup destructor handles isolate disposal
+        _setup.reset();
 
         _initialized = false;
     }
@@ -65,21 +72,26 @@ namespace Framework::Scripting::JS {
             return true;
         }
 
-        // Initialize Node.js
-        std::vector<std::string> args = _nodeArgs;
-        std::vector<std::string> execArgs;
-        std::vector<std::string> errors;
-
-        int exitCode = node::InitializeNodeWithArgs(&args, &execArgs, &errors);
-
-        if (exitCode != 0) {
-            _lastError = "Failed to initialize Node.js";
-            for (const auto &err : errors) {
-                _lastError += "\n" + err;
+        // Initialize Node.js with flags to control V8 platform ourselves
+        // Using initializer_list syntax as shown in Node.js docs
+        _initResult = node::InitializeOncePerProcess(
+            _nodeArgs,
+            {
+                node::ProcessInitializationFlags::kNoInitializeV8,
+                node::ProcessInitializationFlags::kNoInitializeNodeV8Platform
             }
+        );
+
+        for (const auto &err : _initResult->errors()) {
+            _lastError += err + "\n";
+        }
+
+        if (_initResult->early_return() != 0) {
+            _lastError = "Failed to initialize Node.js process: " + _lastError;
             return false;
         }
 
+        // Create MultiIsolatePlatform for Worker thread support
         _platform = node::MultiIsolatePlatform::Create(4);
         v8::V8::InitializePlatform(_platform.get());
         v8::V8::Initialize();
@@ -89,90 +101,77 @@ namespace Framework::Scripting::JS {
     }
 
     bool NodeEngine::CreateEnvironment() {
-        // Initialize libuv loop
-        int uvResult = uv_loop_init(&_uvLoop);
-        if (uvResult != 0) {
-            _lastError = "Failed to initialize libuv loop";
+        // Use CommonEnvironmentSetup for proper Node.js embedding
+        std::vector<std::string> errors;
+        _setup = node::CommonEnvironmentSetup::Create(
+            _platform.get(),
+            &errors,
+            _initResult->args(),
+            _initResult->exec_args()
+        );
+
+        if (!_setup) {
+            _lastError = "Failed to create Node.js environment setup";
+            for (const auto &err : errors) {
+                _lastError += "\n" + err;
+            }
             return false;
         }
-        _uvLoopInitialized = true;
 
-        // Create allocator (use shared_ptr for Node.js API)
-        _allocator = node::ArrayBufferAllocator::Create();
+        _isolate = _setup->isolate();
+        _env = _setup->env();
 
-        // Create isolate
-        _isolate = node::NewIsolate(_allocator, &_uvLoop, _platform.get());
-        if (!_isolate) {
-            _lastError = "Failed to create Node.js isolate";
-            return false;
-        }
-
-        // Create isolate data
-        _isolateData.reset(node::CreateIsolateData(_isolate, &_uvLoop, _platform.get(), _allocator.get()));
-
-        // Enter isolate scope
+        // Enter scopes for LoadEnvironment as required by Node.js docs
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::HandleScope handleScope(_isolate);
+        v8::Isolate::Scope isolate_scope(_isolate);
+        v8::HandleScope handle_scope(_isolate);
+        v8::Context::Scope context_scope(_setup->context());
 
-        // Create context
-        v8::Local<v8::Context> context = node::NewContext(_isolate);
-        if (context.IsEmpty()) {
-            _lastError = "Failed to create Node.js context";
+        // Load Node.js internals with require setup
+        v8::MaybeLocal<v8::Value> loadResult = node::LoadEnvironment(
+            _env,
+            "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
+            "globalThis.require = publicRequire;"
+            "globalThis.Framework = {};"
+        );
+
+        if (loadResult.IsEmpty()) {
+            _lastError = "Failed to load Node.js environment";
             return false;
         }
-
-        // Store context globally for later access
-        _context.Reset(_isolate, context);
-
-        v8::Context::Scope contextScope(context);
-
-        // Create Node.js environment
-        _env = node::CreateEnvironment(_isolateData.get(), context, _nodeArgs, _nodeArgs);
-
-        if (!_env) {
-            _lastError = "Failed to create Node.js environment";
-            return false;
-        }
-
-        // Load Node.js internals
-        node::LoadEnvironment(_env, "const publicRequire = require('module').createRequire(process.cwd() + '/');"
-                                    "globalThis.require = publicRequire;"
-                                    "globalThis.Framework = {};");
 
         return true;
     }
 
     void NodeEngine::Tick() {
-        if (!_initialized || !_env) {
+        if (!_initialized || !_setup) {
             return;
         }
 
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::HandleScope handleScope(_isolate);
-        v8::Context::Scope contextScope(GetContext());
+        v8::Isolate::Scope isolate_scope(_isolate);
+        v8::HandleScope handle_scope(_isolate);
+        v8::Context::Scope context_scope(_setup->context());
 
         // Run pending libuv events (non-blocking)
-        uv_run(&_uvLoop, UV_RUN_NOWAIT);
+        uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
     }
 
     bool NodeEngine::Execute(const std::string &code, const std::string &filename) {
-        if (!_initialized) {
+        if (!_initialized || !_setup) {
             _lastError = "Engine not initialized";
             return false;
         }
 
         v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolateScope(_isolate);
-        v8::HandleScope handleScope(_isolate);
-        v8::Local<v8::Context> context = GetContext();
-        v8::Context::Scope contextScope(context);
+        v8::Isolate::Scope isolate_scope(_isolate);
+        v8::HandleScope handle_scope(_isolate);
+        v8::Local<v8::Context> context = _setup->context();
+        v8::Context::Scope context_scope(context);
 
         v8::TryCatch tryCatch(_isolate);
 
         v8::Local<v8::String> source = v8::String::NewFromUtf8(_isolate, code.c_str()).ToLocalChecked();
-
         v8::ScriptOrigin origin(v8::String::NewFromUtf8(_isolate, filename.c_str()).ToLocalChecked());
 
         v8::Local<v8::Script> script;
@@ -204,19 +203,15 @@ namespace Framework::Scripting::JS {
     }
 
     bool NodeEngine::InitFrameworkSDK() {
-        // Register N-API bindings for Framework APIs
-        // This will be implemented in subsequent tasks
-
         if (_sdkRegisterCallback) {
             _sdkRegisterCallback(this);
         }
-
         return true;
     }
 
     v8::Local<v8::Context> NodeEngine::GetContext() const {
-        if (!_context.IsEmpty()) {
-            return _context.Get(_isolate);
+        if (_setup) {
+            return _setup->context();
         }
         return v8::Local<v8::Context>();
     }

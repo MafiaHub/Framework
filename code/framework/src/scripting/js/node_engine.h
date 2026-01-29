@@ -56,16 +56,14 @@ namespace Framework::Scripting::JS {
         bool CreateEnvironment();
 
         static std::unique_ptr<node::MultiIsolatePlatform> _platform;
+        static std::shared_ptr<node::InitializationResult> _initResult;
         static bool _platformInitialized;
         static std::vector<std::string> _nodeArgs;
 
+        // Using CommonEnvironmentSetup for proper Node.js embedding
+        std::unique_ptr<node::CommonEnvironmentSetup> _setup;
         node::Environment *_env = nullptr;
         v8::Isolate *_isolate = nullptr;
-        std::unique_ptr<node::IsolateData, decltype(&node::FreeIsolateData)> _isolateData;
-        std::shared_ptr<node::ArrayBufferAllocator> _allocator;
-        v8::Global<v8::Context> _context;
-        uv_loop_t _uvLoop;
-        bool _uvLoopInitialized = false;
     };
 
 } // namespace Framework::Scripting::JS

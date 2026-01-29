@@ -6,13 +6,13 @@ namespace Framework::Scripting::JS {
 
     const char *ResourceStateToString(ResourceState state) {
         switch (state) {
-            case ResourceState::Unloaded: return "Unloaded";
-            case ResourceState::Loading: return "Loading";
-            case ResourceState::Running: return "Running";
-            case ResourceState::Stopping: return "Stopping";
-            case ResourceState::Stopped: return "Stopped";
-            case ResourceState::Error: return "Error";
-            default: return "Unknown";
+            case ResourceState::Unloaded: return "unloaded";
+            case ResourceState::Loading: return "loading";
+            case ResourceState::Running: return "running";
+            case ResourceState::Stopping: return "stopping";
+            case ResourceState::Stopped: return "stopped";
+            case ResourceState::Error: return "error";
+            default: return "unknown";
         }
     }
 
@@ -25,6 +25,7 @@ namespace Framework::Scripting::JS {
 
         if (!_manifestValid) {
             _errorMessage = _manifest.GetError();
+            _state = ResourceState::Error;
         }
     }
 
@@ -130,7 +131,7 @@ namespace Framework::Scripting::JS {
     }
 
     bool JSResource::IsStopped() const {
-        return _state == ResourceState::Stopped;
+        return _state == ResourceState::Stopped || _state == ResourceState::Unloaded;
     }
 
     bool JSResource::HasError() const {
@@ -201,8 +202,11 @@ namespace Framework::Scripting::JS {
 
     int JSResource::GetRestartBackoffMs() const {
         int attempts = GetRestartAttemptCount();
+        if (attempts == 0) {
+            return 0;
+        }
         // Exponential backoff: 1s, 2s, 4s, 8s, 16s max
-        int delayMs = 1000 * (1 << std::min(attempts, 4));
+        int delayMs = 1000 * (1 << std::min(attempts - 1, 4));
         return delayMs;
     }
 
