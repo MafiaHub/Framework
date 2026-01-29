@@ -13,7 +13,7 @@ namespace Framework::Scripting::Builtins {
  * Vector4 wrapper class for V8 bindings using v8pp.
  * Provides a clean C++ interface that wraps glm::vec4.
  */
-class Vector4 {
+class Vector4 final {
   public:
     Vector4() : _vec(0.0f) {}
     Vector4(float x, float y, float z, float w) : _vec(x, y, z, w) {}

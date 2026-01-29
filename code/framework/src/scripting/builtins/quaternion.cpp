@@ -28,7 +28,11 @@ Quaternion Quaternion::fromEuler(float pitch, float yaw, float roll) {
 }
 
 Quaternion Quaternion::fromAxisAngle(const Vector3& axis, float angle) {
-    glm::vec3 normalizedAxis = glm::normalize(axis.vec());
+    float lengthSq = glm::dot(axis.vec(), axis.vec());
+    if (lengthSq < 1e-12f) {
+        return Quaternion::identity();
+    }
+    glm::vec3 normalizedAxis = axis.vec() / std::sqrt(lengthSq);
     return Quaternion(glm::angleAxis(angle, normalizedAxis));
 }
 
