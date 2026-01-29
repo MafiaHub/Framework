@@ -7,6 +7,44 @@
 #include <queue>
 #include <stack>
 
+namespace {
+    // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
+    // Handles: backslash, single quote, newline, carriage return, and tab.
+    std::string EscapeForSingleQuotedJSString(const std::string &input) {
+        std::string result;
+        result.reserve(input.size() + input.size() / 8); // Pre-allocate with some margin
+
+        for (char c : input) {
+            switch (c) {
+            case '\\': result += "\\\\"; break;
+            case '\'': result += "\\'"; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default: result += c; break;
+            }
+        }
+        return result;
+    }
+
+    // Converts a filesystem path to a proper file:// URL.
+    // - Uses forward slashes (generic_string)
+    // - Windows: file:///C:/path (three slashes before drive letter)
+    // - POSIX: file:///path (path already starts with /)
+    std::string PathToFileURL(const std::filesystem::path &absPath) {
+        std::string genericPath = absPath.generic_string();
+
+        // Check for Windows drive letter (e.g., "C:/...")
+        if (genericPath.size() >= 2 && std::isalpha(static_cast<unsigned char>(genericPath[0])) && genericPath[1] == ':') {
+            // Windows path: needs file:/// prefix (three slashes, then drive letter)
+            return "file:///" + genericPath;
+        }
+
+        // POSIX path: already starts with /, so file:// + path gives file:///path
+        return "file://" + genericPath;
+    }
+} // anonymous namespace
+
 namespace Framework::Scripting {
 
     ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
@@ -360,30 +398,33 @@ namespace Framework::Scripting {
         std::filesystem::path absPath = std::filesystem::absolute(entryPoint);
         std::string absPathStr = absPath.string();
 
-        // Escape backslashes for JS string
-        std::string escapedPath = absPathStr;
-        for (size_t pos = 0; (pos = escapedPath.find('\\', pos)) != std::string::npos; pos += 2) {
-            escapedPath.replace(pos, 1, "\\\\");
-        }
+        // Escape resource name for safe embedding in JS strings
+        std::string escapedResourceName = EscapeForSingleQuotedJSString(resourceName);
 
         std::string code;
         if (resource.GetManifest().IsESModule()) {
             // ES Module: Load asynchronously, emit resourceStart after handlers are registered
             // Track pending load so we know when all modules are ready
+            // Use proper file:// URL format and escape for JS string
+            std::string fileUrl = PathToFileURL(absPath);
+            std::string escapedFileUrl = EscapeForSingleQuotedJSString(fileUrl);
+
             IncrementPendingLoads();
             code =
                 "(async function() {\n"
                 "    try {\n"
-                "        await import('file://" + escapedPath + "');\n"
-                "        Framework.__internal.emitResourceStart('" + resourceName + "');\n"
+                "        await import('" + escapedFileUrl + "');\n"
+                "        Framework.__internal.emitResourceStart('" + escapedResourceName + "');\n"
                 "    } catch (err) {\n"
-                "        console.error('[" + resourceName + "] Failed to load:', err.stack || err);\n"
-                "        Framework.__internal.onLoadError('" + resourceName + "');\n"
+                "        console.error('[" + escapedResourceName + "] Failed to load:', err.stack || err);\n"
+                "        Framework.__internal.onLoadError('" + escapedResourceName + "');\n"
                 "        throw err;\n"
                 "    }\n"
                 "})();\n";
         } else {
-            // CommonJS
+            // CommonJS: require() takes paths, use forward slashes and escape for JS string
+            std::string genericPath = absPath.generic_string();
+            std::string escapedPath = EscapeForSingleQuotedJSString(genericPath);
             code = "(function() { require('" + escapedPath + "'); })();\n";
         }
 

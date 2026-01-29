@@ -4,6 +4,27 @@
 #include <fstream>
 #include <sstream>
 
+namespace {
+    // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
+    // Handles: backslash, single quote, newline, carriage return, and tab.
+    std::string EscapeForSingleQuotedJSString(const std::string &input) {
+        std::string result;
+        result.reserve(input.size() + input.size() / 8);
+
+        for (char c : input) {
+            switch (c) {
+            case '\\': result += "\\\\"; break;
+            case '\'': result += "\\'"; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default: result += c; break;
+            }
+        }
+        return result;
+    }
+} // anonymous namespace
+
 namespace Framework::Scripting {
 
     std::unique_ptr<node::MultiIsolatePlatform> NodeEngine::_platform = nullptr;
@@ -278,13 +299,14 @@ namespace Framework::Scripting {
         }
 
         // Convert to absolute path for Node.js require
-        // Use generic_string() to get forward slashes on all platforms,
-        // avoiding Windows backslash escape sequence issues in JS strings
+        // Use generic_string() to get forward slashes on all platforms
         std::filesystem::path absPath = std::filesystem::absolute(filepath);
         std::string absPathStr = absPath.generic_string();
 
         // Use Node.js require for file execution
-        std::string code = "require('" + absPathStr + "');";
+        // Escape the path for safe embedding in JS single-quoted string
+        std::string escapedPath = EscapeForSingleQuotedJSString(absPathStr);
+        std::string code = "require('" + escapedPath + "');";
         return Execute(code, absPathStr);
     }
 
