@@ -34,6 +34,10 @@ namespace Framework::Scripting {
         _description = json.value("description", "");
         _author = json.value("author", "");
 
+        // Module type (Node.js standard: "type": "module" for ES modules)
+        std::string typeStr = json.value("type", "commonjs");
+        _moduleType = (typeStr == "module") ? ModuleType::ESModule : ModuleType::CommonJS;
+
         // MafiaHub config
         if (json.contains("mafiahub") && json["mafiahub"].is_object()) {
             const auto &mh = json["mafiahub"];

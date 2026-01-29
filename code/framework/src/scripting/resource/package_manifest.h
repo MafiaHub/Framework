@@ -24,6 +24,15 @@ namespace Framework::Scripting {
     };
 
     /**
+     * Module type for Node.js compatibility.
+     * Determines whether to use require() (CommonJS) or import() (ES Modules).
+     */
+    enum class ModuleType {
+        CommonJS,  // Default, uses require()
+        ESModule   // Uses import(), supports import/export syntax
+    };
+
+    /**
      * Parses package.json files for JS resources.
      */
     class PackageManifest {
@@ -37,6 +46,8 @@ namespace Framework::Scripting {
         const std::string &GetAuthor() const { return _author; }
         const MafiaHubConfig &GetMafiaHubConfig() const { return _mafiahubConfig; }
         const std::string &GetError() const { return _error; }
+        ModuleType GetModuleType() const { return _moduleType; }
+        bool IsESModule() const { return _moduleType == ModuleType::ESModule; }
 
         bool IsValid() const { return _valid; }
 
@@ -48,6 +59,7 @@ namespace Framework::Scripting {
         std::string _version;
         std::string _description;
         std::string _author;
+        ModuleType _moduleType = ModuleType::CommonJS;
         MafiaHubConfig _mafiahubConfig;
     };
 

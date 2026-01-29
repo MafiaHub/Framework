@@ -319,26 +319,49 @@ namespace Framework::Scripting {
         std::string resourceName = resource.GetName();
         SetCurrentResourceContext(resourceName);
 
-        // Convert to absolute path for Node.js require
+        // Convert to absolute path
         std::filesystem::path absPath = std::filesystem::absolute(entryPoint);
         std::string absPathStr = absPath.string();
 
-        // Execute code that requires the module, stores it, and calls onResourceStart if present
-        // We need to escape backslashes for Windows paths in the JS string
+        // Escape backslashes for Windows paths in the JS string
         std::string escapedPath = absPathStr;
         for (size_t pos = 0; (pos = escapedPath.find('\\', pos)) != std::string::npos; pos += 2) {
             escapedPath.replace(pos, 1, "\\\\");
         }
 
-        std::string code =
-            "(function() {\n"
-            "    globalThis.__resourceModules = globalThis.__resourceModules || {};\n"
-            "    const _mod = require('" + escapedPath + "');\n"
-            "    globalThis.__resourceModules['" + resourceName + "'] = _mod;\n"
-            "    if (_mod && typeof _mod.onResourceStart === 'function') {\n"
-            "        _mod.onResourceStart();\n"
-            "    }\n"
-            "})();\n";
+        std::string code;
+        bool isESModule = resource.GetManifest().IsESModule();
+
+        if (isESModule) {
+            // ES Modules: Use dynamic import() with file:// URL
+            // import() returns a Promise, so we use an async IIFE
+            // The module namespace object has all exports as properties
+            code =
+                "(async function() {\n"
+                "    globalThis.__resourceModules = globalThis.__resourceModules || {};\n"
+                "    try {\n"
+                "        const _mod = await import('file://" + escapedPath + "');\n"
+                "        globalThis.__resourceModules['" + resourceName + "'] = _mod;\n"
+                "        if (_mod && typeof _mod.onResourceStart === 'function') {\n"
+                "            _mod.onResourceStart();\n"
+                "        }\n"
+                "    } catch (err) {\n"
+                "        console.error('[" + resourceName + "] Failed to load ES module:', err);\n"
+                "        throw err;\n"
+                "    }\n"
+                "})();\n";
+        } else {
+            // CommonJS: Use require() (synchronous)
+            code =
+                "(function() {\n"
+                "    globalThis.__resourceModules = globalThis.__resourceModules || {};\n"
+                "    const _mod = require('" + escapedPath + "');\n"
+                "    globalThis.__resourceModules['" + resourceName + "'] = _mod;\n"
+                "    if (_mod && typeof _mod.onResourceStart === 'function') {\n"
+                "        _mod.onResourceStart();\n"
+                "    }\n"
+                "})();\n";
+        }
 
         bool result = _jsEngine->Execute(code, absPathStr);
         if (!result) {
