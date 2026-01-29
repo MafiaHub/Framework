@@ -337,10 +337,21 @@ namespace Framework::Scripting {
         }
 
         // Use Promise.allSettled to wait for all handlers
-        v8::Local<v8::Object> promiseConstructor = context->Global()
-            ->Get(context, v8pp::to_v8(isolate, "Promise")).ToLocalChecked().As<v8::Object>();
-        v8::Local<v8::Function> allSettled = promiseConstructor
-            ->Get(context, v8pp::to_v8(isolate, "allSettled")).ToLocalChecked().As<v8::Function>();
+        v8::MaybeLocal<v8::Value> maybePromiseCtor = context->Global()->Get(context, v8pp::to_v8(isolate, "Promise"));
+        if (maybePromiseCtor.IsEmpty() || !maybePromiseCtor.ToLocalChecked()->IsObject()) {
+            // Promise not available, resolve immediately
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return handleScope.Escape(promise);
+        }
+        v8::Local<v8::Object> promiseConstructor = maybePromiseCtor.ToLocalChecked().As<v8::Object>();
+
+        v8::MaybeLocal<v8::Value> maybeAllSettled = promiseConstructor->Get(context, v8pp::to_v8(isolate, "allSettled"));
+        if (maybeAllSettled.IsEmpty() || !maybeAllSettled.ToLocalChecked()->IsFunction()) {
+            // allSettled not available, resolve immediately
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return handleScope.Escape(promise);
+        }
+        v8::Local<v8::Function> allSettled = maybeAllSettled.ToLocalChecked().As<v8::Function>();
 
         v8::Local<v8::Value> allSettledArgs[] = { promises };
         v8::MaybeLocal<v8::Value> allSettledResult = allSettled->Call(context, promiseConstructor, 1, allSettledArgs);
@@ -630,10 +641,23 @@ namespace Framework::Scripting {
         }
 
         // Use Promise.allSettled to wait for all handlers
-        v8::Local<v8::Object> promiseConstructor = context->Global()
-            ->Get(context, v8pp::to_v8(isolate, "Promise")).ToLocalChecked().As<v8::Object>();
-        v8::Local<v8::Function> allSettled = promiseConstructor
-            ->Get(context, v8pp::to_v8(isolate, "allSettled")).ToLocalChecked().As<v8::Function>();
+        v8::MaybeLocal<v8::Value> maybePromiseCtor = context->Global()->Get(context, v8pp::to_v8(isolate, "Promise"));
+        if (maybePromiseCtor.IsEmpty() || !maybePromiseCtor.ToLocalChecked()->IsObject()) {
+            // Promise not available, resolve immediately
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            args.GetReturnValue().Set(resolver->GetPromise());
+            return;
+        }
+        v8::Local<v8::Object> promiseConstructor = maybePromiseCtor.ToLocalChecked().As<v8::Object>();
+
+        v8::MaybeLocal<v8::Value> maybeAllSettled = promiseConstructor->Get(context, v8pp::to_v8(isolate, "allSettled"));
+        if (maybeAllSettled.IsEmpty() || !maybeAllSettled.ToLocalChecked()->IsFunction()) {
+            // allSettled not available, resolve immediately
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            args.GetReturnValue().Set(resolver->GetPromise());
+            return;
+        }
+        v8::Local<v8::Function> allSettled = maybeAllSettled.ToLocalChecked().As<v8::Function>();
 
         v8::Local<v8::Value> allSettledArgs[] = { promises };
         v8::MaybeLocal<v8::Value> allSettledResult = allSettled->Call(context, promiseConstructor, 1, allSettledArgs);
