@@ -104,8 +104,12 @@ namespace Framework::Scripting {
         for (const auto &[name, deps] : _dependencies) {
             for (const auto &depName : deps) {
                 if (_resources.find(depName) == _resources.end()) {
-                    outError = "Resource '" + name + "' depends on missing resource '" + depName + "'";
-                    return false;
+                    if (_config.warnOnMissingDependency) {
+                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' depends on missing resource '{}'", name, depName);
+                    } else {
+                        outError = "Resource '" + name + "' depends on missing resource '" + depName + "'";
+                        return false;
+                    }
                 }
             }
         }
