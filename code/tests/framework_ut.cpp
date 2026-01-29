@@ -18,6 +18,7 @@
 #include "modules/engine_ut.h"
 #include "modules/resource_ut.h"
 #include "modules/resource_manager_ut.h"
+#include "modules/js_features_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -31,6 +32,7 @@ int main() {
     UNIT_MODULE(engine);
     UNIT_MODULE(resource);
     UNIT_MODULE(resource_manager);
+    UNIT_MODULE(js_features);
 
     return UNIT_RUN();
 }
