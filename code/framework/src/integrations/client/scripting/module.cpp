@@ -76,8 +76,8 @@ namespace Framework::Integrations::Client::Scripting {
         v8::Local<v8::Object> frameworkObj = _v8Engine->GetFrameworkObject();
         v8::Local<v8::Object> global = context->Global();
 
-        // Register math type builtins
-        Framework::Scripting::Builtins::RegisterAll(isolate, frameworkObj);
+        // Register math type builtins (on global for parity with server)
+        Framework::Scripting::Builtins::RegisterAll(isolate, global);
 
         // Register communication APIs
         _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
