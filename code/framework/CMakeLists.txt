@@ -74,6 +74,7 @@ set(FRAMEWORK_SERVER_SRC
 
     # JavaScript scripting (Node.js engine for server)
     src/scripting/js/node_engine.cpp
+    src/integrations/server/scripting/js_module.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
@@ -93,6 +94,9 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
+
+    # JavaScript scripting (V8 engine for client)
+    src/integrations/client/scripting/js_module.cpp
 )
 
 # GUI (Ultralight) only available for 64-bit builds

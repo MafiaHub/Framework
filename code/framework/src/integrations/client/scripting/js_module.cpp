@@ -1,0 +1,209 @@
+#include "js_module.h"
+
+#include <logging/logger.h>
+
+#include <scripting/js/builtins/builtins.h>
+#include <scripting/js/builtins/events.h>
+#include <scripting/js/builtins/messages.h>
+#include <scripting/js/builtins/console.h>
+#include <scripting/js/builtins/imports.h>
+
+#include <filesystem>
+
+namespace Framework::Integrations::Client::Scripting {
+
+    JSClientScriptingModule::JSClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
+        : _world(world) {
+        _v8Engine = std::make_unique<Framework::Scripting::JS::V8Engine>();
+    }
+
+    JSClientScriptingModule::~JSClientScriptingModule() {
+        Shutdown();
+    }
+
+    bool JSClientScriptingModule::Init(Framework::Scripting::JS::Engine::SDKRegisterCallback sdkCallback) {
+        // Set the SDK callback before initialization
+        if (sdkCallback) {
+            _v8Engine->SetSDKRegisterCallback(sdkCallback);
+        }
+
+        // Initialize the V8 engine
+        if (!_v8Engine->Init()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Failed to initialize V8 engine: {}", _v8Engine->GetLastError());
+            return false;
+        }
+
+        // Initialize ResourceManager with client-side config
+        Framework::Scripting::JS::JSResourceManagerConfig config;
+        config.resourcesPath = _resourceCachePath;
+        config.isClient = true;
+        config.cascadeStopDependents = true;
+
+        _resourceManager = std::make_unique<Framework::Scripting::JS::JSResourceManager>(
+            _v8Engine.get(), config);
+
+        // Register Framework SDK bindings
+        RegisterFrameworkBindings();
+
+        // Initialize Framework SDK in the engine
+        _v8Engine->InitFrameworkSDK();
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
+            "JS Client scripting module initialized with V8 engine");
+
+        return true;
+    }
+
+    void JSClientScriptingModule::RegisterFrameworkBindings() {
+        if (!_v8Engine || !_v8Engine->IsInitialized()) {
+            return;
+        }
+
+        v8::Isolate *isolate = _v8Engine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = _v8Engine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        // Get Framework global object (created by V8Engine)
+        v8::Local<v8::Object> frameworkObj = _v8Engine->GetFrameworkObject();
+
+        // Register math type builtins
+        Framework::Scripting::JS::Builtins::RegisterAll(isolate, frameworkObj);
+
+        // Register communication APIs
+        Framework::Scripting::JS::Events::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::JS::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::JS::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
+
+        // Register console override
+        Framework::Scripting::JS::Console::Register(isolate, context, _resourceManager.get());
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings (client)");
+    }
+
+    bool JSClientScriptingModule::Shutdown() {
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+            _resourceManager.reset();
+        }
+
+        if (_v8Engine) {
+            _v8Engine->Shutdown();
+            _v8Engine.reset();
+        }
+
+        _serverResourceList.clear();
+        _resourcesSynced = false;
+
+        return true;
+    }
+
+    void JSClientScriptingModule::Update() {
+        if (_resourceManager) {
+            _resourceManager->ProcessScheduledRestarts();
+        }
+
+        // Process pending message responses
+        if (_v8Engine && _v8Engine->IsInitialized() && _resourceManager) {
+            v8::Isolate *isolate = _v8Engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _v8Engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            Framework::Scripting::JS::Messages::ProcessPendingResponses(isolate, context);
+        }
+    }
+
+    void JSClientScriptingModule::SetResourceCachePath(const std::string &path) {
+        _resourceCachePath = path;
+        if (_resourceManager) {
+            Framework::Scripting::JS::JSResourceManagerConfig config = _resourceManager->GetConfig();
+            config.resourcesPath = path;
+            _resourceManager->SetConfig(config);
+        }
+    }
+
+    void JSClientScriptingModule::OnServerResourceList(const std::vector<JSServerResourceInfo> &resources) {
+        _serverResourceList = resources;
+        _resourcesSynced = false;
+
+        if (resources.empty()) {
+            _resourcesSynced = true;
+            if (_onResourceSyncComplete) {
+                _onResourceSyncComplete(true);
+            }
+            return;
+        }
+
+        // Check which resources need to be downloaded
+        for (const auto &resource : resources) {
+            std::string resourcePath = GetResourcePath(resource.name);
+
+            // Check if resource exists locally
+            if (!std::filesystem::exists(resourcePath)) {
+                if (_onResourceDownloadNeeded) {
+                    _onResourceDownloadNeeded(resource.name, resource.version);
+                }
+            }
+        }
+    }
+
+    void JSClientScriptingModule::OnResourceDownloaded(const std::string &resourceName) {
+        // Discover the downloaded resource
+        std::string resourcePath = GetResourcePath(resourceName);
+        if (_resourceManager) {
+            _resourceManager->DiscoverResource(resourcePath);
+        }
+
+        // Check if all resources have been downloaded
+        bool allDownloaded = true;
+        for (const auto &resource : _serverResourceList) {
+            std::string path = GetResourcePath(resource.name);
+            if (!std::filesystem::exists(path)) {
+                allDownloaded = false;
+                break;
+            }
+        }
+
+        if (allDownloaded && !_resourcesSynced) {
+            _resourcesSynced = true;
+            if (_onResourceSyncComplete) {
+                _onResourceSyncComplete(true);
+            }
+        }
+    }
+
+    bool JSClientScriptingModule::StartAllResources() {
+        if (!_resourceManager) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("JS ResourceManager not initialized");
+            return false;
+        }
+
+        auto result = _resourceManager->StartAll();
+        if (!result.success) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Failed to start JS resources: {}", result.error);
+            return false;
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
+            "Started {} JS resource(s) on client", result.affectedResources.size());
+        return true;
+    }
+
+    void JSClientScriptingModule::StopAllResources() {
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+        }
+    }
+
+    std::string JSClientScriptingModule::GetResourcePath(const std::string &resourceName) const {
+        return (std::filesystem::path(_resourceCachePath) / resourceName).string();
+    }
+
+} // namespace Framework::Integrations::Client::Scripting
