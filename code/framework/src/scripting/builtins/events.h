@@ -5,6 +5,7 @@
 #include <v8pp/convert.hpp>
 #include <v8.h>
 
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
@@ -40,7 +41,7 @@ namespace Framework::Scripting {
     class Events {
       public:
         Events() = default;
-        ~Events() = default;
+        ~Events();
 
         // Non-copyable
         Events(const Events &) = delete;
@@ -82,10 +83,13 @@ namespace Framework::Scripting {
         /**
          * Context data passed to V8 callbacks via External.
          * Contains both the Events instance and ResourceManager.
+         * The valid flag is set to false when Events is destroyed,
+         * allowing lambdas holding this context to safely bail out.
          */
         struct CallbackContext {
             Events *events;
             ResourceManager *resourceManager;
+            std::atomic<bool> valid{true};
         };
 
         // V8 callbacks

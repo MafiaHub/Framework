@@ -5,6 +5,14 @@
 
 namespace Framework::Scripting {
 
+    Events::~Events() {
+        // Invalidate the callback context so any outstanding unsubscribe
+        // lambdas holding a reference will safely bail out
+        if (_callbackContext) {
+            _callbackContext->valid.store(false, std::memory_order_release);
+        }
+    }
+
     void Events::Register(v8::Isolate *isolate,
                           v8::Local<v8::Context> context,
                           v8::Local<v8::Object> global,
@@ -133,32 +141,39 @@ namespace Framework::Scripting {
 
         events->RegisterHandler(isolate, manager, eventName, handler, false);
 
-        // Return unsubscribe function - include events pointer in data
+        // Return unsubscribe function - use CallbackContext for lifetime safety
         v8::Local<v8::Object> data = v8::Object::New(isolate);
         data->Set(context, v8pp::to_v8(isolate, "eventName"), args[0]).Check();
         data->Set(context, v8pp::to_v8(isolate, "handler"), args[1]).Check();
         data->Set(context, v8pp::to_v8(isolate, "resourceName"), v8pp::to_v8(isolate, resourceName)).Check();
-        data->Set(context, v8pp::to_v8(isolate, "eventsPtr"), v8::External::New(isolate, events)).Check();
+        data->Set(context, v8pp::to_v8(isolate, "context"), v8::External::New(isolate, ctx)).Check();
 
         v8::Local<v8::Function> unsubscribe = v8::Function::New(context,
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                 v8::Isolate *iso = info.GetIsolate();
-                v8::Local<v8::Context> ctx = iso->GetCurrentContext();
+                v8::Local<v8::Context> localCtx = iso->GetCurrentContext();
                 v8::Local<v8::Object> d = info.Data().As<v8::Object>();
 
-                v8::Local<v8::Value> evtVal = d->Get(ctx, v8pp::to_v8(iso, "eventName")).ToLocalChecked();
-                v8::Local<v8::Value> hndVal = d->Get(ctx, v8pp::to_v8(iso, "handler")).ToLocalChecked();
-                v8::Local<v8::Value> resVal = d->Get(ctx, v8pp::to_v8(iso, "resourceName")).ToLocalChecked();
-                v8::Local<v8::Value> eventsVal = d->Get(ctx, v8pp::to_v8(iso, "eventsPtr")).ToLocalChecked();
+                v8::Local<v8::Value> ctxVal = d->Get(localCtx, v8pp::to_v8(iso, "context")).ToLocalChecked();
+                CallbackContext *callbackCtx = static_cast<CallbackContext *>(ctxVal.As<v8::External>()->Value());
+
+                // Check if the Events instance is still valid before accessing
+                if (!callbackCtx || !callbackCtx->valid.load(std::memory_order_acquire)) {
+                    return;
+                }
+
+                Events *eventsInst = callbackCtx->events;
+                if (!eventsInst) {
+                    return;
+                }
+
+                v8::Local<v8::Value> evtVal = d->Get(localCtx, v8pp::to_v8(iso, "eventName")).ToLocalChecked();
+                v8::Local<v8::Value> hndVal = d->Get(localCtx, v8pp::to_v8(iso, "handler")).ToLocalChecked();
+                v8::Local<v8::Value> resVal = d->Get(localCtx, v8pp::to_v8(iso, "resourceName")).ToLocalChecked();
 
                 std::string evt = v8pp::from_v8<std::string>(iso, evtVal);
                 v8::Local<v8::Function> hnd = hndVal.As<v8::Function>();
                 std::string resName = v8pp::from_v8<std::string>(iso, resVal);
-                Events *eventsInst = static_cast<Events *>(eventsVal.As<v8::External>()->Value());
-
-                if (!eventsInst) {
-                    return;
-                }
 
                 std::lock_guard<std::mutex> lock(eventsInst->_handlersMutex);
                 auto it = eventsInst->_globalHandlers.find(evt);
