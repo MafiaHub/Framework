@@ -277,6 +277,9 @@ namespace Framework::Scripting {
         // Internal resource access (mutable)
         Resource *GetResourceMutable(const std::string &name);
 
+        // Call resource onResourceStop lifecycle function
+        bool CallResourceStop(const std::string &resourceName);
+
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
 

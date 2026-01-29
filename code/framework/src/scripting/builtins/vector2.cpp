@@ -20,6 +20,7 @@ std::string Vector2::toString() const {
 v8pp::class_<Vector2>& Vector2::GetClass(v8::Isolate* isolate) {
     if (!_class) {
         _class = std::make_unique<v8pp::class_<Vector2>>(isolate);
+        _class->auto_wrap_objects(true);  // Enable auto-wrapping for return values
         _class->ctor<float, float>()
             // Instance methods
             .set("add", &Vector2::add)

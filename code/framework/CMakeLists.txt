@@ -39,6 +39,7 @@ set(FRAMEWORK_SRC
     src/scripting/builtins/messages.cpp
     src/scripting/builtins/console.cpp
     src/scripting/builtins/imports.cpp
+    src/scripting/builtins/exports.cpp
     src/scripting/resource/package_manifest.cpp
     src/scripting/resource/resource.cpp
     src/scripting/resource/resource_manager.cpp

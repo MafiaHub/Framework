@@ -182,6 +182,11 @@ namespace Framework::Scripting {
          */
         std::vector<std::string> GetRegisteredExportNames() const;
 
+        /**
+         * Get an export value by name.
+         */
+        v8::Local<v8::Value> GetExportValue(const std::string &name) const;
+
         // Context access
         v8::Isolate *GetIsolate() const { return _isolate; }
         void SetIsolate(v8::Isolate *isolate) { _isolate = isolate; }

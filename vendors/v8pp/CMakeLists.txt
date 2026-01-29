@@ -13,7 +13,7 @@ FetchContent_MakeAvailable(v8pp)
 message(STATUS "v8pp: Header-only V8 binding library v1.8.1")
 
 # Configure v8pp config.hpp
-set(V8PP_ISOLATE_DATA_SLOT 0 CACHE STRING "v8::Isolate data slot number")
+set(V8PP_ISOLATE_DATA_SLOT 3 CACHE STRING "v8::Isolate data slot number (slot 3 to avoid conflict with Node.js)")
 set(V8PP_PLUGIN_INIT_PROC_NAME v8pp_plugin_init CACHE STRING "v8pp plugin init procedure name")
 set(V8PP_PLUGIN_SUFFIX ".dylib" CACHE STRING "v8pp plugin filename suffix")
 set(V8PP_HEADER_ONLY 1 CACHE STRING "Use v8pp as header-only library")

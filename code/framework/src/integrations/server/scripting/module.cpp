@@ -7,6 +7,7 @@
 #include <scripting/builtins/messages.h>
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/imports.h>
+#include <scripting/builtins/exports.h>
 
 namespace Framework::Integrations::Server::Scripting {
 
@@ -79,13 +80,14 @@ namespace Framework::Integrations::Server::Scripting {
             global->Set(context, frameworkKey, frameworkObj).Check();
         }
 
-        // Register math type builtins
-        Framework::Scripting::Builtins::RegisterAll(isolate, frameworkObj);
+        // Register math type builtins on global for direct access (Vector3, Color, etc.)
+        Framework::Scripting::Builtins::RegisterAll(isolate, global);
 
         // Register communication APIs
         Framework::Scripting::Events::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
 
         // Register console override
         Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());

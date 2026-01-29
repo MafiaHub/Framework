@@ -256,6 +256,15 @@ namespace Framework::Scripting {
         return names;
     }
 
+    v8::Local<v8::Value> Resource::GetExportValue(const std::string &name) const {
+        std::lock_guard<std::mutex> lock(_exportsMutex);
+        auto it = _exports.find(name);
+        if (it == _exports.end() || it->second.IsEmpty()) {
+            return v8::Local<v8::Value>();
+        }
+        return it->second.Get(_isolate);
+    }
+
     bool Resource::TransitionTo(ResourceState newState) {
         if (!IsValidTransition(_state, newState)) {
             return false;

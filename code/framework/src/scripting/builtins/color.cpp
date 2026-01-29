@@ -67,6 +67,7 @@ Color Color::fromRGB(float r, float g, float b, float a) {
 v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
     if (!_class) {
         _class = std::make_unique<v8pp::class_<Color>>(isolate);
+        _class->auto_wrap_objects(true);  // Enable auto-wrapping for return values
         _class->ctor<float, float, float, float>()
             // Instance methods
             .set("lerp", &Color::lerp)

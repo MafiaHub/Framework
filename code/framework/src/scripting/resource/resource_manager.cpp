@@ -268,6 +268,9 @@ namespace Framework::Scripting {
         // Transition to Stopping
         resource->TransitionTo(ResourceState::Stopping);
 
+        // Call onResourceStop lifecycle function
+        CallResourceStop(name);
+
         // Clear exports
         resource->ClearExports();
 
@@ -313,14 +316,61 @@ namespace Framework::Scripting {
         }
 
         // Set resource context
-        SetCurrentResourceContext(resource.GetName());
+        std::string resourceName = resource.GetName();
+        SetCurrentResourceContext(resourceName);
 
-        bool result = _jsEngine->ExecuteFile(entryPoint);
+        // Convert to absolute path for Node.js require
+        std::filesystem::path absPath = std::filesystem::absolute(entryPoint);
+        std::string absPathStr = absPath.string();
+
+        // Execute code that requires the module, stores it, and calls onResourceStart if present
+        // We need to escape backslashes for Windows paths in the JS string
+        std::string escapedPath = absPathStr;
+        for (size_t pos = 0; (pos = escapedPath.find('\\', pos)) != std::string::npos; pos += 2) {
+            escapedPath.replace(pos, 1, "\\\\");
+        }
+
+        std::string code =
+            "(function() {\n"
+            "    globalThis.__resourceModules = globalThis.__resourceModules || {};\n"
+            "    const _mod = require('" + escapedPath + "');\n"
+            "    globalThis.__resourceModules['" + resourceName + "'] = _mod;\n"
+            "    if (_mod && typeof _mod.onResourceStart === 'function') {\n"
+            "        _mod.onResourceStart();\n"
+            "    }\n"
+            "})();\n";
+
+        bool result = _jsEngine->Execute(code, absPathStr);
         if (!result) {
             outError = _jsEngine->GetLastError();
         }
 
         // Clear context
+        SetCurrentResourceContext("");
+
+        return result;
+    }
+
+    bool ResourceManager::CallResourceStop(const std::string &resourceName) {
+        if (!_jsEngine || !_jsEngine->IsInitialized()) {
+            return false;
+        }
+
+        SetCurrentResourceContext(resourceName);
+
+        std::string code =
+            "(function() {\n"
+            "    const _mod = globalThis.__resourceModules && globalThis.__resourceModules['" + resourceName + "'];\n"
+            "    if (_mod && typeof _mod.onResourceStop === 'function') {\n"
+            "        _mod.onResourceStop();\n"
+            "    }\n"
+            "    if (globalThis.__resourceModules) {\n"
+            "        delete globalThis.__resourceModules['" + resourceName + "'];\n"
+            "    }\n"
+            "})();\n";
+
+        bool result = _jsEngine->Execute(code, resourceName + ":stop");
+
         SetCurrentResourceContext("");
 
         return result;

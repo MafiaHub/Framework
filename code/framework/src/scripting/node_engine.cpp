@@ -1,5 +1,6 @@
 #include "node_engine.h"
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -197,9 +198,13 @@ namespace Framework::Scripting {
             return false;
         }
 
+        // Convert to absolute path for Node.js require
+        std::filesystem::path absPath = std::filesystem::absolute(filepath);
+        std::string absPathStr = absPath.string();
+
         // Use Node.js require for file execution
-        std::string code = "require('" + filepath + "');";
-        return Execute(code, filepath);
+        std::string code = "require('" + absPathStr + "');";
+        return Execute(code, absPathStr);
     }
 
     bool NodeEngine::InitFrameworkSDK() {
