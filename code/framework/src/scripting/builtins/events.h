@@ -8,6 +8,7 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -115,6 +116,30 @@ namespace Framework::Scripting {
                                             const std::vector<v8::Local<v8::Value>> &args,
                                             const std::string &targetResource = "");
 
+        // Helper: invoke handlers and collect results as promises
+        // handlers: pairs of (callback, logContext) where logContext is used for error logging
+        static v8::Local<v8::Array> InvokeHandlersToPromiseArray(
+            v8::Isolate *isolate,
+            v8::Local<v8::Context> context,
+            std::vector<std::pair<v8::Global<v8::Function>, std::string>> &handlers,
+            const std::vector<v8::Local<v8::Value>> &args,
+            const std::string &eventName);
+
+        // Forward declaration for callback data tracking
+        struct AllSettledCallbackData;
+
+        // Helper: aggregate promises using Promise.allSettled and resolve/reject the resolver
+        // Non-static to track pending callbacks for cleanup on destruction
+        void AggregateWithAllSettled(
+            v8::Isolate *isolate,
+            v8::Local<v8::Context> context,
+            v8::Local<v8::Array> promises,
+            v8::Local<v8::Promise::Resolver> resolver,
+            const std::string &aggregateErrorMessage);
+
+        // Remove callback data from tracking (called when promise settles)
+        void RemovePendingCallback(AllSettledCallbackData *data);
+
         // Global handlers: eventName -> handlers (FIFO order)
         std::map<std::string, std::vector<EventHandler>> _globalHandlers;
 
@@ -126,6 +151,10 @@ namespace Framework::Scripting {
 
         // Stored callback context (lifetime tied to this Events instance)
         std::unique_ptr<CallbackContext> _callbackContext;
+
+        // Track pending AllSettled callbacks for cleanup on destruction
+        std::set<AllSettledCallbackData *> _pendingCallbacks;
+        std::mutex _pendingCallbacksMutex;
     };
 
 } // namespace Framework::Scripting
