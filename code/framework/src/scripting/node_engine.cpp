@@ -164,30 +164,6 @@ namespace Framework::Scripting {
         _isolate->PerformMicrotaskCheckpoint();
     }
 
-    bool NodeEngine::TickBlocking() {
-        if (!_initialized || !_setup) {
-            return false;
-        }
-
-        v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
-        v8::Context::Scope context_scope(_setup->context());
-
-        // Process microtasks first (Promise continuations, async/await)
-        // This is needed to advance Promise chains before waiting for I/O
-        _isolate->PerformMicrotaskCheckpoint();
-
-        // Run pending libuv events (blocking - waits for at least one event)
-        // Returns non-zero if there are still active handles/requests
-        int result = uv_run(_setup->event_loop(), UV_RUN_ONCE);
-
-        // Process any microtasks that were queued by I/O callbacks
-        _isolate->PerformMicrotaskCheckpoint();
-
-        return result != 0;
-    }
-
     bool NodeEngine::Execute(const std::string &code, const std::string &filename) {
         if (!_initialized || !_setup) {
             _lastError = "Engine not initialized";

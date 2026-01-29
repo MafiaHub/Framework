@@ -155,14 +155,11 @@ namespace Framework::Integrations::Server {
         // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
 
-        // Start all resources
+        // Start all resources (ES modules load asynchronously via normal Update cycle)
         auto startResult = _scriptingModule->GetResourceManager()->StartAll();
         if (!startResult.success) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.error);
         }
-
-        // Process the Node.js event loop to let async ES module imports complete
-        _scriptingModule->WaitForPendingLoads();
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);

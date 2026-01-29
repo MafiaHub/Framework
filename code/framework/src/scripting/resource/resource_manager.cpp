@@ -364,6 +364,8 @@ namespace Framework::Scripting {
         std::string code;
         if (resource.GetManifest().IsESModule()) {
             // ES Module: Load asynchronously, emit resourceStart after handlers are registered
+            // Track pending load so we know when all modules are ready
+            IncrementPendingLoads();
             code =
                 "(async function() {\n"
                 "    try {\n"
@@ -371,6 +373,7 @@ namespace Framework::Scripting {
                 "        Framework.__internal.emitResourceStart('" + resourceName + "');\n"
                 "    } catch (err) {\n"
                 "        console.error('[" + resourceName + "] Failed to load:', err.stack || err);\n"
+                "        Framework.__internal.onLoadError('" + resourceName + "');\n"
                 "        throw err;\n"
                 "    }\n"
                 "})();\n";
@@ -668,6 +671,21 @@ namespace Framework::Scripting {
         if (_onResourceStateChanged) {
             _onResourceStateChanged(name, oldState, newState);
         }
+    }
+
+    void ResourceManager::IncrementPendingLoads() {
+        ++_pendingESModuleLoads;
+    }
+
+    void ResourceManager::DecrementPendingLoads() {
+        --_pendingESModuleLoads;
+        if (_pendingESModuleLoads == 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("All ES modules loaded");
+        }
+    }
+
+    bool ResourceManager::HasPendingLoads() const {
+        return _pendingESModuleLoads > 0;
     }
 
 } // namespace Framework::Scripting
