@@ -1,4 +1,5 @@
 #include "v8_engine.h"
+#include "builtins/messages.h"
 
 #include <fstream>
 #include <sstream>
@@ -42,6 +43,7 @@ namespace Framework::Scripting {
             return;
         }
 
+        Messages::Shutdown();
         _context.Reset();
 
         if (_isolate) {

@@ -1,4 +1,5 @@
 #include "node_engine.h"
+#include "builtins/messages.h"
 
 #include <filesystem>
 #include <fstream>
@@ -72,7 +73,7 @@ namespace Framework::Scripting {
             v8::HandleScope handle_scope(_isolate);
             v8::Context::Scope context_scope(_setup->context());
 
-            // Any final JS cleanup can happen here if needed
+            Messages::Shutdown();
         }
         // All V8 scopes have now exited
 

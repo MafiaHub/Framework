@@ -305,4 +305,20 @@ namespace Framework::Scripting {
         }
     }
 
+    void Messages::Shutdown() {
+        {
+            std::lock_guard<std::mutex> lock(_handlersMutex);
+            _handlers.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            _pendingRequests.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(_responseQueueMutex);
+            _responseQueue.clear();
+        }
+        _resourceManager = nullptr;
+    }
+
 } // namespace Framework::Scripting

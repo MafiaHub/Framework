@@ -36,6 +36,12 @@ namespace Framework::Scripting {
          */
         static void ProcessPendingResponses(v8::Isolate *isolate, v8::Local<v8::Context> context);
 
+        /**
+         * Cleanup all static V8 globals.
+         * Must be called before the V8 isolate is disposed.
+         */
+        static void Shutdown();
+
       private:
         // V8 callback implementations
         static void HandleCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
