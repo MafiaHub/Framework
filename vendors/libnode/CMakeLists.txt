@@ -120,15 +120,18 @@ else()
     endif()
 endif()
 
-target_include_directories(libnode INTERFACE
+target_include_directories(libnode SYSTEM INTERFACE
     "${LIBNODE_INCLUDE_DIR}"
     "${LIBNODE_INCLUDE_DIR}/node"
     "${LIBNODE_INCLUDE_DIR}/v8"
     "${LIBNODE_INCLUDE_DIR}/uv"
 )
 
+# Note: NODE_WANT_INTERNALS is needed for Node.js internal APIs but causes
+# Windows SDK errno conflicts when propagated to all targets via PCH compilation.
+# Targets that need Node.js internals should add this define themselves.
+# NAPI_CPP_EXCEPTIONS is needed for N-API C++ exception support.
 target_compile_definitions(libnode INTERFACE
-    NODE_WANT_INTERNALS=1
     NAPI_CPP_EXCEPTIONS=1
 )
 
@@ -161,7 +164,7 @@ endif()
 # This allows client code to use V8 API without linking full Node.js
 add_library(v8 INTERFACE)
 
-target_include_directories(v8 INTERFACE
+target_include_directories(v8 SYSTEM INTERFACE
     "${LIBNODE_INCLUDE_DIR}/v8"
 )
 
