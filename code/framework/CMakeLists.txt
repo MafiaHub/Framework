@@ -257,6 +257,9 @@ target_include_directories(FrameworkServer PRIVATE
     ${CMAKE_SOURCE_DIR}/vendors/libsig
 )
 
+# FrameworkServer needs Node.js internal APIs for the scripting engine
+target_compile_definitions(FrameworkServer PRIVATE NODE_WANT_INTERNALS=1)
+
 # Platform-dependent post processing
 if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
