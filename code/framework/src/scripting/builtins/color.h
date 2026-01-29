@@ -29,8 +29,11 @@ class Color {
     float getA() const { return _color.a; }
     void setA(float v) { _color.a = v; }
 
-    // Methods
-    Color lerp(const Color& target, float t) const { return Color(glm::mix(_color, target._color, t)); }
+    // Mutable methods (modify in place, return this for chaining)
+    Color& lerp(const Color& target, float t) { _color = glm::mix(_color, target._color, t); return *this; }
+    Color& set(float r, float g, float b, float a = 1.0f) { _color.r = r; _color.g = g; _color.b = b; _color.a = a; return *this; }
+
+    // Non-mutating methods
     Color clone() const { return Color(_color); }
     std::string toHex(bool includeAlpha = false) const;
     std::string toString() const;

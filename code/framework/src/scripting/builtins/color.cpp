@@ -71,6 +71,7 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
         _class->ctor<float, float, float, float>()
             // Instance methods
             .set("lerp", &Color::lerp)
+            .set("set", &Color::set)
             .set("clone", &Color::clone)
             .set("toHex", &Color::toHex)
             .set("toString", &Color::toString);

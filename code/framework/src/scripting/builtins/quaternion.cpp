@@ -46,6 +46,7 @@ v8pp::class_<Quaternion>& Quaternion::GetClass(v8::Isolate* isolate) {
             .set("dot", &Quaternion::dot)
             .set("rotateVector", &Quaternion::rotateVector)
             .set("toEuler", &Quaternion::toEuler)
+            .set("set", &Quaternion::set)
             .set("clone", &Quaternion::clone)
             .set("toString", &Quaternion::toString);
 

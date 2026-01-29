@@ -37,12 +37,15 @@ class Quaternion {
     float getZ() const { return _quat.z; }
     void setZ(float v) { _quat.z = v; }
 
-    // Instance methods
-    Quaternion multiply(const Quaternion& other) const { return Quaternion(_quat * other._quat); }
-    Quaternion normalize() const { return Quaternion(glm::normalize(_quat)); }
+    // Mutable methods (modify in place, return this for chaining)
+    Quaternion& multiply(const Quaternion& other) { _quat = _quat * other._quat; return *this; }
+    Quaternion& normalize() { _quat = glm::normalize(_quat); return *this; }
+    Quaternion& slerp(const Quaternion& target, float t) { _quat = glm::slerp(_quat, target._quat, t); return *this; }
+    Quaternion& set(float w, float x, float y, float z) { _quat.w = w; _quat.x = x; _quat.y = y; _quat.z = z; return *this; }
+
+    // Non-mutating methods
     Quaternion conjugate() const { return Quaternion(glm::conjugate(_quat)); }
     Quaternion inverse() const { return Quaternion(glm::inverse(_quat)); }
-    Quaternion slerp(const Quaternion& target, float t) const { return Quaternion(glm::slerp(_quat, target._quat, t)); }
     float dot(const Quaternion& other) const { return glm::dot(_quat, other._quat); }
     Vector3 rotateVector(const Vector3& v) const;
     Vector3 toEuler() const;

@@ -28,15 +28,18 @@ class Vector3 {
     float getLength() const { return glm::length(_vec); }
     float getLengthSquared() const { return glm::dot(_vec, _vec); }
 
-    // Methods
-    Vector3 add(const Vector3& other) const { return Vector3(_vec + other._vec); }
-    Vector3 sub(const Vector3& other) const { return Vector3(_vec - other._vec); }
-    Vector3 mul(float scalar) const { return Vector3(_vec * scalar); }
-    Vector3 div(float scalar) const { return Vector3(_vec / scalar); }
+    // Mutable methods (modify in place, return this for chaining)
+    Vector3& add(const Vector3& other) { _vec += other._vec; return *this; }
+    Vector3& sub(const Vector3& other) { _vec -= other._vec; return *this; }
+    Vector3& mul(float scalar) { _vec *= scalar; return *this; }
+    Vector3& div(float scalar) { _vec /= scalar; return *this; }
+    Vector3& cross(const Vector3& other) { _vec = glm::cross(_vec, other._vec); return *this; }
+    Vector3& normalize();
+    Vector3& lerp(const Vector3& target, float t) { _vec = glm::mix(_vec, target._vec, t); return *this; }
+    Vector3& set(float x, float y, float z) { _vec.x = x; _vec.y = y; _vec.z = z; return *this; }
+
+    // Non-mutating methods
     float dot(const Vector3& other) const { return glm::dot(_vec, other._vec); }
-    Vector3 cross(const Vector3& other) const { return Vector3(glm::cross(_vec, other._vec)); }
-    Vector3 normalize() const;
-    Vector3 lerp(const Vector3& target, float t) const { return Vector3(glm::mix(_vec, target._vec, t)); }
     float distance(const Vector3& other) const { return glm::distance(_vec, other._vec); }
     Vector3 clone() const { return Vector3(_vec); }
     std::string toString() const;

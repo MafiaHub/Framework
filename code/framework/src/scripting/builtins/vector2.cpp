@@ -6,9 +6,10 @@ namespace Framework::Scripting::Builtins {
 
 std::unique_ptr<v8pp::class_<Vector2>> Vector2::_class;
 
-Vector2 Vector2::normalize() const {
+Vector2& Vector2::normalize() {
     float len = glm::length(_vec);
-    return len > 0.0f ? Vector2(_vec / len) : Vector2();
+    if (len > 0.0f) _vec /= len;
+    return *this;
 }
 
 std::string Vector2::toString() const {
@@ -30,6 +31,7 @@ v8pp::class_<Vector2>& Vector2::GetClass(v8::Isolate* isolate) {
             .set("dot", &Vector2::dot)
             .set("normalize", &Vector2::normalize)
             .set("lerp", &Vector2::lerp)
+            .set("set", &Vector2::set)
             .set("distance", &Vector2::distance)
             .set("clone", &Vector2::clone)
             .set("toString", &Vector2::toString);

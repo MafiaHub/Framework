@@ -26,14 +26,17 @@ class Vector2 {
     float getLength() const { return glm::length(_vec); }
     float getLengthSquared() const { return glm::dot(_vec, _vec); }
 
-    // Methods
-    Vector2 add(const Vector2& other) const { return Vector2(_vec + other._vec); }
-    Vector2 sub(const Vector2& other) const { return Vector2(_vec - other._vec); }
-    Vector2 mul(float scalar) const { return Vector2(_vec * scalar); }
-    Vector2 div(float scalar) const { return Vector2(_vec / scalar); }
+    // Mutable methods (modify in place, return this for chaining)
+    Vector2& add(const Vector2& other) { _vec += other._vec; return *this; }
+    Vector2& sub(const Vector2& other) { _vec -= other._vec; return *this; }
+    Vector2& mul(float scalar) { _vec *= scalar; return *this; }
+    Vector2& div(float scalar) { _vec /= scalar; return *this; }
+    Vector2& normalize();
+    Vector2& lerp(const Vector2& target, float t) { _vec = glm::mix(_vec, target._vec, t); return *this; }
+    Vector2& set(float x, float y) { _vec.x = x; _vec.y = y; return *this; }
+
+    // Non-mutating methods
     float dot(const Vector2& other) const { return glm::dot(_vec, other._vec); }
-    Vector2 normalize() const;
-    Vector2 lerp(const Vector2& target, float t) const { return Vector2(glm::mix(_vec, target._vec, t)); }
     float distance(const Vector2& other) const { return glm::distance(_vec, other._vec); }
     Vector2 clone() const { return Vector2(_vec); }
     std::string toString() const;

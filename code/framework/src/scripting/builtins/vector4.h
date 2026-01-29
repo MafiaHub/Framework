@@ -30,14 +30,17 @@ class Vector4 {
     float getLength() const { return glm::length(_vec); }
     float getLengthSquared() const { return glm::dot(_vec, _vec); }
 
-    // Methods
-    Vector4 add(const Vector4& other) const { return Vector4(_vec + other._vec); }
-    Vector4 sub(const Vector4& other) const { return Vector4(_vec - other._vec); }
-    Vector4 mul(float scalar) const { return Vector4(_vec * scalar); }
-    Vector4 div(float scalar) const { return Vector4(_vec / scalar); }
+    // Mutable methods (modify in place, return this for chaining)
+    Vector4& add(const Vector4& other) { _vec += other._vec; return *this; }
+    Vector4& sub(const Vector4& other) { _vec -= other._vec; return *this; }
+    Vector4& mul(float scalar) { _vec *= scalar; return *this; }
+    Vector4& div(float scalar) { _vec /= scalar; return *this; }
+    Vector4& normalize();
+    Vector4& lerp(const Vector4& target, float t) { _vec = glm::mix(_vec, target._vec, t); return *this; }
+    Vector4& set(float x, float y, float z, float w) { _vec.x = x; _vec.y = y; _vec.z = z; _vec.w = w; return *this; }
+
+    // Non-mutating methods
     float dot(const Vector4& other) const { return glm::dot(_vec, other._vec); }
-    Vector4 normalize() const;
-    Vector4 lerp(const Vector4& target, float t) const { return Vector4(glm::mix(_vec, target._vec, t)); }
     Vector4 clone() const { return Vector4(_vec); }
     std::string toString() const;
 
