@@ -47,6 +47,10 @@ set(FRAMEWORK_SRC
     src/scripting/js/builtins/vector4.cpp
     src/scripting/js/builtins/quaternion.cpp
     src/scripting/js/builtins/color.cpp
+    src/scripting/js/builtins/events.cpp
+    src/scripting/js/builtins/messages.cpp
+    src/scripting/js/builtins/console.cpp
+    src/scripting/js/builtins/imports.cpp
     src/scripting/js/resource/package_manifest.cpp
     src/scripting/js/resource/js_resource.cpp
     src/scripting/js/resource/js_resource_manager.cpp

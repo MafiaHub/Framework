@@ -132,6 +132,31 @@ namespace Framework::Scripting::JS {
         static v8::Local<v8::String> NewString(v8::Isolate *isolate, const std::string &str) {
             return v8::String::NewFromUtf8(isolate, str.c_str()).ToLocalChecked();
         }
+
+        /**
+         * Alias for NewString.
+         */
+        static v8::Local<v8::String> ToV8String(v8::Isolate *isolate, const char *str) {
+            return NewString(isolate, str);
+        }
+
+        /**
+         * Alias for NewString.
+         */
+        static v8::Local<v8::String> ToV8String(v8::Isolate *isolate, const std::string &str) {
+            return NewString(isolate, str);
+        }
+
+        /**
+         * Get a string from a V8 value.
+         */
+        static std::string GetString(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+            if (value.IsEmpty() || !value->IsString()) {
+                return "";
+            }
+            v8::String::Utf8Value str(isolate, value);
+            return *str ? *str : "";
+        }
     };
 
 } // namespace Framework::Scripting::JS
