@@ -42,14 +42,14 @@ namespace Framework::Scripting {
         /**
          * Get the V8 isolate (Node.js uses V8 internally).
          */
-        v8::Isolate *GetIsolate() const {
+        v8::Isolate *GetIsolate() const override {
             return _isolate;
         }
 
         /**
          * Get the main context.
          */
-        v8::Local<v8::Context> GetContext() const;
+        v8::Local<v8::Context> GetContext() const override;
 
       private:
         bool InitializeNode();

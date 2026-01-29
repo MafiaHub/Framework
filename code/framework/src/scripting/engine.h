@@ -1,5 +1,7 @@
 #pragma once
 
+#include <v8.h>
+
 #include <memory>
 #include <string>
 #include <functional>
@@ -74,6 +76,16 @@ namespace Framework::Scripting {
         bool IsInitialized() const {
             return _initialized;
         }
+
+        /**
+         * Get the V8 isolate.
+         */
+        virtual v8::Isolate *GetIsolate() const = 0;
+
+        /**
+         * Get the main context.
+         */
+        virtual v8::Local<v8::Context> GetContext() const = 0;
 
       protected:
         bool _initialized = false;

@@ -28,14 +28,14 @@ namespace Framework::Scripting {
         /**
          * Get the V8 isolate for this engine.
          */
-        v8::Isolate *GetIsolate() const {
+        v8::Isolate *GetIsolate() const override {
             return _isolate;
         }
 
         /**
          * Get the global context.
          */
-        v8::Local<v8::Context> GetContext() const {
+        v8::Local<v8::Context> GetContext() const override {
             return _context.Get(_isolate);
         }
 

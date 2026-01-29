@@ -1,10 +1,10 @@
 #pragma once
 
-#include <v8pp/convert.hpp>
+#include "events_reserved.h"
 
+#include <v8pp/convert.hpp>
 #include <v8.h>
 
-#include <functional>
 #include <map>
 #include <mutex>
 #include <string>
@@ -15,65 +15,88 @@ namespace Framework::Scripting {
     class ResourceManager;
 
     /**
-     * JavaScript events system for inter-resource communication.
-     * Provides Framework.events API:
-     * - on(eventName, handler) - Register listener
+     * Handler entry with metadata
+     */
+    struct EventHandler {
+        v8::Global<v8::Function> callback;
+        std::string resourceName;
+        bool once;
+    };
+
+    /**
+     * JavaScript Events system - global event bus with async support.
+     *
+     * Provides Events global API:
+     * - on(eventName, handler) - Register listener, returns unsubscribe function
+     * - once(eventName, handler) - One-time listener
      * - off(eventName, handler) - Remove listener
-     * - emit(eventName, ...args) - Emit to all listeners
+     * - emit(eventName, ...args) - Emit globally, returns Promise
      * - emitTo(resourceName, eventName, ...args) - Targeted emit
+     * - onLocal(eventName, handler) - Resource-local listener
+     * - emitLocal(eventName, ...args) - Resource-local emit
+     * - listenerCount(eventName) - Get handler count
      */
     class Events {
       public:
         /**
-         * Register the Framework.events object in a context.
-         * @param isolate V8 isolate
-         * @param context Target context
-         * @param frameworkObj Framework global object to attach to
-         * @param resourceManager Resource manager for inter-resource communication
+         * Register the Events global object in a context.
          */
         static void Register(v8::Isolate *isolate,
                             v8::Local<v8::Context> context,
-                            v8::Local<v8::Object> frameworkObj,
+                            v8::Local<v8::Object> global,
                             ResourceManager *resourceManager);
 
         /**
-         * Emit an event to all registered handlers for a specific resource.
-         * @param isolate V8 isolate
-         * @param context Target context
-         * @param resourceName Resource to emit to
-         * @param eventName Event name
-         * @param args Event arguments
+         * Emit a reserved event (framework-only, bypasses protection).
+         * Returns a Promise that resolves when all handlers complete.
          */
-        static void EmitToResource(v8::Isolate *isolate,
-                                   v8::Local<v8::Context> context,
-                                   const std::string &resourceName,
-                                   const std::string &eventName,
-                                   const std::vector<v8::Local<v8::Value>> &args);
+        static v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate,
+                                                    v8::Local<v8::Context> context,
+                                                    const std::string &eventName,
+                                                    const std::vector<v8::Local<v8::Value>> &args);
 
         /**
-         * Emit an event to all registered handlers across all resources.
-         * @param isolate V8 isolate
-         * @param context Target context
-         * @param eventName Event name
-         * @param args Event arguments
+         * Clean up all handlers for a resource (called on resource stop).
          */
-        static void EmitGlobal(v8::Isolate *isolate,
-                               v8::Local<v8::Context> context,
-                               const std::string &eventName,
-                               const std::vector<v8::Local<v8::Value>> &args);
+        static void CleanupResource(const std::string &resourceName);
+
+        /**
+         * Get count of handlers for an event.
+         */
+        static size_t GetListenerCount(const std::string &eventName);
 
       private:
-        // V8 callback implementations
+        // V8 callbacks
         static void OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void OnceCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void EmitToCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void OnLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void EmitLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+        static void ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
 
-        // Event handler storage: resourceName -> eventName -> handlers
-        static std::map<std::string, std::map<std::string, std::vector<v8::Global<v8::Function>>>> _handlers;
+        // Internal registration helper
+        static void RegisterHandler(v8::Isolate *isolate,
+                                   ResourceManager *manager,
+                                   const std::string &eventName,
+                                   v8::Local<v8::Function> handler,
+                                   bool once);
+
+        // Internal emit helper - returns Promise
+        static v8::Local<v8::Promise> EmitInternal(v8::Isolate *isolate,
+                                                   v8::Local<v8::Context> context,
+                                                   const std::string &eventName,
+                                                   const std::vector<v8::Local<v8::Value>> &args,
+                                                   const std::string &targetResource = "");
+
+        // Global handlers: eventName -> handlers (FIFO order)
+        static std::map<std::string, std::vector<EventHandler>> _globalHandlers;
+
+        // Local handlers: resourceName -> eventName -> handlers
+        static std::map<std::string, std::map<std::string, std::vector<EventHandler>>> _localHandlers;
+
         static std::mutex _handlersMutex;
-
-        // Resource manager reference (set during Register)
         static ResourceManager *_resourceManager;
     };
 

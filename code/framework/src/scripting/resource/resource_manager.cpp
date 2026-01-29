@@ -1,5 +1,7 @@
 #include "resource_manager.h"
 
+#include "../builtins/events.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <queue>
@@ -228,6 +230,23 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Failure(error);
         }
 
+        // Emit resourceStart event and wait for handlers
+        if (_jsEngine && _jsEngine->IsInitialized()) {
+            v8::Isolate *isolate = _jsEngine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _jsEngine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            std::vector<v8::Local<v8::Value>> args;
+            args.push_back(v8pp::to_v8(isolate, name));
+
+            SetCurrentResourceContext(name);
+            Events::EmitReserved(isolate, context, "resourceStart", args);
+            SetCurrentResourceContext("");
+        }
+
         // Transition to Running
         if (!resource->TransitionTo(ResourceState::Running)) {
             return ResourceOperationResult::Failure("Failed to transition to Running state");
@@ -268,7 +287,24 @@ namespace Framework::Scripting {
         // Transition to Stopping
         resource->TransitionTo(ResourceState::Stopping);
 
-        // Call onResourceStop lifecycle function
+        // Emit resourceStop event before cleanup
+        if (_jsEngine && _jsEngine->IsInitialized()) {
+            v8::Isolate *isolate = _jsEngine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _jsEngine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            std::vector<v8::Local<v8::Value>> args;
+            args.push_back(v8pp::to_v8(isolate, name));
+
+            SetCurrentResourceContext(name);
+            Events::EmitReserved(isolate, context, "resourceStop", args);
+            SetCurrentResourceContext("");
+        }
+
+        // Call cleanup (removes handlers)
         CallResourceStop(name);
 
         // Clear exports
@@ -306,7 +342,6 @@ namespace Framework::Scripting {
         std::string entryPoint = _config.isClient ? resource.GetClientEntryPoint() : resource.GetServerEntryPoint();
 
         if (entryPoint.empty()) {
-            // No entry point defined for this side
             return true;
         }
 
@@ -315,15 +350,12 @@ namespace Framework::Scripting {
             return false;
         }
 
-        // Set resource context
         std::string resourceName = resource.GetName();
         SetCurrentResourceContext(resourceName);
 
-        // Convert to absolute path
         std::filesystem::path absPath = std::filesystem::absolute(entryPoint);
         std::string absPathStr = absPath.string();
 
-        // Escape backslashes for Windows paths in the JS string
         std::string escapedPath = absPathStr;
         for (size_t pos = 0; (pos = escapedPath.find('\\', pos)) != std::string::npos; pos += 2) {
             escapedPath.replace(pos, 1, "\\\\");
@@ -333,33 +365,21 @@ namespace Framework::Scripting {
         bool isESModule = resource.GetManifest().IsESModule();
 
         if (isESModule) {
-            // ES Modules: Use dynamic import() with file:// URL
-            // import() returns a Promise, so we use an async IIFE
-            // The module namespace object has all exports as properties
+            // ES Module - just import, no lifecycle function detection
             code =
                 "(async function() {\n"
-                "    globalThis.__resourceModules = globalThis.__resourceModules || {};\n"
                 "    try {\n"
-                "        const _mod = await import('file://" + escapedPath + "');\n"
-                "        globalThis.__resourceModules['" + resourceName + "'] = _mod;\n"
-                "        if (_mod && typeof _mod.onResourceStart === 'function') {\n"
-                "            _mod.onResourceStart();\n"
-                "        }\n"
+                "        await import('file://" + escapedPath + "');\n"
                 "    } catch (err) {\n"
                 "        console.error('[" + resourceName + "] Failed to load ES module:', err);\n"
                 "        throw err;\n"
                 "    }\n"
                 "})();\n";
         } else {
-            // CommonJS: Use require() (synchronous)
+            // CommonJS - just require, no lifecycle function detection
             code =
                 "(function() {\n"
-                "    globalThis.__resourceModules = globalThis.__resourceModules || {};\n"
-                "    const _mod = require('" + escapedPath + "');\n"
-                "    globalThis.__resourceModules['" + resourceName + "'] = _mod;\n"
-                "    if (_mod && typeof _mod.onResourceStart === 'function') {\n"
-                "        _mod.onResourceStart();\n"
-                "    }\n"
+                "    require('" + escapedPath + "');\n"
                 "})();\n";
         }
 
@@ -368,35 +388,15 @@ namespace Framework::Scripting {
             outError = _jsEngine->GetLastError();
         }
 
-        // Clear context
         SetCurrentResourceContext("");
 
         return result;
     }
 
     bool ResourceManager::CallResourceStop(const std::string &resourceName) {
-        if (!_jsEngine || !_jsEngine->IsInitialized()) {
-            return false;
-        }
-
-        SetCurrentResourceContext(resourceName);
-
-        std::string code =
-            "(function() {\n"
-            "    const _mod = globalThis.__resourceModules && globalThis.__resourceModules['" + resourceName + "'];\n"
-            "    if (_mod && typeof _mod.onResourceStop === 'function') {\n"
-            "        _mod.onResourceStop();\n"
-            "    }\n"
-            "    if (globalThis.__resourceModules) {\n"
-            "        delete globalThis.__resourceModules['" + resourceName + "'];\n"
-            "    }\n"
-            "})();\n";
-
-        bool result = _jsEngine->Execute(code, resourceName + ":stop");
-
-        SetCurrentResourceContext("");
-
-        return result;
+        // Cleanup handlers before resource fully stops
+        Events::CleanupResource(resourceName);
+        return true;
     }
 
     std::vector<std::string> ResourceManager::GetAllResourceNames() const {

@@ -84,7 +84,7 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Builtins::RegisterAll(isolate, global);
 
         // Register communication APIs
-        Framework::Scripting::Events::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Events::Register(isolate, context, global, _resourceManager.get());
         Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
