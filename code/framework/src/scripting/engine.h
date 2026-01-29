@@ -1,50 +1,84 @@
-/*
- * MafiaHub OSS license
- * Copyright (c) 2021-2023, MafiaHub. All rights reserved.
- *
- * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
- * See LICENSE file in the source repository for information regarding licensing.
- */
-
 #pragma once
 
-#include <mutex>
+#include <memory>
+#include <string>
 #include <functional>
 
-#include <sol/sol.hpp>
-
-#include "types/errors.h"
-#include "shared.h"
-
 namespace Framework::Scripting {
-    using ScriptProc = std::function<void()>;
 
+    /**
+     * Abstract base class for JavaScript engines.
+     * Provides common interface for both V8 (client) and libnode (server).
+     */
     class Engine {
       public:
-        sol::state* _luaEngine = nullptr;
-        std::mutex _executionMutex;
+        using SDKRegisterCallback = std::function<void(Engine *)>;
+
+        Engine() = default;
+        virtual ~Engine() = default;
+
+        // Non-copyable
+        Engine(const Engine &) = delete;
+        Engine &operator=(const Engine &) = delete;
+
+        /**
+         * Initialize the JavaScript engine.
+         * @return true if initialization succeeded
+         */
+        virtual bool Init() = 0;
+
+        /**
+         * Shutdown the JavaScript engine.
+         */
+        virtual void Shutdown() = 0;
+
+        /**
+         * Execute a JavaScript string.
+         * @param code JavaScript code to execute
+         * @param filename Optional filename for error messages
+         * @return true if execution succeeded
+         */
+        virtual bool Execute(const std::string &code, const std::string &filename = "<eval>") = 0;
+
+        /**
+         * Execute a JavaScript file.
+         * @param filepath Path to the JavaScript file
+         * @return true if execution succeeded
+         */
+        virtual bool ExecuteFile(const std::string &filepath) = 0;
+
+        /**
+         * Register framework SDK bindings.
+         * Called after Init() to set up Framework.* APIs.
+         */
+        virtual bool InitFrameworkSDK() = 0;
+
+        /**
+         * Set callback for registering additional SDK bindings.
+         * Used by game projects to add custom APIs.
+         */
+        void SetSDKRegisterCallback(SDKRegisterCallback callback) {
+            _sdkRegisterCallback = std::move(callback);
+        }
+
+        /**
+         * Get the last error message.
+         */
+        const std::string &GetLastError() const {
+            return _lastError;
+        }
+
+        /**
+         * Check if engine is initialized.
+         */
+        bool IsInitialized() const {
+            return _initialized;
+        }
 
       protected:
-        ScriptProc _onLoadProc   = nullptr;
-        ScriptProc _onUnloadProc = nullptr;
-
-      public:
-        virtual EngineError Init(SDKRegisterCallback) = 0;
-        virtual EngineError Shutdown()                = 0;
-        virtual void Update()                         = 0;
-
-        bool InitCommonSDK();
-
-        sol::state *GetLuaEngine() {
-            return _luaEngine;
-        }
-
-        void SetOnLoadProc(ScriptProc proc) {
-            _onLoadProc = std::move(proc);
-        }
-
-        void SetOnUnloadProc(ScriptProc proc) {
-            _onUnloadProc = std::move(proc);
-        }
+        bool _initialized = false;
+        std::string _lastError;
+        SDKRegisterCallback _sdkRegisterCallback;
     };
+
 } // namespace Framework::Scripting

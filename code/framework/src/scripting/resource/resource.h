@@ -1,8 +1,8 @@
 #pragma once
 
-#include "resource_manifest.h"
+#include "package_manifest.h"
 
-#include <sol/sol.hpp>
+#include <v8.h>
 
 #include <chrono>
 #include <functional>
@@ -18,24 +18,24 @@ namespace Framework::Scripting {
      * Resource state in the lifecycle state machine.
      *
      * State transitions:
-     *                     ┌─────────┐
-     *                     │ Unloaded│
-     *                     └────┬────┘
-     *                          │ load()
-     *                          ▼
-     *                     ┌─────────┐
-     *          ┌─────────►│ Loading │
-     *          │          └────┬────┘
-     *          │               │ success
-     *          │    error      ▼
-     *          │          ┌─────────┐
-     *          │    ┌─────│ Running │◄────────┐
-     *          │    │     └────┬────┘         │
-     *          │    │          │ stop()       │ start()
-     *          │    ▼          ▼              │
-     *     ┌─────────┐    ┌──────────┐    ┌─────────┐
-     *     │  Error  │    │ Stopping │───►│ Stopped │
-     *     └─────────┘    └──────────┘    └─────────┘
+     *                     +----------+
+     *                     | Unloaded |
+     *                     +----+-----+
+     *                          | load()
+     *                          v
+     *                     +----------+
+     *          +--------> | Loading  |
+     *          |          +----+-----+
+     *          |               | success
+     *          |    error      v
+     *          |          +----------+
+     *          |    +-----| Running  |<--------+
+     *          |    |     +----+-----+         |
+     *          |    |          | stop()        | start()
+     *          |    v          v               |
+     *     +----------+    +----------+    +----------+
+     *     |  Error   |    | Stopping |--->| Stopped  |
+     *     +----------+    +----------+    +----------+
      */
     enum class ResourceState {
         Unloaded, // Resource discovered but not loaded
@@ -51,20 +51,17 @@ namespace Framework::Scripting {
      */
     const char *ResourceStateToString(ResourceState state);
 
-    /**
-     * Event handler callback type for resource events.
-     */
-    using ResourceEventHandler = std::function<void(sol::variadic_args)>;
+    class ResourceManager;
 
     /**
-     * Represents a single resource unit - a collection of related scripts with a manifest.
-     * Each resource has its own isolated Lua environment, lifecycle, and communication channels.
+     * Represents a single JavaScript resource unit.
+     * Each resource has its own context, lifecycle, and communication channels.
      */
     class Resource final {
       public:
         /**
          * Create a resource from a directory path.
-         * @param path Path to the resource directory (containing manifest.json)
+         * @param path Path to the resource directory (containing package.json)
          */
         explicit Resource(const std::string &path);
 
@@ -86,9 +83,19 @@ namespace Framework::Scripting {
         const std::string &GetPath() const;
 
         // Manifest access
-        const ResourceManifest &GetManifest() const;
+        const PackageManifest &GetManifest() const;
         bool HasExport(const std::string &exportName) const;
         bool DependsOn(const std::string &resourceName) const;
+
+        /**
+         * Get the server entry point script path.
+         */
+        std::string GetServerEntryPoint() const;
+
+        /**
+         * Get the client entry point script path.
+         */
+        std::string GetClientEntryPoint() const;
 
         // State machine
         ResourceState GetState() const;
@@ -147,52 +154,13 @@ namespace Framework::Scripting {
          */
         int GetRestartBackoffMs() const;
 
-        // Environment access (for ResourceManager to set up)
-        sol::environment *GetEnvironment();
-        const sol::environment *GetEnvironment() const;
-
-        /**
-         * Set the Lua environment for this resource.
-         * Should only be called by ResourceManager during load.
-         */
-        void SetEnvironment(std::unique_ptr<sol::environment> env);
-
-        // Event handlers
-        /**
-         * Register an event handler for this resource.
-         * @param eventName Name of the event
-         * @param handler Callback function
-         */
-        void RegisterEventHandler(const std::string &eventName, sol::protected_function handler);
-
-        /**
-         * Unregister an event handler.
-         * @param eventName Name of the event to unregister
-         */
-        void UnregisterEventHandler(const std::string &eventName);
-
-        /**
-         * Unregister all event handlers.
-         */
-        void ClearEventHandlers();
-
-        /**
-         * Check if an event handler is registered.
-         */
-        bool HasEventHandler(const std::string &eventName) const;
-
-        /**
-         * Get all registered event names.
-         */
-        std::vector<std::string> GetEventNames() const;
-
         // Exports
         /**
          * Register an export from this resource.
          * @param name Export name (must be declared in manifest)
-         * @param value The exported Lua value (function or table)
+         * @param value The exported JavaScript value
          */
-        bool RegisterExport(const std::string &name, sol::object value);
+        bool RegisterExport(const std::string &name, v8::Local<v8::Value> value);
 
         /**
          * Unregister an export.
@@ -205,11 +173,6 @@ namespace Framework::Scripting {
         void ClearExports();
 
         /**
-         * Get an exported value by name.
-         */
-        sol::object GetExport(const std::string &name) const;
-
-        /**
          * Check if an export is registered at runtime.
          */
         bool HasRegisteredExport(const std::string &name) const;
@@ -219,35 +182,9 @@ namespace Framework::Scripting {
          */
         std::vector<std::string> GetRegisteredExportNames() const;
 
-        // Scripts
-        /**
-         * Get the list of server script paths.
-         */
-        std::vector<std::string> GetServerScriptPaths() const;
-
-        /**
-         * Get the list of client script paths.
-         */
-        std::vector<std::string> GetClientScriptPaths() const;
-
-        /**
-         * Get the number of scripts loaded.
-         */
-        size_t GetScriptCount() const;
-
-        /**
-         * Calculate the content hash for this resource.
-         * Hash is based on manifest + all script file contents.
-         * Result is cached until InvalidateContentHash() is called.
-         * @return CRC32 hash of all resource content
-         */
-        uint32_t GetContentHash() const;
-
-        /**
-         * Invalidate the cached content hash.
-         * Call this when files have been modified.
-         */
-        void InvalidateContentHash();
+        // Context access
+        v8::Isolate *GetIsolate() const { return _isolate; }
+        void SetIsolate(v8::Isolate *isolate) { _isolate = isolate; }
 
         // State transitions (called by ResourceManager)
         friend class ResourceManager;
@@ -262,14 +199,14 @@ namespace Framework::Scripting {
         // Check if a state transition is valid
         static bool IsValidTransition(ResourceState from, ResourceState to);
 
-        // Get restart attempt count without locking (caller must hold _restartAttemptsMutex)
+        // Get restart attempt count without locking
         int GetRestartAttemptCountUnlocked() const;
 
         // Path to resource directory
         std::string _path;
 
-        // Manifest (loaded from manifest.json)
-        ResourceManifest _manifest;
+        // Manifest (loaded from package.json)
+        PackageManifest _manifest;
         bool _manifestValid = false;
 
         // Current state
@@ -278,30 +215,15 @@ namespace Framework::Scripting {
         std::chrono::system_clock::time_point _stateTimestamp;
         std::chrono::system_clock::time_point _loadTimestamp;
 
-        // Isolated Lua environment
-        std::unique_ptr<sol::environment> _environment;
-
-        // Event handlers owned by this resource
-        std::map<std::string, sol::protected_function> _eventHandlers;
-        mutable std::mutex _eventHandlersMutex;
+        // V8 isolate for this resource (set by manager)
+        v8::Isolate *_isolate = nullptr;
 
         // Exports registered by this resource
-        std::map<std::string, sol::object> _exports;
+        std::map<std::string, v8::Global<v8::Value>> _exports;
         mutable std::mutex _exportsMutex;
-
-        // Script paths (resolved from manifest)
-        std::vector<std::string> _serverScriptPaths;
-        std::vector<std::string> _clientScriptPaths;
 
         std::vector<std::chrono::system_clock::time_point> _restartAttempts;
         mutable std::mutex _restartAttemptsMutex;
-
-        mutable uint32_t _contentHash = 0;
-        mutable bool _contentHashValid = false;
-        mutable std::mutex _contentHashMutex;
-
-        // Calculate and cache the content hash
-        uint32_t CalculateContentHash() const;
     };
 
 } // namespace Framework::Scripting

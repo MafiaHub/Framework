@@ -1,179 +1,69 @@
-/*
- * MafiaHub OSS license
- * Copyright (c) 2021-2023, MafiaHub. All rights reserved.
- *
- * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
- * See LICENSE file in the source repository for information regarding licensing.
- */
-
 #pragma once
 
-#include "../resource/environment_sandbox.h"
+#include <v8pp/class.hpp>
+#include <v8pp/property.hpp>
 
-#include <glm/ext.hpp>
-#include <glm/ext/matrix_relational.hpp>
-#include <glm/ext/scalar_relational.hpp>
-#include <glm/ext/vector_relational.hpp>
-#include <glm/gtc/constants.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <glm/vec3.hpp>
-#include <sol/sol.hpp>
+#include <glm/gtx/quaternion.hpp>
 
-#include <iomanip>
-#include <list>
-#include <sstream>
+#include <memory>
+#include <string>
 
 namespace Framework::Scripting::Builtins {
-    class Quaternion final {
-      private:
-        glm::quat _data;
 
-      public:
-        Quaternion(float w, float x, float y, float z) {
-            _data = {w, x, y, z};
-        }
+// Forward declaration
+class Vector3;
 
-        Quaternion(glm::quat data) {
-            _data = data;
-        }
+/**
+ * Quaternion wrapper class for V8 bindings using v8pp.
+ * Provides a clean C++ interface that wraps glm::quat.
+ * Uses (w, x, y, z) order internally matching GLM.
+ */
+class Quaternion {
+  public:
+    Quaternion() : _quat(1.0f, 0.0f, 0.0f, 0.0f) {}
+    Quaternion(float w, float x, float y, float z) : _quat(w, x, y, z) {}
+    Quaternion(const glm::quat& q) : _quat(q) {}
 
-        float GetW() const {
-            return _data.w;
-        }
+    // Property accessors
+    float getW() const { return _quat.w; }
+    void setW(float v) { _quat.w = v; }
+    float getX() const { return _quat.x; }
+    void setX(float v) { _quat.x = v; }
+    float getY() const { return _quat.y; }
+    void setY(float v) { _quat.y = v; }
+    float getZ() const { return _quat.z; }
+    void setZ(float v) { _quat.z = v; }
 
-        float GetX() const {
-            return _data.x;
-        }
+    // Instance methods
+    Quaternion multiply(const Quaternion& other) const { return Quaternion(_quat * other._quat); }
+    Quaternion normalize() const { return Quaternion(glm::normalize(_quat)); }
+    Quaternion conjugate() const { return Quaternion(glm::conjugate(_quat)); }
+    Quaternion inverse() const { return Quaternion(glm::inverse(_quat)); }
+    Quaternion slerp(const Quaternion& target, float t) const { return Quaternion(glm::slerp(_quat, target._quat, t)); }
+    float dot(const Quaternion& other) const { return glm::dot(_quat, other._quat); }
+    Vector3 rotateVector(const Vector3& v) const;
+    Vector3 toEuler() const;
+    Quaternion clone() const { return Quaternion(_quat); }
+    std::string toString() const;
 
-        float GetY() const {
-            return _data.y;
-        }
+    // Static factory methods
+    static Quaternion identity() { return Quaternion(1.0f, 0.0f, 0.0f, 0.0f); }
+    static Quaternion fromEuler(float pitch, float yaw, float roll);
+    static Quaternion fromAxisAngle(const Vector3& axis, float angle);
 
-        float GetZ() const {
-            return _data.z;
-        }
+    // Access underlying GLM type
+    const glm::quat& quat() const { return _quat; }
 
-        float GetLength() const {
-            return glm::length(_data);
-        }
+    // V8 Registration
+    static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
+    static v8pp::class_<Quaternion>& GetClass(v8::Isolate* isolate);
 
-        std::string ToString() const {
-            std::ostringstream ss;
-            ss << std::fixed << std::setprecision(4) << "Quaternion{ w: " << _data.w << ", x: " << _data.x << ", y: " << _data.y << ", z: " << _data.z << " }";
-            return ss.str();
-        }
+  private:
+    glm::quat _quat;
+    static std::unique_ptr<v8pp::class_<Quaternion>> _class;
+};
 
-        std::list<float> ToArray() const {
-            return {_data.w, _data.x, _data.y, _data.z};
-        }
-
-        std::list<float> ToEulerRadians() const {
-            glm::vec3 eulerRadians = glm::eulerAngles(_data);
-            return { eulerRadians.x, eulerRadians.y, eulerRadians.z };
-        }
-
-        std::list<float> ToEulerDegrees() const {
-            glm::vec3 eulerRadians = glm::eulerAngles(_data);
-            glm::vec3 eulerDegrees = glm::degrees(eulerRadians);
-            return { eulerDegrees.x, eulerDegrees.y, eulerDegrees.z };
-        }
-        
-        void Add(float w, float x, float y, float z) {
-            const glm::quat newQuat(w, x, y, z);
-            _data += newQuat;
-        }
-
-        void Sub(float w, float x, float y, float z) {
-            const glm::quat newQuat(w, x, y, z);
-            _data -= newQuat;
-        }
-
-        void Mul(float w, float x, float y, float z) {
-            const glm::quat newQuat(w, x, y, z);
-            _data *= newQuat;
-        }
-
-        void Lerp(float w, float x, float y, float z, float f) {
-            const glm::quat newQuat(w, x, y, z);
-            _data = glm::mix(_data, newQuat, f);
-        }
-
-        void Conjugate(float w, float x, float y, float z) {
-            glm::quat newQuat(w, x, y, z);
-            _data = glm::conjugate(_data);
-        }
-
-        void Cross(float w, float x, float y, float z) {
-            const glm::quat newQuat(w, x, y, z);
-            _data = glm::cross(_data, newQuat);
-        }
-
-        float Dot(float w, float x, float y, float z) const {
-            const glm::quat newQuat(w, x, y, z);
-            return glm::dot(_data, newQuat);
-        }
-
-        void Inverse() {
-            _data = glm::inverse(_data);
-        }
-
-        static Quaternion FromEulerRadians(float x, float y, float z) {
-            auto data = glm::quat(glm::vec3(x, y, z));
-            return Quaternion(data.w, data.x, data.y, data.z);
-        }
-
-        static Quaternion FromEulerDegrees(float x, float y, float z) {
-            auto radians = glm::radians(glm::vec3(x, y, z));
-            auto data = glm::quat(radians);
-            return Quaternion(data.w, data.x, data.y, data.z);
-        }
-
-        void SetEuler(float x, float y, float z) {
-            _data = glm::quat(glm::vec3(x, y, z));
-        }
-
-        void FromAxisAngle(float x, float y, float z, float angle) {
-            _data = glm::quat(glm::angleAxis(angle, glm::vec3(x, y, z)));
-        }
-
-        static Quaternion Identity() {
-            return Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
-        }
-        
-        operator glm::quat() const {
-            return _data;
-        }
-        
-        operator glm::vec3() const {
-            return glm::degrees(glm::eulerAngles(_data));
-        }
-
-        static void Register(sol::state *luaEngine) {
-            sol::usertype<Quaternion> cls = luaEngine->new_usertype<Quaternion>("Quaternion", sol::constructors<Quaternion(float, float, float, float)>());
-            cls["w"] = sol::property([](const Quaternion& self) { return self.GetW(); });
-            cls["x"] = sol::property([](const Quaternion& self) { return self.GetX(); });
-            cls["y"] = sol::property([](const Quaternion& self) { return self.GetY(); });
-            cls["z"] = sol::property([](const Quaternion& self) { return self.GetZ(); });
-            cls["length"] = sol::property([](const Quaternion& self) { return self.GetLength(); });
-            cls["__tostring"] = &Quaternion::ToString;
-            cls["toArray"]  = &Quaternion::ToArray;
-            cls["toEulerRadians"]  = &Quaternion::ToEulerRadians;
-            cls["toEulerDegrees"]  = &Quaternion::ToEulerDegrees;
-            cls["add"]     = &Quaternion::Add;
-            cls["sub"]     = &Quaternion::Sub;
-            cls["mul"]     = &Quaternion::Mul;
-            cls["lerp"]     = &Quaternion::Lerp;
-            cls["conjugate"]     = &Quaternion::Conjugate;
-            cls["cross"]     = &Quaternion::Cross;
-            cls["dot"]     = &Quaternion::Dot;
-            cls["inverse"]     = &Quaternion::Inverse;
-            cls["fromEulerRadians"]     = &Quaternion::FromEulerRadians;
-            cls["fromEulerDegrees"]     = &Quaternion::FromEulerDegrees;
-            cls["setEuler"]     = &Quaternion::SetEuler;
-            cls["fromAxisAngle"]     = &Quaternion::FromAxisAngle;
-            cls["identity"] = sol::property(&Quaternion::Identity);
-            EnvironmentSandbox::RegisterBuiltinName("Quaternion");
-        }
-    };
 } // namespace Framework::Scripting::Builtins

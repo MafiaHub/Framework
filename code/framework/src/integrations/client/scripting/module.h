@@ -1,12 +1,13 @@
 #pragma once
 
-#include <scripting/client_engine.h>
-#include <scripting/resource/resource_manager.h>
-#include <world/client.h>
-
-#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
+#include <functional>
+
+#include <scripting/v8_engine.h>
+#include <scripting/resource/resource_manager.h>
+#include <world/client.h>
 
 namespace Framework::Integrations::Client::Scripting {
 
@@ -16,70 +17,64 @@ namespace Framework::Integrations::Client::Scripting {
     struct ServerResourceInfo {
         std::string name;
         std::string version;
-        uint32_t hash = 0;
     };
 
     /**
      * Callback type for resource download requests.
-     * Called when client needs to download a resource from the server.
      */
-    using ResourceDownloadCallback = std::function<void(const std::string &resourceName, const std::string &version, uint32_t hash)>;
+    using ResourceDownloadCallback = std::function<void(const std::string &resourceName, const std::string &version)>;
 
     /**
      * Callback type for resource sync completion.
-     * Called when all resources have been synchronized.
      */
     using ResourceSyncCompleteCallback = std::function<void(bool success)>;
 
     /**
-     * Client-side scripting module with resource management support.
+     * Client-side JavaScript scripting module with resource management support.
      *
-     * - Mirrors server resource lifecycle
-     * - Handles resource synchronization from server at connection time
-     * - Client runs standalone after initial resource sync
+     * Uses V8 for sandboxed client-side JavaScript execution.
+     * More restricted than server-side (no filesystem, no network).
      */
     class ClientScriptingModule {
-      private:
-        std::shared_ptr<Framework::Scripting::ClientEngine> _clientEngine;
-        std::shared_ptr<World::ClientEngine> _world;
-        std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
-
-        // Resource synchronization state
-        std::vector<ServerResourceInfo> _serverResourceList;
-        bool _resourcesSynced = false;
-
-        // Callbacks
-        ResourceDownloadCallback _onResourceDownloadNeeded;
-        ResourceSyncCompleteCallback _onResourceSyncComplete;
-
-        // Resource cache path
-        std::string _resourceCachePath;
-
       public:
-        ClientScriptingModule(std::shared_ptr<World::ClientEngine>);
-
+        explicit ClientScriptingModule(std::shared_ptr<World::ClientEngine> world);
         ~ClientScriptingModule();
 
-        bool Init(Framework::Scripting::SDKRegisterCallback);
+        /**
+         * Initialize the V8 engine and resource manager.
+         * @param sdkCallback Optional callback for registering additional SDK bindings
+         * @return true if initialization succeeded
+         */
+        bool Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
 
+        /**
+         * Shutdown the V8 engine.
+         */
         bool Shutdown();
 
         /**
-         * Update the scripting module (call from main loop).
-         * Processes ResourceManager updates like scheduled restarts.
+         * Update tick - process pending operations.
+         * Call this from the game loop.
          */
         void Update();
 
-        // Engine access
-
-        std::shared_ptr<Framework::Scripting::ClientEngine> GetEngine() const {
-            return _clientEngine;
+        /**
+         * Get the V8 engine.
+         */
+        Framework::Scripting::V8Engine *GetEngine() const {
+            return _v8Engine.get();
         }
 
+        /**
+         * Get the world engine.
+         */
         std::shared_ptr<World::ClientEngine> GetWorldEngine() const {
             return _world;
         }
 
+        /**
+         * Get the JavaScript resource manager.
+         */
         Framework::Scripting::ResourceManager *GetResourceManager() const {
             return _resourceManager.get();
         }
@@ -99,7 +94,6 @@ namespace Framework::Integrations::Client::Scripting {
         /**
          * Handle resource list message from server.
          * Called when server sends the list of resources on connection.
-         * @param resources List of resources the server wants the client to load
          */
         void OnServerResourceList(const std::vector<ServerResourceInfo> &resources);
 
@@ -118,33 +112,19 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         /**
-         * Set the server resource list directly (without triggering download logic).
-         * Use this when resources have already been downloaded.
-         */
-        void SetServerResourceList(const std::vector<ServerResourceInfo> &resources) {
-            _serverResourceList = resources;
-        }
-
-        /**
          * Mark that a resource has been downloaded and is ready to load.
-         * Call this after the asset download system has downloaded a resource.
-         * @param resourceName Name of the resource that was downloaded
          */
         void OnResourceDownloaded(const std::string &resourceName);
 
         /**
          * Start all downloaded resources.
-         * Call this after all resources have been downloaded.
          */
         bool StartAllResources();
 
         /**
-         * Stop all running resources without clearing the server resource list.
-         * Use this when preparing for a re-download/reload cycle.
+         * Stop all running resources.
          */
         void StopAllResources();
-
-        // Callbacks
 
         /**
          * Set callback for when a resource download is needed.
@@ -160,36 +140,31 @@ namespace Framework::Integrations::Client::Scripting {
             _onResourceSyncComplete = std::move(callback);
         }
 
-        // State queries
-
-        /**
-         * Check if a resource is available locally (downloaded and valid).
-         * @param resourceName Name of the resource
-         * @param version Expected version
-         * @param hash Expected content hash
-         * @return True if resource is available and matches
-         */
-        bool IsResourceAvailable(const std::string &resourceName, const std::string &version, uint32_t hash) const;
-
         /**
          * Get the local path for a resource.
-         * @param resourceName Name of the resource
-         * @return Path to the resource directory
          */
         std::string GetResourcePath(const std::string &resourceName) const;
 
-      private:
         /**
-         * Check which resources need to be downloaded.
-         * @return List of resources that need downloading
+         * Register the Framework SDK bindings in the engine.
          */
-        std::vector<ServerResourceInfo> GetResourcesToDownload() const;
+        void RegisterFrameworkBindings();
 
-        /**
-         * Discover a single resource from the cache.
-         * @param resourceName Name of the resource
-         * @return True if resource was discovered successfully
-         */
-        bool DiscoverCachedResource(const std::string &resourceName);
+      private:
+        std::unique_ptr<Framework::Scripting::V8Engine> _v8Engine;
+        std::shared_ptr<World::ClientEngine> _world;
+        std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
+
+        // Resource synchronization state
+        std::vector<ServerResourceInfo> _serverResourceList;
+        bool _resourcesSynced = false;
+
+        // Callbacks
+        ResourceDownloadCallback _onResourceDownloadNeeded;
+        ResourceSyncCompleteCallback _onResourceSyncComplete;
+
+        // Resource cache path
+        std::string _resourceCachePath = "resources";
     };
+
 } // namespace Framework::Integrations::Client::Scripting

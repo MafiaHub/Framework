@@ -38,7 +38,7 @@ namespace Framework::Integrations::Server {
         _webServer        = std::make_shared<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingModule  = std::make_shared<Scripting::JSServerScriptingModule>(_worldEngine);
+        _scriptingModule  = std::make_shared<Scripting::ServerScriptingModule>(_worldEngine);
         _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
@@ -136,7 +136,7 @@ namespace Framework::Integrations::Server {
         // Initialize mod subsystems
         PostInit();
     
-        const auto sdkCallback = [this](Framework::Scripting::JS::Engine *engine) {
+        const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
             this->RegisterScriptingBuiltins(engine);
         };
 
@@ -582,8 +582,8 @@ namespace Framework::Integrations::Server {
         Shutdown();
     }
 
-    void Instance::RegisterScriptingBuiltins(Framework::Scripting::JS::Engine *engine) {
-        // JS bindings are registered by JSServerScriptingModule::RegisterFrameworkBindings
+    void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
+        // JS bindings are registered by ServerScriptingModule::RegisterFrameworkBindings
         // This method is called to allow mod-specific customization
         ModuleRegister(engine);
     }

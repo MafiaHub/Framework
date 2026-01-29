@@ -14,10 +14,10 @@
 #include "modules/interpolator_ut.h"
 #include "modules/state_machine_ut.h"
 
-// JavaScript scripting tests
-#include "modules/js_engine_ut.h"
-#include "modules/js_resource_ut.h"
-#include "modules/js_resource_manager_ut.h"
+// Scripting tests
+#include "modules/engine_ut.h"
+#include "modules/resource_ut.h"
+#include "modules/resource_manager_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -27,10 +27,10 @@ int main() {
     UNIT_MODULE(interpolator);
     UNIT_MODULE(state_machine);
 
-    // JavaScript scripting tests
-    UNIT_MODULE(js_engine);
-    UNIT_MODULE(js_resource);
-    UNIT_MODULE(js_resource_manager);
+    // Scripting tests
+    UNIT_MODULE(engine);
+    UNIT_MODULE(resource);
+    UNIT_MODULE(resource_manager);
 
     return UNIT_RUN();
 }

@@ -28,20 +28,20 @@ set(FRAMEWORK_SRC
     src/networking/errors.cpp
 
     # JavaScript scripting (V8/Node.js)
-    src/scripting/js/engine.cpp
-    src/scripting/js/v8_engine.cpp
-    src/scripting/js/builtins/vector2.cpp
-    src/scripting/js/builtins/vector3.cpp
-    src/scripting/js/builtins/vector4.cpp
-    src/scripting/js/builtins/quaternion.cpp
-    src/scripting/js/builtins/color.cpp
-    src/scripting/js/builtins/events.cpp
-    src/scripting/js/builtins/messages.cpp
-    src/scripting/js/builtins/console.cpp
-    src/scripting/js/builtins/imports.cpp
-    src/scripting/js/resource/package_manifest.cpp
-    src/scripting/js/resource/js_resource.cpp
-    src/scripting/js/resource/js_resource_manager.cpp
+    src/scripting/engine.cpp
+    src/scripting/v8_engine.cpp
+    src/scripting/builtins/vector2.cpp
+    src/scripting/builtins/vector3.cpp
+    src/scripting/builtins/vector4.cpp
+    src/scripting/builtins/quaternion.cpp
+    src/scripting/builtins/color.cpp
+    src/scripting/builtins/events.cpp
+    src/scripting/builtins/messages.cpp
+    src/scripting/builtins/console.cpp
+    src/scripting/builtins/imports.cpp
+    src/scripting/resource/package_manifest.cpp
+    src/scripting/resource/resource.cpp
+    src/scripting/resource/resource_manager.cpp
 
     src/jobs/job_system.cpp
     src/jobs/io_tasks.cpp
@@ -56,8 +56,8 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/networking/engine.cpp
 
     # JavaScript scripting (Node.js engine for server)
-    src/scripting/js/node_engine.cpp
-    src/integrations/server/scripting/js_module.cpp
+    src/scripting/node_engine.cpp
+    src/integrations/server/scripting/module.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
@@ -79,7 +79,7 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/networking/engine.cpp
 
     # JavaScript scripting (V8 engine for client)
-    src/integrations/client/scripting/js_module.cpp
+    src/integrations/client/scripting/module.cpp
 )
 
 # GUI (Ultralight) only available for 64-bit builds
