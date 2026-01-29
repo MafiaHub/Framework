@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace Framework::Scripting::Builtins {
 
@@ -66,7 +67,7 @@ class Quaternion {
 
   private:
     glm::quat _quat;
-    static std::unique_ptr<v8pp::class_<Quaternion>> _class;
+    static std::unordered_map<v8::Isolate*, std::unique_ptr<v8pp::class_<Quaternion>>> _classes;
 };
 
 } // namespace Framework::Scripting::Builtins

@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
+#include <unordered_map>
 
 namespace Framework::Scripting::Builtins {
 
@@ -60,7 +61,7 @@ class Vector3 {
 
   private:
     glm::vec3 _vec;
-    static std::unique_ptr<v8pp::class_<Vector3>> _class;
+    static std::unordered_map<v8::Isolate*, std::unique_ptr<v8pp::class_<Vector3>>> _classes;
 };
 
 } // namespace Framework::Scripting::Builtins

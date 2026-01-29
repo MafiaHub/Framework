@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
+#include <unordered_map>
 
 namespace Framework::Scripting::Builtins {
 
@@ -60,7 +61,7 @@ class Color {
 
   private:
     glm::vec4 _color;
-    static std::unique_ptr<v8pp::class_<Color>> _class;
+    static std::unordered_map<v8::Isolate*, std::unique_ptr<v8pp::class_<Color>>> _classes;
 };
 
 } // namespace Framework::Scripting::Builtins
