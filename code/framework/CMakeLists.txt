@@ -154,6 +154,10 @@ add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
 # Framework base PCH - stable, frequently used headers
 # Using PUBLIC so child targets can inherit via INTERFACE_PRECOMPILE_HEADERS
 target_precompile_headers(Framework PUBLIC
+    # C headers first - cerrno must be included before any headers that may
+    # be affected by libuv/Node.js which don't define EINVAL/ERANGE on Windows
+    <cerrno>
+
     # STL (stable, frequently used)
     <memory>
     <string>
