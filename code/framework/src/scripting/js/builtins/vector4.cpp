@@ -1,363 +1,136 @@
 #include "vector4.h"
-#include "../v8_helpers.h"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/norm.hpp>
 #include <sstream>
 
 namespace Framework::Scripting::JS::Builtins {
 
-    v8::Global<v8::FunctionTemplate> Vector4::_template;
+std::unique_ptr<v8pp::class_<Vector4>> Vector4::_class;
 
-    void Vector4::Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        v8::Local<v8::FunctionTemplate> tmpl = GetTemplate(isolate);
-        v8::Local<v8::Function> constructor = tmpl->GetFunction(isolate->GetCurrentContext()).ToLocalChecked();
+Vector4 Vector4::normalize() const {
+    float len = glm::length(_vec);
+    return len > 0.0f ? Vector4(_vec / len) : Vector4();
+}
 
-        global
-            ->Set(isolate->GetCurrentContext(), v8::String::NewFromUtf8(isolate, "Vector4").ToLocalChecked(),
-                  constructor)
-            .Check();
+std::string Vector4::toString() const {
+    std::ostringstream ss;
+    ss << "Vector4(" << _vec.x << ", " << _vec.y << ", " << _vec.z << ", " << _vec.w << ")";
+    return ss.str();
+}
+
+v8pp::class_<Vector4>& Vector4::GetClass(v8::Isolate* isolate) {
+    if (!_class) {
+        _class = std::make_unique<v8pp::class_<Vector4>>(isolate);
+        _class->ctor<float, float, float, float>()
+            // Instance methods
+            .set("add", &Vector4::add)
+            .set("sub", &Vector4::sub)
+            .set("mul", &Vector4::mul)
+            .set("div", &Vector4::div)
+            .set("dot", &Vector4::dot)
+            .set("normalize", &Vector4::normalize)
+            .set("lerp", &Vector4::lerp)
+            .set("clone", &Vector4::clone)
+            .set("toString", &Vector4::toString)
+            // Getter methods (workaround for v8pp property issues with modern V8)
+            .set("getX", &Vector4::getX)
+            .set("getY", &Vector4::getY)
+            .set("getZ", &Vector4::getZ)
+            .set("getW", &Vector4::getW)
+            .set("setX", &Vector4::setX)
+            .set("setY", &Vector4::setY)
+            .set("setZ", &Vector4::setZ)
+            .set("setW", &Vector4::setW)
+            .set("getLength", &Vector4::getLength)
+            .set("getLengthSquared", &Vector4::getLengthSquared);
+
+        // Add properties manually using v8's SetAccessor with correct signature
+        auto protoTemplate = _class->class_function_template()->PrototypeTemplate();
+
+        // Property: x
+        protoTemplate->SetAccessor(
+            v8pp::to_v8(isolate, "x").As<v8::Name>(),
+            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) info.GetReturnValue().Set(self->getX());
+            },
+            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self && value->IsNumber()) {
+                    self->setX(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
+                }
+            });
+
+        // Property: y
+        protoTemplate->SetAccessor(
+            v8pp::to_v8(isolate, "y").As<v8::Name>(),
+            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) info.GetReturnValue().Set(self->getY());
+            },
+            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self && value->IsNumber()) {
+                    self->setY(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
+                }
+            });
+
+        // Property: z
+        protoTemplate->SetAccessor(
+            v8pp::to_v8(isolate, "z").As<v8::Name>(),
+            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) info.GetReturnValue().Set(self->getZ());
+            },
+            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self && value->IsNumber()) {
+                    self->setZ(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
+                }
+            });
+
+        // Property: w
+        protoTemplate->SetAccessor(
+            v8pp::to_v8(isolate, "w").As<v8::Name>(),
+            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) info.GetReturnValue().Set(self->getW());
+            },
+            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self && value->IsNumber()) {
+                    self->setW(static_cast<float>(value->NumberValue(info.GetIsolate()->GetCurrentContext()).FromMaybe(0.0)));
+                }
+            });
+
+        // Read-only property: length
+        protoTemplate->SetAccessor(
+            v8pp::to_v8(isolate, "length").As<v8::Name>(),
+            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) info.GetReturnValue().Set(self->getLength());
+            });
+
+        // Read-only property: lengthSquared
+        protoTemplate->SetAccessor(
+            v8pp::to_v8(isolate, "lengthSquared").As<v8::Name>(),
+            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+                auto* self = v8pp::class_<Vector4>::unwrap_object(info.GetIsolate(), info.This());
+                if (self) info.GetReturnValue().Set(self->getLengthSquared());
+            });
+
+        // Static methods need to be added to the js_function_template
+        auto func = _class->js_function_template();
+        func->Set(isolate, "zero", v8pp::wrap_function_template(isolate, &Vector4::zero));
+        func->Set(isolate, "one", v8pp::wrap_function_template(isolate, &Vector4::one));
     }
+    return *_class;
+}
 
-    v8::Local<v8::FunctionTemplate> Vector4::GetTemplate(v8::Isolate *isolate) {
-        if (!_template.IsEmpty()) {
-            return _template.Get(isolate);
-        }
-
-        v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(isolate, New);
-        tmpl->SetClassName(v8::String::NewFromUtf8(isolate, "Vector4").ToLocalChecked());
-        tmpl->InstanceTemplate()->SetInternalFieldCount(1);
-
-        v8::Local<v8::ObjectTemplate> instanceTmpl = tmpl->InstanceTemplate();
-        instanceTmpl->SetAccessor(v8::String::NewFromUtf8(isolate, "x").ToLocalChecked(), GetX, SetX);
-        instanceTmpl->SetAccessor(v8::String::NewFromUtf8(isolate, "y").ToLocalChecked(), GetY, SetY);
-        instanceTmpl->SetAccessor(v8::String::NewFromUtf8(isolate, "z").ToLocalChecked(), GetZ, SetZ);
-        instanceTmpl->SetAccessor(v8::String::NewFromUtf8(isolate, "w").ToLocalChecked(), GetW, SetW);
-        instanceTmpl->SetAccessor(v8::String::NewFromUtf8(isolate, "length").ToLocalChecked(), GetLength);
-
-        v8::Local<v8::ObjectTemplate> protoTmpl = tmpl->PrototypeTemplate();
-        protoTmpl->Set(isolate, "add", v8::FunctionTemplate::New(isolate, Add));
-        protoTmpl->Set(isolate, "sub", v8::FunctionTemplate::New(isolate, Sub));
-        protoTmpl->Set(isolate, "mul", v8::FunctionTemplate::New(isolate, Mul));
-        protoTmpl->Set(isolate, "div", v8::FunctionTemplate::New(isolate, Div));
-        protoTmpl->Set(isolate, "dot", v8::FunctionTemplate::New(isolate, Dot));
-        protoTmpl->Set(isolate, "normalize", v8::FunctionTemplate::New(isolate, Normalize));
-        protoTmpl->Set(isolate, "lerp", v8::FunctionTemplate::New(isolate, Lerp));
-        protoTmpl->Set(isolate, "clone", v8::FunctionTemplate::New(isolate, Clone));
-        protoTmpl->Set(isolate, "toArray", v8::FunctionTemplate::New(isolate, ToArray));
-        protoTmpl->Set(isolate, "toString", v8::FunctionTemplate::New(isolate, ToString));
-
-        tmpl->Set(isolate, "zero", v8::FunctionTemplate::New(isolate, Zero));
-        tmpl->Set(isolate, "one", v8::FunctionTemplate::New(isolate, One));
-
-        _template.Reset(isolate, tmpl);
-        return tmpl;
-    }
-
-    v8::Local<v8::Object> Vector4::NewInstance(v8::Isolate *isolate, float x, float y, float z, float w) {
-        v8::Local<v8::FunctionTemplate> tmpl = GetTemplate(isolate);
-        v8::Local<v8::Function> constructor = tmpl->GetFunction(isolate->GetCurrentContext()).ToLocalChecked();
-
-        v8::Local<v8::Value> argv[] = {v8::Number::New(isolate, x), v8::Number::New(isolate, y),
-                                       v8::Number::New(isolate, z), v8::Number::New(isolate, w)};
-
-        return constructor->NewInstance(isolate->GetCurrentContext(), 4, argv).ToLocalChecked();
-    }
-
-    v8::Local<v8::Object> Vector4::NewInstance(v8::Isolate *isolate, const glm::vec4 &vec) {
-        return NewInstance(isolate, vec.x, vec.y, vec.z, vec.w);
-    }
-
-    glm::vec4 *Vector4::Unwrap(v8::Local<v8::Object> obj) {
-        if (obj->InternalFieldCount() < 1) {
-            return nullptr;
-        }
-        v8::Local<v8::Data> field = obj->GetInternalField(0);
-        if (field.IsEmpty()) {
-            return nullptr;
-        }
-        return static_cast<glm::vec4 *>(field.As<v8::External>()->Value());
-    }
-
-    bool Vector4::IsInstance(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        if (_template.IsEmpty() || !value->IsObject())
-            return false;
-        return _template.Get(isolate)->HasInstance(value);
-    }
-
-    void Vector4::New(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-
-        if (!args.IsConstructCall()) {
-            V8Helpers::ThrowTypeError(isolate, "Vector4 must be called with new");
-            return;
-        }
-
-        float x = V8Helpers::GetFloat(args, 0, 0.0f);
-        float y = V8Helpers::GetFloat(args, 1, 0.0f);
-        float z = V8Helpers::GetFloat(args, 2, 0.0f);
-        float w = V8Helpers::GetFloat(args, 3, 0.0f);
-
-        glm::vec4 *vec = new glm::vec4(x, y, z, w);
-        args.This()->SetInternalField(0, v8::External::New(isolate, vec));
-        args.GetReturnValue().Set(args.This());
-    }
-
-    void Vector4::GetX(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec)
-            info.GetReturnValue().Set(vec->x);
-    }
-
-    void Vector4::SetX(v8::Local<v8::String>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec && value->IsNumber())
-            vec->x = static_cast<float>(value.As<v8::Number>()->Value());
-    }
-
-    void Vector4::GetY(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec)
-            info.GetReturnValue().Set(vec->y);
-    }
-
-    void Vector4::SetY(v8::Local<v8::String>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec && value->IsNumber())
-            vec->y = static_cast<float>(value.As<v8::Number>()->Value());
-    }
-
-    void Vector4::GetZ(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec)
-            info.GetReturnValue().Set(vec->z);
-    }
-
-    void Vector4::SetZ(v8::Local<v8::String>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec && value->IsNumber())
-            vec->z = static_cast<float>(value.As<v8::Number>()->Value());
-    }
-
-    void Vector4::GetW(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec)
-            info.GetReturnValue().Set(vec->w);
-    }
-
-    void Vector4::SetW(v8::Local<v8::String>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec && value->IsNumber())
-            vec->w = static_cast<float>(value.As<v8::Number>()->Value());
-    }
-
-    void Vector4::GetLength(v8::Local<v8::String>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-        glm::vec4 *vec = Unwrap(info.Holder());
-        if (vec)
-            info.GetReturnValue().Set(glm::length(*vec));
-    }
-
-    void Vector4::Add(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        glm::vec4 other;
-        if (args.Length() >= 1 && IsInstance(isolate, args[0])) {
-            glm::vec4 *otherVec = Unwrap(args[0].As<v8::Object>());
-            if (otherVec)
-                other = *otherVec;
-        } else {
-            other.x = V8Helpers::GetFloat(args, 0, 0.0f);
-            other.y = V8Helpers::GetFloat(args, 1, 0.0f);
-            other.z = V8Helpers::GetFloat(args, 2, 0.0f);
-            other.w = V8Helpers::GetFloat(args, 3, 0.0f);
-        }
-
-        args.GetReturnValue().Set(NewInstance(isolate, *vec + other));
-    }
-
-    void Vector4::Sub(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        glm::vec4 other;
-        if (args.Length() >= 1 && IsInstance(isolate, args[0])) {
-            glm::vec4 *otherVec = Unwrap(args[0].As<v8::Object>());
-            if (otherVec)
-                other = *otherVec;
-        } else {
-            other.x = V8Helpers::GetFloat(args, 0, 0.0f);
-            other.y = V8Helpers::GetFloat(args, 1, 0.0f);
-            other.z = V8Helpers::GetFloat(args, 2, 0.0f);
-            other.w = V8Helpers::GetFloat(args, 3, 0.0f);
-        }
-
-        args.GetReturnValue().Set(NewInstance(isolate, *vec - other));
-    }
-
-    void Vector4::Mul(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        if (args.Length() == 1 && args[0]->IsNumber()) {
-            float scalar = static_cast<float>(args[0].As<v8::Number>()->Value());
-            args.GetReturnValue().Set(NewInstance(isolate, *vec * scalar));
-        } else {
-            glm::vec4 other(1.0f);
-            if (args.Length() >= 1 && IsInstance(isolate, args[0])) {
-                glm::vec4 *otherVec = Unwrap(args[0].As<v8::Object>());
-                if (otherVec)
-                    other = *otherVec;
-            } else {
-                other.x = V8Helpers::GetFloat(args, 0, 1.0f);
-                other.y = V8Helpers::GetFloat(args, 1, 1.0f);
-                other.z = V8Helpers::GetFloat(args, 2, 1.0f);
-                other.w = V8Helpers::GetFloat(args, 3, 1.0f);
-            }
-            args.GetReturnValue().Set(NewInstance(isolate, *vec * other));
-        }
-    }
-
-    void Vector4::Div(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        if (args.Length() == 1 && args[0]->IsNumber()) {
-            float scalar = static_cast<float>(args[0].As<v8::Number>()->Value());
-            if (scalar == 0.0f) {
-                V8Helpers::ThrowError(isolate, "Division by zero");
-                return;
-            }
-            args.GetReturnValue().Set(NewInstance(isolate, *vec / scalar));
-        } else {
-            glm::vec4 other(1.0f);
-            if (args.Length() >= 1 && IsInstance(isolate, args[0])) {
-                glm::vec4 *otherVec = Unwrap(args[0].As<v8::Object>());
-                if (otherVec)
-                    other = *otherVec;
-            } else {
-                other.x = V8Helpers::GetFloat(args, 0, 1.0f);
-                other.y = V8Helpers::GetFloat(args, 1, 1.0f);
-                other.z = V8Helpers::GetFloat(args, 2, 1.0f);
-                other.w = V8Helpers::GetFloat(args, 3, 1.0f);
-            }
-
-            if (other.x == 0.0f || other.y == 0.0f || other.z == 0.0f || other.w == 0.0f) {
-                V8Helpers::ThrowError(isolate, "Division by zero");
-                return;
-            }
-            args.GetReturnValue().Set(NewInstance(isolate, *vec / other));
-        }
-    }
-
-    void Vector4::Dot(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        glm::vec4 other;
-        if (args.Length() >= 1 && IsInstance(isolate, args[0])) {
-            glm::vec4 *otherVec = Unwrap(args[0].As<v8::Object>());
-            if (otherVec)
-                other = *otherVec;
-        } else {
-            other.x = V8Helpers::GetFloat(args, 0, 0.0f);
-            other.y = V8Helpers::GetFloat(args, 1, 0.0f);
-            other.z = V8Helpers::GetFloat(args, 2, 0.0f);
-            other.w = V8Helpers::GetFloat(args, 3, 0.0f);
-        }
-
-        args.GetReturnValue().Set(glm::dot(*vec, other));
-    }
-
-    void Vector4::Normalize(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        float len = glm::length(*vec);
-        if (len > 0.0f) {
-            args.GetReturnValue().Set(NewInstance(isolate, *vec / len));
-        } else {
-            args.GetReturnValue().Set(NewInstance(isolate, glm::vec4(0.0f)));
-        }
-    }
-
-    void Vector4::Lerp(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        glm::vec4 target;
-        float t = 0.5f;
-
-        if (args.Length() >= 1 && IsInstance(isolate, args[0])) {
-            glm::vec4 *targetVec = Unwrap(args[0].As<v8::Object>());
-            if (targetVec)
-                target = *targetVec;
-            t = V8Helpers::GetFloat(args, 1, 0.5f);
-        } else {
-            target.x = V8Helpers::GetFloat(args, 0, 0.0f);
-            target.y = V8Helpers::GetFloat(args, 1, 0.0f);
-            target.z = V8Helpers::GetFloat(args, 2, 0.0f);
-            target.w = V8Helpers::GetFloat(args, 3, 0.0f);
-            t = V8Helpers::GetFloat(args, 4, 0.5f);
-        }
-
-        args.GetReturnValue().Set(NewInstance(isolate, glm::mix(*vec, target, t)));
-    }
-
-    void Vector4::Clone(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (vec)
-            args.GetReturnValue().Set(NewInstance(isolate, *vec));
-    }
-
-    void Vector4::ToArray(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        v8::Local<v8::Array> arr = v8::Array::New(isolate, 4);
-        arr->Set(isolate->GetCurrentContext(), 0, v8::Number::New(isolate, vec->x)).Check();
-        arr->Set(isolate->GetCurrentContext(), 1, v8::Number::New(isolate, vec->y)).Check();
-        arr->Set(isolate->GetCurrentContext(), 2, v8::Number::New(isolate, vec->z)).Check();
-        arr->Set(isolate->GetCurrentContext(), 3, v8::Number::New(isolate, vec->w)).Check();
-
-        args.GetReturnValue().Set(arr);
-    }
-
-    void Vector4::ToString(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        glm::vec4 *vec = Unwrap(args.Holder());
-        if (!vec)
-            return;
-
-        std::ostringstream ss;
-        ss << "Vector4(" << vec->x << ", " << vec->y << ", " << vec->z << ", " << vec->w << ")";
-
-        args.GetReturnValue().Set(v8::String::NewFromUtf8(isolate, ss.str().c_str()).ToLocalChecked());
-    }
-
-    void Vector4::Zero(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        args.GetReturnValue().Set(NewInstance(args.GetIsolate(), 0.0f, 0.0f, 0.0f, 0.0f));
-    }
-
-    void Vector4::One(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        args.GetReturnValue().Set(NewInstance(args.GetIsolate(), 1.0f, 1.0f, 1.0f, 1.0f));
-    }
+void Vector4::Register(v8::Isolate* isolate, v8::Local<v8::Object> global) {
+    v8pp::class_<Vector4>& cls = GetClass(isolate);
+    auto ctx = isolate->GetCurrentContext();
+    global->Set(ctx, v8pp::to_v8(isolate, "Vector4"),
+                cls.js_function_template()->GetFunction(ctx).ToLocalChecked()).Check();
+}
 
 } // namespace Framework::Scripting::JS::Builtins

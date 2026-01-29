@@ -21,25 +21,25 @@ namespace Framework::Scripting::JS {
 
         // console.log
         v8::Local<v8::FunctionTemplate> logTmpl = v8::FunctionTemplate::New(isolate, LogCallback, managerData);
-        consoleObj->Set(context, V8Helpers::ToV8String(isolate, "log"), logTmpl->GetFunction(context).ToLocalChecked()).Check();
+        consoleObj->Set(context, v8pp::to_v8(isolate, "log"), logTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // console.info (alias for log)
-        consoleObj->Set(context, V8Helpers::ToV8String(isolate, "info"), logTmpl->GetFunction(context).ToLocalChecked()).Check();
+        consoleObj->Set(context, v8pp::to_v8(isolate, "info"), logTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // console.warn
         v8::Local<v8::FunctionTemplate> warnTmpl = v8::FunctionTemplate::New(isolate, WarnCallback, managerData);
-        consoleObj->Set(context, V8Helpers::ToV8String(isolate, "warn"), warnTmpl->GetFunction(context).ToLocalChecked()).Check();
+        consoleObj->Set(context, v8pp::to_v8(isolate, "warn"), warnTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // console.error
         v8::Local<v8::FunctionTemplate> errorTmpl = v8::FunctionTemplate::New(isolate, ErrorCallback, managerData);
-        consoleObj->Set(context, V8Helpers::ToV8String(isolate, "error"), errorTmpl->GetFunction(context).ToLocalChecked()).Check();
+        consoleObj->Set(context, v8pp::to_v8(isolate, "error"), errorTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // console.debug
         v8::Local<v8::FunctionTemplate> debugTmpl = v8::FunctionTemplate::New(isolate, DebugCallback, managerData);
-        consoleObj->Set(context, V8Helpers::ToV8String(isolate, "debug"), debugTmpl->GetFunction(context).ToLocalChecked()).Check();
+        consoleObj->Set(context, v8pp::to_v8(isolate, "debug"), debugTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // Set as global console
-        context->Global()->Set(context, V8Helpers::ToV8String(isolate, "console"), consoleObj).Check();
+        context->Global()->Set(context, v8pp::to_v8(isolate, "console"), consoleObj).Check();
     }
 
     std::string Console::FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -53,7 +53,7 @@ namespace Framework::Scripting::JS {
             v8::Local<v8::Value> value = args[i];
 
             if (value->IsString()) {
-                ss << V8Helpers::GetString(isolate, value);
+                ss << v8pp::from_v8<std::string>(isolate, value);
             } else if (value->IsNumber()) {
                 double num = value->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0);
                 if (num == static_cast<int64_t>(num)) {
@@ -76,15 +76,15 @@ namespace Framework::Scripting::JS {
 
                 // Try to get JSON representation
                 v8::Local<v8::Object> json = context->Global()
-                    ->Get(context, V8Helpers::ToV8String(isolate, "JSON")).ToLocalChecked().As<v8::Object>();
+                    ->Get(context, v8pp::to_v8(isolate, "JSON")).ToLocalChecked().As<v8::Object>();
                 v8::Local<v8::Function> stringify = json
-                    ->Get(context, V8Helpers::ToV8String(isolate, "stringify")).ToLocalChecked().As<v8::Function>();
+                    ->Get(context, v8pp::to_v8(isolate, "stringify")).ToLocalChecked().As<v8::Function>();
 
                 v8::Local<v8::Value> jsonArgs[1] = {obj};
                 v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
 
                 if (!jsonResult.IsEmpty()) {
-                    ss << V8Helpers::GetString(isolate, jsonResult.ToLocalChecked());
+                    ss << v8pp::from_v8<std::string>(isolate, jsonResult.ToLocalChecked());
                 } else {
                     ss << "[Object]";
                 }

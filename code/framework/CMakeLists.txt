@@ -226,7 +226,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl v8)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl v8 v8pp)
 
     # Required libraries for windows
     if(WIN32)

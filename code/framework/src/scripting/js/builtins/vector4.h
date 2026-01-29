@@ -1,54 +1,60 @@
 #pragma once
 
-#include <v8.h>
+#include <v8pp/class.hpp>
+#include <v8pp/property.hpp>
 #include <glm/glm.hpp>
+#include <string>
+#include <memory>
 
 namespace Framework::Scripting::JS::Builtins {
 
-    /**
-     * V8 binding for Vector4 type.
-     */
-    class Vector4 {
-      public:
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
-        static v8::Local<v8::FunctionTemplate> GetTemplate(v8::Isolate *isolate);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, float x, float y, float z, float w);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec4 &vec);
-        static glm::vec4 *Unwrap(v8::Local<v8::Object> obj);
-        static bool IsInstance(v8::Isolate *isolate, v8::Local<v8::Value> value);
+/**
+ * Vector4 wrapper class for V8 bindings using v8pp.
+ * Provides a clean C++ interface that wraps glm::vec4.
+ */
+class Vector4 {
+  public:
+    Vector4() : _vec(0.0f) {}
+    Vector4(float x, float y, float z, float w) : _vec(x, y, z, w) {}
+    Vector4(const glm::vec4& v) : _vec(v) {}
 
-      private:
-        static void New(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Property accessors
+    float getX() const { return _vec.x; }
+    void setX(float v) { _vec.x = v; }
+    float getY() const { return _vec.y; }
+    void setY(float v) { _vec.y = v; }
+    float getZ() const { return _vec.z; }
+    void setZ(float v) { _vec.z = v; }
+    float getW() const { return _vec.w; }
+    void setW(float v) { _vec.w = v; }
+    float getLength() const { return glm::length(_vec); }
+    float getLengthSquared() const { return glm::dot(_vec, _vec); }
 
-        static void GetX(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetX(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetY(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetY(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetZ(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetZ(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetW(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetW(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetLength(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
+    // Methods
+    Vector4 add(const Vector4& other) const { return Vector4(_vec + other._vec); }
+    Vector4 sub(const Vector4& other) const { return Vector4(_vec - other._vec); }
+    Vector4 mul(float scalar) const { return Vector4(_vec * scalar); }
+    Vector4 div(float scalar) const { return Vector4(_vec / scalar); }
+    float dot(const Vector4& other) const { return glm::dot(_vec, other._vec); }
+    Vector4 normalize() const;
+    Vector4 lerp(const Vector4& target, float t) const { return Vector4(glm::mix(_vec, target._vec, t)); }
+    Vector4 clone() const { return Vector4(_vec); }
+    std::string toString() const;
 
-        static void Add(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Sub(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Mul(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Div(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Dot(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Normalize(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Lerp(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Clone(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToArray(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToString(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Static factory methods
+    static Vector4 zero() { return Vector4(0, 0, 0, 0); }
+    static Vector4 one() { return Vector4(1, 1, 1, 1); }
 
-        static void Zero(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void One(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Access underlying GLM type
+    const glm::vec4& vec() const { return _vec; }
 
-        static v8::Global<v8::FunctionTemplate> _template;
-    };
+    // V8 Registration
+    static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
+    static v8pp::class_<Vector4>& GetClass(v8::Isolate* isolate);
+
+  private:
+    glm::vec4 _vec;
+    static std::unique_ptr<v8pp::class_<Vector4>> _class;
+};
 
 } // namespace Framework::Scripting::JS::Builtins

@@ -22,21 +22,21 @@ namespace Framework::Scripting::JS {
 
         // on(eventName, handler)
         v8::Local<v8::FunctionTemplate> onTmpl = v8::FunctionTemplate::New(isolate, OnCallback, managerData);
-        eventsObj->Set(context, V8Helpers::ToV8String(isolate, "on"), onTmpl->GetFunction(context).ToLocalChecked()).Check();
+        eventsObj->Set(context, v8pp::to_v8(isolate, "on"), onTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // off(eventName, handler)
         v8::Local<v8::FunctionTemplate> offTmpl = v8::FunctionTemplate::New(isolate, OffCallback, managerData);
-        eventsObj->Set(context, V8Helpers::ToV8String(isolate, "off"), offTmpl->GetFunction(context).ToLocalChecked()).Check();
+        eventsObj->Set(context, v8pp::to_v8(isolate, "off"), offTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // emit(eventName, ...args)
         v8::Local<v8::FunctionTemplate> emitTmpl = v8::FunctionTemplate::New(isolate, EmitCallback, managerData);
-        eventsObj->Set(context, V8Helpers::ToV8String(isolate, "emit"), emitTmpl->GetFunction(context).ToLocalChecked()).Check();
+        eventsObj->Set(context, v8pp::to_v8(isolate, "emit"), emitTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // emitTo(resourceName, eventName, ...args)
         v8::Local<v8::FunctionTemplate> emitToTmpl = v8::FunctionTemplate::New(isolate, EmitToCallback, managerData);
-        eventsObj->Set(context, V8Helpers::ToV8String(isolate, "emitTo"), emitToTmpl->GetFunction(context).ToLocalChecked()).Check();
+        eventsObj->Set(context, v8pp::to_v8(isolate, "emitTo"), emitToTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        frameworkObj->Set(context, V8Helpers::ToV8String(isolate, "events"), eventsObj).Check();
+        frameworkObj->Set(context, v8pp::to_v8(isolate, "events"), eventsObj).Check();
     }
 
     void Events::OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -44,31 +44,31 @@ namespace Framework::Scripting::JS {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            V8Helpers::ThrowError(isolate, "events.on requires 2 arguments: eventName, handler");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.on requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "events.on: eventName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.on: eventName must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            V8Helpers::ThrowError(isolate, "events.on: handler must be a function");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.on: handler must be a function")));
             return;
         }
 
         JSResourceManager *manager = static_cast<JSResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            V8Helpers::ThrowError(isolate, "events.on: resource manager not available");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.on: resource manager not available")));
             return;
         }
 
-        std::string eventName = V8Helpers::GetString(isolate, args[0]);
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string resourceName = manager->GetCurrentResourceContext();
 
         if (resourceName.empty()) {
-            V8Helpers::ThrowError(isolate, "events.on: must be called from within a resource");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.on: must be called from within a resource")));
             return;
         }
 
@@ -85,17 +85,17 @@ namespace Framework::Scripting::JS {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            V8Helpers::ThrowError(isolate, "events.off requires 2 arguments: eventName, handler");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.off requires 2 arguments: eventName, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "events.off: eventName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.off: eventName must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            V8Helpers::ThrowError(isolate, "events.off: handler must be a function");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.off: handler must be a function")));
             return;
         }
 
@@ -104,7 +104,7 @@ namespace Framework::Scripting::JS {
             return;
         }
 
-        std::string eventName = V8Helpers::GetString(isolate, args[0]);
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string resourceName = manager->GetCurrentResourceContext();
 
         if (resourceName.empty()) {
@@ -141,16 +141,16 @@ namespace Framework::Scripting::JS {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            V8Helpers::ThrowError(isolate, "events.emit requires at least 1 argument: eventName");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.emit requires at least 1 argument: eventName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "events.emit: eventName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.emit: eventName must be a string")));
             return;
         }
 
-        std::string eventName = V8Helpers::GetString(isolate, args[0]);
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
 
         // Collect remaining arguments
         std::vector<v8::Local<v8::Value>> eventArgs;
@@ -167,22 +167,22 @@ namespace Framework::Scripting::JS {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            V8Helpers::ThrowError(isolate, "events.emitTo requires at least 2 arguments: resourceName, eventName");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.emitTo requires at least 2 arguments: resourceName, eventName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "events.emitTo: resourceName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.emitTo: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            V8Helpers::ThrowError(isolate, "events.emitTo: eventName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "events.emitTo: eventName must be a string")));
             return;
         }
 
-        std::string resourceName = V8Helpers::GetString(isolate, args[0]);
-        std::string eventName = V8Helpers::GetString(isolate, args[1]);
+        std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[1]);
 
         // Collect remaining arguments
         std::vector<v8::Local<v8::Value>> eventArgs;

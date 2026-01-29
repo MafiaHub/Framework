@@ -77,6 +77,9 @@ add_subdirectory(ftl)
 # v8: V8 headers interface for client-side scripting (links to libnode)
 add_subdirectory(libnode)
 
+# Build v8pp (header-only V8 binding library)
+add_subdirectory(v8pp)
+
 # Build OS specific libraries
 if (WIN32)
     # Build other win32 deps

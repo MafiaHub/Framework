@@ -1,81 +1,63 @@
 #pragma once
 
-#include <v8.h>
+#include <v8pp/class.hpp>
+#include <v8pp/property.hpp>
 #include <glm/glm.hpp>
+#include <string>
+#include <memory>
 
 namespace Framework::Scripting::JS::Builtins {
 
-    /**
-     * V8 binding for Vector3 type.
-     * Mirrors the Lua Vector3 API.
-     */
-    class Vector3 {
-      public:
-        /**
-         * Register Vector3 as a global constructor.
-         */
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
+/**
+ * Vector3 wrapper class for V8 bindings using v8pp.
+ * Provides a clean C++ interface that wraps glm::vec3.
+ */
+class Vector3 {
+  public:
+    Vector3() : _vec(0.0f) {}
+    Vector3(float x, float y, float z) : _vec(x, y, z) {}
+    Vector3(const glm::vec3& v) : _vec(v) {}
 
-        /**
-         * Get the constructor function template.
-         */
-        static v8::Local<v8::FunctionTemplate> GetTemplate(v8::Isolate *isolate);
+    // Property accessors
+    float getX() const { return _vec.x; }
+    void setX(float v) { _vec.x = v; }
+    float getY() const { return _vec.y; }
+    void setY(float v) { _vec.y = v; }
+    float getZ() const { return _vec.z; }
+    void setZ(float v) { _vec.z = v; }
+    float getLength() const { return glm::length(_vec); }
+    float getLengthSquared() const { return glm::dot(_vec, _vec); }
 
-        /**
-         * Create a new Vector3 instance.
-         */
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, float x, float y, float z);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec3 &vec);
+    // Methods
+    Vector3 add(const Vector3& other) const { return Vector3(_vec + other._vec); }
+    Vector3 sub(const Vector3& other) const { return Vector3(_vec - other._vec); }
+    Vector3 mul(float scalar) const { return Vector3(_vec * scalar); }
+    Vector3 div(float scalar) const { return Vector3(_vec / scalar); }
+    float dot(const Vector3& other) const { return glm::dot(_vec, other._vec); }
+    Vector3 cross(const Vector3& other) const { return Vector3(glm::cross(_vec, other._vec)); }
+    Vector3 normalize() const;
+    Vector3 lerp(const Vector3& target, float t) const { return Vector3(glm::mix(_vec, target._vec, t)); }
+    float distance(const Vector3& other) const { return glm::distance(_vec, other._vec); }
+    Vector3 clone() const { return Vector3(_vec); }
+    std::string toString() const;
 
-        /**
-         * Unwrap a Vector3 from a JS object.
-         */
-        static glm::vec3 *Unwrap(v8::Local<v8::Object> obj);
+    // Static factory methods
+    static Vector3 zero() { return Vector3(0, 0, 0); }
+    static Vector3 one() { return Vector3(1, 1, 1); }
+    static Vector3 up() { return Vector3(0, 1, 0); }
+    static Vector3 forward() { return Vector3(0, 0, 1); }
+    static Vector3 right() { return Vector3(1, 0, 0); }
 
-        /**
-         * Check if an object is a Vector3 instance.
-         */
-        static bool IsInstance(v8::Isolate *isolate, v8::Local<v8::Value> value);
+    // Access underlying GLM type
+    const glm::vec3& vec() const { return _vec; }
 
-      private:
-        // Constructor
-        static void New(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // V8 Registration
+    static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
+    static v8pp::class_<Vector3>& GetClass(v8::Isolate* isolate);
 
-        // Properties (getters/setters)
-        static void GetX(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetX(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetY(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetY(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetZ(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetZ(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetLength(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void GetLengthSquared(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-
-        // Methods
-        static void Add(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Sub(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Mul(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Div(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Dot(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Cross(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Normalize(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Lerp(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Distance(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Clone(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToArray(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToString(const v8::FunctionCallbackInfo<v8::Value> &args);
-
-        // Static methods
-        static void Zero(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void One(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Up(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Forward(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Right(const v8::FunctionCallbackInfo<v8::Value> &args);
-
-        static v8::Global<v8::FunctionTemplate> _template;
-    };
+  private:
+    glm::vec3 _vec;
+    static std::unique_ptr<v8pp::class_<Vector3>> _class;
+};
 
 } // namespace Framework::Scripting::JS::Builtins

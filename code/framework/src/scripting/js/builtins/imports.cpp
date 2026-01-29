@@ -21,9 +21,9 @@ namespace Framework::Scripting::JS {
 
         // get(resourceName)
         v8::Local<v8::FunctionTemplate> getTmpl = v8::FunctionTemplate::New(isolate, GetCallback, managerData);
-        importsObj->Set(context, V8Helpers::ToV8String(isolate, "get"), getTmpl->GetFunction(context).ToLocalChecked()).Check();
+        importsObj->Set(context, v8pp::to_v8(isolate, "get"), getTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        frameworkObj->Set(context, V8Helpers::ToV8String(isolate, "imports"), importsObj).Check();
+        frameworkObj->Set(context, v8pp::to_v8(isolate, "imports"), importsObj).Check();
     }
 
     void Imports::GetCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -32,34 +32,34 @@ namespace Framework::Scripting::JS {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 1) {
-            V8Helpers::ThrowError(isolate, "imports.get requires 1 argument: resourceName");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get requires 1 argument: resourceName")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "imports.get: resourceName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resourceName must be a string")));
             return;
         }
 
         JSResourceManager *manager = static_cast<JSResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            V8Helpers::ThrowError(isolate, "imports.get: resource manager not available");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resource manager not available")));
             return;
         }
 
-        std::string resourceName = V8Helpers::GetString(isolate, args[0]);
+        std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string callerResource = manager->GetCurrentResourceContext();
 
         // Check if target resource exists
         const JSResource *resource = manager->GetResource(resourceName);
         if (!resource) {
-            V8Helpers::ThrowError(isolate, ("imports.get: resource '" + resourceName + "' not found").c_str());
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resource '" + resourceName + "' not found")));
             return;
         }
 
         // Check if target resource is running
         if (!resource->IsRunning()) {
-            V8Helpers::ThrowError(isolate, ("imports.get: resource '" + resourceName + "' is not running").c_str());
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "imports.get: resource '" + resourceName + "' is not running")));
             return;
         }
 
@@ -95,9 +95,9 @@ namespace Framework::Scripting::JS {
         // Add a special property listing available exports
         v8::Local<v8::Array> exportArray = v8::Array::New(isolate, static_cast<int>(exportNames.size()));
         for (size_t i = 0; i < exportNames.size(); ++i) {
-            exportArray->Set(context, static_cast<uint32_t>(i), V8Helpers::ToV8String(isolate, exportNames[i])).Check();
+            exportArray->Set(context, static_cast<uint32_t>(i), v8pp::to_v8(isolate, exportNames[i])).Check();
         }
-        exportsObj->Set(context, V8Helpers::ToV8String(isolate, "_availableExports"), exportArray).Check();
+        exportsObj->Set(context, v8pp::to_v8(isolate, "_availableExports"), exportArray).Check();
 
         // Log for debugging
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug(

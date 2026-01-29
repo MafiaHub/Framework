@@ -1,50 +1,57 @@
 #pragma once
 
-#include <v8.h>
+#include <v8pp/class.hpp>
+#include <v8pp/property.hpp>
 #include <glm/glm.hpp>
+#include <string>
+#include <memory>
 
 namespace Framework::Scripting::JS::Builtins {
 
-    /**
-     * V8 binding for Vector2 type.
-     */
-    class Vector2 {
-      public:
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
-        static v8::Local<v8::FunctionTemplate> GetTemplate(v8::Isolate *isolate);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, float x, float y);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec2 &vec);
-        static glm::vec2 *Unwrap(v8::Local<v8::Object> obj);
-        static bool IsInstance(v8::Isolate *isolate, v8::Local<v8::Value> value);
+/**
+ * Vector2 wrapper class for V8 bindings using v8pp.
+ * Provides a clean C++ interface that wraps glm::vec2.
+ */
+class Vector2 {
+  public:
+    Vector2() : _vec(0.0f) {}
+    Vector2(float x, float y) : _vec(x, y) {}
+    Vector2(const glm::vec2& v) : _vec(v) {}
 
-      private:
-        static void New(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Property accessors
+    float getX() const { return _vec.x; }
+    void setX(float v) { _vec.x = v; }
+    float getY() const { return _vec.y; }
+    void setY(float v) { _vec.y = v; }
+    float getLength() const { return glm::length(_vec); }
+    float getLengthSquared() const { return glm::dot(_vec, _vec); }
 
-        static void GetX(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetX(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetY(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetY(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetLength(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void GetLengthSquared(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
+    // Methods
+    Vector2 add(const Vector2& other) const { return Vector2(_vec + other._vec); }
+    Vector2 sub(const Vector2& other) const { return Vector2(_vec - other._vec); }
+    Vector2 mul(float scalar) const { return Vector2(_vec * scalar); }
+    Vector2 div(float scalar) const { return Vector2(_vec / scalar); }
+    float dot(const Vector2& other) const { return glm::dot(_vec, other._vec); }
+    Vector2 normalize() const;
+    Vector2 lerp(const Vector2& target, float t) const { return Vector2(glm::mix(_vec, target._vec, t)); }
+    float distance(const Vector2& other) const { return glm::distance(_vec, other._vec); }
+    Vector2 clone() const { return Vector2(_vec); }
+    std::string toString() const;
 
-        static void Add(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Sub(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Mul(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Div(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Dot(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Normalize(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Lerp(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Distance(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Clone(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToArray(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToString(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Static factory methods
+    static Vector2 zero() { return Vector2(0, 0); }
+    static Vector2 one() { return Vector2(1, 1); }
 
-        static void Zero(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void One(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Access underlying GLM type
+    const glm::vec2& vec() const { return _vec; }
 
-        static v8::Global<v8::FunctionTemplate> _template;
-    };
+    // V8 Registration
+    static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
+    static v8pp::class_<Vector2>& GetClass(v8::Isolate* isolate);
+
+  private:
+    glm::vec2 _vec;
+    static std::unique_ptr<v8pp::class_<Vector2>> _class;
+};
 
 } // namespace Framework::Scripting::JS::Builtins

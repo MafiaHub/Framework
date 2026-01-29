@@ -1,61 +1,63 @@
 #pragma once
 
-#include <v8.h>
+#include <v8pp/class.hpp>
+#include <v8pp/property.hpp>
 #include <glm/glm.hpp>
+#include <string>
+#include <memory>
 
 namespace Framework::Scripting::JS::Builtins {
 
-    /**
-     * V8 binding for Color type (RGBA).
-     * Components are stored as floats in range [0, 1].
-     */
-    class Color {
-      public:
-        static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global);
-        static v8::Local<v8::FunctionTemplate> GetTemplate(v8::Isolate *isolate);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, float r, float g, float b, float a = 1.0f);
-        static v8::Local<v8::Object> NewInstance(v8::Isolate *isolate, const glm::vec4 &color);
-        static glm::vec4 *Unwrap(v8::Local<v8::Object> obj);
-        static bool IsInstance(v8::Isolate *isolate, v8::Local<v8::Value> value);
+/**
+ * Color wrapper class for V8 bindings using v8pp.
+ * Provides a clean C++ interface that wraps glm::vec4 for RGBA colors.
+ * Components are stored as floats in range [0, 1].
+ */
+class Color {
+  public:
+    Color() : _color(1.0f) {}
+    Color(float r, float g, float b, float a = 1.0f) : _color(r, g, b, a) {}
+    Color(const glm::vec4& c) : _color(c) {}
 
-      private:
-        static void New(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Property accessors
+    float getR() const { return _color.r; }
+    void setR(float v) { _color.r = v; }
+    float getG() const { return _color.g; }
+    void setG(float v) { _color.g = v; }
+    float getB() const { return _color.b; }
+    void setB(float v) { _color.b = v; }
+    float getA() const { return _color.a; }
+    void setA(float v) { _color.a = v; }
 
-        // Properties
-        static void GetR(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetR(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetG(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetG(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetB(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetB(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
-        static void GetA(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info);
-        static void SetA(v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void> &info);
+    // Methods
+    Color lerp(const Color& target, float t) const { return Color(glm::mix(_color, target._color, t)); }
+    Color clone() const { return Color(_color); }
+    std::string toHex(bool includeAlpha = false) const;
+    std::string toString() const;
 
-        // Methods
-        static void Lerp(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Clone(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToHex(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToArray(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void ToString(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Static factory methods
+    static Color fromHex(const std::string& hex);
+    static Color fromRGB(float r, float g, float b, float a = 255.0f);
+    static Color white() { return Color(1.0f, 1.0f, 1.0f, 1.0f); }
+    static Color black() { return Color(0.0f, 0.0f, 0.0f, 1.0f); }
+    static Color red() { return Color(1.0f, 0.0f, 0.0f, 1.0f); }
+    static Color green() { return Color(0.0f, 1.0f, 0.0f, 1.0f); }
+    static Color blue() { return Color(0.0f, 0.0f, 1.0f, 1.0f); }
+    static Color yellow() { return Color(1.0f, 1.0f, 0.0f, 1.0f); }
+    static Color cyan() { return Color(0.0f, 1.0f, 1.0f, 1.0f); }
+    static Color magenta() { return Color(1.0f, 0.0f, 1.0f, 1.0f); }
+    static Color transparent() { return Color(0.0f, 0.0f, 0.0f, 0.0f); }
 
-        // Static methods
-        static void FromHex(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void FromRGB(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void White(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Black(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Red(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Green(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Blue(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Yellow(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Cyan(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Magenta(const v8::FunctionCallbackInfo<v8::Value> &args);
-        static void Transparent(const v8::FunctionCallbackInfo<v8::Value> &args);
+    // Access underlying GLM type
+    const glm::vec4& vec() const { return _color; }
 
-        static v8::Global<v8::FunctionTemplate> _template;
-    };
+    // V8 Registration
+    static void Register(v8::Isolate* isolate, v8::Local<v8::Object> global);
+    static v8pp::class_<Color>& GetClass(v8::Isolate* isolate);
+
+  private:
+    glm::vec4 _color;
+    static std::unique_ptr<v8pp::class_<Color>> _class;
+};
 
 } // namespace Framework::Scripting::JS::Builtins

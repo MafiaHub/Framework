@@ -27,17 +27,17 @@ namespace Framework::Scripting::JS {
 
         // handle(messageType, handler)
         v8::Local<v8::FunctionTemplate> handleTmpl = v8::FunctionTemplate::New(isolate, HandleCallback, managerData);
-        messagesObj->Set(context, V8Helpers::ToV8String(isolate, "handle"), handleTmpl->GetFunction(context).ToLocalChecked()).Check();
+        messagesObj->Set(context, v8pp::to_v8(isolate, "handle"), handleTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // request(resourceName, messageType, payload)
         v8::Local<v8::FunctionTemplate> requestTmpl = v8::FunctionTemplate::New(isolate, RequestCallback, managerData);
-        messagesObj->Set(context, V8Helpers::ToV8String(isolate, "request"), requestTmpl->GetFunction(context).ToLocalChecked()).Check();
+        messagesObj->Set(context, v8pp::to_v8(isolate, "request"), requestTmpl->GetFunction(context).ToLocalChecked()).Check();
 
         // send(resourceName, messageType, payload)
         v8::Local<v8::FunctionTemplate> sendTmpl = v8::FunctionTemplate::New(isolate, SendCallback, managerData);
-        messagesObj->Set(context, V8Helpers::ToV8String(isolate, "send"), sendTmpl->GetFunction(context).ToLocalChecked()).Check();
+        messagesObj->Set(context, v8pp::to_v8(isolate, "send"), sendTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        frameworkObj->Set(context, V8Helpers::ToV8String(isolate, "messages"), messagesObj).Check();
+        frameworkObj->Set(context, v8pp::to_v8(isolate, "messages"), messagesObj).Check();
     }
 
     void Messages::HandleCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -45,31 +45,31 @@ namespace Framework::Scripting::JS {
         v8::HandleScope handleScope(isolate);
 
         if (args.Length() < 2) {
-            V8Helpers::ThrowError(isolate, "messages.handle requires 2 arguments: messageType, handler");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle requires 2 arguments: messageType, handler")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "messages.handle: messageType must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: messageType must be a string")));
             return;
         }
 
         if (!args[1]->IsFunction()) {
-            V8Helpers::ThrowError(isolate, "messages.handle: handler must be a function");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: handler must be a function")));
             return;
         }
 
         JSResourceManager *manager = static_cast<JSResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            V8Helpers::ThrowError(isolate, "messages.handle: resource manager not available");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: resource manager not available")));
             return;
         }
 
-        std::string messageType = V8Helpers::GetString(isolate, args[0]);
+        std::string messageType = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string resourceName = manager->GetCurrentResourceContext();
 
         if (resourceName.empty()) {
-            V8Helpers::ThrowError(isolate, "messages.handle: must be called from within a resource");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.handle: must be called from within a resource")));
             return;
         }
 
@@ -87,28 +87,28 @@ namespace Framework::Scripting::JS {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            V8Helpers::ThrowError(isolate, "messages.request requires at least 2 arguments: resourceName, messageType");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request requires at least 2 arguments: resourceName, messageType")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "messages.request: resourceName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            V8Helpers::ThrowError(isolate, "messages.request: messageType must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request: messageType must be a string")));
             return;
         }
 
         JSResourceManager *manager = static_cast<JSResourceManager *>(args.Data().As<v8::External>()->Value());
         if (!manager) {
-            V8Helpers::ThrowError(isolate, "messages.request: resource manager not available");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.request: resource manager not available")));
             return;
         }
 
-        std::string targetResource = V8Helpers::GetString(isolate, args[0]);
-        std::string messageType = V8Helpers::GetString(isolate, args[1]);
+        std::string targetResource = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string messageType = v8pp::from_v8<std::string>(isolate, args[1]);
         std::string sourceResource = manager->GetCurrentResourceContext();
 
         v8::Local<v8::Value> payload = args.Length() > 2 ? args[2] : v8::Undefined(isolate).As<v8::Value>();
@@ -123,14 +123,14 @@ namespace Framework::Scripting::JS {
             std::lock_guard<std::mutex> lock(_handlersMutex);
             auto resourceIt = _handlers.find(targetResource);
             if (resourceIt == _handlers.end()) {
-                resolver->Reject(context, V8Helpers::ToV8String(isolate, "Target resource not found")).Check();
+                resolver->Reject(context, v8pp::to_v8(isolate, "Target resource not found")).Check();
                 args.GetReturnValue().Set(promise);
                 return;
             }
 
             auto handlerIt = resourceIt->second.find(messageType);
             if (handlerIt == resourceIt->second.end()) {
-                resolver->Reject(context, V8Helpers::ToV8String(isolate, "No handler for message type")).Check();
+                resolver->Reject(context, v8pp::to_v8(isolate, "No handler for message type")).Check();
                 args.GetReturnValue().Set(promise);
                 return;
             }
@@ -202,22 +202,22 @@ namespace Framework::Scripting::JS {
         v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
         if (args.Length() < 2) {
-            V8Helpers::ThrowError(isolate, "messages.send requires at least 2 arguments: resourceName, messageType");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send requires at least 2 arguments: resourceName, messageType")));
             return;
         }
 
         if (!args[0]->IsString()) {
-            V8Helpers::ThrowError(isolate, "messages.send: resourceName must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send: resourceName must be a string")));
             return;
         }
 
         if (!args[1]->IsString()) {
-            V8Helpers::ThrowError(isolate, "messages.send: messageType must be a string");
+            isolate->ThrowException(v8::Exception::Error(v8pp::to_v8(isolate, "messages.send: messageType must be a string")));
             return;
         }
 
-        std::string targetResource = V8Helpers::GetString(isolate, args[0]);
-        std::string messageType = V8Helpers::GetString(isolate, args[1]);
+        std::string targetResource = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string messageType = v8pp::from_v8<std::string>(isolate, args[1]);
 
         v8::Local<v8::Value> payload = args.Length() > 2 ? args[2] : v8::Undefined(isolate).As<v8::Value>();
 
