@@ -439,6 +439,9 @@ namespace Framework::Scripting {
 
         bool result = _jsEngine->Execute(code, absPathStr);
         if (!result) {
+            if (resource.GetManifest().IsESModule()) {
+                DecrementPendingLoads();
+            }
             outError = _jsEngine->GetLastError();
         }
         return result;
@@ -737,9 +740,11 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::DecrementPendingLoads() {
-        --_pendingESModuleLoads;
-        if (_pendingESModuleLoads == 0) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("All ES modules loaded");
+        if (_pendingESModuleLoads > 0) {
+            --_pendingESModuleLoads;
+            if (_pendingESModuleLoads == 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("All ES modules loaded");
+            }
         }
     }
 
