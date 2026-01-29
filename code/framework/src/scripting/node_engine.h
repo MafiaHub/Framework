@@ -15,7 +15,7 @@ namespace Framework::Scripting {
      * Node.js embedded engine for server-side scripting.
      * Provides full Node.js APIs including require(), fs, http, etc.
      */
-    class NodeEngine : public Engine {
+    class NodeEngine final : public Engine {
       public:
         NodeEngine();
         ~NodeEngine() override;

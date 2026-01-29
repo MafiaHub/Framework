@@ -51,8 +51,9 @@ namespace Framework::Scripting {
             _isolate = nullptr;
         }
 
-        delete _createParams.array_buffer_allocator;
+        auto *allocator = _createParams.array_buffer_allocator;
         _createParams.array_buffer_allocator = nullptr;
+        delete allocator;
 
         _initialized = false;
     }

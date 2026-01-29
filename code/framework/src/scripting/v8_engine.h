@@ -14,7 +14,7 @@ namespace Framework::Scripting {
      * Pure V8 JavaScript engine for client-side scripting.
      * Provides sandboxed execution with Framework APIs exposed.
      */
-    class V8Engine : public Engine {
+    class V8Engine final : public Engine {
       public:
         V8Engine();
         ~V8Engine() override;
