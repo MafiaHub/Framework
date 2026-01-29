@@ -65,7 +65,8 @@ namespace Framework::Scripting {
             return false;
         }
 
-        std::string name = resource->GetName();
+        std::string name    = resource->GetName();
+        std::string version = resource->GetVersion();
 
         {
             std::lock_guard<std::mutex> lock(_resourcesMutex);
@@ -76,7 +77,7 @@ namespace Framework::Scripting {
             _resources[name] = std::move(resource);
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered JS resource: {} v{}", name, _resources[name]->GetVersion());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovered JS resource: {} v{}", name, version);
         return true;
     }
 
