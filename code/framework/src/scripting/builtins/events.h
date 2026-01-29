@@ -90,14 +90,17 @@ namespace Framework::Scripting {
                                                    const std::vector<v8::Local<v8::Value>> &args,
                                                    const std::string &targetResource = "");
 
-        // Global handlers: eventName -> handlers (FIFO order)
-        static std::map<std::string, std::vector<EventHandler>> _globalHandlers;
+        // Get handlers map for current isolate (creates if needed)
+        static std::map<std::string, std::vector<EventHandler>> &GetGlobalHandlers(v8::Isolate *isolate);
+        static std::map<std::string, std::map<std::string, std::vector<EventHandler>>> &GetLocalHandlers(v8::Isolate *isolate);
 
-        // Local handlers: resourceName -> eventName -> handlers
-        static std::map<std::string, std::map<std::string, std::vector<EventHandler>>> _localHandlers;
+        // Per-isolate handlers storage
+        static std::map<v8::Isolate *, std::map<std::string, std::vector<EventHandler>>> _isolateGlobalHandlers;
+        static std::map<v8::Isolate *, std::map<std::string, std::map<std::string, std::vector<EventHandler>>>> _isolateLocalHandlers;
 
         static std::mutex _handlersMutex;
         static ResourceManager *_resourceManager;
+        static v8::Isolate *_currentIsolate;
     };
 
 } // namespace Framework::Scripting

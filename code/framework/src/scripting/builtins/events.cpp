@@ -748,6 +748,28 @@ namespace Framework::Scripting {
         _localHandlers.erase(resourceName);
     }
 
+    void Events::ClearAll() {
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+
+        // Explicitly Reset() all global handles before clearing to avoid
+        // crash when destroying handlers from dead isolates
+        for (auto &[eventName, handlers] : _globalHandlers) {
+            for (auto &handler : handlers) {
+                handler.callback.Reset();
+            }
+        }
+        _globalHandlers.clear();
+
+        for (auto &[resourceName, eventMap] : _localHandlers) {
+            for (auto &[eventName, handlers] : eventMap) {
+                for (auto &handler : handlers) {
+                    handler.callback.Reset();
+                }
+            }
+        }
+        _localHandlers.clear();
+    }
+
     size_t Events::GetListenerCount(const std::string &eventName) {
         std::lock_guard<std::mutex> lock(_handlersMutex);
         auto it = _globalHandlers.find(eventName);
