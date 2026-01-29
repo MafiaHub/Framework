@@ -3,6 +3,7 @@
 #include "../builtins/events.h"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <queue>
 #include <stack>
