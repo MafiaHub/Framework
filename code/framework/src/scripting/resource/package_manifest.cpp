@@ -28,6 +28,10 @@ namespace Framework::Scripting {
             return false;
         }
         _name = json["name"].get<std::string>();
+        if (_name.empty()) {
+            _error = "Package name cannot be empty";
+            return false;
+        }
 
         // Optional standard fields
         _version = json.value("version", "1.0.0");
