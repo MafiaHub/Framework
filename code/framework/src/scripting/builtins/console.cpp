@@ -112,7 +112,7 @@ namespace Framework::Scripting {
         return manager->GetResourceContextFromStack(isolate);
     }
 
-    void Console::LogCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    static void LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
 
@@ -121,55 +121,26 @@ namespace Framework::Scripting {
         std::string message = FormatArgs(isolate, args);
 
         if (!resourceName.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("[{}] {}", resourceName, message);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->log(level, "[{}] {}", resourceName, message);
         } else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("{}", message);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->log(level, "{}", message);
         }
+    }
+
+    void Console::LogCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        LogWithLevel(args, spdlog::level::info);
     }
 
     void Console::WarnCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope handleScope(isolate);
-
-        ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
-        std::string resourceName = GetResourceContextForConsole(isolate, manager);
-        std::string message = FormatArgs(isolate, args);
-
-        if (!resourceName.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("[{}] {}", resourceName, message);
-        } else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("{}", message);
-        }
+        LogWithLevel(args, spdlog::level::warn);
     }
 
     void Console::ErrorCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope handleScope(isolate);
-
-        ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
-        std::string resourceName = GetResourceContextForConsole(isolate, manager);
-        std::string message = FormatArgs(isolate, args);
-
-        if (!resourceName.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] {}", resourceName, message);
-        } else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", message);
-        }
+        LogWithLevel(args, spdlog::level::err);
     }
 
     void Console::DebugCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope handleScope(isolate);
-
-        ResourceManager *manager = static_cast<ResourceManager *>(args.Data().As<v8::External>()->Value());
-        std::string resourceName = GetResourceContextForConsole(isolate, manager);
-        std::string message = FormatArgs(isolate, args);
-
-        if (!resourceName.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("[{}] {}", resourceName, message);
-        } else {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("{}", message);
-        }
+        LogWithLevel(args, spdlog::level::debug);
     }
 
 } // namespace Framework::Scripting
