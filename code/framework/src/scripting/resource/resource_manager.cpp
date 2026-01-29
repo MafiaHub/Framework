@@ -163,10 +163,18 @@ namespace Framework::Scripting {
         std::map<std::string, int> inDegree;
         std::queue<std::string> queue;
 
-        // Initialize in-degrees
+        // Initialize in-degrees (only count dependencies that exist in _resources)
         for (const auto &[name, _] : _resources) {
+            int degree = 0;
             auto it = _dependencies.find(name);
-            inDegree[name] = (it != _dependencies.end()) ? static_cast<int>(it->second.size()) : 0;
+            if (it != _dependencies.end()) {
+                for (const auto &dep : it->second) {
+                    if (_resources.find(dep) != _resources.end()) {
+                        ++degree;
+                    }
+                }
+            }
+            inDegree[name] = degree;
             if (inDegree[name] == 0) {
                 queue.push(name);
             }
