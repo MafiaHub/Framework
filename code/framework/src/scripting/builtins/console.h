@@ -3,6 +3,7 @@
 #include <v8pp/convert.hpp>
 
 #include <v8.h>
+#include <spdlog/spdlog.h>
 
 #include <string>
 
@@ -36,6 +37,9 @@ namespace Framework::Scripting {
         static void WarnCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void ErrorCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
         static void DebugCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
+
+        // Helper to log at a specific level
+        static void LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level);
 
         // Helper to format arguments as a string
         static std::string FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args);

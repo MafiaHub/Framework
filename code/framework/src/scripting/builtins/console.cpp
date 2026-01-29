@@ -120,7 +120,7 @@ namespace Framework::Scripting {
         return manager->GetResourceContextFromStack(isolate);
     }
 
-    static void LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level) {
+    void Console::LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level) {
         v8::Isolate *isolate = args.GetIsolate();
         v8::HandleScope handleScope(isolate);
 
