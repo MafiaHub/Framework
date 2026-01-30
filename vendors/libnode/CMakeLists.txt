@@ -91,9 +91,16 @@ endif()
 add_library(libnode SHARED IMPORTED GLOBAL)
 
 if(WIN32)
+    # On Windows, the DLL might be in bin/ or lib/ depending on the package
+    if(EXISTS "${LIBNODE_BIN_DIR}/${LIBNODE_DLL_NAME}")
+        set(LIBNODE_DLL_LOCATION "${LIBNODE_BIN_DIR}/${LIBNODE_DLL_NAME}")
+    else()
+        set(LIBNODE_DLL_LOCATION "${LIBNODE_LIB_DIR}/${LIBNODE_DLL_NAME}")
+    endif()
+
     set_target_properties(libnode PROPERTIES
         IMPORTED_IMPLIB "${LIBNODE_LIB_DIR}/${LIBNODE_LIB_NAME}"
-        IMPORTED_LOCATION "${LIBNODE_BIN_DIR}/${LIBNODE_DLL_NAME}"
+        IMPORTED_LOCATION "${LIBNODE_DLL_LOCATION}"
     )
 else()
     set_target_properties(libnode PROPERTIES
@@ -183,10 +190,10 @@ set(LIBNODE_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}" CACHE PATH "libnode include di
 set(LIBNODE_LIBRARY_DIR "${LIBNODE_LIB_DIR}" CACHE PATH "libnode library directory" FORCE)
 set(V8_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}/v8" CACHE PATH "V8 include directories" FORCE)
 
-# On Windows, create a custom target to copy libnode.dll to the bin directory.
+# On Windows, create a custom target to copy libnode.dll to the output bin directory.
 # Executables that link against libnode need to depend on this target.
 if(WIN32)
-    set(LIBNODE_DLL_PATH "${LIBNODE_BIN_DIR}/${LIBNODE_DLL_NAME}" CACHE PATH "libnode DLL path" FORCE)
+    set(LIBNODE_DLL_PATH "${LIBNODE_DLL_LOCATION}" CACHE PATH "libnode DLL path" FORCE)
 
     add_custom_target(libnode_copy_dll
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
