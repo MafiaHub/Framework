@@ -567,6 +567,20 @@ namespace Framework::Scripting {
             return "";
         }
 
+        // Get the configured resources root as a canonical path for matching
+        std::filesystem::path resourcesRoot(_config.resourcesPath);
+        std::error_code ec;
+        auto canonicalRoot = std::filesystem::weakly_canonical(resourcesRoot, ec);
+        if (ec) {
+            // If we can't canonicalize, use the original path
+            canonicalRoot = resourcesRoot;
+        }
+        std::string rootStr = canonicalRoot.string();
+        // Ensure the root ends with a separator for proper matching
+        if (!rootStr.empty() && rootStr.back() != '/' && rootStr.back() != '\\') {
+            rootStr += '/';
+        }
+
         // Look for the first frame with a file path in the resources directory
         for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
             v8::Local<v8::StackFrame> frame = stackTrace->GetFrame(isolate, i);
@@ -582,24 +596,38 @@ namespace Framework::Scripting {
 
             std::string path(*scriptPath);
 
-            // Check if path is in resources directory
-            // Path format: .../resources/<resource-name>/...
-            size_t resourcesPos = path.find("/resources/");
-            if (resourcesPos == std::string::npos) {
-                // Also try file:// URL format
-                resourcesPos = path.find("file:///");
-                if (resourcesPos != std::string::npos) {
-                    path = path.substr(resourcesPos + 7); // Remove "file://"
-                    resourcesPos = path.find("/resources/");
+            // Strip file:// or file:/// prefix if present
+            const std::string filePrefix = "file://";
+            if (path.compare(0, filePrefix.size(), filePrefix) == 0) {
+                path = path.substr(filePrefix.size());
+                // On Windows, file:///C:/... needs to strip one more slash
+                // On Unix, file:///path... also has an extra slash to strip
+                if (!path.empty() && path[0] == '/') {
+#ifdef _WIN32
+                    // On Windows, check if it's file:///C:/ format
+                    if (path.size() > 2 && std::isalpha(path[1]) && path[2] == ':') {
+                        path = path.substr(1); // Remove leading slash to get C:/...
+                    }
+#endif
                 }
             }
 
+            // Normalize the script path
+            std::filesystem::path scriptFilePath(path);
+            auto canonicalScript = std::filesystem::weakly_canonical(scriptFilePath, ec);
+            if (ec) {
+                canonicalScript = scriptFilePath;
+            }
+            std::string normalizedPath = canonicalScript.string();
+
+            // Check if the script path starts with or contains the resources root
+            size_t resourcesPos = normalizedPath.find(rootStr);
             if (resourcesPos != std::string::npos) {
-                // Extract resource name
-                size_t nameStart = resourcesPos + 11; // Skip "/resources/"
-                size_t nameEnd = path.find('/', nameStart);
+                // Extract resource name (the directory immediately after the resources root)
+                size_t nameStart = resourcesPos + rootStr.size();
+                size_t nameEnd = normalizedPath.find_first_of("/\\", nameStart);
                 if (nameEnd != std::string::npos) {
-                    std::string resourceName = path.substr(nameStart, nameEnd - nameStart);
+                    std::string resourceName = normalizedPath.substr(nameStart, nameEnd - nameStart);
                     // Verify this resource exists
                     if (GetResource(resourceName) != nullptr) {
                         return resourceName;
