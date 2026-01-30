@@ -138,40 +138,44 @@ namespace Framework::Scripting {
             handler.Reset(isolate, handlerIt->second.Get(isolate));
         }
 
-        // Generate request ID and store pending request
+        // Create reply context with atomic consumed flag for safe reply handling.
+        // The shared_ptr is stored in PendingRequest to keep it alive until the request is resolved.
+        auto replyContext = std::make_shared<ReplyContext>(0); // ID set below after we know it
+
+        // Generate request ID and store pending request (including replyContext to keep it alive)
         uint64_t requestId;
         {
             std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
             requestId = _nextRequestId++;
-            _pendingRequests[requestId] = {requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource};
+            replyContext->id = requestId;
+            _pendingRequests[requestId] = {requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, replyContext};
         }
 
-        // Create reply function
-        // Note: We heap-allocate the request ID to avoid truncation on 32-bit systems
-        // where void* is 4 bytes but uint64_t is 8 bytes.
+        // Create reply function - the ReplyContext is kept alive by PendingRequest.replyContext
         auto replyCallback = [](const v8::FunctionCallbackInfo<v8::Value> &replyArgs) {
             v8::Isolate *replyIsolate = replyArgs.GetIsolate();
             v8::HandleScope replyScope(replyIsolate);
-            v8::Local<v8::Context> replyContext = replyIsolate->GetCurrentContext();
 
-            uint64_t *reqIdPtr = static_cast<uint64_t *>(replyArgs.Data().As<v8::External>()->Value());
-            uint64_t reqId = *reqIdPtr;
-            delete reqIdPtr;
+            auto *replyCtx = static_cast<ReplyContext *>(replyArgs.Data().As<v8::External>()->Value());
+
+            // Atomically check-and-set consumed flag - only the first call proceeds
+            if (replyCtx->consumed.exchange(true)) {
+                return; // Already consumed, ignore subsequent calls
+            }
 
             v8::Local<v8::Value> response = replyArgs.Length() > 0 ? replyArgs[0] : v8::Undefined(replyIsolate).As<v8::Value>();
 
             {
                 std::lock_guard<std::mutex> lock(_responseQueueMutex);
                 PendingResponse pendingResponse;
-                pendingResponse.requestId = reqId;
+                pendingResponse.requestId = replyCtx->id;
                 pendingResponse.response.Reset(replyIsolate, response);
                 pendingResponse.isError = false;
                 _responseQueue.push_back(std::move(pendingResponse));
             }
         };
 
-        uint64_t *requestIdPtr = new uint64_t(requestId);
-        v8::Local<v8::External> requestIdData = v8::External::New(isolate, requestIdPtr);
+        v8::Local<v8::External> requestIdData = v8::External::New(isolate, replyContext.get());
         v8::Local<v8::Function> replyFn = v8::Function::New(context, replyCallback, requestIdData).ToLocalChecked();
 
         // Call the handler with (payload, reply)
@@ -191,11 +195,8 @@ namespace Framework::Scripting {
                 "[{}] Message handler '{}' error: {}",
                 targetResource, messageType, *error ? *error : "Unknown error");
 
-            // Clean up the heap-allocated request ID since replyCallback won't be called
-            delete requestIdPtr;
-
-            // Reject the promise
-            {
+            // Only reject the promise if reply() wasn't already called before the error
+            if (!replyContext->consumed.exchange(true)) {
                 std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
                 auto it = _pendingRequests.find(requestId);
                 if (it != _pendingRequests.end()) {
