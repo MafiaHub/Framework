@@ -30,6 +30,10 @@ namespace Framework::Scripting {
         }
 
         if (!CreateContext()) {
+            _isolate->Dispose();
+            _isolate = nullptr;
+            delete _createParams.array_buffer_allocator;
+            _createParams.array_buffer_allocator = nullptr;
             return false;
         }
 
@@ -81,6 +85,8 @@ namespace Framework::Scripting {
 
         if (!_isolate) {
             _lastError = "Failed to create V8 isolate";
+            delete _createParams.array_buffer_allocator;
+            _createParams.array_buffer_allocator = nullptr;
             return false;
         }
 
