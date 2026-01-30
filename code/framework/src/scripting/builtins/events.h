@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
@@ -138,6 +139,7 @@ namespace Framework::Scripting {
             const std::string &aggregateErrorMessage);
 
         // Remove callback data from tracking (called when promise settles)
+        // Takes raw pointer and finds the corresponding shared_ptr to remove
         void RemovePendingCallback(AllSettledCallbackData *data);
 
         // Global handlers: eventName -> handlers (FIFO order)
@@ -153,7 +155,7 @@ namespace Framework::Scripting {
         std::unique_ptr<CallbackContext> _callbackContext;
 
         // Track pending AllSettled callbacks for cleanup on destruction
-        std::set<AllSettledCallbackData *> _pendingCallbacks;
+        std::set<std::shared_ptr<AllSettledCallbackData>> _pendingCallbacks;
         std::mutex _pendingCallbacksMutex;
     };
 

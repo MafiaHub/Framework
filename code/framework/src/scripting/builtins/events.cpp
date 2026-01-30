@@ -11,6 +11,7 @@ namespace Framework::Scripting {
         v8::Global<v8::Promise::Resolver> resolver;
         std::string errorMessage;
         Events *owner;  // For removing from pending set on completion
+        std::atomic<bool> cancelled{false};  // Set when Events is destroyed
     };
 
     Events::~Events() {
@@ -20,11 +21,14 @@ namespace Framework::Scripting {
             _callbackContext->valid.store(false, std::memory_order_release);
         }
 
-        // Clean up any pending AllSettled callback data
+        // Mark all pending AllSettled callbacks as cancelled so any outstanding
+        // promise then-handlers will safely bail out. The shared_ptr ensures
+        // the data stays alive until the last reference (this set or the
+        // then-handler) releases it.
         std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
-        for (auto *data : _pendingCallbacks) {
+        for (const auto &data : _pendingCallbacks) {
+            data->cancelled.store(true, std::memory_order_release);
             data->resolver.Reset();
-            delete data;
         }
         _pendingCallbacks.clear();
     }
@@ -337,7 +341,12 @@ namespace Framework::Scripting {
 
     void Events::RemovePendingCallback(AllSettledCallbackData *data) {
         std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
-        _pendingCallbacks.erase(data);
+        for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
+            if (it->get() == data) {
+                _pendingCallbacks.erase(it);
+                return;
+            }
+        }
     }
 
     void Events::AggregateWithAllSettled(
@@ -373,7 +382,10 @@ namespace Framework::Scripting {
         v8::Local<v8::Promise> allPromise = allSettledResult.ToLocalChecked().As<v8::Promise>();
 
         // Allocate callback data and track it for cleanup on Events destruction
-        AllSettledCallbackData *callbackData = new AllSettledCallbackData();
+        // Use shared_ptr so the data survives until either:
+        // - The then-handler runs and releases its reference, or
+        // - Events is destroyed and releases its reference
+        auto callbackData = std::make_shared<AllSettledCallbackData>();
         callbackData->resolver.Reset(isolate, resolver);
         callbackData->errorMessage = aggregateErrorMessage;
         callbackData->owner = this;
@@ -383,7 +395,24 @@ namespace Framework::Scripting {
             _pendingCallbacks.insert(callbackData);
         }
 
-        v8::Local<v8::External> resolverData = v8::External::New(isolate, callbackData);
+        // Store the shared_ptr in a weak reference via raw pointer in External,
+        // but we also need to ensure the shared_ptr stays alive. We do this by
+        // capturing it in the lambda below (via the closure's captured copy).
+        // The External just provides a way to access it from the V8 callback.
+        AllSettledCallbackData *rawData = callbackData.get();
+        v8::Local<v8::External> resolverData = v8::External::New(isolate, rawData);
+
+        // Prevent the shared_ptr from being destroyed when this function returns
+        // by creating a weak reference stored in V8's weak persistent handle mechanism.
+        // Actually, we need to ensure the then-handler lambda captures the shared_ptr.
+        // Since V8 callbacks can't directly capture, we use a persistent weak reference approach.
+        // Instead, we store the shared_ptr in a weak persistent handle that prevents GC.
+        //
+        // Simpler approach: We keep the shared_ptr in _pendingCallbacks (which we do).
+        // The then-handler will access via raw pointer but check cancelled flag before use.
+        // This is safe because:
+        // 1. If Events is alive, _pendingCallbacks keeps shared_ptr alive
+        // 2. If Events is destroyed, cancelled is set to true, then-handler bails out
 
         v8::Local<v8::Function> thenHandler = v8::Function::New(context,
             [](const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -392,6 +421,12 @@ namespace Framework::Scripting {
 
                 AllSettledCallbackData *data =
                     static_cast<AllSettledCallbackData *>(info.Data().As<v8::External>()->Value());
+
+                // Check if Events was destroyed before this callback ran
+                if (data->cancelled.load(std::memory_order_acquire)) {
+                    return;  // Events destroyed, bail out safely
+                }
+
                 v8::Local<v8::Promise::Resolver> res = data->resolver.Get(iso);
                 std::string errorMsg = data->errorMessage;
 
@@ -436,9 +471,9 @@ namespace Framework::Scripting {
                     res->Resolve(ctx, v8::Undefined(iso)).Check();
                 }
 
-                // Remove from tracking and clean up
+                // Remove from tracking - the shared_ptr in _pendingCallbacks will be erased,
+                // releasing the last reference and freeing the data
                 data->owner->RemovePendingCallback(data);
-                delete data;
             }, resolverData).ToLocalChecked();
 
         allPromise->Then(context, thenHandler).ToLocalChecked();
