@@ -229,8 +229,8 @@ macro(link_shared_deps target_name)
         target_link_libraries(${target_name} "-framework CoreFoundation" "-framework Foundation" "-framework GSS" "-framework Security" "-framework CoreText" "-framework CoreGraphics" bsm)
     endif()
 
-    # Global libraries
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl v8 v8pp)
+    # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl)
 
     # Required libraries for windows
     if(WIN32)
@@ -243,13 +243,15 @@ endmacro()
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
+target_link_libraries(Framework v8 v8pp)
 
 if(WIN32)
     link_shared_deps(FrameworkClient)
+    target_link_libraries(FrameworkClient v8 v8pp)
 endif()
 
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer MafiaHubServices libsig libnode)
+target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
 
 # FrameworkServer-specific includes
 target_include_directories(FrameworkServer PRIVATE
