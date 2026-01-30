@@ -3,17 +3,15 @@
 
 #include <logging/logger.h>
 
+#include <cmath>
+#include <limits>
 #include <sstream>
 
 namespace Framework::Scripting {
 
-    ResourceManager *Console::_resourceManager = nullptr;
-
     void Console::Register(v8::Isolate *isolate,
                           v8::Local<v8::Context> context,
                           ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         v8::Local<v8::Object> consoleObj = v8::Object::New(isolate);
 
         // Store resource manager as external data for callbacks
@@ -56,7 +54,9 @@ namespace Framework::Scripting {
                 ss << v8pp::from_v8<std::string>(isolate, value);
             } else if (value->IsNumber()) {
                 double num = value->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0);
-                if (num == static_cast<int64_t>(num)) {
+                if (num >= static_cast<double>(std::numeric_limits<int64_t>::min()) &&
+                    num <= static_cast<double>(std::numeric_limits<int64_t>::max()) &&
+                    std::trunc(num) == num) {
                     ss << static_cast<int64_t>(num);
                 } else {
                     ss << num;
