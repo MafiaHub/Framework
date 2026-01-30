@@ -183,5 +183,17 @@ set(LIBNODE_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}" CACHE PATH "libnode include di
 set(LIBNODE_LIBRARY_DIR "${LIBNODE_LIB_DIR}" CACHE PATH "libnode library directory" FORCE)
 set(V8_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}/v8" CACHE PATH "V8 include directories" FORCE)
 
+# On Windows, create a custom target to copy libnode.dll to the bin directory.
+# Executables that link against libnode need to depend on this target.
+if(WIN32)
+    set(LIBNODE_DLL_PATH "${LIBNODE_BIN_DIR}/${LIBNODE_DLL_NAME}" CACHE PATH "libnode DLL path" FORCE)
+
+    add_custom_target(libnode_copy_dll
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBNODE_DLL_PATH}" "${CMAKE_BINARY_DIR}/bin/"
+        COMMENT "Copying libnode.dll to bin directory"
+    )
+endif()
+
 message(STATUS "libnode: Include dir: ${LIBNODE_INCLUDE_DIR}")
 message(STATUS "libnode: Library dir: ${LIBNODE_LIB_DIR}")
