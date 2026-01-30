@@ -254,6 +254,7 @@ target_link_libraries(FrameworkServer MafiaHubServices libsig libnode)
 # FrameworkServer-specific includes
 target_include_directories(FrameworkServer PRIVATE
     ${CMAKE_SOURCE_DIR}/vendors/libsig
+    ${LIBNODE_UV_INCLUDE_DIR}
 )
 
 # FrameworkServer needs Node.js internal APIs for the scripting engine

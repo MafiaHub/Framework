@@ -124,8 +124,13 @@ target_include_directories(libnode SYSTEM INTERFACE
     "${LIBNODE_INCLUDE_DIR}"
     "${LIBNODE_INCLUDE_DIR}/node"
     "${LIBNODE_INCLUDE_DIR}/v8"
-    "${LIBNODE_INCLUDE_DIR}/uv"
 )
+
+# libuv headers are only needed by code that directly uses libuv APIs.
+# Adding them to INTERFACE causes Windows SDK errno conflicts (EINVAL/ERANGE undefined)
+# because uv.h includes system headers in a problematic order.
+# Targets that need libuv should add this include directory themselves.
+set(LIBNODE_UV_INCLUDE_DIR "${LIBNODE_INCLUDE_DIR}/uv" CACHE PATH "libuv include directory" FORCE)
 
 # Note: NODE_WANT_INTERNALS is needed for Node.js internal APIs but causes
 # Windows SDK errno conflicts when propagated to all targets via PCH compilation.
