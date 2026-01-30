@@ -5,6 +5,16 @@
 namespace Framework::Scripting {
 
     bool PackageManifest::Parse(const std::string &filepath) {
+        // Reset state to avoid stale data from previous parse attempts
+        _valid = false;
+        _error.clear();
+        _name.clear();
+        _version.clear();
+        _description.clear();
+        _author.clear();
+        _moduleType = ModuleType::CommonJS;
+        _mafiahubConfig = MafiaHubConfig {};
+
         std::ifstream file(filepath);
         if (!file.is_open()) {
             _error = "Failed to open: " + filepath;
@@ -22,6 +32,16 @@ namespace Framework::Scripting {
     }
 
     bool PackageManifest::ParseJson(const nlohmann::json &json) {
+        // Reset state to avoid stale data from previous parse attempts
+        _valid = false;
+        _error.clear();
+        _name.clear();
+        _version.clear();
+        _description.clear();
+        _author.clear();
+        _moduleType = ModuleType::CommonJS;
+        _mafiahubConfig = MafiaHubConfig {};
+
         // Required fields
         if (!json.contains("name") || !json["name"].is_string()) {
             _error = "Missing required field: name";
