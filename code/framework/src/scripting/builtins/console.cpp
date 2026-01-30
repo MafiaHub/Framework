@@ -110,20 +110,22 @@ namespace Framework::Scripting {
         return ss.str();
     }
 
-    // Helper to get resource context - uses V8 stack trace as fallback for async ES modules
-    std::string GetResourceContextForConsole(v8::Isolate *isolate, ResourceManager *manager) {
-        if (!manager) {
-            return "";
-        }
+    namespace {
+        // Helper to get resource context - uses V8 stack trace as fallback for async ES modules
+        std::string GetResourceContextForConsole(v8::Isolate *isolate, ResourceManager *manager) {
+            if (!manager) {
+                return "";
+            }
 
-        std::string resourceName = manager->GetCurrentResourceContext();
-        if (!resourceName.empty()) {
-            return resourceName;
-        }
+            std::string resourceName = manager->GetCurrentResourceContext();
+            if (!resourceName.empty()) {
+                return resourceName;
+            }
 
-        // Fallback: extract resource name from V8 call stack file paths
-        return manager->GetResourceContextFromStack(isolate);
-    }
+            // Fallback: extract resource name from V8 call stack file paths
+            return manager->GetResourceContextFromStack(isolate);
+        }
+    } // namespace
 
     void Console::LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level) {
         v8::Isolate *isolate = args.GetIsolate();
