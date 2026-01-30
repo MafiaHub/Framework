@@ -1,6 +1,7 @@
 add_executable(FrameworkTests framework_ut.cpp)
 
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
+target_include_directories(FrameworkTests SYSTEM PRIVATE ${LIBNODE_UV_INCLUDE_DIR})
 target_link_libraries(FrameworkTests Framework FrameworkServer libnode)
 
 # Tests use Node.js APIs through the scripting engine
