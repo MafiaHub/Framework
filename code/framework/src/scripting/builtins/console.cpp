@@ -84,11 +84,16 @@ namespace Framework::Scripting {
                         stringifyValue->IsFunction()) {
                         v8::Local<v8::Function> stringify = stringifyValue.As<v8::Function>();
                         v8::Local<v8::Value> jsonArgs[1] = {obj};
+
+                        // Use TryCatch to handle circular structures and other stringify errors
+                        v8::TryCatch tryCatch(isolate);
                         v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
-                        if (!jsonResult.IsEmpty()) {
-                            ss << v8pp::from_v8<std::string>(isolate, jsonResult.ToLocalChecked());
-                        } else {
+
+                        if (tryCatch.HasCaught() || jsonResult.IsEmpty()) {
+                            tryCatch.Reset();
                             ss << "[Object]";
+                        } else {
+                            ss << v8pp::from_v8<std::string>(isolate, jsonResult.ToLocalChecked());
                         }
                     } else {
                         ss << "[Object]";
