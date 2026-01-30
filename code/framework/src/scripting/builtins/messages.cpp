@@ -147,12 +147,16 @@ namespace Framework::Scripting {
         }
 
         // Create reply function
+        // Note: We heap-allocate the request ID to avoid truncation on 32-bit systems
+        // where void* is 4 bytes but uint64_t is 8 bytes.
         auto replyCallback = [](const v8::FunctionCallbackInfo<v8::Value> &replyArgs) {
             v8::Isolate *replyIsolate = replyArgs.GetIsolate();
             v8::HandleScope replyScope(replyIsolate);
             v8::Local<v8::Context> replyContext = replyIsolate->GetCurrentContext();
 
-            uint64_t reqId = reinterpret_cast<uintptr_t>(replyArgs.Data().As<v8::External>()->Value());
+            uint64_t *reqIdPtr = static_cast<uint64_t *>(replyArgs.Data().As<v8::External>()->Value());
+            uint64_t reqId = *reqIdPtr;
+            delete reqIdPtr;
 
             v8::Local<v8::Value> response = replyArgs.Length() > 0 ? replyArgs[0] : v8::Undefined(replyIsolate).As<v8::Value>();
 
@@ -166,7 +170,8 @@ namespace Framework::Scripting {
             }
         };
 
-        v8::Local<v8::External> requestIdData = v8::External::New(isolate, reinterpret_cast<void *>(requestId));
+        uint64_t *requestIdPtr = new uint64_t(requestId);
+        v8::Local<v8::External> requestIdData = v8::External::New(isolate, requestIdPtr);
         v8::Local<v8::Function> replyFn = v8::Function::New(context, replyCallback, requestIdData).ToLocalChecked();
 
         // Call the handler with (payload, reply)
@@ -185,6 +190,9 @@ namespace Framework::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "[{}] Message handler '{}' error: {}",
                 targetResource, messageType, *error ? *error : "Unknown error");
+
+            // Clean up the heap-allocated request ID since replyCallback won't be called
+            delete requestIdPtr;
 
             // Reject the promise
             {
