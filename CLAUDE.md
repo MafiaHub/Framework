@@ -16,8 +16,13 @@ cmake --build build --target RunFrameworkTests  # Run tests
 ```
 
 **Windows:**
-- Use Visual Studio 2022 with CMake tools installed
-- Open the repository folder in Visual Studio for automatic setup
+```bash
+cmake -B build              # Configure
+cmake --build build         # Build
+cmake --build build --target RunFrameworkTests  # Run tests
+```
+
+Or use Visual Studio 2022 with CMake tools installed and open the repository folder for automatic setup.
 
 ## Project Structure
 
@@ -47,7 +52,7 @@ The framework provides ready-to-use server and client implementations:
 - **Server** (`integrations/server/instance.h`) - Complete game server with HTTP endpoints, command processing, scripting, and MafiaHub Services integration
 - **Client** (`integrations/client/instance.h`) - Game client with rendering, Discord presence, asset downloading, and networking
 
-Both expose virtual methods (`PostInit`, `PostUpdate`, `ModuleRegister`) for game-specific customization.
+Both expose virtual methods (`PostInit`, `PostUpdate`, `PreShutdown`, `ModuleRegister`) for game-specific customization.
 
 ### Key Patterns
 
@@ -69,6 +74,12 @@ Format: `Module: Brief commit description`
 - Wrap messages at 72 characters
 - Rebase on `develop` branch
 - Split changes into atomic commits
+
+## Version Semantics
+
+- **PATCH**: Changes not affecting peer sync or scripting layer
+- **MINOR**: Scripting layer changes
+- **MAJOR**: Netcode, shared ECS modules, or sync flow changes (requires both client and server update)
 
 ## Key Dependencies
 
