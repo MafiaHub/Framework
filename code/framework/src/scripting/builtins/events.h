@@ -80,6 +80,16 @@ namespace Framework::Scripting {
          */
         size_t GetListenerCount(const std::string &eventName);
 
+        /**
+         * Add additional reserved events (e.g., from game-specific code).
+         */
+        void AddReservedEvents(const std::set<std::string> &events);
+
+        /**
+         * Check if an event name is reserved (static + dynamic).
+         */
+        bool IsEventReserved(const std::string &eventName) const;
+
       private:
         /**
          * Context data passed to V8 callbacks via External.
@@ -150,6 +160,9 @@ namespace Framework::Scripting {
 
         std::mutex _handlersMutex;
         ResourceManager *_resourceManager = nullptr;
+
+        // Additional reserved events added at runtime
+        std::set<std::string> _additionalReservedEvents;
 
         // Stored callback context (lifetime tied to this Events instance)
         std::unique_ptr<CallbackContext> _callbackContext;

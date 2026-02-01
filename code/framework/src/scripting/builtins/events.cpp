@@ -577,8 +577,8 @@ namespace Framework::Scripting {
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
 
-        // Check reserved events
-        if (IsReservedEvent(eventName)) {
+        // Check reserved events (static + dynamic)
+        if (ctx->events->IsEventReserved(eventName)) {
             isolate->ThrowException(v8::Exception::Error(
                 v8pp::to_v8(isolate, "Events.emit: cannot emit reserved event '" + eventName + "'")));
             return;
@@ -620,8 +620,8 @@ namespace Framework::Scripting {
         std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[1]);
 
-        // Check reserved events
-        if (IsReservedEvent(eventName)) {
+        // Check reserved events (static + dynamic)
+        if (ctx->events->IsEventReserved(eventName)) {
             isolate->ThrowException(v8::Exception::Error(
                 v8pp::to_v8(isolate, "Events.emitTo: cannot emit reserved event '" + eventName + "'")));
             return;
@@ -789,6 +789,17 @@ namespace Framework::Scripting {
             return it->second.size();
         }
         return 0;
+    }
+
+    void Events::AddReservedEvents(const std::set<std::string> &events) {
+        _additionalReservedEvents.insert(events.begin(), events.end());
+    }
+
+    bool Events::IsEventReserved(const std::string &eventName) const {
+        if (IsReservedEvent(eventName)) {
+            return true;
+        }
+        return _additionalReservedEvents.find(eventName) != _additionalReservedEvents.end();
     }
 
     void Events::ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
