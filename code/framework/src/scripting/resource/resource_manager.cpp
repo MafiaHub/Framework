@@ -578,7 +578,11 @@ namespace Framework::Scripting {
         std::string rootStr = canonicalRoot.string();
         // Ensure the root ends with a separator for proper matching
         if (!rootStr.empty() && rootStr.back() != '/' && rootStr.back() != '\\') {
+#ifdef _WIN32
+            rootStr += '\\';
+#else
             rootStr += '/';
+#endif
         }
 
         // Look for the first frame with a file path in the resources directory

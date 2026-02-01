@@ -17,6 +17,7 @@ namespace Framework::Integrations::Client::Scripting {
     struct ServerResourceInfo {
         std::string name;
         std::string version;
+        uint32_t hash = 0;
     };
 
     /**
@@ -109,6 +110,15 @@ namespace Framework::Integrations::Client::Scripting {
          */
         const std::vector<ServerResourceInfo> &GetServerResourceList() const {
             return _serverResourceList;
+        }
+
+        /**
+         * Set the server resource list (without triggering download checks).
+         * Used when resources have already been downloaded.
+         */
+        void SetServerResourceList(const std::vector<ServerResourceInfo> &resources) {
+            _serverResourceList = resources;
+            _resourcesSynced = true;
         }
 
         /**

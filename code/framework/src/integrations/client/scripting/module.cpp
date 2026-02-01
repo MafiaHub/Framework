@@ -200,6 +200,15 @@ namespace Framework::Integrations::Client::Scripting {
             return false;
         }
 
+        // Discover all resources in the cache path
+        size_t discovered = _resourceManager->DiscoverResources();
+        if (discovered == 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
+                "No JS resources discovered in: {}", _resourceCachePath);
+            return true; // Not an error, just no resources
+        }
+
+        // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result.success) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(

@@ -218,10 +218,10 @@ macro(link_shared_deps target_name)
     )
 
     # Implementation-only vendor headers (PRIVATE - not part of public API)
+    # Note: httplib include path is provided by the httplib target (uses split headers when HTTPLIB_COMPILE=ON)
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/vendors/cppfs/source/cppfs/include
         ${CMAKE_SOURCE_DIR}/vendors/semver
-        ${CMAKE_SOURCE_DIR}/vendors/httplib
         ${CMAKE_SOURCE_DIR}/vendors/sentry/include
         ${CMAKE_SOURCE_DIR}/vendors/curl/include
         ${CMAKE_SOURCE_DIR}/vendors/ftl/include

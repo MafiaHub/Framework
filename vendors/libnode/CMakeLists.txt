@@ -182,8 +182,36 @@ target_include_directories(v8 SYSTEM INTERFACE
 
 target_compile_features(v8 INTERFACE cxx_std_17)
 
-# V8 needs to link against libnode at runtime
-target_link_libraries(v8 INTERFACE libnode)
+# V8 platform libraries (for v8::platform::NewDefaultPlatform, etc.)
+# These are separate from libnode and needed for standalone V8 usage on client
+if(WIN32)
+    set(V8_LIBPLATFORM_NAME "v8_libplatform.lib")
+    set(V8_LIBBASE_NAME "v8_libbase.lib")
+else()
+    set(V8_LIBPLATFORM_NAME "v8_libplatform.a")
+    set(V8_LIBBASE_NAME "v8_libbase.a")
+endif()
+
+# Create imported targets for V8 platform libraries
+if(EXISTS "${LIBNODE_LIB_DIR}/${V8_LIBPLATFORM_NAME}")
+    add_library(v8_libplatform STATIC IMPORTED GLOBAL)
+    set_target_properties(v8_libplatform PROPERTIES
+        IMPORTED_LOCATION "${LIBNODE_LIB_DIR}/${V8_LIBPLATFORM_NAME}"
+    )
+
+    add_library(v8_libbase STATIC IMPORTED GLOBAL)
+    set_target_properties(v8_libbase PROPERTIES
+        IMPORTED_LOCATION "${LIBNODE_LIB_DIR}/${V8_LIBBASE_NAME}"
+    )
+
+    # V8 interface links to platform libs (for client) and libnode (for runtime symbols)
+    target_link_libraries(v8 INTERFACE v8_libplatform v8_libbase libnode)
+    message(STATUS "v8: Using standalone V8 platform libraries")
+else()
+    # Fallback: link only to libnode (server use case)
+    target_link_libraries(v8 INTERFACE libnode)
+    message(STATUS "v8: V8 platform libraries not found, using libnode only")
+endif()
 
 # Export paths for other modules
 set(LIBNODE_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}" CACHE PATH "libnode include directories" FORCE)
