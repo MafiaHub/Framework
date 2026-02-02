@@ -158,7 +158,7 @@ namespace Framework::Scripting {
         // Local handlers: resourceName -> eventName -> handlers
         std::map<std::string, std::map<std::string, std::vector<EventHandler>>> _localHandlers;
 
-        std::mutex _handlersMutex;
+        mutable std::mutex _handlersMutex;
         ResourceManager *_resourceManager = nullptr;
 
         // Additional reserved events added at runtime
