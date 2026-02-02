@@ -301,21 +301,6 @@ namespace Framework::Scripting {
          */
         void ProcessScheduledRestarts();
 
-        /**
-         * Increment pending ES module load count.
-         */
-        void IncrementPendingLoads();
-
-        /**
-         * Decrement pending ES module load count.
-         */
-        void DecrementPendingLoads();
-
-        /**
-         * Check if there are pending ES module loads.
-         */
-        bool HasPendingLoads() const;
-
       private:
         // Internal resource access (mutable)
         Resource *GetResourceMutable(const std::string &name);
@@ -374,9 +359,6 @@ namespace Framework::Scripting {
         };
         std::vector<ScheduledRestart> _scheduledRestarts;
         mutable std::mutex _scheduledRestartsMutex;
-
-        // Pending ES module loads counter
-        std::atomic<int> _pendingESModuleLoads{0};
 
         // Events instance owned by this manager
         Events _events;

@@ -372,8 +372,8 @@ namespace Framework::Integrations::Server {
                 if (!resource) continue;
 
                 // Only process resources with client entry points
-                const auto clientEntry = resource->GetClientEntryPoint();
-                if (clientEntry.empty()) continue;
+                const auto &clientEntryRelative = resource->GetManifest().GetMafiaHubConfig().client;
+                if (clientEntryRelative.empty()) continue;
 
                 const auto resourcePath = resource->GetPath();
 
@@ -386,9 +386,9 @@ namespace Framework::Integrations::Server {
                 }
 
                 // Add the client entry point script
-                std::filesystem::path clientEntryPath = std::filesystem::path(resourcePath) / clientEntry;
+                std::filesystem::path clientEntryPath = std::filesystem::path(resourcePath) / clientEntryRelative;
                 if (std::filesystem::exists(clientEntryPath)) {
-                    std::filesystem::path clientEntryName = std::filesystem::path(resourceName) / clientEntry;
+                    std::filesystem::path clientEntryName = std::filesystem::path(resourceName) / clientEntryRelative;
                     streamer->AddFile(clientEntryPath.string().c_str(), clientEntryName.string().c_str());
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", clientEntryName.string());
                 }

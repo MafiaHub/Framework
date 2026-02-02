@@ -95,11 +95,6 @@ namespace Framework::Integrations::Server::Scripting {
         bool StartAllResources();
 
         /**
-         * Check if there are pending ES module loads.
-         */
-        bool HasPendingLoads() const;
-
-        /**
          * Register the Framework SDK bindings in the engine.
          */
         void RegisterFrameworkBindings();

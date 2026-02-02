@@ -9,62 +9,6 @@
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/exports.h>
 
-namespace {
-    // Global pointer for internal callbacks (set during RegisterFrameworkBindings)
-    Framework::Scripting::ResourceManager *g_resourceManager = nullptr;
-
-    // Called from ES module loader after import completes
-    void EmitResourceStartCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        v8::Isolate *isolate = args.GetIsolate();
-        v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-        if (args.Length() < 1 || !args[0]->IsString()) {
-            return;
-        }
-
-        std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
-
-        if (g_resourceManager) {
-            g_resourceManager->SetCurrentResourceContext(resourceName);
-            g_resourceManager->DecrementPendingLoads();
-        }
-
-        std::vector<v8::Local<v8::Value>> eventArgs;
-        eventArgs.push_back(args[0]);
-        if (g_resourceManager) {
-            g_resourceManager->GetEvents().EmitReserved(isolate, context, "resourceStart", eventArgs);
-        }
-
-        if (g_resourceManager) {
-            g_resourceManager->SetCurrentResourceContext("");
-        }
-    }
-
-    // Called from ES module loader on load error
-    void OnLoadErrorCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        if (g_resourceManager) {
-            g_resourceManager->DecrementPendingLoads();
-        }
-    }
-
-    // Register Framework.__internal functions for ES module lifecycle
-    void RegisterInternalFunctions(v8::Isolate *isolate,
-                                   v8::Local<v8::Context> context,
-                                   v8::Local<v8::Object> frameworkObj) {
-        v8::Local<v8::Object> internalObj = v8::Object::New(isolate);
-        frameworkObj->Set(context, v8pp::to_v8(isolate, "__internal"), internalObj).Check();
-
-        v8::Local<v8::FunctionTemplate> emitTmpl = v8::FunctionTemplate::New(isolate, EmitResourceStartCallback);
-        internalObj->Set(context, v8pp::to_v8(isolate, "emitResourceStart"),
-                         emitTmpl->GetFunction(context).ToLocalChecked()).Check();
-
-        v8::Local<v8::FunctionTemplate> errorTmpl = v8::FunctionTemplate::New(isolate, OnLoadErrorCallback);
-        internalObj->Set(context, v8pp::to_v8(isolate, "onLoadError"),
-                         errorTmpl->GetFunction(context).ToLocalChecked()).Check();
-    }
-} // anonymous namespace
-
 namespace Framework::Integrations::Server::Scripting {
 
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world)
@@ -153,23 +97,17 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
-
-        // Register internal functions for ES module lifecycle
-        g_resourceManager = _resourceManager.get();
-        RegisterInternalFunctions(isolate, context, frameworkObj);
     }
 
     bool ServerScriptingModule::PreShutdown() {
         if (_resourceManager) {
             _resourceManager->StopAll();
         }
-        g_resourceManager = nullptr;
         return true;
     }
 
     bool ServerScriptingModule::Shutdown() {
         _resourceManager.reset();
-        g_resourceManager = nullptr;
 
         if (_nodeEngine) {
             _nodeEngine->Shutdown();
@@ -264,10 +202,6 @@ namespace Framework::Integrations::Server::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
             "Started {} JS resource(s)", result.affectedResources.size());
         return true;
-    }
-
-    bool ServerScriptingModule::HasPendingLoads() const {
-        return _resourceManager && _resourceManager->HasPendingLoads();
     }
 
 } // namespace Framework::Integrations::Server::Scripting

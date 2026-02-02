@@ -12,7 +12,6 @@ namespace Framework::Scripting {
         _version.clear();
         _description.clear();
         _author.clear();
-        _moduleType = ModuleType::CommonJS;
         _mafiahubConfig = MafiaHubConfig {};
 
         std::ifstream file(filepath);
@@ -39,7 +38,6 @@ namespace Framework::Scripting {
         _version.clear();
         _description.clear();
         _author.clear();
-        _moduleType = ModuleType::CommonJS;
         _mafiahubConfig = MafiaHubConfig {};
 
         // Required fields
@@ -57,10 +55,6 @@ namespace Framework::Scripting {
         _version = json.value("version", "1.0.0");
         _description = json.value("description", "");
         _author = json.value("author", "");
-
-        // Module type (Node.js standard: "type": "module" for ES modules)
-        std::string typeStr = json.value("type", "commonjs");
-        _moduleType = (typeStr == "module") ? ModuleType::ESModule : ModuleType::CommonJS;
 
         // MafiaHub config
         if (json.contains("mafiahub") && json["mafiahub"].is_object()) {

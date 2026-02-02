@@ -54,25 +54,29 @@ namespace Framework::World::Modules {
         };
 
         streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-            if (tr && es)
+            // Only send framework update if entity has a valid owner
+            if (tr && es && es->owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+                Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
                 entityUpdate.FromParameters(*tr, es->owner);
-            entityUpdate.SetServerID(e.id());
-            peer->Send(entityUpdate, guid);
+                entityUpdate.SetServerID(e.id());
+                peer->Send(entityUpdate, guid);
+            }
             CALL_CUSTOM_PROC(updateProc);
             return true;
         };
 
         streamable.events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
             const auto tr = e.get<Framework::World::Modules::Base::Transform>();
             const auto es = e.get<Framework::World::Modules::Base::Streamable>();
-            if (tr && es)
+            // Only send framework owner update if entity has a valid owner
+            if (tr && es && es->owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+                Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
                 entityUpdate.FromParameters(es->owner);
-            entityUpdate.SetServerID(e.id());
-            peer->Send(entityUpdate, guid);
+                entityUpdate.SetServerID(e.id());
+                peer->Send(entityUpdate, guid);
+            }
             CALL_CUSTOM_PROC(ownerUpdateProc);
             return true;
         };

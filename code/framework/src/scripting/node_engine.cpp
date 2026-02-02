@@ -211,87 +211,22 @@ namespace Framework::Scripting {
 
         v8::TryCatch tryCatch(_isolate);
 
-        // Use Node.js's vm.Script with USE_MAIN_CONTEXT_DEFAULT_LOADER for proper ES module support
-        // This enables dynamic import() to use Node's module loader
-        v8::Local<v8::Object> global = context->Global();
+        v8::Local<v8::String> source = v8::String::NewFromUtf8(_isolate, code.c_str()).ToLocalChecked();
+        v8::ScriptOrigin origin(v8::String::NewFromUtf8(_isolate, filename.c_str()).ToLocalChecked());
 
-        // Get require function
-        v8::Local<v8::Value> requireVal;
-        v8::Local<v8::String> requireKey = v8::String::NewFromUtf8(_isolate, "require").ToLocalChecked();
-        if (!global->Get(context, requireKey).ToLocal(&requireVal) ||
-            !requireVal->IsFunction()) {
-            _lastError = "require not available";
-            return false;
-        }
-        v8::Local<v8::Function> requireFn = requireVal.As<v8::Function>();
-
-        // require('vm')
-        v8::Local<v8::Value> vmModuleArg = v8::String::NewFromUtf8(_isolate, "vm").ToLocalChecked();
-        v8::Local<v8::Value> vmModule;
-        if (!requireFn->Call(context, global, 1, &vmModuleArg).ToLocal(&vmModule) ||
-            !vmModule->IsObject()) {
-            _lastError = "Failed to require vm module";
-            return false;
-        }
-        v8::Local<v8::Object> vmObj = vmModule.As<v8::Object>();
-
-        // Get vm.Script constructor
-        v8::Local<v8::Value> scriptClassVal;
-        v8::Local<v8::String> scriptKey = v8::String::NewFromUtf8(_isolate, "Script").ToLocalChecked();
-        if (!vmObj->Get(context, scriptKey).ToLocal(&scriptClassVal) || !scriptClassVal->IsFunction()) {
-            _lastError = "vm.Script not available";
-            return false;
-        }
-        v8::Local<v8::Function> scriptClass = scriptClassVal.As<v8::Function>();
-
-        // Get vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER
-        v8::Local<v8::Value> constantsVal;
-        v8::Local<v8::String> constantsKey = v8::String::NewFromUtf8(_isolate, "constants").ToLocalChecked();
-        if (!vmObj->Get(context, constantsKey).ToLocal(&constantsVal) || !constantsVal->IsObject()) {
-            _lastError = "vm.constants not available";
-            return false;
-        }
-        v8::Local<v8::Value> loaderSymbol;
-        v8::Local<v8::String> loaderKey = v8::String::NewFromUtf8(_isolate, "USE_MAIN_CONTEXT_DEFAULT_LOADER").ToLocalChecked();
-        if (!constantsVal.As<v8::Object>()->Get(context, loaderKey).ToLocal(&loaderSymbol)) {
-            _lastError = "vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER not available";
-            return false;
-        }
-
-        // Create options object: { filename, importModuleDynamically: USE_MAIN_CONTEXT_DEFAULT_LOADER }
-        v8::Local<v8::Object> options = v8::Object::New(_isolate);
-        v8::Local<v8::String> filenameKey = v8::String::NewFromUtf8(_isolate, "filename").ToLocalChecked();
-        v8::Local<v8::String> filenameVal = v8::String::NewFromUtf8(_isolate, filename.c_str()).ToLocalChecked();
-        options->Set(context, filenameKey, filenameVal).Check();
-        v8::Local<v8::String> importKey = v8::String::NewFromUtf8(_isolate, "importModuleDynamically").ToLocalChecked();
-        options->Set(context, importKey, loaderSymbol).Check();
-
-        // Create new vm.Script(code, options)
-        v8::Local<v8::String> codeStr = v8::String::NewFromUtf8(_isolate, code.c_str()).ToLocalChecked();
-        v8::Local<v8::Value> ctorArgs[2] = {codeStr, options};
-        v8::Local<v8::Object> scriptInstance;
-        if (!scriptClass->NewInstance(context, 2, ctorArgs).ToLocal(&scriptInstance)) {
+        v8::Local<v8::Script> script;
+        if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
             if (tryCatch.HasCaught()) {
                 v8::String::Utf8Value error(_isolate, tryCatch.Exception());
                 _lastError = *error ? *error : "Script compilation error";
             } else {
-                _lastError = "Failed to create vm.Script instance";
+                _lastError = "Failed to compile script";
             }
             return false;
         }
 
-        // Get script.runInThisContext method
-        v8::Local<v8::Value> runMethodVal;
-        v8::Local<v8::String> runKey = v8::String::NewFromUtf8(_isolate, "runInThisContext").ToLocalChecked();
-        if (!scriptInstance->Get(context, runKey).ToLocal(&runMethodVal) || !runMethodVal->IsFunction()) {
-            _lastError = "script.runInThisContext not available";
-            return false;
-        }
-        v8::Local<v8::Function> runMethod = runMethodVal.As<v8::Function>();
-
-        // Call script.runInThisContext()
         v8::Local<v8::Value> result;
-        if (!runMethod->Call(context, scriptInstance, 0, nullptr).ToLocal(&result)) {
+        if (!script->Run(context).ToLocal(&result)) {
             if (tryCatch.HasCaught()) {
                 v8::String::Utf8Value error(_isolate, tryCatch.Exception());
                 _lastError = *error ? *error : "Runtime error";

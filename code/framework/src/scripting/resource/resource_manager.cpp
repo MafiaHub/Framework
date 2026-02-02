@@ -282,9 +282,8 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Failure(error);
         }
 
-        // For CommonJS modules, emit resourceStart immediately (synchronous loading)
-        // For ES modules, the event is emitted from within the async loader wrapper
-        if (!resource->GetManifest().IsESModule() && _jsEngine && _jsEngine->IsInitialized()) {
+        // Emit resourceStart event
+        if (_jsEngine && _jsEngine->IsInitialized()) {
             v8::Isolate *isolate = _jsEngine->GetIsolate();
             v8::Locker locker(isolate);
             v8::Isolate::Scope isolateScope(isolate);
@@ -410,38 +409,13 @@ namespace Framework::Scripting {
         // Escape resource name for safe embedding in JS strings
         std::string escapedResourceName = EscapeForSingleQuotedJSString(resourceName);
 
-        std::string code;
-        if (resource.GetManifest().IsESModule()) {
-            // ES Module: Load asynchronously, emit resourceStart after handlers are registered
-            // Track pending load so we know when all modules are ready
-            // Use proper file:// URL format and escape for JS string
-            std::string fileUrl = PathToFileURL(absPath);
-            std::string escapedFileUrl = EscapeForSingleQuotedJSString(fileUrl);
-
-            IncrementPendingLoads();
-            code =
-                "(async function() {\n"
-                "    try {\n"
-                "        await import('" + escapedFileUrl + "');\n"
-                "        Framework.__internal.emitResourceStart('" + escapedResourceName + "');\n"
-                "    } catch (err) {\n"
-                "        console.error('[" + escapedResourceName + "] Failed to load:', err.stack || err);\n"
-                "        Framework.__internal.onLoadError('" + escapedResourceName + "');\n"
-                "        throw err;\n"
-                "    }\n"
-                "})();\n";
-        } else {
-            // CommonJS: require() takes paths, use forward slashes and escape for JS string
-            std::string genericPath = absPath.generic_string();
-            std::string escapedPath = EscapeForSingleQuotedJSString(genericPath);
-            code = "(function() { require('" + escapedPath + "'); })();\n";
-        }
+        // CommonJS: require() takes paths, use forward slashes
+        std::string genericPath = absPath.generic_string();
+        std::string escapedPath = EscapeForSingleQuotedJSString(genericPath);
+        std::string code = "(function() { require('" + escapedPath + "'); })();\n";
 
         bool result = _jsEngine->Execute(code, absPathStr);
         if (!result) {
-            if (resource.GetManifest().IsESModule()) {
-                DecrementPendingLoads();
-            }
             outError = _jsEngine->GetLastError();
         }
         return result;
@@ -765,23 +739,6 @@ namespace Framework::Scripting {
         if (_onResourceStateChanged) {
             _onResourceStateChanged(name, oldState, newState);
         }
-    }
-
-    void ResourceManager::IncrementPendingLoads() {
-        ++_pendingESModuleLoads;
-    }
-
-    void ResourceManager::DecrementPendingLoads() {
-        if (_pendingESModuleLoads > 0) {
-            --_pendingESModuleLoads;
-            if (_pendingESModuleLoads == 0) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("All ES modules loaded");
-            }
-        }
-    }
-
-    bool ResourceManager::HasPendingLoads() const {
-        return _pendingESModuleLoads > 0;
     }
 
 } // namespace Framework::Scripting
