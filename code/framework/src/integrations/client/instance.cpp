@@ -405,18 +405,25 @@ namespace Framework::Integrations::Client {
 
             // Parse JSON payload and emit event
             std::vector<v8::Local<v8::Value>> args;
-            try {
-                if (!payloadStr.empty()) {
-                    v8::Local<v8::String> jsonStr = v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocalChecked();
-                    v8::Local<v8::Value> parsed;
-                    if (v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
-                        args.push_back(parsed);
-                    }
+            if (!payloadStr.empty()) {
+                v8::Local<v8::String> jsonStr;
+                if (!v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocal(&jsonStr)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to create V8 string from event payload: {}", payloadStr);
+                    return;
                 }
-            }
-            catch (const std::exception &ex) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
-                return;
+
+                v8::TryCatch tryCatch(isolate);
+                v8::Local<v8::Value> parsed;
+                if (!v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+                    if (tryCatch.HasCaught()) {
+                        v8::String::Utf8Value errorMsg(isolate, tryCatch.Exception());
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", *errorMsg ? *errorMsg : "unknown error");
+                    } else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", payloadStr);
+                    }
+                    return;
+                }
+                args.push_back(parsed);
             }
 
             resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
