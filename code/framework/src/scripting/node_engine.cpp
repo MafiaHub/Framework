@@ -31,9 +31,9 @@ namespace Framework::Scripting {
     std::unique_ptr<node::MultiIsolatePlatform> NodeEngine::_platform = nullptr;
     std::shared_ptr<node::InitializationResult> NodeEngine::_initResult = nullptr;
     bool NodeEngine::_platformInitialized = false;
-    std::vector<std::string> NodeEngine::_nodeArgs = {"mafiahub-server"};
 
-    NodeEngine::NodeEngine() = default;
+    NodeEngine::NodeEngine(const NodeEngineOptions &options)
+        : _options(options) {}
 
     NodeEngine::~NodeEngine() {
         Shutdown();
@@ -97,10 +97,13 @@ namespace Framework::Scripting {
             return true;
         }
 
+        // Build args from options
+        std::vector<std::string> nodeArgs = {_options.processName};
+
         // Initialize Node.js with flags to control V8 platform ourselves
         // Using initializer_list syntax as shown in Node.js docs
         _initResult = node::InitializeOncePerProcess(
-            _nodeArgs,
+            nodeArgs,
             {
                 node::ProcessInitializationFlags::kNoInitializeV8,
                 node::ProcessInitializationFlags::kNoInitializeNodeV8Platform
@@ -162,6 +165,12 @@ namespace Framework::Scripting {
 
         if (loadResult.IsEmpty()) {
             _lastError = "Failed to load Node.js environment";
+            return false;
+        }
+
+        // Apply sandbox restrictions if enabled
+        if (_options.sandboxed && !ApplySandbox()) {
+            _lastError = "Failed to apply sandbox: " + _lastError;
             return false;
         }
 
@@ -325,6 +334,225 @@ namespace Framework::Scripting {
             return _setup->context();
         }
         return v8::Local<v8::Context>();
+    }
+
+    v8::Local<v8::Object> NodeEngine::GetFrameworkObject() const {
+        if (!_setup) {
+            return v8::Local<v8::Object>();
+        }
+        v8::Local<v8::Context> context = _setup->context();
+        v8::Local<v8::Value> frameworkValue;
+        context->Global()
+            ->Get(context, v8::String::NewFromUtf8(_isolate, "Framework").ToLocalChecked())
+            .ToLocal(&frameworkValue);
+        return frameworkValue.As<v8::Object>();
+    }
+
+    bool NodeEngine::ApplySandbox() {
+        // This function disables dangerous Node.js APIs for client-side sandboxing.
+        // We override require() to block dangerous modules and remove dangerous
+        // properties from the global scope and process object.
+
+        const char *sandboxCode = R"JS(
+(function() {
+    'use strict';
+
+    // List of modules that are blocked in sandbox mode
+    const blockedModules = new Set([
+        // Filesystem access
+        'fs', 'fs/promises', 'node:fs', 'node:fs/promises',
+
+        // Network access
+        'net', 'node:net',
+        'dgram', 'node:dgram',
+        'tls', 'node:tls',
+        'http', 'node:http',
+        'https', 'node:https',
+        'http2', 'node:http2',
+        'dns', 'node:dns',
+        'dns/promises', 'node:dns/promises',
+
+        // Process spawning
+        'child_process', 'node:child_process',
+
+        // Threading
+        'worker_threads', 'node:worker_threads',
+        'cluster', 'node:cluster',
+
+        // Other dangerous modules
+        'vm', 'node:vm',
+        'v8', 'node:v8',
+        'inspector', 'node:inspector',
+        'inspector/promises', 'node:inspector/promises',
+        'trace_events', 'node:trace_events',
+        'perf_hooks', 'node:perf_hooks',
+        'async_hooks', 'node:async_hooks',
+        'diagnostics_channel', 'node:diagnostics_channel',
+        'repl', 'node:repl',
+        'readline', 'node:readline',
+        'readline/promises', 'node:readline/promises',
+        'module', 'node:module',
+        'wasi', 'node:wasi',
+        'sqlite', 'node:sqlite',
+        'sea', 'node:sea',
+    ]);
+
+    // Modules that are allowed (safe subset)
+    const allowedModules = new Set([
+        // Core utilities
+        'assert', 'node:assert',
+        'assert/strict', 'node:assert/strict',
+        'buffer', 'node:buffer',
+        'console', 'node:console',
+        'constants', 'node:constants',
+        'crypto', 'node:crypto',
+        'events', 'node:events',
+        'path', 'node:path',
+        'path/posix', 'node:path/posix',
+        'path/win32', 'node:path/win32',
+        'process', 'node:process',
+        'punycode', 'node:punycode',
+        'querystring', 'node:querystring',
+        'stream', 'node:stream',
+        'stream/consumers', 'node:stream/consumers',
+        'stream/promises', 'node:stream/promises',
+        'stream/web', 'node:stream/web',
+        'string_decoder', 'node:string_decoder',
+        'timers', 'node:timers',
+        'timers/promises', 'node:timers/promises',
+        'url', 'node:url',
+        'util', 'node:util',
+        'util/types', 'node:util/types',
+        'zlib', 'node:zlib',
+    ]);
+
+    // Store original require
+    const originalRequire = globalThis.require;
+
+    // Create sandboxed require that blocks dangerous modules
+    function sandboxedRequire(id) {
+        if (blockedModules.has(id)) {
+            throw new Error(`Module '${id}' is not available in sandbox mode`);
+        }
+
+        // For non-builtin modules (npm packages, local files), allow if not in blocked list
+        // But we need to be careful about packages that re-export blocked modules
+        return originalRequire(id);
+    }
+
+    // Copy properties from original require
+    sandboxedRequire.resolve = function(id, options) {
+        if (blockedModules.has(id)) {
+            throw new Error(`Module '${id}' is not available in sandbox mode`);
+        }
+        return originalRequire.resolve(id, options);
+    };
+    sandboxedRequire.cache = originalRequire.cache;
+    sandboxedRequire.main = originalRequire.main;
+
+    // Replace global require
+    globalThis.require = sandboxedRequire;
+
+    // Disable dangerous process methods and properties
+    const process = globalThis.process;
+
+    // Remove access to environment variables (could leak sensitive info)
+    process.env = Object.freeze({});
+
+    // Disable process control methods
+    process.exit = function() {
+        throw new Error('process.exit() is not available in sandbox mode');
+    };
+    process.abort = function() {
+        throw new Error('process.abort() is not available in sandbox mode');
+    };
+    process.kill = function() {
+        throw new Error('process.kill() is not available in sandbox mode');
+    };
+    process.chdir = function() {
+        throw new Error('process.chdir() is not available in sandbox mode');
+    };
+    process.umask = function() {
+        throw new Error('process.umask() is not available in sandbox mode');
+    };
+    process.setuid = function() {
+        throw new Error('process.setuid() is not available in sandbox mode');
+    };
+    process.setgid = function() {
+        throw new Error('process.setgid() is not available in sandbox mode');
+    };
+    process.seteuid = function() {
+        throw new Error('process.seteuid() is not available in sandbox mode');
+    };
+    process.setegid = function() {
+        throw new Error('process.setegid() is not available in sandbox mode');
+    };
+    process.setgroups = function() {
+        throw new Error('process.setgroups() is not available in sandbox mode');
+    };
+    process.initgroups = function() {
+        throw new Error('process.initgroups() is not available in sandbox mode');
+    };
+
+    // Disable dlopen (loading native modules)
+    process.dlopen = function() {
+        throw new Error('process.dlopen() is not available in sandbox mode');
+    };
+
+    // Disable binding (internal Node.js APIs)
+    process.binding = function() {
+        throw new Error('process.binding() is not available in sandbox mode');
+    };
+    process._linkedBinding = function() {
+        throw new Error('process._linkedBinding() is not available in sandbox mode');
+    };
+
+    // Remove reference to main module (prevents path discovery)
+    process.mainModule = undefined;
+
+    // Disable code generation from strings (eval, Function constructor)
+    // This is also set at the C++ level but we reinforce it here
+    // Note: This would require context-level settings which we do in C++
+
+    // Mark sandbox as applied
+    globalThis.__SANDBOX_APPLIED__ = true;
+})();
+)JS";
+
+        v8::TryCatch tryCatch(_isolate);
+        v8::Local<v8::Context> context = _setup->context();
+
+        v8::Local<v8::String> source =
+            v8::String::NewFromUtf8(_isolate, sandboxCode).ToLocalChecked();
+        v8::ScriptOrigin origin(
+            v8::String::NewFromUtf8(_isolate, "<sandbox-init>").ToLocalChecked());
+
+        v8::Local<v8::Script> script;
+        if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
+            if (tryCatch.HasCaught()) {
+                v8::String::Utf8Value error(_isolate, tryCatch.Exception());
+                _lastError = *error ? *error : "Sandbox script compilation error";
+            } else {
+                _lastError = "Failed to compile sandbox script";
+            }
+            return false;
+        }
+
+        v8::Local<v8::Value> result;
+        if (!script->Run(context).ToLocal(&result)) {
+            if (tryCatch.HasCaught()) {
+                v8::String::Utf8Value error(_isolate, tryCatch.Exception());
+                _lastError = *error ? *error : "Sandbox script execution error";
+            } else {
+                _lastError = "Failed to execute sandbox script";
+            }
+            return false;
+        }
+
+        // Also disable code generation from strings at the V8 level
+        context->AllowCodeGenerationFromStrings(false);
+
+        return true;
     }
 
 } // namespace Framework::Scripting

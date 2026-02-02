@@ -27,8 +27,8 @@ set(FRAMEWORK_SRC
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
-    # JavaScript scripting (V8/Node.js)
-    src/scripting/v8_engine.cpp
+    # JavaScript scripting builtins (used by both client and server)
+    # Note: node_engine.cpp is in FrameworkNodeEngine object library due to special compile flags
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
     src/scripting/builtins/vector4.cpp
@@ -55,8 +55,7 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/instance.cpp
     src/integrations/server/networking/engine.cpp
 
-    # JavaScript scripting (Node.js engine for server)
-    src/scripting/node_engine.cpp
+    # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
 )
 
@@ -244,13 +243,49 @@ macro(link_shared_deps target_name)
     endif()
 endmacro()
 
+# FrameworkNodeEngine - Object library for node_engine.cpp
+# This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
+# cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
+add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp)
+
+# Apply the same shared dependencies as Framework
+target_include_directories(FrameworkNodeEngine PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_include_directories(FrameworkNodeEngine PUBLIC
+    ${CMAKE_SOURCE_DIR}/vendors/glm
+    ${CMAKE_SOURCE_DIR}/vendors/json/include
+    ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
+    ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+    ${CMAKE_SOURCE_DIR}/vendors
+)
+
+# Link to libnode for headers (includes V8 and Node.js headers)
+# Also link spdlog for logging used by node_engine.cpp
+target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog)
+
+# Node.js internal APIs require NODE_WANT_INTERNALS
+# NOTE: Do NOT add ${LIBNODE_UV_INCLUDE_DIR} here - it causes Windows SDK errno
+# conflicts because #include <errno.h> finds uv/errno.h instead of system errno.h.
+# The main libnode include dir already has uv.h which includes uv/* properly.
+target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
+
+# Match Framework compile definitions and features
+target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
+target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_17)
+
 # Link the solutions based on the platform
 link_shared_deps(Framework)
-target_link_libraries(Framework v8 v8pp)
+target_link_libraries(Framework v8 v8pp libnode)
+
+# Include FrameworkNodeEngine objects in Framework
+target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
 
 if(WIN32)
     link_shared_deps(FrameworkClient)
-    target_link_libraries(FrameworkClient v8 v8pp)
+    target_link_libraries(FrameworkClient v8 v8pp libnode)
 endif()
 
 link_shared_deps(FrameworkServer)
@@ -260,12 +295,6 @@ target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
 target_include_directories(FrameworkServer PRIVATE
     ${CMAKE_SOURCE_DIR}/vendors/libsig
 )
-target_include_directories(FrameworkServer SYSTEM PRIVATE
-    ${LIBNODE_UV_INCLUDE_DIR}
-)
-
-# FrameworkServer needs Node.js internal APIs for the scripting engine
-target_compile_definitions(FrameworkServer PRIVATE NODE_WANT_INTERNALS=1)
 
 # Platform-dependent post processing
 if(WIN32)

@@ -1,5 +1,10 @@
 #pragma once
 
+// CRITICAL: Include <cerrno> BEFORE V8 headers on Windows.
+// V8 headers include Windows SDK headers that can interfere with
+// errno definitions (EINVAL, ERANGE, etc.) needed by <string> and others.
+#include <cerrno>
+
 #include <v8.h>
 
 #include <memory>
@@ -10,7 +15,8 @@ namespace Framework::Scripting {
 
     /**
      * Abstract base class for JavaScript engines.
-     * Provides common interface for both V8 (client) and libnode (server).
+     * Both client (sandboxed) and server (full access) use NodeEngine which
+     * is backed by libnode for a unified Node.js runtime.
      */
     class Engine {
       public:

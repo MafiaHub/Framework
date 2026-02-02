@@ -134,7 +134,7 @@ MODULE(js_features, {
     // ========================================
 
     IT("All builtin types work correctly", {
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         {
@@ -187,7 +187,7 @@ MODULE(js_features, {
     IT("Events.on registers handler and CleanupResource removes it", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;
@@ -229,7 +229,7 @@ MODULE(js_features, {
     IT("Events.emit blocks reserved events from JS", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;
@@ -267,7 +267,7 @@ MODULE(js_features, {
     IT("Events.listenerCount returns correct count", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;
@@ -306,7 +306,7 @@ MODULE(js_features, {
     IT("Events unsubscribe function removes handler", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;
@@ -345,7 +345,7 @@ MODULE(js_features, {
     IT("Events.on throws without resource context", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;
@@ -373,7 +373,7 @@ MODULE(js_features, {
     IT("Events.on throws with invalid arguments", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;
@@ -415,7 +415,7 @@ MODULE(js_features, {
     IT("console methods are callable without crash", {
         EventsTestHelper::Setup();
 
-        NodeEngine engine;
+        NodeEngine engine({});
         EQUALS(engine.Init(), true);
 
         ResourceManagerConfig config;

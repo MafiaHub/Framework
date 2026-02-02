@@ -69,7 +69,11 @@ namespace Framework::Integrations::Server::Scripting {
 
     ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world)
         : _world(world) {
-        _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>();
+        // Create Node.js engine without sandbox for full server capabilities
+        Framework::Scripting::NodeEngineOptions options;
+        options.sandboxed = false;
+        options.processName = "mafiahub-server";
+        _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
     }
 
     ServerScriptingModule::~ServerScriptingModule() {

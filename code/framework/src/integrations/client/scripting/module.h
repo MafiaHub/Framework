@@ -5,7 +5,7 @@
 #include <vector>
 #include <functional>
 
-#include <scripting/v8_engine.h>
+#include <scripting/node_engine.h>
 #include <scripting/resource/resource_manager.h>
 #include <world/client.h>
 
@@ -33,8 +33,8 @@ namespace Framework::Integrations::Client::Scripting {
     /**
      * Client-side JavaScript scripting module with resource management support.
      *
-     * Uses V8 for sandboxed client-side JavaScript execution.
-     * More restricted than server-side (no filesystem, no network).
+     * Uses Node.js in sandboxed mode for client-side JavaScript execution.
+     * Dangerous APIs (filesystem, network, process spawning) are disabled.
      */
     class ClientScriptingModule final {
       public:
@@ -42,14 +42,14 @@ namespace Framework::Integrations::Client::Scripting {
         ~ClientScriptingModule();
 
         /**
-         * Initialize the V8 engine and resource manager.
+         * Initialize the Node.js engine (sandboxed) and resource manager.
          * @param sdkCallback Optional callback for registering additional SDK bindings
          * @return true if initialization succeeded
          */
         bool Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
 
         /**
-         * Shutdown the V8 engine.
+         * Shutdown the Node.js engine.
          */
         bool Shutdown();
 
@@ -60,10 +60,10 @@ namespace Framework::Integrations::Client::Scripting {
         void Update();
 
         /**
-         * Get the V8 engine.
+         * Get the Node.js engine.
          */
-        Framework::Scripting::V8Engine *GetEngine() const {
-            return _v8Engine.get();
+        Framework::Scripting::NodeEngine *GetEngine() const {
+            return _nodeEngine.get();
         }
 
         /**
@@ -161,7 +161,7 @@ namespace Framework::Integrations::Client::Scripting {
         void RegisterFrameworkBindings();
 
       private:
-        std::unique_ptr<Framework::Scripting::V8Engine> _v8Engine;
+        std::unique_ptr<Framework::Scripting::NodeEngine> _nodeEngine;
         std::shared_ptr<World::ClientEngine> _world;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
 

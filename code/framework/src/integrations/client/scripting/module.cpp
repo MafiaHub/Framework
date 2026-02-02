@@ -14,7 +14,11 @@ namespace Framework::Integrations::Client::Scripting {
 
     ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
         : _world(world) {
-        _v8Engine = std::make_unique<Framework::Scripting::V8Engine>();
+        // Create Node.js engine with sandbox mode enabled for client security
+        Framework::Scripting::NodeEngineOptions options;
+        options.sandboxed = true;
+        options.processName = "mafiahub-client";
+        _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
@@ -24,13 +28,13 @@ namespace Framework::Integrations::Client::Scripting {
     bool ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
         // Set the SDK callback before initialization
         if (sdkCallback) {
-            _v8Engine->SetSDKRegisterCallback(sdkCallback);
+            _nodeEngine->SetSDKRegisterCallback(sdkCallback);
         }
 
-        // Initialize the V8 engine
-        if (!_v8Engine->Init()) {
+        // Initialize the Node.js engine (sandboxed)
+        if (!_nodeEngine->Init()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to initialize V8 engine: {}", _v8Engine->GetLastError());
+                "Failed to initialize Node.js engine (sandboxed): {}", _nodeEngine->GetLastError());
             return false;
         }
 
@@ -41,39 +45,39 @@ namespace Framework::Integrations::Client::Scripting {
         config.cascadeStopDependents = true;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
-            _v8Engine.get(), config);
+            _nodeEngine.get(), config);
 
         // Register Framework SDK bindings
         RegisterFrameworkBindings();
 
         // Initialize Framework SDK in the engine
-        if (!_v8Engine->InitFrameworkSDK()) {
+        if (!_nodeEngine->InitFrameworkSDK()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to initialize Framework SDK: {}", _v8Engine->GetLastError());
+                "Failed to initialize Framework SDK: {}", _nodeEngine->GetLastError());
             _resourceManager.reset();
             return false;
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Client scripting module initialized with V8 engine");
+            "Client scripting module initialized with Node.js engine (sandboxed)");
 
         return true;
     }
 
     void ClientScriptingModule::RegisterFrameworkBindings() {
-        if (!_v8Engine || !_v8Engine->IsInitialized()) {
+        if (!_nodeEngine || !_nodeEngine->IsInitialized()) {
             return;
         }
 
-        v8::Isolate *isolate = _v8Engine->GetIsolate();
+        v8::Isolate *isolate = _nodeEngine->GetIsolate();
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolateScope(isolate);
         v8::HandleScope handleScope(isolate);
-        v8::Local<v8::Context> context = _v8Engine->GetContext();
+        v8::Local<v8::Context> context = _nodeEngine->GetContext();
         v8::Context::Scope contextScope(context);
 
-        // Get Framework global object (created by V8Engine)
-        v8::Local<v8::Object> frameworkObj = _v8Engine->GetFrameworkObject();
+        // Get Framework global object (created by NodeEngine)
+        v8::Local<v8::Object> frameworkObj = _nodeEngine->GetFrameworkObject();
         v8::Local<v8::Object> global = context->Global();
 
         // Register math type builtins (on global for parity with server)
@@ -87,7 +91,7 @@ namespace Framework::Integrations::Client::Scripting {
         // Register console override
         Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client)");
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, sandboxed)");
     }
 
     bool ClientScriptingModule::Shutdown() {
@@ -96,9 +100,9 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager.reset();
         }
 
-        if (_v8Engine) {
-            _v8Engine->Shutdown();
-            _v8Engine.reset();
+        if (_nodeEngine) {
+            _nodeEngine->Shutdown();
+            _nodeEngine.reset();
         }
 
         _serverResourceList.clear();
@@ -112,16 +116,21 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager->ProcessScheduledRestarts();
         }
 
-        // Process pending message responses
-        if (_v8Engine && _v8Engine->IsInitialized() && _resourceManager) {
-            v8::Isolate *isolate = _v8Engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = _v8Engine->GetContext();
-            v8::Context::Scope contextScope(context);
+        // Process Node.js event loop and pending message responses
+        if (_nodeEngine && _nodeEngine->IsInitialized()) {
+            // Tick processes libuv events (timers, I/O callbacks, etc.)
+            _nodeEngine->Tick();
 
-            Framework::Scripting::Messages::ProcessPendingResponses(isolate, context);
+            if (_resourceManager) {
+                v8::Isolate *isolate = _nodeEngine->GetIsolate();
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                v8::HandleScope handleScope(isolate);
+                v8::Local<v8::Context> context = _nodeEngine->GetContext();
+                v8::Context::Scope contextScope(context);
+
+                Framework::Scripting::Messages::ProcessPendingResponses(isolate, context);
+            }
         }
     }
 

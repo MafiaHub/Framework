@@ -1,11 +1,14 @@
 # libnode - Node.js as a Library
 #
 # Fetches prebuilt libnode from MafiaHub/MafiaNode releases.
-# Includes V8 headers for client-side usage.
+# Both client and server use libnode for a unified Node.js runtime.
+#
+# Client runs in sandboxed mode (no filesystem, network, or process APIs).
+# Server runs in full mode with complete Node.js capabilities.
 #
 # Targets:
-#   libnode - Shared library for server (full Node.js)
-#   v8      - Interface library for client (V8 headers only, links to libnode)
+#   libnode - Shared library (Node.js runtime for both client and server)
+#   v8      - Interface library for V8 headers and platform libraries
 
 cmake_minimum_required(VERSION 3.20)
 
@@ -45,7 +48,7 @@ elseif(UNIX)
 endif()
 
 set(LIBNODE_ARCHIVE_NAME "libnode-v${LIBNODE_VERSION}-${LIBNODE_PLATFORM}.${LIBNODE_ARCHIVE_EXT}")
-set(LIBNODE_URL "https://github.com/${LIBNODE_GITHUB_REPO}/releases/download/v${LIBNODE_VERSION}/${LIBNODE_ARCHIVE_NAME}")
+set(LIBNODE_URL "https://github.com/${LIBNODE_GITHUB_REPO}/releases/download/libnode-v${LIBNODE_VERSION}/${LIBNODE_ARCHIVE_NAME}")
 set(LIBNODE_EXTRACT_DIR "${LIBNODE_DOWNLOAD_DIR}/libnode-v${LIBNODE_VERSION}-${LIBNODE_PLATFORM}")
 
 message(STATUS "libnode: Version ${LIBNODE_VERSION}, Platform: ${LIBNODE_PLATFORM}")
@@ -127,10 +130,10 @@ else()
     endif()
 endif()
 
+# All headers (node.h, v8.h, uv.h, etc.) are directly in include/
+# No subdirectories for node/ or v8/ - they're all flat
 target_include_directories(libnode SYSTEM INTERFACE
     "${LIBNODE_INCLUDE_DIR}"
-    "${LIBNODE_INCLUDE_DIR}/node"
-    "${LIBNODE_INCLUDE_DIR}/v8"
 )
 
 # libuv headers are only needed by code that directly uses libuv APIs.
@@ -173,11 +176,11 @@ else()
 endif()
 
 # Create v8 interface target (uses V8 headers from libnode)
-# This allows client code to use V8 API without linking full Node.js
+# V8 headers are in the same include/ directory as Node headers
 add_library(v8 INTERFACE)
 
 target_include_directories(v8 SYSTEM INTERFACE
-    "${LIBNODE_INCLUDE_DIR}/v8"
+    "${LIBNODE_INCLUDE_DIR}"
 )
 
 target_compile_features(v8 INTERFACE cxx_std_17)
@@ -216,7 +219,7 @@ endif()
 # Export paths for other modules
 set(LIBNODE_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}" CACHE PATH "libnode include directories" FORCE)
 set(LIBNODE_LIBRARY_DIR "${LIBNODE_LIB_DIR}" CACHE PATH "libnode library directory" FORCE)
-set(V8_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}/v8" CACHE PATH "V8 include directories" FORCE)
+set(V8_INCLUDE_DIRS "${LIBNODE_INCLUDE_DIR}" CACHE PATH "V8 include directories" FORCE)
 
 # On Windows, create a custom target to copy libnode.dll to the output bin directory.
 # Executables that link against libnode need to depend on this target.
