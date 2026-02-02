@@ -26,12 +26,15 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     bool ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
-        // Set the SDK callback before initialization
-        if (sdkCallback) {
+        // Check if engine is already initialized (e.g., after Reset())
+        bool engineAlreadyInitialized = _nodeEngine && _nodeEngine->IsInitialized();
+
+        // Set the SDK callback before initialization (only on first init)
+        if (!engineAlreadyInitialized && sdkCallback) {
             _nodeEngine->SetSDKRegisterCallback(sdkCallback);
         }
 
-        // Initialize the Node.js engine (sandboxed)
+        // Initialize the Node.js engine (sandboxed) - no-op if already initialized
         if (!_nodeEngine->Init()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "Failed to initialize Node.js engine (sandboxed): {}", _nodeEngine->GetLastError());
@@ -47,15 +50,16 @@ namespace Framework::Integrations::Client::Scripting {
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
             _nodeEngine.get(), config);
 
-        // Register Framework SDK bindings
-        RegisterFrameworkBindings();
+        // Register Framework SDK bindings and call SDK callback only on first init
+        if (!engineAlreadyInitialized) {
+            RegisterFrameworkBindings();
 
-        // Initialize Framework SDK in the engine
-        if (!_nodeEngine->InitFrameworkSDK()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to initialize Framework SDK: {}", _nodeEngine->GetLastError());
-            _resourceManager.reset();
-            return false;
+            if (!_nodeEngine->InitFrameworkSDK()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                    "Failed to initialize Framework SDK: {}", _nodeEngine->GetLastError());
+                _resourceManager.reset();
+                return false;
+            }
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
@@ -109,6 +113,19 @@ namespace Framework::Integrations::Client::Scripting {
         _resourcesSynced = false;
 
         return true;
+    }
+
+    void ClientScriptingModule::Reset() {
+        // Stop all resources but keep the engine running
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+            _resourceManager.reset();
+        }
+
+        _serverResourceList.clear();
+        _resourcesSynced = false;
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Client scripting module reset");
     }
 
     void ClientScriptingModule::Update() {

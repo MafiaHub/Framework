@@ -50,8 +50,16 @@ namespace Framework::Integrations::Client::Scripting {
 
         /**
          * Shutdown the Node.js engine.
+         * Use this only when the client is truly closing.
          */
         bool Shutdown();
+
+        /**
+         * Reset the scripting module for reconnection.
+         * Stops all resources and clears state but keeps the engine running.
+         * Use this on disconnect to avoid expensive reinitialization.
+         */
+        void Reset();
 
         /**
          * Update tick - process pending operations.

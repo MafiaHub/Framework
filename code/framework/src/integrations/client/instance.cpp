@@ -368,8 +368,8 @@ namespace Framework::Integrations::Client {
                 _onConnectionClosed();
             }
 
-            // Request the scripting engine to clean up loaded scripts
-            _scriptingModule->Shutdown();
+            // Reset the scripting engine (keeps engine alive, just stops resources)
+            _scriptingModule->Reset();
 
 #ifdef _WIN64
             // Destroy scriptable web views
