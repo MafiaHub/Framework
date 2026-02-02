@@ -301,7 +301,7 @@ if(WIN32)
     target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv shlwapi)
 
-    target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK DearImGUI)
+    target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK DearImGUI ImGuizmo)
 
     set(CLIENT_SHARED_LIBS minhook SteamSDK udis86)
     target_link_libraries(FrameworkClient ${CLIENT_SHARED_LIBS} ${FREETYPE_LIBRARY})
@@ -310,6 +310,7 @@ if(WIN32)
     target_include_directories(FrameworkClient PRIVATE
         ${CMAKE_SOURCE_DIR}/vendors/minhook/include
         ${CMAKE_SOURCE_DIR}/vendors/imgui
+        ${CMAKE_SOURCE_DIR}/vendors/imguizmo
         ${CMAKE_SOURCE_DIR}/vendors/sdl2/include
         ${CMAKE_SOURCE_DIR}/vendors/steamworks/include
         ${CMAKE_SOURCE_DIR}/vendors/galaxy/Include
