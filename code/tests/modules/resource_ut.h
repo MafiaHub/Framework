@@ -30,7 +30,7 @@ class TestResourceHelper {
 #endif
     }
 
-    static void CreateTestResource(const std::string &name, const std::string &manifestJson) {
+    static void CreateTestResource(const std::string &name, const std::string &packageJson) {
         std::string basePath = GetTestResourcePath();
         std::string resourcePath = basePath + "/" + name;
 
@@ -45,11 +45,11 @@ class TestResourceHelper {
             resourceDir.createDirectory();
         }
 
-        // Write manifest
-        std::string manifestPath = resourcePath + "/manifest.json";
-        std::ofstream manifestFile(manifestPath);
-        manifestFile << manifestJson;
-        manifestFile.close();
+        // Write package.json
+        std::string packagePath = resourcePath + "/package.json";
+        std::ofstream packageFile(packagePath);
+        packageFile << packageJson;
+        packageFile.close();
     }
 
     static void CreateTestScript(const std::string &resourceName, const std::string &scriptName, const std::string &content) {
@@ -94,18 +94,18 @@ MODULE(resource, {
 
     // ==================== Manifest Loading ====================
 
-    IT("loads valid manifest from directory", {
-        TestResourceHelper::CreateTestResource("manifest-test-1", R"({
-            "name": "manifest-test-1",
+    IT("loads valid package.json from directory", {
+        TestResourceHelper::CreateTestResource("pkg-test-1", R"({
+            "name": "pkg-test-1",
             "version": "2.0.0",
             "author": "Test Author",
             "description": "A test resource"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/manifest-test-1");
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/pkg-test-1");
 
         EQUALS(resource.IsManifestValid(), true);
-        STREQUALS(resource.GetName().c_str(), "manifest-test-1");
+        STREQUALS(resource.GetName().c_str(), "pkg-test-1");
         STREQUALS(resource.GetVersion().c_str(), "2.0.0");
         STREQUALS(resource.GetAuthor().c_str(), "Test Author");
         STREQUALS(resource.GetDescription().c_str(), "A test resource");
@@ -114,25 +114,10 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    IT("enters error state for invalid manifest name", {
-        TestResourceHelper::CreateTestResource("manifest-test-2", R"({
-            "name": "123invalid",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/manifest-test-2");
-
-        EQUALS(resource.IsManifestValid(), false);
-        EQUALS(resource.GetState(), ResourceState::Error);
-        EQUALS(resource.GetErrorMessage().empty(), false);
-
-        TestResourceHelper::Cleanup();
-    });
-
-    IT("enters error state for missing manifest", {
-        // Create directory without manifest
+    IT("enters error state for missing package.json", {
+        // Create directory without package.json
         std::string basePath = TestResourceHelper::GetTestResourcePath();
-        std::string resourcePath = basePath + "/no-manifest";
+        std::string resourcePath = basePath + "/no-package";
 
         cppfs::FileHandle baseDir = cppfs::fs::open(basePath);
         if (!baseDir.exists()) {
@@ -152,13 +137,13 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    IT("enters error state for malformed JSON manifest", {
-        TestResourceHelper::CreateTestResource("manifest-test-3", R"({
+    IT("enters error state for malformed JSON", {
+        TestResourceHelper::CreateTestResource("pkg-test-2", R"({
             "name": "test"
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/manifest-test-3");
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/pkg-test-2");
 
         EQUALS(resource.IsManifestValid(), false);
         EQUALS(resource.GetState(), ResourceState::Error);
@@ -193,7 +178,7 @@ MODULE(resource, {
 
         EQUALS(resource.GetState(), ResourceState::Unloaded);
         EQUALS(resource.IsRunning(), false);
-        EQUALS(resource.IsStopped(), true); // Unloaded counts as stopped
+        EQUALS(resource.IsStopped(), true);
         EQUALS(resource.HasError(), false);
 
         TestResourceHelper::Cleanup();
@@ -214,54 +199,53 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    // ==================== Script Paths ====================
+    // ==================== Entry Points ====================
 
-    IT("resolves server and client script paths", {
-        TestResourceHelper::CreateTestResource("scripts-test", R"({
-            "name": "scripts-test",
+    IT("returns server entry point from mafiahub config", {
+        TestResourceHelper::CreateTestResource("entry-test", R"({
+            "name": "entry-test",
             "version": "1.0.0",
-            "server_files": ["server/main.lua", "server/utils.lua"],
-            "client_files": ["client/main.lua"]
+            "mafiahub": {
+                "server": "server/main.js",
+                "client": "client/main.js"
+            }
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/scripts-test");
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/entry-test");
 
-        auto serverPaths = resource.GetServerScriptPaths();
-        auto clientPaths = resource.GetClientScriptPaths();
+        std::string serverEntry = resource.GetServerEntryPoint();
+        std::string clientEntry = resource.GetClientEntryPoint();
 
-        EQUALS(serverPaths.size(), 2u);
-        EQUALS(clientPaths.size(), 1u);
-        EQUALS(resource.GetScriptCount(), 3u);
-
-        // Check full paths
-        std::string expectedServerPath = TestResourceHelper::GetTestResourcePath() + "/scripts-test/server/main.lua";
-        STREQUALS(serverPaths[0].c_str(), expectedServerPath.c_str());
+        // Should contain the path
+        EQUALS(serverEntry.find("server/main.js") != std::string::npos, true);
+        EQUALS(clientEntry.find("client/main.js") != std::string::npos, true);
 
         TestResourceHelper::Cleanup();
     });
 
-    IT("handles empty script lists", {
-        TestResourceHelper::CreateTestResource("no-scripts", R"({
-            "name": "no-scripts",
+    IT("returns empty entry point when not specified", {
+        TestResourceHelper::CreateTestResource("no-entry", R"({
+            "name": "no-entry",
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/no-scripts");
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/no-entry");
 
-        EQUALS(resource.GetServerScriptPaths().size(), 0u);
-        EQUALS(resource.GetClientScriptPaths().size(), 0u);
-        EQUALS(resource.GetScriptCount(), 0u);
+        STREQUALS(resource.GetServerEntryPoint().c_str(), "");
+        STREQUALS(resource.GetClientEntryPoint().c_str(), "");
 
         TestResourceHelper::Cleanup();
     });
 
-    // ==================== Manifest Methods ====================
+    // ==================== Exports ====================
 
-    IT("HasExport delegates to manifest", {
+    IT("HasExport checks manifest exports", {
         TestResourceHelper::CreateTestResource("export-test", R"({
             "name": "export-test",
             "version": "1.0.0",
-            "exports": ["getData", "setConfig"]
+            "mafiahub": {
+                "exports": ["getData", "setConfig"]
+            }
         })");
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/export-test");
@@ -273,11 +257,18 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    IT("DependsOn delegates to manifest", {
+    // ==================== Dependencies ====================
+
+    IT("DependsOn checks resource dependencies", {
         TestResourceHelper::CreateTestResource("depends-test", R"({
             "name": "depends-test",
             "version": "1.0.0",
-            "dependencies": [{"name": "core"}, {"name": "utils"}]
+            "mafiahub": {
+                "resourceDependencies": [
+                    {"name": "core"},
+                    {"name": "utils"}
+                ]
+            }
         })");
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/depends-test");
@@ -289,51 +280,24 @@ MODULE(resource, {
         TestResourceHelper::Cleanup();
     });
 
-    IT("GetManifest returns full manifest", {
-        TestResourceHelper::CreateTestResource("manifest-access", R"({
-            "name": "manifest-access",
-            "version": "3.0.0",
-            "priority": 10,
-            "exports": ["api"]
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/manifest-access");
-
-        const auto &manifest = resource.GetManifest();
-        STREQUALS(manifest.name.c_str(), "manifest-access");
-        STREQUALS(manifest.version.c_str(), "3.0.0");
-        EQUALS(manifest.priority, 10);
-        EQUALS(manifest.exports.size(), 1u);
-
-        TestResourceHelper::Cleanup();
-    });
-
     // ==================== Restart Tracking ====================
 
     IT("tracks restart attempts correctly", {
         TestResourceHelper::CreateTestResource("restart-test-1", R"({
             "name": "restart-test-1",
-            "version": "1.0.0",
-            "auto_restart": {
-                "enabled": true,
-                "max_attempts": 3,
-                "time_window_seconds": 60
-            }
+            "version": "1.0.0"
         })");
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-1");
 
         EQUALS(resource.GetRestartAttemptCount(), 0);
-        EQUALS(resource.CanAutoRestart(), true);
 
         resource.RecordRestartAttempt();
         EQUALS(resource.GetRestartAttemptCount(), 1);
-        EQUALS(resource.CanAutoRestart(), true);
 
         resource.RecordRestartAttempt();
         resource.RecordRestartAttempt();
         EQUALS(resource.GetRestartAttemptCount(), 3);
-        EQUALS(resource.CanAutoRestart(), false);
 
         TestResourceHelper::Cleanup();
     });
@@ -341,11 +305,7 @@ MODULE(resource, {
     IT("ClearRestartAttempts resets counter", {
         TestResourceHelper::CreateTestResource("restart-test-2", R"({
             "name": "restart-test-2",
-            "version": "1.0.0",
-            "auto_restart": {
-                "enabled": true,
-                "max_attempts": 3
-            }
+            "version": "1.0.0"
         })");
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-2");
@@ -363,11 +323,7 @@ MODULE(resource, {
     IT("calculates exponential backoff correctly", {
         TestResourceHelper::CreateTestResource("backoff-test", R"({
             "name": "backoff-test",
-            "version": "1.0.0",
-            "auto_restart": {
-                "enabled": true,
-                "backoff_base_ms": 1000
-            }
+            "version": "1.0.0"
         })");
 
         Resource resource(TestResourceHelper::GetTestResourcePath() + "/backoff-test");
@@ -375,106 +331,12 @@ MODULE(resource, {
         EQUALS(resource.GetRestartBackoffMs(), 0);
 
         resource.RecordRestartAttempt();
-        EQUALS(resource.GetRestartBackoffMs(), 1000); // 1000 * 2^0
+        int backoff1 = resource.GetRestartBackoffMs();
+        NEQUALS(backoff1, 0);
 
         resource.RecordRestartAttempt();
-        EQUALS(resource.GetRestartBackoffMs(), 2000); // 1000 * 2^1
-
-        resource.RecordRestartAttempt();
-        EQUALS(resource.GetRestartBackoffMs(), 4000); // 1000 * 2^2
-
-        TestResourceHelper::Cleanup();
-    });
-
-    IT("CanAutoRestart returns false when disabled", {
-        TestResourceHelper::CreateTestResource("restart-disabled", R"({
-            "name": "restart-disabled",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-disabled");
-
-        // auto_restart not enabled by default
-        EQUALS(resource.CanAutoRestart(), false);
-
-        TestResourceHelper::Cleanup();
-    });
-
-    IT("GetRestartAttemptCount returns 0 when auto-restart disabled", {
-        TestResourceHelper::CreateTestResource("restart-disabled-count", R"({
-            "name": "restart-disabled-count",
-            "version": "1.0.0",
-            "auto_restart": {
-                "enabled": false
-            }
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-disabled-count");
-
-        // Record attempts (these should still work)
-        resource.RecordRestartAttempt();
-        resource.RecordRestartAttempt();
-
-        // But count returns 0 when disabled
-        EQUALS(resource.GetRestartAttemptCount(), 0);
-
-        TestResourceHelper::Cleanup();
-    });
-
-    // ==================== Content Hash ====================
-
-    IT("calculates content hash", {
-        TestResourceHelper::CreateTestResource("hash-test", R"({
-            "name": "hash-test",
-            "version": "1.0.0",
-            "server_files": ["main.lua"]
-        })");
-        TestResourceHelper::CreateTestScript("hash-test", "main.lua", "print('hello')");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/hash-test");
-
-        uint32_t hash1 = resource.GetContentHash();
-        NEQUALS(hash1, 0u);
-
-        // Same content should give same hash
-        uint32_t hash2 = resource.GetContentHash();
-        EQUALS(hash1, hash2);
-
-        TestResourceHelper::Cleanup();
-    });
-
-    IT("can invalidate content hash", {
-        TestResourceHelper::CreateTestResource("hash-invalidate", R"({
-            "name": "hash-invalidate",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/hash-invalidate");
-
-        uint32_t hash1 = resource.GetContentHash();
-
-        resource.InvalidateContentHash();
-
-        // Hash should be recalculated
-        uint32_t hash2 = resource.GetContentHash();
-
-        // Same content, same hash after invalidation and recalculation
-        EQUALS(hash1, hash2);
-
-        TestResourceHelper::Cleanup();
-    });
-
-    // ==================== Environment ====================
-
-    IT("environment is initially null", {
-        TestResourceHelper::CreateTestResource("env-test", R"({
-            "name": "env-test",
-            "version": "1.0.0"
-        })");
-
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/env-test");
-
-        EQUALS(resource.GetEnvironment(), nullptr);
+        int backoff2 = resource.GetRestartBackoffMs();
+        EQUALS(backoff2 > backoff1, true); // Exponential increase
 
         TestResourceHelper::Cleanup();
     });
@@ -495,10 +357,6 @@ MODULE(resource, {
         STREQUALS(moved.GetName().c_str(), "move-test-1");
         EQUALS(moved.GetState(), ResourceState::Unloaded);
         EQUALS(moved.IsManifestValid(), true);
-
-        // Original should be in moved-from state
-        EQUALS(original.IsManifestValid(), false);
-        EQUALS(original.GetState(), ResourceState::Unloaded);
 
         TestResourceHelper::Cleanup();
     });

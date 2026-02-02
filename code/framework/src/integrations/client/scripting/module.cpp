@@ -1,63 +1,115 @@
-/*
- * MafiaHub OSS license
- * Copyright (c) 2021-2023, MafiaHub. All rights reserved.
- *
- * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
- * See LICENSE file in the source repository for information regarding licensing.
- */
-
 #include "module.h"
 
-#include "core_modules.h"
-
-#include <cppfs/FileHandle.h>
-#include <cppfs/FilePath.h>
-#include <cppfs/fs.h>
 #include <logging/logger.h>
-#include <scripting/resource/resource.h>
+
+#include <scripting/builtins/builtins.h>
+#include <scripting/builtins/events.h>
+#include <scripting/builtins/exports.h>
+#include <scripting/builtins/messages.h>
+#include <scripting/builtins/console.h>
+#include <scripting/builtins/imports.h>
+
+#include <filesystem>
 
 namespace Framework::Integrations::Client::Scripting {
 
-    ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world): _world(world) {
-        _clientEngine = std::make_shared<Framework::Scripting::ClientEngine>();
-        CoreModules::SetScriptingEngine(_clientEngine.get());
+    ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
+        : _world(world) {
+        // Create Node.js engine with sandbox mode enabled for client security
+        Framework::Scripting::NodeEngineOptions options;
+        options.sandboxed = true;
+        options.processName = "mafiahub-client";
+        _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
     }
 
     ClientScriptingModule::~ClientScriptingModule() {
         Shutdown();
     }
 
-    bool ClientScriptingModule::Init(Framework::Scripting::SDKRegisterCallback cb) {
-        if (_clientEngine->Init(cb) != Framework::Scripting::EngineError::ENGINE_NONE) {
-            _clientEngine.reset();
+    bool ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
+        // Check if engine is already initialized (e.g., after Reset())
+        bool engineAlreadyInitialized = _nodeEngine && _nodeEngine->IsInitialized();
+
+        // Set the SDK callback before initialization (only on first init)
+        if (!engineAlreadyInitialized && sdkCallback) {
+            _nodeEngine->SetSDKRegisterCallback(sdkCallback);
+        }
+
+        // Initialize the Node.js engine (sandboxed) - no-op if already initialized
+        if (!_nodeEngine->Init()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Failed to initialize Node.js engine (sandboxed): {}", _nodeEngine->GetLastError());
             return false;
         }
 
         // Initialize ResourceManager with client-side config
         Framework::Scripting::ResourceManagerConfig config;
-        config.resourcesPath = _resourceCachePath.empty() ? "resources" : _resourceCachePath;
+        config.resourcesPath = _resourceCachePath;
         config.isClient = true;
         config.cascadeStopDependents = true;
 
-        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(_clientEngine->GetLuaEngine(), config);
+        _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
+            _nodeEngine.get(), config);
 
-        // Register ResourceManager with CoreModules
-        CoreModules::SetResourceManager(_resourceManager.get());
+        // Register Framework SDK bindings for the new ResourceManager
+        RegisterFrameworkBindings();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Client scripting module initialized with ResourceManager");
+        // Initialize Framework SDK only on first init (not after Reset)
+        if (!engineAlreadyInitialized) {
+            if (!_nodeEngine->InitFrameworkSDK()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                    "Failed to initialize Framework SDK: {}", _nodeEngine->GetLastError());
+                _resourceManager.reset();
+                return false;
+            }
+        }
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
+            "Client scripting module initialized with Node.js engine (sandboxed)");
+
         return true;
+    }
+
+    void ClientScriptingModule::RegisterFrameworkBindings() {
+        if (!_nodeEngine || !_nodeEngine->IsInitialized()) {
+            return;
+        }
+
+        v8::Isolate *isolate = _nodeEngine->GetIsolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolateScope(isolate);
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = _nodeEngine->GetContext();
+        v8::Context::Scope contextScope(context);
+
+        // Get Framework global object (created by NodeEngine)
+        v8::Local<v8::Object> frameworkObj = _nodeEngine->GetFrameworkObject();
+        v8::Local<v8::Object> global = context->Global();
+
+        // Register math type builtins (on global for parity with server)
+        Framework::Scripting::Builtins::RegisterAll(isolate, global);
+
+        // Register communication APIs
+        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
+        Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
+        Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
+
+        // Register console override
+        Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
+
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, sandboxed)");
     }
 
     bool ClientScriptingModule::Shutdown() {
         if (_resourceManager) {
-            // Stop all resources before shutdown
             _resourceManager->StopAll();
             _resourceManager.reset();
-            CoreModules::SetResourceManager(nullptr);
         }
 
-        if (_clientEngine) {
-            _clientEngine->Shutdown();
+        if (_nodeEngine) {
+            _nodeEngine->Shutdown();
+            _nodeEngine.reset();
         }
 
         _serverResourceList.clear();
@@ -66,24 +118,44 @@ namespace Framework::Integrations::Client::Scripting {
         return true;
     }
 
-    void ClientScriptingModule::Update() {
-        if (_clientEngine) {
-            _clientEngine->Update();
+    void ClientScriptingModule::Reset() {
+        // Stop all resources but keep the engine running
+        if (_resourceManager) {
+            _resourceManager->StopAll();
+            _resourceManager.reset();
         }
 
-        if (_resourceManager) {
-            // Process any scheduled restarts
-            _resourceManager->ProcessScheduledRestarts();
+        _serverResourceList.clear();
+        _resourcesSynced = false;
 
-            // Process message queue
-            _resourceManager->ProcessMessageQueue();
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Client scripting module reset");
+    }
+
+    void ClientScriptingModule::Update() {
+        if (_resourceManager) {
+            _resourceManager->ProcessScheduledRestarts();
+        }
+
+        // Process Node.js event loop and pending message responses
+        if (_nodeEngine && _nodeEngine->IsInitialized()) {
+            // Tick processes libuv events (timers, I/O callbacks, etc.)
+            _nodeEngine->Tick();
+
+            if (_resourceManager) {
+                v8::Isolate *isolate = _nodeEngine->GetIsolate();
+                v8::Locker locker(isolate);
+                v8::Isolate::Scope isolateScope(isolate);
+                v8::HandleScope handleScope(isolate);
+                v8::Local<v8::Context> context = _nodeEngine->GetContext();
+                v8::Context::Scope contextScope(context);
+
+                Framework::Scripting::Messages::ProcessPendingResponses(isolate, context);
+            }
         }
     }
 
     void ClientScriptingModule::SetResourceCachePath(const std::string &path) {
         _resourceCachePath = path;
-
-        // Update ResourceManager config if it exists
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
             config.resourcesPath = path;
@@ -95,64 +167,60 @@ namespace Framework::Integrations::Client::Scripting {
         _serverResourceList = resources;
         _resourcesSynced = false;
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Received resource list from server with {} resources", resources.size());
-
-        // Check which resources need to be downloaded
-        auto toDownload = GetResourcesToDownload();
-
-        if (toDownload.empty()) {
-            // All resources are available locally
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("All resources available locally");
+        if (resources.empty()) {
             _resourcesSynced = true;
-
             if (_onResourceSyncComplete) {
                 _onResourceSyncComplete(true);
             }
+            return;
         }
-        else {
-            // Request downloads for missing resources
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("{} resources need to be downloaded", toDownload.size());
 
-            for (const auto &resource : toDownload) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Requesting download: {} v{}", resource.name, resource.version);
+        // Check which resources need to be downloaded
+        bool anyMissing = false;
+        for (const auto &resource : resources) {
+            std::string resourcePath = GetResourcePath(resource.name);
 
+            // Check if resource exists locally
+            if (!std::filesystem::exists(resourcePath)) {
+                anyMissing = true;
                 if (_onResourceDownloadNeeded) {
-                    _onResourceDownloadNeeded(resource.name, resource.version, resource.hash);
+                    _onResourceDownloadNeeded(resource.name, resource.version);
                 }
+            }
+        }
+
+        // If all resources already exist locally, mark as synced immediately
+        if (!anyMissing) {
+            _resourcesSynced = true;
+            if (_onResourceSyncComplete) {
+                _onResourceSyncComplete(true);
             }
         }
     }
 
     void ClientScriptingModule::OnResourceDownloaded(const std::string &resourceName) {
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource downloaded: {}", resourceName);
-
         // Discover the downloaded resource
-        DiscoverCachedResource(resourceName);
+        std::string resourcePath = GetResourcePath(resourceName);
+        if (_resourceManager) {
+            _resourceManager->DiscoverResource(resourcePath);
+        }
 
-        // Check if all resources are now available
-        auto toDownload = GetResourcesToDownload();
+        // Check if all resources have been downloaded
+        bool allDownloaded = true;
+        for (const auto &resource : _serverResourceList) {
+            std::string path = GetResourcePath(resource.name);
+            if (!std::filesystem::exists(path)) {
+                allDownloaded = false;
+                break;
+            }
+        }
 
-        if (toDownload.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("All resources downloaded and available");
+        if (allDownloaded && !_resourcesSynced) {
             _resourcesSynced = true;
-
             if (_onResourceSyncComplete) {
                 _onResourceSyncComplete(true);
             }
         }
-    }
-
-    void ClientScriptingModule::StopAllResources() {
-        // Stop all running resources but keep the ResourceManager and engine alive.
-        // This allows StartAllResources() to be called again without requiring
-        // a full re-initialization via Init(). Use Shutdown() for full cleanup.
-        if (_resourceManager) {
-            _resourceManager->StopAll();
-        }
-
-        // Note: We intentionally do NOT clear _serverResourceList here
-        // to preserve it for StartAllResources() after re-download
-        _resourcesSynced = false;
     }
 
     bool ClientScriptingModule::StartAllResources() {
@@ -161,98 +229,35 @@ namespace Framework::Integrations::Client::Scripting {
             return false;
         }
 
-        // Discover all resources from cache based on server list
-        for (const auto &serverResource : _serverResourceList) {
-            if (!_resourceManager->HasResource(serverResource.name)) {
-                DiscoverCachedResource(serverResource.name);
-            }
+        // Discover all resources in the cache path
+        size_t discovered = _resourceManager->DiscoverResources();
+        if (discovered == 0) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
+                "No JS resources discovered in: {}", _resourceCachePath);
+            return true; // Not an error, just no resources
         }
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
         if (!result.success) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start all resources: {}", result.error);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Failed to start resources: {}", result.error);
             return false;
         }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started {} resources", result.affectedResources.size());
+        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
+            "Started {} resource(s) on client", result.affectedResources.size());
         return true;
     }
 
-    // State queries
-
-    bool ClientScriptingModule::IsResourceAvailable(const std::string &resourceName, const std::string &version, uint32_t hash) const {
-        std::string resourcePath = GetResourcePath(resourceName);
-
-        // Check if directory exists
-        cppfs::FileHandle dir = cppfs::fs::open(resourcePath);
-        if (!dir.exists() || !dir.isDirectory()) {
-            return false;
+    void ClientScriptingModule::StopAllResources() {
+        if (_resourceManager) {
+            _resourceManager->StopAll();
         }
-
-        // Check if manifest exists
-        std::string manifestPath = resourcePath + "/manifest.json";
-        cppfs::FileHandle manifest = cppfs::fs::open(manifestPath);
-        if (!manifest.exists() || !manifest.isFile()) {
-            return false;
-        }
-
-        // Validate hash if provided (non-zero hash means server wants validation)
-        if (hash != 0) {
-            // Create a temporary Resource to calculate the local hash
-            Framework::Scripting::Resource tempResource(resourcePath);
-            if (!tempResource.IsManifestValid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' manifest is invalid", resourceName);
-                return false;
-            }
-
-            // Check version match
-            if (!version.empty() && tempResource.GetVersion() != version) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' version mismatch: local={}, server={}", resourceName, tempResource.GetVersion(), version);
-                return false;
-            }
-
-            // Check hash match
-            uint32_t localHash = tempResource.GetContentHash();
-            if (localHash != hash) {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' hash mismatch: local={}, server={}", resourceName, localHash, hash);
-                return false;
-            }
-        }
-
-        return true;
     }
 
     std::string ClientScriptingModule::GetResourcePath(const std::string &resourceName) const {
-        if (_resourceCachePath.empty()) {
-            return resourceName;
-        }
-        cppfs::FilePath basePath(_resourceCachePath);
-        return basePath.resolve(resourceName).fullPath();
-    }
-
-    std::vector<ServerResourceInfo> ClientScriptingModule::GetResourcesToDownload() const {
-        std::vector<ServerResourceInfo> toDownload;
-
-        for (const auto &resource : _serverResourceList) {
-            if (!IsResourceAvailable(resource.name, resource.version, resource.hash)) {
-                toDownload.push_back(resource);
-            }
-        }
-
-        return toDownload;
-    }
-
-    bool ClientScriptingModule::DiscoverCachedResource(const std::string &resourceName) {
-        if (!_resourceManager) {
-            return false;
-        }
-
-        std::string resourcePath = GetResourcePath(resourceName);
-
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Discovering cached resource: {} at {}", resourceName, resourcePath);
-
-        return _resourceManager->DiscoverResource(resourcePath);
+        return (std::filesystem::path(_resourceCachePath) / resourceName).string();
     }
 
 } // namespace Framework::Integrations::Client::Scripting

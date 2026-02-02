@@ -27,7 +27,7 @@
 This codebase provides a suite of tools and libraries to simplify the development of multi-player modifications and ensure consistency across all of them. The primary goal is to provide a common foundation and interface with shared functionality and data. It covers many fields we found necessary during the development of multi-player mods, such as:
 * **Networking**: The core of the framework provides all the necessary tools to synchronize data between players.
 * **ECS**: Backed by a robust ECS framework that simplifies entity management and world streaming, it is also easily extensible.
-* **Scripting**: The **Lua** scripting layer provides an easy way to create and manage game modes used on game servers.
+* **Scripting**: The **JavaScript/TypeScript** scripting layer provides an easy way to create and manage game modes used on game servers (powered by Node.js on server, V8 on client).
 * **Logging**: It is always vital to log actions and errors, so the framework provides a simple way.
 * **GUI**: It provides a simple way to create and manage GUI elements using the **Ultralight** and DearImGUI libraries.
 * **Sentry**: The framework provides a simple way to report errors and exceptions to the **Sentry** service.

@@ -27,16 +27,20 @@ set(FRAMEWORK_SRC
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
-    src/scripting/engine.cpp
-    src/scripting/client_engine.cpp
-    src/scripting/types/events.cpp
-
-    src/integrations/client/scripting/module.cpp
-
+    # JavaScript scripting builtins (used by both client and server)
+    # Note: node_engine.cpp is in FrameworkNodeEngine object library due to special compile flags
+    src/scripting/builtins/vector2.cpp
+    src/scripting/builtins/vector3.cpp
+    src/scripting/builtins/vector4.cpp
+    src/scripting/builtins/quaternion.cpp
+    src/scripting/builtins/color.cpp
+    src/scripting/builtins/events.cpp
+    src/scripting/builtins/messages.cpp
+    src/scripting/builtins/console.cpp
+    src/scripting/builtins/imports.cpp
+    src/scripting/builtins/exports.cpp
+    src/scripting/resource/package_manifest.cpp
     src/scripting/resource/resource.cpp
-    src/scripting/resource/resource_manifest.cpp
-    src/scripting/resource/dependency_graph.cpp
-    src/scripting/resource/environment_sandbox.cpp
     src/scripting/resource/resource_manager.cpp
 
     src/jobs/job_system.cpp
@@ -44,17 +48,15 @@ set(FRAMEWORK_SRC
 )
 
 set(FRAMEWORK_SERVER_SRC
-    src/scripting/server_engine.cpp
-
     src/http/webserver.cpp
 
     src/networking/network_server.cpp
 
     src/integrations/server/instance.cpp
     src/integrations/server/networking/engine.cpp
+
+    # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
-    src/integrations/server/scripting/builtins/entity.cpp
-    src/integrations/server/scripting/builtins/events_lua.cpp
 )
 
 set(FRAMEWORK_CLIENT_SRC
@@ -74,6 +76,9 @@ set(FRAMEWORK_CLIENT_SRC
 
     src/integrations/client/instance.cpp
     src/integrations/client/networking/engine.cpp
+
+    # JavaScript scripting (V8 engine for client)
+    src/integrations/client/scripting/module.cpp
 )
 
 # GUI (Ultralight) only available for 64-bit builds
@@ -147,7 +152,17 @@ add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
 # Precompiled Headers (PCH) for faster builds
 # Framework base PCH - stable, frequently used headers
 # Using PUBLIC so child targets can inherit via INTERFACE_PRECOMPILE_HEADERS
+#
+# IMPORTANT: FrameworkServer and FrameworkClient use REUSE_FROM Framework.
+# This is critical because these targets have V8/libuv include directories and
+# NODE_WANT_INTERNALS defined, which causes Windows SDK errno conflicts (EINVAL/ERANGE
+# undefined) if they try to compile their own PCH. By reusing Framework's PCH
+# (compiled without those settings), we avoid the issue.
 target_precompile_headers(Framework PUBLIC
+    # C headers first - cerrno must be included before any headers that may
+    # be affected by libuv/Node.js which don't define EINVAL/ERANGE on Windows
+    <cerrno>
+
     # STL (stable, frequently used)
     <memory>
     <string>
@@ -160,21 +175,16 @@ target_precompile_headers(Framework PUBLIC
     <glm/glm.hpp>
     <glm/gtc/quaternion.hpp>
     <nlohmann/json.hpp>
-)
 
-# FrameworkServer PCH - reuses Framework PCH + adds scripting/ECS headers
-target_precompile_headers(FrameworkServer PRIVATE
-    "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
-    <sol/sol.hpp>
+    # ECS - used by both server and client
     <flecs/flecs.h>
 )
 
-# FrameworkClient PCH (Windows only)
+# FrameworkServer and FrameworkClient reuse Framework's PCH to avoid
+# Windows SDK errno conflicts when compiling with V8/libuv include paths
+target_precompile_headers(FrameworkServer REUSE_FROM Framework)
 if(WIN32)
-    target_precompile_headers(FrameworkClient PRIVATE
-        "$<TARGET_PROPERTY:Framework,INTERFACE_PRECOMPILE_HEADERS>"
-        <flecs/flecs.h>
-    )
+    target_precompile_headers(FrameworkClient REUSE_FROM Framework)
 endif()
 
 # Custom defines
@@ -200,8 +210,6 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/json/include
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-        ${CMAKE_SOURCE_DIR}/vendors/sol                    # Lua bindings (used in scripting API)
-        ${CMAKE_SOURCE_DIR}/vendors/lua-5.4.4/src/lua54    # Lua headers (required by sol)
         ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in world/modules/base.hpp)
         ${CMAKE_SOURCE_DIR}/vendors/slikenet/Source        # Networking (used in messages.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
@@ -209,10 +217,10 @@ macro(link_shared_deps target_name)
     )
 
     # Implementation-only vendor headers (PRIVATE - not part of public API)
+    # Note: httplib include path is provided by the httplib target (uses split headers when HTTPLIB_COMPILE=ON)
     target_include_directories(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/vendors/cppfs/source/cppfs/include
         ${CMAKE_SOURCE_DIR}/vendors/semver
-        ${CMAKE_SOURCE_DIR}/vendors/httplib
         ${CMAKE_SOURCE_DIR}/vendors/sentry/include
         ${CMAKE_SOURCE_DIR}/vendors/curl/include
         ${CMAKE_SOURCE_DIR}/vendors/ftl/include
@@ -223,7 +231,7 @@ macro(link_shared_deps target_name)
         target_link_libraries(${target_name} "-framework CoreFoundation" "-framework Foundation" "-framework GSS" "-framework Security" "-framework CoreText" "-framework CoreGraphics" bsm)
     endif()
 
-    # Global libraries
+    # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
     target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl)
 
     # Required libraries for windows
@@ -235,15 +243,53 @@ macro(link_shared_deps target_name)
     endif()
 endmacro()
 
+# FrameworkNodeEngine - Object library for node_engine.cpp
+# This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
+# cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
+add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp)
+
+# Apply the same shared dependencies as Framework
+target_include_directories(FrameworkNodeEngine PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_include_directories(FrameworkNodeEngine PUBLIC
+    ${CMAKE_SOURCE_DIR}/vendors/glm
+    ${CMAKE_SOURCE_DIR}/vendors/json/include
+    ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
+    ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+    ${CMAKE_SOURCE_DIR}/vendors
+)
+
+# Link to libnode for headers (includes V8 and Node.js headers)
+# Also link spdlog for logging used by node_engine.cpp
+target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog)
+
+# Node.js internal APIs require NODE_WANT_INTERNALS
+# NOTE: Do NOT add ${LIBNODE_UV_INCLUDE_DIR} here - it causes Windows SDK errno
+# conflicts because #include <errno.h> finds uv/errno.h instead of system errno.h.
+# The main libnode include dir already has uv.h which includes uv/* properly.
+target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
+
+# Match Framework compile definitions and features
+target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
+target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_17)
+
 # Link the solutions based on the platform
 link_shared_deps(Framework)
+target_link_libraries(Framework v8 v8pp libnode)
+
+# Include FrameworkNodeEngine objects in Framework
+target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
 
 if(WIN32)
     link_shared_deps(FrameworkClient)
+    target_link_libraries(FrameworkClient v8 v8pp libnode)
 endif()
 
 link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer MafiaHubServices libsig lua54_static)
+target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
 
 # FrameworkServer-specific includes
 target_include_directories(FrameworkServer PRIVATE

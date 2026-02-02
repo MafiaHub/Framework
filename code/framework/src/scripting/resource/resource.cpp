@@ -1,64 +1,36 @@
 #include "resource.h"
 
-#include <logging/logger.h>
-#include <utils/hashing.h>
-
-#include <cppfs/FileHandle.h>
-#include <cppfs/fs.h>
-
-#include <algorithm>
-#include <fstream>
-#include <sstream>
+#include <filesystem>
 
 namespace Framework::Scripting {
 
     const char *ResourceStateToString(ResourceState state) {
         switch (state) {
-        case ResourceState::Unloaded: return "unloaded";
-        case ResourceState::Loading: return "loading";
-        case ResourceState::Running: return "running";
-        case ResourceState::Stopping: return "stopping";
-        case ResourceState::Stopped: return "stopped";
-        case ResourceState::Error: return "error";
-        default: return "unknown";
+            case ResourceState::Unloaded: return "unloaded";
+            case ResourceState::Loading: return "loading";
+            case ResourceState::Running: return "running";
+            case ResourceState::Stopping: return "stopping";
+            case ResourceState::Stopped: return "stopped";
+            case ResourceState::Error: return "error";
+            default: return "unknown";
         }
     }
 
-    Resource::Resource(const std::string &path): _path(path), _stateTimestamp(std::chrono::system_clock::now()) {
-        // Ensure path ends without separator
-        if (!_path.empty() && (_path.back() == '/' || _path.back() == '\\')) {
-            _path.pop_back();
-        }
+    Resource::Resource(const std::string &path)
+        : _path(path)
+        , _stateTimestamp(std::chrono::system_clock::now()) {
+        // Try to load the manifest
+        std::filesystem::path manifestPath = std::filesystem::path(path) / "package.json";
+        _manifestValid = _manifest.Parse(manifestPath.string());
 
-        // Load manifest
-        std::string manifestPath = _path + "/manifest.json";
-        auto result              = ResourceManifestParser::ParseFile(manifestPath);
-
-        if (result.success) {
-            _manifest      = std::move(result.manifest);
-            _manifestValid = true;
-
-            // Resolve script paths
-            for (const auto &script : _manifest.serverFiles) {
-                _serverScriptPaths.push_back(_path + "/" + script);
-            }
-            for (const auto &script : _manifest.clientFiles) {
-                _clientScriptPaths.push_back(_path + "/" + script);
-            }
-
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Loaded resource manifest: {} v{}", _manifest.name, _manifest.version);
-        } else {
-            _manifestValid = false;
-            _state         = ResourceState::Error;
-            _errorMessage  = result.error;
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to load resource manifest from {}: {}", manifestPath, result.error);
+        if (!_manifestValid) {
+            _errorMessage = _manifest.GetError();
+            _state = ResourceState::Error;
         }
     }
 
     Resource::~Resource() {
-        // Clear exports and event handlers
         ClearExports();
-        ClearEventHandlers();
     }
 
     Resource::Resource(Resource &&other) noexcept
@@ -69,75 +41,86 @@ namespace Framework::Scripting {
         , _errorMessage(std::move(other._errorMessage))
         , _stateTimestamp(other._stateTimestamp)
         , _loadTimestamp(other._loadTimestamp)
-        , _environment(std::move(other._environment))
-        , _eventHandlers(std::move(other._eventHandlers))
+        , _isolate(other._isolate)
         , _exports(std::move(other._exports))
-        , _serverScriptPaths(std::move(other._serverScriptPaths))
-        , _clientScriptPaths(std::move(other._clientScriptPaths))
         , _restartAttempts(std::move(other._restartAttempts)) {
-        other._manifestValid = false;
-        other._state         = ResourceState::Unloaded;
+        other._isolate = nullptr;
     }
 
     Resource &Resource::operator=(Resource &&other) noexcept {
         if (this != &other) {
-            _path              = std::move(other._path);
-            _manifest          = std::move(other._manifest);
-            _manifestValid     = other._manifestValid;
-            _state             = other._state;
-            _errorMessage      = std::move(other._errorMessage);
-            _stateTimestamp    = other._stateTimestamp;
-            _loadTimestamp     = other._loadTimestamp;
-            _environment       = std::move(other._environment);
-            _eventHandlers     = std::move(other._eventHandlers);
-            _exports           = std::move(other._exports);
-            _serverScriptPaths = std::move(other._serverScriptPaths);
-            _clientScriptPaths = std::move(other._clientScriptPaths);
-            _restartAttempts   = std::move(other._restartAttempts);
+            ClearExports();
 
-            other._manifestValid = false;
-            other._state         = ResourceState::Unloaded;
+            _path = std::move(other._path);
+            _manifest = std::move(other._manifest);
+            _manifestValid = other._manifestValid;
+            _state = other._state;
+            _errorMessage = std::move(other._errorMessage);
+            _stateTimestamp = other._stateTimestamp;
+            _loadTimestamp = other._loadTimestamp;
+            _isolate = other._isolate;
+            _exports = std::move(other._exports);
+            _restartAttempts = std::move(other._restartAttempts);
+
+            other._isolate = nullptr;
         }
         return *this;
     }
 
-    // Identity getters
-
     const std::string &Resource::GetName() const {
-        return _manifest.name;
+        return _manifest.GetName();
     }
 
     const std::string &Resource::GetVersion() const {
-        return _manifest.version;
+        return _manifest.GetVersion();
     }
 
     const std::string &Resource::GetAuthor() const {
-        return _manifest.author;
+        return _manifest.GetAuthor();
     }
 
     const std::string &Resource::GetDescription() const {
-        return _manifest.description;
+        return _manifest.GetDescription();
     }
 
     const std::string &Resource::GetPath() const {
         return _path;
     }
 
-    // Manifest access
-
-    const ResourceManifest &Resource::GetManifest() const {
+    const PackageManifest &Resource::GetManifest() const {
         return _manifest;
     }
 
     bool Resource::HasExport(const std::string &exportName) const {
-        return _manifest.HasExport(exportName);
+        const auto &exports = _manifest.GetMafiaHubConfig().exports;
+        return std::find(exports.begin(), exports.end(), exportName) != exports.end();
     }
 
     bool Resource::DependsOn(const std::string &resourceName) const {
-        return _manifest.DependsOn(resourceName);
+        const auto &deps = _manifest.GetMafiaHubConfig().resourceDependencies;
+        for (const auto &dep : deps) {
+            if (dep.name == resourceName) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    // State machine
+    std::string Resource::GetServerEntryPoint() const {
+        const auto &server = _manifest.GetMafiaHubConfig().server;
+        if (server.empty()) {
+            return "";
+        }
+        return (std::filesystem::path(_path) / server).string();
+    }
+
+    std::string Resource::GetClientEntryPoint() const {
+        const auto &client = _manifest.GetMafiaHubConfig().client;
+        if (client.empty()) {
+            return "";
+        }
+        return (std::filesystem::path(_path) / client).string();
+    }
 
     ResourceState Resource::GetState() const {
         return _state;
@@ -171,83 +154,91 @@ namespace Framework::Scripting {
         return _loadTimestamp;
     }
 
-    // Environment
-
-    sol::environment *Resource::GetEnvironment() {
-        return _environment.get();
+    int Resource::GetRestartAttemptCount() const {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        return GetRestartAttemptCountUnlocked();
     }
 
-    const sol::environment *Resource::GetEnvironment() const {
-        return _environment.get();
-    }
+    int Resource::GetRestartAttemptCountUnlocked() const {
+        // Count attempts within the last 5 minutes
+        auto now = std::chrono::system_clock::now();
+        auto windowStart = now - std::chrono::minutes(5);
 
-    void Resource::SetEnvironment(std::unique_ptr<sol::environment> env) {
-        _environment = std::move(env);
-    }
-
-    // Event handlers
-
-    void Resource::RegisterEventHandler(const std::string &eventName, sol::protected_function handler) {
-        std::lock_guard<std::mutex> lock(_eventHandlersMutex);
-        _eventHandlers[eventName] = handler;
-    }
-
-    void Resource::UnregisterEventHandler(const std::string &eventName) {
-        std::lock_guard<std::mutex> lock(_eventHandlersMutex);
-        _eventHandlers.erase(eventName);
-    }
-
-    void Resource::ClearEventHandlers() {
-        std::lock_guard<std::mutex> lock(_eventHandlersMutex);
-        _eventHandlers.clear();
-    }
-
-    bool Resource::HasEventHandler(const std::string &eventName) const {
-        std::lock_guard<std::mutex> lock(_eventHandlersMutex);
-        return _eventHandlers.find(eventName) != _eventHandlers.end();
-    }
-
-    std::vector<std::string> Resource::GetEventNames() const {
-        std::lock_guard<std::mutex> lock(_eventHandlersMutex);
-        std::vector<std::string> names;
-        names.reserve(_eventHandlers.size());
-        for (const auto &pair : _eventHandlers) {
-            names.push_back(pair.first);
+        int count = 0;
+        for (const auto &attempt : _restartAttempts) {
+            if (attempt >= windowStart) {
+                ++count;
+            }
         }
-        return names;
+        return count;
     }
 
-    // Exports
+    bool Resource::CanAutoRestart() const {
+        const auto &config = _manifest.GetMafiaHubConfig();
+        if (config.errorBehavior != "restart") {
+            return false;
+        }
 
-    bool Resource::RegisterExport(const std::string &name, sol::object value) {
-        // Verify export is declared in manifest
-        if (!_manifest.HasExport(name)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' attempted to register undeclared export '{}'", _manifest.name, name);
+        // Allow max 3 restarts within 5 minutes
+        return GetRestartAttemptCount() < 3;
+    }
+
+    void Resource::RecordRestartAttempt() {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        _restartAttempts.push_back(std::chrono::system_clock::now());
+
+        // Prune old attempts (older than 10 minutes)
+        auto cutoff = std::chrono::system_clock::now() - std::chrono::minutes(10);
+        _restartAttempts.erase(
+            std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
+                [&cutoff](const auto &t) { return t < cutoff; }),
+            _restartAttempts.end());
+    }
+
+    void Resource::ClearRestartAttempts() {
+        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        _restartAttempts.clear();
+    }
+
+    int Resource::GetRestartBackoffMs() const {
+        int attempts = GetRestartAttemptCount();
+        if (attempts == 0) {
+            return 0;
+        }
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s max
+        int delayMs = 1000 * (1 << std::min(attempts - 1, 4));
+        return delayMs;
+    }
+
+    bool Resource::RegisterExport(const std::string &name, v8::Local<v8::Value> value) {
+        if (!HasExport(name)) {
+            return false;
+        }
+
+        if (!_isolate) {
             return false;
         }
 
         std::lock_guard<std::mutex> lock(_exportsMutex);
-        _exports[name] = value;
+        _exports[name].Reset(_isolate, value);
         return true;
     }
 
     void Resource::UnregisterExport(const std::string &name) {
         std::lock_guard<std::mutex> lock(_exportsMutex);
-        _exports.erase(name);
+        auto it = _exports.find(name);
+        if (it != _exports.end()) {
+            it->second.Reset();
+            _exports.erase(it);
+        }
     }
 
     void Resource::ClearExports() {
         std::lock_guard<std::mutex> lock(_exportsMutex);
-        _exports.clear();
-    }
-
-    sol::object Resource::GetExport(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_exportsMutex);
-        auto it = _exports.find(name);
-        if (it != _exports.end()) {
-            return it->second;
+        for (auto &[name, global] : _exports) {
+            global.Reset();
         }
-        return sol::nil;
+        _exports.clear();
     }
 
     bool Resource::HasRegisteredExport(const std::string &name) const {
@@ -259,47 +250,39 @@ namespace Framework::Scripting {
         std::lock_guard<std::mutex> lock(_exportsMutex);
         std::vector<std::string> names;
         names.reserve(_exports.size());
-        for (const auto &pair : _exports) {
-            names.push_back(pair.first);
+        for (const auto &[name, _] : _exports) {
+            names.push_back(name);
         }
         return names;
     }
 
-    // Scripts
-
-    std::vector<std::string> Resource::GetServerScriptPaths() const {
-        return _serverScriptPaths;
+    v8::Local<v8::Value> Resource::GetExportValue(const std::string &name) const {
+        std::lock_guard<std::mutex> lock(_exportsMutex);
+        auto it = _exports.find(name);
+        if (it == _exports.end() || it->second.IsEmpty()) {
+            return v8::Local<v8::Value>();
+        }
+        return it->second.Get(_isolate);
     }
-
-    std::vector<std::string> Resource::GetClientScriptPaths() const {
-        return _clientScriptPaths;
-    }
-
-    size_t Resource::GetScriptCount() const {
-        return _serverScriptPaths.size() + _clientScriptPaths.size();
-    }
-
-    // State transitions
 
     bool Resource::TransitionTo(ResourceState newState) {
         if (!IsValidTransition(_state, newState)) {
-            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Invalid state transition for resource '{}': {} -> {}", _manifest.name, ResourceStateToString(_state), ResourceStateToString(newState));
             return false;
         }
 
-        ResourceState oldState = _state;
-        _state                 = newState;
-        _stateTimestamp        = std::chrono::system_clock::now();
+        _state = newState;
+        _stateTimestamp = std::chrono::system_clock::now();
 
-        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Resource '{}' state: {} -> {}", _manifest.name, ResourceStateToString(oldState), ResourceStateToString(newState));
+        if (newState != ResourceState::Error) {
+            ClearError();
+        }
 
         return true;
     }
 
     void Resource::SetError(const std::string &error) {
-        _errorMessage   = error;
-        _state          = ResourceState::Error;
-        _stateTimestamp = std::chrono::system_clock::now();
+        _errorMessage = error;
+        TransitionTo(ResourceState::Error);
     }
 
     void Resource::ClearError() {
@@ -311,162 +294,32 @@ namespace Framework::Scripting {
     }
 
     bool Resource::IsValidTransition(ResourceState from, ResourceState to) {
-        // Define valid state transitions based on the state machine diagram
         switch (from) {
-        case ResourceState::Unloaded:
-            // Can only go to Loading
-            return to == ResourceState::Loading;
+            case ResourceState::Unloaded:
+                return to == ResourceState::Loading;
 
-        case ResourceState::Loading:
-            // Can go to Running (success) or Error (failure)
-            return to == ResourceState::Running || to == ResourceState::Error;
+            case ResourceState::Loading:
+                return to == ResourceState::Running ||
+                       to == ResourceState::Error;
 
-        case ResourceState::Running:
-            // Can go to Stopping (normal stop) or Error (runtime error)
-            return to == ResourceState::Stopping || to == ResourceState::Error;
+            case ResourceState::Running:
+                return to == ResourceState::Stopping ||
+                       to == ResourceState::Error;
 
-        case ResourceState::Stopping:
-            // Can only go to Stopped
-            return to == ResourceState::Stopped;
+            case ResourceState::Stopping:
+                return to == ResourceState::Stopped ||
+                       to == ResourceState::Error;
 
-        case ResourceState::Stopped:
-            // Can go to Loading (restart) or Unloaded (cleanup)
-            return to == ResourceState::Loading || to == ResourceState::Unloaded;
+            case ResourceState::Stopped:
+                return to == ResourceState::Loading;
 
-        case ResourceState::Error:
-            // Can go to Loading (retry) or Unloaded (cleanup)
-            return to == ResourceState::Loading || to == ResourceState::Unloaded;
+            case ResourceState::Error:
+                return to == ResourceState::Loading ||
+                       to == ResourceState::Unloaded;
 
-        default: return false;
+            default:
+                return false;
         }
-    }
-
-    int Resource::GetRestartAttemptCountUnlocked() const {
-        if (!_manifest.autoRestart.enabled) {
-            return 0;
-        }
-
-        // Count attempts within the time window
-        auto now         = std::chrono::system_clock::now();
-        auto windowStart = now - std::chrono::seconds(_manifest.autoRestart.timeWindowSeconds);
-
-        int count = 0;
-        for (const auto &timestamp : _restartAttempts) {
-            if (timestamp >= windowStart) {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    int Resource::GetRestartAttemptCount() const {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
-        return GetRestartAttemptCountUnlocked();
-    }
-
-    bool Resource::CanAutoRestart() const {
-        if (!_manifest.autoRestart.enabled) {
-            return false;
-        }
-
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
-        return GetRestartAttemptCountUnlocked() < _manifest.autoRestart.maxAttempts;
-    }
-
-    void Resource::RecordRestartAttempt() {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
-
-        auto now = std::chrono::system_clock::now();
-        _restartAttempts.push_back(now);
-
-        // Clean up old attempts outside the time window
-        auto windowStart = now - std::chrono::seconds(_manifest.autoRestart.timeWindowSeconds);
-        _restartAttempts.erase(
-            std::remove_if(_restartAttempts.begin(), _restartAttempts.end(),
-                [&windowStart](const auto &timestamp) {
-                    return timestamp < windowStart;
-                }),
-            _restartAttempts.end());
-    }
-
-    void Resource::ClearRestartAttempts() {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
-        _restartAttempts.clear();
-    }
-
-    int Resource::GetRestartBackoffMs() const {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
-
-        int attemptCount = static_cast<int>(_restartAttempts.size());
-        if (attemptCount == 0) {
-            return 0;
-        }
-
-        // Cap at 60 seconds
-        constexpr int64_t maxBackoffMs = 60000;
-
-        // Exponential backoff: base * 2^(attempts-1)
-        // Clamp exponent to prevent undefined behavior from large shifts
-        constexpr int maxShift = 30;
-        int exponent = std::min(attemptCount - 1, maxShift);
-
-        int64_t baseMs = _manifest.autoRestart.backoffBaseMilliseconds;
-        int64_t backoff = baseMs * (static_cast<int64_t>(1) << exponent);
-
-        return static_cast<int>(std::min(backoff, maxBackoffMs));
-    }
-
-    uint32_t Resource::GetContentHash() const {
-        std::lock_guard<std::mutex> lock(_contentHashMutex);
-
-        if (!_contentHashValid) {
-            _contentHash = CalculateContentHash();
-            _contentHashValid = true;
-        }
-
-        return _contentHash;
-    }
-
-    void Resource::InvalidateContentHash() {
-        std::lock_guard<std::mutex> lock(_contentHashMutex);
-        _contentHashValid = false;
-        _contentHash = 0;
-    }
-
-    uint32_t Resource::CalculateContentHash() const {
-        std::ostringstream combinedContent;
-
-        // Include manifest metadata in hash
-        combinedContent << _manifest.name << "|";
-        combinedContent << _manifest.version << "|";
-        combinedContent << _manifest.author << "|";
-
-        // Hash all script files
-        auto hashFiles = [&combinedContent](const std::vector<std::string> &files) {
-            for (const auto &filePath : files) {
-                std::ifstream file(filePath, std::ios::binary);
-                if (file.is_open()) {
-                    combinedContent << filePath << ":";
-                    combinedContent << file.rdbuf();
-                    combinedContent << "|";
-                }
-            }
-        };
-
-        hashFiles(_serverScriptPaths);
-        hashFiles(_clientScriptPaths);
-
-        // Also include the manifest.json file itself
-        std::string manifestPath = _path + "/manifest.json";
-        std::ifstream manifestFile(manifestPath, std::ios::binary);
-        if (manifestFile.is_open()) {
-            combinedContent << "manifest:";
-            combinedContent << manifestFile.rdbuf();
-        }
-
-        std::string content = combinedContent.str();
-        return Utils::Hashing::CalculateCRC32(content.c_str(), content.size());
     }
 
 } // namespace Framework::Scripting

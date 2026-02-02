@@ -1,13 +1,12 @@
 #pragma once
 
-#include "dependency_graph.h"
-#include "environment_sandbox.h"
 #include "resource.h"
-#include "resource_manifest.h"
+#include "../engine.h"
+#include "../builtins/events.h"
 
 #include <logging/logger.h>
-#include <sol/sol.hpp>
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -15,6 +14,11 @@
 #include <set>
 #include <string>
 #include <vector>
+
+// Forward declaration for V8
+namespace v8 {
+    class Isolate;
+}
 
 namespace Framework::Scripting {
 
@@ -25,7 +29,7 @@ namespace Framework::Scripting {
         // Path to the resources directory
         std::string resourcesPath = "resources";
 
-        // Whether this is a client-side manager (enables extra sandboxing)
+        // Whether this is a client-side manager
         bool isClient = false;
 
         // Whether to cascade stop dependents when a resource stops
@@ -45,7 +49,7 @@ namespace Framework::Scripting {
 
         static ResourceOperationResult Success(const std::vector<std::string> &affected = {}) {
             ResourceOperationResult result;
-            result.success           = true;
+            result.success = true;
             result.affectedResources = affected;
             return result;
         }
@@ -53,7 +57,7 @@ namespace Framework::Scripting {
         static ResourceOperationResult Failure(const std::string &error) {
             ResourceOperationResult result;
             result.success = false;
-            result.error   = error;
+            result.error = error;
             return result;
         }
     };
@@ -61,47 +65,26 @@ namespace Framework::Scripting {
     /**
      * Callback types for resource events.
      */
-    using ResourceEventCallback     = std::function<void(const std::string &resourceName)>;
-    using ResourceErrorCallback     = std::function<void(const std::string &resourceName, const std::string &error)>;
-    using ResourceStateCallback     = std::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState)>;
+    using ResourceEventCallback = std::function<void(const std::string &resourceName)>;
+    using ResourceErrorCallback = std::function<void(const std::string &resourceName, const std::string &error)>;
+    using ResourceStateCallback = std::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState)>;
 
     /**
-     * Represents a single entry in the export call chain.
-     * Used for debugging and detecting infinite loops when exports call each other.
-     */
-    struct ExportCallEntry {
-        std::string callerResource;   // Resource that made the export call
-        std::string targetResource;   // Resource that owns the export
-        std::string exportName;       // Name of the export being called
-
-        bool operator==(const ExportCallEntry &other) const {
-            return callerResource == other.callerResource &&
-                   targetResource == other.targetResource &&
-                   exportName == other.exportName;
-        }
-    };
-
-    /**
-     * Maximum depth for export call chain before considering it an infinite loop.
-     */
-    constexpr size_t kMaxExportCallDepth = 64;
-
-    /**
-     * Central manager for all resources.
+     * Central manager for JavaScript resources.
      *
      * Responsibilities:
-     * - Discovery: Scan directories for valid resource manifests
+     * - Discovery: Scan directories for valid package.json files
      * - Dependency Resolution: Build and maintain dependency graph
      * - Lifecycle Management: Load, start, stop, and unload resources
      * - Registry: Track all discovered and running resources
      */
     class ResourceManager final {
       public:
-        explicit ResourceManager(sol::state *luaState, const ResourceManagerConfig &config = {});
+        explicit ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config = {});
         ~ResourceManager();
 
         // Non-copyable
-        ResourceManager(const ResourceManager &)            = delete;
+        ResourceManager(const ResourceManager &) = delete;
         ResourceManager &operator=(const ResourceManager &) = delete;
 
         // Configuration
@@ -162,7 +145,6 @@ namespace Framework::Scripting {
 
         /**
          * Reload a resource from disk (hot-reload).
-         * Preserves state if the resource supports it.
          * @param name Resource name
          * @return Result indicating success or failure
          */
@@ -206,12 +188,6 @@ namespace Framework::Scripting {
          */
         const Resource *GetResource(const std::string &name) const;
 
-        /**
-         * Get resource info as a table (for Lua API).
-         * Returns manifest data plus runtime state.
-         */
-        sol::table GetResourceInfo(sol::state_view luaState, const std::string &name) const;
-
         // Dependency Queries
 
         /**
@@ -223,55 +199,6 @@ namespace Framework::Scripting {
          * Get resources that the given resource directly depends on.
          */
         std::set<std::string> GetDependencies(const std::string &name) const;
-
-        // Exports Registry
-
-        /**
-         * Get an export from a resource.
-         * @param resourceName Name of the exporting resource
-         * @param exportName Name of the export
-         * @return The exported value, or nil if not found
-         */
-        sol::object GetExport(const std::string &resourceName, const std::string &exportName) const;
-
-        /**
-         * List all exports from a resource.
-         * @param resourceName Name of the resource
-         * @return Vector of export names
-         */
-        std::vector<std::string> ListExports(const std::string &resourceName) const;
-
-        // Export Call Chain Tracking
-
-        /**
-         * Get the resource name that called the current export.
-         * @return Caller resource name, or empty string if not in an export call
-         */
-        std::string GetExportCaller() const;
-
-        /**
-         * Get the full export call chain for debugging.
-         * @return Vector of call entries, from oldest to newest
-         */
-        std::vector<ExportCallEntry> GetExportCallChain() const;
-
-        /**
-         * Get the current export call depth.
-         * @return Number of nested export calls
-         */
-        size_t GetExportCallDepth() const;
-
-        /**
-         * Check if we're currently inside an export call.
-         * @return True if inside an export call
-         */
-        bool IsInExportCall() const;
-
-        /**
-         * Format the export call chain as a readable string for debugging.
-         * @return Formatted call chain string
-         */
-        std::string FormatExportCallChain() const;
 
         // Event Callbacks
 
@@ -295,18 +222,22 @@ namespace Framework::Scripting {
          */
         void SetOnResourceStateChanged(ResourceStateCallback callback);
 
-        // Lua State Access
+        // JS Engine Access
 
         /**
-         * Get the Lua state used by this manager.
+         * Get the JavaScript engine used by this manager.
          */
-        sol::state *GetLuaState() const;
+        Engine *GetJSEngine() const;
+
+        /**
+         * Get the Events instance owned by this manager.
+         */
+        Events &GetEvents();
 
         // Current Resource Context
 
         /**
          * Set the currently executing resource name.
-         * Used by the event system and builtins to know which resource is calling.
          * @param name Resource name, or empty string to clear
          */
         void SetCurrentResourceContext(const std::string &name);
@@ -318,179 +249,26 @@ namespace Framework::Scripting {
         std::string GetCurrentResourceContext() const;
 
         /**
+         * Get resource name from V8 call stack by examining file paths.
+         * Used as fallback when async ES modules are loading.
+         * @param isolate V8 isolate to get stack trace from
+         * @return Resource name extracted from stack, or empty string
+         */
+        std::string GetResourceContextFromStack(v8::Isolate *isolate) const;
+
+        /**
          * Get the currently executing resource.
          * @return Pointer to current resource, or nullptr if none
          */
         Resource *GetCurrentResource();
 
         /**
-         * Register an export from the current resource.
-         * @param exportName Name of the export
-         * @param value The value to export
-         * @return True if successful
+         * Get the currently executing resource with stack fallback.
+         * Uses V8 stack trace to determine resource when context isn't set.
+         * @param isolate V8 isolate for stack trace
+         * @return Pointer to current resource, or nullptr if none
          */
-        bool RegisterExport(const std::string &exportName, sol::object value);
-
-        /**
-         * Broadcast a global event to all running resources.
-         * @param eventName Name of the event
-         * @param args Event arguments (from Lua)
-         */
-        void BroadcastGlobalEvent(const std::string &eventName, sol::variadic_args args);
-
-        /**
-         * Invoke a global event from C++ code to all running resources.
-         * This is the C++ equivalent of Event.broadcast() in Lua.
-         * @param eventName Name of the event
-         * @param args Event arguments (C++ types, will be converted to Lua)
-         */
-        template <typename... Args>
-        void InvokeGlobalEvent(const std::string &eventName, Args &&...args) {
-            // Copy handlers while holding the lock, then release before invoking
-            std::map<std::string, std::vector<sol::protected_function>> handlersCopy;
-            {
-                std::lock_guard<std::mutex> lock(_globalEventsMutex);
-                auto it = _globalEventHandlers.find(eventName);
-                if (it == _globalEventHandlers.end()) {
-                    return;
-                }
-                handlersCopy = it->second;
-            }
-
-            // Iterate through all resources that have handlers for this event
-            for (auto &resourcePair : handlersCopy) {
-                const std::string &resourceName = resourcePair.first;
-
-                // Only invoke if resource is running
-                if (!IsResourceRunning(resourceName)) {
-                    continue;
-                }
-
-                // Save current context and set to the handler's resource
-                std::string previousContext = GetCurrentResourceContext();
-                SetCurrentResourceContext(resourceName);
-
-                for (auto &handler : resourcePair.second) {
-                    sol::protected_function_result result = handler(std::forward<Args>(args)...);
-                    if (!result.valid()) {
-                        sol::error err = result;
-                        Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("[{}] Global event '{}' handler error: {}", resourceName, eventName, err.what());
-                    }
-                }
-
-                // Restore context
-                SetCurrentResourceContext(previousContext);
-            }
-        }
-
-        /**
-         * Send a targeted event to a specific resource.
-         * @param targetResource Name of the target resource
-         * @param eventName Name of the event
-         * @param args Event arguments
-         * @return True if the target resource was found and running
-         */
-        bool EmitTargetedEvent(const std::string &targetResource, const std::string &eventName, sol::variadic_args args);
-
-        /**
-         * Register a handler for global events in the current resource.
-         * @param eventName Name of the event
-         * @param handler Event handler function
-         */
-        void RegisterGlobalEventHandler(const std::string &eventName, sol::protected_function handler);
-
-        /**
-         * Register a handler for targeted events in the current resource.
-         * @param eventName Name of the event
-         * @param handler Event handler function
-         */
-        void RegisterTargetedEventHandler(const std::string &eventName, sol::protected_function handler);
-
-        /**
-         * Send a fire-and-forget message to a resource.
-         * @param targetResource Name of the target resource
-         * @param messageType Type of the message
-         * @param payload Message payload
-         */
-        void SendMessage(const std::string &targetResource, const std::string &messageType, sol::object payload);
-
-        /**
-         * Send a request message with callback.
-         * @param targetResource Name of the target resource
-         * @param messageType Type of the message
-         * @param payload Message payload
-         * @param callback Callback to invoke with response
-         */
-        void SendRequest(const std::string &targetResource, const std::string &messageType, sol::object payload, sol::protected_function callback);
-
-        /**
-         * Register a message handler for the current resource.
-         * @param messageType Type of message to handle
-         * @param handler Handler function that receives (request, reply)
-         */
-        void RegisterMessageHandler(const std::string &messageType, sol::protected_function handler);
-
-        /**
-         * Process pending message callbacks (call in update loop).
-         */
-        void ProcessMessageQueue();
-
-        /**
-         * Fire a lifecycle event within a resource's environment.
-         * These events are internal to the resource (onResourceLoad, onResourceStart, etc.)
-         *
-         * @param resourceName Name of the resource
-         * @param eventName Name of the lifecycle event
-         * @param args Optional arguments to pass to the handler
-         * @return True if the event handler was found and executed successfully
-         */
-        bool FireResourceLifecycleEvent(const std::string &resourceName, const std::string &eventName, sol::variadic_args args);
-
-        /**
-         * Fire a lifecycle event within a resource with a preserved state table.
-         * Used during hot-reload to pass preserved state.
-         *
-         * @param resourceName Name of the resource
-         * @param eventName Name of the lifecycle event
-         * @param state The preserved state table (or nil)
-         * @return True if the event handler was found and executed successfully
-         */
-        bool FireResourceLifecycleEventWithState(const std::string &resourceName, const std::string &eventName, sol::object state);
-
-        /**
-         * Broadcast a resource awareness event to all running resources.
-         * These events notify resources about other resources (onResourceStarted, onResourceStopped)
-         *
-         * @param eventName Name of the event (e.g., "onResourceStarted")
-         * @param affectedResourceName Name of the resource that triggered the event
-         */
-        void BroadcastResourceAwarenessEvent(const std::string &eventName, const std::string &affectedResourceName);
-
-        /**
-         * Check if there is preserved state for a resource.
-         * @param name Resource name
-         * @return True if preserved state exists
-         */
-        bool HasPreservedState(const std::string &name) const;
-
-        /**
-         * Clear preserved state for a specific resource.
-         * Use this if you want to discard saved state before a restart.
-         * @param name Resource name
-         */
-        void ClearPreservedState(const std::string &name);
-
-        /**
-         * Clear all preserved states.
-         */
-        void ClearAllPreservedStates();
-
-        /**
-         * Get the preserved state for a resource (without removing it).
-         * @param name Resource name
-         * @return The preserved state object, or nil if none
-         */
-        sol::object GetPreservedState(const std::string &name) const;
+        Resource *GetCurrentResourceWithStackFallback(v8::Isolate *isolate);
 
         // Statistics
 
@@ -506,38 +284,29 @@ namespace Framework::Scripting {
 
         /**
          * Handle a runtime error in a resource.
-         * Behavior depends on the resource's errorBehavior setting in manifest.
-         *
          * @param resourceName Name of the resource that encountered the error
          * @param error Error message
-         * @param stackTrace Optional stack trace
          */
-        void HandleResourceRuntimeError(const std::string &resourceName, const std::string &error, const std::string &stackTrace = "");
+        void HandleResourceRuntimeError(const std::string &resourceName, const std::string &error);
 
         /**
          * Schedule an auto-restart for a resource.
-         * Uses exponential backoff based on restart attempts.
-         *
          * @param resourceName Name of the resource to restart
-         * @return True if restart was scheduled, false if not allowed
+         * @return True if restart was scheduled
          */
         bool ScheduleAutoRestart(const std::string &resourceName);
 
         /**
          * Process scheduled restart tasks.
-         * Should be called periodically from the update loop.
          */
         void ProcessScheduledRestarts();
-
-        /**
-         * Clear restart attempts for a resource, resetting the backoff counter.
-         * @param name Resource name
-         */
-        void ClearResourceRestartAttempts(const std::string &name);
 
       private:
         // Internal resource access (mutable)
         Resource *GetResourceMutable(const std::string &name);
+
+        // Call resource onResourceStop lifecycle function
+        bool CallResourceStop(const std::string &resourceName);
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
@@ -545,11 +314,8 @@ namespace Framework::Scripting {
         // Validate all dependencies can be satisfied
         bool ValidateDependencies(std::string &outError) const;
 
-        // Execute scripts for a resource
-        bool ExecuteResourceScripts(Resource &resource, std::string &outError);
-
-        // Create and setup environment for a resource
-        std::unique_ptr<sol::environment> CreateResourceEnvironment(const std::string &resourceName);
+        // Execute entry point script for a resource
+        bool ExecuteResourceScript(Resource &resource, std::string &outError);
 
         // Fire resource lifecycle events
         void FireOnResourceStarted(const std::string &name);
@@ -557,18 +323,23 @@ namespace Framework::Scripting {
         void FireOnResourceError(const std::string &name, const std::string &error);
         void FireOnResourceStateChanged(const std::string &name, ResourceState oldState, ResourceState newState);
 
+        // Compute topological sort for load order
+        std::vector<std::string> ComputeLoadOrder() const;
+
         // Configuration
         ResourceManagerConfig _config;
 
-        // Lua state (not owned)
-        sol::state *_luaState = nullptr;
+        // JS engine (not owned)
+        Engine *_jsEngine = nullptr;
 
         // Resource registry
         std::map<std::string, std::unique_ptr<Resource>> _resources;
         mutable std::mutex _resourcesMutex;
 
-        // Dependency graph
-        DependencyGraph _dependencyGraph;
+        // Dependency graph: resource -> set of dependencies
+        std::map<std::string, std::set<std::string>> _dependencies;
+        // Reverse dependency graph: resource -> set of dependents
+        std::map<std::string, std::set<std::string>> _dependents;
         mutable std::mutex _graphMutex;
 
         // Event callbacks
@@ -577,73 +348,20 @@ namespace Framework::Scripting {
         ResourceErrorCallback _onResourceError;
         ResourceStateCallback _onResourceStateChanged;
 
-        // Current resource context (for builtins to know which resource is calling)
+        // Current resource context
         std::string _currentResourceContext;
         mutable std::mutex _contextMutex;
 
-        // Export call chain stack for tracking nested export calls
-        // Used for debugging infinite loops and knowing who called an export
-        mutable std::vector<ExportCallEntry> _exportCallChain;
-        mutable std::mutex _exportCallChainMutex;
-
-        // Helper methods for export call chain management
-        bool PushExportCall(const std::string &callerResource, const std::string &targetResource, const std::string &exportName) const;
-        void PopExportCall() const;
-        bool HasCycleInExportCallChain(const std::string &targetResource, const std::string &exportName) const;
-
-        // Global event handlers: eventName -> {resourceName -> handlers}
-        std::map<std::string, std::map<std::string, std::vector<sol::protected_function>>> _globalEventHandlers;
-        mutable std::mutex _globalEventsMutex;
-
-        // Targeted event handlers: resourceName -> {eventName -> handlers}
-        std::map<std::string, std::map<std::string, std::vector<sol::protected_function>>> _targetedEventHandlers;
-        mutable std::mutex _targetedEventsMutex;
-
-        // Message handlers: resourceName -> {messageType -> handler}
-        std::map<std::string, std::map<std::string, sol::protected_function>> _messageHandlers;
-        mutable std::mutex _messageHandlersMutex;
-
-        // Pending message request structure
-        struct PendingRequest {
-            uint64_t requestId;
-            sol::protected_function callback;
-            std::string sourceResource;
-        };
-
-        // Pending message response structure
-        struct PendingResponse {
-            uint64_t requestId;
-            sol::object response;
-        };
-
-        // Pending request callbacks waiting for response
-        std::map<uint64_t, PendingRequest> _pendingRequests;
-        mutable std::mutex _pendingRequestsMutex;
-
-        // Response queue for processing in the main thread
-        std::vector<PendingResponse> _responseQueue;
-        mutable std::mutex _responseQueueMutex;
-
-        // Request ID counter
-        uint64_t _nextRequestId = 1;
-
-        // Cached no-op reply function for fire-and-forget messages
-        sol::protected_function _noOpReplyFn;
-
-        std::map<std::string, sol::object> _preservedStates;
-        mutable std::mutex _preservedStatesMutex;
-
-        // Internal helper to fire lifecycle event without variadic args
-        bool FireResourceLifecycleEventInternal(const std::string &resourceName, const std::string &eventName, std::vector<sol::object> args);
-
+        // Scheduled restarts
         struct ScheduledRestart {
             std::string resourceName;
             std::chrono::system_clock::time_point scheduledTime;
         };
-
-        // Scheduled restarts queue
         std::vector<ScheduledRestart> _scheduledRestarts;
         mutable std::mutex _scheduledRestartsMutex;
+
+        // Events instance owned by this manager
+        Events _events;
     };
 
 } // namespace Framework::Scripting

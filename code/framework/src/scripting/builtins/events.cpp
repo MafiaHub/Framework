@@ -1,0 +1,828 @@
+#include "events.h"
+#include "../resource/resource_manager.h"
+
+#include <logging/logger.h>
+
+namespace Framework::Scripting {
+
+    // Context for AllSettled callback - holds resolver, error message, and owner for cleanup
+    // Defined early so destructor can access it
+    struct Events::AllSettledCallbackData {
+        v8::Global<v8::Promise::Resolver> resolver;
+        std::string errorMessage;
+        Events *owner;  // For removing from pending set on completion
+        std::atomic<bool> cancelled{false};  // Set when Events is destroyed
+    };
+
+    Events::~Events() {
+        // Invalidate the callback context so any outstanding unsubscribe
+        // lambdas holding a reference will safely bail out
+        if (_callbackContext) {
+            _callbackContext->valid.store(false, std::memory_order_release);
+        }
+
+        // Mark all pending AllSettled callbacks as cancelled so any outstanding
+        // promise then-handlers will safely bail out. The shared_ptr ensures
+        // the data stays alive until the last reference (this set or the
+        // then-handler) releases it.
+        std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
+        for (const auto &data : _pendingCallbacks) {
+            data->cancelled.store(true, std::memory_order_release);
+            data->resolver.Reset();
+        }
+        _pendingCallbacks.clear();
+    }
+
+    void Events::Register(v8::Isolate *isolate,
+                          v8::Local<v8::Context> context,
+                          v8::Local<v8::Object> global,
+                          ResourceManager *resourceManager) {
+        _resourceManager = resourceManager;
+
+        // Create callback context that will be passed to all V8 callbacks
+        _callbackContext = std::make_unique<CallbackContext>();
+        _callbackContext->events = this;
+        _callbackContext->resourceManager = resourceManager;
+
+        v8::Local<v8::Object> eventsObj = v8::Object::New(isolate);
+        v8::Local<v8::External> contextData = v8::External::New(isolate, _callbackContext.get());
+
+        // on(eventName, handler) -> unsubscribe function
+        v8::Local<v8::FunctionTemplate> onTmpl = v8::FunctionTemplate::New(isolate, OnCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "on"), onTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // once(eventName, handler)
+        v8::Local<v8::FunctionTemplate> onceTmpl = v8::FunctionTemplate::New(isolate, OnceCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "once"), onceTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // off(eventName, handler)
+        v8::Local<v8::FunctionTemplate> offTmpl = v8::FunctionTemplate::New(isolate, OffCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "off"), offTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // emit(eventName, ...args) -> Promise
+        v8::Local<v8::FunctionTemplate> emitTmpl = v8::FunctionTemplate::New(isolate, EmitCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "emit"), emitTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // emitTo(resourceName, eventName, ...args) -> Promise
+        v8::Local<v8::FunctionTemplate> emitToTmpl = v8::FunctionTemplate::New(isolate, EmitToCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "emitTo"), emitToTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // onLocal(eventName, handler)
+        v8::Local<v8::FunctionTemplate> onLocalTmpl = v8::FunctionTemplate::New(isolate, OnLocalCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "onLocal"), onLocalTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // emitLocal(eventName, ...args) -> Promise
+        v8::Local<v8::FunctionTemplate> emitLocalTmpl = v8::FunctionTemplate::New(isolate, EmitLocalCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "emitLocal"), emitLocalTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // listenerCount(eventName) -> number
+        v8::Local<v8::FunctionTemplate> countTmpl = v8::FunctionTemplate::New(isolate, ListenerCountCallback, contextData);
+        eventsObj->Set(context, v8pp::to_v8(isolate, "listenerCount"), countTmpl->GetFunction(context).ToLocalChecked()).Check();
+
+        // Register as global "Events"
+        global->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
+    }
+
+    // Helper to get resource context - uses V8 stack trace as fallback for async ES modules
+    std::string GetResourceContextWithFallback(v8::Isolate *isolate, ResourceManager *manager) {
+        std::string resourceName = manager->GetCurrentResourceContext();
+        if (!resourceName.empty()) {
+            return resourceName;
+        }
+
+        // Fallback: extract resource name from V8 call stack file paths
+        return manager->GetResourceContextFromStack(isolate);
+    }
+
+    void Events::RegisterHandler(v8::Isolate *isolate,
+                                  ResourceManager *manager,
+                                  const std::string &eventName,
+                                  v8::Local<v8::Function> handler,
+                                  bool once) {
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+        if (resourceName.empty()) {
+            std::string methodName = once ? "Events.once" : "Events.on";
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, methodName + ": must be called from within a resource")));
+            return;
+        }
+
+        EventHandler entry;
+        entry.callback.Reset(isolate, handler);
+        entry.resourceName = resourceName;
+        entry.once = once;
+
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+        _globalHandlers[eventName].push_back(std::move(entry));
+    }
+
+    void Events::OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        if (args.Length() < 2) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.on requires 2 arguments: eventName, handler")));
+            return;
+        }
+
+        if (!args[0]->IsString()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.on: eventName must be a string")));
+            return;
+        }
+
+        if (!args[1]->IsFunction()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.on: handler must be a function")));
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events || !ctx->resourceManager) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.on: context not available")));
+            return;
+        }
+
+        Events *events = ctx->events;
+        ResourceManager *manager = ctx->resourceManager;
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+
+        if (resourceName.empty()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.on: must be called from within a resource")));
+            return;
+        }
+
+        events->RegisterHandler(isolate, manager, eventName, handler, false);
+
+        // Return unsubscribe function - use CallbackContext for lifetime safety
+        v8::Local<v8::Object> data = v8::Object::New(isolate);
+        data->Set(context, v8pp::to_v8(isolate, "eventName"), args[0]).Check();
+        data->Set(context, v8pp::to_v8(isolate, "handler"), args[1]).Check();
+        data->Set(context, v8pp::to_v8(isolate, "resourceName"), v8pp::to_v8(isolate, resourceName)).Check();
+        data->Set(context, v8pp::to_v8(isolate, "context"), v8::External::New(isolate, ctx)).Check();
+
+        v8::Local<v8::Function> unsubscribe = v8::Function::New(context,
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                v8::Isolate *iso = info.GetIsolate();
+                v8::Local<v8::Context> localCtx = iso->GetCurrentContext();
+                v8::Local<v8::Object> d = info.Data().As<v8::Object>();
+
+                v8::Local<v8::Value> ctxVal = d->Get(localCtx, v8pp::to_v8(iso, "context")).ToLocalChecked();
+                CallbackContext *callbackCtx = static_cast<CallbackContext *>(ctxVal.As<v8::External>()->Value());
+
+                // Check if the Events instance is still valid before accessing
+                if (!callbackCtx || !callbackCtx->valid.load(std::memory_order_acquire)) {
+                    return;
+                }
+
+                Events *eventsInst = callbackCtx->events;
+                if (!eventsInst) {
+                    return;
+                }
+
+                v8::Local<v8::Value> evtVal = d->Get(localCtx, v8pp::to_v8(iso, "eventName")).ToLocalChecked();
+                v8::Local<v8::Value> hndVal = d->Get(localCtx, v8pp::to_v8(iso, "handler")).ToLocalChecked();
+                v8::Local<v8::Value> resVal = d->Get(localCtx, v8pp::to_v8(iso, "resourceName")).ToLocalChecked();
+
+                std::string evt = v8pp::from_v8<std::string>(iso, evtVal);
+                v8::Local<v8::Function> hnd = hndVal.As<v8::Function>();
+                std::string resName = v8pp::from_v8<std::string>(iso, resVal);
+
+                std::lock_guard<std::mutex> lock(eventsInst->_handlersMutex);
+                auto it = eventsInst->_globalHandlers.find(evt);
+                if (it != eventsInst->_globalHandlers.end()) {
+                    auto &handlers = it->second;
+                    handlers.erase(
+                        std::remove_if(handlers.begin(), handlers.end(),
+                            [&](const EventHandler &h) {
+                                return h.resourceName == resName &&
+                                       h.callback.Get(iso)->StrictEquals(hnd);
+                            }),
+                        handlers.end());
+                }
+            }, data).ToLocalChecked();
+
+        args.GetReturnValue().Set(unsubscribe);
+    }
+
+    void Events::OnceCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+
+        if (args.Length() < 2) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.once requires 2 arguments: eventName, handler")));
+            return;
+        }
+
+        if (!args[0]->IsString() || !args[1]->IsFunction()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.once: invalid arguments")));
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events || !ctx->resourceManager) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.once: context not available")));
+            return;
+        }
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+
+        ctx->events->RegisterHandler(isolate, ctx->resourceManager, eventName, handler, true);
+    }
+
+    void Events::OffCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+
+        if (args.Length() < 2) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.off requires 2 arguments: eventName, handler")));
+            return;
+        }
+
+        if (!args[0]->IsString() || !args[1]->IsFunction()) {
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events || !ctx->resourceManager) {
+            return;
+        }
+
+        Events *events = ctx->events;
+        ResourceManager *manager = ctx->resourceManager;
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+
+        // If no resource context, we can't determine which resource to remove handlers for
+        if (resourceName.empty()) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(events->_handlersMutex);
+        auto it = events->_globalHandlers.find(eventName);
+        if (it != events->_globalHandlers.end()) {
+            auto &handlers = it->second;
+            handlers.erase(
+                std::remove_if(handlers.begin(), handlers.end(),
+                    [&](const EventHandler &h) {
+                        return h.resourceName == resourceName &&
+                               h.callback.Get(isolate)->StrictEquals(handler);
+                    }),
+                handlers.end());
+        }
+    }
+
+    v8::Local<v8::Array> Events::InvokeHandlersToPromiseArray(
+        v8::Isolate *isolate,
+        v8::Local<v8::Context> context,
+        std::vector<std::pair<v8::Global<v8::Function>, std::string>> &handlers,
+        const std::vector<v8::Local<v8::Value>> &args,
+        const std::string &eventName) {
+
+        v8::Local<v8::Array> promises = v8::Array::New(isolate, static_cast<int>(handlers.size()));
+
+        for (size_t i = 0; i < handlers.size(); ++i) {
+            auto &[callback, logContext] = handlers[i];
+            v8::Local<v8::Function> func = callback.Get(isolate);
+
+            v8::TryCatch tryCatch(isolate);
+            std::vector<v8::Local<v8::Value>> argv(args.begin(), args.end());
+
+            v8::MaybeLocal<v8::Value> maybeResult = func->Call(context, context->Global(),
+                                                                static_cast<int>(argv.size()),
+                                                                argv.empty() ? nullptr : argv.data());
+
+            if (tryCatch.HasCaught()) {
+                v8::String::Utf8Value error(isolate, tryCatch.Exception());
+                std::string errorStr = *error ? *error : "Unknown error";
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                    "[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
+
+                // Create rejected promise for this handler
+                v8::Local<v8::Promise::Resolver> errResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+                errResolver->Reject(context, tryCatch.Exception()).Check();
+                promises->Set(context, static_cast<uint32_t>(i), errResolver->GetPromise()).Check();
+                tryCatch.Reset();
+            } else if (!maybeResult.IsEmpty()) {
+                v8::Local<v8::Value> result = maybeResult.ToLocalChecked();
+
+                // Wrap non-promise values in resolved promise
+                if (result->IsPromise()) {
+                    promises->Set(context, static_cast<uint32_t>(i), result).Check();
+                } else {
+                    v8::Local<v8::Promise::Resolver> valResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+                    valResolver->Resolve(context, result).Check();
+                    promises->Set(context, static_cast<uint32_t>(i), valResolver->GetPromise()).Check();
+                }
+            } else {
+                // Empty result - create resolved promise with undefined
+                v8::Local<v8::Promise::Resolver> valResolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+                valResolver->Resolve(context, v8::Undefined(isolate)).Check();
+                promises->Set(context, static_cast<uint32_t>(i), valResolver->GetPromise()).Check();
+            }
+        }
+
+        return promises;
+    }
+
+    void Events::RemovePendingCallback(AllSettledCallbackData *data) {
+        std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
+        for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
+            if (it->get() == data) {
+                _pendingCallbacks.erase(it);
+                return;
+            }
+        }
+    }
+
+    void Events::AggregateWithAllSettled(
+        v8::Isolate *isolate,
+        v8::Local<v8::Context> context,
+        v8::Local<v8::Array> promises,
+        v8::Local<v8::Promise::Resolver> resolver,
+        const std::string &aggregateErrorMessage) {
+
+        // Get Promise.allSettled
+        v8::MaybeLocal<v8::Value> maybePromiseCtor = context->Global()->Get(context, v8pp::to_v8(isolate, "Promise"));
+        if (maybePromiseCtor.IsEmpty() || !maybePromiseCtor.ToLocalChecked()->IsObject()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return;
+        }
+        v8::Local<v8::Object> promiseConstructor = maybePromiseCtor.ToLocalChecked().As<v8::Object>();
+
+        v8::MaybeLocal<v8::Value> maybeAllSettled = promiseConstructor->Get(context, v8pp::to_v8(isolate, "allSettled"));
+        if (maybeAllSettled.IsEmpty() || !maybeAllSettled.ToLocalChecked()->IsFunction()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return;
+        }
+        v8::Local<v8::Function> allSettled = maybeAllSettled.ToLocalChecked().As<v8::Function>();
+
+        v8::Local<v8::Value> allSettledArgs[] = { promises };
+        v8::MaybeLocal<v8::Value> allSettledResult = allSettled->Call(context, promiseConstructor, 1, allSettledArgs);
+
+        if (allSettledResult.IsEmpty()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return;
+        }
+
+        v8::Local<v8::Promise> allPromise = allSettledResult.ToLocalChecked().As<v8::Promise>();
+
+        // Allocate callback data and track it for cleanup on Events destruction
+        // Use shared_ptr so the data survives until either:
+        // - The then-handler runs and releases its reference, or
+        // - Events is destroyed and releases its reference
+        auto callbackData = std::make_shared<AllSettledCallbackData>();
+        callbackData->resolver.Reset(isolate, resolver);
+        callbackData->errorMessage = aggregateErrorMessage;
+        callbackData->owner = this;
+
+        {
+            std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
+            _pendingCallbacks.insert(callbackData);
+        }
+
+        // Store the shared_ptr in a weak reference via raw pointer in External,
+        // but we also need to ensure the shared_ptr stays alive. We do this by
+        // capturing it in the lambda below (via the closure's captured copy).
+        // The External just provides a way to access it from the V8 callback.
+        AllSettledCallbackData *rawData = callbackData.get();
+        v8::Local<v8::External> resolverData = v8::External::New(isolate, rawData);
+
+        // Prevent the shared_ptr from being destroyed when this function returns
+        // by creating a weak reference stored in V8's weak persistent handle mechanism.
+        // Actually, we need to ensure the then-handler lambda captures the shared_ptr.
+        // Since V8 callbacks can't directly capture, we use a persistent weak reference approach.
+        // Instead, we store the shared_ptr in a weak persistent handle that prevents GC.
+        //
+        // Simpler approach: We keep the shared_ptr in _pendingCallbacks (which we do).
+        // The then-handler will access via raw pointer but check cancelled flag before use.
+        // This is safe because:
+        // 1. If Events is alive, _pendingCallbacks keeps shared_ptr alive
+        // 2. If Events is destroyed, cancelled is set to true, then-handler bails out
+
+        v8::Local<v8::Function> thenHandler = v8::Function::New(context,
+            [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+                v8::Isolate *iso = info.GetIsolate();
+                v8::Local<v8::Context> ctx = iso->GetCurrentContext();
+
+                AllSettledCallbackData *data =
+                    static_cast<AllSettledCallbackData *>(info.Data().As<v8::External>()->Value());
+
+                // Check if Events was destroyed before this callback ran
+                if (data->cancelled.load(std::memory_order_acquire)) {
+                    return;  // Events destroyed, bail out safely
+                }
+
+                v8::Local<v8::Promise::Resolver> res = data->resolver.Get(iso);
+                std::string errorMsg = data->errorMessage;
+
+                v8::Local<v8::Array> results = info[0].As<v8::Array>();
+                std::vector<v8::Local<v8::Value>> rejections;
+
+                for (uint32_t i = 0; i < results->Length(); ++i) {
+                    v8::Local<v8::Object> item = results->Get(ctx, i).ToLocalChecked().As<v8::Object>();
+                    v8::Local<v8::Value> status = item->Get(ctx, v8pp::to_v8(iso, "status")).ToLocalChecked();
+                    v8::String::Utf8Value statusStr(iso, status);
+
+                    if (std::string(*statusStr) == "rejected") {
+                        v8::Local<v8::Value> reason = item->Get(ctx, v8pp::to_v8(iso, "reason")).ToLocalChecked();
+                        rejections.push_back(reason);
+                    }
+                }
+
+                if (!rejections.empty()) {
+                    // Create AggregateError
+                    v8::Local<v8::Array> errArray = v8::Array::New(iso, static_cast<int>(rejections.size()));
+                    for (size_t i = 0; i < rejections.size(); ++i) {
+                        errArray->Set(ctx, static_cast<uint32_t>(i), rejections[i]).Check();
+                    }
+
+                    v8::Local<v8::String> msg = v8pp::to_v8(iso, errorMsg);
+                    v8::Local<v8::Value> aggArgs[] = { errArray, msg };
+                    v8::MaybeLocal<v8::Value> aggErrorCtorVal = ctx->Global()->Get(ctx, v8pp::to_v8(iso, "AggregateError"));
+
+                    if (!aggErrorCtorVal.IsEmpty() && aggErrorCtorVal.ToLocalChecked()->IsFunction()) {
+                        v8::Local<v8::Function> aggErrorCtor = aggErrorCtorVal.ToLocalChecked().As<v8::Function>();
+                        v8::MaybeLocal<v8::Object> aggErrorObj = aggErrorCtor->NewInstance(ctx, 2, aggArgs);
+                        if (!aggErrorObj.IsEmpty()) {
+                            res->Reject(ctx, aggErrorObj.ToLocalChecked()).Check();
+                        } else {
+                            res->Reject(ctx, errArray).Check();
+                        }
+                    } else {
+                        // Fallback if AggregateError not available
+                        res->Reject(ctx, errArray).Check();
+                    }
+                } else {
+                    res->Resolve(ctx, v8::Undefined(iso)).Check();
+                }
+
+                // Remove from tracking - the shared_ptr in _pendingCallbacks will be erased,
+                // releasing the last reference and freeing the data
+                data->owner->RemovePendingCallback(data);
+            }, resolverData).ToLocalChecked();
+
+        allPromise->Then(context, thenHandler).ToLocalChecked();
+    }
+
+    v8::Local<v8::Promise> Events::EmitInternal(v8::Isolate *isolate,
+                                                 v8::Local<v8::Context> context,
+                                                 const std::string &eventName,
+                                                 const std::vector<v8::Local<v8::Value>> &args,
+                                                 const std::string &targetResource,
+                                                 bool bypassRunningCheck) {
+        v8::EscapableHandleScope handleScope(isolate);
+
+        // Create Promise resolver
+        v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+        v8::Local<v8::Promise> promise = resolver->GetPromise();
+
+        // Collect handlers to call and track which ones to remove (once handlers)
+        std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
+        std::vector<size_t> indicesToRemove;
+
+        {
+            std::lock_guard<std::mutex> lock(_handlersMutex);
+            auto it = _globalHandlers.find(eventName);
+            if (it != _globalHandlers.end()) {
+                for (size_t idx = 0; idx < it->second.size(); ++idx) {
+                    const auto &handler = it->second[idx];
+
+                    // Filter by target resource if specified
+                    if (!targetResource.empty() && handler.resourceName != targetResource) {
+                        continue;
+                    }
+
+                    // Check if resource is still running (skip for resourceStart via bypass)
+                    if (!bypassRunningCheck && _resourceManager && !_resourceManager->IsResourceRunning(handler.resourceName)) {
+                        continue;
+                    }
+
+                    // Copy the callback for calling outside the lock
+                    v8::Global<v8::Function> callbackCopy;
+                    callbackCopy.Reset(isolate, handler.callback.Get(isolate));
+                    handlersToCall.emplace_back(std::move(callbackCopy), handler.resourceName);
+
+                    if (handler.once) {
+                        indicesToRemove.push_back(idx);
+                    }
+                }
+
+                // Remove once handlers (in reverse order to preserve indices)
+                for (auto rit = indicesToRemove.rbegin(); rit != indicesToRemove.rend(); ++rit) {
+                    it->second.erase(it->second.begin() + static_cast<std::ptrdiff_t>(*rit));
+                }
+            }
+        }
+
+        if (handlersToCall.empty()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            return handleScope.Escape(promise);
+        }
+
+        // Invoke handlers and collect results as promises
+        v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(
+            isolate, context, handlersToCall, args, eventName);
+
+        // Aggregate results using Promise.allSettled
+        AggregateWithAllSettled(isolate, context, promises, resolver,
+            "One or more event handlers failed");
+
+        return handleScope.Escape(promise);
+    }
+
+    v8::Local<v8::Promise> Events::EmitReserved(v8::Isolate *isolate,
+                                                 v8::Local<v8::Context> context,
+                                                 const std::string &eventName,
+                                                 const std::vector<v8::Local<v8::Value>> &args,
+                                                 bool bypassRunningCheck) {
+        return EmitInternal(isolate, context, eventName, args, "", bypassRunningCheck);
+    }
+
+    void Events::EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        if (args.Length() < 1) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emit requires at least 1 argument: eventName")));
+            return;
+        }
+
+        if (!args[0]->IsString()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emit: eventName must be a string")));
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emit: context not available")));
+            return;
+        }
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+
+        // Check reserved events (static + dynamic)
+        if (ctx->events->IsEventReserved(eventName)) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emit: cannot emit reserved event '" + eventName + "'")));
+            return;
+        }
+
+        std::vector<v8::Local<v8::Value>> eventArgs;
+        for (int i = 1; i < args.Length(); ++i) {
+            eventArgs.push_back(args[i]);
+        }
+
+        v8::Local<v8::Promise> promise = ctx->events->EmitInternal(isolate, context, eventName, eventArgs);
+        args.GetReturnValue().Set(promise);
+    }
+
+    void Events::EmitToCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        if (args.Length() < 2) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emitTo requires at least 2 arguments: resourceName, eventName")));
+            return;
+        }
+
+        if (!args[0]->IsString() || !args[1]->IsString()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emitTo: resourceName and eventName must be strings")));
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emitTo: context not available")));
+            return;
+        }
+
+        std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[1]);
+
+        // Check reserved events (static + dynamic)
+        if (ctx->events->IsEventReserved(eventName)) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emitTo: cannot emit reserved event '" + eventName + "'")));
+            return;
+        }
+
+        std::vector<v8::Local<v8::Value>> eventArgs;
+        for (int i = 2; i < args.Length(); ++i) {
+            eventArgs.push_back(args[i]);
+        }
+
+        v8::Local<v8::Promise> promise = ctx->events->EmitInternal(isolate, context, eventName, eventArgs, resourceName);
+        args.GetReturnValue().Set(promise);
+    }
+
+    void Events::OnLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+
+        if (args.Length() < 2 || !args[0]->IsString() || !args[1]->IsFunction()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.onLocal requires 2 arguments: eventName, handler")));
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events || !ctx->resourceManager) {
+            return;
+        }
+
+        Events *events = ctx->events;
+        ResourceManager *manager = ctx->resourceManager;
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+
+        if (resourceName.empty()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.onLocal: must be called from within a resource")));
+            return;
+        }
+
+        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+
+        EventHandler entry;
+        entry.callback.Reset(isolate, handler);
+        entry.resourceName = resourceName;
+        entry.once = false;
+
+        std::lock_guard<std::mutex> lock(events->_handlersMutex);
+        events->_localHandlers[resourceName][eventName].push_back(std::move(entry));
+    }
+
+    void Events::EmitLocalCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+        v8::HandleScope handleScope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emitLocal requires at least 1 argument: eventName")));
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events || !ctx->resourceManager) {
+            return;
+        }
+
+        Events *events = ctx->events;
+        ResourceManager *manager = ctx->resourceManager;
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+
+        if (resourceName.empty()) {
+            isolate->ThrowException(v8::Exception::Error(
+                v8pp::to_v8(isolate, "Events.emitLocal: must be called from within a resource")));
+            return;
+        }
+
+        // Collect local handlers (convert to pairs with resource name as log context)
+        std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
+        {
+            std::lock_guard<std::mutex> lock(events->_handlersMutex);
+            auto resIt = events->_localHandlers.find(resourceName);
+            if (resIt != events->_localHandlers.end()) {
+                auto evtIt = resIt->second.find(eventName);
+                if (evtIt != resIt->second.end()) {
+                    for (const auto &handler : evtIt->second) {
+                        v8::Global<v8::Function> copy;
+                        copy.Reset(isolate, handler.callback.Get(isolate));
+                        handlersToCall.emplace_back(std::move(copy), resourceName);
+                    }
+                }
+            }
+        }
+
+        // Create resolver for promise
+        v8::Local<v8::Promise::Resolver> resolver = v8::Promise::Resolver::New(context).ToLocalChecked();
+
+        if (handlersToCall.empty()) {
+            resolver->Resolve(context, v8::Undefined(isolate)).Check();
+            args.GetReturnValue().Set(resolver->GetPromise());
+            return;
+        }
+
+        // Collect args
+        std::vector<v8::Local<v8::Value>> eventArgs;
+        for (int i = 1; i < args.Length(); ++i) {
+            eventArgs.push_back(args[i]);
+        }
+
+        // Invoke handlers and collect results as promises
+        v8::Local<v8::Array> promises = InvokeHandlersToPromiseArray(
+            isolate, context, handlersToCall, eventArgs, eventName);
+
+        // Aggregate results using Promise.allSettled
+        events->AggregateWithAllSettled(isolate, context, promises, resolver,
+            "One or more local event handlers failed");
+
+        args.GetReturnValue().Set(resolver->GetPromise());
+    }
+
+    void Events::CleanupResource(const std::string &resourceName) {
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+
+        // Remove from global handlers
+        for (auto &[eventName, handlers] : _globalHandlers) {
+            handlers.erase(
+                std::remove_if(handlers.begin(), handlers.end(),
+                    [&](const EventHandler &h) { return h.resourceName == resourceName; }),
+                handlers.end());
+        }
+
+        // Remove local handlers entirely
+        _localHandlers.erase(resourceName);
+    }
+
+    void Events::ClearAll() {
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+
+        // Explicitly Reset() all global handles before clearing to avoid
+        // crash when destroying handlers from dead isolates
+        for (auto &[eventName, handlers] : _globalHandlers) {
+            for (auto &handler : handlers) {
+                handler.callback.Reset();
+            }
+        }
+        _globalHandlers.clear();
+
+        for (auto &[resourceName, eventMap] : _localHandlers) {
+            for (auto &[eventName, handlers] : eventMap) {
+                for (auto &handler : handlers) {
+                    handler.callback.Reset();
+                }
+            }
+        }
+        _localHandlers.clear();
+    }
+
+    size_t Events::GetListenerCount(const std::string &eventName) {
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+        auto it = _globalHandlers.find(eventName);
+        if (it != _globalHandlers.end()) {
+            return it->second.size();
+        }
+        return 0;
+    }
+
+    void Events::AddReservedEvents(const std::set<std::string> &events) {
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+        _additionalReservedEvents.insert(events.begin(), events.end());
+    }
+
+    bool Events::IsEventReserved(const std::string &eventName) const {
+        if (IsReservedEvent(eventName)) {
+            return true;
+        }
+        std::lock_guard<std::mutex> lock(_handlersMutex);
+        return _additionalReservedEvents.find(eventName) != _additionalReservedEvents.end();
+    }
+
+    void Events::ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+        v8::Isolate *isolate = args.GetIsolate();
+
+        if (args.Length() < 1 || !args[0]->IsString()) {
+            args.GetReturnValue().Set(0);
+            return;
+        }
+
+        CallbackContext *ctx = static_cast<CallbackContext *>(args.Data().As<v8::External>()->Value());
+        if (!ctx || !ctx->events) {
+            args.GetReturnValue().Set(0);
+            return;
+        }
+
+        std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
+        size_t count = ctx->events->GetListenerCount(eventName);
+        args.GetReturnValue().Set(static_cast<uint32_t>(count));
+    }
+
+} // namespace Framework::Scripting

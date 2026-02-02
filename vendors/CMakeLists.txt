@@ -72,6 +72,14 @@ set(FTL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(FTL_CPP_17 ON CACHE BOOL "" FORCE)
 add_subdirectory(ftl)
 
+# Build libnode (Node.js as library) - provides both libnode and v8 targets
+# libnode: Full Node.js shared library for server-side scripting
+# v8: V8 headers interface for client-side scripting (links to libnode)
+add_subdirectory(libnode)
+
+# Build v8pp (header-only V8 binding library)
+add_subdirectory(v8pp)
+
 # Build OS specific libraries
 if (WIN32)
     # Build other win32 deps

@@ -1,10 +1,20 @@
 add_executable(FrameworkTests framework_ut.cpp)
 
 target_include_directories(FrameworkTests PRIVATE . ../framework/src)
-target_link_libraries(FrameworkTests Framework FrameworkServer)
+target_include_directories(FrameworkTests SYSTEM PRIVATE ${LIBNODE_UV_INCLUDE_DIR})
+target_link_libraries(FrameworkTests Framework FrameworkServer libnode)
 
-# Reuse FrameworkServer's PCH (includes sol, flecs, and Framework's headers)
-target_precompile_headers(FrameworkTests REUSE_FROM FrameworkServer)
+# Ensure libnode.dll is copied to bin directory before running tests (Windows only)
+if(WIN32)
+    add_dependencies(FrameworkTests libnode_copy_dll)
+endif()
+
+# Tests use Node.js APIs through the scripting engine
+target_compile_definitions(FrameworkTests PRIVATE NODE_WANT_INTERNALS=1)
+
+# Reuse Framework's PCH (includes standard headers and flecs)
+# Note: We reuse from Framework directly because FrameworkServer itself uses REUSE_FROM Framework
+target_precompile_headers(FrameworkTests REUSE_FROM Framework)
 
 add_custom_target(RunFrameworkTests
         COMMAND $<TARGET_FILE:FrameworkTests>

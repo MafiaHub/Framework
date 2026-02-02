@@ -21,14 +21,8 @@
 
 #include "../shared/modules/mod.hpp"
 
-#include "scripting/utils/table_conversions.h"
 #include "scripting/resource/resource_manager.h"
-
-#include "scripting/builtins/events_lua.h"
-#ifdef _WIN64
-#include "scripting/builtins/views.h"
-#endif
-#include "scripting/builtins/input.h"
+#include "scripting/builtins/events.h"
 
 #include "networking/state.h"
 
@@ -374,8 +368,8 @@ namespace Framework::Integrations::Client {
                 _onConnectionClosed();
             }
 
-            // Request the scripting engine to clean up loaded scripts
-            _scriptingModule->Shutdown();
+            // Reset the scripting engine (keeps engine alive, just stops resources)
+            _scriptingModule->Reset();
 
 #ifdef _WIN64
             // Destroy scriptable web views
@@ -390,19 +384,49 @@ namespace Framework::Integrations::Client {
                 return;
             const auto eventName  = rpc->GetEventName();
             const auto payloadStr = rpc->GetPayload();
-            sol::object payload {};
-            try {
-                nlohmann::json payloadJson = nlohmann::json::parse(payloadStr);
-                payload                    = Framework::Scripting::Utils::JsonToSol(sol::this_state(_scriptingModule->GetEngine()->GetLuaEngine()->lua_state()), payloadJson);
-            }
-            catch (const std::exception &ex) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload: {}", ex.what());
+
+            // Emit to JavaScript resources via the Events system
+            auto resourceManager = _scriptingModule->GetResourceManager();
+            if (!resourceManager) {
                 return;
             }
-            const auto resourceManager = Framework::CoreModules::GetResourceManager();
-            if (resourceManager) {
-                resourceManager->InvokeGlobalEvent(eventName, payload);
+
+            auto *engine = _scriptingModule->GetEngine();
+            if (!engine || !engine->IsInitialized()) {
+                return;
             }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Parse JSON payload and emit event
+            std::vector<v8::Local<v8::Value>> args;
+            if (!payloadStr.empty()) {
+                v8::Local<v8::String> jsonStr;
+                if (!v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocal(&jsonStr)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to create V8 string from event payload: {}", payloadStr);
+                    return;
+                }
+
+                v8::TryCatch tryCatch(isolate);
+                v8::Local<v8::Value> parsed;
+                if (!v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+                    if (tryCatch.HasCaught()) {
+                        v8::String::Utf8Value errorMsg(isolate, tryCatch.Exception());
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", *errorMsg ? *errorMsg : "unknown error");
+                    } else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", payloadStr);
+                    }
+                    return;
+                }
+                args.push_back(parsed);
+            }
+
+            resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
         });
 
         Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
@@ -478,8 +502,8 @@ namespace Framework::Integrations::Client {
                 scriptingModule->SetResourceCachePath(GetAssetCachePath());
 
                 // Initialize the scripting module with builtin registration callback
-                const auto sdkCallback = [this](Framework::Scripting::SDKRegisterWrapper<Framework::Scripting::Engine> sdk) {
-                    this->RegisterScriptingBuiltins(sdk.GetEngine());
+                const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
+                    this->RegisterScriptingBuiltins(engine);
                 };
 
                 if (!scriptingModule->Init(sdkCallback)) {
@@ -528,14 +552,8 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {
-        // Register the events builtin
-        Framework::Integrations::Scripting::EventsClient::Register(engine->GetLuaEngine());
-#ifdef _WIN64
-        Framework::Integrations::Scripting::Views::Register(engine->GetLuaEngine());
-#endif
-        Framework::Integrations::Scripting::Input::Register(engine->GetLuaEngine());
-
-        // mod-specific builtins
+        // JavaScript bindings are registered by ClientScriptingModule::RegisterFrameworkBindings
+        // This method is called to allow mod-specific customization
         ModuleRegister(engine);
     }
 } // namespace Framework::Integrations::Client
