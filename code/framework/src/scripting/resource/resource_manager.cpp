@@ -414,7 +414,11 @@ namespace Framework::Scripting {
         std::string escapedPath = EscapeForSingleQuotedJSString(genericPath);
         std::string code = "(function() { require('" + escapedPath + "'); })();\n";
 
+        // Set resource context so Events.on() etc. know which resource is executing
+        SetCurrentResourceContext(resourceName);
         bool result = _jsEngine->Execute(code, absPathStr);
+        SetCurrentResourceContext("");
+
         if (!result) {
             outError = _jsEngine->GetLastError();
         }
