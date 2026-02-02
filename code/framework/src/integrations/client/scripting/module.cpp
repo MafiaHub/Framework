@@ -51,10 +51,11 @@ namespace Framework::Integrations::Client::Scripting {
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
             _nodeEngine.get(), config);
 
-        // Register Framework SDK bindings and call SDK callback only on first init
-        if (!engineAlreadyInitialized) {
-            RegisterFrameworkBindings();
+        // Register Framework SDK bindings for the new ResourceManager
+        RegisterFrameworkBindings();
 
+        // Initialize Framework SDK only on first init (not after Reset)
+        if (!engineAlreadyInitialized) {
             if (!_nodeEngine->InitFrameworkSDK()) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                     "Failed to initialize Framework SDK: {}", _nodeEngine->GetLastError());
