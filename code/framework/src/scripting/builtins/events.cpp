@@ -792,6 +792,7 @@ namespace Framework::Scripting {
     }
 
     void Events::AddReservedEvents(const std::set<std::string> &events) {
+        std::lock_guard<std::mutex> lock(_handlersMutex);
         _additionalReservedEvents.insert(events.begin(), events.end());
     }
 
@@ -799,6 +800,7 @@ namespace Framework::Scripting {
         if (IsReservedEvent(eventName)) {
             return true;
         }
+        std::lock_guard<std::mutex> lock(_handlersMutex);
         return _additionalReservedEvents.find(eventName) != _additionalReservedEvents.end();
     }
 
