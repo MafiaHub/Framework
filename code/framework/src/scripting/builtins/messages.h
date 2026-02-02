@@ -7,7 +7,6 @@
 #include <atomic>
 #include <functional>
 #include <map>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -54,20 +53,17 @@ namespace Framework::Scripting {
         static std::map<std::string, std::map<std::string, v8::Global<v8::Function>>> _handlers;
         static std::mutex _handlersMutex;
 
-        // Reply context for safe reply function handling - prevents double-free
-        // and use-after-free when reply() is called multiple times or errors occur.
-        struct ReplyContext {
-            uint64_t id;
-            std::atomic<bool> consumed{false};
-            explicit ReplyContext(uint64_t requestId) : id(requestId) {}
-        };
-
         // Pending request structure
         struct PendingRequest {
             uint64_t requestId;
             v8::Global<v8::Promise::Resolver> resolver;
             std::string sourceResource;
-            std::shared_ptr<ReplyContext> replyContext; // Keeps ReplyContext alive
+            std::atomic<bool> consumed{false}; // Prevents double-reply
+
+            PendingRequest(uint64_t id, v8::Global<v8::Promise::Resolver> res, std::string src)
+                : requestId(id), resolver(std::move(res)), sourceResource(std::move(src)), consumed(false) {}
+            PendingRequest(PendingRequest&&) = delete;
+            PendingRequest& operator=(PendingRequest&&) = delete;
         };
 
         // Pending response structure

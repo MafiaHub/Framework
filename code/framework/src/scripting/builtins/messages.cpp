@@ -138,29 +138,35 @@ namespace Framework::Scripting {
             handler.Reset(isolate, handlerIt->second.Get(isolate));
         }
 
-        // Create reply context with atomic consumed flag for safe reply handling.
-        // The shared_ptr is stored in PendingRequest to keep it alive until the request is resolved.
-        auto replyContext = std::make_shared<ReplyContext>(0); // ID set below after we know it
-
-        // Generate request ID and store pending request (including replyContext to keep it alive)
+        // Generate request ID and store pending request
         uint64_t requestId;
         {
             std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
             requestId = _nextRequestId++;
-            replyContext->id = requestId;
-            _pendingRequests[requestId] = {requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource, replyContext};
+            _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource);
         }
 
-        // Create reply function - the ReplyContext is kept alive by PendingRequest.replyContext
+        // Create reply function - passes requestId as BigInt to avoid dangling pointer issues
         auto replyCallback = [](const v8::FunctionCallbackInfo<v8::Value> &replyArgs) {
             v8::Isolate *replyIsolate = replyArgs.GetIsolate();
             v8::HandleScope replyScope(replyIsolate);
 
-            auto *replyCtx = static_cast<ReplyContext *>(replyArgs.Data().As<v8::External>()->Value());
+            // Extract requestId from BigInt
+            v8::Local<v8::BigInt> bigInt = replyArgs.Data().As<v8::BigInt>();
+            uint64_t reqId = bigInt->Uint64Value();
 
-            // Atomically check-and-set consumed flag - only the first call proceeds
-            if (replyCtx->consumed.exchange(true)) {
-                return; // Already consumed, ignore subsequent calls
+            // Look up PendingRequest and atomically check-and-set consumed flag
+            {
+                std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+                auto it = _pendingRequests.find(reqId);
+                if (it == _pendingRequests.end()) {
+                    return; // Request no longer exists
+                }
+
+                // Atomically check-and-set consumed flag - only the first call proceeds
+                if (it->second.consumed.exchange(true)) {
+                    return; // Already consumed, ignore subsequent calls
+                }
             }
 
             v8::Local<v8::Value> response = replyArgs.Length() > 0 ? replyArgs[0] : v8::Undefined(replyIsolate).As<v8::Value>();
@@ -168,14 +174,14 @@ namespace Framework::Scripting {
             {
                 std::lock_guard<std::mutex> lock(_responseQueueMutex);
                 PendingResponse pendingResponse;
-                pendingResponse.requestId = replyCtx->id;
+                pendingResponse.requestId = reqId;
                 pendingResponse.response.Reset(replyIsolate, response);
                 pendingResponse.isError = false;
                 _responseQueue.push_back(std::move(pendingResponse));
             }
         };
 
-        v8::Local<v8::External> requestIdData = v8::External::New(isolate, replyContext.get());
+        v8::Local<v8::BigInt> requestIdData = v8::BigInt::NewFromUnsigned(isolate, requestId);
         v8::Local<v8::Function> replyFn = v8::Function::New(context, replyCallback, requestIdData).ToLocalChecked();
 
         // Call the handler with (payload, reply)
@@ -196,13 +202,11 @@ namespace Framework::Scripting {
                 targetResource, messageType, *error ? *error : "Unknown error");
 
             // Only reject the promise if reply() wasn't already called before the error
-            if (!replyContext->consumed.exchange(true)) {
-                std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
-                auto it = _pendingRequests.find(requestId);
-                if (it != _pendingRequests.end()) {
-                    it->second.resolver.Get(isolate)->Reject(context, tryCatch.Exception()).Check();
-                    _pendingRequests.erase(it);
-                }
+            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            auto it = _pendingRequests.find(requestId);
+            if (it != _pendingRequests.end() && !it->second.consumed.exchange(true)) {
+                it->second.resolver.Get(isolate)->Reject(context, tryCatch.Exception()).Check();
+                _pendingRequests.erase(it);
             }
         }
 
