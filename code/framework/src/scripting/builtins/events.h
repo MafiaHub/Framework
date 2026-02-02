@@ -59,11 +59,13 @@ namespace Framework::Scripting {
         /**
          * Emit a reserved event (framework-only, bypasses protection).
          * Returns a Promise that resolves when all handlers complete.
+         * @param bypassRunningCheck If true, skips the "resource is running" check (for resourceStart)
          */
         v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate,
                                             v8::Local<v8::Context> context,
                                             const std::string &eventName,
-                                            const std::vector<v8::Local<v8::Value>> &args);
+                                            const std::vector<v8::Local<v8::Value>> &args,
+                                            bool bypassRunningCheck = false);
 
         /**
          * Clean up all handlers for a resource (called on resource stop).
@@ -125,7 +127,8 @@ namespace Framework::Scripting {
                                             v8::Local<v8::Context> context,
                                             const std::string &eventName,
                                             const std::vector<v8::Local<v8::Value>> &args,
-                                            const std::string &targetResource = "");
+                                            const std::string &targetResource = "",
+                                            bool bypassRunningCheck = false);
 
         // Helper: invoke handlers and collect results as promises
         // handlers: pairs of (callback, logContext) where logContext is used for error logging

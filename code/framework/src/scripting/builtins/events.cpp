@@ -483,7 +483,8 @@ namespace Framework::Scripting {
                                                  v8::Local<v8::Context> context,
                                                  const std::string &eventName,
                                                  const std::vector<v8::Local<v8::Value>> &args,
-                                                 const std::string &targetResource) {
+                                                 const std::string &targetResource,
+                                                 bool bypassRunningCheck) {
         v8::EscapableHandleScope handleScope(isolate);
 
         // Create Promise resolver
@@ -506,8 +507,8 @@ namespace Framework::Scripting {
                         continue;
                     }
 
-                    // Check if resource is still running
-                    if (_resourceManager && !_resourceManager->IsResourceRunning(handler.resourceName)) {
+                    // Check if resource is still running (skip for resourceStart via bypass)
+                    if (!bypassRunningCheck && _resourceManager && !_resourceManager->IsResourceRunning(handler.resourceName)) {
                         continue;
                     }
 
@@ -547,8 +548,9 @@ namespace Framework::Scripting {
     v8::Local<v8::Promise> Events::EmitReserved(v8::Isolate *isolate,
                                                  v8::Local<v8::Context> context,
                                                  const std::string &eventName,
-                                                 const std::vector<v8::Local<v8::Value>> &args) {
-        return EmitInternal(isolate, context, eventName, args);
+                                                 const std::vector<v8::Local<v8::Value>> &args,
+                                                 bool bypassRunningCheck) {
+        return EmitInternal(isolate, context, eventName, args, "", bypassRunningCheck);
     }
 
     void Events::EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {

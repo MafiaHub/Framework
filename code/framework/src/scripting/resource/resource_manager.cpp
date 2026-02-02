@@ -282,7 +282,7 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Failure(error);
         }
 
-        // Emit resourceStart event
+        // Emit resourceStart event (bypass running check since resource is still Loading)
         if (_jsEngine && _jsEngine->IsInitialized()) {
             v8::Isolate *isolate = _jsEngine->GetIsolate();
             v8::Locker locker(isolate);
@@ -295,7 +295,7 @@ namespace Framework::Scripting {
             args.push_back(v8pp::to_v8(isolate, name));
 
             SetCurrentResourceContext(name);
-            _events.EmitReserved(isolate, context, "resourceStart", args);
+            _events.EmitReserved(isolate, context, "resourceStart", args, true);
             SetCurrentResourceContext("");
         }
 
