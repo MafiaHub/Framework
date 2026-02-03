@@ -70,6 +70,8 @@ namespace Framework::Scripting {
             } else if (value->IsArray()) {
                 v8::Local<v8::Array> arr = value.As<v8::Array>();
                 ss << "[Array(" << arr->Length() << ")]";
+            } else if (value->IsFunction()) {
+                ss << "[Function]";
             } else if (value->IsObject()) {
                 v8::Local<v8::Object> obj = value.As<v8::Object>();
                 v8::Local<v8::Context> context = isolate->GetCurrentContext();
@@ -93,7 +95,12 @@ namespace Framework::Scripting {
                             tryCatch.Reset();
                             ss << "[Object]";
                         } else {
-                            ss << v8pp::from_v8<std::string>(isolate, jsonResult.ToLocalChecked());
+                            v8::Local<v8::Value> result = jsonResult.ToLocalChecked();
+                            if (result->IsString()) {
+                                ss << v8pp::from_v8<std::string>(isolate, result);
+                            } else {
+                                ss << "[Object]";
+                            }
                         }
                     } else {
                         ss << "[Object]";
