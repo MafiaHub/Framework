@@ -149,44 +149,6 @@ endif()
 
 add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
 
-# Precompiled Headers (PCH) for faster builds
-# Framework base PCH - stable, frequently used headers
-# Using PUBLIC so child targets can inherit via INTERFACE_PRECOMPILE_HEADERS
-#
-# IMPORTANT: FrameworkServer and FrameworkClient use REUSE_FROM Framework.
-# This is critical because these targets have V8/libuv include directories and
-# NODE_WANT_INTERNALS defined, which causes Windows SDK errno conflicts (EINVAL/ERANGE
-# undefined) if they try to compile their own PCH. By reusing Framework's PCH
-# (compiled without those settings), we avoid the issue.
-target_precompile_headers(Framework PUBLIC
-    # C headers first - cerrno must be included before any headers that may
-    # be affected by libuv/Node.js which don't define EINVAL/ERANGE on Windows
-    <cerrno>
-
-    # STL (stable, frequently used)
-    <memory>
-    <string>
-    <vector>
-    <unordered_map>
-    <functional>
-
-    # Stable vendor headers
-    <spdlog/spdlog.h>
-    <glm/glm.hpp>
-    <glm/gtc/quaternion.hpp>
-    <nlohmann/json.hpp>
-
-    # ECS - used by both server and client
-    <flecs/flecs.h>
-)
-
-# FrameworkServer and FrameworkClient reuse Framework's PCH to avoid
-# Windows SDK errno conflicts when compiling with V8/libuv include paths
-target_precompile_headers(FrameworkServer REUSE_FROM Framework)
-if(WIN32)
-    target_precompile_headers(FrameworkClient REUSE_FROM Framework)
-endif()
-
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
@@ -267,9 +229,6 @@ target_include_directories(FrameworkNodeEngine PUBLIC
 target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog)
 
 # Node.js internal APIs require NODE_WANT_INTERNALS
-# NOTE: Do NOT add ${LIBNODE_UV_INCLUDE_DIR} here - it causes Windows SDK errno
-# conflicts because #include <errno.h> finds uv/errno.h instead of system errno.h.
-# The main libnode include dir already has uv.h which includes uv/* properly.
 target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
 
 # Match Framework compile definitions and features
