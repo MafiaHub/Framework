@@ -31,6 +31,12 @@ namespace Framework::Scripting {
                             v8::Local<v8::Context> context,
                             ResourceManager *resourceManager);
 
+        // Helper to format arguments as a string (public for testing)
+        static std::string FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args);
+
+        // Format a single V8 value as a string (public for testing)
+        static std::string FormatValue(v8::Isolate *isolate, v8::Local<v8::Value> value);
+
       private:
         // V8 callback implementations
         static void LogCallback(const v8::FunctionCallbackInfo<v8::Value> &args);
@@ -41,8 +47,6 @@ namespace Framework::Scripting {
         // Helper to log at a specific level
         static void LogWithLevel(const v8::FunctionCallbackInfo<v8::Value> &args, spdlog::level::level_enum level);
 
-        // Helper to format arguments as a string
-        static std::string FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args);
     };
 
 } // namespace Framework::Scripting

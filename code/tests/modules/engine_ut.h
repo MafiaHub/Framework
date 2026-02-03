@@ -398,4 +398,127 @@ MODULE(engine, {
         EQUALS(success, true);
         engine.Shutdown();
     });
+
+    // ========================================
+    // ERROR FORMATTING TESTS
+    // ========================================
+
+    IT("Execute returns error with stack trace for TypeError", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        // Code that causes a TypeError - call undefined as function
+        const char *code = "const x = undefined; x();";
+
+        bool result = engine.Execute(code, "test-error.js");
+        EQUALS(result, false);
+
+        std::string error = engine.GetLastError();
+        // Should contain the error type
+        EQUALS(error.find("TypeError") != std::string::npos, true);
+        // Should contain the filename from ScriptOrigin
+        EQUALS(error.find("test-error.js") != std::string::npos, true);
+        // Should contain line number (format: filename:line)
+        EQUALS(error.find("test-error.js:1") != std::string::npos, true);
+
+        engine.Shutdown();
+    });
+
+    IT("Execute returns error with stack trace for ReferenceError", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        // Code that causes a ReferenceError
+        const char *code = "undefinedVariable.foo()";
+
+        bool result = engine.Execute(code, "reference-test.js");
+        EQUALS(result, false);
+
+        std::string error = engine.GetLastError();
+        // Should contain the error type
+        EQUALS(error.find("ReferenceError") != std::string::npos, true);
+        // Should contain filename
+        EQUALS(error.find("reference-test.js") != std::string::npos, true);
+        // Should contain "at" keyword indicating stack trace
+        EQUALS(error.find("at ") != std::string::npos, true);
+
+        engine.Shutdown();
+    });
+
+    IT("Execute returns error with correct line number for multi-line code", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        // Multi-line code with error on line 5 (1 empty + 3 const + 1 error)
+        const char *code =
+            "const a = 1;\n"
+            "const b = 2;\n"
+            "const c = 3;\n"
+            "nonExistentFunction();";
+
+        bool result = engine.Execute(code, "multiline-test.js");
+        EQUALS(result, false);
+
+        std::string error = engine.GetLastError();
+        // Should contain ReferenceError
+        EQUALS(error.find("ReferenceError") != std::string::npos, true);
+        // Should contain filename
+        EQUALS(error.find("multiline-test.js") != std::string::npos, true);
+        // Should contain line 4 (the error line)
+        EQUALS(error.find("multiline-test.js:4") != std::string::npos, true);
+
+        engine.Shutdown();
+    });
+
+    IT("Execute returns syntax error with location info", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        // Code with syntax error
+        const char *code = "function( { broken syntax";
+
+        bool result = engine.Execute(code, "syntax-test.js");
+        EQUALS(result, false);
+
+        std::string error = engine.GetLastError();
+        // Should contain SyntaxError
+        EQUALS(error.find("SyntaxError") != std::string::npos, true);
+        // Should contain some location info (line number indicator via colon)
+        // Syntax errors may not always include filename but should have line/column
+        EQUALS(error.find(":") != std::string::npos, true);
+
+        engine.Shutdown();
+    });
+
+    IT("Execute returns stack trace with nested function calls", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        // Code with nested function calls to test stack depth
+        const char *code =
+            "function level1() { level2(); }\n"
+            "function level2() { level3(); }\n"
+            "function level3() { throw new Error('deep error'); }\n"
+            "level1();";
+
+        bool result = engine.Execute(code, "nested-test.js");
+        EQUALS(result, false);
+
+        std::string error = engine.GetLastError();
+        // Should contain the error message
+        EQUALS(error.find("deep error") != std::string::npos, true);
+        // Should contain filename
+        EQUALS(error.find("nested-test.js") != std::string::npos, true);
+        // Should show multiple stack frames (multiple "at" occurrences)
+        size_t firstAt = error.find("at ");
+        EQUALS(firstAt != std::string::npos, true);
+        size_t secondAt = error.find("at ", firstAt + 1);
+        EQUALS(secondAt != std::string::npos, true);
+        // Should contain function names in stack
+        EQUALS(error.find("level3") != std::string::npos, true);
+        EQUALS(error.find("level2") != std::string::npos, true);
+        EQUALS(error.find("level1") != std::string::npos, true);
+
+        engine.Shutdown();
+    });
 })

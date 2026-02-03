@@ -76,6 +76,38 @@ static bool RunJSBool(Framework::Scripting::NodeEngine &engine, const char *code
     return maybeResult.ToLocalChecked()->BooleanValue(isolate);
 }
 
+// Helper to execute JS and get string result
+static std::string RunJSString(Framework::Scripting::NodeEngine &engine, const char *code) {
+    v8::Isolate *isolate = engine.GetIsolate();
+    v8::Locker locker(isolate);
+    v8::Isolate::Scope isolateScope(isolate);
+    v8::HandleScope handleScope(isolate);
+    v8::Local<v8::Context> context = engine.GetContext();
+    v8::Context::Scope contextScope(context);
+
+    v8::TryCatch tryCatch(isolate);
+    v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, code).ToLocalChecked();
+    v8::MaybeLocal<v8::Script> maybeScript = v8::Script::Compile(context, source);
+
+    if (maybeScript.IsEmpty() || tryCatch.HasCaught()) {
+        return "";
+    }
+
+    v8::MaybeLocal<v8::Value> maybeResult = maybeScript.ToLocalChecked()->Run(context);
+
+    if (tryCatch.HasCaught() || maybeResult.IsEmpty()) {
+        return "";
+    }
+
+    v8::Local<v8::Value> result = maybeResult.ToLocalChecked();
+    if (!result->IsString()) {
+        return "";
+    }
+
+    v8::String::Utf8Value str(isolate, result);
+    return *str ? *str : "";
+}
+
 // Helper to check if JS throws
 static bool RunJSThrows(Framework::Scripting::NodeEngine &engine, const char *code) {
     v8::Isolate *isolate = engine.GetIsolate();
@@ -444,6 +476,179 @@ MODULE(js_features, {
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
+    });
+
+    IT("Console::FormatValue formats functions as [Function]", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Test arrow function
+            v8::Local<v8::String> arrowCode = v8::String::NewFromUtf8(isolate, "() => {}").ToLocalChecked();
+            v8::Local<v8::Value> arrowFn = v8::Script::Compile(context, arrowCode).ToLocalChecked()->Run(context).ToLocalChecked();
+            std::string arrowResult = Console::FormatValue(isolate, arrowFn);
+            STREQUALS(arrowResult.c_str(), "[Function]");
+
+            // Test regular function
+            v8::Local<v8::String> funcCode = v8::String::NewFromUtf8(isolate, "(function myFunc() {})").ToLocalChecked();
+            v8::Local<v8::Value> func = v8::Script::Compile(context, funcCode).ToLocalChecked()->Run(context).ToLocalChecked();
+            std::string funcResult = Console::FormatValue(isolate, func);
+            STREQUALS(funcResult.c_str(), "[Function]");
+
+            // Test native function (Math.max)
+            v8::Local<v8::String> nativeCode = v8::String::NewFromUtf8(isolate, "Math.max").ToLocalChecked();
+            v8::Local<v8::Value> nativeFn = v8::Script::Compile(context, nativeCode).ToLocalChecked()->Run(context).ToLocalChecked();
+            std::string nativeResult = Console::FormatValue(isolate, nativeFn);
+            STREQUALS(nativeResult.c_str(), "[Function]");
+        }
+
+        engine.Shutdown();
+    });
+
+    IT("Console::FormatValue formats primitive types correctly", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Test string
+            v8::Local<v8::Value> strVal = v8::String::NewFromUtf8(isolate, "hello").ToLocalChecked();
+            STREQUALS(Console::FormatValue(isolate, strVal).c_str(), "hello");
+
+            // Test integer
+            v8::Local<v8::Value> intVal = v8::Number::New(isolate, 42);
+            STREQUALS(Console::FormatValue(isolate, intVal).c_str(), "42");
+
+            // Test boolean true
+            v8::Local<v8::Value> trueVal = v8::Boolean::New(isolate, true);
+            STREQUALS(Console::FormatValue(isolate, trueVal).c_str(), "true");
+
+            // Test boolean false
+            v8::Local<v8::Value> falseVal = v8::Boolean::New(isolate, false);
+            STREQUALS(Console::FormatValue(isolate, falseVal).c_str(), "false");
+
+            // Test null
+            v8::Local<v8::Value> nullVal = v8::Null(isolate);
+            STREQUALS(Console::FormatValue(isolate, nullVal).c_str(), "null");
+
+            // Test undefined
+            v8::Local<v8::Value> undefVal = v8::Undefined(isolate);
+            STREQUALS(Console::FormatValue(isolate, undefVal).c_str(), "undefined");
+        }
+
+        engine.Shutdown();
+    });
+
+    IT("Console::FormatValue formats arrays correctly", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Test empty array
+            v8::Local<v8::String> emptyArrCode = v8::String::NewFromUtf8(isolate, "[]").ToLocalChecked();
+            v8::Local<v8::Value> emptyArr = v8::Script::Compile(context, emptyArrCode).ToLocalChecked()->Run(context).ToLocalChecked();
+            STREQUALS(Console::FormatValue(isolate, emptyArr).c_str(), "[Array(0)]");
+
+            // Test array with 3 elements
+            v8::Local<v8::String> arrCode = v8::String::NewFromUtf8(isolate, "[1, 2, 3]").ToLocalChecked();
+            v8::Local<v8::Value> arr = v8::Script::Compile(context, arrCode).ToLocalChecked()->Run(context).ToLocalChecked();
+            STREQUALS(Console::FormatValue(isolate, arr).c_str(), "[Array(3)]");
+        }
+
+        engine.Shutdown();
+    });
+
+    IT("Console::FormatValue formats objects as JSON", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Test simple object
+            v8::Local<v8::String> objCode = v8::String::NewFromUtf8(isolate, "({x: 1, y: 2})").ToLocalChecked();
+            v8::Local<v8::Value> obj = v8::Script::Compile(context, objCode).ToLocalChecked()->Run(context).ToLocalChecked();
+            std::string objResult = Console::FormatValue(isolate, obj);
+            // JSON output should contain x and y
+            EQUALS(objResult.find("\"x\"") != std::string::npos, true);
+            EQUALS(objResult.find("\"y\"") != std::string::npos, true);
+        }
+
+        engine.Shutdown();
+    });
+
+    IT("Console::FormatValue handles circular references safely", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Create circular reference
+            v8::Local<v8::String> circularCode = v8::String::NewFromUtf8(isolate,
+                "(function() { const obj = {}; obj.self = obj; return obj; })()").ToLocalChecked();
+            v8::Local<v8::Value> circularObj = v8::Script::Compile(context, circularCode).ToLocalChecked()->Run(context).ToLocalChecked();
+
+            // Should not crash, should return [Object] for circular
+            std::string result = Console::FormatValue(isolate, circularObj);
+            STREQUALS(result.c_str(), "[Object]");
+        }
+
+        engine.Shutdown();
+    });
+
+    IT("Console::FormatValue handles objects with function properties", {
+        NodeEngine engine({});
+        EQUALS(engine.Init(), true);
+
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Object with function property - JSON.stringify returns {} for function values
+            v8::Local<v8::String> objCode = v8::String::NewFromUtf8(isolate, "({fn: () => {}})").ToLocalChecked();
+            v8::Local<v8::Value> obj = v8::Script::Compile(context, objCode).ToLocalChecked()->Run(context).ToLocalChecked();
+
+            // Should not crash - JSON.stringify will omit the function
+            std::string result = Console::FormatValue(isolate, obj);
+            EQUALS(result.empty(), false);
+        }
+
+        engine.Shutdown();
     });
 
 });

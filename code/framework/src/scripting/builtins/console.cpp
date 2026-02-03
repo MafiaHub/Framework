@@ -40,6 +40,70 @@ namespace Framework::Scripting {
         context->Global()->Set(context, v8pp::to_v8(isolate, "console"), consoleObj).Check();
     }
 
+    std::string Console::FormatValue(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        if (value->IsString()) {
+            return v8pp::from_v8<std::string>(isolate, value);
+        } else if (value->IsNumber()) {
+            double num = value->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0);
+            if (num >= static_cast<double>(std::numeric_limits<int64_t>::min()) &&
+                num <= static_cast<double>(std::numeric_limits<int64_t>::max()) &&
+                std::trunc(num) == num) {
+                return std::to_string(static_cast<int64_t>(num));
+            } else {
+                std::ostringstream ss;
+                ss << num;
+                return ss.str();
+            }
+        } else if (value->IsBoolean()) {
+            return value->BooleanValue(isolate) ? "true" : "false";
+        } else if (value->IsNull()) {
+            return "null";
+        } else if (value->IsUndefined()) {
+            return "undefined";
+        } else if (value->IsArray()) {
+            v8::Local<v8::Array> arr = value.As<v8::Array>();
+            return "[Array(" + std::to_string(arr->Length()) + ")]";
+        } else if (value->IsFunction()) {
+            return "[Function]";
+        } else if (value->IsObject()) {
+            v8::Local<v8::Object> obj = value.As<v8::Object>();
+            v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+            // Try to get JSON representation
+            v8::Local<v8::Value> jsonValue;
+            if (context->Global()->Get(context, v8pp::to_v8(isolate, "JSON")).ToLocal(&jsonValue) &&
+                jsonValue->IsObject()) {
+                v8::Local<v8::Object> json = jsonValue.As<v8::Object>();
+                v8::Local<v8::Value> stringifyValue;
+                if (json->Get(context, v8pp::to_v8(isolate, "stringify")).ToLocal(&stringifyValue) &&
+                    stringifyValue->IsFunction()) {
+                    v8::Local<v8::Function> stringify = stringifyValue.As<v8::Function>();
+                    v8::Local<v8::Value> jsonArgs[1] = {obj};
+
+                    // Use TryCatch to handle circular structures and other stringify errors
+                    v8::TryCatch tryCatch(isolate);
+                    v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
+
+                    if (tryCatch.HasCaught() || jsonResult.IsEmpty()) {
+                        tryCatch.Reset();
+                        return "[Object]";
+                    } else {
+                        v8::Local<v8::Value> result = jsonResult.ToLocalChecked();
+                        if (result->IsString()) {
+                            return v8pp::from_v8<std::string>(isolate, result);
+                        } else {
+                            return "[Object]";
+                        }
+                    }
+                }
+            }
+            return "[Object]";
+        } else {
+            v8::String::Utf8Value str(isolate, value);
+            return *str ? *str : "<unknown>";
+        }
+    }
+
     std::string Console::FormatArgs(v8::Isolate *isolate, const v8::FunctionCallbackInfo<v8::Value> &args) {
         std::ostringstream ss;
 
@@ -47,71 +111,7 @@ namespace Framework::Scripting {
             if (i > 0) {
                 ss << " ";
             }
-
-            v8::Local<v8::Value> value = args[i];
-
-            if (value->IsString()) {
-                ss << v8pp::from_v8<std::string>(isolate, value);
-            } else if (value->IsNumber()) {
-                double num = value->NumberValue(isolate->GetCurrentContext()).FromMaybe(0.0);
-                if (num >= static_cast<double>(std::numeric_limits<int64_t>::min()) &&
-                    num <= static_cast<double>(std::numeric_limits<int64_t>::max()) &&
-                    std::trunc(num) == num) {
-                    ss << static_cast<int64_t>(num);
-                } else {
-                    ss << num;
-                }
-            } else if (value->IsBoolean()) {
-                ss << (value->BooleanValue(isolate) ? "true" : "false");
-            } else if (value->IsNull()) {
-                ss << "null";
-            } else if (value->IsUndefined()) {
-                ss << "undefined";
-            } else if (value->IsArray()) {
-                v8::Local<v8::Array> arr = value.As<v8::Array>();
-                ss << "[Array(" << arr->Length() << ")]";
-            } else if (value->IsFunction()) {
-                ss << "[Function]";
-            } else if (value->IsObject()) {
-                v8::Local<v8::Object> obj = value.As<v8::Object>();
-                v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-                // Try to get JSON representation
-                v8::Local<v8::Value> jsonValue;
-                if (context->Global()->Get(context, v8pp::to_v8(isolate, "JSON")).ToLocal(&jsonValue) &&
-                    jsonValue->IsObject()) {
-                    v8::Local<v8::Object> json = jsonValue.As<v8::Object>();
-                    v8::Local<v8::Value> stringifyValue;
-                    if (json->Get(context, v8pp::to_v8(isolate, "stringify")).ToLocal(&stringifyValue) &&
-                        stringifyValue->IsFunction()) {
-                        v8::Local<v8::Function> stringify = stringifyValue.As<v8::Function>();
-                        v8::Local<v8::Value> jsonArgs[1] = {obj};
-
-                        // Use TryCatch to handle circular structures and other stringify errors
-                        v8::TryCatch tryCatch(isolate);
-                        v8::MaybeLocal<v8::Value> jsonResult = stringify->Call(context, json, 1, jsonArgs);
-
-                        if (tryCatch.HasCaught() || jsonResult.IsEmpty()) {
-                            tryCatch.Reset();
-                            ss << "[Object]";
-                        } else {
-                            v8::Local<v8::Value> result = jsonResult.ToLocalChecked();
-                            if (result->IsString()) {
-                                ss << v8pp::from_v8<std::string>(isolate, result);
-                            } else {
-                                ss << "[Object]";
-                            }
-                        }
-                    } else {
-                        ss << "[Object]";
-                    }
-                } else {
-                    ss << "[Object]";
-                }
-            } else {
-                v8::String::Utf8Value str(isolate, value);
-                ss << (*str ? *str : "<unknown>");
-            }
+            ss << FormatValue(isolate, args[i]);
         }
 
         return ss.str();
