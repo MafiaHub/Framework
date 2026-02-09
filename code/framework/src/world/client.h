@@ -63,7 +63,7 @@ namespace Framework::World {
         flecs::entity CreateEntity(flecs::entity_t serverID) const;
         flecs::entity GetEntityByServerID(flecs::entity_t id) const;
         static flecs::entity_t GetServerID(flecs::entity entity);
-        static void UpdateEntityTransform(flecs::entity entity, Modules::Base::Transform &rhs);
+        static void UpdateEntityTransform(flecs::entity entity, const Modules::Base::Transform &rhs);
 
         void SetOnEntityDestroyCallback(OnEntityDestroyCallback cb) {
             _onEntityDestroyCallback = cb;

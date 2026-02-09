@@ -133,7 +133,7 @@ namespace Framework::World {
         });
     }
 
-    void ClientEngine::UpdateEntityTransform(flecs::entity entity, Modules::Base::Transform &rhs) {
+    void ClientEngine::UpdateEntityTransform(flecs::entity entity, const Modules::Base::Transform &rhs) {
         if (!entity.is_valid() || !entity.is_alive()) {
             return;
         }

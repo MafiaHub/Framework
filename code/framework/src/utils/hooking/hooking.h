@@ -599,7 +599,7 @@ namespace hook {
 
             pass {(
                 [&] {
-                    int size = std::min(sizeof(Args), sizeof(uintptr_t));
+                    int size = (std::min)(sizeof(Args), sizeof(uintptr_t));
 
                     argOffset += size;
                 }(),
@@ -610,10 +610,10 @@ namespace hook {
 
             pass {(
                 [&] {
-                    mov(eax, dword_ptr[esp + stackOffset + argOffset]);
-                    push(eax);
+                    this->mov(this->eax, this->dword_ptr[this->esp + stackOffset + argOffset]);
+                    this->push(this->eax);
 
-                    int size = std::max(sizeof(Args), sizeof(uintptr_t));
+                    int size = (std::max)(sizeof(Args), sizeof(uintptr_t));
 
                     stackOffset += size;
                     argCleanup += size;
@@ -621,10 +621,10 @@ namespace hook {
                 }(),
                 1)...};
 
-            mov(eax, (uintptr_t)m_target);
-            call(eax);
+            this->mov(this->eax, (uintptr_t)m_target);
+            this->call(this->eax);
 
-            add(esp, argCleanup);
+            this->add(this->esp, argCleanup);
         }
     };
 #pragma endregion
