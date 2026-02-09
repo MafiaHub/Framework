@@ -312,4 +312,14 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/vendors/javascriptcorepp/include
         )
     endif()
+
+    # Ensure runtime DLLs are copied to bin directory for all client/server targets
+    if(TARGET libnode_copy_dll)
+        add_dependencies(FrameworkClient libnode_copy_dll)
+        add_dependencies(FrameworkServer libnode_copy_dll)
+    endif()
+    if(TARGET OpenSSLCopyStub)
+        add_dependencies(FrameworkClient OpenSSLCopyStub)
+        add_dependencies(FrameworkServer OpenSSLCopyStub)
+    endif()
 endif()
