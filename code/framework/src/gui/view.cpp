@@ -59,7 +59,7 @@ namespace Framework::GUI {
             return;
         }
 
-        std::lock_guard lock(_renderMutex);
+        std::scoped_lock lock(_renderMutex);
 
         // Update the view content (CPU renderer)
         if (!_gpuAccelerated) {

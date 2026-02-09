@@ -142,7 +142,7 @@ namespace Framework::Jobs::IO {
 
                     bool allDone = false;
                     {
-                        std::lock_guard<std::mutex> lock(state->mutex);
+                        std::scoped_lock lock(state->mutex);
                         state->results[i] = std::move(result);
                         state->completed++;
                         allDone = (state->completed == state->total);
@@ -194,7 +194,7 @@ namespace Framework::Jobs::IO {
                         result.success = false;
                     }
 
-                    std::lock_guard<std::mutex> lock(resultsMutex);
+                    std::scoped_lock lock(resultsMutex);
                     results[i] = std::move(result);
                 });
         }

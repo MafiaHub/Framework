@@ -24,7 +24,7 @@ namespace Framework::World {
         _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
             // Remove the entity from all streamers.
             _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                if (rhsS.entities.find(e) != rhsS.entities.end()) {
+                if (rhsS.entities.contains(e)) {
                     rhsS.entities.erase(e);
 
                     // Ensure we despawn the entity from the client.
@@ -294,7 +294,7 @@ namespace Framework::World {
                 if (e == dependentEntity)
                     continue;
                 // Skip if already visited (part of a cycle)
-                if (visited.find(dependentEntity.id()) != visited.end())
+                if (visited.contains(dependentEntity.id()))
                     continue;
                 const auto &dependentS  = dependentEntity.get<Modules::Base::Streamable>();
                 const auto &dependentTr = dependentEntity.get<Modules::Base::Transform>();
@@ -329,7 +329,7 @@ namespace Framework::World {
 
         // If we made it this far and the entity is streaming range check exempt
         // we override isVisible state to True.
-        if (streamer.rangeExemptEntities.find(e.id()) != streamer.rangeExemptEntities.end()) {
+        if (streamer.rangeExemptEntities.contains(e.id())) {
             isVisible = true;
         }
 

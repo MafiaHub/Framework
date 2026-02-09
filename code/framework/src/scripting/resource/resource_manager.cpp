@@ -108,8 +108,8 @@ namespace Framework::Scripting {
         std::string version = resource->GetVersion();
 
         {
-            std::lock_guard<std::mutex> lock(_resourcesMutex);
-            if (_resources.find(name) != _resources.end()) {
+            std::scoped_lock lock(_resourcesMutex);
+            if (_resources.contains(name)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Duplicate resource name: {}", name);
                 return false;
             }
@@ -121,8 +121,8 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::BuildDependencyGraph() {
-        std::lock_guard<std::mutex> graphLock(_graphMutex);
-        std::lock_guard<std::mutex> resourceLock(_resourcesMutex);
+        std::scoped_lock graphLock(_graphMutex);
+        std::scoped_lock resourceLock(_resourcesMutex);
 
         _dependencies.clear();
         _dependents.clear();
@@ -137,12 +137,12 @@ namespace Framework::Scripting {
     }
 
     bool ResourceManager::ValidateDependencies(std::string &outError) const {
-        std::lock_guard<std::mutex> graphLock(_graphMutex);
-        std::lock_guard<std::mutex> resourceLock(_resourcesMutex);
+        std::scoped_lock graphLock(_graphMutex);
+        std::scoped_lock resourceLock(_resourcesMutex);
 
         for (const auto &[name, deps] : _dependencies) {
             for (const auto &depName : deps) {
-                if (_resources.find(depName) == _resources.end()) {
+                if (!_resources.contains(depName)) {
                     if (_config.warnOnMissingDependency) {
                         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Resource '{}' depends on missing resource '{}'", name, depName);
                     } else {
@@ -156,8 +156,8 @@ namespace Framework::Scripting {
     }
 
     std::vector<std::string> ResourceManager::ComputeLoadOrder() const {
-        std::lock_guard<std::mutex> graphLock(_graphMutex);
-        std::lock_guard<std::mutex> resourceLock(_resourcesMutex);
+        std::scoped_lock graphLock(_graphMutex);
+        std::scoped_lock resourceLock(_resourcesMutex);
 
         std::vector<std::string> result;
         std::map<std::string, int> inDegree;
@@ -169,7 +169,7 @@ namespace Framework::Scripting {
             auto it = _dependencies.find(name);
             if (it != _dependencies.end()) {
                 for (const auto &dep : it->second) {
-                    if (_resources.find(dep) != _resources.end()) {
+                    if (_resources.contains(dep)) {
                         ++degree;
                     }
                 }
@@ -432,7 +432,7 @@ namespace Framework::Scripting {
     }
 
     std::vector<std::string> ResourceManager::GetAllResourceNames() const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         std::vector<std::string> names;
         names.reserve(_resources.size());
         for (const auto &[name, _] : _resources) {
@@ -442,7 +442,7 @@ namespace Framework::Scripting {
     }
 
     std::vector<std::string> ResourceManager::GetRunningResourceNames() const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         std::vector<std::string> names;
         for (const auto &[name, resource] : _resources) {
             if (resource->IsRunning()) {
@@ -457,18 +457,18 @@ namespace Framework::Scripting {
     }
 
     bool ResourceManager::HasResource(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
-        return _resources.find(name) != _resources.end();
+        std::scoped_lock lock(_resourcesMutex);
+        return _resources.contains(name);
     }
 
     bool ResourceManager::IsResourceRunning(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         return it != _resources.end() && it->second->IsRunning();
     }
 
     ResourceState ResourceManager::GetResourceState(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         if (it == _resources.end()) {
             return ResourceState::Unloaded;
@@ -477,25 +477,25 @@ namespace Framework::Scripting {
     }
 
     const Resource *ResourceManager::GetResource(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         return it != _resources.end() ? it->second.get() : nullptr;
     }
 
     Resource *ResourceManager::GetResourceMutable(const std::string &name) {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         return it != _resources.end() ? it->second.get() : nullptr;
     }
 
     std::set<std::string> ResourceManager::GetDependents(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_graphMutex);
+        std::scoped_lock lock(_graphMutex);
         auto it = _dependents.find(name);
         return it != _dependents.end() ? it->second : std::set<std::string>{};
     }
 
     std::set<std::string> ResourceManager::GetDependencies(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_graphMutex);
+        std::scoped_lock lock(_graphMutex);
         auto it = _dependencies.find(name);
         return it != _dependencies.end() ? it->second : std::set<std::string>{};
     }
@@ -525,12 +525,12 @@ namespace Framework::Scripting {
     }
 
     void ResourceManager::SetCurrentResourceContext(const std::string &name) {
-        std::lock_guard<std::mutex> lock(_contextMutex);
+        std::scoped_lock lock(_contextMutex);
         _currentResourceContext = name;
     }
 
     std::string ResourceManager::GetCurrentResourceContext() const {
-        std::lock_guard<std::mutex> lock(_contextMutex);
+        std::scoped_lock lock(_contextMutex);
         return _currentResourceContext;
     }
 
@@ -580,7 +580,7 @@ namespace Framework::Scripting {
 
             // Strip file:// or file:/// prefix if present
             const std::string filePrefix = "file://";
-            if (path.compare(0, filePrefix.size(), filePrefix) == 0) {
+            if (path.starts_with(filePrefix)) {
                 path = path.substr(filePrefix.size());
                 // On Windows, file:///C:/... needs to strip one more slash
                 // On Unix, file:///path... also has an extra slash to strip
@@ -644,12 +644,12 @@ namespace Framework::Scripting {
     }
 
     size_t ResourceManager::GetResourceCount() const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         return _resources.size();
     }
 
     size_t ResourceManager::GetRunningResourceCount() const {
-        std::lock_guard<std::mutex> lock(_resourcesMutex);
+        std::scoped_lock lock(_resourcesMutex);
         size_t count = 0;
         for (const auto &[_, resource] : _resources) {
             if (resource->IsRunning()) {
@@ -688,7 +688,7 @@ namespace Framework::Scripting {
         resource->RecordRestartAttempt();
         int backoffMs = resource->GetRestartBackoffMs();
 
-        std::lock_guard<std::mutex> lock(_scheduledRestartsMutex);
+        std::scoped_lock lock(_scheduledRestartsMutex);
         _scheduledRestarts.push_back({
             resourceName,
             std::chrono::system_clock::now() + std::chrono::milliseconds(backoffMs)
@@ -702,7 +702,7 @@ namespace Framework::Scripting {
         std::vector<ScheduledRestart> dueRestarts;
 
         {
-            std::lock_guard<std::mutex> lock(_scheduledRestartsMutex);
+            std::scoped_lock lock(_scheduledRestartsMutex);
             auto now = std::chrono::system_clock::now();
 
             auto it = std::remove_if(_scheduledRestarts.begin(), _scheduledRestarts.end(),

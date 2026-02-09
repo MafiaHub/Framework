@@ -25,7 +25,7 @@ namespace Framework::Scripting {
         // promise then-handlers will safely bail out. The shared_ptr ensures
         // the data stays alive until the last reference (this set or the
         // then-handler) releases it.
-        std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
+        std::scoped_lock lock(_pendingCallbacksMutex);
         for (const auto &data : _pendingCallbacks) {
             data->cancelled.store(true, std::memory_order_release);
             data->resolver.Reset();
@@ -112,7 +112,7 @@ namespace Framework::Scripting {
         entry.resourceName = resourceName;
         entry.once = once;
 
-        std::lock_guard<std::mutex> lock(_handlersMutex);
+        std::scoped_lock lock(_handlersMutex);
         _globalHandlers[eventName].push_back(std::move(entry));
     }
 
@@ -195,7 +195,7 @@ namespace Framework::Scripting {
                 v8::Local<v8::Function> hnd = hndVal.As<v8::Function>();
                 std::string resName = v8pp::from_v8<std::string>(iso, resVal);
 
-                std::lock_guard<std::mutex> lock(eventsInst->_handlersMutex);
+                std::scoped_lock lock(eventsInst->_handlersMutex);
                 auto it = eventsInst->_globalHandlers.find(evt);
                 if (it != eventsInst->_globalHandlers.end()) {
                     auto &handlers = it->second;
@@ -272,7 +272,7 @@ namespace Framework::Scripting {
             return;
         }
 
-        std::lock_guard<std::mutex> lock(events->_handlersMutex);
+        std::scoped_lock lock(events->_handlersMutex);
         auto it = events->_globalHandlers.find(eventName);
         if (it != events->_globalHandlers.end()) {
             auto &handlers = it->second;
@@ -340,7 +340,7 @@ namespace Framework::Scripting {
     }
 
     void Events::RemovePendingCallback(AllSettledCallbackData *data) {
-        std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
+        std::scoped_lock lock(_pendingCallbacksMutex);
         for (auto it = _pendingCallbacks.begin(); it != _pendingCallbacks.end(); ++it) {
             if (it->get() == data) {
                 _pendingCallbacks.erase(it);
@@ -391,7 +391,7 @@ namespace Framework::Scripting {
         callbackData->owner = this;
 
         {
-            std::lock_guard<std::mutex> lock(_pendingCallbacksMutex);
+            std::scoped_lock lock(_pendingCallbacksMutex);
             _pendingCallbacks.insert(callbackData);
         }
 
@@ -496,7 +496,7 @@ namespace Framework::Scripting {
         std::vector<size_t> indicesToRemove;
 
         {
-            std::lock_guard<std::mutex> lock(_handlersMutex);
+            std::scoped_lock lock(_handlersMutex);
             auto it = _globalHandlers.find(eventName);
             if (it != _globalHandlers.end()) {
                 for (size_t idx = 0; idx < it->second.size(); ++idx) {
@@ -672,7 +672,7 @@ namespace Framework::Scripting {
         entry.resourceName = resourceName;
         entry.once = false;
 
-        std::lock_guard<std::mutex> lock(events->_handlersMutex);
+        std::scoped_lock lock(events->_handlersMutex);
         events->_localHandlers[resourceName][eventName].push_back(std::move(entry));
     }
 
@@ -707,7 +707,7 @@ namespace Framework::Scripting {
         // Collect local handlers (convert to pairs with resource name as log context)
         std::vector<std::pair<v8::Global<v8::Function>, std::string>> handlersToCall;
         {
-            std::lock_guard<std::mutex> lock(events->_handlersMutex);
+            std::scoped_lock lock(events->_handlersMutex);
             auto resIt = events->_localHandlers.find(resourceName);
             if (resIt != events->_localHandlers.end()) {
                 auto evtIt = resIt->second.find(eventName);
@@ -748,7 +748,7 @@ namespace Framework::Scripting {
     }
 
     void Events::CleanupResource(const std::string &resourceName) {
-        std::lock_guard<std::mutex> lock(_handlersMutex);
+        std::scoped_lock lock(_handlersMutex);
 
         // Remove from global handlers
         for (auto &[eventName, handlers] : _globalHandlers) {
@@ -763,7 +763,7 @@ namespace Framework::Scripting {
     }
 
     void Events::ClearAll() {
-        std::lock_guard<std::mutex> lock(_handlersMutex);
+        std::scoped_lock lock(_handlersMutex);
 
         // Explicitly Reset() all global handles before clearing to avoid
         // crash when destroying handlers from dead isolates
@@ -785,7 +785,7 @@ namespace Framework::Scripting {
     }
 
     size_t Events::GetListenerCount(const std::string &eventName) {
-        std::lock_guard<std::mutex> lock(_handlersMutex);
+        std::scoped_lock lock(_handlersMutex);
         auto it = _globalHandlers.find(eventName);
         if (it != _globalHandlers.end()) {
             return it->second.size();
@@ -794,7 +794,7 @@ namespace Framework::Scripting {
     }
 
     void Events::AddReservedEvents(const std::set<std::string> &events) {
-        std::lock_guard<std::mutex> lock(_handlersMutex);
+        std::scoped_lock lock(_handlersMutex);
         _additionalReservedEvents.insert(events.begin(), events.end());
     }
 
@@ -802,8 +802,8 @@ namespace Framework::Scripting {
         if (IsReservedEvent(eventName)) {
             return true;
         }
-        std::lock_guard<std::mutex> lock(_handlersMutex);
-        return _additionalReservedEvents.find(eventName) != _additionalReservedEvents.end();
+        std::scoped_lock lock(_handlersMutex);
+        return _additionalReservedEvents.contains(eventName);
     }
 
     void Events::ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {

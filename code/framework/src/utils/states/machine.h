@@ -48,11 +48,11 @@ namespace Framework::Utils::States {
 
         template <typename T>
         void RegisterState() {
-            std::lock_guard<std::mutex> lock(_mutex);
+            std::scoped_lock lock(_mutex);
             auto ptr = std::make_unique<T>();
             int32_t id = ptr->GetId();
             
-            if (_states.find(id) != _states.end()) {
+            if (_states.contains(id)) {
                 throw std::runtime_error("State ID already registered");
             }
             
@@ -62,12 +62,12 @@ namespace Framework::Utils::States {
         bool Update();
 
         const IState* GetCurrentState() const {
-            std::lock_guard<std::mutex> lock(_mutex);
+            std::scoped_lock lock(_mutex);
             return _currentState;
         }
 
         const IState* GetNextState() const {
-            std::lock_guard<std::mutex> lock(_mutex);
+            std::scoped_lock lock(_mutex);
             return _nextState;
         }
     };

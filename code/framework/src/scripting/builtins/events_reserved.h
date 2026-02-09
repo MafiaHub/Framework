@@ -21,7 +21,7 @@ namespace Framework::Scripting {
     };
 
     inline bool IsReservedEvent(const std::string &eventName) {
-        return RESERVED_EVENTS.find(eventName) != RESERVED_EVENTS.end();
+        return RESERVED_EVENTS.contains(eventName);
     }
 
 } // namespace Framework::Scripting

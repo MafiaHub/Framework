@@ -689,7 +689,8 @@ namespace hook {
     };
 
     template <int Register, typename T, typename AT>
-    inline std::enable_if_t<(Register < 8 && Register >= 0)> jump_reg(AT address, T func) {
+        requires (Register < 8 && Register >= 0)
+    inline void jump_reg(AT address, T func) {
         LPVOID funcStub = AllocateFunctionStub(get_func_ptr<T>::get(func), Register);
 
         put<uint8_t>(address, 0xE9);
@@ -707,7 +708,8 @@ namespace hook {
     }
 
     template <int Register, typename T, typename AT>
-    inline std::enable_if_t<(Register < 8 && Register >= 0)> call_reg(AT address, T func) {
+        requires (Register < 8 && Register >= 0)
+    inline void call_reg(AT address, T func) {
         LPVOID funcStub = AllocateFunctionStub(get_func_ptr<T>::get(func), Register);
 
         put<uint8_t>(address, 0xE8);

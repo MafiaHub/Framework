@@ -23,7 +23,7 @@ namespace Framework::Utils {
                 if (commandString.empty())
                     continue;
 
-                std::lock_guard<std::mutex> lock(_mutex);
+                std::scoped_lock lock(_mutex);
                 _queue.push(commandString);
             }
         });
@@ -35,7 +35,7 @@ namespace Framework::Utils {
         if (!_cb) {
             return;
         }
-        std::lock_guard<std::mutex> lock(_mutex);
+        std::scoped_lock lock(_mutex);
         while (!_queue.empty()) {
             const auto &cmdLine = _queue.front();
             _cb(cmdLine);

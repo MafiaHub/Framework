@@ -155,7 +155,7 @@ namespace Framework::Scripting {
     }
 
     int Resource::GetRestartAttemptCount() const {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        std::scoped_lock lock(_restartAttemptsMutex);
         return GetRestartAttemptCountUnlocked();
     }
 
@@ -184,7 +184,7 @@ namespace Framework::Scripting {
     }
 
     void Resource::RecordRestartAttempt() {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        std::scoped_lock lock(_restartAttemptsMutex);
         _restartAttempts.push_back(std::chrono::system_clock::now());
 
         // Prune old attempts (older than 10 minutes)
@@ -196,7 +196,7 @@ namespace Framework::Scripting {
     }
 
     void Resource::ClearRestartAttempts() {
-        std::lock_guard<std::mutex> lock(_restartAttemptsMutex);
+        std::scoped_lock lock(_restartAttemptsMutex);
         _restartAttempts.clear();
     }
 
@@ -219,13 +219,13 @@ namespace Framework::Scripting {
             return false;
         }
 
-        std::lock_guard<std::mutex> lock(_exportsMutex);
+        std::scoped_lock lock(_exportsMutex);
         _exports[name].Reset(_isolate, value);
         return true;
     }
 
     void Resource::UnregisterExport(const std::string &name) {
-        std::lock_guard<std::mutex> lock(_exportsMutex);
+        std::scoped_lock lock(_exportsMutex);
         auto it = _exports.find(name);
         if (it != _exports.end()) {
             it->second.Reset();
@@ -234,7 +234,7 @@ namespace Framework::Scripting {
     }
 
     void Resource::ClearExports() {
-        std::lock_guard<std::mutex> lock(_exportsMutex);
+        std::scoped_lock lock(_exportsMutex);
         for (auto &[name, global] : _exports) {
             global.Reset();
         }
@@ -242,12 +242,12 @@ namespace Framework::Scripting {
     }
 
     bool Resource::HasRegisteredExport(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_exportsMutex);
-        return _exports.find(name) != _exports.end();
+        std::scoped_lock lock(_exportsMutex);
+        return _exports.contains(name);
     }
 
     std::vector<std::string> Resource::GetRegisteredExportNames() const {
-        std::lock_guard<std::mutex> lock(_exportsMutex);
+        std::scoped_lock lock(_exportsMutex);
         std::vector<std::string> names;
         names.reserve(_exports.size());
         for (const auto &[name, _] : _exports) {
@@ -257,7 +257,7 @@ namespace Framework::Scripting {
     }
 
     v8::Local<v8::Value> Resource::GetExportValue(const std::string &name) const {
-        std::lock_guard<std::mutex> lock(_exportsMutex);
+        std::scoped_lock lock(_exportsMutex);
         auto it = _exports.find(name);
         if (it == _exports.end() || it->second.IsEmpty()) {
             return v8::Local<v8::Value>();

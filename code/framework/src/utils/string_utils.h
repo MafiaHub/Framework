@@ -8,10 +8,7 @@
 
 #pragma once
 
-#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
-
 #include <algorithm>
-#include <codecvt>
 #include <locale>
 #include <regex>
 #include <string>

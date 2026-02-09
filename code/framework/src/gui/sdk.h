@@ -45,7 +45,7 @@ namespace Framework::GUI {
 
         inline void RemoveEventListener(std::string eventName) {
             // Make sure the event exist
-            if (_eventListeners.find(eventName) == _eventListeners.end()) {
+            if (!_eventListeners.contains(eventName)) {
                 return;
             }
 
@@ -55,7 +55,7 @@ namespace Framework::GUI {
 
         inline void BroadcastEvent(std::string eventName, std::string eventPayload) {
             // Make sure the event exist
-            if (_eventListeners.find(eventName) == _eventListeners.end()) {
+            if (!_eventListeners.contains(eventName)) {
                 return;
             }
 

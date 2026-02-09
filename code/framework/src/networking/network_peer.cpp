@@ -24,7 +24,7 @@ namespace Framework::Networking {
             uint32_t hashName;
             bs.Read(hashName);
 
-            if (_registeredRPCs.find(hashName) != _registeredRPCs.end()) {
+            if (_registeredRPCs.contains(hashName)) {
                 for (const auto &cb : _registeredRPCs[hashName]) {
                     cb(p);
                 }
@@ -82,7 +82,7 @@ namespace Framework::Networking {
             uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
-                if (_registeredMessageCallbacks.find(packetID) != _registeredMessageCallbacks.end()) {
+                if (_registeredMessageCallbacks.contains(packetID)) {
                     _registeredMessageCallbacks[packetID](_packet);
                 }
                 else {

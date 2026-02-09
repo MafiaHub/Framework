@@ -70,7 +70,7 @@ namespace Framework::GUI {
         }
 
         // Update the renderer
-        std::lock_guard lock(_renderMutex);
+        std::scoped_lock lock(_renderMutex);
         _ultralightRenderer->Update();
         _ultralightRenderer->RefreshDisplay(0);
         _ultralightRenderer->Render();
@@ -95,7 +95,7 @@ namespace Framework::GUI {
             return a->GetZIndex() < b->GetZIndex();
         });
         
-        std::lock_guard lock(_renderMutex);
+        std::scoped_lock lock(_renderMutex);
 
         // Render the views
         for (auto &view : views) {

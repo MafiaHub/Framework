@@ -13,12 +13,12 @@ namespace Framework::Utils::States {
     Machine::Machine(): _currentState(nullptr), _nextState(nullptr), _currentContext(Context::Enter), _isUpdating(false) {}
 
     Machine::~Machine() {
-        std::lock_guard<std::mutex> lock(_mutex);
+        std::scoped_lock lock(_mutex);
         _states.clear();
     }
 
     bool Machine::RequestNextState(int32_t stateId) {
-        std::lock_guard<std::mutex> lock(_mutex);   
+        std::scoped_lock lock(_mutex);   
 
         auto it = _states.find(stateId);
         if (it == _states.end()) {

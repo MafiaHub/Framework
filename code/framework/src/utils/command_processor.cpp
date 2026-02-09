@@ -27,7 +27,7 @@ namespace Framework::Utils {
 
         command = args[0];
 
-        if (_commands.find(command) != _commands.end()) {
+        if (_commands.contains(command)) {
             std::vector<const char *> vArgs;
             for (auto &arg : args) {
                 vArgs.push_back(arg.c_str());
@@ -59,7 +59,7 @@ namespace Framework::Utils {
         if (name.empty()) {
             return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
         }
-        if (_commands.find(name) != _commands.end()) {
+        if (_commands.contains(name)) {
             return {CommandProcessorError::ERROR_CMD_ALREADY_EXISTS, name};
         }
 
@@ -85,7 +85,7 @@ namespace Framework::Utils {
         if (name.empty()) {
             return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
         }
-        if (_commands.find(name) != _commands.end()) {
+        if (_commands.contains(name)) {
             return {CommandProcessorError::ERROR_CMD_ALREADY_EXISTS, name};
         }
 

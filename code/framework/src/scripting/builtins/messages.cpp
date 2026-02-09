@@ -76,7 +76,7 @@ namespace Framework::Scripting {
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
 
         {
-            std::lock_guard<std::mutex> lock(_handlersMutex);
+            std::scoped_lock lock(_handlersMutex);
             _handlers[resourceName][messageType].Reset(isolate, handler);
         }
     }
@@ -120,7 +120,7 @@ namespace Framework::Scripting {
         // Check if target resource has a handler
         v8::Global<v8::Function> handler;
         {
-            std::lock_guard<std::mutex> lock(_handlersMutex);
+            std::scoped_lock lock(_handlersMutex);
             auto resourceIt = _handlers.find(targetResource);
             if (resourceIt == _handlers.end()) {
                 resolver->Reject(context, v8pp::to_v8(isolate, "Target resource not found")).Check();
@@ -141,7 +141,7 @@ namespace Framework::Scripting {
         // Generate request ID and store pending request
         uint64_t requestId;
         {
-            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            std::scoped_lock lock(_pendingRequestsMutex);
             requestId = _nextRequestId++;
             _pendingRequests.try_emplace(requestId, requestId, v8::Global<v8::Promise::Resolver>(isolate, resolver), sourceResource);
         }
@@ -157,7 +157,7 @@ namespace Framework::Scripting {
 
             // Look up PendingRequest and atomically check-and-set consumed flag
             {
-                std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+                std::scoped_lock lock(_pendingRequestsMutex);
                 auto it = _pendingRequests.find(reqId);
                 if (it == _pendingRequests.end()) {
                     return; // Request no longer exists
@@ -172,7 +172,7 @@ namespace Framework::Scripting {
             v8::Local<v8::Value> response = replyArgs.Length() > 0 ? replyArgs[0] : v8::Undefined(replyIsolate).As<v8::Value>();
 
             {
-                std::lock_guard<std::mutex> lock(_responseQueueMutex);
+                std::scoped_lock lock(_responseQueueMutex);
                 PendingResponse pendingResponse;
                 pendingResponse.requestId = reqId;
                 pendingResponse.response.Reset(replyIsolate, response);
@@ -202,7 +202,7 @@ namespace Framework::Scripting {
                 targetResource, messageType, *error ? *error : "Unknown error");
 
             // Only reject the promise if reply() wasn't already called before the error
-            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            std::scoped_lock lock(_pendingRequestsMutex);
             auto it = _pendingRequests.find(requestId);
             if (it != _pendingRequests.end() && !it->second.consumed.exchange(true)) {
                 it->second.resolver.Get(isolate)->Reject(context, tryCatch.Exception()).Check();
@@ -246,7 +246,7 @@ namespace Framework::Scripting {
         // Find handler
         v8::Global<v8::Function> handler;
         {
-            std::lock_guard<std::mutex> lock(_handlersMutex);
+            std::scoped_lock lock(_handlersMutex);
             auto resourceIt = _handlers.find(targetResource);
             if (resourceIt == _handlers.end()) {
                 return; // Silently ignore
@@ -293,13 +293,13 @@ namespace Framework::Scripting {
     void Messages::ProcessPendingResponses(v8::Isolate *isolate, v8::Local<v8::Context> context) {
         std::vector<PendingResponse> responses;
         {
-            std::lock_guard<std::mutex> lock(_responseQueueMutex);
+            std::scoped_lock lock(_responseQueueMutex);
             responses = std::move(_responseQueue);
             _responseQueue.clear();
         }
 
         for (auto &response : responses) {
-            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            std::scoped_lock lock(_pendingRequestsMutex);
             auto it = _pendingRequests.find(response.requestId);
             if (it == _pendingRequests.end()) {
                 continue;
@@ -320,15 +320,15 @@ namespace Framework::Scripting {
 
     void Messages::Shutdown() {
         {
-            std::lock_guard<std::mutex> lock(_handlersMutex);
+            std::scoped_lock lock(_handlersMutex);
             _handlers.clear();
         }
         {
-            std::lock_guard<std::mutex> lock(_pendingRequestsMutex);
+            std::scoped_lock lock(_pendingRequestsMutex);
             _pendingRequests.clear();
         }
         {
-            std::lock_guard<std::mutex> lock(_responseQueueMutex);
+            std::scoped_lock lock(_responseQueueMutex);
             _responseQueue.clear();
         }
         _resourceManager = nullptr;

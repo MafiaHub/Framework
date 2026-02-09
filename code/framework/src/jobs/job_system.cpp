@@ -130,7 +130,7 @@ namespace Framework::Jobs {
         std::queue<CompletedCallback> callbacks;
 
         {
-            std::lock_guard<std::mutex> lock(_callbackMutex);
+            std::scoped_lock lock(_callbackMutex);
             std::swap(callbacks, _completedCallbacks);
         }
 
@@ -148,7 +148,7 @@ namespace Framework::Jobs {
     }
 
     void JobSystem::QueueCallback(std::function<void()> callback) {
-        std::lock_guard<std::mutex> lock(_callbackMutex);
+        std::scoped_lock lock(_callbackMutex);
         _completedCallbacks.push(CompletedCallback{std::move(callback)});
     }
 

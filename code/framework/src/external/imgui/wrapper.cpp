@@ -100,7 +100,7 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::Update() {
-        std::lock_guard _lock(_renderMtx);
+        std::scoped_lock _lock(_renderMtx);
 
         switch (_config.renderBackend) {
         case Graphics::RendererBackend::BACKEND_D3D_9: {
@@ -135,7 +135,7 @@ namespace Framework::External::ImGUI {
     }
 
     Error Wrapper::Render() {
-        std::lock_guard _lock(_renderMtx);
+        std::scoped_lock _lock(_renderMtx);
 
         if (!isContextInitialized) {
             return Error::IMGUI_NOT_INITIALIZED;

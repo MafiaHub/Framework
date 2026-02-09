@@ -174,7 +174,8 @@ namespace Framework::Jobs {
          * @return The return value of func
          */
         template <typename Func, typename ReturnType = decltype(std::declval<Func>()())>
-        auto BlockingCall(Func &&func) -> std::enable_if_t<!std::is_void_v<ReturnType>, ReturnType> {
+            requires (!std::is_void_v<ReturnType>)
+        ReturnType BlockingCall(Func &&func) {
             // For blocking I/O, we use a WaitGroup to yield the fiber
             ftl::WaitGroup wg(_scheduler.get());
             wg.Add(1);
@@ -206,7 +207,8 @@ namespace Framework::Jobs {
          * @brief Execute a void blocking operation without blocking the worker thread
          */
         template <typename Func, typename ReturnType = decltype(std::declval<Func>()())>
-        auto BlockingCall(Func &&func) -> std::enable_if_t<std::is_void_v<ReturnType>, void> {
+            requires std::is_void_v<ReturnType>
+        void BlockingCall(Func &&func) {
             // For blocking I/O, we use a WaitGroup to yield the fiber
             ftl::WaitGroup wg(_scheduler.get());
             wg.Add(1);

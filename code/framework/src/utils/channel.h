@@ -24,12 +24,12 @@ namespace Framework::Utils {
 
       public:
         inline void PushTask(Proc proc) {
-            std::lock_guard lock(_mtx);
+            std::scoped_lock lock(_mtx);
             _queue.push(proc);
         }
 
         void Update() {
-            std::lock_guard lock(_mtx);
+            std::scoped_lock lock(_mtx);
             while (!_queue.empty()) {
                 const auto &proc = _queue.front();
                 proc();

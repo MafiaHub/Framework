@@ -337,7 +337,7 @@ namespace Framework::Graphics {
     void D3D11Backend::CreateGeometry(uint32_t geometry_id, const VertexBuffer &vertices, const IndexBuffer &indices) {
         BindVertexLayout(vertices.format);
 
-        if (_geometry.find(geometry_id) != _geometry.end())
+        if (_geometry.contains(geometry_id))
             return;
 
         GeometryEntry geometry;

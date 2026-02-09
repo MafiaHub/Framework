@@ -233,7 +233,7 @@ target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
 
 # Match Framework compile definitions and features
 target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
-target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_17)
+target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
