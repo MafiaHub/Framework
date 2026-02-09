@@ -39,6 +39,27 @@ namespace Framework::Scripting {
          * Process name shown in Node.js (argv[0]).
          */
         std::string processName = "mafiahub";
+
+        /**
+         * Enable the Node.js inspector agent for debugging.
+         * Only effective when compiled with FW_NODE_INSPECTOR define.
+         */
+        bool enableInspector = false;
+
+        /**
+         * Port for the inspector agent to listen on.
+         */
+        int inspectorPort = 9229;
+
+        /**
+         * Host for the inspector agent to bind to.
+         */
+        std::string inspectorHost = "127.0.0.1";
+
+        /**
+         * If true, pause execution at start until a debugger connects.
+         */
+        bool inspectorWaitForDebugger = false;
     };
 
     /**

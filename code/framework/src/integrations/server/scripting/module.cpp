@@ -17,6 +17,10 @@ namespace Framework::Integrations::Server::Scripting {
         Framework::Scripting::NodeEngineOptions options;
         options.sandboxed = false;
         options.processName = "mafiahub-server";
+#ifdef FW_NODE_INSPECTOR
+        options.enableInspector = true;
+        options.inspectorPort = 9229;
+#endif
         _nodeEngine = std::make_unique<Framework::Scripting::NodeEngine>(options);
     }
 

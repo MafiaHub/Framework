@@ -1,6 +1,8 @@
 #include "node_engine.h"
 #include "builtins/messages.h"
 
+#include <spdlog/spdlog.h>
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -143,6 +145,14 @@ namespace Framework::Scripting {
         // Build args from options
         std::vector<std::string> nodeArgs = {_options.processName};
 
+#ifdef FW_NODE_INSPECTOR
+        if (_options.enableInspector) {
+            std::string flag = _options.inspectorWaitForDebugger ? "--inspect-brk=" : "--inspect=";
+            flag += _options.inspectorHost + ":" + std::to_string(_options.inspectorPort);
+            nodeArgs.push_back(flag);
+        }
+#endif
+
         // Initialize Node.js with flags to control V8 platform ourselves
         // Using initializer_list syntax as shown in Node.js docs
         _initResult = node::InitializeOncePerProcess(
@@ -168,6 +178,13 @@ namespace Framework::Scripting {
         v8::V8::Initialize();
 
         _platformInitialized = true;
+
+#ifdef FW_NODE_INSPECTOR
+        if (_options.enableInspector) {
+            spdlog::info("Node.js inspector listening on {}:{}", _options.inspectorHost, _options.inspectorPort);
+        }
+#endif
+
         return true;
     }
 
@@ -358,8 +375,6 @@ namespace Framework::Scripting {
         // Other dangerous modules
         'vm', 'node:vm',
         'v8', 'node:v8',
-        'inspector', 'node:inspector',
-        'inspector/promises', 'node:inspector/promises',
         'trace_events', 'node:trace_events',
         'perf_hooks', 'node:perf_hooks',
         'async_hooks', 'node:async_hooks',
@@ -490,13 +505,30 @@ namespace Framework::Scripting {
     // This is also set at the C++ level but we reinforce it here
     // Note: This would require context-level settings which we do in C++
 
+    // Block inspector module unless explicitly enabled for debugging
+    if (!globalThis.__INSPECTOR_ENABLED__) {
+        blockedModules.add('inspector');
+        blockedModules.add('node:inspector');
+        blockedModules.add('inspector/promises');
+        blockedModules.add('node:inspector/promises');
+    }
+
     // Mark sandbox as applied
     globalThis.__SANDBOX_APPLIED__ = true;
 })();
 )JS";
 
-        v8::TryCatch tryCatch(_isolate);
         v8::Local<v8::Context> context = _setup->context();
+
+        // Set inspector flag before sandbox code runs so it can conditionally
+        // allow the inspector module for debugging
+        if (_options.enableInspector) {
+            v8::Local<v8::String> key =
+                v8::String::NewFromUtf8(_isolate, "__INSPECTOR_ENABLED__").ToLocalChecked();
+            context->Global()->Set(context, key, v8::Boolean::New(_isolate, true)).Check();
+        }
+
+        v8::TryCatch tryCatch(_isolate);
 
         v8::Local<v8::String> source =
             v8::String::NewFromUtf8(_isolate, sandboxCode).ToLocalChecked();
