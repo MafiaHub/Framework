@@ -205,6 +205,9 @@ macro(link_shared_deps target_name)
     endif()
 endmacro()
 
+# Node.js inspector support for script debugging (auto-enabled for Debug builds)
+option(FW_NODE_INSPECTOR "Enable Node.js inspector for script debugging" OFF)
+
 # FrameworkNodeEngine - Object library for node_engine.cpp
 # This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
 # cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
@@ -235,6 +238,10 @@ target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
 target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
 target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
 
+# Node.js inspector: enabled via explicit option OR Debug builds
+target_compile_definitions(FrameworkNodeEngine PRIVATE
+    $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
+
 # Link the solutions based on the platform
 link_shared_deps(Framework)
 target_link_libraries(Framework v8 v8pp libnode)
@@ -245,10 +252,14 @@ target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
 if(WIN32)
     link_shared_deps(FrameworkClient)
     target_link_libraries(FrameworkClient v8 v8pp libnode)
+    target_compile_definitions(FrameworkClient PRIVATE
+        $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
 endif()
 
 link_shared_deps(FrameworkServer)
 target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
+target_compile_definitions(FrameworkServer PRIVATE
+    $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
 
 # FrameworkServer-specific includes
 target_include_directories(FrameworkServer PRIVATE
