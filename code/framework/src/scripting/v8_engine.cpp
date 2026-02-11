@@ -245,18 +245,27 @@ namespace Framework::Scripting {
     void V8Engine::ProcessTimers() {
         auto now = std::chrono::steady_clock::now();
 
-        // Collect due timers
-        std::vector<TimerEntry *> dueTimers;
+        // Collect IDs of due timers (not raw pointers, which would dangle
+        // if a callback calls AddTimer and _timers reallocates).
+        std::vector<uint32_t> dueIds;
         for (auto &timer : _timers) {
             if (!timer->cancelled && timer->fireTime <= now) {
-                dueTimers.push_back(timer.get());
+                dueIds.push_back(timer->id);
             }
         }
 
         v8::Local<v8::Context> context = _context.Get(_isolate);
 
-        for (auto *timer : dueTimers) {
-            if (timer->cancelled) continue;
+        for (uint32_t id : dueIds) {
+            // Look up the timer by ID each iteration (safe across reallocations).
+            TimerEntry *timer = nullptr;
+            for (auto &t : _timers) {
+                if (t->id == id) {
+                    timer = t.get();
+                    break;
+                }
+            }
+            if (!timer || timer->cancelled) continue;
 
             v8::TryCatch tryCatch(_isolate);
 
@@ -278,6 +287,16 @@ namespace Framework::Scripting {
                 std::string error = FormatV8Exception(_isolate, tryCatch, "Timer callback error");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("{}", error);
             }
+
+            // Re-lookup: callback may have mutated _timers.
+            timer = nullptr;
+            for (auto &t : _timers) {
+                if (t->id == id) {
+                    timer = t.get();
+                    break;
+                }
+            }
+            if (!timer) continue;
 
             // Re-queue intervals
             if (timer->intervalMs > 0 && !timer->cancelled) {
