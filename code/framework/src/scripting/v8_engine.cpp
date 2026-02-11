@@ -44,6 +44,10 @@ namespace Framework::Scripting {
         return true;
     }
 
+    void V8Engine::SetModuleRootPath(const std::string &path) {
+        _options.moduleRootPath = path;
+    }
+
     void V8Engine::Shutdown() {
         if (!_initialized) {
             return;

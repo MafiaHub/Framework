@@ -63,6 +63,12 @@ namespace Framework::Scripting {
         v8::Isolate *GetIsolate() const override;
         v8::Local<v8::Context> GetContext() const override;
 
+        /**
+         * Update the module root path for require() sandboxing.
+         * Call this when the resource cache path changes.
+         */
+        void SetModuleRootPath(const std::string &path);
+
         // Module loader internals (used by require callback)
         v8::MaybeLocal<v8::Value> LoadModule(const std::string &requestedPath,
                                               const std::string &referencingDir);
