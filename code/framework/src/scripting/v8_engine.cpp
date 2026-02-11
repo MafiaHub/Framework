@@ -5,6 +5,8 @@
 
 #include <logging/logger.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 
 using namespace Framework::Scripting::V8EngineCallbacks;
@@ -337,6 +339,15 @@ namespace Framework::Scripting {
             fs::path root = fs::weakly_canonical(fs::path(_options.moduleRootPath));
             std::string rootStr = root.string();
             std::string resolvedStr = resolved.string();
+
+#ifdef _WIN32
+            // Windows filesystems are case-insensitive; normalize both paths
+            // to lowercase so the prefix check cannot be bypassed via casing.
+            std::transform(rootStr.begin(), rootStr.end(), rootStr.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+            std::transform(resolvedStr.begin(), resolvedStr.end(), resolvedStr.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+#endif
 
             // Ensure resolved path starts with root AND sits inside the
             // directory (not just sharing a prefix).  Without the boundary
