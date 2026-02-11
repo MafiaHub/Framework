@@ -382,7 +382,7 @@ namespace Framework::Integrations::Server {
                 if (std::filesystem::exists(packageJsonPath)) {
                     std::filesystem::path packageJsonName = std::filesystem::path(resourceName) / "package.json";
                     streamer->AddFile(packageJsonPath.string().c_str(), packageJsonName.string().c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", packageJsonName.string());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", packageJsonName.string());
                 }
 
                 // Add the client entry point script
@@ -390,7 +390,7 @@ namespace Framework::Integrations::Server {
                 if (std::filesystem::exists(clientEntryPath)) {
                     std::filesystem::path clientEntryName = std::filesystem::path(resourceName) / clientEntryRelative;
                     streamer->AddFile(clientEntryPath.string().c_str(), clientEntryName.string().c_str());
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", clientEntryName.string());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", clientEntryName.string());
                 }
 
                 // If the client entry is in a subdirectory, add all JS files from that directory
@@ -404,7 +404,7 @@ namespace Framework::Integrations::Server {
                         if (ext == ".js" || ext == ".mjs" || ext == ".ts" || ext == ".json") {
                             std::filesystem::path relativePath = std::filesystem::relative(entry.path(), std::filesystem::path(assetsPath));
                             streamer->AddFile(entry.path().string().c_str(), relativePath.string().c_str());
-                            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Added client asset: {}", relativePath.string());
+                            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->trace("Added client asset: {}", relativePath.string());
                         }
                     }
                 }
