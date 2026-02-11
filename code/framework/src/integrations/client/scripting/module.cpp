@@ -16,10 +16,10 @@ namespace Framework::Integrations::Client::Scripting {
     ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
         : _world(world) {
         // Create standalone V8 engine for client (no Node.js runtime)
+        // moduleRootPath is set later in Init() or SetResourceCachePath()
+        // when the actual resource cache path is known.
         Framework::Scripting::V8EngineOptions options;
         options.processName = "mafiahub-client";
-        // Sandbox require() paths to the resource cache directory
-        options.moduleRootPath = std::filesystem::absolute(_resourceCachePath).string();
         _engine = std::make_unique<Framework::Scripting::V8Engine>(options);
     }
 
@@ -35,6 +35,9 @@ namespace Framework::Integrations::Client::Scripting {
         if (!engineAlreadyInitialized && sdkCallback) {
             _engine->SetSDKRegisterCallback(sdkCallback);
         }
+
+        // Sandbox require() paths to the resource cache directory
+        _engine->SetModuleRootPath(std::filesystem::absolute(_resourceCachePath).string());
 
         // Initialize the V8 engine - no-op if already initialized
         if (!_engine->Init()) {
@@ -156,6 +159,10 @@ namespace Framework::Integrations::Client::Scripting {
 
     void ClientScriptingModule::SetResourceCachePath(const std::string &path) {
         _resourceCachePath = path;
+        // Update V8 engine's module root path so require() sandbox matches
+        if (_engine) {
+            _engine->SetModuleRootPath(std::filesystem::absolute(path).string());
+        }
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
             config.resourcesPath = path;
