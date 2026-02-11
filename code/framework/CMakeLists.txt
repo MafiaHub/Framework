@@ -27,8 +27,9 @@ set(FRAMEWORK_SRC
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
-    # JavaScript scripting builtins (used by both client and server)
-    # Note: node_engine.cpp is in FrameworkNodeEngine object library due to special compile flags
+    # JavaScript scripting engine base and builtins (used by both client and server)
+    # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
+    src/scripting/engine.cpp
     src/scripting/builtins/vector2.cpp
     src/scripting/builtins/vector3.cpp
     src/scripting/builtins/vector4.cpp
@@ -242,18 +243,38 @@ target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
 target_compile_definitions(FrameworkNodeEngine PRIVATE
     $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
 
+# FrameworkV8Engine - Object library for v8_engine.cpp
+# Standalone V8 engine for client-side scripting (no Node.js dependency).
+# Uses V8 symbols from the v8 target (which links libnode for the V8 runtime).
+add_library(FrameworkV8Engine OBJECT src/scripting/v8_engine.cpp)
+
+target_include_directories(FrameworkV8Engine PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_include_directories(FrameworkV8Engine PUBLIC
+    ${CMAKE_SOURCE_DIR}/vendors/glm
+    ${CMAKE_SOURCE_DIR}/vendors/json/include
+    ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
+    ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+    ${CMAKE_SOURCE_DIR}/vendors
+)
+target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog)
+target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
+target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
+
 # Link the solutions based on the platform
 link_shared_deps(Framework)
 target_link_libraries(Framework v8 v8pp libnode)
 
-# Include FrameworkNodeEngine objects in Framework
+# Include FrameworkNodeEngine and FrameworkV8Engine objects in Framework
 target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
+target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkV8Engine>)
 
 if(WIN32)
     link_shared_deps(FrameworkClient)
     target_link_libraries(FrameworkClient v8 v8pp libnode)
-    target_compile_definitions(FrameworkClient PRIVATE
-        $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
 endif()
 
 link_shared_deps(FrameworkServer)

@@ -76,9 +76,7 @@ namespace Framework::Scripting {
 
         bool Init() override;
         void Shutdown() override;
-        bool Execute(const std::string &code, const std::string &filename = "<eval>") override;
         bool ExecuteFile(const std::string &filepath) override;
-        bool InitFrameworkSDK() override;
 
         /**
          * Process pending Node.js events (non-blocking).
@@ -118,11 +116,6 @@ namespace Framework::Scripting {
          * Get the main context.
          */
         v8::Local<v8::Context> GetContext() const override;
-
-        /**
-         * Get the Framework global object for binding APIs.
-         */
-        v8::Local<v8::Object> GetFrameworkObject() const;
 
       private:
         bool InitializeNode();
