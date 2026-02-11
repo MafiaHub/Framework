@@ -1,11 +1,10 @@
 #include "node_engine.h"
+#include "engine_helpers.h"
 #include "builtins/messages.h"
 
-#include <spdlog/spdlog.h>
+#include <logging/logger.h>
 
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 
 namespace {
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
@@ -24,49 +23,6 @@ namespace {
             default: result += c; break;
             }
         }
-        return result;
-    }
-
-    // Formats a V8 exception with stack trace for better error messages
-    std::string FormatV8Exception(v8::Isolate *isolate, v8::TryCatch &tryCatch, const char *fallbackMessage) {
-        v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-        // Try to get the stack trace first (most informative)
-        v8::Local<v8::Value> stackTrace;
-        if (tryCatch.StackTrace(context).ToLocal(&stackTrace) && stackTrace->IsString()) {
-            v8::String::Utf8Value stackStr(isolate, stackTrace);
-            if (*stackStr && strlen(*stackStr) > 0) {
-                return *stackStr;
-            }
-        }
-
-        // Fall back to exception message with manual location info
-        v8::Local<v8::Value> exception = tryCatch.Exception();
-        v8::String::Utf8Value exceptionStr(isolate, exception);
-        std::string result = (*exceptionStr && strlen(*exceptionStr) > 0) ? *exceptionStr : fallbackMessage;
-
-        // Try to add location information from the message
-        v8::Local<v8::Message> message = tryCatch.Message();
-        if (!message.IsEmpty()) {
-            v8::Local<v8::Value> resourceName = message->GetScriptResourceName();
-            if (!resourceName.IsEmpty() && !resourceName->IsUndefined()) {
-                v8::String::Utf8Value resourceNameStr(isolate, resourceName);
-                if (*resourceNameStr) {
-                    int lineNumber = message->GetLineNumber(context).FromMaybe(-1);
-                    int startColumn = message->GetStartColumn(context).FromMaybe(-1);
-
-                    result += "\n    at ";
-                    result += *resourceNameStr;
-                    if (lineNumber >= 0) {
-                        result += ":" + std::to_string(lineNumber);
-                        if (startColumn >= 0) {
-                            result += ":" + std::to_string(startColumn + 1);
-                        }
-                    }
-                }
-            }
-        }
-
         return result;
     }
 } // anonymous namespace
@@ -181,7 +137,7 @@ namespace Framework::Scripting {
 
 #ifdef FW_NODE_INSPECTOR
         if (_options.enableInspector) {
-            spdlog::info("Node.js inspector listening on {}:{}", _options.inspectorHost, _options.inspectorPort);
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Node.js inspector listening on {}:{}", _options.inspectorHost, _options.inspectorPort);
         }
 #endif
 
@@ -257,46 +213,6 @@ namespace Framework::Scripting {
         _isolate->PerformMicrotaskCheckpoint();
     }
 
-    bool NodeEngine::Execute(const std::string &code, const std::string &filename) {
-        if (!_initialized || !_setup) {
-            _lastError = "Engine not initialized";
-            return false;
-        }
-
-        v8::Locker locker(_isolate);
-        v8::Isolate::Scope isolate_scope(_isolate);
-        v8::HandleScope handle_scope(_isolate);
-        v8::Local<v8::Context> context = _setup->context();
-        v8::Context::Scope context_scope(context);
-
-        v8::TryCatch tryCatch(_isolate);
-
-        v8::Local<v8::String> source = v8::String::NewFromUtf8(_isolate, code.c_str()).ToLocalChecked();
-        v8::ScriptOrigin origin(v8::String::NewFromUtf8(_isolate, filename.c_str()).ToLocalChecked());
-
-        v8::Local<v8::Script> script;
-        if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
-            if (tryCatch.HasCaught()) {
-                _lastError = FormatV8Exception(_isolate, tryCatch, "Script compilation error");
-            } else {
-                _lastError = "Failed to compile script";
-            }
-            return false;
-        }
-
-        v8::Local<v8::Value> result;
-        if (!script->Run(context).ToLocal(&result)) {
-            if (tryCatch.HasCaught()) {
-                _lastError = FormatV8Exception(_isolate, tryCatch, "Runtime error");
-            } else {
-                _lastError = "Unknown execution error";
-            }
-            return false;
-        }
-
-        return true;
-    }
-
     bool NodeEngine::ExecuteFile(const std::string &filepath) {
         if (!_initialized) {
             _lastError = "Engine not initialized";
@@ -315,30 +231,11 @@ namespace Framework::Scripting {
         return Execute(code, absPathStr);
     }
 
-    bool NodeEngine::InitFrameworkSDK() {
-        if (_sdkRegisterCallback) {
-            _sdkRegisterCallback(this);
-        }
-        return true;
-    }
-
     v8::Local<v8::Context> NodeEngine::GetContext() const {
         if (_setup) {
             return _setup->context();
         }
         return v8::Local<v8::Context>();
-    }
-
-    v8::Local<v8::Object> NodeEngine::GetFrameworkObject() const {
-        if (!_setup) {
-            return v8::Local<v8::Object>();
-        }
-        v8::Local<v8::Context> context = _setup->context();
-        v8::Local<v8::Value> frameworkValue;
-        context->Global()
-            ->Get(context, v8::String::NewFromUtf8(_isolate, "Framework").ToLocalChecked())
-            .ToLocal(&frameworkValue);
-        return frameworkValue.As<v8::Object>();
     }
 
     bool NodeEngine::ApplySandbox() {

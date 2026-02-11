@@ -8,44 +8,6 @@
 #include <queue>
 #include <stack>
 
-namespace {
-    // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
-    // Handles: backslash, single quote, newline, carriage return, and tab.
-    std::string EscapeForSingleQuotedJSString(const std::string &input) {
-        std::string result;
-        result.reserve(input.size() + input.size() / 8); // Pre-allocate with some margin
-
-        for (char c : input) {
-            switch (c) {
-            case '\\': result += "\\\\"; break;
-            case '\'': result += "\\'"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += c; break;
-            }
-        }
-        return result;
-    }
-
-    // Converts a filesystem path to a proper file:// URL.
-    // - Uses forward slashes (generic_string)
-    // - Windows: file:///C:/path (three slashes before drive letter)
-    // - POSIX: file:///path (path already starts with /)
-    std::string PathToFileURL(const std::filesystem::path &absPath) {
-        std::string genericPath = absPath.generic_string();
-
-        // Check for Windows drive letter (e.g., "C:/...")
-        if (genericPath.size() >= 2 && std::isalpha(static_cast<unsigned char>(genericPath[0])) && genericPath[1] == ':') {
-            // Windows path: needs file:/// prefix (three slashes, then drive letter)
-            return "file:///" + genericPath;
-        }
-
-        // POSIX path: already starts with /, so file:// + path gives file:///path
-        return "file://" + genericPath;
-    }
-} // anonymous namespace
-
 namespace Framework::Scripting {
 
     ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
@@ -403,20 +365,15 @@ namespace Framework::Scripting {
         }
 
         std::string resourceName = resource.GetName();
-        std::filesystem::path absPath = std::filesystem::absolute(entryPoint);
-        std::string absPathStr = absPath.string();
-
-        // Escape resource name for safe embedding in JS strings
-        std::string escapedResourceName = EscapeForSingleQuotedJSString(resourceName);
-
-        // CommonJS: require() takes paths, use forward slashes
-        std::string genericPath = absPath.generic_string();
-        std::string escapedPath = EscapeForSingleQuotedJSString(genericPath);
-        std::string code = "(function() { require('" + escapedPath + "'); })();\n";
 
         // Set resource context so Events.on() etc. know which resource is executing
         SetCurrentResourceContext(resourceName);
-        bool result = _jsEngine->Execute(code, absPathStr);
+
+        // Use ExecuteFile which properly resolves the module from the file's
+        // parent directory (V8Engine uses LoadModule with correct base dir,
+        // NodeEngine uses Node.js require with absolute path).
+        bool result = _jsEngine->ExecuteFile(entryPoint);
+
         SetCurrentResourceContext("");
 
         if (!result) {

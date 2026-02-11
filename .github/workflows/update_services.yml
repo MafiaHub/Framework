@@ -116,6 +116,8 @@ jobs:
         if: runner.os == 'Linux'
       - name: Set up CMake
         uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.31.0"
       - name: Set up Visual Studio shell
         if: runner.os == 'Windows'
         uses: egor-tensin/vs-shell@v2

@@ -14,9 +14,9 @@
 namespace Framework::Scripting {
 
     /**
-     * Abstract base class for JavaScript engines.
-     * Both client (sandboxed) and server (full access) use NodeEngine which
-     * is backed by libnode for a unified Node.js runtime.
+     * Base class for JavaScript engines.
+     * Two implementations exist: NodeEngine (server, full Node.js) and
+     * V8Engine (client, standalone V8). Shared logic lives here.
      */
     class Engine {
       public:
@@ -46,7 +46,7 @@ namespace Framework::Scripting {
          * @param filename Optional filename for error messages
          * @return true if execution succeeded
          */
-        virtual bool Execute(const std::string &code, const std::string &filename = "<eval>") = 0;
+        bool Execute(const std::string &code, const std::string &filename = "<eval>");
 
         /**
          * Execute a JavaScript file.
@@ -59,7 +59,7 @@ namespace Framework::Scripting {
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
          */
-        virtual bool InitFrameworkSDK() = 0;
+        bool InitFrameworkSDK();
 
         /**
          * Set callback for registering additional SDK bindings.
@@ -92,6 +92,11 @@ namespace Framework::Scripting {
          * Get the main context.
          */
         virtual v8::Local<v8::Context> GetContext() const = 0;
+
+        /**
+         * Get the Framework global object for binding APIs.
+         */
+        v8::Local<v8::Object> GetFrameworkObject() const;
 
       protected:
         bool _initialized = false;
