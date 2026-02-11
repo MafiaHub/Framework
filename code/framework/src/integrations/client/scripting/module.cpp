@@ -28,8 +28,15 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     bool ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
+        if (!_engine) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
+                "Cannot initialize client scripting: engine is null (Shutdown() was called). "
+                "Create a new ClientScriptingModule instance instead.");
+            return false;
+        }
+
         // Check if engine is already initialized (e.g., after Reset())
-        bool engineAlreadyInitialized = _engine && _engine->IsInitialized();
+        bool engineAlreadyInitialized = _engine->IsInitialized();
 
         // Set the SDK callback before initialization (only on first init)
         if (!engineAlreadyInitialized && sdkCallback) {
