@@ -33,6 +33,13 @@ namespace Framework::Scripting::V8EngineCallbacks {
         file.seekg(0, std::ios::beg);
         outContent.resize(static_cast<size_t>(size));
         file.read(outContent.data(), size);
+        if (file.fail() || file.gcount() != size) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
+                "Failed to read module file (read {} of {} bytes): {}",
+                static_cast<long long>(file.gcount()), static_cast<long long>(size), filepath);
+            outContent.clear();
+            return false;
+        }
         return true;
     }
 
