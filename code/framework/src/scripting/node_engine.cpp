@@ -286,35 +286,6 @@ namespace Framework::Scripting {
         'sea', 'node:sea',
     ]);
 
-    // Modules that are allowed (safe subset)
-    const allowedModules = new Set([
-        // Core utilities
-        'assert', 'node:assert',
-        'assert/strict', 'node:assert/strict',
-        'buffer', 'node:buffer',
-        'console', 'node:console',
-        'constants', 'node:constants',
-        'crypto', 'node:crypto',
-        'events', 'node:events',
-        'path', 'node:path',
-        'path/posix', 'node:path/posix',
-        'path/win32', 'node:path/win32',
-        'process', 'node:process',
-        'punycode', 'node:punycode',
-        'querystring', 'node:querystring',
-        'stream', 'node:stream',
-        'stream/consumers', 'node:stream/consumers',
-        'stream/promises', 'node:stream/promises',
-        'stream/web', 'node:stream/web',
-        'string_decoder', 'node:string_decoder',
-        'timers', 'node:timers',
-        'timers/promises', 'node:timers/promises',
-        'url', 'node:url',
-        'util', 'node:util',
-        'util/types', 'node:util/types',
-        'zlib', 'node:zlib',
-    ]);
-
     // Store original require
     const originalRequire = globalThis.require;
 
@@ -329,18 +300,21 @@ namespace Framework::Scripting {
         return originalRequire(id);
     }
 
-    // Copy properties from original require
+    // Keep resolve() for compatibility, but never expose cache/main internals.
     sandboxedRequire.resolve = function(id, options) {
         if (blockedModules.has(id)) {
             throw new Error(`Module '${id}' is not available in sandbox mode`);
         }
         return originalRequire.resolve(id, options);
     };
-    sandboxedRequire.cache = originalRequire.cache;
-    sandboxedRequire.main = originalRequire.main;
 
-    // Replace global require
-    globalThis.require = sandboxedRequire;
+    // Replace global require and prevent user code from swapping it back.
+    Object.defineProperty(globalThis, 'require', {
+        value: sandboxedRequire,
+        writable: false,
+        configurable: false,
+        enumerable: true
+    });
 
     // Disable dangerous process methods and properties
     const process = globalThis.process;

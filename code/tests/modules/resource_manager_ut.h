@@ -425,6 +425,38 @@ MODULE(resource_manager, {
         TestManagerHelper::Cleanup();
     });
 
+    IT("rejects entry points that escape resource directory", {
+        TestManagerHelper::CreateTestResource("escape-test", R"({
+            "name": "escape-test",
+            "version": "1.0.0",
+            "mafiahub": {
+                "server": "../outside.js"
+            }
+        })");
+
+        // Create the target outside the resource directory to simulate traversal.
+        std::ofstream outsideFile(TestManagerHelper::GetTestResourcePath() + "/outside.js");
+        outsideFile << "// outside";
+        outsideFile.close();
+
+        NodeEngine engine;
+        EQUALS(engine.Init(), true);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        ResourceManager manager(&engine, config);
+        manager.DiscoverResources();
+
+        auto startResult = manager.StartResource("escape-test");
+        EQUALS(startResult.success, false);
+        EQUALS(startResult.error.find("escapes resource directory") != std::string::npos, true);
+        EQUALS(manager.IsResourceRunning("escape-test"), false);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
+    });
+
     // ==================== Callbacks ====================
 
     IT("fires OnResourceStarted callback", {

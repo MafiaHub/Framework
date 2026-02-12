@@ -50,6 +50,13 @@ namespace Framework::Scripting {
         _options.moduleRootPath = path;
     }
 
+    void V8Engine::ClearModuleCache() {
+        // Must only be called after stopping resources.
+        // RequireData stores backing pointers for module-scoped require().
+        _moduleCache.clear();
+        _requireDataStore.clear();
+    }
+
     void V8Engine::Shutdown() {
         if (!_initialized) {
             return;
@@ -68,11 +75,7 @@ namespace Framework::Scripting {
         // Clear all timer callbacks (prevent dangling references)
         _timers.clear();
 
-        // Clear module cache
-        _moduleCache.clear();
-
-        // Clear require data store (frees all RequireData instances)
-        _requireDataStore.clear();
+        ClearModuleCache();
 
         // Reset the persistent context handle
         _context.Reset();
@@ -430,6 +433,12 @@ namespace Framework::Scripting {
             v8::String::NewFromUtf8Literal(_isolate, "exports"),
             exportsObj).Check();
 
+        // Insert provisional cache entry before module execution to support
+        // circular dependencies (A -> B -> A) without recursive re-entry.
+        v8::Global<v8::Value> provisionalExports;
+        provisionalExports.Reset(_isolate, exportsObj);
+        _moduleCache[resolvedPath] = std::move(provisionalExports);
+
         // Create a require function bound to this module's directory (owned by engine)
         auto requireData = std::make_unique<RequireData>(RequireData{this, moduleDir});
         auto *requireDataPtr = requireData.get();
@@ -453,6 +462,7 @@ namespace Framework::Scripting {
 
         v8::Local<v8::Script> script;
         if (!v8::Script::Compile(context, v8Source, &origin).ToLocal(&script)) {
+            _moduleCache.erase(resolvedPath);
             if (tryCatch.HasCaught()) {
                 tryCatch.ReThrow();
             }
@@ -461,6 +471,7 @@ namespace Framework::Scripting {
 
         v8::Local<v8::Value> wrapperValue;
         if (!script->Run(context).ToLocal(&wrapperValue) || !wrapperValue->IsFunction()) {
+            _moduleCache.erase(resolvedPath);
             if (tryCatch.HasCaught()) {
                 tryCatch.ReThrow();
             }
@@ -486,11 +497,13 @@ namespace Framework::Scripting {
             context, v8::Undefined(_isolate), 5, callArgs);
 
         if (tryCatch.HasCaught()) {
+            _moduleCache.erase(resolvedPath);
             tryCatch.ReThrow();
             return v8::MaybeLocal<v8::Value>();
         }
 
         if (callResult.IsEmpty()) {
+            _moduleCache.erase(resolvedPath);
             return v8::MaybeLocal<v8::Value>();
         }
 

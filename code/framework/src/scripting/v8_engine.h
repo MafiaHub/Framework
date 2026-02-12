@@ -69,6 +69,12 @@ namespace Framework::Scripting {
          */
         void SetModuleRootPath(const std::string &path);
 
+        /**
+         * Clear cached modules and loader callback data.
+         * Call this after stopping resources to avoid stale modules on reconnect.
+         */
+        void ClearModuleCache();
+
         // Module loader internals (used by require callback)
         v8::MaybeLocal<v8::Value> LoadModule(const std::string &requestedPath,
                                               const std::string &referencingDir);

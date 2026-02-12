@@ -367,6 +367,34 @@ MODULE(engine, {
         engine.Shutdown();
     });
 
+    IT("sandboxed engine does not expose require internals", {
+        NodeEngineOptions options;
+        options.sandboxed = true;
+        options.processName = "test-sandbox";
+        NodeEngine engine(options);
+        EQUALS(engine.Init(), true);
+
+        bool internalsHidden = false;
+        {
+            v8::Isolate *isolate = engine.GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine.GetContext();
+            v8::Context::Scope contextScope(context);
+
+            const char *code = "typeof require.main === 'undefined' && typeof require.cache === 'undefined'";
+            v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, code).ToLocalChecked();
+            v8::Local<v8::Script> script = v8::Script::Compile(context, source).ToLocalChecked();
+            v8::Local<v8::Value> result = script->Run(context).ToLocalChecked();
+
+            internalsHidden = result->BooleanValue(isolate);
+        }
+
+        EQUALS(internalsHidden, true);
+        engine.Shutdown();
+    });
+
     IT("non-sandboxed engine allows fs module", {
         NodeEngineOptions options;
         options.sandboxed = false;

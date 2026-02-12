@@ -9,6 +9,19 @@
 #include <stack>
 
 namespace Framework::Scripting {
+    namespace {
+        bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
+            auto rootIt = root.begin();
+            auto pathIt = path.begin();
+
+            for (; rootIt != root.end(); ++rootIt, ++pathIt) {
+                if (pathIt == path.end() || *pathIt != *rootIt) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    } // anonymous namespace
 
     ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
         : _config(config)
@@ -353,17 +366,44 @@ namespace Framework::Scripting {
             return false;
         }
 
-        std::string entryPoint = _config.isClient ? resource.GetClientEntryPoint() : resource.GetServerEntryPoint();
-
-        if (entryPoint.empty()) {
+        const auto &mhConfig = resource.GetManifest().GetMafiaHubConfig();
+        const std::string &entryField = _config.isClient ? mhConfig.client : mhConfig.server;
+        if (entryField.empty()) {
             return true;
         }
 
-        if (!std::filesystem::exists(entryPoint)) {
-            outError = "Entry point not found: " + entryPoint;
+        std::filesystem::path resourceRoot = std::filesystem::path(resource.GetPath());
+        std::error_code ec;
+        resourceRoot = std::filesystem::weakly_canonical(resourceRoot, ec);
+        if (ec) {
+            outError = "Failed to resolve resource root path: " + resource.GetPath();
             return false;
         }
 
+        std::filesystem::path entryPath(entryField);
+        if (entryPath.is_absolute()) {
+            outError = "Entry point must be a relative path: " + entryField;
+            return false;
+        }
+
+        std::filesystem::path resolvedEntry =
+            std::filesystem::weakly_canonical(resourceRoot / entryPath, ec);
+        if (ec || !IsPathInsideRoot(resolvedEntry, resourceRoot)) {
+            outError = "Entry point escapes resource directory: " + entryField;
+            return false;
+        }
+
+        if (!std::filesystem::exists(resolvedEntry)) {
+            outError = "Entry point not found: " + resolvedEntry.string();
+            return false;
+        }
+
+        if (!std::filesystem::is_regular_file(resolvedEntry)) {
+            outError = "Entry point is not a regular file: " + resolvedEntry.string();
+            return false;
+        }
+
+        const std::string entryPoint = resolvedEntry.string();
         std::string resourceName = resource.GetName();
 
         // Set resource context so Events.on() etc. know which resource is executing

@@ -9,9 +9,22 @@
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/imports.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 
 namespace Framework::Integrations::Client::Scripting {
+    namespace {
+        bool IsValidResourceName(const std::string &name) {
+            if (name.empty()) {
+                return false;
+            }
+
+            return std::all_of(name.begin(), name.end(), [](unsigned char c) {
+                return std::isalnum(c) || c == '-' || c == '_' || c == '.';
+            });
+        }
+    } // anonymous namespace
 
     ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
         : _world(world) {
@@ -51,6 +64,13 @@ namespace Framework::Integrations::Client::Scripting {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "Failed to initialize V8 engine: {}", _engine->GetLastError());
             return false;
+        }
+
+        // Reusing an already initialized engine (reconnect/reset path):
+        // clear stale module cache and loader callback data before loading
+        // new resources.
+        if (engineAlreadyInitialized) {
+            _engine->ClearModuleCache();
         }
 
         // Initialize ResourceManager with client-side config
@@ -136,6 +156,10 @@ namespace Framework::Integrations::Client::Scripting {
             _resourceManager.reset();
         }
 
+        if (_engine && _engine->IsInitialized()) {
+            _engine->ClearModuleCache();
+        }
+
         _serverResourceList.clear();
         _resourcesSynced = false;
 
@@ -178,10 +202,19 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     void ClientScriptingModule::OnServerResourceList(const std::vector<ServerResourceInfo> &resources) {
-        _serverResourceList = resources;
+        _serverResourceList.clear();
+        _serverResourceList.reserve(resources.size());
+        for (const auto &resource : resources) {
+            if (!IsValidResourceName(resource.name)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
+                    "Ignoring invalid server resource name: '{}'", resource.name);
+                continue;
+            }
+            _serverResourceList.push_back(resource);
+        }
         _resourcesSynced = false;
 
-        if (resources.empty()) {
+        if (_serverResourceList.empty()) {
             _resourcesSynced = true;
             if (_onResourceSyncComplete) {
                 _onResourceSyncComplete(true);
@@ -191,7 +224,7 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Check which resources need to be downloaded
         bool anyMissing = false;
-        for (const auto &resource : resources) {
+        for (const auto &resource : _serverResourceList) {
             std::string resourcePath = GetResourcePath(resource.name);
 
             // Check if resource exists locally
@@ -213,6 +246,19 @@ namespace Framework::Integrations::Client::Scripting {
     }
 
     void ClientScriptingModule::OnResourceDownloaded(const std::string &resourceName) {
+        if (!IsValidResourceName(resourceName)) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
+                "Ignoring downloaded resource with invalid name: '{}'", resourceName);
+            return;
+        }
+
+        if (std::none_of(_serverResourceList.begin(), _serverResourceList.end(),
+            [&resourceName](const ServerResourceInfo &res) { return res.name == resourceName; })) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn(
+                "Ignoring downloaded resource not announced by server: '{}'", resourceName);
+            return;
+        }
+
         // Discover the downloaded resource
         std::string resourcePath = GetResourcePath(resourceName);
         if (_resourceManager) {
