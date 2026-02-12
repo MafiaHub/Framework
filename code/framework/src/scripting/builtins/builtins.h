@@ -11,14 +11,14 @@
 namespace Framework::Scripting::Builtins {
 
     /**
-     * Register all builtin types to the global object.
+     * Register all builtin types on the target object.
      */
-    inline void RegisterAll(v8::Isolate *isolate, v8::Local<v8::Object> global) {
-        Vector2::Register(isolate, global);
-        Vector3::Register(isolate, global);
-        Vector4::Register(isolate, global);
-        Quaternion::Register(isolate, global);
-        Color::Register(isolate, global);
+    inline void RegisterAll(v8::Isolate *isolate, v8::Local<v8::Object> target) {
+        Vector2::Register(isolate, target);
+        Vector3::Register(isolate, target);
+        Vector4::Register(isolate, target);
+        Quaternion::Register(isolate, target);
+        Color::Register(isolate, target);
     }
 
 } // namespace Framework::Scripting::Builtins

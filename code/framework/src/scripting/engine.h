@@ -98,6 +98,11 @@ namespace Framework::Scripting {
          */
         v8::Local<v8::Object> GetFrameworkObject() const;
 
+        /**
+         * Get the Core global object for builtin types and events.
+         */
+        v8::Local<v8::Object> GetCoreObject() const;
+
       protected:
         bool _initialized = false;
         std::string _lastError;

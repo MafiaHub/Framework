@@ -1,0 +1,48 @@
+name: Publish Types
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'types/**'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Bump patch version
+        working-directory: types
+        run: |
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "VERSION=${NEW_VERSION}" >> $GITHUB_ENV
+
+      - name: Publish to npm
+        working-directory: types
+        run: npm publish --access public
+
+      - name: Commit version bump
+        run: |
+          git config user.name "MafiaHub CI"
+          git config user.email "${{ secrets.MHCI_MAIL }}"
+          git add types/package.json
+          git commit -m "ci: publish @mafiahub/types ${{ env.VERSION }} [skip ci]"
+          git push origin develop

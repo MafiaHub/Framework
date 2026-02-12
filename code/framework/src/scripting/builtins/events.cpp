@@ -35,7 +35,7 @@ namespace Framework::Scripting {
 
     void Events::Register(v8::Isolate *isolate,
                           v8::Local<v8::Context> context,
-                          v8::Local<v8::Object> global,
+                          v8::Local<v8::Object> target,
                           ResourceManager *resourceManager) {
         _resourceManager = resourceManager;
 
@@ -79,8 +79,8 @@ namespace Framework::Scripting {
         v8::Local<v8::FunctionTemplate> countTmpl = v8::FunctionTemplate::New(isolate, ListenerCountCallback, contextData);
         eventsObj->Set(context, v8pp::to_v8(isolate, "listenerCount"), countTmpl->GetFunction(context).ToLocalChecked()).Check();
 
-        // Register as global "Events"
-        global->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
+        // Register as "Events" on target object
+        target->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
     }
 
     // Helper to get resource context - uses V8 stack trace as fallback for async ES modules

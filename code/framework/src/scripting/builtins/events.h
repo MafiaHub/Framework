@@ -49,11 +49,11 @@ namespace Framework::Scripting {
         Events &operator=(const Events &) = delete;
 
         /**
-         * Register the Events global object in a context.
+         * Register the Events object on the target object.
          */
         void Register(v8::Isolate *isolate,
                      v8::Local<v8::Context> context,
-                     v8::Local<v8::Object> global,
+                     v8::Local<v8::Object> target,
                      ResourceManager *resourceManager);
 
         /**

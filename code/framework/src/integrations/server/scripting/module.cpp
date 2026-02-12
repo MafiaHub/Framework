@@ -88,11 +88,22 @@ namespace Framework::Integrations::Server::Scripting {
             global->Set(context, frameworkKey, frameworkObj).Check();
         }
 
-        // Register math type builtins on global for direct access (Vector3, Color, etc.)
-        Framework::Scripting::Builtins::RegisterAll(isolate, global);
+        // Get or create Core global object
+        v8::Local<v8::String> coreKey = v8::String::NewFromUtf8(isolate, "Core").ToLocalChecked();
+        v8::Local<v8::Object> coreObj;
+        v8::Local<v8::Value> existingCore;
+        if (global->Get(context, coreKey).ToLocal(&existingCore) && existingCore->IsObject()) {
+            coreObj = existingCore.As<v8::Object>();
+        } else {
+            coreObj = v8::Object::New(isolate);
+            global->Set(context, coreKey, coreObj).Check();
+        }
+
+        // Register math type builtins on Core object
+        Framework::Scripting::Builtins::RegisterAll(isolate, coreObj);
 
         // Register communication APIs
-        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
+        _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get());
         Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());

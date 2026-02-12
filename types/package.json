@@ -1,0 +1,20 @@
+{
+    "name": "@mafiahub/types",
+    "version": "0.1.1",
+    "description": "TypeScript type definitions for the MafiaHub Framework scripting API",
+    "types": "index.d.ts",
+    "files": [
+        "index.d.ts",
+        "core/*.d.ts",
+        "framework/*.d.ts"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/MafiaHub/Framework.git",
+        "directory": "types"
+    },
+    "license": "SEE LICENSE IN ../LICENSE",
+    "publishConfig": {
+        "access": "public"
+    }
+}

@@ -177,6 +177,7 @@ namespace Framework::Scripting {
             "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
             "globalThis.require = publicRequire;"
             "globalThis.Framework = {};"
+            "globalThis.Core = {};"
         );
 
         if (loadResult.IsEmpty()) {

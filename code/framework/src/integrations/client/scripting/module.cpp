@@ -93,15 +93,15 @@ namespace Framework::Integrations::Client::Scripting {
         v8::Local<v8::Context> context = _engine->GetContext();
         v8::Context::Scope contextScope(context);
 
-        // Get Framework global object (created by V8Engine)
+        // Get Framework and Core global objects (created by V8Engine)
         v8::Local<v8::Object> frameworkObj = _engine->GetFrameworkObject();
-        v8::Local<v8::Object> global = context->Global();
+        v8::Local<v8::Object> coreObj = _engine->GetCoreObject();
 
-        // Register math type builtins (on global for parity with server)
-        Framework::Scripting::Builtins::RegisterAll(isolate, global);
+        // Register math type builtins on Core object
+        Framework::Scripting::Builtins::RegisterAll(isolate, coreObj);
 
         // Register communication APIs
-        _resourceManager->GetEvents().Register(isolate, context, global, _resourceManager.get());
+        _resourceManager->GetEvents().Register(isolate, context, coreObj, _resourceManager.get());
         Framework::Scripting::Messages::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Exports::Register(isolate, context, frameworkObj, _resourceManager.get());
         Framework::Scripting::Imports::Register(isolate, context, frameworkObj, _resourceManager.get());

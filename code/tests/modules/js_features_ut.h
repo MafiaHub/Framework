@@ -176,38 +176,44 @@ MODULE(js_features, {
             v8::HandleScope handleScope(isolate);
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
-            Builtins::RegisterAll(isolate, context->Global());
+
+            // Create Core object on global (normally done by engine bootstrap)
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            Builtins::RegisterAll(isolate, coreObj);
         }
 
         // Vector3 tests
-        EQUALS(RunJSBool(engine, "typeof Vector3 === 'function'"), true);
-        EQUALS(RunJS(engine, "new Vector3(1, 2, 3).x"), 1);
-        EQUALS(RunJS(engine, "new Vector3(1, 2, 3).y"), 2);
-        EQUALS(RunJS(engine, "new Vector3(1, 2, 3).z"), 3);
-        EQUALS(RunJS(engine, "const v = new Vector3(0,0,0); v.x = 5; v.x"), 5);
-        EQUALS(RunJS(engine, "const a = new Vector3(1,2,3); a.add(new Vector3(4,5,6)); a.x"), 5);
-        EQUALS(RunJS(engine, "new Vector3(1,0,0).dot(new Vector3(0,1,0))"), 0);
-        EQUALS(RunJSBool(engine, "Math.abs(new Vector3(3,4,0).length - 5) < 0.001"), true);
-        EQUALS(RunJS(engine, "Vector3.zero().x + Vector3.zero().y + Vector3.zero().z"), 0);
-        EQUALS(RunJS(engine, "Vector3.one().x + Vector3.one().y + Vector3.one().z"), 3);
+        EQUALS(RunJSBool(engine, "typeof Core.Vector3 === 'function'"), true);
+        EQUALS(RunJS(engine, "new Core.Vector3(1, 2, 3).x"), 1);
+        EQUALS(RunJS(engine, "new Core.Vector3(1, 2, 3).y"), 2);
+        EQUALS(RunJS(engine, "new Core.Vector3(1, 2, 3).z"), 3);
+        EQUALS(RunJS(engine, "const v = new Core.Vector3(0,0,0); v.x = 5; v.x"), 5);
+        EQUALS(RunJS(engine, "const a = new Core.Vector3(1,2,3); a.add(new Core.Vector3(4,5,6)); a.x"), 5);
+        EQUALS(RunJS(engine, "new Core.Vector3(1,0,0).dot(new Core.Vector3(0,1,0))"), 0);
+        EQUALS(RunJSBool(engine, "Math.abs(new Core.Vector3(3,4,0).length - 5) < 0.001"), true);
+        EQUALS(RunJS(engine, "Core.Vector3.zero().x + Core.Vector3.zero().y + Core.Vector3.zero().z"), 0);
+        EQUALS(RunJS(engine, "Core.Vector3.one().x + Core.Vector3.one().y + Core.Vector3.one().z"), 3);
 
         // Vector2 tests
-        EQUALS(RunJSBool(engine, "typeof Vector2 === 'function'"), true);
-        EQUALS(RunJS(engine, "new Vector2(10, 20).x"), 10);
-        EQUALS(RunJS(engine, "new Vector2(10, 20).y"), 20);
+        EQUALS(RunJSBool(engine, "typeof Core.Vector2 === 'function'"), true);
+        EQUALS(RunJS(engine, "new Core.Vector2(10, 20).x"), 10);
+        EQUALS(RunJS(engine, "new Core.Vector2(10, 20).y"), 20);
 
         // Vector4 tests
-        EQUALS(RunJSBool(engine, "typeof Vector4 === 'function'"), true);
-        EQUALS(RunJS(engine, "new Vector4(1,2,3,4).w"), 4);
+        EQUALS(RunJSBool(engine, "typeof Core.Vector4 === 'function'"), true);
+        EQUALS(RunJS(engine, "new Core.Vector4(1,2,3,4).w"), 4);
 
         // Quaternion tests
-        EQUALS(RunJSBool(engine, "typeof Quaternion === 'function'"), true);
-        EQUALS(RunJSBool(engine, "Quaternion.identity().w === 1"), true);
+        EQUALS(RunJSBool(engine, "typeof Core.Quaternion === 'function'"), true);
+        EQUALS(RunJSBool(engine, "Core.Quaternion.identity().w === 1"), true);
 
         // Color tests
-        EQUALS(RunJSBool(engine, "typeof Color === 'function'"), true);
-        EQUALS(RunJS(engine, "new Color(255, 128, 64, 255).r"), 255);
-        EQUALS(RunJS(engine, "new Color(255, 128, 64, 255).g"), 128);
+        EQUALS(RunJSBool(engine, "typeof Core.Color === 'function'"), true);
+        EQUALS(RunJS(engine, "new Core.Color(255, 128, 64, 255).r"), 255);
+        EQUALS(RunJS(engine, "new Core.Color(255, 128, 64, 255).g"), 128);
 
         engine.Shutdown();
     });
@@ -234,12 +240,16 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
         EQUALS(RunJSBool(engine, R"(
-            const unsub = Events.on('testEvent', () => {});
+            const unsub = Core.Events.on('testEvent', () => {});
             typeof unsub === 'function'
         )"), true);
 
@@ -276,14 +286,18 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        EQUALS(RunJSThrows(engine, "Events.emit('resourceStart')"), true);
-        EQUALS(RunJSThrows(engine, "Events.emit('resourceStop')"), true);
-        EQUALS(RunJSThrows(engine, "Events.emit('playerConnect')"), true);
-        EQUALS(RunJSThrows(engine, "Events.emit('customEvent')"), false);
+        EQUALS(RunJSThrows(engine, "Core.Events.emit('resourceStart')"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.emit('resourceStop')"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.emit('playerConnect')"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.emit('customEvent')"), false);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -314,15 +328,19 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        EQUALS(RunJS(engine, "Events.listenerCount('countTest')"), 0);
-        RunJS(engine, "Events.on('countTest', () => {}); 0");
-        EQUALS(RunJS(engine, "Events.listenerCount('countTest')"), 1);
-        RunJS(engine, "Events.on('countTest', () => {}); 0");
-        EQUALS(RunJS(engine, "Events.listenerCount('countTest')"), 2);
+        EQUALS(RunJS(engine, "Core.Events.listenerCount('countTest')"), 0);
+        RunJS(engine, "Core.Events.on('countTest', () => {}); 0");
+        EQUALS(RunJS(engine, "Core.Events.listenerCount('countTest')"), 1);
+        RunJS(engine, "Core.Events.on('countTest', () => {}); 0");
+        EQUALS(RunJS(engine, "Core.Events.listenerCount('countTest')"), 2);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -353,11 +371,15 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        RunJS(engine, "globalThis.unsub = Events.on('unsubTest', () => {}); 0");
+        RunJS(engine, "globalThis.unsub = Core.Events.on('unsubTest', () => {}); 0");
         EQUALS(manager.GetEvents().GetListenerCount("unsubTest"), (size_t)1);
 
         RunJS(engine, "globalThis.unsub(); 0");
@@ -392,11 +414,15 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
             // NOT setting resource context
         }
 
-        EQUALS(RunJSThrows(engine, "Events.on('test', () => {})"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.on('test', () => {})"), true);
 
         engine.Shutdown();
         EventsTestHelper::Cleanup();
@@ -420,14 +446,18 @@ MODULE(js_features, {
             v8::Local<v8::Context> context = engine.GetContext();
             v8::Context::Scope contextScope(context);
 
-            manager.GetEvents().Register(isolate, context, context->Global(), &manager);
+            v8::Local<v8::Object> coreObj = v8::Object::New(isolate);
+            context->Global()->Set(context,
+                v8::String::NewFromUtf8Literal(isolate, "Core"),
+                coreObj).Check();
+            manager.GetEvents().Register(isolate, context, coreObj, &manager);
             manager.SetCurrentResourceContext("testResource");
         }
 
-        EQUALS(RunJSThrows(engine, "Events.on()"), true);
-        EQUALS(RunJSThrows(engine, "Events.on('test')"), true);
-        EQUALS(RunJSThrows(engine, "Events.on(123, () => {})"), true);
-        EQUALS(RunJSThrows(engine, "Events.on('test', 'notafunction')"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.on()"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.on('test')"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.on(123, () => {})"), true);
+        EQUALS(RunJSThrows(engine, "Core.Events.on('test', 'notafunction')"), true);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();

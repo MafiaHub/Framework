@@ -70,4 +70,21 @@ namespace Framework::Scripting {
         return frameworkValue.As<v8::Object>();
     }
 
+    v8::Local<v8::Object> Engine::GetCoreObject() const {
+        v8::Local<v8::Context> context = GetContext();
+        if (context.IsEmpty()) {
+            return v8::Local<v8::Object>();
+        }
+        v8::Isolate *isolate = GetIsolate();
+        v8::Local<v8::Value> coreValue;
+        if (!context->Global()
+                ->Get(context, v8::String::NewFromUtf8(isolate, "Core").ToLocalChecked())
+                .ToLocal(&coreValue) ||
+            !coreValue->IsObject()) {
+            Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("globalThis.Core is missing or not an object");
+            return v8::Local<v8::Object>();
+        }
+        return coreValue.As<v8::Object>();
+    }
+
 } // namespace Framework::Scripting
