@@ -2,7 +2,9 @@
 #undef max
 
 // Comment out this line when using as DLL
-#define flecs_STATIC
+#ifndef flecs_STATIC
+#define flecs_STATIC 1
+#endif
 /**
  * @file flecs.h
  * @brief Flecs public API.
@@ -33034,4 +33036,3 @@ inline flecs::scoped_world world::scope(const char* name) const {
 
 
 #endif
-
