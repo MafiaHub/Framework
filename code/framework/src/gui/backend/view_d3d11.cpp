@@ -1,196 +1,205 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
 #include "view_d3d11.h"
 #include "logging/logger.h"
 
-#include <stdio.h>
-
-#include <unordered_map>
-
-#include "gui/backend/renderer_d3d11.h"
 #include "graphics/backend/d3d11.h"
 
-static ultralight::IndexType patternCW[]  = {0, 1, 3, 1, 2, 3};
-static ultralight::IndexType patternCCW[] = {0, 3, 1, 1, 3, 2};
-
-Framework::GUI::RendererD3D11 *rendererBackend {};
-
 namespace Framework::GUI {
-    ViewD3D11::ViewD3D11(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer, Manager *manager): View(renderer, graphicsRenderer, manager) {
-        _sdk = new SDK;
+    ViewD3D11::ViewD3D11(Graphics::Renderer *graphicsRenderer, Manager *manager): View(graphicsRenderer, manager) {
     }
 
-    bool ViewD3D11::Init(std::string &path, int width, int height, int offset_x, int offset_y, bool gpu_accelerated) {
-        return View::Init(path, width, height, offset_x, offset_y, gpu_accelerated);
-    }
-
-    void ViewD3D11::UpdateGeometry() {
-        const auto driver = rendererBackend;
-        
-        bool is_new = false;
-
-        float uv_l = 0.0f;
-        float uv_t = 0.0f;
-        float uv_r = 1.0f;
-        float uv_b = 1.0f;
-
-        if (_vertices.empty()) {
-            _vertices.resize(4);
-            _indices.resize(6);
-
-            auto &config = ultralight::Platform::instance().config();
-
-            if (config.face_winding == ultralight::FaceWinding::Clockwise) {
-                std::memcpy(_indices.data(), patternCW, sizeof(ultralight::IndexType) * _indices.size());
-            }
-            else {
-                std::memcpy(_indices.data(), patternCCW, sizeof(ultralight::IndexType) * _indices.size());
-            }
-
-            std::memset(&_gpuState, 0, sizeof(_gpuState));
-            ultralight::Matrix identity;
-            identity.SetIdentity();
-
-            _gpuState.viewport_width   = _width;
-            _gpuState.viewport_height  = _height;
-            _gpuState.transform        = identity.GetMatrix4x4();
-            _gpuState.enable_scissor   = false;
-            _gpuState.enable_blend     = true;
-            _gpuState.enable_texturing = true;
-            _gpuState.shader_type      = ultralight::ShaderType::Fill;
-            _gpuState.render_buffer_id = 0;
-            
-            if (_gpuAccelerated) {
-                ultralight::RenderTarget target = _internalView->render_target();
-                _gpuState.texture_1_id          = target.texture_id;
-
-                uv_l = target.uv_coords.left;
-                uv_t = target.uv_coords.top;
-                uv_r = target.uv_coords.right;
-                uv_b = target.uv_coords.bottom;
-            }
-
-            is_new = true;
-        }
-
-        if (!_needsUpdate) {
-            return;
-        }
-
-        ultralight::Vertex_2f_4ub_2f_2f_28f v;
-        memset(&v, 0, sizeof(v));
-
-        v.data0[0] = 1; // Fill Type: Image
-
-        v.color[0] = 255;
-        v.color[1] = 255;
-        v.color[2] = 255;
-        v.color[3] = 255;
-
-        auto x_      = _x;
-        auto y_      = _y;
-        float left   = static_cast<float>(x_);
-        float top    = static_cast<float>(y_);
-        float right  = static_cast<float>(x_ + _width);
-        float bottom = static_cast<float>(y_ + _height);
-
-        // TOP LEFT
-        v.pos[0] = v.obj[0] = left;
-        v.pos[1] = v.obj[1] = top;
-        v.tex[0]            = uv_l;
-        v.tex[1]            = uv_t;
-
-        _vertices[0] = v;
-
-        // TOP RIGHT
-        v.pos[0] = v.obj[0] = right;
-        v.pos[1] = v.obj[1] = top;
-        v.tex[0]            = uv_r;
-        v.tex[1]            = uv_t;
-
-        _vertices[1] = v;
-
-        // BOTTOM RIGHT
-        v.pos[0] = v.obj[0] = right;
-        v.pos[1] = v.obj[1] = bottom;
-        v.tex[0]            = uv_r;
-        v.tex[1]            = uv_b;
-
-        _vertices[2] = v;
-
-        // BOTTOM LEFT
-        v.pos[0] = v.obj[0] = left;
-        v.pos[1] = v.obj[1] = bottom;
-        v.tex[0]            = uv_l;
-        v.tex[1]            = uv_b;
-
-        _vertices[3] = v;
-
-        ultralight::VertexBuffer vbuffer;
-        vbuffer.format = ultralight::VertexBufferFormat::_2f_4ub_2f_2f_28f;
-        vbuffer.size   = static_cast<uint32_t>(sizeof(ultralight::Vertex_2f_4ub_2f_2f_28f) * _vertices.size());
-        vbuffer.data   = (uint8_t *)_vertices.data();
-
-        ultralight::IndexBuffer ibuffer;
-        ibuffer.size = static_cast<uint32_t>(sizeof(ultralight::IndexType) * _indices.size());
-        ibuffer.data = (uint8_t *)_indices.data();
-
-        if (is_new) {
-            _geometryID = driver->NextGeometryId();
-            driver->CreateGeometry(_geometryID, vbuffer, ibuffer);
-        }
-        else {
-            driver->UpdateGeometry(_geometryID, vbuffer, ibuffer);
-        }
-
-        _needsUpdate = false;
+    bool ViewD3D11::Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
+        return View::Init(url, width, height, offsetX, offsetY, gpuAccelerated);
     }
 
     void ViewD3D11::Update() {
-        if (!_internalView || !_shouldDisplay) {
+        if (!_browser || !_shouldDisplay) {
             return;
         }
 
         std::scoped_lock lock(_renderMutex);
-
-        // Update the view content
         View::Update();
     }
 
+    void ViewD3D11::CreateOrUpdateGeometry() {
+        auto *backend = _graphicsRenderer->GetD3D11Backend();
+        if (!backend) {
+            return;
+        }
+
+        // Build a simple full-screen quad using the complex vertex format
+        // that the existing D3D11 backend shaders expect
+        struct Vertex {
+            float pos[2];
+            uint8_t color[4];
+            float tex[2];
+            float obj[2];
+            float data0[4];
+            float data1[4];
+            float data2[4];
+            float data3[4];
+            float data4[4];
+            float data5[4];
+            float data6[4];
+        };
+
+        float left   = static_cast<float>(_x);
+        float top    = static_cast<float>(_y);
+        float right  = static_cast<float>(_x + _width);
+        float bottom = static_cast<float>(_y + _height);
+
+        Vertex vertices[4] = {};
+
+        // Fill type 1 = Image
+        auto fillVertex = [](Vertex &v) {
+            memset(&v, 0, sizeof(v));
+            v.color[0] = 255;
+            v.color[1] = 255;
+            v.color[2] = 255;
+            v.color[3] = 255;
+            v.data0[0] = 1.0f; // Fill Type: Image
+        };
+
+        fillVertex(vertices[0]);
+        vertices[0].pos[0] = vertices[0].obj[0] = left;
+        vertices[0].pos[1] = vertices[0].obj[1] = top;
+        vertices[0].tex[0] = 0.0f;
+        vertices[0].tex[1] = 0.0f;
+
+        fillVertex(vertices[1]);
+        vertices[1].pos[0] = vertices[1].obj[0] = right;
+        vertices[1].pos[1] = vertices[1].obj[1] = top;
+        vertices[1].tex[0] = 1.0f;
+        vertices[1].tex[1] = 0.0f;
+
+        fillVertex(vertices[2]);
+        vertices[2].pos[0] = vertices[2].obj[0] = right;
+        vertices[2].pos[1] = vertices[2].obj[1] = bottom;
+        vertices[2].tex[0] = 1.0f;
+        vertices[2].tex[1] = 1.0f;
+
+        fillVertex(vertices[3]);
+        vertices[3].pos[0] = vertices[3].obj[0] = left;
+        vertices[3].pos[1] = vertices[3].obj[1] = bottom;
+        vertices[3].tex[0] = 0.0f;
+        vertices[3].tex[1] = 1.0f;
+
+        uint32_t indices[] = {0, 1, 3, 1, 2, 3};
+
+        Graphics::VertexBuffer vb;
+        vb.format = Graphics::VertexBufferFormat::_2f_4ub_2f_2f_28f;
+        vb.size   = sizeof(vertices);
+        vb.data   = reinterpret_cast<uint8_t *>(vertices);
+
+        Graphics::IndexBuffer ib;
+        ib.size = sizeof(indices);
+        ib.data = reinterpret_cast<uint8_t *>(indices);
+
+        if (!_geometryCreated) {
+            _geometryID = backend->NextGeometryId();
+            backend->CreateGeometry(_geometryID, vb, ib);
+            _geometryCreated = true;
+        }
+        else {
+            backend->UpdateGeometry(_geometryID, vb, ib);
+        }
+    }
+
     void ViewD3D11::Render() {
-        if (!_internalView || !_shouldDisplay) {
+        if (!_browser || !_shouldDisplay) {
             return;
         }
 
         std::scoped_lock lock(_renderMutex);
 
-        // Update D3D11 internal resources
-        UpdateGeometry();
-
-        // Update texture data for CPU renderer
-        if (!_gpuAccelerated && _internalView->surface()) {
-            const auto driver = rendererBackend;
-            auto bitmap       = ((ultralight::BitmapSurface *)_internalView->surface())->bitmap();
-            
-            if (!_renderTextureID) {
-                _renderTextureID = rendererBackend->NextTextureId();
-                rendererBackend->CreateTexture(_renderTextureID, bitmap);
-            }
-            else {
-                rendererBackend->UpdateTexture(_renderTextureID, bitmap);
-            }
-
-            _gpuState.texture_1_id = _renderTextureID;
+        auto *backend = _graphicsRenderer->GetD3D11Backend();
+        if (!backend) {
+            return;
         }
 
-        // Issue a view render
-        rendererBackend->DrawGeometry(_geometryID, 6, 0, _gpuState);
-    }
+        // Create/update geometry
+        CreateOrUpdateGeometry();
 
-    void ViewD3D11::InitRenderer(Framework::Graphics::Renderer *graphicsRenderer) {
-        if (!rendererBackend) {
-            rendererBackend = new RendererD3D11();
-            rendererBackend->Init(graphicsRenderer);
+        // Set up GPU state for rendering the quad
+        Graphics::GPUState gpuState {};
+        memset(&gpuState, 0, sizeof(gpuState));
 
-            ultralight::Platform::instance().set_gpu_driver(rendererBackend);
+        gpuState.viewport_width  = _width;
+        gpuState.viewport_height = _height;
+        gpuState.enable_scissor  = false;
+        gpuState.enable_blend    = true;
+        gpuState.enable_texturing = true;
+        gpuState.shader_type      = Graphics::ShaderType::Fill;
+        gpuState.render_buffer_id = 0;
+
+        // Set identity transform
+        gpuState.transform = glm::mat4(1.0f);
+
+        if (_gpuAccelerated) {
+            // GPU path: use shared texture from CEF
+            auto *renderHandler = GetRenderHandler();
+            if (renderHandler) {
+                auto *sharedTex = renderHandler->GetSharedTexture();
+                if (sharedTex) {
+                    // Register the shared texture with the D3D11 backend if not already done
+                    if (_textureID == 0) {
+                        _textureID = backend->NextTextureId();
+                    }
+
+                    // Create a SRV from the shared texture and register with backend
+                    auto &texEntry = backend->GetTexture(_textureID);
+                    Microsoft::WRL::ComPtr<ID3D11Texture2D> tex;
+                    sharedTex->QueryInterface(IID_PPV_ARGS(&tex));
+                    texEntry.texture = tex;
+
+                    if (!texEntry.texture_srv) {
+                        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc {};
+                        srvDesc.Format                    = DXGI_FORMAT_B8G8R8A8_UNORM;
+                        srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+                        srvDesc.Texture2D.MipLevels       = 1;
+                        srvDesc.Texture2D.MostDetailedMip = 0;
+                        backend->GetDevice()->CreateShaderResourceView(sharedTex, &srvDesc, &texEntry.texture_srv);
+                    }
+
+                    gpuState.texture_1_id = _textureID;
+                }
+            }
+        }
+        else {
+            // CPU path: use pixel data from CEF's OnPaint
+            auto *renderHandler = GetRenderHandler();
+            if (renderHandler && !renderHandler->GetPixelData().empty()) {
+                Graphics::Bitmap bmp;
+                bmp.format = Graphics::BitmapFormat::BGRA8;
+                bmp.width  = _width;
+                bmp.height = _height;
+                bmp.pitch  = _width * 4;
+                bmp.size   = static_cast<uint32_t>(renderHandler->GetPixelData().size());
+                bmp.pixels = const_cast<uint8_t *>(renderHandler->GetPixelData().data());
+
+                if (_cpuTextureID == 0) {
+                    _cpuTextureID = backend->NextTextureId();
+                    backend->CreateTexture(_cpuTextureID, bmp);
+                }
+                else if (renderHandler->IsPixelDataDirty()) {
+                    backend->UpdateTexture(_cpuTextureID, bmp);
+                    renderHandler->ClearPixelDataDirty();
+                }
+
+                gpuState.texture_1_id = _cpuTextureID;
+            }
+        }
+
+        // Draw the geometry
+        if (gpuState.texture_1_id != 0) {
+            backend->DrawGeometry(_geometryID, 6, 0, gpuState);
         }
     }
 } // namespace Framework::GUI

@@ -11,53 +11,32 @@
 #include <utils/safe_win32.h>
 
 #include <d3d11.h>
-#include <function2.hpp>
-#include <map>
 #include <mutex>
-#include <string>
+#include <wrl/client.h>
 
-#include <Ultralight/Ultralight.h>
-
-#include <glm/glm.hpp>
-
-#include "gui/sdk.h"
 #include "graphics/renderer.h"
-
 #include "gui/view.h"
 
 namespace Framework::GUI {
-
-    class ViewD3D11 final : public View {
-      protected:
-        // CPU renderer
-        uint32_t _renderTextureID = 0;
-
-        // GPU renderer
-        ultralight::GPUState _gpuState {};
-        std::vector<ultralight::Vertex_2f_4ub_2f_2f_28f> _vertices {};
-        std::vector<ultralight::IndexType> _indices {};
-        bool _needsUpdate = true;
+    class ViewD3D11 final: public View {
+      private:
+        // GPU path: texture received from CEF's OnAcceleratedPaint
+        uint32_t _textureID  = 0;
         uint32_t _geometryID = 0;
+        bool _geometryCreated = false;
 
-      private:
-        bool _d3dInitialized = false;
-
-      private:
-        // CPU renderer
-        void InitD3D();
-        void ResetTextures();
-
-        // GPU renderer
-        void UpdateGeometry();
+        // CPU path: texture created from pixel data
+        uint32_t _cpuTextureID = 0;
 
       public:
-        ViewD3D11(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*, Manager*);
+        ViewD3D11(Graphics::Renderer *graphicsRenderer, Manager *manager);
 
-        bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false) override;
+        bool Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false) override;
 
         void Update() override;
         void Render() override;
 
-        static void InitRenderer(Framework::Graphics::Renderer *);
+      private:
+        void CreateOrUpdateGeometry();
     };
 } // namespace Framework::GUI

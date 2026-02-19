@@ -7,15 +7,14 @@
  */
 
 #pragma once
-#include <Ultralight/Ultralight.h>
 
-#include <Ultralight/platform/Clipboard.h>
+#include <string>
 
 namespace Framework::GUI {
-    class SystemClipboard final: public ultralight::Clipboard {
+    class SystemClipboard final {
       public:
-        void Clear() override;
-        ultralight::String ReadPlainText() override;
-        void WritePlainText(const ultralight::String &text) override;
+        void Clear();
+        std::string ReadPlainText();
+        void WritePlainText(const std::string &text);
     };
 } // namespace Framework::GUI

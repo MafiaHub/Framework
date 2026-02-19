@@ -15,65 +15,69 @@
 #include <map>
 #include <mutex>
 #include <string>
-
-#include <Ultralight/Ultralight.h>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 #include "graphics/renderer.h"
 #include "sdk.h"
 
-#include <vector>
+#include "include/cef_browser.h"
+
+#include "cef/client.h"
+#include "cef/display_handler.h"
+#include "cef/life_span_handler.h"
+#include "cef/load_handler.h"
+#include "cef/render_handler.h"
 
 namespace Framework::GUI {
-    using OnConsoleMessageCallback     = fu2::function<void(std::string,uint32_t,uint32_t,std::string)>;
-    using OnDOMReadyCallback           = fu2::function<void(uint64_t, bool, std::string)>;
-    using OnWindowObjectReadyCallback  = fu2::function<void(uint64_t, bool, std::string)>;
+    using OnConsoleMessageCallback    = fu2::function<void(std::string, uint32_t, uint32_t, std::string)>;
+    using OnDOMReadyCallback          = fu2::function<void(std::string, bool, std::string)>;
+    using OnWindowObjectReadyCallback = fu2::function<void(std::string, bool, std::string)>;
 
     class Manager;
 
-    class View: public ultralight::ViewListener, ultralight::LoadListener {
+    class View {
       private:
         OnConsoleMessageCallback _onConsoleMessageCallback;
         OnDOMReadyCallback _onDOMReadyCallback;
         OnWindowObjectReadyCallback _onWindowObjectReadyCallback;
 
       protected:
-        ultralight::RefPtr<ultralight::Renderer> _renderer;
-        ultralight::RefPtr<ultralight::View> _internalView = nullptr;
-        Graphics::Renderer *_graphicsRenderer              = nullptr;
-        Manager *_manager                                  = nullptr;
+        CefRefPtr<CefBrowser> _browser;
+        CefRefPtr<CEF::Client> _cefClient;
+        CefRefPtr<CEF::RenderHandler> _renderHandler;
+        CefRefPtr<CEF::LifeSpanHandler> _lifeSpanHandler;
+        CefRefPtr<CEF::LoadHandler> _loadHandler;
+        CefRefPtr<CEF::DisplayHandler> _displayHandler;
+
+        Graphics::Renderer *_graphicsRenderer = nullptr;
+        Manager *_manager                     = nullptr;
 
         SDK *_sdk = nullptr;
 
-        // CPU renderer
+        // CPU renderer fallback
         std::vector<uint8_t> _pixelData;
 
-        bool _gpuAccelerated = false;
+        bool _gpuAccelerated  = false;
+        bool _hasFocus        = false;
         int _x;
         int _y;
         int _z;
         int _width;
         int _height;
-        bool _shouldDisplay = false;
+        bool _shouldDisplay   = false;
         bool _garbageCollected = false;
 
         std::recursive_mutex _renderMutex;
-        ultralight::Cursor _cursor = ultralight::kCursor_Pointer;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
 
-      protected:
-        void OnAddConsoleMessage(ultralight::View *caller, const ultralight::ConsoleMessage &message) override;
-        void OnDOMReady(ultralight::View *, uint64_t, bool, const ultralight::String &) override;
-        void OnWindowObjectReady(ultralight::View *, uint64_t, bool, const ultralight::String &) override;
-        void OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) override;
-
       public:
-        View(ultralight::RefPtr<ultralight::Renderer>, Graphics::Renderer*, Manager*);
+        View(Graphics::Renderer *graphicsRenderer, Manager *manager);
         virtual ~View();
 
-        virtual bool Init(std::string &, int, int, int, int, bool gpu_accelerated = false);
+        virtual bool Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;
@@ -82,20 +86,14 @@ namespace Framework::GUI {
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
         void Focus(bool enable) {
-            if (!_internalView) {
-                return;
-            }
-
-            if (enable) {
-                _internalView->Focus();
-            }
-            else {
-                _internalView->Unfocus();
+            _hasFocus = enable;
+            if (_browser) {
+                _browser->GetHost()->SetFocus(enable);
             }
         }
 
         bool HasFocus() const {
-            return _internalView->HasFocus();
+            return _hasFocus;
         }
 
         void Display(bool enable) {
@@ -129,15 +127,10 @@ namespace Framework::GUI {
             return _garbageCollected;
         }
 
-        ultralight::Cursor GetCursor() const {
-            return _cursor;
-        }
-
         inline void AddEventListener(std::string eventName, const EventCallbackProc &proc) {
             if (!_sdk) {
                 return;
             }
-
             _sdk->AddEventListener(eventName, proc);
         }
 
@@ -145,24 +138,33 @@ namespace Framework::GUI {
             if (!_sdk) {
                 return;
             }
-
             _sdk->RemoveEventListener(eventName);
         }
 
-        inline std::string EvaluateScript(const std::string& script) {
-            if (!_internalView) {
-                return "";
+        inline void EvaluateScript(const std::string &script) {
+            if (!_browser || !_browser->GetMainFrame()) {
+                return;
             }
-
-            return _internalView->EvaluateScript(ultralight::String(script.c_str())).utf8().data();
+            _browser->GetMainFrame()->ExecuteJavaScript(script, "", 0);
         }
 
-        inline ultralight::View *GetInternalView() {
-            return _internalView.get();
+        CefRefPtr<CefBrowser> GetBrowser() const {
+            return _browser;
         }
 
         inline GUI::SDK *GetSDK() {
             return _sdk;
+        }
+
+        CEF::RenderHandler *GetRenderHandler() const {
+            return _renderHandler.get();
+        }
+
+        cef_cursor_type_t GetCursorType() const {
+            if (_displayHandler) {
+                return _displayHandler->GetCursorType();
+            }
+            return CT_POINTER;
         }
 
         inline void SetOnConsoleMessageCallback(OnConsoleMessageCallback proc) {

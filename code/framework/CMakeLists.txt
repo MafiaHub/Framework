@@ -82,17 +82,20 @@ set(FRAMEWORK_CLIENT_SRC
     src/integrations/client/scripting/module.cpp
 )
 
-# GUI (Ultralight) only available for 64-bit builds
-if(CMAKE_CL_64)
-    list(APPEND FRAMEWORK_CLIENT_SRC
-        src/gui/manager.cpp
-        src/gui/clipboard.cpp
-        src/gui/view.cpp
-        src/gui/sdk.cpp
-        src/gui/backend/renderer_d3d11.cpp
-        src/gui/backend/view_d3d11.cpp
-    )
-endif()
+# GUI (CEF-based)
+list(APPEND FRAMEWORK_CLIENT_SRC
+    src/gui/manager.cpp
+    src/gui/clipboard.cpp
+    src/gui/view.cpp
+    src/gui/sdk.cpp
+    src/gui/backend/view_d3d11.cpp
+    src/gui/cef/app.cpp
+    src/gui/cef/client.cpp
+    src/gui/cef/render_handler.cpp
+    src/gui/cef/life_span_handler.cpp
+    src/gui/cef/load_handler.cpp
+    src/gui/cef/display_handler.cpp
+)
 
 # Append the platform-dependent files to the related lists
 if(WIN32)
@@ -334,15 +337,27 @@ if(WIN32)
     if(NOT CMAKE_CL_64)
         target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
     else()
-        target_link_libraries(FrameworkClient UltralightSDK JavaScriptCorePP)
         target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
+    endif()
 
-        # Ultralight GUI includes (64-bit only)
-        target_include_directories(FrameworkClient PRIVATE
-            ${CMAKE_SOURCE_DIR}/vendors/ultralight/include
-            ${CMAKE_SOURCE_DIR}/vendors/directxtk
-            ${CMAKE_SOURCE_DIR}/vendors/javascriptcorepp/include
-        )
+    # CEF GUI integration (CEF target provides include dirs via INTERFACE)
+    target_link_libraries(FrameworkClient CEF)
+    target_include_directories(FrameworkClient PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/directxtk
+    )
+
+    # CEF subprocess executable
+    add_executable(cef_subprocess
+        src/gui/cef/subprocess_main.cpp
+        src/gui/cef/renderer_app.cpp
+    )
+    target_link_libraries(cef_subprocess CEF)
+    set_target_properties(cef_subprocess PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+    if(TARGET CEFCopyDlls)
+        add_dependencies(FrameworkClient CEFCopyDlls)
+        add_dependencies(cef_subprocess CEFCopyDlls)
     endif()
 
     # Ensure runtime DLLs are copied to bin directory for all client/server targets

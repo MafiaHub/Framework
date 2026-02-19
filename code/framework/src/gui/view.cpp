@@ -1,20 +1,37 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
 #include "view.h"
 #include "logging/logger.h"
+
 #include <Windows.h>
 #include <WindowsX.h>
 
-#include <unordered_map>
+#include "graphics/backend/d3d11.h"
 
 namespace Framework::GUI {
-    View::View(ultralight::RefPtr<ultralight::Renderer> renderer, Graphics::Renderer *graphicsRenderer, Manager *manager): _renderer(renderer), _graphicsRenderer(graphicsRenderer), _manager(manager), _width(0), _height(0), _x(0), _y(0), _z(0) {
-        _sdk = new SDK;
+    View::View(Graphics::Renderer *graphicsRenderer, Manager *manager)
+        : _graphicsRenderer(graphicsRenderer)
+        , _manager(manager)
+        , _width(0)
+        , _height(0)
+        , _x(0)
+        , _y(0)
+        , _z(0) {
+        _sdk         = new SDK;
         _isMouseDown = false;
     }
 
     View::~View() {
-        // Leak the reference since Ultralight asserts on shutdown if it still holds onto some GPU renderer related data
-        // TODO: re-visit later since closing views might actually leak them!
-        _internalView.LeakRef();
+        if (_browser) {
+            _browser->GetHost()->CloseBrowser(true);
+            _browser = nullptr;
+        }
 
         if (_sdk) {
             _sdk->Shutdown();
@@ -22,228 +39,165 @@ namespace Framework::GUI {
         }
     }
 
-    bool View::Init(std::string &path, int width, int height, int offset_x, int offset_y, bool gpu_accelerated) {
-        // Initialize a view configuration
-        ultralight::ViewConfig config;
-        config.is_accelerated = gpu_accelerated;
-        config.is_transparent = true;
-        config.initial_focus  = false;
-        config.enable_compositor = false; // Broken for now, see later
-        _gpuAccelerated       = gpu_accelerated;
+    bool View::Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
+        _gpuAccelerated = gpuAccelerated;
+        _width          = width;
+        _height         = height;
+        _x              = offsetX;
+        _y              = offsetY;
 
-        // Initialize the internal view
-        _internalView = _renderer->CreateView(width, height, config, nullptr);
-        if (!_internalView || !_internalView.get()) {
+        // Create CEF handlers
+        _renderHandler   = new CEF::RenderHandler();
+        _lifeSpanHandler = new CEF::LifeSpanHandler();
+        _loadHandler     = new CEF::LoadHandler();
+        _displayHandler  = new CEF::DisplayHandler();
+
+        _renderHandler->SetDimensions(width, height);
+
+        // Wire up D3D11 device for shared texture support
+        if (_graphicsRenderer && _graphicsRenderer->GetBackendType() == Graphics::RendererBackend::BACKEND_D3D_11) {
+            auto *backend = _graphicsRenderer->GetD3D11Backend();
+            if (backend) {
+                _renderHandler->SetD3D11Device(backend->GetDevice());
+            }
+        }
+
+        // Wire up callbacks through handlers
+        _loadHandler->SetOnDOMReadyCallback([this](std::string frameId, bool isMainFrame, std::string frameUrl) {
+            if (_onDOMReadyCallback) {
+                _onDOMReadyCallback(frameId, isMainFrame, frameUrl);
+            }
+        });
+        _loadHandler->SetOnWindowObjectReadyCallback([this](std::string frameId, bool isMainFrame, std::string frameUrl) {
+            // Initialize SDK when window object is ready
+            if (_sdk && _browser) {
+                _sdk->Init(_browser);
+            }
+            if (_onWindowObjectReadyCallback) {
+                _onWindowObjectReadyCallback(frameId, isMainFrame, frameUrl);
+            }
+        });
+        _displayHandler->SetOnConsoleMessageCallback([this](std::string msg, uint32_t line, uint32_t col, std::string source) {
+            if (_onConsoleMessageCallback) {
+                _onConsoleMessageCallback(msg, line, col, source);
+            }
+        });
+
+        // Create CEF client
+        _cefClient = new CEF::Client(_renderHandler, _lifeSpanHandler, _loadHandler, _displayHandler, _sdk);
+
+        // Configure windowless rendering
+        CefWindowInfo windowInfo;
+        windowInfo.SetAsWindowless(nullptr);
+        windowInfo.shared_texture_enabled = gpuAccelerated;
+
+        CefBrowserSettings browserSettings;
+        browserSettings.windowless_frame_rate = 60;
+        browserSettings.background_color      = CefColorSetARGB(0, 0, 0, 0);
+
+        // Create the browser synchronously
+        _browser = CefBrowserHost::CreateBrowserSync(windowInfo, _cefClient, url, browserSettings, nullptr, nullptr);
+        if (!_browser) {
+            Framework::Logging::GetLogger("Web")->error("Failed to create CEF browser");
             return false;
         }
 
-        // Bind the listeners to the internal view
-        _internalView->set_view_listener(this);
-        _internalView->set_load_listener(this);
-
-        // Load the initial URL
-        _internalView->LoadURL(path.c_str());
-
-        // Store the width/height
-        _width  = width;
-        _height = height;
-
-        // Store the offsets
-        _x = offset_x;
-        _y = offset_y;
         return true;
     }
 
     void View::Update() {
-        if (!_internalView || !_shouldDisplay) {
-            return;
-        }
-
-        std::scoped_lock lock(_renderMutex);
-
-        // Update the view content (CPU renderer)
-        if (!_gpuAccelerated) {
-            auto surface = dynamic_cast<ultralight::BitmapSurface *>(_internalView->surface());
-            void *pixels = surface->LockPixels();
-            int size     = surface->size();
-            if (_pixelData.size() != size) {
-                _pixelData.clear();
-                _pixelData.resize(size);
-            }
-            std::memcpy(_pixelData.data(), pixels, size);
-            surface->UnlockPixels();
-        }
+        // Nothing to update at the base level for CEF; message loop is driven by Manager
     }
 
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-        if (!_internalView || !_shouldDisplay) {
+        if (!_browser || !_shouldDisplay || !_hasFocus) {
             return;
         }
 
-        if (!_internalView->HasFocus()) {
-            return;
-        }
+        auto host = _browser->GetHost();
 
-        // Handle the mouse wheel event as separate from the other mouse events
+        // Handle mouse wheel separately
         if (msg == WM_MOUSEWHEEL) {
-            ultralight::ScrollEvent ev;
-            ev.type    = ultralight::ScrollEvent::kType_ScrollByPixel;
-            ev.delta_x = 0;
-            ev.delta_y = GET_WHEEL_DELTA_WPARAM(wParam) * 0.8;
-            _internalView->FireScrollEvent(ev);
+            CefMouseEvent cefEvent;
+            cefEvent.x = GET_X_LPARAM(lParam) - _x;
+            cefEvent.y = GET_Y_LPARAM(lParam) - _y;
+            cefEvent.modifiers = 0;
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            host->SendMouseWheelEvent(cefEvent, 0, delta);
             return;
         }
 
-        // Handle other classic mouse events
-        ultralight::MouseEvent ev;
-
-        ev.x = GET_X_LPARAM(lParam) - _x;
-        ev.y = GET_Y_LPARAM(lParam) - _y;
+        CefMouseEvent cefEvent;
+        cefEvent.x = GET_X_LPARAM(lParam) - _x;
+        cefEvent.y = GET_Y_LPARAM(lParam) - _y;
+        cefEvent.modifiers = 0;
 
         switch (msg) {
         case WM_MOUSEMOVE: {
-            ev.type = ultralight::MouseEvent::kType_MouseMoved;
-            ev.button = _isMouseDown ? ultralight::MouseEvent::kButton_Left : ultralight::MouseEvent::kButton_None;
-            _cursorPos = {ev.x, ev.y};
+            _cursorPos = {cefEvent.x, cefEvent.y};
+            host->SendMouseMoveEvent(cefEvent, false);
         } break;
         case WM_LBUTTONDOWN: {
-            ev.type = ultralight::MouseEvent::kType_MouseDown;
-            ev.button = ultralight::MouseEvent::kButton_Left;
             _isMouseDown = true;
+            host->SendMouseClickEvent(cefEvent, MBT_LEFT, false, 1);
         } break;
         case WM_LBUTTONUP: {
-            ev.type = ultralight::MouseEvent::kType_MouseUp;
-            ev.button = ultralight::MouseEvent::kButton_Left;
             _isMouseDown = false;
+            host->SendMouseClickEvent(cefEvent, MBT_LEFT, true, 1);
         } break;
         case WM_RBUTTONDOWN: {
-            ev.type = ultralight::MouseEvent::kType_MouseDown;
-            ev.button = ultralight::MouseEvent::kButton_Right;
+            host->SendMouseClickEvent(cefEvent, MBT_RIGHT, false, 1);
         } break;
         case WM_RBUTTONUP: {
-            ev.type = ultralight::MouseEvent::kType_MouseUp;
-            ev.button = ultralight::MouseEvent::kButton_Right;
+            host->SendMouseClickEvent(cefEvent, MBT_RIGHT, true, 1);
         } break;
         case WM_MBUTTONDOWN: {
-            ev.type = ultralight::MouseEvent::kType_MouseDown;
-            ev.button = ultralight::MouseEvent::kButton_Middle;
+            host->SendMouseClickEvent(cefEvent, MBT_MIDDLE, false, 1);
         } break;
         case WM_MBUTTONUP: {
-            ev.type = ultralight::MouseEvent::kType_MouseUp;
-            ev.button = ultralight::MouseEvent::kButton_Middle;
+            host->SendMouseClickEvent(cefEvent, MBT_MIDDLE, true, 1);
         } break;
         }
-
-        _internalView->FireMouseEvent(ev);
     }
 
     void View::ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-        if (!_internalView || !_shouldDisplay) {
+        if (!_browser || !_shouldDisplay || !_hasFocus) {
             return;
         }
 
-        if (!_internalView->HasFocus()) {
-            return;
-        }
+        CefKeyEvent cefEvent;
 
-        ultralight::KeyEvent ev;
         switch (msg) {
         case WM_KEYDOWN: {
-            ev.type = ultralight::KeyEvent::kType_RawKeyDown;
+            cefEvent.type = KEYEVENT_RAWKEYDOWN;
         } break;
         case WM_KEYUP: {
-            ev.type = ultralight::KeyEvent::kType_KeyUp;
+            cefEvent.type = KEYEVENT_KEYUP;
         } break;
         case WM_CHAR: {
-            ev.type = ultralight::KeyEvent::kType_Char;
-            
-            // Handle UTF-16 input (including emojis which are surrogate pairs)
-            static std::wstring utf16Buffer;
-            wchar_t currentChar = static_cast<wchar_t>(wParam);
-            
-            // Check if this is a surrogate pair
-            if (IS_HIGH_SURROGATE(currentChar)) {
-                // Start collecting a new surrogate pair
-                utf16Buffer = currentChar;
-                return; // Wait for the low surrogate
-            }
-            else if (IS_LOW_SURROGATE(currentChar) && !utf16Buffer.empty()) {
-                // Complete the surrogate pair
-                utf16Buffer += currentChar;
-                
-                // Convert from UTF-16 to UTF-8
-                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), static_cast<int>(utf16Buffer.length()), nullptr, 0, nullptr, nullptr);
-                
-                std::string utf8Text(utf8Length, 0);
-                WideCharToMultiByte(CP_UTF8, 0, utf16Buffer.c_str(), static_cast<int>(utf16Buffer.length()), &utf8Text[0], utf8Length, nullptr, nullptr);
-
-                ev.text = utf8Text.c_str();
-                ev.unmodified_text = ev.text;
-                utf16Buffer.clear();
-            }
-            else {
-                // Regular UTF-16 character (not a surrogate pair)
-                utf16Buffer.clear();
-                
-                // Convert from UTF-16 to UTF-8
-                wchar_t wc = static_cast<wchar_t>(wParam);
-                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, nullptr, 0, nullptr, nullptr);
-                
-                std::string utf8Text(utf8Length, 0);
-                WideCharToMultiByte(CP_UTF8, 0, &wc, 1, &utf8Text[0], utf8Length, nullptr, nullptr);
-                
-                ev.text = utf8Text.c_str();
-                ev.unmodified_text = ev.text;
-            }
+            cefEvent.type = KEYEVENT_CHAR;
 
             // Make sure that pressing enter does not trigger this event
             if (wParam == 13) {
                 return;
             }
         } break;
+        default:
+            return;
         }
 
-        ev.virtual_key_code = wParam;
-        ev.native_key_code  = lParam;
+        cefEvent.windows_key_code = static_cast<int>(wParam);
+        cefEvent.native_key_code  = static_cast<int>(lParam);
 
         const bool ctrlPressed  = GetKeyState(VK_CONTROL) & 0x8000;
         const bool shiftPressed = GetKeyState(VK_SHIFT) & 0x8000;
         const bool altPressed   = GetKeyState(VK_MENU) & 0x8000;
-        ev.modifiers            = (ctrlPressed ? ultralight::KeyEvent::kMod_CtrlKey : 0) | (shiftPressed ? ultralight::KeyEvent::kMod_ShiftKey : 0) | (altPressed ? ultralight::KeyEvent::kMod_AltKey : 0);
+        cefEvent.modifiers      = (ctrlPressed ? EVENTFLAG_CONTROL_DOWN : 0) | (shiftPressed ? EVENTFLAG_SHIFT_DOWN : 0) | (altPressed ? EVENTFLAG_ALT_DOWN : 0);
 
-        ultralight::GetKeyIdentifierFromVirtualKeyCode(ev.virtual_key_code, ev.key_identifier);
-        _internalView->FireKeyEvent(ev);
-    }
-
-    void View::OnAddConsoleMessage(ultralight::View *caller, const ultralight::ConsoleMessage &message) {
-        const auto msg = std::string(message.message().utf8().data());
-        const auto lineNumber = message.line_number();
-        const auto columnNumber = message.column_number();
-        const auto sourceUrl = std::string(message.source_id().utf8().data());
-        if (_onConsoleMessageCallback) {
-            _onConsoleMessageCallback(msg, lineNumber, columnNumber, sourceUrl);
-        }
-    }
-
-    void View::OnDOMReady(ultralight::View *caller, uint64_t frame_id, bool is_main_frame, const ultralight::String &url) {
-        if (_onDOMReadyCallback) {
-            _onDOMReadyCallback(frame_id, is_main_frame, std::string(url.utf8().data()));
-        }
-    }
-
-    void View::OnWindowObjectReady(ultralight::View *caller, uint64_t frame_id, bool is_main_frame, const ultralight::String &url) {
-        _sdk->Init(caller);
-        if (_onWindowObjectReadyCallback) {
-            _onWindowObjectReadyCallback(frame_id, is_main_frame, std::string(url.utf8().data()));
-        }
-    }
-
-    void View::OnChangeCursor(ultralight::View *caller, ultralight::Cursor cursor) {
-        _cursor = cursor;
+        _browser->GetHost()->SendKeyEvent(cefEvent);
     }
 
     void View::SetZIndex(int z) {
         _z = z;
     }
-
 } // namespace Framework::GUI

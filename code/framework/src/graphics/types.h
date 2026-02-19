@@ -20,7 +20,7 @@ namespace Framework::Graphics {
 
     enum class RendererAPI {
         IMGUI,
-        ULTRALIGHT
+        CEF
     };
 
     enum class PlatformBackend {

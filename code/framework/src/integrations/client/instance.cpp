@@ -82,9 +82,7 @@ namespace Framework::Integrations::Client {
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
-#ifdef _WIN64
-        _webManager       = std::make_shared<Framework::GUI::Manager>();
-#endif
+        _webManager = std::make_shared<Framework::GUI::Manager>();
     }
 
     Instance::~Instance() {
@@ -261,11 +259,9 @@ namespace Framework::Integrations::Client {
             _renderIO->UpdateMainThread();
         }
 
-#ifdef _WIN64
         if (_webManager) {
             _webManager->Update();
         }
-#endif
 
         PostUpdate();
     }
@@ -371,12 +367,10 @@ namespace Framework::Integrations::Client {
             // Reset the scripting engine (keeps engine alive, just stops resources)
             _scriptingModule->Reset();
 
-#ifdef _WIN64
             // Destroy scriptable web views
             if (_webManager) {
                 _webManager->CleanupViews();
             }
-#endif
         });
 
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
@@ -446,12 +440,10 @@ namespace Framework::Integrations::Client {
         // Stop running resources before redownloading (preserves server resource list)
         _scriptingModule->StopAllResources();
 
-#ifdef _WIN64
         // Destroy scriptable web views
         if (_webManager) {
             _webManager->CleanupViews();
         }
-#endif
 
         // Setup the asset downloader
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Setting up asset downloads...");

@@ -14,14 +14,12 @@
 #include <mutex>
 #include <vector>
 
-#include <AppCore/Platform.h>
-#include <Ultralight/Ultralight.h>
+#include "include/cef_app.h"
 
+#include "cef/app.h"
 #include "clipboard.h"
-#include "view.h"
 #include "graphics/renderer.h"
-
-#include <utils/time.h>
+#include "view.h"
 
 namespace Framework::GUI {
     struct ViewportConfiguration {
@@ -32,7 +30,8 @@ namespace Framework::GUI {
     class Manager {
       private:
         ViewportConfiguration _viewportConfiguration {};
-        ultralight::RefPtr<ultralight::Renderer> _ultralightRenderer;
+        CefRefPtr<CEF::App> _cefApp;
+        bool _cefInitialized = false;
 
         std::recursive_mutex _renderMutex;
 
@@ -40,34 +39,28 @@ namespace Framework::GUI {
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer *_graphicsRenderer {};
         bool _gpuAccelerated = false;
-        
-        // HACK: Ultralight tends to crash if you destroy and create views too fast.
-        // Here we put Update() on cooldown whenever a view is destroyed.
-        // UGLY UGLY HACK
-        constexpr static int64_t UPDATE_COOLDOWN_MS = 2000;
-        Utils::Time::TimePoint _updateCooldown {};
 
       public:
         Manager();
         ~Manager();
 
-        bool Init(const std::string&, ViewportConfiguration, Graphics::Renderer*, bool gpu_accelerated = false);
+        bool Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
 
-        int CreateView(std::string, int width, int height, int offset_x = 0, int offset_y = 0);
-        bool DestroyView(int);
+        int CreateView(std::string url, int width, int height, int offsetX = 0, int offsetY = 0);
+        bool DestroyView(int id);
 
         void CleanupViews();
-        bool IsAnyViewFocused() const; // This also includes all C++ views
-        bool IsAnyGCViewFocused() const; // Check garbage collected views only (usually views created via client-side Lua)
-        
-        std::vector<GUI::View*> GetAllViews() const;
-        std::vector<GUI::View*> GetGCViews() const;
+        bool IsAnyViewFocused() const;
+        bool IsAnyGCViewFocused() const;
+
+        std::vector<GUI::View *> GetAllViews() const;
+        std::vector<GUI::View *> GetGCViews() const;
 
         void Update();
         void Render();
 
-        void ProcessMouseEvent(HWND, UINT, WPARAM, LPARAM) const;
-        void ProcessKeyboardEvent(HWND, UINT, WPARAM, LPARAM) const;
+        void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
+        void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
 
         void SetViewportConfiguration(const ViewportConfiguration &viewportConfiguration) {
             _viewportConfiguration = viewportConfiguration;

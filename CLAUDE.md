@@ -42,7 +42,7 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
 2. **World Engine** (`world/engine.h`) - ECS-based world management using Flecs with streaming support
 3. **Networking** (`networking/network_peer.h`) - Client-server communication via SlikeNet
 4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
-5. **GUI Manager** (`gui/manager.h`) - UI using Ultralight and Dear ImGui
+5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
 6. **Job System** (`jobs/job_system.h`) - Opt-in fiber-based task scheduling using FTL
 
 ### Integration Layer
@@ -87,7 +87,7 @@ Format: `Module: Brief commit description`
 - **FTL** - Fiber Tasking Library for job system (v2.1.0)
 - **libnode/V8** - JavaScript scripting (Server uses libnode for full Node.js APIs, Client uses V8 for sandboxed execution)
 - **SlikeNet** - Networking
-- **Ultralight** - Web-based UI
+- **CEF** - Web-based UI (Chromium Embedded Framework)
 - **Dear ImGui** - Immediate mode GUI
 - **spdlog** - Logging
 - **nlohmann/json** - JSON parsing

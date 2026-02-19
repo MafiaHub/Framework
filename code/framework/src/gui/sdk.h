@@ -8,35 +8,27 @@
 
 #pragma once
 
-#include <queue>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
+
 #include <fu2/function2.hpp>
 
-#include <Ultralight/Ultralight.h>
-#include <JavaScriptCore/JavaScript.h>
+#include "include/cef_browser.h"
 
 namespace Framework::GUI {
     using EventCallbackProc = fu2::function<void(std::string eventPayload)>;
 
     class SDK {
       private:
-        ultralight::View *_view;
+        CefRefPtr<CefBrowser> _browser;
         std::unordered_map<std::string, EventCallbackProc> _eventListeners;
 
-        JSContextRef _context;
-        JSObjectRef _globalObject;
-
       public:
-        bool Init(ultralight::View *);
+        bool Init(CefRefPtr<CefBrowser> browser);
         bool Shutdown();
 
-        inline JSContextRef GetContext() const {
-            return _context;
-        }
-
-        inline JSObjectRef GetGlobalObject() const {
-            return _globalObject;
+        CefRefPtr<CefBrowser> GetBrowser() const {
+            return _browser;
         }
 
         inline void AddEventListener(std::string eventName, EventCallbackProc proc) {
@@ -44,26 +36,17 @@ namespace Framework::GUI {
         }
 
         inline void RemoveEventListener(std::string eventName) {
-            // Make sure the event exist
             if (!_eventListeners.contains(eventName)) {
                 return;
             }
-
-            // Remove the event
             _eventListeners.erase(eventName);
         }
 
         inline void BroadcastEvent(std::string eventName, std::string eventPayload) {
-            // Make sure the event exist
             if (!_eventListeners.contains(eventName)) {
                 return;
             }
-
-            // Process all the event callback
             _eventListeners[eventName](eventPayload);
         }
-
-      private:
-        void InitEventHandlers();
     };
-}
+} // namespace Framework::GUI

@@ -61,7 +61,7 @@ lua                  - Scripting
 sdl2                 - Window management
 sentry               - Error reporting
 imgui                - GUI
-ultralight           - Web-based UI
+cef                  - Web-based UI (Chromium Embedded Framework)
 steamworks/galaxy    - Platform integration
 discord              - Discord integration
 ```

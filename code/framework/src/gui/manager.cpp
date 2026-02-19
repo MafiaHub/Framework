@@ -1,3 +1,11 @@
+/*
+ * MafiaHub OSS license
+ * Copyright (c) 2021-2024, MafiaHub. All rights reserved.
+ *
+ * This file comes from MafiaHub, hosted at https://github.com/MafiaHub/Framework.
+ * See LICENSE file in the source repository for information regarding licensing.
+ */
+
 #include "manager.h"
 
 #include <logging/logger.h>
@@ -6,74 +14,74 @@
 
 #include <core_modules.h>
 
+#include <filesystem>
 
 namespace Framework::GUI {
     Manager::Manager() {
         _clipboard = std::make_unique<SystemClipboard>();
-        _updateCooldown = Utils::Time::GetTimePoint() + std::chrono::milliseconds(UPDATE_COOLDOWN_MS);
-
         CoreModules::SetWebManager(this);
     }
 
     Manager::~Manager() {
-        // Destroy the views
+        // Destroy the views first (closes browsers)
         for (auto &view : _views) {
             view.reset();
         }
+        _views.clear();
 
-        // Destroy the Ultralight renderer
-        if (_ultralightRenderer) {
-            _ultralightRenderer->Release();
+        // Shutdown CEF
+        if (_cefInitialized) {
+            CefShutdown();
+            _cefInitialized = false;
         }
     }
 
-    bool Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpu_accelerated) {
+    bool Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated) {
         _graphicsRenderer = renderer;
-        _gpuAccelerated   = gpu_accelerated;
+        _gpuAccelerated   = gpuAccelerated;
 
         SetViewportConfiguration(initialViewport);
 
-        // Initialize the configuration
-        ultralight::Config rendererConfig;
-        rendererConfig.cache_path    = (rootDir + "/cache").c_str();
+        // Configure CEF settings
+        CefSettings settings;
+        settings.windowless_rendering_enabled = true;
+        settings.multi_threaded_message_loop  = false;
+        settings.no_sandbox                   = true;
+        settings.log_severity                 = LOGSEVERITY_FATAL;
 
-        // Initialize the platform
-        ultralight::Platform::instance().set_config(rendererConfig);
-        ultralight::Platform::instance().set_clipboard(_clipboard.get());
-        ultralight::Platform::instance().set_font_loader(ultralight::GetPlatformFontLoader());
-        ultralight::Platform::instance().set_file_system(ultralight::GetPlatformFileSystem(rootDir.c_str()));
-        ultralight::Platform::instance().set_logger(ultralight::GetDefaultLogger((rootDir + "/logs/web_manager.log").c_str()));
+        CefString(&settings.cache_path) = rootDir + "/cache";
+        CefString(&settings.log_file)  = rootDir + "/logs/cef.log";
 
-        // Initialise backend renderer for Ultralight
-        switch (_graphicsRenderer->GetBackendType()) {
-            case Graphics::RendererBackend::BACKEND_D3D_11: ViewD3D11::InitRenderer(_graphicsRenderer); break;
-            default: break;
-        }
-        
-        // Initialize the ultralight renderer
-        _ultralightRenderer = ultralight::Renderer::Create();
-        if (!_ultralightRenderer) {
-            Framework::Logging::GetLogger("Web")->error("Failed to initialize renderer");
+        // CEF requires an absolute path for the subprocess executable
+        wchar_t exePath[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        std::filesystem::path subprocessPath = std::filesystem::path(exePath).parent_path() / "cef_subprocess.exe";
+        CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
+
+        // Create the CEF app
+        _cefApp = new CEF::App();
+
+        // Initialize CEF
+        CefMainArgs mainArgs(GetModuleHandle(nullptr));
+        if (!CefInitialize(mainArgs, settings, _cefApp, nullptr)) {
+            Framework::Logging::GetLogger("Web")->error("Failed to initialize CEF");
             return false;
         }
 
+        _cefInitialized = true;
+        Framework::Logging::GetLogger("Web")->info("CEF initialized successfully");
         return true;
     }
 
     void Manager::Update() {
-        if (!_ultralightRenderer) {
+        if (!_cefInitialized) {
             return;
         }
 
-        if (Utils::Time::Compare(_updateCooldown, Utils::Time::GetTimePoint()) >= 0) {
-            return;
-        }
-
-        // Update the renderer
         std::scoped_lock lock(_renderMutex);
-        _ultralightRenderer->Update();
-        _ultralightRenderer->RefreshDisplay(0);
-        _ultralightRenderer->Render();
+
+        // Pump the CEF message loop
+        CefDoMessageLoopWork();
 
         // Update the views
         for (auto &view : _views) {
@@ -82,11 +90,11 @@ namespace Framework::GUI {
     }
 
     void Manager::Render() {
-        if (!_ultralightRenderer) {
+        if (!_cefInitialized) {
             return;
         }
 
-        // Update the views
+        // Sort views by z-index
         std::vector<GUI::View *> views;
         for (auto &view : _views) {
             views.push_back(view.get());
@@ -94,7 +102,7 @@ namespace Framework::GUI {
         std::sort(views.begin(), views.end(), [](GUI::View *a, GUI::View *b) {
             return a->GetZIndex() < b->GetZIndex();
         });
-        
+
         std::scoped_lock lock(_renderMutex);
 
         // Render the views
@@ -115,9 +123,9 @@ namespace Framework::GUI {
         }
     }
 
-    int Manager::CreateView(std::string url, int width, int height, int offset_x, int offset_y) {
-        if (!_ultralightRenderer) {
-            Framework::Logging::GetLogger("Web")->error("Failed to create view: Renderer is not initialized");
+    int Manager::CreateView(std::string url, int width, int height, int offsetX, int offsetY) {
+        if (!_cefInitialized) {
+            Framework::Logging::GetLogger("Web")->error("Failed to create view: CEF is not initialized");
             return -1;
         }
 
@@ -129,70 +137,60 @@ namespace Framework::GUI {
             height = _viewportConfiguration.height;
         }
 
-        // Create the view
+        // Create the view based on the graphics backend
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
-        case Graphics::RendererBackend::BACKEND_D3D_11: 
-            view = std::make_unique<ViewD3D11>(_ultralightRenderer.get(), _graphicsRenderer, this); break;
-        default: 
+        case Graphics::RendererBackend::BACKEND_D3D_11:
+            view = std::make_unique<ViewD3D11>(_graphicsRenderer, this);
+            break;
+        default:
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
             return -1;
         }
-        if (!view || !view.get()) {
+        if (!view) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: failed");
             return -1;
         }
 
-        if (!view->Init(url, width, height, offset_x, offset_y, _gpuAccelerated)) {
+        if (!view->Init(url, width, height, offsetX, offsetY, _gpuAccelerated)) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: initialization failed");
             return -1;
         }
 
-        // Add the view to the list
         _views.push_back(std::move(view));
 
-        // Return the view id
         const auto viewId = _views.size() - 1;
-
-        // Log the view creation
         Framework::Logging::GetLogger("Web")->debug("Created view with id {}", viewId);
-        return viewId;
+        return static_cast<int>(viewId);
     }
 
     bool Manager::DestroyView(int id) {
-        if (!_ultralightRenderer) {
-            Framework::Logging::GetLogger("Web")->error("Failed to destroy view: Renderer is not initialized");
+        if (!_cefInitialized) {
+            Framework::Logging::GetLogger("Web")->error("Failed to destroy view: CEF is not initialized");
             return false;
         }
 
-        // Check if the view exists
-        if (id < 0 || id >= _views.size()) {
+        if (id < 0 || id >= static_cast<int>(_views.size())) {
             Framework::Logging::GetLogger("Web")->error("Failed to destroy view: View does not exist");
             return false;
         }
 
-        // Destroy the view
         _views[id].reset();
-
-        // Remove the view from the list
         _views.erase(_views.begin() + id);
 
         Framework::Logging::GetLogger("Web")->debug("Destroyed view with id {}", id);
-
-        _updateCooldown = Utils::Time::GetTimePoint() + std::chrono::milliseconds(UPDATE_COOLDOWN_MS);
-
         return true;
     }
 
     void Manager::CleanupViews() {
-       for (auto it = _views.begin(); it != _views.end();) {
-           if ((*it)->IsGarbageCollected()) {
-               it = _views.erase(it);
-           }
-           else {
-               ++it;
-           }
-       }
+        for (auto it = _views.begin(); it != _views.end();) {
+            if ((*it)->IsGarbageCollected()) {
+                it = _views.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
     }
 
     bool Manager::IsAnyViewFocused() const {
@@ -213,16 +211,16 @@ namespace Framework::GUI {
         return false;
     }
 
-    std::vector<GUI::View*> Manager::GetAllViews() const {
-        std::vector<GUI::View*> views;
+    std::vector<GUI::View *> Manager::GetAllViews() const {
+        std::vector<GUI::View *> views;
         for (const auto &view : _views) {
             views.push_back(view.get());
         }
         return views;
     }
 
-    std::vector<GUI::View*> Manager::GetGCViews() const {
-        std::vector<GUI::View*> views;
+    std::vector<GUI::View *> Manager::GetGCViews() const {
+        std::vector<GUI::View *> views;
         for (const auto &view : _views) {
             if (view->IsGarbageCollected()) {
                 views.push_back(view.get());

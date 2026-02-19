@@ -1,0 +1,4 @@
+# Downloaded and extracted CEF binary distributions
+cef_binary_*/
+*.tar.bz2
+*.tar.bz2.sha1

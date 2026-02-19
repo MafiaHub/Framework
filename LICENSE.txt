@@ -45,7 +45,7 @@ This codebase also depends on the following third-party libraries:
     protobuf        - https://github.com/protocolbuffers/protobuf/blob/master/LICENSE
     curl            - https://curl.se/docs/copyright.html
     udis86          - https://github.com/vmt/udis86
-    ultralight      - https://ultralig.ht/
+    cef             - https://bitbucket.org/chromiumembedded/cef/
     flecs           - https://github.com/SanderMertens/flecs/
     fmt             - https://fmt.dev/latest/index.html
     cxxopts         - https://github.com/jarro2783/cxxopts
