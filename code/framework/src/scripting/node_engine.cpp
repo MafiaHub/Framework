@@ -6,6 +6,10 @@
 
 #include <filesystem>
 
+// env.h provides node::Environment with RunAndClearInterrupts() needed for
+// inspector CDP message dispatch and other interrupt-based callbacks.
+#include <env.h>
+
 namespace {
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
     // Handles: backslash, single quote, newline, carriage return, and tab.
@@ -204,13 +208,23 @@ namespace Framework::Scripting {
         v8::HandleScope handle_scope(_isolate);
         v8::Context::Scope context_scope(_setup->context());
 
+        // Drain pending interrupt callbacks (inspector CDP messages, etc.).
+        // The inspector uses env->RequestInterrupt() to dispatch protocol
+        // messages from the I/O thread. These callbacks are queued but only
+        // processed during JS execution or explicit drain. Without this call,
+        // inspector messages are never delivered when the isolate is idle.
+        _env->RunAndClearInterrupts();
+
         // Process microtasks (Promise continuations, async/await)
         _isolate->PerformMicrotaskCheckpoint();
 
         // Run pending libuv events (non-blocking)
         uv_run(_setup->event_loop(), UV_RUN_NOWAIT);
 
-        // Process any microtasks that were queued by I/O callbacks
+        // Drain V8 platform tasks (background compile, etc.)
+        _platform->DrainTasks(_isolate);
+
+        // Process any microtasks that were queued by I/O callbacks or platform tasks
         _isolate->PerformMicrotaskCheckpoint();
     }
 
