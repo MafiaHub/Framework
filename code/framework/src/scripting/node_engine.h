@@ -132,6 +132,15 @@ namespace Framework::Scripting {
         std::unique_ptr<node::CommonEnvironmentSetup> _setup;
         node::Environment *_env = nullptr;
         v8::Isolate *_isolate = nullptr;
+
+        // Cached JS function that calls setImmediate(()=>{}) each tick.
+        // This serves two purposes for inspector CDP message processing:
+        // 1. Enters JS execution, triggering V8 safepoint where pending
+        //    interrupts (queued via RequestInterrupt) are drained.
+        // 2. Activates Node's CheckImmediate uv_check handle, which calls
+        //    RunAndClearNativeImmediates → RunAndClearInterrupts internally.
+        // Only created when FW_NODE_INSPECTOR is defined and inspector enabled.
+        v8::Global<v8::Function> _interruptDrainFn;
     };
 
 } // namespace Framework::Scripting

@@ -6,9 +6,6 @@
 
 #include <filesystem>
 
-// env.h provides node::Environment with RunAndClearInterrupts() needed for
-// inspector CDP message dispatch and other interrupt-based callbacks.
-#include <env.h>
 
 namespace {
     // Escapes a string for safe embedding in a JavaScript single-quoted string literal.
@@ -86,6 +83,9 @@ namespace Framework::Scripting {
 
         // Stop Node.js environment AFTER scopes are released (per embedtest.cc)
         node::Stop(_env);
+
+        // Release persistent handles before destroying the isolate
+        _interruptDrainFn.Reset();
 
         // Clear our references before destroying setup
         _env = nullptr;
@@ -195,6 +195,28 @@ namespace Framework::Scripting {
             return false;
         }
 
+#ifdef FW_NODE_INSPECTOR
+        // Cache a JS function for inspector interrupt draining.
+        // Node's internal task_queues_async_ callback is empty and its
+        // CheckImmediate uv_check handle is only active when setImmediate()
+        // is pending, so uv_run(UV_RUN_NOWAIT) alone cannot drain interrupts.
+        // Calling setImmediate() each tick both enters JS execution (triggering
+        // V8 safepoint for interrupt draining) and activates CheckImmediate
+        // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
+        if (_options.enableInspector) {
+            v8::Local<v8::Context> ctx = _setup->context();
+            v8::Local<v8::String> source = v8::String::NewFromUtf8Literal(
+                _isolate, "(function(){ setImmediate(function(){}); })");
+            v8::Local<v8::Script> script;
+            if (v8::Script::Compile(ctx, source).ToLocal(&script)) {
+                v8::Local<v8::Value> result;
+                if (script->Run(ctx).ToLocal(&result) && result->IsFunction()) {
+                    _interruptDrainFn.Reset(_isolate, result.As<v8::Function>());
+                }
+            }
+        }
+#endif
+
         return true;
     }
 
@@ -206,14 +228,19 @@ namespace Framework::Scripting {
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolate_scope(_isolate);
         v8::HandleScope handle_scope(_isolate);
-        v8::Context::Scope context_scope(_setup->context());
+        v8::Local<v8::Context> context = _setup->context();
+        v8::Context::Scope context_scope(context);
 
-        // Drain pending interrupt callbacks (inspector CDP messages, etc.).
-        // The inspector uses env->RequestInterrupt() to dispatch protocol
-        // messages from the I/O thread. These callbacks are queued but only
-        // processed during JS execution or explicit drain. Without this call,
-        // inspector messages are never delivered when the isolate is idle.
-        _env->RunAndClearInterrupts();
+#ifdef FW_NODE_INSPECTOR
+        // Trigger V8 interrupt processing for inspector CDP messages.
+        // Calling setImmediate() enters JS (draining V8 interrupts at the
+        // safepoint) and activates Node's CheckImmediate uv_check handle,
+        // which calls RunAndClearNativeImmediates → RunAndClearInterrupts.
+        if (!_interruptDrainFn.IsEmpty()) {
+            _interruptDrainFn.Get(_isolate)->Call(context, v8::Undefined(_isolate), 0, nullptr)
+                .FromMaybe(v8::Local<v8::Value>());
+        }
+#endif
 
         // Process microtasks (Promise continuations, async/await)
         _isolate->PerformMicrotaskCheckpoint();
