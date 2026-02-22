@@ -85,6 +85,31 @@ namespace Framework::Scripting {
         void Tick();
 
         /**
+         * Pending uncaught error from process.on('uncaughtException') or
+         * process.on('unhandledRejection'), queued during Tick() for
+         * deferred processing outside of V8/libuv callbacks.
+         */
+        struct PendingUncaughtError {
+            std::string resourceName;
+            std::string errorMessage;
+        };
+
+        /**
+         * Install the C++ handler for uncaught exceptions/rejections.
+         * The bootstrap already installs JS process handlers that prevent crashes.
+         * This method connects them to a C++ callback for error attribution.
+         * Must be called with V8 scopes active.
+         * @param resourcesPath Path to resources directory for extracting resource names from stacks
+         */
+        void InstallUncaughtExceptionHandler(const std::string &resourcesPath);
+
+        /**
+         * Drain pending uncaught errors. Returns and clears the queue.
+         * Call after Tick() to process errors outside of V8/libuv callbacks.
+         */
+        std::vector<PendingUncaughtError> DrainPendingErrors();
+
+        /**
          * Check if this engine is running in sandboxed mode.
          */
         bool IsSandboxed() const {
@@ -122,6 +147,8 @@ namespace Framework::Scripting {
         bool CreateEnvironment();
         bool ApplySandbox();
 
+        static void OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
+
         NodeEngineOptions _options;
 
         static std::unique_ptr<node::MultiIsolatePlatform> _platform;
@@ -141,6 +168,11 @@ namespace Framework::Scripting {
         //    RunAndClearNativeImmediates → RunAndClearInterrupts internally.
         // Only created when FW_NODE_INSPECTOR is defined and inspector enabled.
         v8::Global<v8::Function> _interruptDrainFn;
+
+        // Pending uncaught errors queued during Tick() for deferred processing
+        std::vector<PendingUncaughtError> _pendingErrors;
+        // Canonical resources path for extracting resource names from error stacks
+        std::string _resourcesPath;
     };
 
 } // namespace Framework::Scripting

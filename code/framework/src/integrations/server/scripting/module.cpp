@@ -57,6 +57,19 @@ namespace Framework::Integrations::Server::Scripting {
         // Initialize Framework SDK in the engine
         _nodeEngine->InitFrameworkSDK();
 
+        // Install uncaught exception handler to prevent async errors from
+        // crashing the server process and route them to the resource system
+        {
+            v8::Isolate *isolate = _nodeEngine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = _nodeEngine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            _nodeEngine->InstallUncaughtExceptionHandler(_resourcesPath);
+        }
+
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
             "JS Server scripting module initialized with Node.js engine");
 
@@ -136,6 +149,16 @@ namespace Framework::Integrations::Server::Scripting {
         if (_nodeEngine && _nodeEngine->IsInitialized()) {
             // Process Node.js event loop
             _nodeEngine->Tick();
+
+            // Process uncaught errors captured during Tick().
+            // Deferred to here so HandleResourceRuntimeError can safely
+            // stop/restart resources outside of V8/libuv callbacks.
+            if (_resourceManager) {
+                auto errors = _nodeEngine->DrainPendingErrors();
+                for (const auto &err : errors) {
+                    _resourceManager->HandleResourceRuntimeError(err.resourceName, err.errorMessage);
+                }
+            }
         }
 
         if (_resourceManager) {

@@ -4,6 +4,7 @@
 
 #include <logging/logger.h>
 
+#include <algorithm>
 #include <filesystem>
 
 
@@ -175,13 +176,51 @@ namespace Framework::Scripting {
         v8::HandleScope handle_scope(_isolate);
         v8::Context::Scope context_scope(_setup->context());
 
-        // Load Node.js internals with require setup
+        // Load Node.js internals with require setup and uncaught exception/rejection
+        // handlers. These prevent async errors (timers, promises) from crashing
+        // the host process.
+        //
+        // setUncaughtExceptionCaptureCallback is preferred over process.on('uncaughtException')
+        // because it:
+        //   - Cannot be removed by user scripts (process.removeAllListeners)
+        //   - Prevents abort even with --abort-on-uncaught-exception
+        //   - Is designed for embedder use cases
+        //
+        // For unhandled promise rejections, process.on('unhandledRejection') is used
+        // as there is no capture callback equivalent.
+        //
+        // Both route to __fw_handleUncaughtError if installed later via
+        // InstallUncaughtExceptionHandler(), otherwise log to stderr.
         v8::MaybeLocal<v8::Value> loadResult = node::LoadEnvironment(
             _env,
             "const publicRequire = require('node:module').createRequire(process.cwd() + '/');"
             "globalThis.require = publicRequire;"
             "globalThis.Framework = {};"
             "globalThis.Core = {};"
+            "process.setUncaughtExceptionCaptureCallback((err) => {"
+            "  try {"
+            "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
+            "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
+            "      globalThis.__fw_handleUncaughtError(msg, 'uncaughtException');"
+            "    } else {"
+            "      console.error('[uncaughtException]', msg);"
+            "    }"
+            "  } catch(e) {"
+            "    console.error('Error in uncaught exception handler:', e);"
+            "  }"
+            "});"
+            "process.on('unhandledRejection', (reason) => {"
+            "  try {"
+            "    const msg = reason instanceof Error ? (reason.stack || reason.message) : String(reason);"
+            "    if (typeof globalThis.__fw_handleUncaughtError === 'function') {"
+            "      globalThis.__fw_handleUncaughtError(msg, 'unhandledRejection');"
+            "    } else {"
+            "      console.error('[unhandledRejection]', msg);"
+            "    }"
+            "  } catch(e) {"
+            "    console.error('Error in unhandled rejection handler:', e);"
+            "  }"
+            "});"
         );
 
         if (loadResult.IsEmpty()) {
@@ -278,6 +317,78 @@ namespace Framework::Scripting {
             return _setup->context();
         }
         return v8::Local<v8::Context>();
+    }
+
+    void NodeEngine::InstallUncaughtExceptionHandler(const std::string &resourcesPath) {
+        // Store canonical resources path for extracting resource names from error stacks
+        std::error_code ec;
+        auto canonicalPath = std::filesystem::weakly_canonical(resourcesPath, ec);
+        _resourcesPath = ec ? resourcesPath : canonicalPath.string();
+
+        // Create C++ handler function accessible from JS
+        v8::Local<v8::Context> context = _setup->context();
+        v8::Local<v8::External> data = v8::External::New(_isolate, this);
+        v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
+            _isolate, OnUncaughtError, data);
+        v8::Local<v8::Function> fn = tmpl->GetFunction(context).ToLocalChecked();
+
+        v8::Local<v8::String> key = v8::String::NewFromUtf8(
+            _isolate, "__fw_handleUncaughtError").ToLocalChecked();
+        context->Global()->Set(context, key, fn).Check();
+    }
+
+    void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        auto *engine = static_cast<NodeEngine *>(
+            v8::Local<v8::External>::Cast(info.Data())->Value());
+
+        std::string errorMsg = "Unknown error";
+        std::string origin = "uncaughtException";
+
+        if (info.Length() > 0) {
+            v8::String::Utf8Value msg(isolate, info[0]);
+            if (*msg) errorMsg = *msg;
+        }
+        if (info.Length() > 1) {
+            v8::String::Utf8Value orig(isolate, info[1]);
+            if (*orig) origin = *orig;
+        }
+
+        // Try to extract resource name from the error stack trace by matching
+        // file paths against the configured resources directory
+        std::string resourceName;
+        if (!engine->_resourcesPath.empty()) {
+            // Normalize path separators for cross-platform matching
+            std::string normalizedError = errorMsg;
+            std::string normalizedResPath = engine->_resourcesPath;
+            std::replace(normalizedError.begin(), normalizedError.end(), '\\', '/');
+            std::replace(normalizedResPath.begin(), normalizedResPath.end(), '\\', '/');
+
+            if (!normalizedResPath.empty() && normalizedResPath.back() != '/') {
+                normalizedResPath += '/';
+            }
+
+            size_t pos = normalizedError.find(normalizedResPath);
+            if (pos != std::string::npos) {
+                size_t nameStart = pos + normalizedResPath.size();
+                size_t nameEnd = normalizedError.find('/', nameStart);
+                if (nameEnd != std::string::npos) {
+                    resourceName = normalizedError.substr(nameStart, nameEnd - nameStart);
+                }
+            }
+        }
+
+        // Queue for processing outside of Tick()
+        engine->_pendingErrors.push_back({
+            resourceName.empty() ? "unknown" : resourceName,
+            "[" + origin + "] " + errorMsg
+        });
+    }
+
+    std::vector<NodeEngine::PendingUncaughtError> NodeEngine::DrainPendingErrors() {
+        std::vector<PendingUncaughtError> errors;
+        errors.swap(_pendingErrors);
+        return errors;
     }
 
     bool NodeEngine::ApplySandbox() {
