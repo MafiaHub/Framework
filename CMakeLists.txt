@@ -17,6 +17,7 @@ if (WIN32)
     if (MSVC)
         add_compile_options(
             /bigobj
+            /Zc:__cplusplus
         )
     endif()
 endif()
