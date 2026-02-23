@@ -77,17 +77,17 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
     cls->auto_wrap_objects(true);  // Enable auto-wrapping for return values
     cls->ctor<float, float, float, float>()
         // Instance methods
-        .set("lerp", &Color::lerp)
-        .set("set", &Color::set)
-        .set("clone", &Color::clone)
-        .set("toHex", &Color::toHex)
-        .set("toString", &Color::toString);
+        .function("lerp", &Color::lerp)
+        .function("set", &Color::set)
+        .function("clone", &Color::clone)
+        .function("toHex", &Color::toHex)
+        .function("toString", &Color::toString);
 
-    // Add properties manually using v8's SetAccessor with correct signature
+    // Add properties manually using v8's SetNativeDataProperty with correct signature
     auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
     // Property: r
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "r").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
@@ -101,7 +101,7 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: g
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "g").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
@@ -115,7 +115,7 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: b
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "b").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());
@@ -129,7 +129,7 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: a
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "a").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Color>::unwrap_object(info.GetIsolate(), info.This());

@@ -29,24 +29,24 @@ v8pp::class_<Vector3>& Vector3::GetClass(v8::Isolate* isolate) {
     cls->auto_wrap_objects(true);  // Enable auto-wrapping for return values
     cls->ctor<float, float, float>()
         // Instance methods
-        .set("add", &Vector3::add)
-        .set("sub", &Vector3::sub)
-        .set("mul", &Vector3::mul)
-        .set("div", &Vector3::div)
-        .set("dot", &Vector3::dot)
-        .set("cross", &Vector3::cross)
-        .set("normalize", &Vector3::normalize)
-        .set("lerp", &Vector3::lerp)
-        .set("set", &Vector3::set)
-        .set("distance", &Vector3::distance)
-        .set("clone", &Vector3::clone)
-        .set("toString", &Vector3::toString);
+        .function("add", &Vector3::add)
+        .function("sub", &Vector3::sub)
+        .function("mul", &Vector3::mul)
+        .function("div", &Vector3::div)
+        .function("dot", &Vector3::dot)
+        .function("cross", &Vector3::cross)
+        .function("normalize", &Vector3::normalize)
+        .function("lerp", &Vector3::lerp)
+        .function("set", &Vector3::set)
+        .function("distance", &Vector3::distance)
+        .function("clone", &Vector3::clone)
+        .function("toString", &Vector3::toString);
 
-    // Add properties manually using v8's SetAccessor with correct signature
+    // Add properties manually using v8's SetNativeDataProperty with correct signature
     auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
     // Property: x
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "x").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());
@@ -60,7 +60,7 @@ v8pp::class_<Vector3>& Vector3::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: y
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "y").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());
@@ -74,7 +74,7 @@ v8pp::class_<Vector3>& Vector3::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: z
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "z").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());
@@ -88,7 +88,7 @@ v8pp::class_<Vector3>& Vector3::GetClass(v8::Isolate* isolate) {
         });
 
     // Read-only property: length
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "length").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());
@@ -96,7 +96,7 @@ v8pp::class_<Vector3>& Vector3::GetClass(v8::Isolate* isolate) {
         });
 
     // Read-only property: lengthSquared
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "lengthSquared").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info.This());

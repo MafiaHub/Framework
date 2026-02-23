@@ -47,23 +47,23 @@ v8pp::class_<Quaternion>& Quaternion::GetClass(v8::Isolate* isolate) {
     cls->auto_wrap_objects(true);  // Enable auto-wrapping for return values
     cls->ctor<float, float, float, float>()
         // Instance methods
-        .set("multiply", &Quaternion::multiply)
-        .set("normalize", &Quaternion::normalize)
-        .set("conjugate", &Quaternion::conjugate)
-        .set("inverse", &Quaternion::inverse)
-        .set("slerp", &Quaternion::slerp)
-        .set("dot", &Quaternion::dot)
-        .set("rotateVector", &Quaternion::rotateVector)
-        .set("toEuler", &Quaternion::toEuler)
-        .set("set", &Quaternion::set)
-        .set("clone", &Quaternion::clone)
-        .set("toString", &Quaternion::toString);
+        .function("multiply", &Quaternion::multiply)
+        .function("normalize", &Quaternion::normalize)
+        .function("conjugate", &Quaternion::conjugate)
+        .function("inverse", &Quaternion::inverse)
+        .function("slerp", &Quaternion::slerp)
+        .function("dot", &Quaternion::dot)
+        .function("rotateVector", &Quaternion::rotateVector)
+        .function("toEuler", &Quaternion::toEuler)
+        .function("set", &Quaternion::set)
+        .function("clone", &Quaternion::clone)
+        .function("toString", &Quaternion::toString);
 
-    // Add properties manually using v8's SetAccessor with correct signature
+    // Add properties manually using v8's SetNativeDataProperty with correct signature
     auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
     // Property: w
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "w").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
@@ -77,7 +77,7 @@ v8pp::class_<Quaternion>& Quaternion::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: x
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "x").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
@@ -91,7 +91,7 @@ v8pp::class_<Quaternion>& Quaternion::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: y
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "y").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
@@ -105,7 +105,7 @@ v8pp::class_<Quaternion>& Quaternion::GetClass(v8::Isolate* isolate) {
         });
 
     // Property: z
-    protoTemplate->SetAccessor(
+    protoTemplate->SetNativeDataProperty(
         v8pp::to_v8(isolate, "z").As<v8::Name>(),
         [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
             auto* self = v8pp::class_<Quaternion>::unwrap_object(info.GetIsolate(), info.This());
