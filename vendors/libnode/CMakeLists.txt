@@ -190,9 +190,11 @@ target_compile_features(v8 INTERFACE cxx_std_17)
 if(WIN32)
     set(V8_LIBPLATFORM_NAME "v8_libplatform.lib")
     set(V8_LIBBASE_NAME "v8_libbase.lib")
+    set(V8_ABSEIL_NAME "abseil.lib")
 else()
     set(V8_LIBPLATFORM_NAME "v8_libplatform.a")
     set(V8_LIBBASE_NAME "v8_libbase.a")
+    set(V8_ABSEIL_NAME "libabseil.a")
 endif()
 
 # Create imported targets for V8 platform libraries
@@ -206,6 +208,16 @@ if(EXISTS "${LIBNODE_LIB_DIR}/${V8_LIBPLATFORM_NAME}")
     set_target_properties(v8_libbase PROPERTIES
         IMPORTED_LOCATION "${LIBNODE_LIB_DIR}/${V8_LIBBASE_NAME}"
     )
+
+    # Abseil library (required by v8_libbase in V8 13+/Node.js 25+)
+    if(EXISTS "${LIBNODE_LIB_DIR}/${V8_ABSEIL_NAME}")
+        add_library(v8_abseil STATIC IMPORTED GLOBAL)
+        set_target_properties(v8_abseil PROPERTIES
+            IMPORTED_LOCATION "${LIBNODE_LIB_DIR}/${V8_ABSEIL_NAME}"
+        )
+        target_link_libraries(v8_libbase INTERFACE v8_abseil)
+        message(STATUS "v8: Using V8 abseil library")
+    endif()
 
     # V8 interface links to platform libs (for client) and libnode (for runtime symbols)
     target_link_libraries(v8 INTERFACE v8_libplatform v8_libbase libnode)

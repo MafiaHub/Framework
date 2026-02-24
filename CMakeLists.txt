@@ -16,8 +16,8 @@ endif()
 if (WIN32)
     if (MSVC)
         add_compile_options(
-            /bigobj
-            /Zc:__cplusplus
+            $<$<COMPILE_LANGUAGE:C,CXX>:/bigobj>
+            $<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>
         )
     endif()
 endif()
