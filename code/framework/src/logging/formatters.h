@@ -11,7 +11,7 @@ struct fmt::formatter<glm::vec3> {
 
     template <typename FormatContext>
     auto format(const glm::vec3 &t, FormatContext &ctx) {
-        return format_to(ctx.out(), "{:.2f}, {:.2f}, {:.2f}", t.x, t.y, t.z);
+        return fmt::format_to(ctx.out(), "{:.2f}, {:.2f}, {:.2f}", t.x, t.y, t.z);
     }
 };
 
@@ -23,7 +23,7 @@ struct fmt::formatter<glm::quat> {
 
     template <typename FormatContext>
     auto format(const glm::quat &t, FormatContext &ctx) {
-        return format_to(ctx.out(), "{:.2f}, {:.2f}, {:.2f}, {:.2f}", t.x, t.y, t.z, t.w);
+        return fmt::format_to(ctx.out(), "{:.2f}, {:.2f}, {:.2f}, {:.2f}", t.x, t.y, t.z, t.w);
     }
 };
 
@@ -35,6 +35,6 @@ struct fmt::formatter<Framework::World::Modules::Base::Transform> {
 
     template <typename FormatContext>
     auto format(const Framework::World::Modules::Base::Transform &t, FormatContext &ctx) {
-        return format_to(ctx.out(), "Transform(pos=({}), vel=({}), rot=({}), genID={})", t.pos, t.vel, t.rot, t.GetGeneration());
+        return fmt::format_to(ctx.out(), "Transform(pos=({}), vel=({}), rot=({}), genID={})", t.pos, t.vel, t.rot, t.GetGeneration());
     }
 };
