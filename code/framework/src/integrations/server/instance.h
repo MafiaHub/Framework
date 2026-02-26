@@ -75,11 +75,6 @@ namespace Framework::Integrations::Server {
         int argc;
         char **argv;
 
-        // firebase
-        bool firebaseEnabled = false;
-        std::string firebaseProjectId;
-        std::string firebaseAppId;
-        std::string firebaseApiKey;
     };
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;

@@ -151,7 +151,9 @@ if(WIN32)
     add_library(FrameworkClient STATIC ${FRAMEWORK_CLIENT_SRC})
 endif()
 
-add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
+if(LIBNODE_AVAILABLE)
+    add_library(FrameworkServer STATIC ${FRAMEWORK_SERVER_SRC})
+endif()
 
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
@@ -212,39 +214,41 @@ endmacro()
 # Node.js inspector support for script debugging (auto-enabled for Debug builds)
 option(FW_NODE_INSPECTOR "Enable Node.js inspector for script debugging" OFF)
 
-# FrameworkNodeEngine - Object library for node_engine.cpp
-# This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
-# cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
-add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp)
+# FrameworkNodeEngine - Object library for node_engine.cpp (requires full libnode)
+if(LIBNODE_AVAILABLE)
+    # This is separate because it needs NODE_WANT_INTERNALS and libuv headers which
+    # cause Windows SDK errno conflicts (EINVAL/ERANGE undefined) when applied to PCH.
+    add_library(FrameworkNodeEngine OBJECT src/scripting/node_engine.cpp)
 
-# Apply the same shared dependencies as Framework
-target_include_directories(FrameworkNodeEngine PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-)
-target_include_directories(FrameworkNodeEngine PUBLIC
-    ${CMAKE_SOURCE_DIR}/vendors/glm
-    ${CMAKE_SOURCE_DIR}/vendors/json/include
-    ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
-    ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-    ${CMAKE_SOURCE_DIR}/vendors
-)
+    # Apply the same shared dependencies as Framework
+    target_include_directories(FrameworkNodeEngine PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/services>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    )
+    target_include_directories(FrameworkNodeEngine PUBLIC
+        ${CMAKE_SOURCE_DIR}/vendors/glm
+        ${CMAKE_SOURCE_DIR}/vendors/json/include
+        ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
+        ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+        ${CMAKE_SOURCE_DIR}/vendors
+    )
 
-# Link to libnode for headers (includes V8 and Node.js headers)
-# Also link spdlog for logging used by node_engine.cpp
-target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog)
+    # Link to libnode for headers (includes V8 and Node.js headers)
+    # Also link spdlog for logging used by node_engine.cpp
+    target_link_libraries(FrameworkNodeEngine PUBLIC libnode v8pp spdlog)
 
-# Node.js internal APIs require NODE_WANT_INTERNALS
-target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
+    # Node.js internal APIs require NODE_WANT_INTERNALS
+    target_compile_definitions(FrameworkNodeEngine PRIVATE NODE_WANT_INTERNALS=1)
 
-# Match Framework compile definitions and features
-target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
-target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
+    # Match Framework compile definitions and features
+    target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
+    target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
 
-# Node.js inspector: enabled via explicit option OR Debug builds
-target_compile_definitions(FrameworkNodeEngine PRIVATE
-    $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
+    # Node.js inspector: enabled via explicit option OR Debug builds
+    target_compile_definitions(FrameworkNodeEngine PRIVATE
+        $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
+endif()
 
 # FrameworkV8Engine - Object library for v8_engine.cpp
 # Standalone V8 engine for client-side scripting (no Node.js dependency).
@@ -269,26 +273,36 @@ target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
 
 # Link the solutions based on the platform
 link_shared_deps(Framework)
-target_link_libraries(Framework v8 v8pp libnode)
+target_link_libraries(Framework v8 v8pp)
+if(LIBNODE_AVAILABLE)
+    target_link_libraries(Framework libnode)
+endif()
 
-# Include FrameworkNodeEngine and FrameworkV8Engine objects in Framework
-target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
+# Include scripting engine objects in Framework
+if(LIBNODE_AVAILABLE)
+    target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
+endif()
 target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkV8Engine>)
 
 if(WIN32)
     link_shared_deps(FrameworkClient)
-    target_link_libraries(FrameworkClient v8 v8pp libnode)
+    target_link_libraries(FrameworkClient v8 v8pp)
+    if(LIBNODE_AVAILABLE)
+        target_link_libraries(FrameworkClient libnode)
+    endif()
 endif()
 
-link_shared_deps(FrameworkServer)
-target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
-target_compile_definitions(FrameworkServer PRIVATE
-    $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
+if(LIBNODE_AVAILABLE)
+    link_shared_deps(FrameworkServer)
+    target_link_libraries(FrameworkServer v8 v8pp MafiaHubServices libsig libnode)
+    target_compile_definitions(FrameworkServer PRIVATE
+        $<$<OR:$<BOOL:${FW_NODE_INSPECTOR}>,$<CONFIG:Debug>>:FW_NODE_INSPECTOR>)
 
-# FrameworkServer-specific includes
-target_include_directories(FrameworkServer PRIVATE
-    ${CMAKE_SOURCE_DIR}/vendors/libsig
-)
+    # FrameworkServer-specific includes
+    target_include_directories(FrameworkServer PRIVATE
+        ${CMAKE_SOURCE_DIR}/vendors/libsig
+    )
+endif()
 
 # Platform-dependent post processing
 if(WIN32)
@@ -335,7 +349,9 @@ if(WIN32)
     )
 
     if(NOT CMAKE_CL_64)
-        target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
+        if(TARGET FrameworkServer)
+            target_link_options(FrameworkServer PUBLIC "-SAFESEH:NO")
+        endif()
     else()
         target_link_options(FrameworkClient PUBLIC "-SAFESEH:NO")
     endif()
@@ -363,10 +379,14 @@ if(WIN32)
     # Ensure runtime DLLs are copied to bin directory for all client/server targets
     if(TARGET libnode_copy_dll)
         add_dependencies(FrameworkClient libnode_copy_dll)
-        add_dependencies(FrameworkServer libnode_copy_dll)
+        if(TARGET FrameworkServer)
+            add_dependencies(FrameworkServer libnode_copy_dll)
+        endif()
     endif()
     if(TARGET OpenSSLCopyStub)
         add_dependencies(FrameworkClient OpenSSLCopyStub)
-        add_dependencies(FrameworkServer OpenSSLCopyStub)
+        if(TARGET FrameworkServer)
+            add_dependencies(FrameworkServer OpenSSLCopyStub)
+        endif()
     endif()
 endif()

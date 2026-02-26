@@ -17,7 +17,6 @@ namespace Framework::Integrations::Server {
         SERVER_WEBSERVER_INIT_FAILED,
         SERVER_NETWORKING_INIT_FAILED,
         SERVER_WORLD_INIT_FAILED,
-        SERVER_FIREBASE_WRAPPER_INIT_FAILED,
         SERVER_SCRIPTING_INIT_FAILED
     };
 } // namespace Framework::Integrations::Server

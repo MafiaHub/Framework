@@ -30,8 +30,7 @@ This codebase also depends on the following third-party libraries:
     zpl.test        - https://github.com/zpl-c/zpl.test/blob/master/LICENSE
     cppfs           - https://github.com/cginternals/cppfs/blob/master/LICENSE
     cef             - https://github.com/chromiumembedded/cef/blob/master/LICENSE.txt
-    firebase        - https://github.com/firebase/firebase-cpp-sdk/blob/main/LICENSE
-    glm             - https://github.com/firebase/firebase-cpp-sdk/blob/main/LICENSE
+    glm             - https://github.com/g-truc/glm/blob/master/copying.txt
     discord         - https://discord.com/developers/docs/legal
     httplib         - https://github.com/yhirose/cpp-httplib/blob/master/LICENSE
     nlohmann-json   - https://github.com/nlohmann/json/blob/develop/LICENSE.MIT
