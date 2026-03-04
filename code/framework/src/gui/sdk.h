@@ -18,7 +18,7 @@
 #include "include/cef_browser.h"
 
 namespace Framework::GUI {
-    using EventCallbackProc = fu2::function<void(std::string eventPayload)>;
+    using EventCallbackProc = fu2::function<void(const std::string &eventPayload)>;
 
     class SDK {
       private:

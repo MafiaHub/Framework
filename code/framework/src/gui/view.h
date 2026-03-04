@@ -33,9 +33,9 @@
 #include "cef/render_handler.h"
 
 namespace Framework::GUI {
-    using OnConsoleMessageCallback    = fu2::function<void(std::string, uint32_t, uint32_t, std::string)>;
-    using OnDOMReadyCallback          = fu2::function<void(std::string, bool, std::string)>;
-    using OnWindowObjectReadyCallback = fu2::function<void(std::string, bool, std::string)>;
+    using OnConsoleMessageCallback    = fu2::function<void(const std::string &, uint32_t, uint32_t, const std::string &)>;
+    using OnDOMReadyCallback          = fu2::function<void(const std::string &, bool, const std::string &)>;
+    using OnWindowObjectReadyCallback = fu2::function<void(const std::string &, bool, const std::string &)>;
 
     class Manager;
 

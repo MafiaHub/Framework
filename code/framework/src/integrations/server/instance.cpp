@@ -263,7 +263,7 @@ namespace Framework::Integrations::Server {
 
             const auto fwVersion = msg->GetFWVersion();
 
-            if (!Utils::Version::VersionSatisfies(fwVersion.c_str(), Utils::Version::rel)) {
+            if (!Utils::Version::VersionSatisfies(fwVersion, Utils::Version::rel)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid Framework version, force-disconnecting peer");
                 Framework::Networking::Messages::ClientKick kick;
                 kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
@@ -274,7 +274,7 @@ namespace Framework::Integrations::Server {
 
             const auto clientVersion = msg->GetClientVersion();
 
-            if (!Utils::Version::VersionSatisfies(clientVersion.c_str(), _opts.modVersion.c_str())) {
+            if (!Utils::Version::VersionSatisfies(clientVersion, _opts.modVersion)) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
                 Framework::Networking::Messages::ClientKick kick;
                 kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);

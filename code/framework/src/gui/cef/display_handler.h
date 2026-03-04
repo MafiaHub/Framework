@@ -14,7 +14,7 @@
 #include "include/cef_display_handler.h"
 
 namespace Framework::GUI::CEF {
-    using OnConsoleMessageCallback = fu2::function<void(std::string, uint32_t, uint32_t, std::string)>;
+    using OnConsoleMessageCallback = fu2::function<void(const std::string &, uint32_t, uint32_t, const std::string &)>;
 
     class DisplayHandler final: public CefDisplayHandler {
       private:

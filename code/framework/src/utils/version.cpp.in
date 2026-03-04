@@ -11,18 +11,19 @@
 #define FW_VERSION     "@FW_VERSION@"
 
 #include <semver.h>
+#include <string>
 
 namespace Framework::Utils::Version {
     const char *git = FW_GIT_VERSION;
     const char *gitLong = FW_GIT_VERSION_LONG;
     const char *rel = FW_VERSION;
 
-    static bool BuildVersion(const char *ver, semver_t &ctx) {
-        return semver_parse(ver, &ctx) == 0;
+    static bool BuildVersion(const std::string &ver, semver_t &ctx) {
+        return semver_parse(ver.c_str(), &ctx) == 0;
     }
 
-    bool VersionSatisfies(const char *a, const char *b) {
-        if (!a && !b) {
+    bool VersionSatisfies(const std::string &a, const std::string &b) {
+        if (a.empty() && b.empty()) {
             return true;
         }
         semver_t va, vb;
@@ -30,7 +31,7 @@ namespace Framework::Utils::Version {
             return false;
         }
         if (!BuildVersion(b, vb)) {
-            if (semver_is_valid(a)) {
+            if (semver_is_valid(a.c_str())) {
                 semver_free(&va);
             }
             return false;

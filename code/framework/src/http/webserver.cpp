@@ -67,18 +67,18 @@ namespace Framework::HTTP {
         Lifecycle::Shutdown();
     }
 
-    void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) const {
+    void Webserver::RegisterRequest(const std::string &path, const RequestCallback &callback) const {
         if (!_running)
             return;
-        if (strlen(path) > 0 && callback) {
+        if (!path.empty() && callback) {
             _server->Get(path, callback);
         }
     }
 
-    void Webserver::RegisterPostRequest(const char* path, const PostCallback& callback) const {
+    void Webserver::RegisterPostRequest(const std::string &path, const PostCallback &callback) const {
         if (!_running)
             return;
-        if (strlen(path) > 0 && callback) {
+        if (!path.empty() && callback) {
             _server->Post(path, callback);
         }
     }

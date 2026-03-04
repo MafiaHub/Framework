@@ -8,10 +8,12 @@
 
 #pragma once
 
+#include <string>
+
 namespace Framework::Utils::Version {
     extern const char *gitLong;
     extern const char *git;
     extern const char *rel;
 
-    extern bool VersionSatisfies(const char *a, const char *b);
+    extern bool VersionSatisfies(const std::string &a, const std::string &b);
 } // namespace Framework::Utils::Version

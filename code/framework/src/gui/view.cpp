@@ -62,12 +62,12 @@ namespace Framework::GUI {
         }
 
         // Wire up callbacks through handlers
-        _loadHandler->SetOnDOMReadyCallback([this](std::string frameId, bool isMainFrame, std::string frameUrl) {
+        _loadHandler->SetOnDOMReadyCallback([this](const std::string &frameId, bool isMainFrame, const std::string &frameUrl) {
             if (_onDOMReadyCallback) {
                 _onDOMReadyCallback(frameId, isMainFrame, frameUrl);
             }
         });
-        _loadHandler->SetOnWindowObjectReadyCallback([this](std::string frameId, bool isMainFrame, std::string frameUrl) {
+        _loadHandler->SetOnWindowObjectReadyCallback([this](const std::string &frameId, bool isMainFrame, const std::string &frameUrl) {
             // Initialize SDK when window object is ready
             if (_sdk && _browser) {
                 (void)_sdk->Init(_browser);
@@ -76,7 +76,7 @@ namespace Framework::GUI {
                 _onWindowObjectReadyCallback(frameId, isMainFrame, frameUrl);
             }
         });
-        _displayHandler->SetOnConsoleMessageCallback([this](std::string msg, uint32_t line, uint32_t col, std::string source) {
+        _displayHandler->SetOnConsoleMessageCallback([this](const std::string &msg, uint32_t line, uint32_t col, const std::string &source) {
             if (_onConsoleMessageCallback) {
                 _onConsoleMessageCallback(msg, line, col, source);
             }

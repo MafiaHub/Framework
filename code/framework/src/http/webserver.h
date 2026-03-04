@@ -33,8 +33,8 @@ namespace Framework::HTTP {
 
         void Shutdown() override;
 
-        void RegisterRequest(const char *, const RequestCallback &) const;
-        void RegisterPostRequest(const char *, const PostCallback &) const;
+        void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
+        void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 
         const std::string &GetServeDirectory() {
             return _serveDir;

@@ -14,8 +14,8 @@
 #include "include/cef_load_handler.h"
 
 namespace Framework::GUI::CEF {
-    using OnDOMReadyCallback          = fu2::function<void(std::string, bool, std::string)>;
-    using OnWindowObjectReadyCallback = fu2::function<void(std::string, bool, std::string)>;
+    using OnDOMReadyCallback          = fu2::function<void(const std::string &, bool, const std::string &)>;
+    using OnWindowObjectReadyCallback = fu2::function<void(const std::string &, bool, const std::string &)>;
 
     class LoadHandler final: public CefLoadHandler {
       private:
