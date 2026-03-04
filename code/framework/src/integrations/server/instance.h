@@ -154,7 +154,7 @@ namespace Framework::Integrations::Server {
             _onPlayerDisconnectCallback = std::move(onPlayerDisconnectCallback);
         }
 
-        InstanceOptions &GetOpts() {
+        InstanceOptions &GetOptions() {
             return _opts;
         }
 

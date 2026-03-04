@@ -449,8 +449,8 @@ MODULE(resource_manager, {
         manager.DiscoverResources();
 
         auto startResult = manager.StartResource("escape-test");
-        EQUALS(startResult.success, false);
-        EQUALS(startResult.error.find("escapes resource directory") != std::string::npos, true);
+        EQUALS((bool)startResult, false);
+        EQUALS(startResult.GetError().find("escapes resource directory") != std::string::npos, true);
         EQUALS(manager.IsResourceRunning("escape-test"), false);
 
         engine.Shutdown();

@@ -184,25 +184,25 @@ namespace Framework::Scripting {
     ResourceOperationResult ResourceManager::StartAll() {
         std::string depError;
         if (!ValidateDependencies(depError)) {
-            return ResourceOperationResult::Failure(depError);
+            return ResourceOperationResult(depError);
         }
 
         auto loadOrder = ComputeLoadOrder();
         if (loadOrder.empty() && GetResourceCount() > 0) {
-            return ResourceOperationResult::Failure("Dependency cycle detected");
+            return ResourceOperationResult("Dependency cycle detected");
         }
 
         std::vector<std::string> started;
         for (const auto &name : loadOrder) {
             auto result = StartResource(name);
-            if (result.success) {
+            if (result) {
                 started.push_back(name);
             } else {
-                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource {}: {}", name, result.error);
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error("Failed to start resource {}: {}", name, result.GetError());
             }
         }
 
-        return ResourceOperationResult::Success(started);
+        return ResourceOperationResult::Ok(started);
     }
 
     ResourceOperationResult ResourceManager::StopAll() {
@@ -214,23 +214,23 @@ namespace Framework::Scripting {
         for (const auto &name : loadOrder) {
             if (IsResourceRunning(name)) {
                 auto result = StopResource(name);
-                if (result.success) {
+                if (result) {
                     stopped.push_back(name);
                 }
             }
         }
 
-        return ResourceOperationResult::Success(stopped);
+        return ResourceOperationResult::Ok(stopped);
     }
 
     ResourceOperationResult ResourceManager::StartResource(std::string_view name) {
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
-            return ResourceOperationResult::Failure("Resource not found: " + std::string(name));
+            return ResourceOperationResult("Resource not found: " + std::string(name));
         }
 
         if (resource->IsRunning()) {
-            return ResourceOperationResult::Success({std::string(name)});
+            return ResourceOperationResult::Ok({std::string(name)});
         }
 
         // Start dependencies first
@@ -238,15 +238,15 @@ namespace Framework::Scripting {
         for (const auto &depName : deps) {
             if (!IsResourceRunning(depName)) {
                 auto result = StartResource(depName);
-                if (!result.success) {
-                    return ResourceOperationResult::Failure("Failed to start dependency '" + depName + "': " + result.error);
+                if (!result) {
+                    return ResourceOperationResult("Failed to start dependency '" + depName + "': " + result.GetError());
                 }
             }
         }
 
         // Transition to Loading
         if (!resource->TransitionTo(ResourceState::Loading)) {
-            return ResourceOperationResult::Failure("Invalid state transition for resource: " + std::string(name));
+            return ResourceOperationResult("Invalid state transition for resource: " + std::string(name));
         }
 
         // Execute the entry point script
@@ -254,7 +254,7 @@ namespace Framework::Scripting {
         if (!ExecuteResourceScript(*resource, error)) {
             resource->SetError(error);
             FireOnResourceError(std::string(name), error);
-            return ResourceOperationResult::Failure(error);
+            return ResourceOperationResult(error);
         }
 
         // Emit resourceStart event (bypass running check since resource is still Loading)
@@ -277,7 +277,7 @@ namespace Framework::Scripting {
 
         // Transition to Running
         if (!resource->TransitionTo(ResourceState::Running)) {
-            return ResourceOperationResult::Failure("Failed to transition to Running state");
+            return ResourceOperationResult("Failed to transition to Running state");
         }
 
         resource->SetLoadTimestamp();
@@ -286,17 +286,17 @@ namespace Framework::Scripting {
         FireOnResourceStarted(std::string(name));
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started JS resource: {}", name);
 
-        return ResourceOperationResult::Success({std::string(name)});
+        return ResourceOperationResult::Ok({std::string(name)});
     }
 
     ResourceOperationResult ResourceManager::StopResource(std::string_view name) {
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
-            return ResourceOperationResult::Failure("Resource not found: " + std::string(name));
+            return ResourceOperationResult("Resource not found: " + std::string(name));
         }
 
         if (!resource->IsRunning()) {
-            return ResourceOperationResult::Success({});
+            return ResourceOperationResult::Ok({});
         }
 
         std::vector<std::string> stopped;
@@ -307,7 +307,8 @@ namespace Framework::Scripting {
             for (const auto &depName : dependents) {
                 if (IsResourceRunning(depName)) {
                     auto result = StopResource(depName);
-                    stopped.insert(stopped.end(), result.affectedResources.begin(), result.affectedResources.end());
+                    const auto &affected = result.Unwrap();
+                    stopped.insert(stopped.end(), affected.begin(), affected.end());
                 }
             }
         }
@@ -346,12 +347,12 @@ namespace Framework::Scripting {
         FireOnResourceStopped(std::string(name));
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped JS resource: {}", name);
 
-        return ResourceOperationResult::Success(stopped);
+        return ResourceOperationResult::Ok(stopped);
     }
 
     ResourceOperationResult ResourceManager::RestartResource(std::string_view name) {
         auto stopResult = StopResource(name);
-        if (!stopResult.success) {
+        if (!stopResult) {
             return stopResult;
         }
 

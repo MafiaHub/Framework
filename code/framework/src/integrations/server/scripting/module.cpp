@@ -232,14 +232,14 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
-        if (!result.success) {
+        if (!result) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to start JS resources: {}", result.error);
+                "Failed to start JS resources: {}", result.GetError());
             return false;
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Started {} JS resource(s)", result.affectedResources.size());
+            "Started {} JS resource(s)", result.Unwrap().size());
         return true;
     }
 

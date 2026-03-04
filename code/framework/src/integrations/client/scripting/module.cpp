@@ -300,14 +300,14 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Start all discovered resources
         auto result = _resourceManager->StartAll();
-        if (!result.success) {
+        if (!result) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
-                "Failed to start resources: {}", result.error);
+                "Failed to start resources: {}", result.GetError());
             return false;
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Started {} resource(s) on client", result.affectedResources.size());
+            "Started {} resource(s) on client", result.Unwrap().size());
         return true;
     }
 

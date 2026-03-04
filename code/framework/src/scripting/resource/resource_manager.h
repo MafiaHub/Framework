@@ -5,10 +5,10 @@
 #include "../builtins/events.h"
 
 #include <logging/logger.h>
+#include <utils/result.h>
 
 #include <function2.hpp>
 
-#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -43,26 +43,9 @@ namespace Framework::Scripting {
 
     /**
      * Result of a resource operation.
+     * Value: list of affected resource names.  Error: description string (empty on success).
      */
-    struct ResourceOperationResult {
-        bool success = false;
-        std::string error;
-        std::vector<std::string> affectedResources;
-
-        static ResourceOperationResult Success(const std::vector<std::string> &affected = {}) {
-            ResourceOperationResult result;
-            result.success = true;
-            result.affectedResources = affected;
-            return result;
-        }
-
-        static ResourceOperationResult Failure(const std::string &error) {
-            ResourceOperationResult result;
-            result.success = false;
-            result.error = error;
-            return result;
-        }
-    };
+    using ResourceOperationResult = Utils::Result<std::vector<std::string>, std::string>;
 
     /**
      * Callback types for resource events.

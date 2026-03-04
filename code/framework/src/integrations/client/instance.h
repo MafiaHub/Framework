@@ -149,8 +149,8 @@ namespace Framework::Integrations::Client {
 
         void DownloadsAssetsFromConnectedServer();
 
-        InstanceOptions *GetOptions() {
-            return &_opts;
+        InstanceOptions &GetOptions() {
+            return _opts;
         }
 
         CurrentState GetCurrentState() const {

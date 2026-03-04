@@ -163,8 +163,8 @@ namespace Framework::Integrations::Server {
 
         // Start all resources (ES modules load asynchronously via normal Update cycle)
         auto startResult = _scriptingModule->GetResourceManager()->StartAll();
-        if (!startResult.success) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.error);
+        if (!startResult) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.GetError());
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
