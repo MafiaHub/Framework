@@ -14,8 +14,8 @@
 
 namespace Framework::Utils {
     CommandListener::CommandListener() {
-        _running       = true;
-        _currentThread = std::make_unique<std::thread>([this]() {
+        _running = true;
+        std::thread([this]() {
             while (_running) {
                 std::string commandString;
                 std::getline(std::cin, commandString);
@@ -26,9 +26,10 @@ namespace Framework::Utils {
                 std::scoped_lock lock(_mutex);
                 _queue.push(commandString);
             }
-        });
-
-        _currentThread->detach();
+        // Thread is detached because std::getline blocks indefinitely and cannot be
+        // interrupted portably. The CommandListener must outlive the detached thread
+        // or the process must exit shortly after Shutdown().
+        }).detach();
     }
 
     void CommandListener::Update() {
@@ -42,9 +43,8 @@ namespace Framework::Utils {
             _queue.pop();
         }
     }
+
     void CommandListener::Shutdown() {
         _running = false;
-        if (_currentThread->joinable())
-            _currentThread->join();
     }
 } // namespace Framework::Utils

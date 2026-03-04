@@ -10,18 +10,15 @@
 
 #include <function2.hpp>
 #include <atomic>
-#include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
-#include <thread>
 #include <utility>
 
 namespace Framework::Utils {
     using CommandCallback = fu2::function<void(const std::string &) const>;
     class CommandListener {
       private:
-        std::unique_ptr<std::thread> _currentThread;
         std::queue<std::string> _queue;
         std::mutex _mutex;
         CommandCallback _cb;
