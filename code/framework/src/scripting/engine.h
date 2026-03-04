@@ -7,9 +7,10 @@
 
 #include <v8.h>
 
+#include <function2.hpp>
+
 #include <memory>
 #include <string>
-#include <functional>
 
 #include <utils/lifecycle.h>
 
@@ -22,7 +23,7 @@ namespace Framework::Scripting {
      */
     class Engine : public Framework::Lifecycle {
       public:
-        using SDKRegisterCallback = std::function<void(Engine *)>;
+        using SDKRegisterCallback = fu2::function<void(Engine *)>;
 
         /**
          * Initialize the JavaScript engine.

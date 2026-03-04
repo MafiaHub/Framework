@@ -13,7 +13,8 @@
 #include <ftl/fibtex.h>
 #include <ftl/parallel_for.h>
 
-#include <functional>
+#include <function2.hpp>
+
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -77,7 +78,7 @@ namespace Framework::Jobs {
      * @brief Callback wrapper for completed tasks
      */
     struct CompletedCallback {
-        std::function<void()> callback;
+        fu2::function<void()> callback;
     };
 
     /**
@@ -122,7 +123,7 @@ namespace Framework::Jobs {
          * @param task The function to execute
          * @param priority Task priority (High or Normal)
          */
-        void Schedule(std::function<void()> task, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+        void Schedule(fu2::function<void()> task, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
         /**
          * @brief Schedule a named task (useful for profiling)
@@ -130,7 +131,7 @@ namespace Framework::Jobs {
          * @param task The function to execute
          * @param priority Task priority
          */
-        void Schedule(const std::string &name, std::function<void()> task, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+        void Schedule(const std::string &name, fu2::function<void()> task, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
         /**
          * @brief Schedule a task with a WaitGroup for synchronization
@@ -138,7 +139,7 @@ namespace Framework::Jobs {
          * @param task The function to execute
          * @param priority Task priority
          */
-        void Schedule(ftl::WaitGroup *waitGroup, std::function<void()> task, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+        void Schedule(ftl::WaitGroup *waitGroup, fu2::function<void()> task, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
         /**
          * @brief Schedule a task with success/error callbacks
@@ -147,7 +148,7 @@ namespace Framework::Jobs {
          * @param onError Called on main thread if task throws
          * @param priority Task priority
          */
-        void ScheduleWithCallback(std::function<void()> task, std::function<void()> onSuccess, std::function<void(std::exception_ptr)> onError = nullptr, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+        void ScheduleWithCallback(fu2::function<void()> task, fu2::function<void()> onSuccess, fu2::function<void(std::exception_ptr)> onError = nullptr, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
         /**
          * @brief Schedule a batch of items to process in parallel
@@ -289,7 +290,7 @@ namespace Framework::Jobs {
 
         bool _profilingEnabled = false;
 
-        void QueueCallback(std::function<void()> callback);
+        void QueueCallback(fu2::function<void()> callback);
     };
 
 } // namespace Framework::Jobs

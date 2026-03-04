@@ -6,8 +6,9 @@
 
 #include <logging/logger.h>
 
+#include <function2.hpp>
+
 #include <atomic>
-#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -65,9 +66,9 @@ namespace Framework::Scripting {
     /**
      * Callback types for resource events.
      */
-    using ResourceEventCallback = std::function<void(const std::string &resourceName)>;
-    using ResourceErrorCallback = std::function<void(const std::string &resourceName, const std::string &error)>;
-    using ResourceStateCallback = std::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState)>;
+    using ResourceEventCallback = fu2::function<void(const std::string &resourceName)>;
+    using ResourceErrorCallback = fu2::function<void(const std::string &resourceName, const std::string &error)>;
+    using ResourceStateCallback = fu2::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState)>;
 
     /**
      * Central manager for JavaScript resources.

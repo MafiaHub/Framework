@@ -10,7 +10,6 @@
 
 #include "job_system.h"
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,7 +26,7 @@ namespace Framework::Jobs {
         friend class TaskGraph;
 
       public:
-        using TaskFunc = std::function<void()>;
+        using TaskFunc = fu2::function<void()>;
 
         TaskNode(std::string name, TaskFunc func) : _name(std::move(name)), _func(std::move(func)) {
         }

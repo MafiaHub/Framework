@@ -11,7 +11,8 @@
 #include <Windows.h>
 #include <cstdint>
 #include <string>
-#include <functional>
+
+#include <function2.hpp>
 
 namespace Framework::Launcher::RGL {
 
@@ -108,7 +109,7 @@ namespace Framework::Launcher::RGL {
      */
     class ProcessMonitor {
       public:
-        using ProcessCallback = std::function<void(DWORD processId, HANDLE processHandle)>;
+        using ProcessCallback = fu2::function<void(DWORD processId, HANDLE processHandle)>;
 
         /**
          * Wait for a process to start and get a handle to it

@@ -43,18 +43,15 @@ namespace Framework::Jobs::IO {
         }
     }
 
-    void ReadFileAsync(JobSystem *jobs, const std::string &path, std::function<void(std::vector<uint8_t>)> onComplete, std::function<void(std::string)> onError, ftl::TaskPriority priority) {
+    void ReadFileAsync(JobSystem *jobs, const std::string &path, fu2::function<void(std::vector<uint8_t>)> onComplete, fu2::function<void(std::string)> onError, ftl::TaskPriority priority) {
         jobs->ScheduleWithCallback(
             [jobs, path]() {
                 // This runs on a fiber, use BlockingCall to not block the worker
-                auto data = jobs->BlockingCall([&path]() {
+                jobs->BlockingCall([&path]() {
                     return ReadFileInternal(path);
                 });
-                // Store result for callback
-                // Note: The callback mechanism will pick this up
-                return data;
             },
-            [onComplete, jobs, path]() {
+            [onComplete = std::move(onComplete), jobs, path]() mutable {
                 // On success - we need to re-read since we can't pass data through
                 // This is a limitation; for production, consider a shared state mechanism
                 try {
@@ -66,7 +63,7 @@ namespace Framework::Jobs::IO {
                     spdlog::error("ReadFileAsync callback re-read failed: {}", e.what());
                 }
             },
-            [onError, path](std::exception_ptr ex) {
+            [onError = std::move(onError), path](std::exception_ptr ex) mutable {
                 if (onError) {
                     try {
                         std::rethrow_exception(ex);
@@ -80,19 +77,19 @@ namespace Framework::Jobs::IO {
             priority);
     }
 
-    void WriteFileAsync(JobSystem *jobs, const std::string &path, std::vector<uint8_t> data, std::function<void()> onComplete, std::function<void(std::string)> onError, ftl::TaskPriority priority) {
+    void WriteFileAsync(JobSystem *jobs, const std::string &path, std::vector<uint8_t> data, fu2::function<void()> onComplete, fu2::function<void(std::string)> onError, ftl::TaskPriority priority) {
         jobs->ScheduleWithCallback(
             [jobs, path, data = std::move(data)]() {
                 jobs->BlockingCall([&path, &data]() {
                     WriteFileInternal(path, data);
                 });
             },
-            [onComplete]() {
+            [onComplete = std::move(onComplete)]() mutable {
                 if (onComplete) {
                     onComplete();
                 }
             },
-            [onError, path](std::exception_ptr ex) {
+            [onError = std::move(onError), path](std::exception_ptr ex) mutable {
                 if (onError) {
                     try {
                         std::rethrow_exception(ex);
@@ -106,14 +103,14 @@ namespace Framework::Jobs::IO {
             priority);
     }
 
-    void ReadFilesAsync(JobSystem *jobs, const std::vector<std::string> &paths, std::function<void(std::vector<FileResult>)> onAllComplete, ftl::TaskPriority priority) {
+    void ReadFilesAsync(JobSystem *jobs, const std::vector<std::string> &paths, fu2::function<void(std::vector<FileResult>)> onAllComplete, ftl::TaskPriority priority) {
         // Create shared state for results
         struct SharedState {
             std::mutex mutex;
             std::vector<FileResult> results;
             size_t completed = 0;
             size_t total = 0;
-            std::function<void(std::vector<FileResult>)> callback;
+            fu2::function<void(std::vector<FileResult>)> callback;
             JobSystem *jobs;
         };
 

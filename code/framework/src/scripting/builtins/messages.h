@@ -5,7 +5,6 @@
 #include <v8.h>
 
 #include <atomic>
-#include <functional>
 #include <map>
 #include <mutex>
 #include <string>

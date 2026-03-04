@@ -1,9 +1,10 @@
 #pragma once
 
+#include <function2.hpp>
+
 #include <memory>
 #include <string>
 #include <vector>
-#include <functional>
 
 #include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
@@ -24,12 +25,12 @@ namespace Framework::Integrations::Client::Scripting {
     /**
      * Callback type for resource download requests.
      */
-    using ResourceDownloadCallback = std::function<void(const std::string &resourceName, const std::string &version)>;
+    using ResourceDownloadCallback = fu2::function<void(const std::string &resourceName, const std::string &version)>;
 
     /**
      * Callback type for resource sync completion.
      */
-    using ResourceSyncCompleteCallback = std::function<void(bool success)>;
+    using ResourceSyncCompleteCallback = fu2::function<void(bool success)>;
 
     /**
      * Client-side JavaScript scripting module with resource management support.

@@ -11,7 +11,6 @@
 #include "job_system.h"
 
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <vector>
 
@@ -46,7 +45,7 @@ namespace Framework::Jobs::IO {
      * @param onError Called if an error occurs (optional)
      * @param priority Task priority
      */
-    void ReadFileAsync(JobSystem *jobs, const std::string &path, std::function<void(std::vector<uint8_t>)> onComplete, std::function<void(std::string)> onError = nullptr, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+    void ReadFileAsync(JobSystem *jobs, const std::string &path, fu2::function<void(std::vector<uint8_t>)> onComplete, fu2::function<void(std::string)> onError = nullptr, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
     /**
      * @brief Asynchronously write a file
@@ -60,7 +59,7 @@ namespace Framework::Jobs::IO {
      * @param onError Called if an error occurs (optional)
      * @param priority Task priority
      */
-    void WriteFileAsync(JobSystem *jobs, const std::string &path, std::vector<uint8_t> data, std::function<void()> onComplete = nullptr, std::function<void(std::string)> onError = nullptr, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+    void WriteFileAsync(JobSystem *jobs, const std::string &path, std::vector<uint8_t> data, fu2::function<void()> onComplete = nullptr, fu2::function<void(std::string)> onError = nullptr, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
     /**
      * @brief Asynchronously read multiple files in parallel
@@ -73,7 +72,7 @@ namespace Framework::Jobs::IO {
      * @param onAllComplete Called with results for all files
      * @param priority Task priority
      */
-    void ReadFilesAsync(JobSystem *jobs, const std::vector<std::string> &paths, std::function<void(std::vector<FileResult>)> onAllComplete, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
+    void ReadFilesAsync(JobSystem *jobs, const std::vector<std::string> &paths, fu2::function<void(std::vector<FileResult>)> onAllComplete, ftl::TaskPriority priority = ftl::TaskPriority::Normal);
 
     /**
      * @brief Read a file, blocking the current fiber but not the worker thread

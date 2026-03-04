@@ -12,9 +12,9 @@
 
 namespace Framework::Jobs {
 
-    // Helper struct to wrap std::function for FTL's C-style function pointer
+    // Helper struct to wrap fu2::function for FTL's C-style function pointer
     struct TaskWrapper {
-        std::function<void()> func;
+        fu2::function<void()> func;
     };
 
     static void TaskWrapperFunc(ftl::TaskScheduler * /*scheduler*/, void *arg) {
@@ -69,7 +69,7 @@ namespace Framework::Jobs {
         spdlog::info("JobSystem shutting down");
     }
 
-    void JobSystem::Schedule(std::function<void()> task, ftl::TaskPriority priority) {
+    void JobSystem::Schedule(fu2::function<void()> task, ftl::TaskPriority priority) {
         auto *wrapper = new TaskWrapper{std::move(task)};
 
         ftl::Task ftlTask;
@@ -79,13 +79,13 @@ namespace Framework::Jobs {
         _scheduler->AddTask(ftlTask, priority);
     }
 
-    void JobSystem::Schedule(const std::string & /*name*/, std::function<void()> task, ftl::TaskPriority priority) {
+    void JobSystem::Schedule(const std::string & /*name*/, fu2::function<void()> task, ftl::TaskPriority priority) {
         // Name can be used for profiling in the future
         // For now, just schedule normally
         Schedule(std::move(task), priority);
     }
 
-    void JobSystem::Schedule(ftl::WaitGroup *waitGroup, std::function<void()> task, ftl::TaskPriority priority) {
+    void JobSystem::Schedule(ftl::WaitGroup *waitGroup, fu2::function<void()> task, ftl::TaskPriority priority) {
         auto *wrapper = new TaskWrapper{std::move(task)};
 
         ftl::Task ftlTask;
@@ -95,8 +95,8 @@ namespace Framework::Jobs {
         _scheduler->AddTask(ftlTask, priority, waitGroup);
     }
 
-    void JobSystem::ScheduleWithCallback(std::function<void()> task, std::function<void()> onSuccess, std::function<void(std::exception_ptr)> onError, ftl::TaskPriority priority) {
-        auto wrappedTask = [this, task = std::move(task), onSuccess = std::move(onSuccess), onError = std::move(onError)]() {
+    void JobSystem::ScheduleWithCallback(fu2::function<void()> task, fu2::function<void()> onSuccess, fu2::function<void(std::exception_ptr)> onError, ftl::TaskPriority priority) {
+        auto wrappedTask = [this, task = std::move(task), onSuccess = std::move(onSuccess), onError = std::move(onError)]() mutable {
             std::exception_ptr exception;
             try {
                 task();
@@ -106,7 +106,7 @@ namespace Framework::Jobs {
 
             if (exception) {
                 if (onError) {
-                    QueueCallback([onError, exception]() {
+                    QueueCallback([onError = std::move(onError), exception]() mutable {
                         onError(exception);
                     });
                 } else {
@@ -119,7 +119,7 @@ namespace Framework::Jobs {
                     }
                 }
             } else if (onSuccess) {
-                QueueCallback(onSuccess);
+                QueueCallback(std::move(onSuccess));
             }
         };
 
@@ -147,7 +147,7 @@ namespace Framework::Jobs {
         }
     }
 
-    void JobSystem::QueueCallback(std::function<void()> callback) {
+    void JobSystem::QueueCallback(fu2::function<void()> callback) {
         std::scoped_lock lock(_callbackMutex);
         _completedCallbacks.push(CompletedCallback{std::move(callback)});
     }

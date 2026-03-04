@@ -231,6 +231,7 @@ if(LIBNODE_AVAILABLE)
         ${CMAKE_SOURCE_DIR}/vendors/json/include
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+        ${CMAKE_SOURCE_DIR}/vendors/fu2
         ${CMAKE_SOURCE_DIR}/vendors
     )
 
@@ -265,6 +266,7 @@ target_include_directories(FrameworkV8Engine PUBLIC
     ${CMAKE_SOURCE_DIR}/vendors/json/include
     ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
     ${CMAKE_SOURCE_DIR}/vendors/fmt/include
+    ${CMAKE_SOURCE_DIR}/vendors/fu2
     ${CMAKE_SOURCE_DIR}/vendors
 )
 target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog)
