@@ -13,8 +13,6 @@
 #include <RakNetTypes.h>
 #include <function2.hpp>
 
-#include "utils/optional.h"
-
 namespace Framework::Networking::Messages {
     enum class DisconnectionReason : uint32_t {
         NO_FREE_SLOT,
