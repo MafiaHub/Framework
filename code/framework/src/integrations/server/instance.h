@@ -26,6 +26,7 @@
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <sig.h>
@@ -81,8 +82,8 @@ namespace Framework::Integrations::Server {
 
     class Instance {
       private:
-        bool _alive;
-        bool _shuttingDown;
+        std::atomic<bool> _alive;
+        std::atomic<bool> _shuttingDown;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 
         InstanceOptions _opts;
