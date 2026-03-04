@@ -154,7 +154,7 @@ namespace Framework::GUI {
             return _browser;
         }
 
-        inline GUI::SDK *GetSDK() {
+        inline GUI::SDK *GetSDK() const {
             return _sdk.get();
         }
 

@@ -307,8 +307,10 @@ namespace Framework::Scripting {
             for (const auto &depName : dependents) {
                 if (IsResourceRunning(depName)) {
                     auto result = StopResource(depName);
-                    const auto &affected = result.Unwrap();
-                    stopped.insert(stopped.end(), affected.begin(), affected.end());
+                    if (result) {
+                        const auto &affected = result.Unwrap();
+                        stopped.insert(stopped.end(), affected.begin(), affected.end());
+                    }
                 }
             }
         }

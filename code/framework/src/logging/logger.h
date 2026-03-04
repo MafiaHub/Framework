@@ -91,7 +91,7 @@ namespace Framework::Logging {
             _maxRingBufferSize = capacity;
         }
 
-        std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> GetRingBuffer() {
+        std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> GetRingBuffer() const {
             return ringbuffer_sink;
         }
     };

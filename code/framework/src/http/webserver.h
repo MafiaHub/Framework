@@ -36,7 +36,7 @@ namespace Framework::HTTP {
         void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 
-        const std::string &GetServeDirectory() {
+        const std::string &GetServeDirectory() const {
             return _serveDir;
         }
 

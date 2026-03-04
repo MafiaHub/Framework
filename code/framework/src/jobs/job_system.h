@@ -254,7 +254,7 @@ namespace Framework::Jobs {
          * @brief Get the underlying FTL TaskScheduler
          * @return Pointer to the TaskScheduler
          */
-        ftl::TaskScheduler *GetScheduler() {
+        ftl::TaskScheduler *GetScheduler() const {
             return _scheduler.get();
         }
 

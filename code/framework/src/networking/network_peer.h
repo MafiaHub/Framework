@@ -30,7 +30,7 @@ namespace Framework::Networking {
         std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
-        SLNet::DirectoryDeltaTransfer _assetStreamer;
+        mutable SLNet::DirectoryDeltaTransfer _assetStreamer;
 
       public:
         NetworkPeer();
@@ -154,7 +154,7 @@ namespace Framework::Networking {
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
 
-        SLNet::DirectoryDeltaTransfer* GetAssetStreamer() {
+        SLNet::DirectoryDeltaTransfer* GetAssetStreamer() const {
             return &_assetStreamer;
         }
     };

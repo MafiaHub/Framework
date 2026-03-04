@@ -47,7 +47,7 @@ namespace Framework::Networking::RPC {
             return packet;
         }
 
-        bool IsGameRPC() {
+        bool IsGameRPC() const {
             return false;
         }
     };
