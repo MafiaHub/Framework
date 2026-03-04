@@ -105,11 +105,15 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }
 
+        CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
+
         // Initialize the world
         if (!_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
+
+        CoreModules::SetWorldEngine(_worldEngine.get());
 
         if (_opts.bindPublicServer && !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
@@ -517,6 +521,10 @@ namespace Framework::Integrations::Server {
         sig_detach(SIGINT, sig_slot(this, &Instance::OnSignal));
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
 
+        CoreModules::SetNetworkPeer(nullptr);
+        CoreModules::SetWorldEngine(nullptr);
+        CoreModules::SetScriptingEngine(nullptr);
+        CoreModules::SetResourceManager(nullptr);
         CoreModules::Reset();
 
         _alive = false;

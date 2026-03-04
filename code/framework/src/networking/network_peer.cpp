@@ -12,12 +12,9 @@
 
 #include <logging/logger.h>
 
-#include "core_modules.h"
-
 namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
         _peer = SLNet::RakPeerInterface::GetInstance();
-        CoreModules::SetNetworkPeer(this);
 
         RegisterMessage(Messages::INTERNAL_RPC, [this](SLNet::Packet *p) {
             SLNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
@@ -32,9 +29,7 @@ namespace Framework::Networking {
         });
     }
 
-    NetworkPeer::~NetworkPeer() {
-        CoreModules::SetNetworkPeer(nullptr);
-    }
+    NetworkPeer::~NetworkPeer() = default;
 
     bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
         if (!_peer) {

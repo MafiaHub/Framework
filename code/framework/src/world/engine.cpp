@@ -12,7 +12,6 @@
 
 namespace Framework::World {
     bool Engine::Init(Networking::NetworkPeer *networkPeer) {
-        CoreModules::SetWorldEngine(this);
         _networkPeer = networkPeer;
         _world       = std::make_unique<flecs::world>();
 
@@ -27,7 +26,6 @@ namespace Framework::World {
     }
 
     void Engine::Shutdown() {
-        CoreModules::SetWorldEngine(nullptr);
         Lifecycle::Shutdown();
     }
 

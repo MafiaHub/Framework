@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <cassert>
+
 namespace Framework::Networking {
     class NetworkPeer;
 } // namespace Framework::Networking
@@ -31,6 +33,13 @@ namespace Framework::Input {
 
 namespace Framework {
 
+#define FW_ASSERT_MODULE_REGISTRATION(current, incoming, name)                \
+    do {                                                                       \
+        if ((current) != nullptr && (incoming) != nullptr) {                   \
+            assert(false && name " is already registered in CoreModules");     \
+        }                                                                      \
+    } while (0)
+
     /**
      * @brief Class that couples modules together
      *
@@ -49,26 +58,32 @@ namespace Framework {
 
         // Singleton setters
         static void SetNetworkPeer(Networking::NetworkPeer *peer) {
+            FW_ASSERT_MODULE_REGISTRATION(_networkPeer, peer, "NetworkPeer");
             _networkPeer = peer;
         }
 
         static void SetWorldEngine(World::Engine *engine) {
+            FW_ASSERT_MODULE_REGISTRATION(_engine, engine, "WorldEngine");
             _engine = engine;
         }
 
         static void SetScriptingEngine(Scripting::Engine *engine) {
+            FW_ASSERT_MODULE_REGISTRATION(_scriptingEngine, engine, "ScriptingEngine");
             _scriptingEngine = engine;
         }
 
         static void SetResourceManager(Scripting::ResourceManager *manager) {
+            FW_ASSERT_MODULE_REGISTRATION(_resourceManager, manager, "ResourceManager");
             _resourceManager = manager;
         }
 
         static void SetWebManager(GUI::Manager *manager) {
+            FW_ASSERT_MODULE_REGISTRATION(_webManager, manager, "WebManager");
             _webManager = manager;
         }
 
         static void SetInput(Input::IInput *input) {
+            FW_ASSERT_MODULE_REGISTRATION(_input, input, "Input");
             _input = input;
         }
 

@@ -157,7 +157,5 @@ namespace Framework::Networking {
         SLNet::DirectoryDeltaTransfer* GetAssetStreamer() {
             return &_assetStreamer;
         }
-
-        static inline NetworkPeer *_networkRef = nullptr;
     };
 } // namespace Framework::Networking

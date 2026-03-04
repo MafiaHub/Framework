@@ -115,6 +115,7 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Networking engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
+            CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkClient());
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
         }
 
@@ -123,11 +124,14 @@ namespace Framework::Integrations::Client {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
+            CoreModules::SetWorldEngine(_worldEngine.get());
 
             _worldEngine->GetWorld()->import <Shared::Modules::Mod>();
 
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Core ecs modules have been imported!");
         }
+
+        CoreModules::SetWebManager(_webManager.get());
 
         InitNetworkingMessages();
         InitAssetDownloader();
@@ -229,6 +233,10 @@ namespace Framework::Integrations::Client {
             _worldEngine->Shutdown();
         }
 
+        CoreModules::SetWebManager(nullptr);
+        CoreModules::SetNetworkPeer(nullptr);
+        CoreModules::SetWorldEngine(nullptr);
+        CoreModules::SetInput(nullptr);
         CoreModules::Reset();
 
         return ClientError::CLIENT_NONE;

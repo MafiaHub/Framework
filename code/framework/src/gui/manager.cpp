@@ -12,14 +12,11 @@
 
 #include "gui/backend/view_d3d11.h"
 
-#include <core_modules.h>
-
 #include <filesystem>
 
 namespace Framework::GUI {
     Manager::Manager() {
         _clipboard = std::make_unique<SystemClipboard>();
-        CoreModules::SetWebManager(this);
     }
 
     Manager::~Manager() {
