@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <atomic>
+
 namespace Framework {
     class Lifecycle {
       public:
@@ -28,6 +30,6 @@ namespace Framework {
 
       protected:
         Lifecycle()        = default;
-        bool _initialized = false;
+        std::atomic<bool> _initialized = false;
     };
 } // namespace Framework
