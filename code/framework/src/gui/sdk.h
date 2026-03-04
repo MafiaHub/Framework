@@ -18,12 +18,12 @@
 #include "include/cef_browser.h"
 
 namespace Framework::GUI {
-    using EventCallbackProc = fu2::function<void(const std::string &eventPayload)>;
+    using EventCallback = fu2::function<void(const std::string &eventPayload) const>;
 
     class SDK {
       private:
         CefRefPtr<CefBrowser> _browser;
-        std::unordered_map<std::string, EventCallbackProc> _eventListeners;
+        std::unordered_map<std::string, EventCallback> _eventListeners;
 
       public:
         [[nodiscard]] GUIError Init(CefRefPtr<CefBrowser> browser);
@@ -33,7 +33,7 @@ namespace Framework::GUI {
             return _browser;
         }
 
-        inline void AddEventListener(const std::string &eventName, EventCallbackProc proc) {
+        inline void AddEventListener(const std::string &eventName, EventCallback proc) {
             _eventListeners[eventName] = proc;
         }
 

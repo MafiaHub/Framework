@@ -20,7 +20,7 @@
 #include <utility>
 
 namespace Framework::Networking {
-    using OnAssetsDownloadFailedCallback = fu2::function<void()>;
+    using OnAssetsDownloadFailedCallback = fu2::function<void() const>;
     
     class AssetFileTransfer final: public SLNet::FileListTransfer {
       private:

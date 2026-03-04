@@ -26,12 +26,12 @@ namespace Framework::Integrations::Client::Scripting {
     /**
      * Callback type for resource download requests.
      */
-    using ResourceDownloadCallback = fu2::function<void(const std::string &resourceName, const std::string &version)>;
+    using ResourceDownloadCallback = fu2::function<void(const std::string &resourceName, const std::string &version) const>;
 
     /**
      * Callback type for resource sync completion.
      */
-    using ResourceSyncCompleteCallback = fu2::function<void(bool success)>;
+    using ResourceSyncCompleteCallback = fu2::function<void(bool success) const>;
 
     /**
      * Client-side JavaScript scripting module with resource management support.

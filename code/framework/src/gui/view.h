@@ -129,7 +129,7 @@ namespace Framework::GUI {
             return _garbageCollected;
         }
 
-        inline void AddEventListener(const std::string &eventName, const EventCallbackProc &proc) {
+        inline void AddEventListener(const std::string &eventName, const EventCallback &proc) {
             if (!_sdk) {
                 return;
             }

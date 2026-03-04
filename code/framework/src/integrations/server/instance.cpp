@@ -423,7 +423,7 @@ namespace Framework::Integrations::Server {
     void Instance::InitCommandListener() {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
         
-        _commandListener->SetCommandHandler([this](const std::string &command) {
+        _commandListener->SetCommandCallback([this](const std::string &command) {
             this->HandleCommand(command);
         });
         

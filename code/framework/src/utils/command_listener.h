@@ -27,7 +27,7 @@ namespace Framework::Utils {
       public:
         CommandListener();
 
-        void SetCommandHandler(CommandCallback cb) {
+        void SetCommandCallback(CommandCallback cb) {
             _cb = std::move(cb);
         }
 

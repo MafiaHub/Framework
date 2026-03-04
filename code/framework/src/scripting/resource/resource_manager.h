@@ -50,9 +50,9 @@ namespace Framework::Scripting {
     /**
      * Callback types for resource events.
      */
-    using ResourceEventCallback = fu2::function<void(const std::string &resourceName)>;
-    using ResourceErrorCallback = fu2::function<void(const std::string &resourceName, const std::string &error)>;
-    using ResourceStateCallback = fu2::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState)>;
+    using ResourceEventCallback = fu2::function<void(const std::string &resourceName) const>;
+    using ResourceErrorCallback = fu2::function<void(const std::string &resourceName, const std::string &error) const>;
+    using ResourceStateCallback = fu2::function<void(const std::string &resourceName, ResourceState oldState, ResourceState newState) const>;
 
     /**
      * Central manager for JavaScript resources.

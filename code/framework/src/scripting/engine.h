@@ -26,7 +26,7 @@ namespace Framework::Scripting {
      */
     class Engine : public Framework::Lifecycle {
       public:
-        using SDKRegisterCallback = fu2::function<void(Engine *)>;
+        using SDKRegisterCallback = fu2::function<void(Engine *) const>;
 
         /**
          * Initialize the JavaScript engine.
