@@ -18,8 +18,6 @@
 
 #include "world/modules/base.hpp"
 
-#include <BitStream.h>
-
 namespace Framework::Networking::RPC {
     template <class T>
     class IGameRPC {

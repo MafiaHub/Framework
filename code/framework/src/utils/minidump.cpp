@@ -108,4 +108,4 @@ namespace Framework::Utils {
     MiniDump::MiniDump() {
         InitExceptionOverride();
     }
-}; // namespace Framework::Utils
+} // namespace Framework::Utils

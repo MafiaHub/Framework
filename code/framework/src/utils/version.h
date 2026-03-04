@@ -14,4 +14,4 @@ namespace Framework::Utils::Version {
     extern const char *rel;
 
     extern bool VersionSatisfies(const char *a, const char *b);
-}; // namespace Framework::Utils::Version
+} // namespace Framework::Utils::Version

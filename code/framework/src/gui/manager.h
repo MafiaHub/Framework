@@ -50,7 +50,7 @@ namespace Framework::GUI {
         [[nodiscard]] GUIError Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
         void Shutdown() override;
 
-        int CreateView(std::string url, int width, int height, int offsetX = 0, int offsetY = 0);
+        int CreateView(const std::string &url, int width, int height, int offsetX = 0, int offsetY = 0);
         bool DestroyView(int id);
 
         void CleanupViews();

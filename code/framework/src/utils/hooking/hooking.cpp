@@ -34,4 +34,4 @@ namespace hook {
 #endif
 
     ptrdiff_t baseAddressDifference;
-}; // namespace hook
+} // namespace hook

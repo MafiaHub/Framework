@@ -32,4 +32,4 @@ namespace Framework::Utils {
 
         static LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS *exceptionInfo);
     };
-}; // namespace Framework::Utils
+} // namespace Framework::Utils

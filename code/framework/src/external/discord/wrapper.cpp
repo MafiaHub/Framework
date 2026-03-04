@@ -19,7 +19,7 @@ namespace Framework::External::Discord {
 
         _instance->UserManager().OnCurrentUserUpdate.Connect([this]() {
             _instance->UserManager().GetCurrentUser(&_user);
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
+            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("[Discord] Current user updated {} ({})", _user.GetUsername(), _user.GetId());
         });
 
         _initialized = true;

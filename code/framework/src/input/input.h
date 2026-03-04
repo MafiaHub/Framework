@@ -15,7 +15,7 @@
 namespace Framework::Input {
     class IInput {
       public:
-        virtual ~IInput() {}
+        virtual ~IInput() = default;
         virtual void Update() = 0;
 
         virtual void SetMousePosition(int x, int y)   = 0;

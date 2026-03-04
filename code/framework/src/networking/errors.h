@@ -27,4 +27,4 @@ namespace Framework::Networking {
 
     extern std::unordered_map<uint8_t, const char *> StartupResultString;
     extern std::unordered_map<uint8_t, const char *> ConnectionAttemptString;
-}; // namespace Framework::Networking
+} // namespace Framework::Networking

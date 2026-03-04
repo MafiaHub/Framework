@@ -14,4 +14,4 @@ namespace Framework::Networking {
         CONNECTED,
         DISCONNECTED
     };
-}; // namespace Framework::Networking
+} // namespace Framework::Networking

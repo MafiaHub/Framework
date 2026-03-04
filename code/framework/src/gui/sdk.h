@@ -33,18 +33,18 @@ namespace Framework::GUI {
             return _browser;
         }
 
-        inline void AddEventListener(std::string eventName, EventCallbackProc proc) {
+        inline void AddEventListener(const std::string &eventName, EventCallbackProc proc) {
             _eventListeners[eventName] = proc;
         }
 
-        inline void RemoveEventListener(std::string eventName) {
+        inline void RemoveEventListener(const std::string &eventName) {
             if (!_eventListeners.contains(eventName)) {
                 return;
             }
             _eventListeners.erase(eventName);
         }
 
-        inline void BroadcastEvent(std::string eventName, std::string eventPayload) {
+        inline void BroadcastEvent(const std::string &eventName, const std::string &eventPayload) {
             if (!_eventListeners.contains(eventName)) {
                 return;
             }

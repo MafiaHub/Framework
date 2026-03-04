@@ -17,4 +17,4 @@ namespace Framework::Networking {
 
     std::unordered_map<uint8_t, const char *> ConnectionAttemptString = {{SLNet::INVALID_PARAMETER, "Invalid parameter"}, {SLNet::CANNOT_RESOLVE_DOMAIN_NAME, "Cannot resolve domain name"}, {SLNet::ALREADY_CONNECTED_TO_ENDPOINT, "Already connected to endpoint"},
         {SLNet::CONNECTION_ATTEMPT_ALREADY_IN_PROGRESS, "Connection attempt already in progress"}, {SLNet::SECURITY_INITIALIZATION_FAILED, "Security initialization failed"}};
-}; // namespace Framework::Networking
+} // namespace Framework::Networking

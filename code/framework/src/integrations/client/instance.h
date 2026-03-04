@@ -74,10 +74,10 @@ namespace Framework::Integrations::Client {
     };
 
     struct CurrentState {
-        std::string _host;
-        int32_t _port;
-        std::string _nickname;
-        uint32_t _serverIDHash;
+        std::string host;
+        int32_t port;
+        std::string nickname;
+        uint32_t serverIDHash;
     };
 
     struct AssetDownloadStatus {
@@ -159,7 +159,7 @@ namespace Framework::Integrations::Client {
 
         void SetCurrentState(CurrentState state) {
             _currentState = std::move(state);
-            _currentState._serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_currentState._host + ":" + std::to_string(_currentState._port));
+            _currentState.serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_currentState.host + ":" + std::to_string(_currentState.port));
         }
 
         void SetOnConnectionFinalizedCallback(NetworkConnectionFinalizedCallback cb) {

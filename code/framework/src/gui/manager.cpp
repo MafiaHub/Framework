@@ -127,7 +127,7 @@ namespace Framework::GUI {
         }
     }
 
-    int Manager::CreateView(std::string url, int width, int height, int offsetX, int offsetY) {
+    int Manager::CreateView(const std::string &url, int width, int height, int offsetX, int offsetY) {
         if (!_cefInitialized) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: CEF is not initialized");
             return -1;

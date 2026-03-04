@@ -36,7 +36,7 @@ namespace Framework::Utils::States {
         _nextState = it->second.get();
         _currentContext = Context::Exit;
 
-        Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_UTILS)->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
+        Framework::Logging::GetLogger(FRAMEWORK_INNER_UTILS)->debug("[StateMachine] Requesting new state {}", _nextState->GetName());
         return true;
     }
 
@@ -104,7 +104,7 @@ namespace Framework::Utils::States {
             }
         }
         catch (const std::exception &e) {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_UTILS)->error("[StateMachine] Error in state {}: {}", currentState ? currentState->GetName() : "null", e.what());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_UTILS)->error("[StateMachine] Error in state {}: {}", currentState ? currentState->GetName() : "null", e.what());
             lock.lock();
             _isUpdating = false;
             throw;

@@ -20,4 +20,4 @@ namespace Framework::External::ImGUI {
             return f(data);
         };
     }
-}; // namespace Framework::External::ImGUI
+} // namespace Framework::External::ImGUI

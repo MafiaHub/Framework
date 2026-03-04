@@ -46,7 +46,7 @@ namespace Framework::Networking {
 
     ConnectionError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
         if (_state != PeerState::DISCONNECTED) {
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
             return ConnectionError::CONNECTION_ALREADY_CONNECTED;
         }
 

@@ -91,4 +91,4 @@ namespace Framework::Networking {
             return true;
         }
     };
-}; // namespace Framework::Networking
+} // namespace Framework::Networking

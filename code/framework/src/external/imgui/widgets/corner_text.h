@@ -44,4 +44,4 @@ namespace Framework::External::ImGUI::Widgets {
         }
         ImGui::End();
     }
-}; // namespace Framework::External::ImGUI::Widgets
+} // namespace Framework::External::ImGUI::Widgets

@@ -23,7 +23,7 @@ namespace Framework::Networking {
 
         if (!password.empty()) {
             _peer->SetIncomingPassword(password.c_str(), (uint32_t)password.length());
-            Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Applying incoming password to networking peer");
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Applying incoming password to networking peer");
         }
 
         _peer->SetMaximumIncomingConnections((uint16_t)maxPlayers);
@@ -39,7 +39,7 @@ namespace Framework::Networking {
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
         switch (packetID) {
         case ID_NEW_INCOMING_CONNECTION: {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", packet->guid.ToString());
             if (_onPlayerConnectCallback) {
                 _onPlayerConnectCallback(packet);
             }
@@ -47,14 +47,14 @@ namespace Framework::Networking {
         };
 
         case ID_DISCONNECTION_NOTIFICATION: {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
             }
             return true;
         };
         case ID_CONNECTION_LOST: {
-            Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::LOST);
             }

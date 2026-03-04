@@ -17,7 +17,7 @@
 
 namespace Framework::Networking {
     class NetworkPeer;
-}; // namespace Framework::Networking
+} // namespace Framework::Networking
 
 namespace Framework::World {
     class Engine;

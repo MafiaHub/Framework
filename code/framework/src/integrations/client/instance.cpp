@@ -464,7 +464,7 @@ namespace Framework::Integrations::Client {
 
         // Compute the destination path
         const auto appDataPath = Framework::Utils::GetAppDataPathA();
-        const auto cacheDir   = fmt::format("{}\\MafiaHubIntegration\\servers\\{}", appDataPath, _currentState._serverIDHash); // TODO: fix path to use mod name
+        const auto cacheDir   = fmt::format("{}\\MafiaHubIntegration\\servers\\{}", appDataPath, _currentState.serverIDHash); // TODO: fix path to use mod name
 
         // Let the system know where our scripts are stored
         SetAssetCachePath(cacheDir);
@@ -479,7 +479,7 @@ namespace Framework::Integrations::Client {
 
         if (!cacheDirHandle.exists()) {
             if (cacheDirHandle.createDirectory()) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", _currentState._serverIDHash);
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client asset cache: {}", _currentState.serverIDHash);
             }
             else {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not create folder for client asset cache: {}", cacheDir);
@@ -544,7 +544,7 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone = true;
 
             Framework::Networking::Messages::ClientRequestStreamer req;
-            req.FromParameters(_currentState._nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
+            req.FromParameters(_currentState.nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
             net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
         }
 
