@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include <scripting/module.h>
 #include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
 #include <utils/lifecycle.h>
@@ -38,7 +39,7 @@ namespace Framework::Integrations::Client::Scripting {
      * Uses standalone V8 engine for client-side JavaScript execution.
      * No Node.js APIs are available at the binary level.
      */
-    class ClientScriptingModule final : public Framework::Lifecycle {
+    class ClientScriptingModule final : public Framework::Lifecycle, public Framework::Scripting::ScriptingModule {
       public:
         explicit ClientScriptingModule(std::shared_ptr<World::ClientEngine> world);
         ~ClientScriptingModule();
@@ -76,6 +77,10 @@ namespace Framework::Integrations::Client::Scripting {
             return _engine.get();
         }
 
+        Framework::Scripting::Engine *GetScriptingEngine() const override {
+            return _engine.get();
+        }
+
         /**
          * Get the world engine.
          */
@@ -86,7 +91,7 @@ namespace Framework::Integrations::Client::Scripting {
         /**
          * Get the JavaScript resource manager.
          */
-        Framework::Scripting::ResourceManager *GetResourceManager() const {
+        Framework::Scripting::ResourceManager *GetResourceManager() const override {
             return _resourceManager.get();
         }
 

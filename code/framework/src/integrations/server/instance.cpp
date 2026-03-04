@@ -151,6 +151,8 @@ namespace Framework::Integrations::Server {
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
 
+        CoreModules::SetScriptingModule(_scriptingModule.get());
+
         PostScriptInit();
 
         // Discover resources
@@ -528,8 +530,7 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetWorldEngine(nullptr);
-        CoreModules::SetScriptingEngine(nullptr);
-        CoreModules::SetResourceManager(nullptr);
+        CoreModules::SetScriptingModule(nullptr);
         CoreModules::Reset();
 
         Lifecycle::Shutdown();

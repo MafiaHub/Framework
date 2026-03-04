@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include <scripting/module.h>
 #include <scripting/node_engine.h>
 #include <scripting/resource/resource_manager.h>
 #include <utils/lifecycle.h>
@@ -25,7 +26,7 @@ namespace Framework::Integrations::Server::Scripting {
      * Uses Node.js for full server-side JavaScript capabilities including
      * require(), async/await, npm packages, etc.
      */
-    class ServerScriptingModule final : public Framework::Lifecycle {
+    class ServerScriptingModule final : public Framework::Lifecycle, public Framework::Scripting::ScriptingModule {
       public:
         explicit ServerScriptingModule(std::shared_ptr<World::ServerEngine> world);
         ~ServerScriptingModule();
@@ -60,6 +61,10 @@ namespace Framework::Integrations::Server::Scripting {
             return _nodeEngine.get();
         }
 
+        Framework::Scripting::Engine *GetScriptingEngine() const override {
+            return _nodeEngine.get();
+        }
+
         /**
          * Get the world engine.
          */
@@ -70,7 +75,7 @@ namespace Framework::Integrations::Server::Scripting {
         /**
          * Get the JavaScript resource manager.
          */
-        Framework::Scripting::ResourceManager *GetResourceManager() const {
+        Framework::Scripting::ResourceManager *GetResourceManager() const override {
             return _resourceManager.get();
         }
 

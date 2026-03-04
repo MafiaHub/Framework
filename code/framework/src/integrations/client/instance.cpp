@@ -242,6 +242,7 @@ namespace Framework::Integrations::Client {
             _worldEngine->Shutdown();
         }
 
+        CoreModules::SetScriptingModule(nullptr);
         CoreModules::SetWebManager(nullptr);
         CoreModules::SetNetworkPeer(nullptr);
         CoreModules::SetWorldEngine(nullptr);
@@ -520,6 +521,8 @@ namespace Framework::Integrations::Client {
                     net->Disconnect();
                     return;
                 }
+                CoreModules::SetScriptingModule(scriptingModule);
+
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
 
                 // Pass the pending resource list to the scripting module (without triggering download logic)

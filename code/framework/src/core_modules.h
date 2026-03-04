@@ -10,6 +10,8 @@
 
 #include <cassert>
 
+#include <scripting/module.h>
+
 namespace Framework::Networking {
     class NetworkPeer;
 } // namespace Framework::Networking
@@ -18,10 +20,6 @@ namespace Framework::World {
     class Engine;
 } // namespace Framework::World
 
-namespace Framework::Scripting {
-    class Engine;
-    class ResourceManager;
-} // namespace Framework::Scripting
 
 namespace Framework::GUI {
     class Manager;
@@ -50,8 +48,7 @@ namespace Framework {
         static void Reset() {
             _networkPeer      = nullptr;
             _engine           = nullptr;
-            _scriptingEngine  = nullptr;
-            _resourceManager  = nullptr;
+            _scriptingModule  = nullptr;
             _webManager       = nullptr;
             _input            = nullptr;
         }
@@ -67,14 +64,9 @@ namespace Framework {
             _engine = engine;
         }
 
-        static void SetScriptingEngine(Scripting::Engine *engine) {
-            FW_ASSERT_MODULE_REGISTRATION(_scriptingEngine, engine, "ScriptingEngine");
-            _scriptingEngine = engine;
-        }
-
-        static void SetResourceManager(Scripting::ResourceManager *manager) {
-            FW_ASSERT_MODULE_REGISTRATION(_resourceManager, manager, "ResourceManager");
-            _resourceManager = manager;
+        static void SetScriptingModule(Scripting::ScriptingModule *module) {
+            FW_ASSERT_MODULE_REGISTRATION(_scriptingModule, module, "ScriptingModule");
+            _scriptingModule = module;
         }
 
         static void SetWebManager(GUI::Manager *manager) {
@@ -100,12 +92,8 @@ namespace Framework {
             return _engine;
         }
 
-        static Scripting::Engine *GetScriptingEngine() {
-            return _scriptingEngine;
-        }
-
-        static Scripting::ResourceManager *GetResourceManager() {
-            return _resourceManager;
+        static Scripting::ScriptingModule *GetScriptingModule() {
+            return _scriptingModule;
         }
 
         static GUI::Manager *GetGUIManager() {
@@ -123,8 +111,7 @@ namespace Framework {
       private:
         static inline Networking::NetworkPeer *_networkPeer {};
         static inline World::Engine *_engine {};
-        static inline Scripting::Engine *_scriptingEngine {};
-        static inline Scripting::ResourceManager *_resourceManager {};
+        static inline Scripting::ScriptingModule *_scriptingModule {};
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};
         static inline double _tickRate {1000 / 60.0f};
