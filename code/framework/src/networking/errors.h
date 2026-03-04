@@ -12,13 +12,7 @@
 #include <unordered_map>
 
 namespace Framework::Networking {
-    enum ServerError {
-        SERVER_NONE,
-        SERVER_PEER_FAILED,
-        SERVER_PEER_NULL
-    };
-
-    enum ClientError {
+    enum class ClientError {
         CLIENT_NONE,
         CLIENT_PEER_FAILED,
         CLIENT_PEER_NULL,

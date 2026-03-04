@@ -106,7 +106,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize the world
-        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig) != World::EngineError::ENGINE_NONE) {
+        if (!_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }

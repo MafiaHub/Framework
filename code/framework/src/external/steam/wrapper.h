@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #define VERSION_SAFE_STEAM_API_INTERFACES
 
 #include "errors.h"
@@ -35,7 +37,7 @@ namespace Framework::External::Steam {
             return !IsPending() && !IsValid();
         }
     };
-    class Wrapper final {
+    class Wrapper final : public Framework::Lifecycle {
       private:
         std::unique_ptr<CSteamAPIContext> _ctx;
         AuthTicket _authTicket;
@@ -47,7 +49,7 @@ namespace Framework::External::Steam {
         ~Wrapper() = default;
 
         SteamError Init();
-        SteamError Shutdown();
+        void Shutdown() override;
 
         CSteamID GetSteamID() const;
         EPersonaState GetSteamUserState() const;

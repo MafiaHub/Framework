@@ -15,13 +15,14 @@
 #include <FileListTransfer.h>
 #include <DirectoryDeltaTransfer.h>
 #include <logging/logger.h>
+#include <utils/lifecycle.h>
 #include <unordered_map>
 #include <utility>
 #include <utils/hashing.h>
 #include <vector>
 
 namespace Framework::Networking {
-    class NetworkPeer {
+    class NetworkPeer : public Lifecycle {
       protected:
         SLNet::RakPeerInterface *_peer = nullptr;
         SLNet::Packet *_packet         = nullptr;
@@ -131,7 +132,7 @@ namespace Framework::Networking {
             return true;
         }
 
-        virtual void Update();
+        void Update() override;
         virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
 
         void SetUnknownPacketHandler(Messages::PacketCallback callback) {

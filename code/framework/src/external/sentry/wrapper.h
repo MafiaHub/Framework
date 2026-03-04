@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #include "errors.h"
 
 #include <sentry.h>
@@ -41,13 +43,10 @@ namespace Framework::External::Sentry {
         std::string _version;
     };
 
-    class Wrapper final {
-      private:
-        bool _valid = false;
-
+    class Wrapper final : public Framework::Lifecycle {
       public:
         SentryError Init(const std::string &, const std::string &);
-        SentryError Shutdown() const;
+        void Shutdown() override;
 
         SentryError CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
         SentryError CaptureEventException(const std::string &type, const std::string &message) const;
@@ -58,7 +57,7 @@ namespace Framework::External::Sentry {
         SentryError SetGameInformation(const GameInformation &) const;
 
         bool IsValid() const {
-            return _valid;
+            return IsInitialized();
         }
     };
 } // namespace Framework::External::Sentry

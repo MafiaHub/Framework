@@ -12,20 +12,18 @@
 #include "game_rpc/set_transform.h"
 
 namespace Framework::World {
-    EngineError ClientEngine::Init() {
-        const auto status = Engine::Init(nullptr); // assigned by OnConnect
-
-        if (status != EngineError::ENGINE_NONE) {
-            return status;
+    bool ClientEngine::Init() {
+        if (!Engine::Init(nullptr)) { // assigned by OnConnect
+            return false;
         }
 
         _queryGetEntityByServerID = _world->query_builder<Modules::Base::ServerID>().build();
 
-        return EngineError::ENGINE_NONE;
+        return true;
     }
 
-    EngineError ClientEngine::Shutdown() {
-        return Engine::Shutdown();
+    void ClientEngine::Shutdown() {
+        Engine::Shutdown();
     }
 
     void ClientEngine::Update() {

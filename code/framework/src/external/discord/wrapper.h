@@ -8,6 +8,7 @@
 
 #pragma once
 #include <utils/safe_win32.h>
+#include <utils/lifecycle.h>
 
 #include "errors.h"
 
@@ -16,23 +17,18 @@
 #include <string>
 
 namespace Framework::External::Discord {
-    class Wrapper final {
+    class Wrapper final : public Framework::Lifecycle {
       private:
-        bool _initialized = false;
         discord::User _user {};
         discord::Core *_instance {};
 
       public:
         using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
         Wrapper()              = default;
-        DiscordError Init(int64_t id);
-        DiscordError Shutdown();
+        [[nodiscard]] bool Init(int64_t id);
+        void Shutdown() override;
 
-        bool IsInitialized() const {
-            return _initialized;
-        }
-
-        DiscordError Update() const;
+        void Update() override;
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const;
         DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const;
 

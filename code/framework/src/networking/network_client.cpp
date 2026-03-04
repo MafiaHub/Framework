@@ -17,66 +17,67 @@ namespace Framework::Networking {
         Shutdown();
     }
 
-    ClientError NetworkClient::Init() {
+    bool NetworkClient::Init() {
         SLNet::SocketDescriptor sd {};
         const SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
-            return CLIENT_PEER_FAILED;
+            return false;
         }
 
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
 
-        return CLIENT_NONE;
+        _initialized = true;
+        return true;
     }
 
-    ClientError NetworkClient::Shutdown() {
+    void NetworkClient::Shutdown() {
         if (!_peer) {
-            return CLIENT_PEER_NULL;
+            return;
         }
         _registeredMessageCallbacks.clear();
         SLNet::RakPeerInterface::DestroyInstance(_peer);
         _peer = nullptr;
 
-        return CLIENT_NONE;
+        Lifecycle::Shutdown();
     }
 
     ClientError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
-        if (_state != DISCONNECTED) {
+        if (_state != PeerState::DISCONNECTED) {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
-            return CLIENT_ALREADY_CONNECTED;
+            return ClientError::CLIENT_ALREADY_CONNECTED;
         }
 
         if (!_peer) {
-            return CLIENT_PEER_NULL;
+            return ClientError::CLIENT_PEER_NULL;
         }
 
         if (!_peer->IsActive()) {
             Init();
         }
 
-        _state = CONNECTING;
+        _state = PeerState::CONNECTING;
 
         const SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
-            _state = DISCONNECTED;
-            return CLIENT_CONNECT_FAILED;
+            _state = PeerState::DISCONNECTED;
+            return ClientError::CLIENT_CONNECT_FAILED;
         }
 
-        return CLIENT_NONE;
+        return ClientError::CLIENT_NONE;
     }
 
     ClientError NetworkClient::Disconnect() {
         if (!_peer) {
-            return CLIENT_PEER_NULL;
+            return ClientError::CLIENT_PEER_NULL;
         }
 
-        if (_state == DISCONNECTED) {
+        if (_state == PeerState::DISCONNECTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Cannot disconnect, we are already disconnected.");
-            return CLIENT_NONE;
+            return ClientError::CLIENT_NONE;
         }
 
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
@@ -85,13 +86,13 @@ namespace Framework::Networking {
         if (_onPlayerDisconnectedCallback) {
             _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
         }
-        _state = DISCONNECTED;
+        _state = PeerState::DISCONNECTED;
 
-        return CLIENT_NONE;
+        return ClientError::CLIENT_NONE;
     }
 
     void NetworkClient::Update() {
-        if (_state != CONNECTING && _state != CONNECTED) {
+        if (_state != PeerState::CONNECTING && _state != PeerState::CONNECTED) {
             return;
         }
 

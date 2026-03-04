@@ -70,9 +70,9 @@ namespace Framework::External::ImGUI {
         return Error::IMGUI_NONE;
     }
 
-    Error Wrapper::Shutdown() {
+    void Wrapper::Shutdown() {
         if (!isContextInitialized) {
-            return Error::IMGUI_NONE;
+            return;
         }
 
         switch (_config.renderBackend) {
@@ -95,11 +95,11 @@ namespace Framework::External::ImGUI {
 
         ImGui::DestroyContext();
 
-        _initialized = isContextInitialized = false;
-        return Error::IMGUI_NONE;
+        isContextInitialized = false;
+        Lifecycle::Shutdown();
     }
 
-    Error Wrapper::Update() {
+    void Wrapper::Update() {
         std::scoped_lock _lock(_renderMtx);
 
         switch (_config.renderBackend) {
@@ -130,8 +130,6 @@ namespace Framework::External::ImGUI {
         }
 
         ImGui::Render();
-
-        return Error::IMGUI_NONE;
     }
 
     Error Wrapper::Render() {

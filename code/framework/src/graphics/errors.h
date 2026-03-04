@@ -11,9 +11,7 @@
 namespace Framework::Graphics {
     enum class RendererError {
         RENDERER_NONE,
-        RENDERER_UNKNOWN_BACKEND,
         RENDERER_ALREADY_INITIALIZED,
-        RENDERER_NOT_INITIALIZED,
         RENDERER_BACKEND_INIT_FAILED
     };
 } // namespace Framework::Graphics

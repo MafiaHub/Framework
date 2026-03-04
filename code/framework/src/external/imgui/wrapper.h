@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #include "errors.h"
 #include "utils/safe_win32.h"
 
@@ -38,13 +40,12 @@ namespace Framework::External::ImGUI {
         HWND windowHandle            = nullptr;
     };
 
-    class Wrapper final {
+    class Wrapper final : public Framework::Lifecycle {
       public:
         using RenderProc = fu2::function<void() const>;
 
       private:
         Config _config;
-        bool _initialized = false;
         std::queue<RenderProc> _renderQueue;
         std::recursive_mutex _renderMtx;
 
@@ -54,20 +55,16 @@ namespace Framework::External::ImGUI {
 
       public:
         Error Init(Config &config);
-        Error Shutdown();
+        void Shutdown() override;
 
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         static void ShowCursor(bool show);
 
-        Error Update();
+        void Update() override;
         Error Render();
 
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);
-        }
-
-        bool IsInitialized() const {
-            return _initialized;
         }
     };
 } // namespace Framework::External::ImGUI

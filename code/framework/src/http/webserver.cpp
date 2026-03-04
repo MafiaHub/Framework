@@ -55,17 +55,16 @@ namespace Framework::HTTP {
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Listening on {}", address.c_str());
 
         _webThread.detach();
+        _initialized = true;
         return true;
     }
 
-    bool Webserver::Shutdown() {
+    void Webserver::Shutdown() {
         if (!_running)
-            return true;
+            return;
         _running = false;
-        if (_webThread.joinable())
-            _webThread.join();
         _server->stop();
-        return true;
+        Lifecycle::Shutdown();
     }
 
     void Webserver::RegisterRequest(const char *path, const RequestCallback &callback) const {

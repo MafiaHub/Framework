@@ -13,12 +13,12 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    ServerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
+    bool NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
         auto newSocketSd                  = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
         const SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != SLNet::RAKNET_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
-            return SERVER_PEER_FAILED;
+            return false;
         }
 
         if (!password.empty()) {
@@ -32,7 +32,8 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
 
-        return SERVER_NONE;
+        _initialized = true;
+        return true;
     }
 
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
@@ -64,14 +65,14 @@ namespace Framework::Networking {
         return false;
     }
 
-    ServerError NetworkServer::Shutdown() const {
+    void NetworkServer::Shutdown() {
         if (!_peer) {
-            return SERVER_PEER_NULL;
+            return;
         }
 
         _peer->Shutdown(1000);
         //        SLNet::RakPeerInterface::DestroyInstance(_peer);
-        return SERVER_NONE;
+        Lifecycle::Shutdown();
     }
 
     int NetworkServer::GetPing(SLNet::RakNetGUID guid) const {

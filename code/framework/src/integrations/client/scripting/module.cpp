@@ -98,6 +98,7 @@ namespace Framework::Integrations::Client::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
             "Client scripting module initialized with standalone V8 engine");
 
+        _initialized = true;
         return true;
     }
 
@@ -132,7 +133,7 @@ namespace Framework::Integrations::Client::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }
 
-    bool ClientScriptingModule::Shutdown() {
+    void ClientScriptingModule::Shutdown() {
         if (_resourceManager) {
             _resourceManager->StopAll();
             _resourceManager.reset();
@@ -146,7 +147,7 @@ namespace Framework::Integrations::Client::Scripting {
         _serverResourceList.clear();
         _resourcesSynced = false;
 
-        return true;
+        Lifecycle::Shutdown();
     }
 
     void ClientScriptingModule::Reset() {

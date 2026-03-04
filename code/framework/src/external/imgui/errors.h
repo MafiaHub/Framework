@@ -13,8 +13,6 @@ namespace Framework::External::ImGUI {
         IMGUI_NONE,
         IMGUI_NOT_INITIALIZED,
         IMGUI_RENDERER_NOT_SET,
-        IMGUI_WINDOW_NOT_SET,
-        IMGUI_BACKEND_MISMATCH,
-        IMGUI_GENERIC_ERROR
+        IMGUI_WINDOW_NOT_SET
     };
 } // namespace Framework::External::ImGUI

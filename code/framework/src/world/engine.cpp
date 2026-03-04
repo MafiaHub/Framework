@@ -11,7 +11,7 @@
 #include "modules/base.hpp"
 
 namespace Framework::World {
-    EngineError Engine::Init(Networking::NetworkPeer *networkPeer) {
+    bool Engine::Init(Networking::NetworkPeer *networkPeer) {
         CoreModules::SetWorldEngine(this);
         _networkPeer = networkPeer;
         _world       = std::make_unique<flecs::world>();
@@ -22,12 +22,13 @@ namespace Framework::World {
         _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
 
-        return EngineError::ENGINE_NONE;
+        _initialized = true;
+        return true;
     }
 
-    EngineError Engine::Shutdown() {
+    void Engine::Shutdown() {
         CoreModules::SetWorldEngine(nullptr);
-        return EngineError::ENGINE_NONE;
+        Lifecycle::Shutdown();
     }
 
     void Engine::Update() {

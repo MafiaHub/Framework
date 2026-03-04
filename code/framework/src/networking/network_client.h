@@ -45,8 +45,8 @@ namespace Framework::Networking {
 
         ~NetworkClient();
 
-        ClientError Init();
-        ClientError Shutdown();
+        [[nodiscard]] bool Init();
+        void Shutdown() override;
 
         void Update() override;
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;

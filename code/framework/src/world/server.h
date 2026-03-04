@@ -9,7 +9,6 @@
 #pragma once
 
 #include "engine.h"
-#include "errors.h"
 
 #include <flecs/flecs.h>
 
@@ -72,9 +71,9 @@ namespace Framework::World {
             float tickRegulatorInterval                  = 3.0f;
         };
 
-        EngineError Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg);
+        [[nodiscard]] bool Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg);
 
-        EngineError Shutdown() override;
+        void Shutdown() override;
 
         void Update() override;
 

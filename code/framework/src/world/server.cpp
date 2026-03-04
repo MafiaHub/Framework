@@ -11,11 +11,9 @@
 #include "utils/time.h"
 
 namespace Framework::World {
-    EngineError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg) {
-        const auto status = Engine::Init(networkPeer);
-
-        if (status != EngineError::ENGINE_NONE) {
-            return status;
+    bool ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg) {
+        if (!Engine::Init(networkPeer)) {
+            return false;
         }
 
         _findAllResourceEntities = _world->query_builder<Modules::Base::RemovedOnResourceReload>().build();
@@ -192,11 +190,11 @@ namespace Framework::World {
                 }
             });
 
-        return EngineError::ENGINE_NONE;
+        return true;
     }
 
-    EngineError ServerEngine::Shutdown() {
-        return Engine::Shutdown();
+    void ServerEngine::Shutdown() {
+        Engine::Shutdown();
     }
 
     void ServerEngine::Update() {

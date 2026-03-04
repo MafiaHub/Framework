@@ -73,6 +73,7 @@ namespace Framework::Integrations::Server::Scripting {
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
             "JS Server scripting module initialized with Node.js engine");
 
+        _initialized = true;
         return true;
     }
 
@@ -134,7 +135,7 @@ namespace Framework::Integrations::Server::Scripting {
         return true;
     }
 
-    bool ServerScriptingModule::Shutdown() {
+    void ServerScriptingModule::Shutdown() {
         _resourceManager.reset();
 
         if (_nodeEngine) {
@@ -142,7 +143,7 @@ namespace Framework::Integrations::Server::Scripting {
             _nodeEngine.reset();
         }
 
-        return true;
+        Lifecycle::Shutdown();
     }
 
     void ServerScriptingModule::Update() {

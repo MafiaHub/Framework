@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
 #include <utils/safe_win32.h>
 
 #include <memory>
@@ -27,7 +28,7 @@ namespace Framework::GUI {
         int height;
     };
 
-    class Manager {
+    class Manager : public Framework::Lifecycle {
       private:
         ViewportConfiguration _viewportConfiguration {};
         CefRefPtr<CEF::App> _cefApp;
@@ -45,6 +46,7 @@ namespace Framework::GUI {
         ~Manager();
 
         bool Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
+        void Shutdown() override;
 
         int CreateView(std::string url, int width, int height, int offsetX = 0, int offsetY = 0);
         bool DestroyView(int id);
@@ -56,7 +58,7 @@ namespace Framework::GUI {
         std::vector<GUI::View *> GetAllViews() const;
         std::vector<GUI::View *> GetGCViews() const;
 
-        void Update();
+        void Update() override;
         void Render();
 
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;

@@ -23,17 +23,23 @@ namespace Framework::GUI {
     }
 
     Manager::~Manager() {
-        // Destroy the views first (closes browsers)
+        if (IsInitialized()) {
+            Shutdown();
+        }
+    }
+
+    void Manager::Shutdown() {
         for (auto &view : _views) {
             view.reset();
         }
         _views.clear();
 
-        // Shutdown CEF
         if (_cefInitialized) {
             CefShutdown();
             _cefInitialized = false;
         }
+
+        Lifecycle::Shutdown();
     }
 
     bool Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated) {
@@ -69,6 +75,7 @@ namespace Framework::GUI {
         }
 
         _cefInitialized = true;
+        _initialized    = true;
         Framework::Logging::GetLogger("Web")->info("CEF initialized successfully");
         return true;
     }

@@ -7,6 +7,7 @@
 
 #include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
+#include <utils/lifecycle.h>
 #include <world/client.h>
 
 namespace Framework::Integrations::Client::Scripting {
@@ -36,7 +37,7 @@ namespace Framework::Integrations::Client::Scripting {
      * Uses standalone V8 engine for client-side JavaScript execution.
      * No Node.js APIs are available at the binary level.
      */
-    class ClientScriptingModule final {
+    class ClientScriptingModule final : public Framework::Lifecycle {
       public:
         explicit ClientScriptingModule(std::shared_ptr<World::ClientEngine> world);
         ~ClientScriptingModule();
@@ -52,7 +53,7 @@ namespace Framework::Integrations::Client::Scripting {
          * Shutdown the V8 engine.
          * Use this only when the client is truly closing.
          */
-        bool Shutdown();
+        void Shutdown() override;
 
         /**
          * Reset the scripting module for reconnection.
@@ -65,7 +66,7 @@ namespace Framework::Integrations::Client::Scripting {
          * Update tick - process pending operations.
          * Call this from the game loop.
          */
-        void Update();
+        void Update() override;
 
         /**
          * Get the V8 engine.

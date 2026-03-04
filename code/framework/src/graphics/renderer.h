@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #include "utils/safe_win32.h"
 
 #include "errors.h"
@@ -56,7 +58,7 @@ namespace Framework::Graphics {
         } d3d12;
     };
 
-    class Renderer {
+    class Renderer : public Framework::Lifecycle {
       private:
         RendererConfiguration _config {};
         RendererState _state     = RendererState::STATE_NOT_INITIALIZED;
@@ -68,13 +70,11 @@ namespace Framework::Graphics {
         D3D11Backend *_d3d11Backend {};
         D3D12Backend *_d3d12Backend {};
 
-        bool _initialized = false;
-
       public:
         RendererError Init(RendererConfiguration);
-        RendererError Shutdown();
+        void Shutdown() override;
 
-        void Update() const;
+        void Update() override;
         void Render();
         void Paint();
 
@@ -100,10 +100,6 @@ namespace Framework::Graphics {
 
         void SetWindow(HWND ptr) {
             _window = ptr;
-        }
-
-        bool IsInitialized() const {
-            return _initialized;
         }
 
         RendererBackend GetBackendType() const {

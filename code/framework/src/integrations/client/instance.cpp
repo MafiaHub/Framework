@@ -101,7 +101,7 @@ namespace Framework::Integrations::Client {
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
-                if (_presence->Init(opts.discordAppId) != Framework::External::DiscordError::DISCORD_NONE) {
+                if (!_presence->Init(opts.discordAppId)) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
                 }
                 else {
@@ -119,7 +119,7 @@ namespace Framework::Integrations::Client {
         }
 
         if (_worldEngine) {
-            if (_worldEngine->Init() != Framework::World::EngineError::ENGINE_NONE) {
+            if (!_worldEngine->Init()) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }

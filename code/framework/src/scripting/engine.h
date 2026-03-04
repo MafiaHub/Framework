@@ -11,6 +11,8 @@
 #include <string>
 #include <functional>
 
+#include <utils/lifecycle.h>
+
 namespace Framework::Scripting {
 
     /**
@@ -18,16 +20,9 @@ namespace Framework::Scripting {
      * Two implementations exist: NodeEngine (server, full Node.js) and
      * V8Engine (client, standalone V8). Shared logic lives here.
      */
-    class Engine {
+    class Engine : public Framework::Lifecycle {
       public:
         using SDKRegisterCallback = std::function<void(Engine *)>;
-
-        Engine() = default;
-        virtual ~Engine() = default;
-
-        // Non-copyable
-        Engine(const Engine &) = delete;
-        Engine &operator=(const Engine &) = delete;
 
         /**
          * Initialize the JavaScript engine.
@@ -38,7 +33,7 @@ namespace Framework::Scripting {
         /**
          * Shutdown the JavaScript engine.
          */
-        virtual void Shutdown() = 0;
+        void Shutdown() override = 0;
 
         /**
          * Execute a JavaScript string.
@@ -77,13 +72,6 @@ namespace Framework::Scripting {
         }
 
         /**
-         * Check if engine is initialized.
-         */
-        bool IsInitialized() const {
-            return _initialized;
-        }
-
-        /**
          * Get the V8 isolate.
          */
         virtual v8::Isolate *GetIsolate() const = 0;
@@ -104,7 +92,6 @@ namespace Framework::Scripting {
         v8::Local<v8::Object> GetCoreObject() const;
 
       protected:
-        bool _initialized = false;
         std::string _lastError;
         SDKRegisterCallback _sdkRegisterCallback;
     };

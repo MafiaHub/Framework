@@ -8,22 +8,24 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #include <networking/network_client.h>
 
 namespace Framework::Integrations::Client::Networking {
-    class Engine {
+    class Engine : public Framework::Lifecycle {
       private:
         std::unique_ptr<Framework::Networking::NetworkClient> _networkClient {};
 
       public:
         Engine();
 
-        bool Init() const;
-        bool Shutdown() const;
+        [[nodiscard]] bool Init();
+        void Shutdown() override;
 
         bool Connect(const std::string &, const int32_t, const std::string password = "") const;
 
-        void Update() const;
+        void Update() override;
 
         Framework::Networking::NetworkClient *GetNetworkClient() const {
             return _networkClient.get();

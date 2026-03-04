@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #include <atomic>
 #include <cstdint>
 #include <function2.hpp>
@@ -22,12 +24,12 @@ namespace Framework::HTTP {
     using RequestCallback = fu2::function<void(const httplib::Request &, httplib::Response &) const>;
     using PostCallback = fu2::function<void(const httplib::Request &, httplib::Response &, const httplib::ContentReader &) const>;
 
-    class Webserver {
+    class Webserver : public Framework::Lifecycle {
       public:
         Webserver();
         bool Init(const std::string &host, int32_t port, const std::string &);
 
-        bool Shutdown();
+        void Shutdown() override;
 
         void RegisterRequest(const char *, const RequestCallback &) const;
         void RegisterPostRequest(const char *, const PostCallback &) const;

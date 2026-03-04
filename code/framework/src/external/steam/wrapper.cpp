@@ -39,12 +39,13 @@ namespace Framework::External::Steam {
             return SteamError::STEAM_CONTEXT_INIT_FAILED;
         }
 
+        _initialized = true;
         return SteamError::STEAM_NONE;
     }
 
-    SteamError Wrapper::Shutdown() {
+    void Wrapper::Shutdown() {
         SteamAPI_Shutdown();
-        return SteamError::STEAM_NONE;
+        Lifecycle::Shutdown();
     }
 
     CSteamID Wrapper::GetSteamID() const {

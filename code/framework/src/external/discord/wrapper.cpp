@@ -11,10 +11,10 @@
 #include <logging/logger.h>
 
 namespace Framework::External::Discord {
-    DiscordError Wrapper::Init(int64_t id) {
+    bool Wrapper::Init(int64_t id) {
         const auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
         if (result != discord::Result::Ok) {
-            return DiscordError::DISCORD_CORE_CREATE_FAILED;
+            return false;
         }
 
         _instance->UserManager().OnCurrentUserUpdate.Connect([this]() {
@@ -23,27 +23,25 @@ namespace Framework::External::Discord {
         });
 
         _initialized = true;
-        return DiscordError::DISCORD_NONE;
+        return true;
     }
 
-    DiscordError Wrapper::Shutdown() {
+    void Wrapper::Shutdown() {
         if (!_instance) {
-            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
+            return;
         }
 
         _instance->UserManager().OnCurrentUserUpdate.DisconnectAll();
-        _initialized = false;
 
-        return DiscordError::DISCORD_NONE;
+        Lifecycle::Shutdown();
     }
 
-    DiscordError Wrapper::Update() const {
+    void Wrapper::Update() {
         if (!_instance) {
-            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
+            return;
         }
 
         _instance->RunCallbacks();
-        return DiscordError::DISCORD_NONE;
     }
 
     DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const {

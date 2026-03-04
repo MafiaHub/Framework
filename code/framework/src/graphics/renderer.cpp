@@ -49,9 +49,9 @@ namespace Framework::Graphics {
         return RendererError::RENDERER_NONE;
     }
 
-    RendererError Renderer::Shutdown() {
+    void Renderer::Shutdown() {
         if (!_initialized) {
-            return RendererError::RENDERER_NOT_INITIALIZED;
+            return;
         }
 
         if (_d3d11Backend) {
@@ -64,11 +64,10 @@ namespace Framework::Graphics {
             _d3d12Backend->Shutdown();
         }
 
-        _initialized = false;
-        return RendererError::RENDERER_NONE;
+        Lifecycle::Shutdown();
     }
 
-    void Renderer::Update() const {
+    void Renderer::Update() {
         if (_d3d11Backend) {
             _d3d11Backend->Update();
         }

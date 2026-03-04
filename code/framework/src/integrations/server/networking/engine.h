@@ -8,20 +8,22 @@
 
 #pragma once
 
+#include <utils/lifecycle.h>
+
 #include <networking/network_server.h>
 
 namespace Framework::Integrations::Server::Networking {
-    class Engine {
+    class Engine : public Framework::Lifecycle {
       private:
         std::unique_ptr<Framework::Networking::NetworkServer> _networkServer {};
 
       public:
         Engine();
 
-        bool Init(int32_t, std::string &, int32_t, std::string &) const;
-        bool Shutdown() const;
+        [[nodiscard]] bool Init(int32_t, std::string &, int32_t, std::string &);
+        void Shutdown() override;
 
-        void Update() const;
+        void Update() override;
 
         Framework::Networking::NetworkServer *GetNetworkServer() const {
             return _networkServer.get();

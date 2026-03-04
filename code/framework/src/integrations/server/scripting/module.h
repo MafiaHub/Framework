@@ -6,6 +6,7 @@
 
 #include <scripting/node_engine.h>
 #include <scripting/resource/resource_manager.h>
+#include <utils/lifecycle.h>
 #include <world/server.h>
 
 namespace Framework::Integrations::Server::Scripting {
@@ -24,7 +25,7 @@ namespace Framework::Integrations::Server::Scripting {
      * Uses Node.js for full server-side JavaScript capabilities including
      * require(), async/await, npm packages, etc.
      */
-    class ServerScriptingModule final {
+    class ServerScriptingModule final : public Framework::Lifecycle {
       public:
         explicit ServerScriptingModule(std::shared_ptr<World::ServerEngine> world);
         ~ServerScriptingModule();
@@ -44,13 +45,13 @@ namespace Framework::Integrations::Server::Scripting {
         /**
          * Shutdown the Node.js engine.
          */
-        bool Shutdown();
+        void Shutdown() override;
 
         /**
          * Update tick - process Node.js event loop and scheduled restarts.
          * Call this from the game loop.
          */
-        void Update();
+        void Update() override;
 
         /**
          * Get the Node.js engine.

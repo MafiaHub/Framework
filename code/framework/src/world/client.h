@@ -9,7 +9,6 @@
 #pragma once
 
 #include "engine.h"
-#include "errors.h"
 
 #include <flecs/flecs.h>
 
@@ -51,9 +50,9 @@ namespace Framework::World {
         void InitRPCs(Networking::NetworkPeer *peer) const;
 
       public:
-        EngineError Init();
+        [[nodiscard]] bool Init();
 
-        EngineError Shutdown() override;
+        void Shutdown() override;
 
         void OnConnect(Networking::NetworkPeer *peer, float tickInterval);
         void OnDisconnect();

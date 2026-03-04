@@ -8,8 +8,9 @@
 
 #pragma once
 
-#include "errors.h"
 #include "modules/base.hpp"
+
+#include <utils/lifecycle.h>
 
 #include "networking/network_peer.h"
 
@@ -43,7 +44,7 @@ namespace Framework::Scripting {
 }
 
 namespace Framework::World {
-    class Engine {
+    class Engine : public Lifecycle {
       private:
         friend class Framework::Scripting::ResourceManager;
         void PurgeAllResourceEntities() const;
@@ -58,11 +59,11 @@ namespace Framework::World {
         Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:
-        EngineError Init(Networking::NetworkPeer *networkPeer);
+        [[nodiscard]] bool Init(Networking::NetworkPeer *networkPeer);
 
-        virtual EngineError Shutdown();
+        void Shutdown() override;
 
-        virtual void Update();
+        void Update() override;
 
         flecs::entity GetEntityByGUID(uint64_t guid) const;
         flecs::entity WrapEntity(flecs::entity_t serverID) const;
