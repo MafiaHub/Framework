@@ -251,12 +251,12 @@ namespace Framework::Integrations::Client {
             _networkingEngine->Update();
         }
 
-        if (_worldEngine) {
-            _worldEngine->Update();
-        }
-        
         if (_scriptingModule) {
             _scriptingModule->Update();
+        }
+
+        if (_worldEngine) {
+            _worldEngine->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
