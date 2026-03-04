@@ -44,14 +44,14 @@ namespace Framework::Networking {
         Lifecycle::Shutdown();
     }
 
-    ClientError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
+    ConnectionError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
         if (_state != PeerState::DISCONNECTED) {
             Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
-            return ClientError::CLIENT_ALREADY_CONNECTED;
+            return ConnectionError::CONNECTION_ALREADY_CONNECTED;
         }
 
         if (!_peer) {
-            return ClientError::CLIENT_PEER_NULL;
+            return ConnectionError::CONNECTION_PEER_NULL;
         }
 
         if (!_peer->IsActive()) {
@@ -64,20 +64,20 @@ namespace Framework::Networking {
         if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             _state = PeerState::DISCONNECTED;
-            return ClientError::CLIENT_CONNECT_FAILED;
+            return ConnectionError::CONNECTION_CONNECT_FAILED;
         }
 
-        return ClientError::CLIENT_NONE;
+        return ConnectionError::CONNECTION_NONE;
     }
 
-    ClientError NetworkClient::Disconnect() {
+    ConnectionError NetworkClient::Disconnect() {
         if (!_peer) {
-            return ClientError::CLIENT_PEER_NULL;
+            return ConnectionError::CONNECTION_PEER_NULL;
         }
 
         if (_state == PeerState::DISCONNECTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Cannot disconnect, we are already disconnected.");
-            return ClientError::CLIENT_NONE;
+            return ConnectionError::CONNECTION_NONE;
         }
 
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
@@ -88,7 +88,7 @@ namespace Framework::Networking {
         }
         _state = PeerState::DISCONNECTED;
 
-        return ClientError::CLIENT_NONE;
+        return ConnectionError::CONNECTION_NONE;
     }
 
     void NetworkClient::Update() {

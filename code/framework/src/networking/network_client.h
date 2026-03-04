@@ -51,9 +51,9 @@ namespace Framework::Networking {
         void Update() override;
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
 
-        ClientError Connect(const std::string &host, int32_t port, const std::string &password = "");
+        ConnectionError Connect(const std::string &host, int32_t port, const std::string &password = "");
 
-        ClientError Disconnect();
+        ConnectionError Disconnect();
 
         int GetPing() const;
 

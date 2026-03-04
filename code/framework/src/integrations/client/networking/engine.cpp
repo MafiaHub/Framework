@@ -29,7 +29,7 @@ namespace Framework::Integrations::Client::Networking {
             return false;
         }
 
-        if (_networkClient->Connect(host, port, password) != Framework::Networking::ClientError::CLIENT_NONE) {
+        if (_networkClient->Connect(host, port, password) != Framework::Networking::ConnectionError::CONNECTION_NONE) {
             return false;
         }
 

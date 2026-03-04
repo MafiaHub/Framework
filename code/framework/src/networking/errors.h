@@ -12,12 +12,12 @@
 #include <unordered_map>
 
 namespace Framework::Networking {
-    enum class ClientError {
-        CLIENT_NONE,
-        CLIENT_PEER_FAILED,
-        CLIENT_PEER_NULL,
-        CLIENT_ALREADY_CONNECTED,
-        CLIENT_CONNECT_FAILED
+    enum class ConnectionError {
+        CONNECTION_NONE,
+        CONNECTION_PEER_FAILED,
+        CONNECTION_PEER_NULL,
+        CONNECTION_ALREADY_CONNECTED,
+        CONNECTION_CONNECT_FAILED
     };
 
     enum class NetworkPeerError {
