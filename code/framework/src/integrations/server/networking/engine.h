@@ -20,7 +20,7 @@ namespace Framework::Integrations::Server::Networking {
       public:
         Engine();
 
-        [[nodiscard]] Framework::Networking::NetworkPeerError Init(int32_t, std::string &, int32_t, std::string &);
+        [[nodiscard]] Framework::Networking::NetworkPeerError Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password);
         void Shutdown() override;
 
         void Update() override;

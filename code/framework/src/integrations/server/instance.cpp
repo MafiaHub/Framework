@@ -100,7 +100,7 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize our networking engine
-        if (_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword) != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
+        if (_networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword) != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }

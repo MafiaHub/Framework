@@ -13,7 +13,7 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    NetworkPeerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
+    NetworkPeerError NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
         auto newSocketSd                  = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
         const SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != SLNet::RAKNET_STARTED) {

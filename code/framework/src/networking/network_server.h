@@ -34,7 +34,7 @@ namespace Framework::Networking {
       public:
         NetworkServer(): NetworkPeer() {}
 
-        [[nodiscard]] NetworkPeerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
+        [[nodiscard]] NetworkPeerError Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password = "");
         void Shutdown() override;
 
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;

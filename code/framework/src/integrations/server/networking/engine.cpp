@@ -15,8 +15,8 @@ namespace Framework::Integrations::Server::Networking {
         _networkServer = std::make_unique<Framework::Networking::NetworkServer>();
     }
 
-    Framework::Networking::NetworkPeerError Engine::Init(int32_t port, std::string &host, int32_t maxPlayers, std::string &password) {
-        const auto result = _networkServer->Init(port, host, maxPlayers, password);
+    Framework::Networking::NetworkPeerError Engine::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
+        const auto result = _networkServer->Init(host, port, maxPlayers, password);
         if (result != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to init the inner networking engine");
             return result;
