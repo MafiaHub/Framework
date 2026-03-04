@@ -48,7 +48,7 @@ namespace Framework::Utils {
         virtual const char *GetDefaultConfig();
 
         template <typename T>
-        T Get(std::string_view field) {
+        T Get(std::string_view field) const {
             if (!_lastError.empty())
                 return {};
             std::string key(field);
@@ -59,7 +59,7 @@ namespace Framework::Utils {
         }
 
         template <typename T>
-        T GetDefault(std::string_view field, T defaultValue) {
+        T GetDefault(std::string_view field, T defaultValue) const {
             if (!_lastError.empty())
                 return {};
 
