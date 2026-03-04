@@ -26,6 +26,8 @@
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
 
+#include <utils/lifecycle.h>
+
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -80,9 +82,8 @@ namespace Framework::Integrations::Server {
 
     using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
 
-    class Instance {
+    class Instance : public Framework::Lifecycle {
       private:
-        std::atomic<bool> _alive;
         std::atomic<bool> _shuttingDown;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 
@@ -124,7 +125,7 @@ namespace Framework::Integrations::Server {
         ~Instance();
 
         [[nodiscard]] ServerError Init(InstanceOptions &);
-        ServerError Shutdown();
+        void Shutdown() override;
 
         virtual void PostInit() {}
         
@@ -132,21 +133,17 @@ namespace Framework::Integrations::Server {
         
         virtual void PostUpdate() {}
 
-        virtual void PreShutdown();
+        virtual void PreShutdown() {}
 
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
         }
 
-        void Update();
+        void Update() override;
 
         void Run();
 
         void OnSignal(sig_signal_t);
-
-        bool IsAlive() const {
-            return _alive;
-        }
 
         void SetOnPlayerConnectCallback(OnPlayerConnectionCallback onPlayerConnectCallback) {
             _onPlayerConnectCallback = std::move(onPlayerConnectCallback);

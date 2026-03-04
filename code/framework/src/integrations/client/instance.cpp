@@ -215,7 +215,7 @@ namespace Framework::Integrations::Client {
         return ClientError::CLIENT_NONE;
     }
 
-    ClientError Instance::Shutdown() {
+    void Instance::Shutdown() {
         PreShutdown();
 
         if (_renderer && _renderer->IsInitialized()) {
@@ -244,7 +244,7 @@ namespace Framework::Integrations::Client {
         CoreModules::SetInput(nullptr);
         CoreModules::Reset();
 
-        return ClientError::CLIENT_NONE;
+        Lifecycle::Shutdown();
     }
 
     void Instance::Update() {

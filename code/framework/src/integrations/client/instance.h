@@ -10,6 +10,7 @@
 
 #include "errors.h"
 
+#include <utils/lifecycle.h>
 #include <external/discord/wrapper.h>
 #include <external/imgui/wrapper.h>
 #include <function2.hpp>
@@ -85,9 +86,8 @@ namespace Framework::Integrations::Client {
         uint16_t setID;
     };
 
-    class Instance {
+    class Instance : public Framework::Lifecycle {
       private:
-        bool _initialized       = false;
         bool _renderInitialized = false;
         InstanceOptions _opts;
 
@@ -131,15 +131,15 @@ namespace Framework::Integrations::Client {
         virtual ~Instance();
 
         [[nodiscard]] ClientError Init(InstanceOptions &);
-        ClientError Shutdown();
+        void Shutdown() override;
 
         void Render();
-        void Update();
+        void Update() override;
 
-        virtual bool PostInit()    = 0;
-        virtual bool PreShutdown() = 0;
-        virtual void PostUpdate()  = 0;
-        virtual void PostRender()  = 0;
+        virtual void PostInit() {}
+        virtual void PostUpdate() {}
+        virtual void PostRender() {}
+        virtual void PreShutdown() {}
 
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
@@ -151,10 +151,6 @@ namespace Framework::Integrations::Client {
 
         InstanceOptions *GetOptions() {
             return &_opts;
-        }
-
-        bool IsInitialized() const {
-            return _initialized;
         }
 
         CurrentState GetCurrentState() const {

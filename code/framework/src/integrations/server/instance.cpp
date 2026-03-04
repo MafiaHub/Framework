@@ -33,7 +33,7 @@
 #include <csignal>
 
 namespace Framework::Integrations::Server {
-    Instance::Instance(): _alive(false), _shuttingDown(false) {
+    Instance::Instance(): _shuttingDown(false) {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
@@ -172,7 +172,7 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
 
-        _alive        = true;
+        _initialized  = true;
         _shuttingDown = false;
         return ServerError::SERVER_NONE;
     }
@@ -440,7 +440,6 @@ namespace Framework::Integrations::Server {
             "stop", {},
             [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
-                PreShutdown();
                 Shutdown();
             },
             "Stop the server");
@@ -490,12 +489,18 @@ namespace Framework::Integrations::Server {
         }
     }
 
-    ServerError Instance::Shutdown() {
+    void Instance::Shutdown() {
         if (_shuttingDown) {
-            return ServerError::SERVER_NONE;
+            return;
         }
 
         _shuttingDown = true;
+
+        PreShutdown();
+
+        if (_scriptingModule) {
+            _scriptingModule->PreShutdown();
+        }
 
         if (_networkingEngine) {
             _networkingEngine->Shutdown();
@@ -527,8 +532,7 @@ namespace Framework::Integrations::Server {
         CoreModules::SetResourceManager(nullptr);
         CoreModules::Reset();
 
-        _alive = false;
-        return ServerError::SERVER_NONE;
+        Lifecycle::Shutdown();
     }
 
     void Instance::Update() {
@@ -569,14 +573,14 @@ namespace Framework::Integrations::Server {
         }
     }
     void Instance::Run() {
-        while (_alive) {
+        while (_initialized) {
             Update();
             std::this_thread::yield();
         }
     }
 
     void Instance::OnSignal(const sig_signal_t signal) {
-        if (!_alive || _shuttingDown) {
+        if (!_initialized || _shuttingDown) {
             return;
         }
 
@@ -586,7 +590,6 @@ namespace Framework::Integrations::Server {
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received shutdown signal. In progress...");
 
-        PreShutdown();
         Shutdown();
     }
 
@@ -594,12 +597,6 @@ namespace Framework::Integrations::Server {
         // JS bindings are registered by ServerScriptingModule::RegisterFrameworkBindings
         // This method is called to allow mod-specific customization
         ModuleRegister(engine);
-    }
-
-    void Instance::PreShutdown() {
-        if (_scriptingModule) {
-            _scriptingModule->PreShutdown();
-        }
     }
 
 } // namespace Framework::Integrations::Server
