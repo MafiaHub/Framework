@@ -33,6 +33,9 @@ namespace Framework::External::Discord {
 
         _instance->UserManager().OnCurrentUserUpdate.DisconnectAll();
 
+        delete _instance;
+        _instance = nullptr;
+
         Lifecycle::Shutdown();
     }
 

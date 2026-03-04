@@ -85,11 +85,7 @@ namespace Framework::Integrations::Client {
         _webManager = std::make_unique<Framework::GUI::Manager>();
     }
 
-    Instance::~Instance() {
-        if (_scriptingModule) {
-            _scriptingModule->Shutdown();
-        }
-    }
+    Instance::~Instance() = default;
 
     ClientError Instance::Init(InstanceOptions &opts) {
         _opts = opts;
@@ -218,6 +214,10 @@ namespace Framework::Integrations::Client {
     void Instance::Shutdown() {
         PreShutdown();
 
+        if (_scriptingModule) {
+            _scriptingModule->PreShutdown();
+        }
+
         if (_renderer && _renderer->IsInitialized()) {
             _renderer->Shutdown();
         }
@@ -228,6 +228,10 @@ namespace Framework::Integrations::Client {
 
         if (_networkingEngine) {
             _networkingEngine->Shutdown();
+        }
+
+        if (_scriptingModule) {
+            _scriptingModule->Shutdown();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {

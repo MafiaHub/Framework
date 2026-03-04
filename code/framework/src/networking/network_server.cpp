@@ -71,7 +71,8 @@ namespace Framework::Networking {
         }
 
         _peer->Shutdown(1000);
-        //        SLNet::RakPeerInterface::DestroyInstance(_peer);
+        SLNet::RakPeerInterface::DestroyInstance(_peer);
+        _peer = nullptr;
         Lifecycle::Shutdown();
     }
 
