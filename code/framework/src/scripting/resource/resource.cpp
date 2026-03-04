@@ -91,12 +91,12 @@ namespace Framework::Scripting {
         return _manifest;
     }
 
-    bool Resource::HasExport(const std::string &exportName) const {
+    bool Resource::HasExport(std::string_view exportName) const {
         const auto &exports = _manifest.GetMafiaHubConfig().exports;
         return std::find(exports.begin(), exports.end(), exportName) != exports.end();
     }
 
-    bool Resource::DependsOn(const std::string &resourceName) const {
+    bool Resource::DependsOn(std::string_view resourceName) const {
         const auto &deps = _manifest.GetMafiaHubConfig().resourceDependencies;
         for (const auto &dep : deps) {
             if (dep.name == resourceName) {
@@ -210,7 +210,7 @@ namespace Framework::Scripting {
         return delayMs;
     }
 
-    bool Resource::RegisterExport(const std::string &name, v8::Local<v8::Value> value) {
+    bool Resource::RegisterExport(std::string_view name, v8::Local<v8::Value> value) {
         if (!HasExport(name)) {
             return false;
         }
@@ -220,11 +220,11 @@ namespace Framework::Scripting {
         }
 
         std::scoped_lock lock(_exportsMutex);
-        _exports[name].Reset(_isolate, value);
+        _exports[std::string(name)].Reset(_isolate, value);
         return true;
     }
 
-    void Resource::UnregisterExport(const std::string &name) {
+    void Resource::UnregisterExport(std::string_view name) {
         std::scoped_lock lock(_exportsMutex);
         auto it = _exports.find(name);
         if (it != _exports.end()) {
@@ -241,7 +241,7 @@ namespace Framework::Scripting {
         _exports.clear();
     }
 
-    bool Resource::HasRegisteredExport(const std::string &name) const {
+    bool Resource::HasRegisteredExport(std::string_view name) const {
         std::scoped_lock lock(_exportsMutex);
         return _exports.contains(name);
     }
@@ -256,7 +256,7 @@ namespace Framework::Scripting {
         return names;
     }
 
-    v8::Local<v8::Value> Resource::GetExportValue(const std::string &name) const {
+    v8::Local<v8::Value> Resource::GetExportValue(std::string_view name) const {
         std::scoped_lock lock(_exportsMutex);
         auto it = _exports.find(name);
         if (it == _exports.end() || it->second.IsEmpty()) {

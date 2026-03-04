@@ -42,7 +42,7 @@ namespace Framework::GUI {
         return text;
     }
 
-    void SystemClipboard::WritePlainText(const std::string &text) {
+    void SystemClipboard::WritePlainText(std::string_view text) {
         if (!OpenClipboard(nullptr)) {
             return;
         }
@@ -50,7 +50,8 @@ namespace Framework::GUI {
         const size_t size   = text.length() + 1;
         HGLOBAL hClipboardData = GlobalAlloc(GMEM_DDESHARE, size);
         const auto pchData  = static_cast<char *>(GlobalLock(hClipboardData));
-        memcpy(pchData, text.c_str(), size);
+        memcpy(pchData, text.data(), text.length());
+        pchData[text.length()] = '\0';
         GlobalUnlock(hClipboardData);
         SetClipboardData(CF_TEXT, hClipboardData);
         CloseClipboard();

@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -52,7 +53,7 @@ namespace Framework::Scripting {
 
         [[nodiscard]] ScriptingError Init() override;
         void Shutdown() override;
-        bool ExecuteFile(const std::string &filepath) override;
+        bool ExecuteFile(std::string_view filepath) override;
 
         /**
          * Process pending timers and microtasks.
@@ -76,10 +77,10 @@ namespace Framework::Scripting {
         void ClearModuleCache();
 
         // Module loader internals (used by require callback)
-        v8::MaybeLocal<v8::Value> LoadModule(const std::string &requestedPath,
-                                              const std::string &referencingDir);
-        std::string ResolveModulePath(const std::string &requested,
-                                       const std::string &fromDir);
+        v8::MaybeLocal<v8::Value> LoadModule(std::string_view requestedPath,
+                                              std::string_view referencingDir);
+        std::string ResolveModulePath(std::string_view requested,
+                                       std::string_view fromDir);
 
         // Timer entry (public for anonymous-namespace callbacks)
         struct TimerEntry {

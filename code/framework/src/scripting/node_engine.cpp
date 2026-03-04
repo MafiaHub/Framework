@@ -294,7 +294,7 @@ namespace Framework::Scripting {
         _isolate->PerformMicrotaskCheckpoint();
     }
 
-    bool NodeEngine::ExecuteFile(const std::string &filepath) {
+    bool NodeEngine::ExecuteFile(std::string_view filepath) {
         if (!_initialized) {
             _lastError = "Engine not initialized";
             return false;

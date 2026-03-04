@@ -9,12 +9,13 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace Framework::GUI {
     class SystemClipboard final {
       public:
         void Clear();
         std::string ReadPlainText();
-        void WritePlainText(const std::string &text);
+        void WritePlainText(std::string_view text);
     };
 } // namespace Framework::GUI

@@ -223,14 +223,14 @@ namespace Framework::Scripting {
         return ResourceOperationResult::Success(stopped);
     }
 
-    ResourceOperationResult ResourceManager::StartResource(const std::string &name) {
+    ResourceOperationResult ResourceManager::StartResource(std::string_view name) {
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
-            return ResourceOperationResult::Failure("Resource not found: " + name);
+            return ResourceOperationResult::Failure("Resource not found: " + std::string(name));
         }
 
         if (resource->IsRunning()) {
-            return ResourceOperationResult::Success({name});
+            return ResourceOperationResult::Success({std::string(name)});
         }
 
         // Start dependencies first
@@ -246,14 +246,14 @@ namespace Framework::Scripting {
 
         // Transition to Loading
         if (!resource->TransitionTo(ResourceState::Loading)) {
-            return ResourceOperationResult::Failure("Invalid state transition for resource: " + name);
+            return ResourceOperationResult::Failure("Invalid state transition for resource: " + std::string(name));
         }
 
         // Execute the entry point script
         std::string error;
         if (!ExecuteResourceScript(*resource, error)) {
             resource->SetError(error);
-            FireOnResourceError(name, error);
+            FireOnResourceError(std::string(name), error);
             return ResourceOperationResult::Failure(error);
         }
 
@@ -266,10 +266,11 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = _jsEngine->GetContext();
             v8::Context::Scope contextScope(context);
 
+            std::string nameStr(name);
             std::vector<v8::Local<v8::Value>> args;
-            args.push_back(v8pp::to_v8(isolate, name));
+            args.push_back(v8pp::to_v8(isolate, nameStr));
 
-            SetCurrentResourceContext(name);
+            SetCurrentResourceContext(nameStr);
             _events.EmitReserved(isolate, context, "resourceStart", args, true);
             SetCurrentResourceContext("");
         }
@@ -282,16 +283,16 @@ namespace Framework::Scripting {
         resource->SetLoadTimestamp();
         resource->ClearRestartAttempts();
 
-        FireOnResourceStarted(name);
+        FireOnResourceStarted(std::string(name));
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Started JS resource: {}", name);
 
-        return ResourceOperationResult::Success({name});
+        return ResourceOperationResult::Success({std::string(name)});
     }
 
-    ResourceOperationResult ResourceManager::StopResource(const std::string &name) {
+    ResourceOperationResult ResourceManager::StopResource(std::string_view name) {
         Resource *resource = GetResourceMutable(name);
         if (!resource) {
-            return ResourceOperationResult::Failure("Resource not found: " + name);
+            return ResourceOperationResult::Failure("Resource not found: " + std::string(name));
         }
 
         if (!resource->IsRunning()) {
@@ -323,10 +324,11 @@ namespace Framework::Scripting {
             v8::Local<v8::Context> context = _jsEngine->GetContext();
             v8::Context::Scope contextScope(context);
 
+            std::string nameStr(name);
             std::vector<v8::Local<v8::Value>> args;
-            args.push_back(v8pp::to_v8(isolate, name));
+            args.push_back(v8pp::to_v8(isolate, nameStr));
 
-            SetCurrentResourceContext(name);
+            SetCurrentResourceContext(nameStr);
             _events.EmitReserved(isolate, context, "resourceStop", args);
             SetCurrentResourceContext("");
         }
@@ -340,14 +342,14 @@ namespace Framework::Scripting {
         // Transition to Stopped
         resource->TransitionTo(ResourceState::Stopped);
 
-        stopped.push_back(name);
-        FireOnResourceStopped(name);
+        stopped.emplace_back(name);
+        FireOnResourceStopped(std::string(name));
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info("Stopped JS resource: {}", name);
 
         return ResourceOperationResult::Success(stopped);
     }
 
-    ResourceOperationResult ResourceManager::RestartResource(const std::string &name) {
+    ResourceOperationResult ResourceManager::RestartResource(std::string_view name) {
         auto stopResult = StopResource(name);
         if (!stopResult.success) {
             return stopResult;
@@ -356,7 +358,7 @@ namespace Framework::Scripting {
         return StartResource(name);
     }
 
-    ResourceOperationResult ResourceManager::ReloadResource(const std::string &name) {
+    ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
         return RestartResource(name);
     }
 
@@ -422,7 +424,7 @@ namespace Framework::Scripting {
         return result;
     }
 
-    bool ResourceManager::CallResourceStop(const std::string &resourceName) {
+    bool ResourceManager::CallResourceStop(std::string_view resourceName) {
         // Cleanup handlers before resource fully stops
         _events.CleanupResource(resourceName);
         return true;
@@ -453,18 +455,18 @@ namespace Framework::Scripting {
         return ComputeLoadOrder();
     }
 
-    bool ResourceManager::HasResource(const std::string &name) const {
+    bool ResourceManager::HasResource(std::string_view name) const {
         std::scoped_lock lock(_resourcesMutex);
         return _resources.contains(name);
     }
 
-    bool ResourceManager::IsResourceRunning(const std::string &name) const {
+    bool ResourceManager::IsResourceRunning(std::string_view name) const {
         std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         return it != _resources.end() && it->second->IsRunning();
     }
 
-    ResourceState ResourceManager::GetResourceState(const std::string &name) const {
+    ResourceState ResourceManager::GetResourceState(std::string_view name) const {
         std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         if (it == _resources.end()) {
@@ -473,28 +475,30 @@ namespace Framework::Scripting {
         return it->second->GetState();
     }
 
-    const Resource *ResourceManager::GetResource(const std::string &name) const {
+    const Resource *ResourceManager::GetResource(std::string_view name) const {
         std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         return it != _resources.end() ? it->second.get() : nullptr;
     }
 
-    Resource *ResourceManager::GetResourceMutable(const std::string &name) {
+    Resource *ResourceManager::GetResourceMutable(std::string_view name) {
         std::scoped_lock lock(_resourcesMutex);
         auto it = _resources.find(name);
         return it != _resources.end() ? it->second.get() : nullptr;
     }
 
-    std::set<std::string> ResourceManager::GetDependents(const std::string &name) const {
+    std::set<std::string> ResourceManager::GetDependents(std::string_view name) const {
         std::scoped_lock lock(_graphMutex);
         auto it = _dependents.find(name);
-        return it != _dependents.end() ? it->second : std::set<std::string>{};
+        if (it == _dependents.end()) return {};
+        return {it->second.begin(), it->second.end()};
     }
 
-    std::set<std::string> ResourceManager::GetDependencies(const std::string &name) const {
+    std::set<std::string> ResourceManager::GetDependencies(std::string_view name) const {
         std::scoped_lock lock(_graphMutex);
         auto it = _dependencies.find(name);
-        return it != _dependencies.end() ? it->second : std::set<std::string>{};
+        if (it == _dependencies.end()) return {};
+        return {it->second.begin(), it->second.end()};
     }
 
     void ResourceManager::SetOnResourceStarted(ResourceEventCallback callback) {

@@ -33,6 +33,7 @@
 #include <memory>
 #include <sig.h>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace Framework::Integrations::Server {
@@ -107,7 +108,7 @@ namespace Framework::Integrations::Server {
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);
         
         // Command handlers
-        void HandleCommand(const std::string &command);
+        void HandleCommand(std::string_view command);
 
         // managers
         flecs::entity _weatherManager;
@@ -182,13 +183,13 @@ namespace Framework::Integrations::Server {
         }
         
         // Register a custom command with the command processor
-        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
+        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(std::string_view name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
             return _commandProcessor->RegisterCommand(name, options, proc, desc);
         }
-        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(const std::string &name, std::vector<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
+        Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(std::string_view name, std::vector<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
             return _commandProcessor->RegisterCommand(name, options, proc, desc);
         }
-        void RemoveCommand(const std::string &name) {
+        void RemoveCommand(std::string_view name) {
             _commandProcessor->RemoveCommand(name);
         }
     };

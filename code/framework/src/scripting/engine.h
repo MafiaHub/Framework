@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <utils/lifecycle.h>
 
@@ -44,14 +45,14 @@ namespace Framework::Scripting {
          * @param filename Optional filename for error messages
          * @return true if execution succeeded
          */
-        bool Execute(const std::string &code, const std::string &filename = "<eval>");
+        bool Execute(std::string_view code, std::string_view filename = "<eval>");
 
         /**
          * Execute a JavaScript file.
          * @param filepath Path to the JavaScript file
          * @return true if execution succeeded
          */
-        virtual bool ExecuteFile(const std::string &filepath) = 0;
+        virtual bool ExecuteFile(std::string_view filepath) = 0;
 
         /**
          * Register framework SDK bindings.

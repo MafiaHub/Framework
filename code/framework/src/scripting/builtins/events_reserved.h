@@ -2,6 +2,7 @@
 
 #include <set>
 #include <string>
+#include <string_view>
 
 namespace Framework::Scripting {
 
@@ -9,7 +10,7 @@ namespace Framework::Scripting {
      * Reserved event names that cannot be emitted by user code.
      * Only the framework can emit these via EmitReserved().
      */
-    inline const std::set<std::string> RESERVED_EVENTS = {
+    inline const std::set<std::string, std::less<>> RESERVED_EVENTS = {
         "resourceStart",
         "resourceStop",
         "resourceError",
@@ -20,7 +21,7 @@ namespace Framework::Scripting {
         "serverStop"
     };
 
-    inline bool IsReservedEvent(const std::string &eventName) {
+    inline bool IsReservedEvent(std::string_view eventName) {
         return RESERVED_EVENTS.contains(eventName);
     }
 

@@ -11,6 +11,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -70,7 +71,7 @@ namespace Framework::Scripting {
         /**
          * Clean up all handlers for a resource (called on resource stop).
          */
-        void CleanupResource(const std::string &resourceName);
+        void CleanupResource(std::string_view resourceName);
 
         /**
          * Clear all handlers (called on shutdown).
@@ -80,7 +81,7 @@ namespace Framework::Scripting {
         /**
          * Get count of handlers for an event.
          */
-        size_t GetListenerCount(const std::string &eventName);
+        size_t GetListenerCount(std::string_view eventName);
 
         /**
          * Add additional reserved events (e.g., from game-specific code).
@@ -90,7 +91,7 @@ namespace Framework::Scripting {
         /**
          * Check if an event name is reserved (static + dynamic).
          */
-        bool IsEventReserved(const std::string &eventName) const;
+        bool IsEventReserved(std::string_view eventName) const;
 
       private:
         /**
@@ -118,7 +119,7 @@ namespace Framework::Scripting {
         // Internal registration helper
         void RegisterHandler(v8::Isolate *isolate,
                             ResourceManager *manager,
-                            const std::string &eventName,
+                            std::string_view eventName,
                             v8::Local<v8::Function> handler,
                             bool once);
 
@@ -156,16 +157,16 @@ namespace Framework::Scripting {
         void RemovePendingCallback(AllSettledCallbackData *data);
 
         // Global handlers: eventName -> handlers (FIFO order)
-        std::map<std::string, std::vector<EventHandler>> _globalHandlers;
+        std::map<std::string, std::vector<EventHandler>, std::less<>> _globalHandlers;
 
         // Local handlers: resourceName -> eventName -> handlers
-        std::map<std::string, std::map<std::string, std::vector<EventHandler>>> _localHandlers;
+        std::map<std::string, std::map<std::string, std::vector<EventHandler>, std::less<>>, std::less<>> _localHandlers;
 
         mutable std::mutex _handlersMutex;
         ResourceManager *_resourceManager = nullptr;
 
         // Additional reserved events added at runtime
-        std::set<std::string> _additionalReservedEvents;
+        std::set<std::string, std::less<>> _additionalReservedEvents;
 
         // Stored callback context (lifetime tied to this Events instance)
         std::unique_ptr<CallbackContext> _callbackContext;

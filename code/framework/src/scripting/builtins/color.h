@@ -4,6 +4,7 @@
 #include <v8pp/property.hpp>
 #include <glm/glm.hpp>
 #include <string>
+#include <string_view>
 #include <memory>
 #include <unordered_map>
 
@@ -40,7 +41,7 @@ class Color final {
     std::string toString() const;
 
     // Static factory methods
-    static Color fromHex(const std::string& hex);
+    static Color fromHex(std::string_view hex);
     static Color fromRGB(float r, float g, float b, float a = 255.0f);
     static Color white() { return Color(1.0f, 1.0f, 1.0f, 1.0f); }
     static Color black() { return Color(0.0f, 0.0f, 0.0f, 1.0f); }

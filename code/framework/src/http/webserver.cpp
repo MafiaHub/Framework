@@ -48,7 +48,7 @@ namespace Framework::HTTP {
             res.status = 500;
         });
 
-        _webThread = std::thread([&]() {
+        _webThread = std::thread([this, address, port]() {
             _server->listen(address, port);
         });
 

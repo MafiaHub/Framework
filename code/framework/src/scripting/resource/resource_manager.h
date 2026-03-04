@@ -14,6 +14,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Forward declaration for V8
@@ -127,7 +128,7 @@ namespace Framework::Scripting {
          * @param name Resource name
          * @return Result indicating success or failure
          */
-        ResourceOperationResult StartResource(const std::string &name);
+        ResourceOperationResult StartResource(std::string_view name);
 
         /**
          * Stop a specific resource.
@@ -135,21 +136,21 @@ namespace Framework::Scripting {
          * @param name Resource name
          * @return Result with list of stopped resources
          */
-        ResourceOperationResult StopResource(const std::string &name);
+        ResourceOperationResult StopResource(std::string_view name);
 
         /**
          * Restart a specific resource.
          * @param name Resource name
          * @return Result indicating success or failure
          */
-        ResourceOperationResult RestartResource(const std::string &name);
+        ResourceOperationResult RestartResource(std::string_view name);
 
         /**
          * Reload a resource from disk (hot-reload).
          * @param name Resource name
          * @return Result indicating success or failure
          */
-        ResourceOperationResult ReloadResource(const std::string &name);
+        ResourceOperationResult ReloadResource(std::string_view name);
 
         // Registry Queries
 
@@ -171,35 +172,35 @@ namespace Framework::Scripting {
         /**
          * Check if a resource exists (discovered).
          */
-        bool HasResource(const std::string &name) const;
+        bool HasResource(std::string_view name) const;
 
         /**
          * Check if a resource is currently running.
          */
-        bool IsResourceRunning(const std::string &name) const;
+        bool IsResourceRunning(std::string_view name) const;
 
         /**
          * Get the state of a resource.
          */
-        ResourceState GetResourceState(const std::string &name) const;
+        ResourceState GetResourceState(std::string_view name) const;
 
         /**
          * Get a resource by name (const access).
          * @return Pointer to resource, or nullptr if not found
          */
-        const Resource *GetResource(const std::string &name) const;
+        const Resource *GetResource(std::string_view name) const;
 
         // Dependency Queries
 
         /**
          * Get resources that directly depend on the given resource.
          */
-        std::set<std::string> GetDependents(const std::string &name) const;
+        std::set<std::string> GetDependents(std::string_view name) const;
 
         /**
          * Get resources that the given resource directly depends on.
          */
-        std::set<std::string> GetDependencies(const std::string &name) const;
+        std::set<std::string> GetDependencies(std::string_view name) const;
 
         // Event Callbacks
 
@@ -304,10 +305,10 @@ namespace Framework::Scripting {
 
       private:
         // Internal resource access (mutable)
-        Resource *GetResourceMutable(const std::string &name);
+        Resource *GetResourceMutable(std::string_view name);
 
         // Call resource onResourceStop lifecycle function
-        bool CallResourceStop(const std::string &resourceName);
+        bool CallResourceStop(std::string_view resourceName);
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
@@ -334,13 +335,13 @@ namespace Framework::Scripting {
         Engine *_jsEngine = nullptr;
 
         // Resource registry
-        std::map<std::string, std::unique_ptr<Resource>> _resources;
+        std::map<std::string, std::unique_ptr<Resource>, std::less<>> _resources;
         mutable std::mutex _resourcesMutex;
 
         // Dependency graph: resource -> set of dependencies
-        std::map<std::string, std::set<std::string>> _dependencies;
+        std::map<std::string, std::set<std::string, std::less<>>, std::less<>> _dependencies;
         // Reverse dependency graph: resource -> set of dependents
-        std::map<std::string, std::set<std::string>> _dependents;
+        std::map<std::string, std::set<std::string, std::less<>>, std::less<>> _dependents;
         mutable std::mutex _graphMutex;
 
         // Event callbacks

@@ -15,8 +15,11 @@
 
 #include <function2.hpp>
 #include <memory>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
+
+#include "hashing.h"
 
 namespace Framework::Utils {
     enum class CommandProcessorError {
@@ -36,7 +39,7 @@ namespace Framework::Utils {
             std::unique_ptr<cxxopts::Options> options;
             CommandProc proc;
         };
-        std::unordered_map<std::string, CommandInfo> _commands;
+        std::unordered_map<std::string, CommandInfo, StringHash, std::equal_to<>> _commands;
 
       public:
         CommandProcessor() = default;
@@ -49,16 +52,20 @@ namespace Framework::Utils {
             return names;
         }
 
-        inline const CommandInfo *GetCommandInfo(const std::string &name) const {
-            return &_commands.at(name);
+        inline const CommandInfo *GetCommandInfo(std::string_view name) const {
+            auto it = _commands.find(name);
+            return it != _commands.end() ? &it->second : nullptr;
         }
 
-        inline void RemoveCommand(const std::string &name) {
-            _commands.erase(name);
+        inline void RemoveCommand(std::string_view name) {
+            auto it = _commands.find(name);
+            if (it != _commands.end()) {
+                _commands.erase(it);
+            }
         }
 
-        Result<std::string, CommandProcessorError> ProcessCommand(const std::string &input);
-        Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
-        Result<std::string, CommandProcessorError> RegisterCommand(const std::string &name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc = "");
+        Result<std::string, CommandProcessorError> ProcessCommand(std::string_view input);
+        Result<std::string, CommandProcessorError> RegisterCommand(std::string_view name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
+        Result<std::string, CommandProcessorError> RegisterCommand(std::string_view name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc = "");
     };
 } // namespace Framework::Utils

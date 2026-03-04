@@ -11,6 +11,7 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "utils/string_utils.h"
@@ -47,25 +48,27 @@ namespace Framework::Utils {
         virtual const char *GetDefaultConfig();
 
         template <typename T>
-        T Get(const std::string &field) {
+        T Get(std::string_view field) {
             if (!_lastError.empty())
                 return {};
+            std::string key(field);
             if constexpr (std::is_same_v<T, std::wstring>) {
-                return Utils::StringUtils::NormalToWide((*_document)[field]);
+                return Utils::StringUtils::NormalToWide((*_document)[key]);
             }
-            return (*_document)[field];
+            return (*_document)[key];
         }
 
         template <typename T>
-        T GetDefault(const std::string &field, T defaultValue) {
+        T GetDefault(std::string_view field, T defaultValue) {
             if (!_lastError.empty())
                 return {};
 
             try {
+                std::string key(field);
                 if constexpr (std::is_same_v<T, std::wstring>) {
-                    return Utils::StringUtils::NormalToWide((*_document)[field]);
+                    return Utils::StringUtils::NormalToWide((*_document)[key]);
                 }
-                return (*_document)[field];
+                return (*_document)[key];
             }
             catch (const std::exception &) {
                 return defaultValue;

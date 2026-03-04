@@ -462,7 +462,7 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
     }
 
-    void Instance::HandleCommand(const std::string &command) {
+    void Instance::HandleCommand(std::string_view command) {
         try {
             auto result = _commandProcessor->ProcessCommand(command);
             if (result.GetError() != Utils::CommandProcessorError::COMMAND_NONE) {

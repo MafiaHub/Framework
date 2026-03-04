@@ -96,7 +96,7 @@ namespace Framework::Scripting {
 
     void Events::RegisterHandler(v8::Isolate *isolate,
                                   ResourceManager *manager,
-                                  const std::string &eventName,
+                                  std::string_view eventName,
                                   v8::Local<v8::Function> handler,
                                   bool once) {
         std::string resourceName = GetResourceContextWithFallback(isolate, manager);
@@ -113,7 +113,7 @@ namespace Framework::Scripting {
         entry.once = once;
 
         std::scoped_lock lock(_handlersMutex);
-        _globalHandlers[eventName].push_back(std::move(entry));
+        _globalHandlers[std::string(eventName)].push_back(std::move(entry));
     }
 
     void Events::OnCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -747,7 +747,7 @@ namespace Framework::Scripting {
         args.GetReturnValue().Set(resolver->GetPromise());
     }
 
-    void Events::CleanupResource(const std::string &resourceName) {
+    void Events::CleanupResource(std::string_view resourceName) {
         std::scoped_lock lock(_handlersMutex);
 
         // Remove from global handlers
@@ -759,7 +759,10 @@ namespace Framework::Scripting {
         }
 
         // Remove local handlers entirely
-        _localHandlers.erase(resourceName);
+        auto localIt = _localHandlers.find(resourceName);
+        if (localIt != _localHandlers.end()) {
+            _localHandlers.erase(localIt);
+        }
     }
 
     void Events::ClearAll() {
@@ -784,7 +787,7 @@ namespace Framework::Scripting {
         _localHandlers.clear();
     }
 
-    size_t Events::GetListenerCount(const std::string &eventName) {
+    size_t Events::GetListenerCount(std::string_view eventName) {
         std::scoped_lock lock(_handlersMutex);
         auto it = _globalHandlers.find(eventName);
         if (it != _globalHandlers.end()) {
@@ -798,7 +801,7 @@ namespace Framework::Scripting {
         _additionalReservedEvents.insert(events.begin(), events.end());
     }
 
-    bool Events::IsEventReserved(const std::string &eventName) const {
+    bool Events::IsEventReserved(std::string_view eventName) const {
         if (IsReservedEvent(eventName)) {
             return true;
         }

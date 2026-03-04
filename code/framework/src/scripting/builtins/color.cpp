@@ -35,8 +35,8 @@ std::string Color::toString() const {
     return ss.str();
 }
 
-Color Color::fromHex(const std::string& hexInput) {
-    std::string hex = hexInput;
+Color Color::fromHex(std::string_view hexInput) {
+    std::string hex(hexInput);
 
     // Remove # prefix if present
     if (!hex.empty() && hex[0] == '#') {

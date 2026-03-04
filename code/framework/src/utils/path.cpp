@@ -50,7 +50,7 @@ namespace Framework::Utils {
 #endif
     }
 
-    std::string GetAbsolutePathA(const std::string &relative) {
+    std::string GetAbsolutePathA(std::string_view relative) {
 #ifdef WIN32
         static char executable_path[MAX_PATH] = {'\0'};
 
@@ -62,7 +62,8 @@ namespace Framework::Utils {
 
         char buf[MAX_PATH];
         strcpy(buf, executable_path);
-        strcat(buf, relative.c_str());
+        std::string relStr(relative);
+        strcat(buf, relStr.c_str());
 
         char final_buf[MAX_PATH] = {'\0'};
         PathCanonicalizeA(final_buf, buf);
@@ -105,7 +106,8 @@ namespace Framework::Utils {
         // Combine executable path with relative path
         char combined_path[PATH_MAX];
         strcpy(combined_path, executable_path);
-        strcat(combined_path, relative.c_str());
+        std::string relStr(relative);
+        strcat(combined_path, relStr.c_str());
         
         // Canonicalize path (resolve "..", ".", etc.)
         char final_path[PATH_MAX];
@@ -172,22 +174,22 @@ namespace Framework::Utils {
         return path.substr(pos); // Include the dot in the extension
     }
 
-    std::string GetFileExtensionA(const std::string &path) {
+    std::string GetFileExtensionA(std::string_view path) {
         if (path.empty()) {
             return std::string();
         }
 
         size_t pos = path.find_last_of('.');
-        if (pos == std::string::npos || pos == 0 || pos == path.length() - 1) {
+        if (pos == std::string_view::npos || pos == 0 || pos == path.length() - 1) {
             return std::string(); // No extension found or only dot at the beginning/end
         }
 
         // Check if the last dot is actually part of a directory/filename
         size_t lastSlash = path.find_last_of("/\\");
-        if (lastSlash != std::string::npos && lastSlash > pos) {
+        if (lastSlash != std::string_view::npos && lastSlash > pos) {
             return std::string(); // Dot is in a directory component
         }
 
-        return path.substr(pos); // Include the dot in the extension
+        return std::string(path.substr(pos)); // Include the dot in the extension
     }
 } // namespace Framework::Utils

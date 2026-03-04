@@ -12,6 +12,7 @@
 #include <locale>
 #include <regex>
 #include <string>
+#include <string_view>
 
 namespace Framework::Utils::StringUtils {
     inline std::wstring NormalToWide(const std::string &str) {
@@ -30,15 +31,15 @@ namespace Framework::Utils::StringUtils {
         return str;
     }
 
-    inline std::string LeftTrim(const std::string &s) {
-        return std::regex_replace(s, std::regex("^\\s+"), std::string(""));
+    inline std::string LeftTrim(std::string_view s) {
+        return std::regex_replace(std::string(s), std::regex("^\\s+"), std::string(""));
     }
 
-    inline std::string RightTrim(const std::string &s) {
-        return std::regex_replace(s, std::regex("\\s+$"), std::string(""));
+    inline std::string RightTrim(std::string_view s) {
+        return std::regex_replace(std::string(s), std::regex("\\s+$"), std::string(""));
     }
 
-    inline std::string Trim(const std::string &s) {
+    inline std::string Trim(std::string_view s) {
         return LeftTrim(RightTrim(s));
     }
 } // namespace Framework::Utils::StringUtils

@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -83,8 +84,8 @@ namespace Framework::Scripting {
 
         // Manifest access
         const PackageManifest &GetManifest() const;
-        bool HasExport(const std::string &exportName) const;
-        bool DependsOn(const std::string &resourceName) const;
+        bool HasExport(std::string_view exportName) const;
+        bool DependsOn(std::string_view resourceName) const;
 
         /**
          * Get the server entry point script path.
@@ -159,12 +160,12 @@ namespace Framework::Scripting {
          * @param name Export name (must be declared in manifest)
          * @param value The exported JavaScript value
          */
-        bool RegisterExport(const std::string &name, v8::Local<v8::Value> value);
+        bool RegisterExport(std::string_view name, v8::Local<v8::Value> value);
 
         /**
          * Unregister an export.
          */
-        void UnregisterExport(const std::string &name);
+        void UnregisterExport(std::string_view name);
 
         /**
          * Clear all exports.
@@ -174,7 +175,7 @@ namespace Framework::Scripting {
         /**
          * Check if an export is registered at runtime.
          */
-        bool HasRegisteredExport(const std::string &name) const;
+        bool HasRegisteredExport(std::string_view name) const;
 
         /**
          * Get all registered export names.
@@ -184,7 +185,7 @@ namespace Framework::Scripting {
         /**
          * Get an export value by name.
          */
-        v8::Local<v8::Value> GetExportValue(const std::string &name) const;
+        v8::Local<v8::Value> GetExportValue(std::string_view name) const;
 
         // Context access
         v8::Isolate *GetIsolate() const { return _isolate; }
@@ -223,7 +224,7 @@ namespace Framework::Scripting {
         v8::Isolate *_isolate = nullptr;
 
         // Exports registered by this resource
-        std::map<std::string, v8::Global<v8::Value>> _exports;
+        std::map<std::string, v8::Global<v8::Value>, std::less<>> _exports;
         mutable std::mutex _exportsMutex;
 
         std::vector<std::chrono::system_clock::time_point> _restartAttempts;

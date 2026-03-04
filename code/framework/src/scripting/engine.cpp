@@ -5,7 +5,7 @@
 
 namespace Framework::Scripting {
 
-    bool Engine::Execute(const std::string &code, const std::string &filename) {
+    bool Engine::Execute(std::string_view code, std::string_view filename) {
         if (!_initialized) {
             _lastError = "Engine not initialized";
             return false;
@@ -20,8 +20,8 @@ namespace Framework::Scripting {
 
         v8::TryCatch tryCatch(isolate);
 
-        v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, code.c_str()).ToLocalChecked();
-        v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, filename.c_str()).ToLocalChecked());
+        v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, code.data(), v8::NewStringType::kNormal, static_cast<int>(code.size())).ToLocalChecked();
+        v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, filename.data(), v8::NewStringType::kNormal, static_cast<int>(filename.size())).ToLocalChecked());
 
         v8::Local<v8::Script> script;
         if (!v8::Script::Compile(context, source, &origin).ToLocal(&script)) {

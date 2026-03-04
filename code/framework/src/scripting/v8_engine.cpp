@@ -325,8 +325,8 @@ namespace Framework::Scripting {
             _timers.end());
     }
 
-    std::string V8Engine::ResolveModulePath(const std::string &requested,
-                                             const std::string &fromDir) {
+    std::string V8Engine::ResolveModulePath(std::string_view requested,
+                                             std::string_view fromDir) {
         namespace fs = std::filesystem;
 
         fs::path base(fromDir);
@@ -395,14 +395,18 @@ namespace Framework::Scripting {
         return "";
     }
 
-    v8::MaybeLocal<v8::Value> V8Engine::LoadModule(const std::string &requestedPath,
-                                                    const std::string &referencingDir) {
+    v8::MaybeLocal<v8::Value> V8Engine::LoadModule(std::string_view requestedPath,
+                                                    std::string_view referencingDir) {
         v8::EscapableHandleScope handleScope(_isolate);
         v8::Local<v8::Context> context = _context.Get(_isolate);
 
         std::string resolvedPath = ResolveModulePath(requestedPath, referencingDir);
         if (resolvedPath.empty()) {
-            std::string msg = "Cannot find module '" + requestedPath + "' from '" + referencingDir + "'";
+            std::string msg = "Cannot find module '";
+            msg.append(requestedPath);
+            msg += "' from '";
+            msg.append(referencingDir);
+            msg += "'";
             _isolate->ThrowException(v8::Exception::Error(
                 v8::String::NewFromUtf8(_isolate, msg.c_str()).ToLocalChecked()));
             return v8::MaybeLocal<v8::Value>();
@@ -536,7 +540,7 @@ namespace Framework::Scripting {
         _isolate->PerformMicrotaskCheckpoint();
     }
 
-    bool V8Engine::ExecuteFile(const std::string &filepath) {
+    bool V8Engine::ExecuteFile(std::string_view filepath) {
         if (!_initialized) {
             _lastError = "Engine not initialized";
             return false;

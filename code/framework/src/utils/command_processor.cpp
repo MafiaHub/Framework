@@ -10,10 +10,10 @@
 #include "logging/logger.h"
 
 namespace Framework::Utils {
-    Result<std::string, CommandProcessorError> CommandProcessor::ProcessCommand(const std::string &input) {
+    Result<std::string, CommandProcessorError> CommandProcessor::ProcessCommand(std::string_view input) {
         std::string command;
         std::vector<std::string> args;
-        std::stringstream parts(input);
+        std::stringstream parts{std::string(input)};
         std::string item;
         while (std::getline(parts, item, ' ')) {
             args.push_back(item);
@@ -49,22 +49,23 @@ namespace Framework::Utils {
             }
         }
         else {
-            return {CommandProcessorError::COMMAND_UNKNOWN, input};
+            return {CommandProcessorError::COMMAND_UNKNOWN, std::string(input)};
         }
 
         return error;
     }
 
-    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc) {
+    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(std::string_view name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc) {
         if (name.empty()) {
             return CommandProcessorError::COMMAND_UNSPECIFIED_NAME;
         }
         if (_commands.contains(name)) {
-            return {CommandProcessorError::COMMAND_ALREADY_EXISTS, name};
+            return {CommandProcessorError::COMMAND_ALREADY_EXISTS, std::string(name)};
         }
 
         try {
-            auto cmd = std::make_unique<cxxopts::Options>(name, desc);
+            std::string nameStr(name);
+            auto cmd = std::make_unique<cxxopts::Options>(nameStr, desc);
 
             if (options.size() > 0)
                 cmd->add_options("", options);
@@ -72,7 +73,7 @@ namespace Framework::Utils {
             // default help
             cmd->add_option("", {"h,help", "Print usage"});
 
-            _commands[name] = {std::move(cmd), proc};
+            _commands[nameStr] = {std::move(cmd), proc};
         }
         catch (const std::exception &e) {
             return {CommandProcessorError::COMMAND_INTERNAL_ERROR, e.what()};
@@ -81,16 +82,17 @@ namespace Framework::Utils {
         return CommandProcessorError::COMMAND_NONE;
     }
 
-    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc) {
+    Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(std::string_view name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc) {
         if (name.empty()) {
             return CommandProcessorError::COMMAND_UNSPECIFIED_NAME;
         }
         if (_commands.contains(name)) {
-            return {CommandProcessorError::COMMAND_ALREADY_EXISTS, name};
+            return {CommandProcessorError::COMMAND_ALREADY_EXISTS, std::string(name)};
         }
 
         try {
-            auto cmd = std::make_unique<cxxopts::Options>(name, desc);
+            std::string nameStr(name);
+            auto cmd = std::make_unique<cxxopts::Options>(nameStr, desc);
 
             if (!options.empty()) {
                 for (const auto &option : options) {
@@ -101,7 +103,7 @@ namespace Framework::Utils {
             // default help
             cmd->add_option("", {"h,help", "Print usage"});
 
-            _commands[name] = {std::move(cmd), proc};
+            _commands[nameStr] = {std::move(cmd), proc};
         }
         catch (const std::exception &e) {
             return {CommandProcessorError::COMMAND_INTERNAL_ERROR, e.what()};

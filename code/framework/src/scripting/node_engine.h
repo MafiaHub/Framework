@@ -76,7 +76,7 @@ namespace Framework::Scripting {
 
         [[nodiscard]] ScriptingError Init() override;
         void Shutdown() override;
-        bool ExecuteFile(const std::string &filepath) override;
+        bool ExecuteFile(std::string_view filepath) override;
 
         /**
          * Process pending Node.js events (non-blocking).
