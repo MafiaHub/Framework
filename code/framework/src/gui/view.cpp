@@ -23,7 +23,7 @@ namespace Framework::GUI {
         , _x(0)
         , _y(0)
         , _z(0) {
-        _sdk         = new SDK;
+        _sdk         = std::make_unique<SDK>();
         _isMouseDown = false;
     }
 
@@ -35,7 +35,6 @@ namespace Framework::GUI {
 
         if (_sdk) {
             _sdk->Shutdown();
-            delete _sdk;
         }
     }
 
@@ -84,7 +83,7 @@ namespace Framework::GUI {
         });
 
         // Create CEF client
-        _cefClient = new CEF::Client(_renderHandler, _lifeSpanHandler, _loadHandler, _displayHandler, _sdk);
+        _cefClient = new CEF::Client(_renderHandler, _lifeSpanHandler, _loadHandler, _displayHandler, _sdk.get());
 
         // Configure windowless rendering
         CefWindowInfo windowInfo;

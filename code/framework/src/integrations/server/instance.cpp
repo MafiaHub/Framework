@@ -34,16 +34,16 @@
 
 namespace Framework::Integrations::Server {
     Instance::Instance(): _alive(false), _shuttingDown(false) {
-        _networkingEngine = std::make_shared<Networking::Engine>();
-        _webServer        = std::make_shared<HTTP::Webserver>();
+        _networkingEngine = std::make_unique<Networking::Engine>();
+        _webServer        = std::make_unique<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
         _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingModule  = std::make_shared<Scripting::ServerScriptingModule>(_worldEngine);
-        _playerFactory    = std::make_shared<World::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_shared<World::Archetypes::StreamingFactory>();
+        _scriptingModule  = std::make_unique<Scripting::ServerScriptingModule>(_worldEngine);
+        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
+        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
-        _commandListener  = std::make_shared<Utils::CommandListener>();
-        _commandProcessor = std::make_shared<Utils::CommandProcessor>();
+        _commandListener  = std::make_unique<Utils::CommandListener>();
+        _commandProcessor = std::make_unique<Utils::CommandProcessor>();
     }
 
     Instance::~Instance() {

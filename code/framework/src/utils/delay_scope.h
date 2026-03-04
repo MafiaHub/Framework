@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <function2.hpp>
+#include <memory>
 #include <vector>
 
 namespace Framework::Utils {
@@ -34,6 +35,6 @@ namespace Framework::Utils {
 
         uint32_t _delay = 0;
 
-        static std::vector<DelayScope *> activeHandlers;
+        static std::vector<std::unique_ptr<DelayScope>> activeHandlers;
     };
 } // namespace Framework::Utils

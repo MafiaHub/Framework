@@ -13,6 +13,7 @@
 #include <d3d11.h>
 #include <function2.hpp>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -54,7 +55,7 @@ namespace Framework::GUI {
         Graphics::Renderer *_graphicsRenderer = nullptr;
         Manager *_manager                     = nullptr;
 
-        SDK *_sdk = nullptr;
+        std::unique_ptr<SDK> _sdk;
 
         // CPU renderer fallback
         std::vector<uint8_t> _pixelData;
@@ -153,7 +154,7 @@ namespace Framework::GUI {
         }
 
         inline GUI::SDK *GetSDK() {
-            return _sdk;
+            return _sdk.get();
         }
 
         CEF::RenderHandler *GetRenderHandler() const {

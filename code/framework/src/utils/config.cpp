@@ -9,13 +9,9 @@
 #include "config.h"
 
 namespace Framework::Utils {
-    Config::Config() {
-        _document = new nlohmann::json();
+    Config::Config(): _document(std::make_unique<nlohmann::json>()) {
     }
-    Config::~Config() {
-        delete _document;
-        _document = nullptr;
-    }
+    Config::~Config() = default;
     bool Config::Parse(const std::string &content) {
         try {
             const auto doc = nlohmann::json::parse(content, nullptr, true, true);

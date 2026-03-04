@@ -87,14 +87,14 @@ namespace Framework::Integrations::Server {
 
         InstanceOptions _opts;
 
-        std::shared_ptr<Scripting::ServerScriptingModule> _scriptingModule;
-        std::shared_ptr<Networking::Engine> _networkingEngine;
-        std::shared_ptr<HTTP::Webserver> _webServer;
+        std::unique_ptr<Scripting::ServerScriptingModule> _scriptingModule;
+        std::unique_ptr<Networking::Engine> _networkingEngine;
+        std::unique_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
         std::shared_ptr<World::ServerEngine> _worldEngine;
-        std::shared_ptr<Services::MasterlistConnector> _masterlist;
-        std::shared_ptr<Utils::CommandListener> _commandListener;
-        std::shared_ptr<Utils::CommandProcessor> _commandProcessor;
+        std::unique_ptr<Services::MasterlistConnector> _masterlist;
+        std::unique_ptr<Utils::CommandListener> _commandListener;
+        std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
 
         void InitEndpoints();
         void InitModules() const;
@@ -111,8 +111,8 @@ namespace Framework::Integrations::Server {
         flecs::entity _weatherManager;
 
         // entity factories
-        std::shared_ptr<World::Archetypes::PlayerFactory> _playerFactory;
-        std::shared_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
+        std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
+        std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;
@@ -159,28 +159,28 @@ namespace Framework::Integrations::Server {
             return _opts;
         }
 
-        std::shared_ptr<Scripting::ServerScriptingModule> GetScriptingModule() const {
-            return _scriptingModule;
+        Scripting::ServerScriptingModule *GetScriptingModule() const {
+            return _scriptingModule.get();
         }
 
         std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
             return _worldEngine;
         }
 
-        std::shared_ptr<Networking::Engine> GetNetworkingEngine() const {
-            return _networkingEngine;
+        Networking::Engine *GetNetworkingEngine() const {
+            return _networkingEngine.get();
         }
 
-        std::shared_ptr<HTTP::Webserver> GetWebserver() const {
-            return _webServer;
+        HTTP::Webserver *GetWebserver() const {
+            return _webServer.get();
         }
 
-        std::shared_ptr<World::Archetypes::PlayerFactory> GetPlayerFactory() const {
-            return _playerFactory;
+        World::Archetypes::PlayerFactory *GetPlayerFactory() const {
+            return _playerFactory.get();
         }
 
-        std::shared_ptr<World::Archetypes::StreamingFactory> GetStreamingFactory() const {
-            return _streamingFactory;
+        World::Archetypes::StreamingFactory *GetStreamingFactory() const {
+            return _streamingFactory.get();
         }
         
         // Register a custom command with the command processor

@@ -9,7 +9,7 @@
 #include "delay_scope.h"
 
 namespace Framework::Utils {
-    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback): _callback(callback), _delay(delay) {
+    DelayScope::DelayScope(uint32_t delay, fu2::function<void()> callback): _callback(std::move(callback)), _delay(delay) {
         _created = std::chrono::high_resolution_clock::now();
     }
 
@@ -28,23 +28,20 @@ namespace Framework::Utils {
     }
 
     void DelayScope::Update() {
-        std::vector<DelayScope *> pendingDelays;
+        std::vector<std::unique_ptr<DelayScope>> pending;
 
-        for (auto handler : activeHandlers) {
-            if (handler != nullptr && !handler->FireWhenReady()) {
-                pendingDelays.push_back(handler);
-            }
-            else {
-                delete handler;
+        for (auto &handler : activeHandlers) {
+            if (handler && !handler->FireWhenReady()) {
+                pending.push_back(std::move(handler));
             }
         }
 
-        activeHandlers = pendingDelays;
+        activeHandlers = std::move(pending);
     }
 
     void DelayScope::Push(uint32_t delay, fu2::function<void()> callback) {
-        activeHandlers.push_back(new DelayScope(delay, callback));
+        activeHandlers.push_back(std::make_unique<DelayScope>(delay, std::move(callback)));
     }
 
-    std::vector<DelayScope *> DelayScope::activeHandlers;
+    std::vector<std::unique_ptr<DelayScope>> DelayScope::activeHandlers;
 } // namespace Framework::Utils

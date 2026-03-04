@@ -21,7 +21,7 @@ namespace Framework::Utils {
     using CommandCallback = fu2::function<void(const std::string &) const>;
     class CommandListener {
       private:
-        std::shared_ptr<std::thread> _currentThread;
+        std::unique_ptr<std::thread> _currentThread;
         std::queue<std::string> _queue;
         std::mutex _mutex;
         CommandCallback _cb;

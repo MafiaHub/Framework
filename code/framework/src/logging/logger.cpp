@@ -82,11 +82,8 @@ namespace Framework::Logging {
     }
 
     Logger *GetInstance() {
-        static Logger *_instance = nullptr;
-        if (_instance == nullptr) {
-            _instance = new Logger();
-        }
-        return _instance;
+        static Logger instance;
+        return &instance;
     }
 
     std::shared_ptr<spdlog::logger> GetLogger(const char *name, bool async) {

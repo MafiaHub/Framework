@@ -15,7 +15,7 @@
 namespace Framework::Utils {
     CommandListener::CommandListener() {
         _running       = true;
-        _currentThread = std::make_shared<std::thread>([this]() {
+        _currentThread = std::make_unique<std::thread>([this]() {
             while (_running) {
                 std::string commandString;
                 std::getline(std::cin, commandString);

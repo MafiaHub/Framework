@@ -15,6 +15,8 @@
 #include "errors.h"
 #include "types.h"
 
+#include <memory>
+
 #include <dxgi.h>
 
 #ifdef WIN32
@@ -66,9 +68,9 @@ namespace Framework::Graphics {
 
         HWND _window {};
 
-        D3D9Backend *_d3d9Backend {};
-        D3D11Backend *_d3d11Backend {};
-        D3D12Backend *_d3d12Backend {};
+        std::unique_ptr<D3D9Backend> _d3d9Backend;
+        std::unique_ptr<D3D11Backend> _d3d11Backend;
+        std::unique_ptr<D3D12Backend> _d3d12Backend;
 
       public:
         RendererError Init(RendererConfiguration);
@@ -83,15 +85,15 @@ namespace Framework::Graphics {
         }
 
         D3D9Backend *GetD3D9Backend() const {
-            return _d3d9Backend;
+            return _d3d9Backend.get();
         }
 
         D3D11Backend *GetD3D11Backend() const {
-            return _d3d11Backend;
+            return _d3d11Backend.get();
         }
 
         D3D12Backend *GetD3D12Backend() const {
-            return _d3d12Backend;
+            return _d3d12Backend.get();
         }
 
         HWND GetWindow() const {

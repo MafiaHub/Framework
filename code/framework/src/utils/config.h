@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <type_traits>
@@ -19,7 +20,7 @@ namespace Framework::Utils {
 
     class Config {
       private:
-        nlohmann::json *_document;
+        std::unique_ptr<nlohmann::json> _document;
         std::string _lastError;
 
       public:
@@ -36,7 +37,7 @@ namespace Framework::Utils {
         std::string ToString() const;
 
         nlohmann::json *GetDocument() const {
-            return _document;
+            return _document.get();
         }
 
         const std::string &GetLastError() const {

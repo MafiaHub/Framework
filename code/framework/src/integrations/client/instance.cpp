@@ -82,7 +82,7 @@ namespace Framework::Integrations::Client {
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
-        _webManager = std::make_shared<Framework::GUI::Manager>();
+        _webManager = std::make_unique<Framework::GUI::Manager>();
     }
 
     Instance::~Instance() {

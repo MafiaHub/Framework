@@ -97,7 +97,7 @@ namespace Framework::Integrations::Client {
         std::shared_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
-        std::shared_ptr<Framework::GUI::Manager> _webManager;
+        std::unique_ptr<Framework::GUI::Manager> _webManager;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
