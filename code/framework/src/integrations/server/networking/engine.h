@@ -13,7 +13,7 @@
 #include <networking/network_server.h>
 
 namespace Framework::Integrations::Server::Networking {
-    class Engine : public Framework::Lifecycle {
+    class Engine final : public Framework::Lifecycle {
       private:
         std::unique_ptr<Framework::Networking::NetworkServer> _networkServer {};
 

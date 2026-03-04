@@ -37,7 +37,7 @@
     } while (0)
 
 namespace Framework::World {
-    class ClientEngine: public Engine {
+    class ClientEngine final : public Engine {
       public:
         using OnEntityDestroyCallback = fu2::function<bool(flecs::entity) const>;
 

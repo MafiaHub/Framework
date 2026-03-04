@@ -13,7 +13,7 @@
 #include <networking/network_client.h>
 
 namespace Framework::Integrations::Client::Networking {
-    class Engine : public Framework::Lifecycle {
+    class Engine final : public Framework::Lifecycle {
       private:
         std::unique_ptr<Framework::Networking::NetworkClient> _networkClient {};
 

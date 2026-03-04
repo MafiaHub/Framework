@@ -30,7 +30,7 @@ namespace Framework::GUI {
         int height;
     };
 
-    class Manager : public Framework::Lifecycle {
+    class Manager final : public Framework::Lifecycle {
       private:
         ViewportConfiguration _viewportConfiguration {};
         CefRefPtr<CEF::App> _cefApp;
