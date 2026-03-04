@@ -26,8 +26,8 @@ namespace Framework::Graphics {
       public:
         Backend() = default;
 
-        virtual bool Init(const Framework::Graphics::RendererConfiguration &opts) = 0;
-        virtual bool Shutdown()                                                   = 0;
+        [[nodiscard]] virtual bool Init(const Framework::Graphics::RendererConfiguration &opts) = 0;
+        virtual void Shutdown()                                                   = 0;
 
         virtual void Update() = 0;
 

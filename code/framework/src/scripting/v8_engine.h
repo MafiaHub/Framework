@@ -50,7 +50,7 @@ namespace Framework::Scripting {
         explicit V8Engine(const V8EngineOptions &options = {});
         ~V8Engine() override;
 
-        bool Init() override;
+        [[nodiscard]] ScriptingError Init() override;
         void Shutdown() override;
         bool ExecuteFile(const std::string &filepath) override;
 

@@ -15,8 +15,7 @@ namespace Framework::Graphics {
         return true;
     }
 
-    bool D3D9Backend::Shutdown() {
-        return true;
+    void D3D9Backend::Shutdown() {
     }
 
     void D3D9Backend::Update() {}

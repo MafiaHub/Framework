@@ -71,7 +71,7 @@ namespace Framework::World {
             float tickRegulatorInterval                  = 3.0f;
         };
 
-        [[nodiscard]] bool Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg);
+        [[nodiscard]] WorldError Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg);
 
         void Shutdown() override;
 

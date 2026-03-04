@@ -8,10 +8,10 @@
 
 #pragma once
 
-namespace Framework::Networking {
-    enum class PeerState {
-        CONNECTING,
-        CONNECTED,
-        DISCONNECTED
+namespace Framework::World {
+    enum class WorldError {
+        WORLD_NONE,
+        WORLD_FLECS_INIT_FAILED,
+        WORLD_PEER_NULL
     };
-}; // namespace Framework::Networking
+} // namespace Framework::World

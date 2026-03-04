@@ -18,7 +18,7 @@ MODULE(engine, {
         options.processName = "test-server";
         NodeEngine *pEngine = new NodeEngine(options);
 
-        EQUALS(pEngine->Init(), true);
+        EQUALS(pEngine->Init(), ScriptingError::SCRIPTING_NONE);
         NEQUALS(pEngine->GetIsolate(), nullptr);
         EQUALS(pEngine->IsSandboxed(), false);
 
@@ -28,7 +28,7 @@ MODULE(engine, {
 
     IT("returns context after initialization", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // V8 scopes must exit before Shutdown() is called
         {
@@ -57,7 +57,7 @@ MODULE(engine, {
         };
 
         engine.SetSDKRegisterCallback(callback);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // SDK callback is invoked during InitFrameworkSDK
         engine.InitFrameworkSDK();
@@ -70,7 +70,7 @@ MODULE(engine, {
 
     IT("can execute basic JavaScript code", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         int resultValue = 0;
         // V8 scopes must exit before Shutdown() is called
@@ -97,7 +97,7 @@ MODULE(engine, {
 
     IT("can execute JavaScript with variables and functions", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         int resultValue = 0;
         // V8 scopes must exit before Shutdown() is called
@@ -128,7 +128,7 @@ MODULE(engine, {
 
     IT("shutdown is idempotent", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         engine.Shutdown();
         engine.Shutdown(); // Should not crash
@@ -139,7 +139,7 @@ MODULE(engine, {
 
         EQUALS(engine.IsInitialized(), false);
 
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
         EQUALS(engine.IsInitialized(), true);
 
         engine.Shutdown();
@@ -148,14 +148,14 @@ MODULE(engine, {
 
     IT("GetLastError is empty on success", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
         STREQUALS(engine.GetLastError().c_str(), "");
         engine.Shutdown();
     });
 
     IT("Tick processes event loop without crashing", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Tick should not crash
         engine.Tick();
@@ -171,7 +171,7 @@ MODULE(engine, {
         options.processName = "test-client";
         NodeEngine engine(options);
 
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
         EQUALS(engine.IsSandboxed(), true);
         NEQUALS(engine.GetIsolate(), nullptr);
 
@@ -183,7 +183,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Try to require fs - should throw
         bool threwError = false;
@@ -215,7 +215,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Try to require net - should throw
         bool threwError = false;
@@ -247,7 +247,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Try to require child_process - should throw
         bool threwError = false;
@@ -279,7 +279,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // path module should work
         bool success = false;
@@ -311,7 +311,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // process.exit should throw
         bool threwError = false;
@@ -343,7 +343,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // process.env should be empty frozen object
         int envKeyCount = -1;
@@ -372,7 +372,7 @@ MODULE(engine, {
         options.sandboxed = true;
         options.processName = "test-sandbox";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         bool internalsHidden = false;
         {
@@ -400,7 +400,7 @@ MODULE(engine, {
         options.sandboxed = false;
         options.processName = "test-server";
         NodeEngine engine(options);
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // fs module should work
         bool success = false;
@@ -433,7 +433,7 @@ MODULE(engine, {
 
     IT("Execute returns error with stack trace for TypeError", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Code that causes a TypeError - call undefined as function
         const char *code = "const x = undefined; x();";
@@ -454,7 +454,7 @@ MODULE(engine, {
 
     IT("Execute returns error with stack trace for ReferenceError", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Code that causes a ReferenceError
         const char *code = "undefinedVariable.foo()";
@@ -475,7 +475,7 @@ MODULE(engine, {
 
     IT("Execute returns error with correct line number for multi-line code", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Multi-line code with error on line 5 (1 empty + 3 const + 1 error)
         const char *code =
@@ -500,7 +500,7 @@ MODULE(engine, {
 
     IT("Execute returns syntax error with location info", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Code with syntax error
         const char *code = "function( { broken syntax";
@@ -520,7 +520,7 @@ MODULE(engine, {
 
     IT("Execute returns stack trace with nested function calls", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         // Code with nested function calls to test stack depth
         const char *code =

@@ -54,7 +54,7 @@ namespace Framework::External::ImGUI {
         bool _processEventEnabled = true;
 
       public:
-        Error Init(Config &config);
+        [[nodiscard]] Error Init(Config &config);
         void Shutdown() override;
 
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;

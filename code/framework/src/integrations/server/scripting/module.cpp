@@ -29,17 +29,17 @@ namespace Framework::Integrations::Server::Scripting {
         Shutdown();
     }
 
-    bool ServerScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
+    Framework::Scripting::ScriptingError ServerScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
         // Set the SDK callback before initialization
         if (sdkCallback) {
             _nodeEngine->SetSDKRegisterCallback(sdkCallback);
         }
 
         // Initialize the Node.js engine
-        if (!_nodeEngine->Init()) {
+        if (_nodeEngine->Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "Failed to initialize Node.js engine: {}", _nodeEngine->GetLastError());
-            return false;
+            return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
         // Initialize ResourceManager with server-side config
@@ -74,7 +74,7 @@ namespace Framework::Integrations::Server::Scripting {
             "JS Server scripting module initialized with Node.js engine");
 
         _initialized = true;
-        return true;
+        return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
     }
 
     void ServerScriptingModule::RegisterFrameworkBindings() {

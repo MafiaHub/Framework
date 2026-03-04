@@ -15,12 +15,13 @@ namespace Framework::Integrations::Client::Networking {
         _networkClient = std::make_unique<Framework::Networking::NetworkClient>();
     }
 
-    bool Engine::Init() {
-        if (!_networkClient->Init()) {
-            return false;
+    Framework::Networking::NetworkPeerError Engine::Init() {
+        const auto result = _networkClient->Init();
+        if (result != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
+            return result;
         }
         _initialized = true;
-        return true;
+        return Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE;
     }
 
     bool Engine::Connect(const std::string &host, const int32_t port, const std::string password) const {

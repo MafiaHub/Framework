@@ -30,7 +30,7 @@ namespace Framework::Graphics {
     class D3D11Backend: public Backend<ID3D11Device *, ID3D11DeviceContext *, IDXGISwapChain *, void *> {
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
-        bool Shutdown() override;
+        void Shutdown() override;
         void Update() override;
         void Render() override;
         void Paint() override;
@@ -66,8 +66,8 @@ namespace Framework::Graphics {
         IDXGISwapChain *GetSwapChain() const;
 
       private:
-        void LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout);
-        void LoadCompiledPixelShader(unsigned char *data, unsigned int len, ID3D11PixelShader **ppPixelShader);
+        bool LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout);
+        bool LoadCompiledPixelShader(unsigned char *data, unsigned int len, ID3D11PixelShader **ppPixelShader);
         void LoadShaders();
         void BindShader(ShaderType shader);
         void BindVertexLayout(VertexBufferFormat format);

@@ -10,8 +10,8 @@
 
 namespace Framework::Integrations::Client {
     enum class ClientError {
+        CLIENT_NONE,
         CLIENT_ENGINES_ERROR,
-        CLIENT_INVALID_OPTIONS,
-        CLIENT_NONE
+        CLIENT_INVALID_OPTIONS
     };
 } // namespace Framework::Integrations::Client

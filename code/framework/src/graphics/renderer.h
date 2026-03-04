@@ -73,7 +73,7 @@ namespace Framework::Graphics {
         std::unique_ptr<D3D12Backend> _d3d12Backend;
 
       public:
-        RendererError Init(RendererConfiguration);
+        [[nodiscard]] RendererError Init(RendererConfiguration);
         void Shutdown() override;
 
         void Update() override;

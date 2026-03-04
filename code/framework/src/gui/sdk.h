@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "errors.h"
+
 #include <string>
 #include <unordered_map>
 
@@ -24,8 +26,8 @@ namespace Framework::GUI {
         std::unordered_map<std::string, EventCallbackProc> _eventListeners;
 
       public:
-        bool Init(CefRefPtr<CefBrowser> browser);
-        bool Shutdown();
+        [[nodiscard]] GUIError Init(CefRefPtr<CefBrowser> browser);
+        void Shutdown();
 
         CefRefPtr<CefBrowser> GetBrowser() const {
             return _browser;

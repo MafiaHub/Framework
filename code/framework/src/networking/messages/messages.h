@@ -16,10 +16,7 @@
 #include "utils/optional.h"
 
 namespace Framework::Networking::Messages {
-    using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
-    using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, uint32_t reason) const>;
-
-    enum DisconnectionReason {
+    enum class DisconnectionReason : uint32_t {
         NO_FREE_SLOT,
         GRACEFUL_SHUTDOWN,
         LOST,
@@ -32,6 +29,9 @@ namespace Framework::Networking::Messages {
         KICKED_INVALID_PACKET,
         UNKNOWN
     };
+
+    using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
+    using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, DisconnectionReason reason) const>;
 
     // Internal Framework messages
     enum InternalMessages : uint8_t {

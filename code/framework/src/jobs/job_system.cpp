@@ -29,15 +29,17 @@ namespace Framework::Jobs {
         delete wrapper;
     }
 
-    JobSystem::JobSystem(const JobSystemConfig &config) : _profilingEnabled(config.enableProfiling) {
+    JobSystem::JobSystem(const JobSystemConfig &config) : _profilingEnabled(config.enableProfiling), _config(config) {
         _scheduler = std::make_unique<ftl::TaskScheduler>();
+    }
 
+    JobSystemError JobSystem::Init() {
         ftl::TaskSchedulerInitOptions options;
-        options.FiberPoolSize = config.fiberPoolSize;
-        options.ThreadPoolSize = config.workerThreadCount;
-        options.Behavior = config.emptyQueueBehavior;
+        options.FiberPoolSize = _config.fiberPoolSize;
+        options.ThreadPoolSize = _config.workerThreadCount;
+        options.Behavior = _config.emptyQueueBehavior;
 
-        if (config.enableProfiling) {
+        if (_config.enableProfiling) {
             // Profiling callbacks can be added here for Tracy/Remotery integration
             options.Callbacks.Context = this;
             options.Callbacks.OnFiberAttached = [](void * /*context*/, unsigned /*fiberIndex*/) {
@@ -57,10 +59,11 @@ namespace Framework::Jobs {
         int result = _scheduler->Init(options);
         if (result != 0) {
             spdlog::error("Failed to initialize JobSystem TaskScheduler, error code: {}", result);
-            throw std::runtime_error("Failed to initialize JobSystem");
+            return JobSystemError::JOB_SYSTEM_INIT_FAILED;
         }
 
         spdlog::info("JobSystem initialized with {} worker threads and {} fibers", _scheduler->GetThreadCount(), _scheduler->GetFiberCount());
+        return JobSystemError::JOB_SYSTEM_NONE;
     }
 
     JobSystem::~JobSystem() {

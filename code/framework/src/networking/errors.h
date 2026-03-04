@@ -20,6 +20,11 @@ namespace Framework::Networking {
         CLIENT_CONNECT_FAILED
     };
 
+    enum class NetworkPeerError {
+        NETWORK_PEER_NONE,
+        NETWORK_PEER_INIT_FAILED
+    };
+
     extern std::unordered_map<uint8_t, const char *> StartupResultString;
     extern std::unordered_map<uint8_t, const char *> ConnectionAttemptString;
 }; // namespace Framework::Networking

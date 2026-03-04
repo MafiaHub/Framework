@@ -83,7 +83,7 @@ MODULE(resource_manager, {
 
     IT("can create and destroy resource manager", {
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -97,7 +97,7 @@ MODULE(resource_manager, {
 
     IT("GetConfig returns configuration", {
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -116,7 +116,7 @@ MODULE(resource_manager, {
 
     IT("SetConfig updates configuration", {
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = "/old/path";
@@ -145,7 +145,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -169,7 +169,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -193,7 +193,7 @@ MODULE(resource_manager, {
         }
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -221,7 +221,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -243,7 +243,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -262,7 +262,7 @@ MODULE(resource_manager, {
 
     IT("GetResource returns nullptr for unknown resource", {
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -282,7 +282,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -306,7 +306,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -328,7 +328,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -358,7 +358,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -387,7 +387,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -411,7 +411,7 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -440,7 +440,7 @@ MODULE(resource_manager, {
         outsideFile.close();
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -470,7 +470,7 @@ MODULE(resource_manager, {
         TestManagerHelper::CreateTestScript("callback-start", "main.js", "// empty script");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -503,7 +503,7 @@ MODULE(resource_manager, {
         TestManagerHelper::CreateTestScript("callback-stop", "main.js", "// empty script");
 
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
@@ -529,7 +529,7 @@ MODULE(resource_manager, {
 
     IT("SetCurrentResourceContext and GetCurrentResourceContext work correctly", {
         NodeEngine engine;
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();

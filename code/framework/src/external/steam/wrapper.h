@@ -48,7 +48,7 @@ namespace Framework::External::Steam {
 
         ~Wrapper() = default;
 
-        SteamError Init();
+        [[nodiscard]] SteamError Init();
         void Shutdown() override;
 
         CSteamID GetSteamID() const;

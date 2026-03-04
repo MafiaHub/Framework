@@ -20,7 +20,7 @@ namespace Framework::Integrations::Server::Networking {
       public:
         Engine();
 
-        [[nodiscard]] bool Init(int32_t, std::string &, int32_t, std::string &);
+        [[nodiscard]] Framework::Networking::NetworkPeerError Init(int32_t, std::string &, int32_t, std::string &);
         void Shutdown() override;
 
         void Update() override;

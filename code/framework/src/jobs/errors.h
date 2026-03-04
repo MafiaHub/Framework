@@ -8,10 +8,9 @@
 
 #pragma once
 
-namespace Framework::Networking {
-    enum class PeerState {
-        CONNECTING,
-        CONNECTED,
-        DISCONNECTED
+namespace Framework::Jobs {
+    enum class JobSystemError {
+        JOB_SYSTEM_NONE,
+        JOB_SYSTEM_INIT_FAILED,
     };
-}; // namespace Framework::Networking
+} // namespace Framework::Jobs

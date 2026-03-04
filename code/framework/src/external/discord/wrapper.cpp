@@ -11,10 +11,10 @@
 #include <logging/logger.h>
 
 namespace Framework::External::Discord {
-    bool Wrapper::Init(int64_t id) {
+    DiscordError Wrapper::Init(int64_t id) {
         const auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
         if (result != discord::Result::Ok) {
-            return false;
+            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
         }
 
         _instance->UserManager().OnCurrentUserUpdate.Connect([this]() {
@@ -23,7 +23,7 @@ namespace Framework::External::Discord {
         });
 
         _initialized = true;
-        return true;
+        return DiscordError::DISCORD_NONE;
     }
 
     void Wrapper::Shutdown() {

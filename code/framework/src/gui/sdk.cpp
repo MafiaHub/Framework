@@ -9,13 +9,12 @@
 #include "sdk.h"
 
 namespace Framework::GUI {
-    bool SDK::Init(CefRefPtr<CefBrowser> browser) {
+    GUIError SDK::Init(CefRefPtr<CefBrowser> browser) {
         _browser = browser;
-        return true;
+        return GUIError::GUI_NONE;
     }
 
-    bool SDK::Shutdown() {
+    void SDK::Shutdown() {
         _browser = nullptr;
-        return true;
     }
 } // namespace Framework::GUI

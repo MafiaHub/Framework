@@ -20,6 +20,7 @@
 
 #include <glm/glm.hpp>
 
+#include "errors.h"
 #include "graphics/renderer.h"
 #include "sdk.h"
 
@@ -78,7 +79,7 @@ namespace Framework::GUI {
         View(Graphics::Renderer *graphicsRenderer, Manager *manager);
         virtual ~View();
 
-        virtual bool Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false);
+        [[nodiscard]] virtual GUIError Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;

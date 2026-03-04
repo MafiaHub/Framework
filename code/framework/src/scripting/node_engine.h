@@ -74,7 +74,7 @@ namespace Framework::Scripting {
         explicit NodeEngine(const NodeEngineOptions &options = {});
         ~NodeEngine() override;
 
-        bool Init() override;
+        [[nodiscard]] ScriptingError Init() override;
         void Shutdown() override;
         bool ExecuteFile(const std::string &filepath) override;
 

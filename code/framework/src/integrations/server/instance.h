@@ -123,7 +123,7 @@ namespace Framework::Integrations::Server {
         Instance();
         ~Instance();
 
-        ServerError Init(InstanceOptions &);
+        [[nodiscard]] ServerError Init(InstanceOptions &);
         ServerError Shutdown();
 
         virtual void PostInit() {}

@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "errors.h"
 #include "modules/base.hpp"
 
 #include <utils/lifecycle.h>
@@ -59,7 +60,7 @@ namespace Framework::World {
         Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:
-        [[nodiscard]] bool Init(Networking::NetworkPeer *networkPeer);
+        [[nodiscard]] WorldError Init(Networking::NetworkPeer *networkPeer);
 
         void Shutdown() override;
 

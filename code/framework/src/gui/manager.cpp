@@ -39,7 +39,7 @@ namespace Framework::GUI {
         Lifecycle::Shutdown();
     }
 
-    bool Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated) {
+    GUIError Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated) {
         _graphicsRenderer = renderer;
         _gpuAccelerated   = gpuAccelerated;
 
@@ -68,13 +68,13 @@ namespace Framework::GUI {
         CefMainArgs mainArgs(GetModuleHandle(nullptr));
         if (!CefInitialize(mainArgs, settings, _cefApp, nullptr)) {
             Framework::Logging::GetLogger("Web")->error("Failed to initialize CEF");
-            return false;
+            return GUIError::GUI_CEF_INIT_FAILED;
         }
 
         _cefInitialized = true;
         _initialized    = true;
         Framework::Logging::GetLogger("Web")->info("CEF initialized successfully");
-        return true;
+        return GUIError::GUI_NONE;
     }
 
     void Manager::Update() {
@@ -156,7 +156,7 @@ namespace Framework::GUI {
             return -1;
         }
 
-        if (!view->Init(url, width, height, offsetX, offsetY, _gpuAccelerated)) {
+        if (view->Init(url, width, height, offsetX, offsetY, _gpuAccelerated) != GUIError::GUI_NONE) {
             Framework::Logging::GetLogger("Web")->error("Failed to create view: initialization failed");
             return -1;
         }

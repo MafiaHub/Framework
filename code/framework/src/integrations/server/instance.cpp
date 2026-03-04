@@ -94,13 +94,13 @@ namespace Framework::Integrations::Server {
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
-        if (_opts.webServerEnabled && !_webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir)) {
+        if (_opts.webServerEnabled && _webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
             return ServerError::SERVER_WEBSERVER_INIT_FAILED;
         }
 
         // Initialize our networking engine
-        if (!_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword)) {
+        if (_networkingEngine->Init(_opts.bindPort, _opts.bindHost, _opts.maxPlayers, _opts.bindPassword) != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
             return ServerError::SERVER_NETWORKING_INIT_FAILED;
         }
@@ -108,14 +108,14 @@ namespace Framework::Integrations::Server {
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
 
         // Initialize the world
-        if (!_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig)) {
+        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig) != World::WorldError::WORLD_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
             return ServerError::SERVER_WORLD_INIT_FAILED;
         }
 
         CoreModules::SetWorldEngine(_worldEngine.get());
 
-        if (_opts.bindPublicServer && !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
+        if (_opts.bindPublicServer && _masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey) != Services::MasterlistError::MASTERLIST_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
@@ -146,7 +146,7 @@ namespace Framework::Integrations::Server {
 
         // Initialize the scripting engine
         _scriptingModule->SetResourcesPath(_opts.resourcesPath);
-        if (!_scriptingModule->Init(sdkCallback)) {
+        if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
             return ServerError::SERVER_SCRIPTING_INIT_FAILED;
         }
@@ -303,9 +303,9 @@ namespace Framework::Integrations::Server {
             net->Send(readyMsg, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, uint32_t reason) {
+        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
             const auto guid = packet->guid;
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, reason);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 
             const auto e = _worldEngine->GetEntityByGUID(guid.g);
             if (e.is_valid()) {
@@ -466,17 +466,17 @@ namespace Framework::Integrations::Server {
     void Instance::HandleCommand(const std::string &command) {
         try {
             auto result = _commandProcessor->ProcessCommand(command);
-            if (result.GetError() != Utils::CommandProcessorError::ERROR_NONE) {
+            if (result.GetError() != Utils::CommandProcessorError::COMMAND_NONE) {
                 switch (result.GetError()) {
-                    case Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP:
+                    case Utils::CommandProcessorError::COMMAND_PRINT_HELP:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.Unwrap());
                         break;
-                    case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN:
+                    case Utils::CommandProcessorError::COMMAND_UNKNOWN:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.Unwrap());
                         break;
-                    case Utils::CommandProcessorError::ERROR_EMPTY_INPUT:
+                    case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT:
                         break;
-                    case Utils::CommandProcessorError::ERROR_INTERNAL:
+                    case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.Unwrap());
                         break;
                     default:

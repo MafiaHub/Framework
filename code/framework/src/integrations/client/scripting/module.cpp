@@ -40,12 +40,12 @@ namespace Framework::Integrations::Client::Scripting {
         Shutdown();
     }
 
-    bool ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
+    Framework::Scripting::ScriptingError ClientScriptingModule::Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback) {
         if (!_engine) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "Cannot initialize client scripting: engine is null (Shutdown() was called). "
                 "Create a new ClientScriptingModule instance instead.");
-            return false;
+            return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
         // Check if engine is already initialized (e.g., after Reset())
@@ -60,10 +60,10 @@ namespace Framework::Integrations::Client::Scripting {
         _engine->SetModuleRootPath(std::filesystem::absolute(_resourceCachePath).string());
 
         // Initialize the V8 engine - no-op if already initialized
-        if (!_engine->Init()) {
+        if (_engine->Init() != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                 "Failed to initialize V8 engine: {}", _engine->GetLastError());
-            return false;
+            return Framework::Scripting::ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
         // Reusing an already initialized engine (reconnect/reset path):
@@ -91,7 +91,7 @@ namespace Framework::Integrations::Client::Scripting {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                     "Failed to initialize Framework SDK: {}", _engine->GetLastError());
                 _resourceManager.reset();
-                return false;
+                return Framework::Scripting::ScriptingError::SCRIPTING_SDK_INIT_FAILED;
             }
         }
 
@@ -99,7 +99,7 @@ namespace Framework::Integrations::Client::Scripting {
             "Client scripting module initialized with standalone V8 engine");
 
         _initialized = true;
-        return true;
+        return Framework::Scripting::ScriptingError::SCRIPTING_NONE;
     }
 
     void ClientScriptingModule::RegisterFrameworkBindings() {

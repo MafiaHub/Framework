@@ -20,7 +20,7 @@ namespace Framework::Integrations::Client::Networking {
       public:
         Engine();
 
-        [[nodiscard]] bool Init();
+        [[nodiscard]] Framework::Networking::NetworkPeerError Init();
         void Shutdown() override;
 
         bool Connect(const std::string &, const int32_t, const std::string password = "") const;

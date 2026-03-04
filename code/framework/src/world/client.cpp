@@ -12,14 +12,14 @@
 #include "game_rpc/set_transform.h"
 
 namespace Framework::World {
-    bool ClientEngine::Init() {
-        if (!Engine::Init(nullptr)) { // assigned by OnConnect
-            return false;
+    WorldError ClientEngine::Init() {
+        if (Engine::Init(nullptr) != WorldError::WORLD_NONE) { // assigned by OnConnect
+            return WorldError::WORLD_FLECS_INIT_FAILED;
         }
 
         _queryGetEntityByServerID = _world->query_builder<Modules::Base::ServerID>().build();
 
-        return true;
+        return WorldError::WORLD_NONE;
     }
 
     void ClientEngine::Shutdown() {

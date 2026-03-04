@@ -20,10 +20,10 @@ namespace Framework::Utils {
         }
 
         if (args.empty()) {
-            return CommandProcessorError::ERROR_EMPTY_INPUT;
+            return CommandProcessorError::COMMAND_EMPTY_INPUT;
         }
 
-        Result<std::string, CommandProcessorError> error = CommandProcessorError::ERROR_NONE;
+        Result<std::string, CommandProcessorError> error = CommandProcessorError::COMMAND_NONE;
 
         command = args[0];
 
@@ -38,18 +38,18 @@ namespace Framework::Utils {
 
                 if (result.count("help")) {
                     // auto help
-                    error = {CommandProcessorError::ERROR_NONE_PRINT_HELP, _commands[command].options->help()};
+                    error = {CommandProcessorError::COMMAND_PRINT_HELP, _commands[command].options->help()};
                 }
                 else {
                     _commands[command].proc(result);
                 }
             }
             catch (const std::exception &e) {
-                error = {CommandProcessorError::ERROR_INTERNAL, e.what()};
+                error = {CommandProcessorError::COMMAND_INTERNAL_ERROR, e.what()};
             }
         }
         else {
-            return {CommandProcessorError::ERROR_CMD_UNKNOWN, input};
+            return {CommandProcessorError::COMMAND_UNKNOWN, input};
         }
 
         return error;
@@ -57,10 +57,10 @@ namespace Framework::Utils {
 
     Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc) {
         if (name.empty()) {
-            return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
+            return CommandProcessorError::COMMAND_UNSPECIFIED_NAME;
         }
         if (_commands.contains(name)) {
-            return {CommandProcessorError::ERROR_CMD_ALREADY_EXISTS, name};
+            return {CommandProcessorError::COMMAND_ALREADY_EXISTS, name};
         }
 
         try {
@@ -75,18 +75,18 @@ namespace Framework::Utils {
             _commands[name] = {std::move(cmd), proc};
         }
         catch (const std::exception &e) {
-            return {CommandProcessorError::ERROR_INTERNAL, e.what()};
+            return {CommandProcessorError::COMMAND_INTERNAL_ERROR, e.what()};
         }
 
-        return CommandProcessorError::ERROR_NONE;
+        return CommandProcessorError::COMMAND_NONE;
     }
 
     Result<std::string, CommandProcessorError> CommandProcessor::RegisterCommand(const std::string &name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc) {
         if (name.empty()) {
-            return CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME;
+            return CommandProcessorError::COMMAND_UNSPECIFIED_NAME;
         }
         if (_commands.contains(name)) {
-            return {CommandProcessorError::ERROR_CMD_ALREADY_EXISTS, name};
+            return {CommandProcessorError::COMMAND_ALREADY_EXISTS, name};
         }
 
         try {
@@ -104,9 +104,9 @@ namespace Framework::Utils {
             _commands[name] = {std::move(cmd), proc};
         }
         catch (const std::exception &e) {
-            return {CommandProcessorError::ERROR_INTERNAL, e.what()};
+            return {CommandProcessorError::COMMAND_INTERNAL_ERROR, e.what()};
         }
 
-        return CommandProcessorError::ERROR_NONE;
+        return CommandProcessorError::COMMAND_NONE;
     }
 } // namespace Framework::Utils

@@ -462,8 +462,8 @@ namespace Framework::Launcher {
         return true;
     }
 
-    DLLInjectionResults InjectLibraryIntoProcess(HANDLE hProcess, const wchar_t *szLibraryPath) {
-        DLLInjectionResults result = INJECT_LIBRARY_RESULT_OK;
+    DLLInjectionResult InjectLibraryIntoProcess(HANDLE hProcess, const wchar_t *szLibraryPath) {
+        DLLInjectionResult result = DLLInjectionResult::INJECT_LIBRARY_RESULT_OK;
 
         // Get the length of the library path
         const size_t sLibraryPathLen = (wcslen(szLibraryPath) + 1) * sizeof(WCHAR);
@@ -476,19 +476,19 @@ namespace Framework::Launcher {
         const BOOL bWriteSuccess = WriteProcessMemory(hProcess, pRemoteLibraryPath, szLibraryPath, sLibraryPathLen, &sBytesWritten);
 
         if (!bWriteSuccess || sBytesWritten != sLibraryPathLen) {
-            result = INJECT_LIBRARY_RESULT_WRITE_FAILED;
+            result = DLLInjectionResult::INJECT_LIBRARY_RESULT_WRITE_FAILED;
         }
         else {
             // Get the handle of Kernel32.dll
             const HMODULE hKernel32 = GetModuleHandle("kernel32.dll");
             if (hKernel32 == NULL) {
-                result = INJECT_LIBRARY_GET_MODULE_HANDLE_FAILED;
+                result = DLLInjectionResult::INJECT_LIBRARY_GET_MODULE_HANDLE_FAILED;
             }
             else {
                 // Get the address of the LoadLibraryA function from Kernel32.dll
                 const FARPROC pfnLoadLibraryW = GetProcAddress(hKernel32, "LoadLibraryW");
                 if (pfnLoadLibraryW == NULL) {
-                    result = INJECT_LIBRARY_GET_PROC_ADDRESS_FAILED;
+                    result = DLLInjectionResult::INJECT_LIBRARY_GET_PROC_ADDRESS_FAILED;
                 }
                 else {
                     // Create a thread inside the target process to load our library
@@ -504,12 +504,12 @@ namespace Framework::Launcher {
                             assert(dwExitCode != STILL_ACTIVE);
                         }
                         else {
-                            result = INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
+                            result = DLLInjectionResult::INJECT_LIBRARY_GET_RETURN_CODE_FAILED;
                         }
 
                         // In case LoadLibrary returns handle equal to zero there was some problem.
                         if (dwExitCode == 0) {
-                            result = INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
+                            result = DLLInjectionResult::INJECT_LIBRARY_LOAD_LIBRARY_FAILED;
                         }
 
                         // Close our thread handle
@@ -517,7 +517,7 @@ namespace Framework::Launcher {
                     }
                     else {
                         // Thread creation failed
-                        result = INJECT_LIBRARY_THREAD_CREATION_FAILED;
+                        result = DLLInjectionResult::INJECT_LIBRARY_THREAD_CREATION_FAILED;
                     }
                 }
             }
@@ -528,17 +528,17 @@ namespace Framework::Launcher {
         return result;
     }
 
-    DLLInjectionResults InjectLibraryIntoProcess(DWORD dwProcessId, const wchar_t *szLibraryPath) {
+    DLLInjectionResult InjectLibraryIntoProcess(DWORD dwProcessId, const wchar_t *szLibraryPath) {
         // Open our target process
         const HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 
         if (!hProcess) {
             // Failed to open the process
-            return INJECT_LIBRARY_OPEN_PROCESS_FAIL;
+            return DLLInjectionResult::INJECT_LIBRARY_OPEN_PROCESS_FAIL;
         }
 
         // Inject the library into the process
-        const DLLInjectionResults result = InjectLibraryIntoProcess(hProcess, szLibraryPath);
+        const DLLInjectionResult result = InjectLibraryIntoProcess(hProcess, szLibraryPath);
 
         // Close the process handle
         CloseHandle(hProcess);
@@ -579,10 +579,10 @@ namespace Framework::Launcher {
 
         // Inject the client dll inside
         const std::wstring completeDllPath           = gProjectDllPath + std::wstring(L"\\") + gDllName;
-        const DLLInjectionResults moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
+        const DLLInjectionResult moduleInjectResult = InjectLibraryIntoProcess(piProcessInfo.hProcess, completeDllPath.c_str());
 
         // Was it successfull?
-        if (moduleInjectResult != INJECT_LIBRARY_RESULT_OK) {
+        if (moduleInjectResult != DLLInjectionResult::INJECT_LIBRARY_RESULT_OK) {
             MessageBoxA(nullptr, "Failed to inject module into game process", _config.name.c_str(), MB_ICONERROR);
 
             TerminateProcess(piProcessInfo.hProcess, 0);

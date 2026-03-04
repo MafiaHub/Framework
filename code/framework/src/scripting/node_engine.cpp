@@ -42,23 +42,23 @@ namespace Framework::Scripting {
         Shutdown();
     }
 
-    bool NodeEngine::Init() {
+    ScriptingError NodeEngine::Init() {
         _lastError.clear();
 
         if (_initialized) {
-            return true;
+            return ScriptingError::SCRIPTING_NONE;
         }
 
         if (!InitializeNode()) {
-            return false;
+            return ScriptingError::SCRIPTING_PLATFORM_INIT_FAILED;
         }
 
         if (!CreateEnvironment()) {
-            return false;
+            return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
         _initialized = true;
-        return true;
+        return ScriptingError::SCRIPTING_NONE;
     }
 
     void NodeEngine::Shutdown() {

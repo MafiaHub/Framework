@@ -167,7 +167,7 @@ MODULE(js_features, {
 
     IT("All builtin types work correctly", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -226,7 +226,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -272,7 +272,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -314,7 +314,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -357,7 +357,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -400,7 +400,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -432,7 +432,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -478,7 +478,7 @@ MODULE(js_features, {
         EventsTestHelper::Setup();
 
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = EventsTestHelper::GetTestPath();
@@ -510,7 +510,7 @@ MODULE(js_features, {
 
     IT("Console::FormatValue formats functions as [Function]", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -544,7 +544,7 @@ MODULE(js_features, {
 
     IT("Console::FormatValue formats primitive types correctly", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -584,7 +584,7 @@ MODULE(js_features, {
 
     IT("Console::FormatValue formats arrays correctly", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -610,7 +610,7 @@ MODULE(js_features, {
 
     IT("Console::FormatValue formats objects as JSON", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -634,7 +634,7 @@ MODULE(js_features, {
 
     IT("Console::FormatValue handles circular references safely", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();
@@ -659,7 +659,7 @@ MODULE(js_features, {
 
     IT("Console::FormatValue handles objects with function properties", {
         NodeEngine engine({});
-        EQUALS(engine.Init(), true);
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         {
             v8::Isolate *isolate = engine.GetIsolate();

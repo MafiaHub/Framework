@@ -8,10 +8,9 @@
 
 #pragma once
 
-namespace Framework::Networking {
-    enum class PeerState {
-        CONNECTING,
-        CONNECTED,
-        DISCONNECTED
+namespace Framework::HTTP {
+    enum class WebserverError {
+        WEBSERVER_NONE,
+        WEBSERVER_BIND_FAILED
     };
-}; // namespace Framework::Networking
+} // namespace Framework::HTTP

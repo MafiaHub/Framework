@@ -253,19 +253,19 @@ namespace Framework::External::ImGUI::Widgets {
         const auto result = _commandProcessor->ProcessCommand(command);
 
         switch (result.GetError()) {
-        case Utils::CommandProcessorError::ERROR_NONE_PRINT_HELP: {
+        case Utils::CommandProcessorError::COMMAND_PRINT_HELP: {
             _logger->info("{}", result.Unwrap());
         } break;
-        case Utils::CommandProcessorError::ERROR_CMD_ALREADY_EXISTS: {
+        case Utils::CommandProcessorError::COMMAND_ALREADY_EXISTS: {
             _logger->warn("Command already exists: {}", result.Unwrap());
         } break;
-        case Utils::CommandProcessorError::ERROR_CMD_UNSPECIFIED_NAME: {
+        case Utils::CommandProcessorError::COMMAND_UNSPECIFIED_NAME: {
             _logger->warn("Command name was unspecified");
         } break;
-        case Utils::CommandProcessorError::ERROR_CMD_UNKNOWN: {
+        case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
             _logger->warn("Command not found: {}", result.Unwrap());
         } break;
-        case Utils::CommandProcessorError::ERROR_INTERNAL: {
+        case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR: {
             _logger->warn("Input error: {}", result.Unwrap());
         } break;
 

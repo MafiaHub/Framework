@@ -15,7 +15,7 @@ namespace Framework::HTTP {
         _server = std::make_shared<httplib::Server>();
     }
 
-    bool Webserver::Init(const std::string &host, int32_t port, const std::string &serveDir) {
+    WebserverError Webserver::Init(const std::string &host, int32_t port, const std::string &serveDir) {
         _running  = true;
         _serveDir = serveDir;
 
@@ -56,7 +56,7 @@ namespace Framework::HTTP {
 
         _webThread.detach();
         _initialized = true;
-        return true;
+        return WebserverError::WEBSERVER_NONE;
     }
 
     void Webserver::Shutdown() {

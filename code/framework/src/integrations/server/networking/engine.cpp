@@ -15,14 +15,15 @@ namespace Framework::Integrations::Server::Networking {
         _networkServer = std::make_unique<Framework::Networking::NetworkServer>();
     }
 
-    bool Engine::Init(int32_t port, std::string &host, int32_t maxPlayers, std::string &password) {
-        if (!_networkServer->Init(port, host, maxPlayers, password)) {
+    Framework::Networking::NetworkPeerError Engine::Init(int32_t port, std::string &host, int32_t maxPlayers, std::string &password) {
+        const auto result = _networkServer->Init(port, host, maxPlayers, password);
+        if (result != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_SERVER)->critical("Failed to init the inner networking engine");
-            return false;
+            return result;
         }
 
         _initialized = true;
-        return true;
+        return Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE;
     }
 
     void Engine::Shutdown() {

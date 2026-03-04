@@ -10,6 +10,7 @@
 
 #include <cstdint>
 
+#include "errors.h"
 #include "messages/messages.h"
 #include "network_peer.h"
 #include "world/server.h"
@@ -33,7 +34,7 @@ namespace Framework::Networking {
       public:
         NetworkServer(): NetworkPeer() {}
 
-        [[nodiscard]] bool Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
+        [[nodiscard]] NetworkPeerError Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password = "");
         void Shutdown() override;
 
         bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;

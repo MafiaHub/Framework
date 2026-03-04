@@ -34,7 +34,7 @@ namespace Framework::Graphics {
 
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
-        bool Shutdown() override;
+        void Shutdown() override;
         void Update() override;
         void Begin();
         void End();

@@ -8,10 +8,11 @@
 
 #pragma once
 
-namespace Framework::Networking {
-    enum class PeerState {
-        CONNECTING,
-        CONNECTED,
-        DISCONNECTED
+namespace Framework::Scripting {
+    enum class ScriptingError {
+        SCRIPTING_NONE,
+        SCRIPTING_ENGINE_INIT_FAILED,
+        SCRIPTING_SDK_INIT_FAILED,
+        SCRIPTING_PLATFORM_INIT_FAILED
     };
-}; // namespace Framework::Networking
+} // namespace Framework::Scripting

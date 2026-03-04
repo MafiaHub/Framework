@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "errors.h"
+
 #include <ftl/task_scheduler.h>
 #include <ftl/wait_group.h>
 #include <ftl/fibtex.h>
@@ -112,6 +114,12 @@ namespace Framework::Jobs {
         explicit JobSystem(const JobSystemConfig &config = JobSystemConfig{});
 
         ~JobSystem();
+
+        /**
+         * @brief Initialize the job system scheduler
+         * @return JobSystemError::JOB_SYSTEM_NONE on success
+         */
+        [[nodiscard]] JobSystemError Init();
 
         JobSystem(const JobSystem &) = delete;
         JobSystem &operator=(const JobSystem &) = delete;
@@ -288,6 +296,7 @@ namespace Framework::Jobs {
         std::mutex _callbackMutex;
         std::queue<CompletedCallback> _completedCallbacks;
 
+        JobSystemConfig _config;
         bool _profilingEnabled = false;
 
         void QueueCallback(fu2::function<void()> callback);

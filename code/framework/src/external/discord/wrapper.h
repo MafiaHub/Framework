@@ -25,7 +25,7 @@ namespace Framework::External::Discord {
       public:
         using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
         Wrapper()              = default;
-        [[nodiscard]] bool Init(int64_t id);
+        [[nodiscard]] DiscordError Init(int64_t id);
         void Shutdown() override;
 
         void Update() override;

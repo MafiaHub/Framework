@@ -7,6 +7,8 @@
 
 #include <v8.h>
 
+#include "errors.h"
+
 #include <function2.hpp>
 
 #include <memory>
@@ -27,9 +29,9 @@ namespace Framework::Scripting {
 
         /**
          * Initialize the JavaScript engine.
-         * @return true if initialization succeeded
+         * @return ScriptingError::SCRIPTING_NONE on success
          */
-        virtual bool Init() = 0;
+        [[nodiscard]] virtual ScriptingError Init() = 0;
 
         /**
          * Shutdown the JavaScript engine.

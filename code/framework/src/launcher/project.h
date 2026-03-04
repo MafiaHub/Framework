@@ -29,7 +29,7 @@ namespace Framework::Launcher {
         DLL_INJECTION
     };
 
-    enum DLLInjectionResults {
+    enum class DLLInjectionResult {
         INJECT_LIBRARY_RESULT_OK,
 
         INJECT_LIBRARY_GET_MODULE_HANDLE_FAILED,
@@ -158,15 +158,14 @@ namespace Framework::Launcher {
         bool RunWithPELoading();
         bool RunWithDLLInjection();
 
-        const char *InjectLibraryResultToString(const DLLInjectionResults result) {
+        const char *InjectLibraryResultToString(const DLLInjectionResult result) {
             switch (result) {
-            case INJECT_LIBRARY_RESULT_OK: return "Ok";
-            case INJECT_LIBRARY_RESULT_WRITE_FAILED: return "Failed to write memory into process";
-            case INJECT_LIBRARY_GET_RETURN_CODE_FAILED: return "Failed to get return code of the load call";
-            case INJECT_LIBRARY_LOAD_LIBRARY_FAILED: return "Failed to load library";
-            case INJECT_LIBRARY_THREAD_CREATION_FAILED: return "Failed to create remote thread";
-
-            case INJECT_LIBRARY_OPEN_PROCESS_FAIL: return "Open of the process failed";
+            case DLLInjectionResult::INJECT_LIBRARY_RESULT_OK: return "Ok";
+            case DLLInjectionResult::INJECT_LIBRARY_RESULT_WRITE_FAILED: return "Failed to write memory into process";
+            case DLLInjectionResult::INJECT_LIBRARY_GET_RETURN_CODE_FAILED: return "Failed to get return code of the load call";
+            case DLLInjectionResult::INJECT_LIBRARY_LOAD_LIBRARY_FAILED: return "Failed to load library";
+            case DLLInjectionResult::INJECT_LIBRARY_THREAD_CREATION_FAILED: return "Failed to create remote thread";
+            case DLLInjectionResult::INJECT_LIBRARY_OPEN_PROCESS_FAIL: return "Open of the process failed";
             default: return "Unknown error";
             }
         }

@@ -130,7 +130,7 @@ namespace Framework::Integrations::Client {
         Instance();
         virtual ~Instance();
 
-        ClientError Init(InstanceOptions &);
+        [[nodiscard]] ClientError Init(InstanceOptions &);
         ClientError Shutdown();
 
         void Render();
@@ -145,7 +145,7 @@ namespace Framework::Integrations::Client {
             (void)engine;
         }
 
-        ClientError RenderInit();
+        [[nodiscard]] ClientError RenderInit();
 
         void DownloadsAssetsFromConnectedServer();
 

@@ -8,10 +8,11 @@
 
 #pragma once
 
-namespace Framework::Networking {
-    enum class PeerState {
-        CONNECTING,
-        CONNECTED,
-        DISCONNECTED
+namespace Framework::GUI {
+    enum class GUIError {
+        GUI_NONE,
+        GUI_CEF_INIT_FAILED,
+        GUI_RENDERER_NULL,
+        GUI_VIEW_INIT_FAILED
     };
-}; // namespace Framework::Networking
+} // namespace Framework::GUI

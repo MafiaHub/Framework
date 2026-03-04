@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "errors.h"
+
 #include <utils/lifecycle.h>
 
 #include <atomic>
@@ -27,7 +29,7 @@ namespace Framework::HTTP {
     class Webserver : public Framework::Lifecycle {
       public:
         Webserver();
-        bool Init(const std::string &host, int32_t port, const std::string &);
+        [[nodiscard]] WebserverError Init(const std::string &host, int32_t port, const std::string &);
 
         void Shutdown() override;
 

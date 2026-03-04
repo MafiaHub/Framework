@@ -50,7 +50,7 @@ namespace Framework::World {
         void InitRPCs(Networking::NetworkPeer *peer) const;
 
       public:
-        [[nodiscard]] bool Init();
+        [[nodiscard]] WorldError Init();
 
         void Shutdown() override;
 

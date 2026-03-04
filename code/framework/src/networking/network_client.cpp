@@ -17,12 +17,12 @@ namespace Framework::Networking {
         Shutdown();
     }
 
-    bool NetworkClient::Init() {
+    NetworkPeerError NetworkClient::Init() {
         SLNet::SocketDescriptor sd {};
         const SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
-            return false;
+            return NetworkPeerError::NETWORK_PEER_INIT_FAILED;
         }
 
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
@@ -30,7 +30,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_assetStreamer);
 
         _initialized = true;
-        return true;
+        return NetworkPeerError::NETWORK_PEER_NONE;
     }
 
     void NetworkClient::Shutdown() {
@@ -84,7 +84,7 @@ namespace Framework::Networking {
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
 
         if (_onPlayerDisconnectedCallback) {
-            _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+            _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
         }
         _state = PeerState::DISCONNECTED;
 
@@ -105,55 +105,55 @@ namespace Framework::Networking {
             if (_onPlayerConnectedCallback) {
                 _onPlayerConnectedCallback(_packet);
             }
-            _state = CONNECTED;
+            _state = PeerState::CONNECTED;
             return true;
         };
 
         case ID_NO_FREE_INCOMING_CONNECTIONS: {
             if (_onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, Messages::NO_FREE_SLOT);
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::NO_FREE_SLOT);
             }
-            _state = DISCONNECTED;
+            _state = PeerState::DISCONNECTED;
             return true;
         };
 
         case ID_DISCONNECTION_NOTIFICATION: {
             if (_onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
             }
-            _state = DISCONNECTED;
+            _state = PeerState::DISCONNECTED;
             return true;
         };
 
         case ID_CONNECTION_LOST: {
             if (_onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, Messages::LOST);
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::LOST);
             }
-            _state = DISCONNECTED;
+            _state = PeerState::DISCONNECTED;
             return true;
         };
 
         case ID_CONNECTION_ATTEMPT_FAILED: {
             if (_onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, Messages::FAILED);
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::FAILED);
             }
-            _state = DISCONNECTED;
+            _state = PeerState::DISCONNECTED;
             return true;
         };
 
         case ID_INVALID_PASSWORD: {
             if (_onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, Messages::INVALID_PASSWORD);
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::INVALID_PASSWORD);
             }
-            _state = DISCONNECTED;
+            _state = PeerState::DISCONNECTED;
             return true;
         };
 
         case ID_CONNECTION_BANNED: {
             if (_onPlayerDisconnectedCallback) {
-                _onPlayerDisconnectedCallback(_packet, Messages::BANNED);
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::BANNED);
             }
-            _state = DISCONNECTED;
+            _state = PeerState::DISCONNECTED;
             return true;
         };
         }
@@ -161,7 +161,7 @@ namespace Framework::Networking {
     }
 
     int NetworkClient::GetPing() const {
-        if (!_peer || _state != CONNECTED) {
+        if (!_peer || _state != PeerState::CONNECTED) {
             return 0;
         }
 

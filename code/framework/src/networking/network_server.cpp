@@ -13,12 +13,12 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    bool NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
+    NetworkPeerError NetworkServer::Init(int32_t port, const std::string &host, int32_t maxPlayers, const std::string &password) {
         auto newSocketSd                  = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
         const SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != SLNet::RAKNET_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
-            return false;
+            return NetworkPeerError::NETWORK_PEER_INIT_FAILED;
         }
 
         if (!password.empty()) {
@@ -33,7 +33,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_assetStreamer);
 
         _initialized = true;
-        return true;
+        return NetworkPeerError::NETWORK_PEER_NONE;
     }
 
     bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
@@ -49,14 +49,14 @@ namespace Framework::Networking {
         case ID_DISCONNECTION_NOTIFICATION: {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
-                _onPlayerDisconnectCallback(_packet, Messages::GRACEFUL_SHUTDOWN);
+                _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
             }
             return true;
         };
         case ID_CONNECTION_LOST: {
             Framework::Logging::GetInstance()->Get(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
-                _onPlayerDisconnectCallback(_packet, Messages::LOST);
+                _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::LOST);
             }
             return true;
         };

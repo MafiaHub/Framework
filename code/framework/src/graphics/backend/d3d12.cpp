@@ -91,7 +91,7 @@ namespace Framework::Graphics {
         return true;
     }
 
-    bool D3D12Backend::Shutdown() {
+    void D3D12Backend::Shutdown() {
         // release objects
         _rtvHeap->Release();
         _srvHeap->Release();
@@ -100,7 +100,6 @@ namespace Framework::Graphics {
             frameContext._commandAllocator->Release();
             frameContext._mainRenderTargetResource->Release();
         }
-        return true;
     }
 
     void D3D12Backend::Begin() {

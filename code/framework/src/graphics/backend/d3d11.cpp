@@ -126,13 +126,12 @@ namespace Framework::Graphics {
         return true;
     }
 
-    bool D3D11Backend::Shutdown() {
+    void D3D11Backend::Shutdown() {
         if (_device) {
             if (_deferredContext) {
                 _deferredContext->ClearState();
             }
         }
-        return true;
     }
 
     void D3D11Backend::Update() {}
@@ -200,8 +199,10 @@ namespace Framework::Graphics {
             hr = _device->CreateTexture2D(&desc, nullptr, texture_entry.texture.GetAddressOf());
         }
         else {
-            if (bitmap.size == 0 && bitmap.pixels == nullptr)
-                throw std::runtime_error(fmt::format("D3D11Backend::CreateTexture fault, size:{} ptr:{}", bitmap.size, (void *)bitmap.pixels));
+            if (bitmap.size == 0 && bitmap.pixels == nullptr) {
+                spdlog::error("D3D11Backend::CreateTexture fault, size:{} ptr:{}", bitmap.size, (void *)bitmap.pixels);
+                return;
+            }
             D3D11_SUBRESOURCE_DATA tex_data;
             ZeroMemory(&tex_data, sizeof(tex_data));
             tex_data.pSysMem          = bitmap.pixels;
@@ -285,7 +286,9 @@ namespace Framework::Graphics {
     D3D11Backend::TextureEntry& D3D11Backend::GetTexture(uint32_t texture_id) {
         auto i = _textures.find(texture_id);
         if (i == _textures.end()) {
-            throw new std::runtime_error("D3D11Backend::GetTexture, texture id doesn't exist.");
+            spdlog::error("D3D11Backend::GetTexture, texture id doesn't exist.");
+            static TextureEntry empty {};
+            return empty;
         }
 
         return i->second;
@@ -293,19 +296,19 @@ namespace Framework::Graphics {
 
     void D3D11Backend::CreateRenderBuffer(uint32_t render_buffer_id, const RenderBuffer& buffer) {
         if (render_buffer_id == 0) {
-            throw new std::runtime_error("D3D11Backend::CreateRenderBuffer, render buffer ID 0 is reserved for default ");
+            spdlog::error("D3D11Backend::CreateRenderBuffer, render buffer ID 0 is reserved for default");
             return;
         }
 
         auto i = _renderTargets.find(render_buffer_id);
         if (i != _renderTargets.end()) {
-            throw new std::runtime_error("D3D11Backend::CreateRenderBuffer, render buffer id already exists.");
+            spdlog::error("D3D11Backend::CreateRenderBuffer, render buffer id already exists.");
             return;
         }
 
         auto tex_entry = _textures.find(buffer.texture_id);
         if (tex_entry == _textures.end()) {
-            throw new std::runtime_error("D3D11Backend::CreateRenderBuffer, texture id doesn't exist.");
+            spdlog::error("D3D11Backend::CreateRenderBuffer, texture id doesn't exist.");
             return;
         }
 
@@ -323,7 +326,7 @@ namespace Framework::Graphics {
 
         render_target_entry.render_target_texture_id = buffer.texture_id;
         if (FAILED(hr))
-            throw new std::runtime_error("D3D11Backend::CreateRenderBuffer, unable to create render target.");
+            spdlog::error("D3D11Backend::CreateRenderBuffer, unable to create render target.");
     }
 
     void D3D11Backend::DestroyRenderBuffer(uint32_t render_buffer_id) {
@@ -543,33 +546,40 @@ namespace Framework::Graphics {
 
     }
 
-    void D3D11Backend::LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout) {
+    bool D3D11Backend::LoadCompiledVertexShader(unsigned char *data, unsigned int len, ID3D11VertexShader **ppVertexShader, const D3D11_INPUT_ELEMENT_DESC *pInputElementDescs, UINT NumElements, ID3D11InputLayout **ppInputLayout) {
         HRESULT hr;
 
         // Create the vertex shader
         hr = _device->CreateVertexShader(data, len, nullptr, ppVertexShader);
 
         if (FAILED(hr)) {
-            throw new std::runtime_error("D3D11Backend::LoadCompiledVertexShader, Vertex shader could not be compiled.Check ");
+            spdlog::error("D3D11Backend::LoadCompiledVertexShader, Vertex shader could not be compiled.");
+            return false;
         }
 
         // Create the input layout
         hr = _device->CreateInputLayout(pInputElementDescs, NumElements, data, len, ppInputLayout);
 
         if (FAILED(hr)) {
-            throw new std::runtime_error("D3D11Backend::LoadCompiledVertexShader, Could not create vertex input layout.");
+            spdlog::error("D3D11Backend::LoadCompiledVertexShader, Could not create vertex input layout.");
+            return false;
         }
+
+        return true;
     }
 
-    void D3D11Backend::LoadCompiledPixelShader(unsigned char *data, unsigned int len, ID3D11PixelShader **ppPixelShader) {
+    bool D3D11Backend::LoadCompiledPixelShader(unsigned char *data, unsigned int len, ID3D11PixelShader **ppPixelShader) {
         HRESULT hr;
 
         // Create the pixel shader
         hr = _device->CreatePixelShader(data, len, nullptr, ppPixelShader);
 
         if (FAILED(hr)) {
-            throw new std::runtime_error("D3D11Backend::LoadCompiledPixelShader, Pixel shader could not be compiled.");
+            spdlog::error("D3D11Backend::LoadCompiledPixelShader, Pixel shader could not be compiled.");
+            return false;
         }
+
+        return true;
     }
 
     void D3D11Backend::LoadShaders() {
@@ -639,7 +649,8 @@ namespace Framework::Graphics {
     void D3D11Backend::BindGeometry(uint32_t id) {
         auto i = _geometry.find(id);
         if (i == _geometry.end()) {
-            throw std::runtime_error("Geometry id not found!");
+            spdlog::error("D3D11Backend::BindGeometry, geometry id not found!");
+            return;
         }
 
         auto immediate_ctx = GetContext();
@@ -663,7 +674,7 @@ namespace Framework::Graphics {
 #if ENABLE_MSAA
             auto j = _textures.find(i->second.render_target_texture_id);
             if (j == _textures.end()) {
-                throw new std::runtime_error("D3D11Backend::BindRenderBuffer, render target texture id doesn't exist.");
+                spdlog::error("D3D11Backend::BindRenderBuffer, render target texture id doesn't exist.");
                 return nullptr;
             }
 
@@ -707,7 +718,7 @@ namespace Framework::Graphics {
         HRESULT hr                  = _device->CreateSamplerState(&sampler_desc, &_samplerState);
 
         if (FAILED(hr))
-            throw new std::runtime_error("D3D11Backend::GetSamplerState, unable to create sampler state.");
+            spdlog::error("D3D11Backend::GetSamplerState, unable to create sampler state.");
 
         return _samplerState;
     }
@@ -725,7 +736,7 @@ namespace Framework::Graphics {
 
         HRESULT hr = _device->CreateBuffer(&desc, nullptr, _constantBuffer.GetAddressOf());
         if (FAILED(hr))
-            throw new std::runtime_error("D3D11Backend::GetConstantBuffer, unable to create constant buffer.");
+            spdlog::error("D3D11Backend::GetConstantBuffer, unable to create constant buffer.");
 
         return _constantBuffer;
     }

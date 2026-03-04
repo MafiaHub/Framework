@@ -101,7 +101,7 @@ namespace Framework::Integrations::Client {
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
-                if (!_presence->Init(opts.discordAppId)) {
+                if (_presence->Init(opts.discordAppId) != External::DiscordError::DISCORD_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
                 }
                 else {
@@ -111,7 +111,7 @@ namespace Framework::Integrations::Client {
         }
 
         if (_networkingEngine) {
-            if (!_networkingEngine->Init()) {
+            if (_networkingEngine->Init() != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Networking engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
@@ -120,7 +120,7 @@ namespace Framework::Integrations::Client {
         }
 
         if (_worldEngine) {
-            if (!_worldEngine->Init()) {
+            if (_worldEngine->Init() != World::WorldError::WORLD_NONE) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
@@ -184,11 +184,16 @@ namespace Framework::Integrations::Client {
 
                 _renderer->SetWindow(_opts.rendererOptions.windowHandle);
 
+                bool backendInitOk = false;
                 switch (_opts.rendererOptions.backend) {
-                case Graphics::RendererBackend::BACKEND_D3D_9: _renderer->GetD3D9Backend()->Init(_opts.rendererOptions); break;
-                case Graphics::RendererBackend::BACKEND_D3D_11: _renderer->GetD3D11Backend()->Init(_opts.rendererOptions); break;
-                case Graphics::RendererBackend::BACKEND_D3D_12: _renderer->GetD3D12Backend()->Init(_opts.rendererOptions); break;
+                case Graphics::RendererBackend::BACKEND_D3D_9: backendInitOk = _renderer->GetD3D9Backend()->Init(_opts.rendererOptions); break;
+                case Graphics::RendererBackend::BACKEND_D3D_11: backendInitOk = _renderer->GetD3D11Backend()->Init(_opts.rendererOptions); break;
+                case Graphics::RendererBackend::BACKEND_D3D_12: backendInitOk = _renderer->GetD3D12Backend()->Init(_opts.rendererOptions); break;
                 default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
+                }
+                if (!backendInitOk) {
+                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("Failed to initialize graphics backend");
+                    return ClientError::CLIENT_ENGINES_ERROR;
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
@@ -359,7 +364,7 @@ namespace Framework::Integrations::Client {
             const auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });
-        net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, uint32_t reasonId) {
+        net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
             // Reset initial asset download state
             _initialDownloadDone = false;
             _downloadStatus      = {};
@@ -440,7 +445,7 @@ namespace Framework::Integrations::Client {
         const auto net = GetNetworkingEngine()->GetNetworkClient();
 
         // Make sure we're connected to the server already, otherwise bail with warning
-        if (net->GetConnectionState() != Framework::Networking::CONNECTED) {
+        if (net->GetConnectionState() != Framework::Networking::PeerState::CONNECTED) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("We can't download assets if we are not connected to the server yet!");
             return;
         }
@@ -506,7 +511,7 @@ namespace Framework::Integrations::Client {
                     this->RegisterScriptingBuiltins(engine);
                 };
 
-                if (!scriptingModule->Init(sdkCallback)) {
+                if (scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
                     net->Disconnect();
                     return;

@@ -45,7 +45,7 @@ namespace Framework::Networking {
 
         ~NetworkClient();
 
-        [[nodiscard]] bool Init();
+        [[nodiscard]] NetworkPeerError Init();
         void Shutdown() override;
 
         void Update() override;

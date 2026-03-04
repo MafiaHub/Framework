@@ -48,7 +48,7 @@ namespace Framework::Integrations::Client::Scripting {
          * @param sdkCallback Optional callback for registering additional SDK bindings
          * @return true if initialization succeeded
          */
-        bool Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
+        [[nodiscard]] Framework::Scripting::ScriptingError Init(Framework::Scripting::Engine::SDKRegisterCallback sdkCallback = nullptr);
 
         /**
          * Shutdown the V8 engine.

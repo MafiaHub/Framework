@@ -31,5 +31,13 @@ namespace Framework::Utils {
         inline bool Equals(const ErrorType &rhs) const {
             return _errorCode == rhs;
         }
+
+        explicit operator bool() const {
+            return _errorCode == ErrorType {};
+        }
+
+        static Result Ok(const ResultType &message = {}) {
+            return Result(ErrorType {}, message);
+        }
     };
 } // namespace Framework::Utils

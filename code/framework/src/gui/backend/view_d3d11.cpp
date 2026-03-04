@@ -15,7 +15,7 @@ namespace Framework::GUI {
     ViewD3D11::ViewD3D11(Graphics::Renderer *graphicsRenderer, Manager *manager): View(graphicsRenderer, manager) {
     }
 
-    bool ViewD3D11::Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
+    GUIError ViewD3D11::Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
         return View::Init(url, width, height, offsetX, offsetY, gpuAccelerated);
     }
 

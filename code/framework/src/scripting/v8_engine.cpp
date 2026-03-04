@@ -23,19 +23,19 @@ namespace Framework::Scripting {
         Shutdown();
     }
 
-    bool V8Engine::Init() {
+    ScriptingError V8Engine::Init() {
         _lastError.clear();
 
         if (_initialized) {
-            return true;
+            return ScriptingError::SCRIPTING_NONE;
         }
 
         if (!InitializePlatform()) {
-            return false;
+            return ScriptingError::SCRIPTING_PLATFORM_INIT_FAILED;
         }
 
         if (!CreateIsolateAndContext()) {
-            return false;
+            return ScriptingError::SCRIPTING_ENGINE_INIT_FAILED;
         }
 
         if (_options.moduleRootPath.empty()) {
@@ -43,7 +43,7 @@ namespace Framework::Scripting {
         }
 
         _initialized = true;
-        return true;
+        return ScriptingError::SCRIPTING_NONE;
     }
 
     void V8Engine::SetModuleRootPath(const std::string &path) {
