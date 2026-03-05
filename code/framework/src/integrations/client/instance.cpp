@@ -215,7 +215,7 @@ namespace Framework::Integrations::Client {
         PreShutdown();
 
         if (_scriptingModule) {
-            _scriptingModule->PreShutdown();
+            _scriptingModule->Shutdown();
         }
 
         if (_renderer && _renderer->IsInitialized()) {

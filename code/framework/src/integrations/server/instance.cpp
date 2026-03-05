@@ -115,7 +115,7 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetWorldEngine(_worldEngine.get());
 
-        if (_opts.bindPublicServer && _masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey) != Services::MasterlistError::MASTERLIST_NONE) {
+        if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
         }
 
