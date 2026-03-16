@@ -13,6 +13,9 @@
 #include "backend/d3d9.h"
 
 namespace Framework::Graphics {
+    Renderer::Renderer()  = default;
+    Renderer::~Renderer() = default;
+
     RendererError Renderer::Init(RendererConfiguration config) {
         if (_initialized) {
             return RendererError::RENDERER_ALREADY_INITIALIZED;
