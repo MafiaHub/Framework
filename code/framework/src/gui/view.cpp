@@ -38,7 +38,7 @@ namespace Framework::GUI {
         }
     }
 
-    GUIError View::Init(std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
+    GUIError View::Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
         _gpuAccelerated = gpuAccelerated;
         _width          = width;
         _height         = height;
