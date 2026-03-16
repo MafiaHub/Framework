@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <BitStream.h>
+
 namespace Framework::Utils {
     template <typename T>
     class Optional {
@@ -54,6 +56,24 @@ namespace Framework::Utils {
         inline void operator=(T value) {
             _value    = value;
             _hasValue = true;
+        }
+
+        void Serialize(SLNet::BitStream *bs, bool write) {
+            if (write) {
+                bs->Write(_hasValue);
+                if (_hasValue) {
+                    bs->Write(_value);
+                }
+            }
+            else {
+                bs->Read(_hasValue);
+                if (_hasValue) {
+                    bs->Read(_value);
+                }
+                else {
+                    _value = T {};
+                }
+            }
         }
     };
 } // namespace Framework::Utils
