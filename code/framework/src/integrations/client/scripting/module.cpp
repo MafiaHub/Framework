@@ -8,6 +8,7 @@
 #include <scripting/builtins/messages.h>
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/imports.h>
+#include <scripting/builtins/environment.h>
 
 #include <algorithm>
 #include <cctype>
@@ -129,6 +130,9 @@ namespace Framework::Integrations::Client::Scripting {
 
         // Register console override
         Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
+
+        // Register environment info
+        Framework::Scripting::Environment::Register(isolate, context, coreObj, true);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework bindings (client, V8 engine)");
     }

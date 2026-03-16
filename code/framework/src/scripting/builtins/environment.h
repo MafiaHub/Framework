@@ -1,0 +1,29 @@
+#pragma once
+
+#include <v8pp/module.hpp>
+
+namespace Framework::Scripting {
+
+    /**
+     * JavaScript Environment API - provides runtime environment information.
+     *
+     * Exposes an Environment global object:
+     * - Environment.IsClient - true if running on the client side (read-only)
+     * - Environment.IsServer - true if running on the server side (read-only)
+     */
+    class Environment final {
+      public:
+        /**
+         * Register the Environment object on the target object.
+         * @param isolate V8 isolate
+         * @param context Target context
+         * @param target Object to attach Environment to (e.g., Core)
+         * @param isClient true if this is the client side, false for server
+         */
+        static void Register(v8::Isolate *isolate,
+                            v8::Local<v8::Context> context,
+                            v8::Local<v8::Object> target,
+                            bool isClient);
+    };
+
+} // namespace Framework::Scripting

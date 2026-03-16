@@ -8,6 +8,7 @@
 #include <scripting/builtins/console.h>
 #include <scripting/builtins/imports.h>
 #include <scripting/builtins/exports.h>
+#include <scripting/builtins/environment.h>
 
 namespace Framework::Integrations::Server::Scripting {
 
@@ -124,6 +125,9 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Register console override
         Framework::Scripting::Console::Register(isolate, context, _resourceManager.get());
+
+        // Register environment info
+        Framework::Scripting::Environment::Register(isolate, context, coreObj, false);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
     }
