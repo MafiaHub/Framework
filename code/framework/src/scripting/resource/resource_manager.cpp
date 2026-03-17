@@ -26,10 +26,16 @@ namespace Framework::Scripting {
     ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
         : _config(config)
         , _jsEngine(jsEngine) {
+        if (_jsEngine) {
+            _jsEngine->SetResourceManager(this);
+        }
     }
 
     ResourceManager::~ResourceManager() {
         StopAll();
+        if (_jsEngine) {
+            _jsEngine->SetResourceManager(nullptr);
+        }
     }
 
     const ResourceManagerConfig &ResourceManager::GetConfig() const {
@@ -538,15 +544,23 @@ namespace Framework::Scripting {
         return _currentResourceContext;
     }
 
-    std::string ResourceManager::GetResourceContextFromStack(v8::Isolate *isolate) const {
-        if (!isolate) {
-            return "";
-        }
+    std::string ResourceManager::GetResourceNameFromScriptPath(const std::string &scriptPath) const {
+        std::string path = scriptPath;
 
-        // Get stack trace with up to 20 frames
-        v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, 20);
-        if (stackTrace.IsEmpty()) {
-            return "";
+        // Strip file:// or file:/// prefix if present
+        const std::string filePrefix = "file://";
+        if (path.starts_with(filePrefix)) {
+            path = path.substr(filePrefix.size());
+            // On Windows, file:///C:/... needs to strip one more slash
+            // On Unix, file:///path... also has an extra slash to strip
+            if (!path.empty() && path[0] == '/') {
+#ifdef _WIN32
+                // On Windows, check if it's file:///C:/ format
+                if (path.size() > 2 && std::isalpha(path[1]) && path[2] == ':') {
+                    path = path.substr(1); // Remove leading slash to get C:/...
+                }
+#endif
+            }
         }
 
         // Get the configured resources root as a canonical path for matching
@@ -567,6 +581,62 @@ namespace Framework::Scripting {
 #endif
         }
 
+        // Normalize the script path
+        std::filesystem::path scriptFilePath(path);
+        auto canonicalScript = std::filesystem::weakly_canonical(scriptFilePath, ec);
+        if (ec) {
+            canonicalScript = scriptFilePath;
+        }
+        std::string normalizedPath = canonicalScript.string();
+
+        // Check if the script path starts with or contains the resources root
+        size_t resourcesPos = normalizedPath.find(rootStr);
+        if (resourcesPos != std::string::npos) {
+            // Extract resource name (the directory immediately after the resources root)
+            size_t nameStart = resourcesPos + rootStr.size();
+            size_t nameEnd = normalizedPath.find_first_of("/\\", nameStart);
+            if (nameEnd != std::string::npos) {
+                std::string resourceName = normalizedPath.substr(nameStart, nameEnd - nameStart);
+                // Verify this resource exists
+                if (GetResource(resourceName) != nullptr) {
+                    return resourceName;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    std::string ResourceManager::GetResourceNameFromFunction(v8::Isolate *isolate, v8::Local<v8::Function> fn) const {
+        if (!isolate || fn.IsEmpty()) {
+            return "";
+        }
+
+        v8::ScriptOrigin origin = fn->GetScriptOrigin();
+        v8::Local<v8::Value> resourceName = origin.ResourceName();
+        if (resourceName.IsEmpty() || !resourceName->IsString()) {
+            return "";
+        }
+
+        v8::String::Utf8Value scriptPath(isolate, resourceName);
+        if (!*scriptPath) {
+            return "";
+        }
+
+        return GetResourceNameFromScriptPath(*scriptPath);
+    }
+
+    std::string ResourceManager::GetResourceContextFromStack(v8::Isolate *isolate) const {
+        if (!isolate) {
+            return "";
+        }
+
+        // Get stack trace with up to 20 frames
+        v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(isolate, 20);
+        if (stackTrace.IsEmpty()) {
+            return "";
+        }
+
         // Look for the first frame with a file path in the resources directory
         for (int i = 0; i < stackTrace->GetFrameCount(); ++i) {
             v8::Local<v8::StackFrame> frame = stackTrace->GetFrame(isolate, i);
@@ -580,45 +650,9 @@ namespace Framework::Scripting {
                 continue;
             }
 
-            std::string path(*scriptPath);
-
-            // Strip file:// or file:/// prefix if present
-            const std::string filePrefix = "file://";
-            if (path.starts_with(filePrefix)) {
-                path = path.substr(filePrefix.size());
-                // On Windows, file:///C:/... needs to strip one more slash
-                // On Unix, file:///path... also has an extra slash to strip
-                if (!path.empty() && path[0] == '/') {
-#ifdef _WIN32
-                    // On Windows, check if it's file:///C:/ format
-                    if (path.size() > 2 && std::isalpha(path[1]) && path[2] == ':') {
-                        path = path.substr(1); // Remove leading slash to get C:/...
-                    }
-#endif
-                }
-            }
-
-            // Normalize the script path
-            std::filesystem::path scriptFilePath(path);
-            auto canonicalScript = std::filesystem::weakly_canonical(scriptFilePath, ec);
-            if (ec) {
-                canonicalScript = scriptFilePath;
-            }
-            std::string normalizedPath = canonicalScript.string();
-
-            // Check if the script path starts with or contains the resources root
-            size_t resourcesPos = normalizedPath.find(rootStr);
-            if (resourcesPos != std::string::npos) {
-                // Extract resource name (the directory immediately after the resources root)
-                size_t nameStart = resourcesPos + rootStr.size();
-                size_t nameEnd = normalizedPath.find_first_of("/\\", nameStart);
-                if (nameEnd != std::string::npos) {
-                    std::string resourceName = normalizedPath.substr(nameStart, nameEnd - nameStart);
-                    // Verify this resource exists
-                    if (GetResource(resourceName) != nullptr) {
-                        return resourceName;
-                    }
-                }
+            std::string result = GetResourceNameFromScriptPath(*scriptPath);
+            if (!result.empty()) {
+                return result;
             }
         }
 

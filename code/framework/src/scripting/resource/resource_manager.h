@@ -242,6 +242,23 @@ namespace Framework::Scripting {
         std::string GetResourceContextFromStack(v8::Isolate *isolate) const;
 
         /**
+         * Extract resource name from a script file path.
+         * Matches the path against the configured resources directory.
+         * @param scriptPath Absolute path to a script file
+         * @return Resource name, or empty string if not in resources directory
+         */
+        std::string GetResourceNameFromScriptPath(const std::string &scriptPath) const;
+
+        /**
+         * Get resource name from a V8 function's script origin.
+         * Uses the function's definition location (immune to async boundaries).
+         * @param isolate V8 isolate
+         * @param fn V8 function to inspect
+         * @return Resource name, or empty string if not determinable
+         */
+        std::string GetResourceNameFromFunction(v8::Isolate *isolate, v8::Local<v8::Function> fn) const;
+
+        /**
          * Get the currently executing resource.
          * @return Pointer to current resource, or nullptr if none
          */
