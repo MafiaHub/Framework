@@ -83,14 +83,26 @@ namespace Framework::Scripting {
         target->Set(context, v8pp::to_v8(isolate, "Events"), eventsObj).Check();
     }
 
-    // Helper to get resource context - uses V8 stack trace as fallback for async ES modules
-    std::string GetResourceContextWithFallback(v8::Isolate *isolate, ResourceManager *manager) {
+    // Helper to get resource context with three-tier resolution:
+    // 1. Handler function's script origin (async-safe, root cause fix)
+    // 2. Explicit context (set during synchronous resource loading)
+    // 3. V8 call stack file paths (fallback for async ES modules)
+    std::string GetResourceContextWithFallback(v8::Isolate *isolate, ResourceManager *manager, v8::Local<v8::Function> handlerFn = {}) {
+        // 1. Try handler function's script origin (async-safe, root cause fix)
+        if (!handlerFn.IsEmpty()) {
+            std::string name = manager->GetResourceNameFromFunction(isolate, handlerFn);
+            if (!name.empty()) {
+                return name;
+            }
+        }
+
+        // 2. Try explicit context (set during synchronous resource loading)
         std::string resourceName = manager->GetCurrentResourceContext();
         if (!resourceName.empty()) {
             return resourceName;
         }
 
-        // Fallback: extract resource name from V8 call stack file paths
+        // 3. Fallback: extract resource name from V8 call stack file paths
         return manager->GetResourceContextFromStack(isolate);
     }
 
@@ -99,7 +111,7 @@ namespace Framework::Scripting {
                                   std::string_view eventName,
                                   v8::Local<v8::Function> handler,
                                   bool once) {
-        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager, handler);
         if (resourceName.empty()) {
             std::string methodName = once ? "Events.once" : "Events.on";
             isolate->ThrowException(v8::Exception::Error(
@@ -151,7 +163,7 @@ namespace Framework::Scripting {
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
-        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager, handler);
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(
@@ -264,8 +276,8 @@ namespace Framework::Scripting {
         ResourceManager *manager = ctx->resourceManager;
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
         v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager, handler);
 
         // If no resource context, we can't determine which resource to remove handlers for
         if (resourceName.empty()) {
@@ -657,15 +669,14 @@ namespace Framework::Scripting {
         ResourceManager *manager = ctx->resourceManager;
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
-        std::string resourceName = GetResourceContextWithFallback(isolate, manager);
+        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
+        std::string resourceName = GetResourceContextWithFallback(isolate, manager, handler);
 
         if (resourceName.empty()) {
             isolate->ThrowException(v8::Exception::Error(
                 v8pp::to_v8(isolate, "Events.onLocal: must be called from within a resource")));
             return;
         }
-
-        v8::Local<v8::Function> handler = args[1].As<v8::Function>();
 
         EventHandler entry;
         entry.callback.Reset(isolate, handler);

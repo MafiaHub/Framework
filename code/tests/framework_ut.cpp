@@ -19,6 +19,7 @@
 #include "modules/resource_ut.h"
 #include "modules/resource_manager_ut.h"
 #include "modules/js_features_ut.h"
+#include "modules/timer_context_ut.h"
 
 int main() {
     UNIT_CREATE("FrameworkTests");
@@ -33,6 +34,7 @@ int main() {
     UNIT_MODULE(resource);
     UNIT_MODULE(resource_manager);
     UNIT_MODULE(js_features);
+    UNIT_MODULE(timer_context);
 
     return UNIT_RUN();
 }

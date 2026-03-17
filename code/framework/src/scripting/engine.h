@@ -19,6 +19,8 @@
 
 namespace Framework::Scripting {
 
+    class ResourceManager; // Forward declaration for resource context tracking
+
     /**
      * Base class for JavaScript engines.
      * Two implementations exist: NodeEngine (server, full Node.js) and
@@ -95,9 +97,25 @@ namespace Framework::Scripting {
          */
         v8::Local<v8::Object> GetCoreObject() const;
 
+        /**
+         * Set the owning ResourceManager for resource context tracking.
+         * Called by ResourceManager during construction.
+         */
+        void SetResourceManager(ResourceManager *mgr) {
+            _resourceManager = mgr;
+        }
+
+        /**
+         * Get the owning ResourceManager.
+         */
+        ResourceManager *GetResourceManager() const {
+            return _resourceManager;
+        }
+
       protected:
         std::string _lastError;
         SDKRegisterCallback _sdkRegisterCallback;
+        ResourceManager *_resourceManager = nullptr;
     };
 
 } // namespace Framework::Scripting
