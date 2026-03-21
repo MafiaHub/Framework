@@ -11,7 +11,7 @@ endforeach()
 
 # Add OpenSSL
 if (WIN32)
-    set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl")
+    set(OPENSSL_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openssl" CACHE PATH "Path to vendored OpenSSL")
     add_subdirectory(openssl)
 endif ()
 

@@ -159,11 +159,6 @@ endif()
 # Custom defines
 target_compile_definitions(Framework PUBLIC MG_ENABLE_LOG=0)
 
-IF(WIN32)
-    add_definitions(-D_USE_MATH_DEFINES)
-    add_definitions(-DNOMINMAX)
-ENDIF()
-
 # External libraries & other stuff
 macro(link_shared_deps target_name)
     # Framework source directories (PUBLIC for dependent projects)
@@ -200,8 +195,13 @@ macro(link_shared_deps target_name)
         target_link_libraries(${target_name} "-framework CoreFoundation" "-framework Foundation" "-framework GSS" "-framework Security" "-framework CoreText" "-framework CoreGraphics" bsm)
     endif()
 
+    # Windows-specific standard defines (target-scoped instead of global add_definitions)
+    if(WIN32)
+        target_compile_definitions(${target_name} PRIVATE _USE_MATH_DEFINES NOMINMAX)
+    endif()
+
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib ${OPENSSL_LIBRARIES} Curl flecs_static semver Hash ftl)
+    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl flecs_static semver Hash ftl)
 
     # Required libraries for windows
     if(WIN32)
@@ -245,6 +245,9 @@ if(LIBNODE_AVAILABLE)
 
     # Match Framework compile definitions and features
     target_compile_definitions(FrameworkNodeEngine PRIVATE MG_ENABLE_LOG=0)
+    if(WIN32)
+        target_compile_definitions(FrameworkNodeEngine PRIVATE _USE_MATH_DEFINES NOMINMAX)
+    endif()
     target_compile_features(FrameworkNodeEngine PRIVATE cxx_std_20)
 
     # Node.js inspector: enabled via explicit option OR Debug builds
@@ -272,6 +275,9 @@ target_include_directories(FrameworkV8Engine PUBLIC
 )
 target_link_libraries(FrameworkV8Engine PUBLIC v8 v8pp spdlog)
 target_compile_definitions(FrameworkV8Engine PRIVATE MG_ENABLE_LOG=0)
+if(WIN32)
+    target_compile_definitions(FrameworkV8Engine PRIVATE _USE_MATH_DEFINES NOMINMAX)
+endif()
 target_compile_features(FrameworkV8Engine PRIVATE cxx_std_20)
 
 # Link the solutions based on the platform
@@ -309,7 +315,6 @@ endif()
 
 # Platform-dependent post processing
 if(WIN32)
-    target_link_directories(Framework PUBLIC ${CMAKE_SOURCE_DIR}/vendors/openssl/lib)
     target_link_libraries(Framework ws2_32 dbghelp crypt32 winmm iphlpapi psapi userenv shlwapi)
 
     target_link_libraries(FrameworkClient MafiaHubServices DiscordSDK DearImGUI ImGuizmo)
@@ -334,6 +339,7 @@ if(WIN32)
     link_shared_deps(FrameworkLoader)
     target_link_libraries(FrameworkLoader ${CLIENT_SHARED_LIBS} MafiaHubServices FrameworkLoaderData ntdll sfd)
     target_link_libraries(FrameworkLoaderData udis86 minhook)
+    target_compile_definitions(FrameworkLoaderData PRIVATE _USE_MATH_DEFINES NOMINMAX)
     target_link_options(FrameworkLoaderData PUBLIC /EXPORT:CoreRT_SetupSEHHandler /EXPORT:GetThreadLocalStorage /EXPORT:CoreSetExceptionOverride)
 
     # FrameworkLoader-specific includes
@@ -371,6 +377,7 @@ if(WIN32)
         src/gui/cef/renderer_app.cpp
     )
     target_link_libraries(cef_subprocess CEF)
+    target_compile_definitions(cef_subprocess PRIVATE _USE_MATH_DEFINES NOMINMAX)
     set_target_properties(cef_subprocess PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
