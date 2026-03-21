@@ -32,15 +32,15 @@ namespace Framework::Utils {
             return *this;
         }
 
-        inline bool HasValue() const {
+        inline bool HasValue() const noexcept {
             return _hasValue;
         }
 
-        inline T Value() const {
+        inline T Value() const noexcept {
             return _value;
         }
 
-        inline const T &RefValue() const {
+        inline const T &RefValue() const noexcept {
             return _value;
         }
 
@@ -49,7 +49,7 @@ namespace Framework::Utils {
             _hasValue = false;
         }
 
-        inline T operator()() const {
+        inline T operator()() const noexcept {
             return _value;
         }
 

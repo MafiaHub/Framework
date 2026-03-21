@@ -20,19 +20,19 @@ namespace Framework::Utils {
       public:
         Result(ErrorType error, const ResultType &message = {}): _message(message), _errorCode(error) {} // NOLINT(google-explicit-constructor)
 
-        inline ErrorType GetError() const {
+        inline ErrorType GetError() const noexcept {
             return _errorCode;
         }
 
-        inline const ResultType &Unwrap() const {
+        inline const ResultType &Unwrap() const noexcept {
             return _message;
         }
 
-        inline bool Equals(const ErrorType &rhs) const {
+        inline bool Equals(const ErrorType &rhs) const noexcept {
             return _errorCode == rhs;
         }
 
-        explicit operator bool() const {
+        explicit operator bool() const noexcept {
             return _errorCode == ErrorType {};
         }
 

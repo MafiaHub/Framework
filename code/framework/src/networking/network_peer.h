@@ -139,22 +139,22 @@ namespace Framework::Networking {
             _onUnknownPacketCallback = std::move(callback);
         }
 
-        SLNet::Packet *GetPacket() const {
+        SLNet::Packet *GetPacket() const noexcept {
             return _packet;
         }
 
-        int GetPacketDataOffset() const {
+        int GetPacketDataOffset() const noexcept {
             return _packetDataOffset;
         }
 
-        SLNet::RakPeerInterface *GetPeer() const {
+        SLNet::RakPeerInterface *GetPeer() const noexcept {
             return _peer;
         }
 
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
 
-        SLNet::DirectoryDeltaTransfer* GetAssetStreamer() const {
+        SLNet::DirectoryDeltaTransfer* GetAssetStreamer() const noexcept {
             return &_assetStreamer;
         }
     };

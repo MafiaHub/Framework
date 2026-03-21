@@ -45,7 +45,7 @@ namespace Framework {
      */
     class CoreModules final {
       public:
-        static void Reset() {
+        static void Reset() noexcept {
             _networkPeer      = nullptr;
             _engine           = nullptr;
             _scriptingModule  = nullptr;
@@ -79,32 +79,32 @@ namespace Framework {
             _input = input;
         }
 
-        static void SetTickRate(double tickRate) {
+        static void SetTickRate(double tickRate) noexcept {
             _tickRate = tickRate;
         }
 
         // Singleton getters
-        static Networking::NetworkPeer *GetNetworkPeer() {
+        static Networking::NetworkPeer *GetNetworkPeer() noexcept {
             return _networkPeer;
         }
 
-        static World::Engine *GetWorldEngine() {
+        static World::Engine *GetWorldEngine() noexcept {
             return _engine;
         }
 
-        static Scripting::ScriptingModule *GetScriptingModule() {
+        static Scripting::ScriptingModule *GetScriptingModule() noexcept {
             return _scriptingModule;
         }
 
-        static GUI::Manager *GetGUIManager() {
+        static GUI::Manager *GetGUIManager() noexcept {
             return _webManager;
         }
 
-        static Input::IInput *GetInput() {
+        static Input::IInput *GetInput() noexcept {
             return _input;
         }
 
-        static double GetTickRate() {
+        static double GetTickRate() noexcept {
             return _tickRate;
         }
 

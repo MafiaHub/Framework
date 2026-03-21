@@ -24,7 +24,7 @@ namespace Framework {
 
         virtual void Update() {}
 
-        bool IsInitialized() const {
+        bool IsInitialized() const noexcept {
             return _initialized;
         }
 
