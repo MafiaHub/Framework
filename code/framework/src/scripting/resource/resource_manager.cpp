@@ -11,11 +11,21 @@
 namespace Framework::Scripting {
     namespace {
         bool IsPathInsideRoot(const std::filesystem::path &path, const std::filesystem::path &root) {
-            auto rootIt = root.begin();
-            auto pathIt = path.begin();
+            auto canonicalRoot = std::filesystem::weakly_canonical(root);
+            auto canonicalPath = std::filesystem::weakly_canonical(path);
+            auto rootStr = canonicalRoot.string();
+            auto pathStr = canonicalPath.string();
 
-            for (; rootIt != root.end(); ++rootIt, ++pathIt) {
-                if (pathIt == path.end() || *pathIt != *rootIt) {
+            // Path must start with root AND sit inside the directory
+            // (not just sharing a prefix like /app/cache vs /app/cache-evil)
+            if (pathStr.size() < rootStr.size() ||
+                pathStr.compare(0, rootStr.size(), rootStr) != 0) {
+                return false;
+            }
+            // If path is longer than root, ensure there's a separator boundary
+            if (pathStr.size() > rootStr.size()) {
+                char sep = std::filesystem::path::preferred_separator;
+                if (pathStr[rootStr.size()] != sep && rootStr.back() != sep) {
                     return false;
                 }
             }
