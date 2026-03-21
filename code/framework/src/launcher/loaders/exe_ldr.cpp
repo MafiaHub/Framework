@@ -15,6 +15,7 @@
 #include "exe_ldr.h"
 
 #include <delayimp.h>
+#include <stdexcept>
 
 #include "logging/logger.h"
 #include <utils/hooking/hooking.h>
@@ -32,7 +33,7 @@ namespace Framework::Launcher::Loaders {
         });
 
         SetFunctionResolver([](HMODULE module, const char *name) {
-            return (LPVOID)GetProcAddress(module, name);
+            return reinterpret_cast<LPVOID>(GetProcAddress(module, name));
         });
     }
 
@@ -48,7 +49,7 @@ namespace Framework::Launcher::Loaders {
 
             if (!module) {
                 Logging::GetLogger(FRAMEWORK_INNER_LAUNCHER)->error("Could not load dependent module {}. Error code was {}.", name, GetLastError());
-                exit(0);
+                throw std::runtime_error(std::string("Could not load dependent module: ") + name);
             }
 
             // "don't load"

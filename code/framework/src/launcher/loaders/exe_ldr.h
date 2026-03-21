@@ -58,12 +58,12 @@ namespace Framework::Launcher::Loaders {
 
         template <typename T>
         inline const T *GetRVA(uint32_t rva) {
-            return (T *)(_origBinary + rva);
+            return reinterpret_cast<const T *>(_origBinary + rva);
         }
 
         template <typename T>
         inline T *GetTargetRVA(uint32_t rva) {
-            return (T *)((uint8_t *)_module + rva);
+            return reinterpret_cast<T *>(reinterpret_cast<uint8_t *>(_module) + rva);
         }
 
       public:
