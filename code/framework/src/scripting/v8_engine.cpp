@@ -239,6 +239,9 @@ namespace Framework::Scripting {
             return 0;
         }
         uint32_t id = _nextTimerId++;
+        if (_nextTimerId == 0) {
+            _nextTimerId = 1;
+        }
         entry->id = id;
         _timers.push_back(std::move(entry));
         return id;
