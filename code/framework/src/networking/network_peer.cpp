@@ -67,13 +67,19 @@ namespace Framework::Networking {
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
             _packetDataOffset = 0;
+            if (_packet->length == 0) {
+                continue;
+            }
             SLNet::TimeMS TS  = 0;
-            if (_packet->data[0] == ID_TIMESTAMP) {
+            if (_packet->length > 1 + sizeof(SLNet::TimeMS) && _packet->data[0] == ID_TIMESTAMP) {
                 SLNet::BitStream timestamp(_packet->data + 1, sizeof(SLNet::TimeMS) + 1, false);
                 timestamp.Read(TS);
                 _packetDataOffset = 1 + sizeof(SLNet::TimeMS);
             }
 
+            if (static_cast<uint32_t>(_packetDataOffset) >= _packet->length) {
+                continue;
+            }
             uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
