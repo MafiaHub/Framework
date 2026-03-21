@@ -26,35 +26,30 @@ namespace Framework::HTTP {
         }
 
         _server->set_error_handler([](const auto &req, auto &res) {
-            const auto fmt = "<p>Error Status: <span style='color:red;'>%d</span></p>";
-            char buf[BUFSIZ];
-            snprintf(buf, sizeof(buf), fmt, res.status);
-            res.set_content(buf, "text/html");
+            res.set_content("Error Status: " + std::to_string(res.status), "text/plain");
         });
 
         _server->set_exception_handler([](const auto &req, auto &res, std::exception_ptr ep) {
-            const auto fmt = "<h1>Error 500</h1><p>%s</p>";
-            char buf[BUFSIZ];
+            std::string message;
             try {
                 std::rethrow_exception(ep);
             }
             catch (std::exception &e) {
-                snprintf(buf, sizeof(buf), fmt, e.what());
+                message = std::string("Internal Server Error: ") + e.what();
             }
-            catch (...) { // See the following NOTE
-                snprintf(buf, sizeof(buf), fmt, "Unknown Exception");
+            catch (...) {
+                message = "Internal Server Error: Unknown Exception";
             }
-            res.set_content(buf, "text/html");
+            res.set_content(message, "text/plain");
             res.status = 500;
         });
 
-        _webThread = std::thread([this, address, port]() {
+        _webThread = std::jthread([this, address, port](std::stop_token) {
             _server->listen(address, port);
         });
 
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("[Webserver] Listening on {}", address.c_str());
 
-        _webThread.detach();
         _initialized = true;
         return WebserverError::WEBSERVER_NONE;
     }
@@ -64,6 +59,9 @@ namespace Framework::HTTP {
             return;
         _running = false;
         _server->stop();
+        if (_webThread.joinable()) {
+            _webThread.join();
+        }
         Lifecycle::Shutdown();
     }
 

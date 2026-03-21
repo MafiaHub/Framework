@@ -36,7 +36,7 @@ namespace Framework::HTTP {
         void RegisterRequest(const std::string &path, const RequestCallback &callback) const;
         void RegisterPostRequest(const std::string &path, const PostCallback &callback) const;
 
-        const std::string &GetServeDirectory() const {
+        const std::string &GetServeDirectory() const noexcept {
             return _serveDir;
         }
 
@@ -46,7 +46,7 @@ namespace Framework::HTTP {
       private:
         std::shared_ptr<httplib::Server> _server;
         std::atomic_bool _running;
-        std::thread _webThread;
+        std::jthread _webThread;
         std::string _serveDir;
     };
 } // namespace Framework::HTTP
