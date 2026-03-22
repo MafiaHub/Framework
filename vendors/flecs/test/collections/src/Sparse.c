@@ -1,5 +1,7 @@
 #include <collections.h>
+#include <flecs/datastructures/bitset.h>
 #include <flecs/datastructures/sparse.h>
+#include <flecs/datastructures/vec.h>
 
 void Sparse_setup(void) {
     ecs_os_set_api_defaults();
@@ -205,21 +207,21 @@ void Sparse_remove_all(void) {
 
     flecs_sparse_remove_t(sp, int, 0);
     test_int(flecs_sparse_count(sp), 2);
-    test_assert(flecs_sparse_try_t(sp, int, 0) == NULL);
-    test_assert(flecs_sparse_try_t(sp, int, 1) == elem2);
-    test_assert(flecs_sparse_try_t(sp, int, 2) == elem3);
+    test_assert(flecs_sparse_get_t(sp, int, 0) == NULL);
+    test_assert(flecs_sparse_get_t(sp, int, 1) == elem2);
+    test_assert(flecs_sparse_get_t(sp, int, 2) == elem3);
 
     flecs_sparse_remove_t(sp, int, 1);
     test_int(flecs_sparse_count(sp), 1);
-    test_assert(flecs_sparse_try_t(sp, int, 0) == NULL);
-    test_assert(flecs_sparse_try_t(sp, int, 1) == NULL);
-    test_assert(flecs_sparse_try_t(sp, int, 2) == elem3);    
+    test_assert(flecs_sparse_get_t(sp, int, 0) == NULL);
+    test_assert(flecs_sparse_get_t(sp, int, 1) == NULL);
+    test_assert(flecs_sparse_get_t(sp, int, 2) == elem3);    
 
     flecs_sparse_remove_t(sp, int, 2);
     test_int(flecs_sparse_count(sp), 0);
-    test_assert(flecs_sparse_try_t(sp, int, 0) == NULL);
-    test_assert(flecs_sparse_try_t(sp, int, 1) == NULL);
-    test_assert(flecs_sparse_try_t(sp, int, 2) == NULL);    
+    test_assert(flecs_sparse_get_t(sp, int, 0) == NULL);
+    test_assert(flecs_sparse_get_t(sp, int, 1) == NULL);
+    test_assert(flecs_sparse_get_t(sp, int, 2) == NULL);    
 
     flecs_sparse_free(sp);
 }
@@ -361,10 +363,10 @@ void Sparse_count_of_null(void) {
 void Sparse_try_low_after_ensure_high(void) {
     ecs_sparse_t *sp = flecs_sparse_new(NULL, NULL, int);
 
-    int *ptr_1 = flecs_sparse_ensure_t(sp, int, 5000);
+    int *ptr_1 = flecs_sparse_insert_t(sp, int, 5000);
     test_assert(ptr_1 != NULL);
 
-    int *ptr_2 = flecs_sparse_try_t(sp, int, 100);
+    int *ptr_2 = flecs_sparse_get_t(sp, int, 100);
     test_assert(ptr_2 == NULL);
 
     flecs_sparse_free(sp);
@@ -373,7 +375,7 @@ void Sparse_try_low_after_ensure_high(void) {
 void Sparse_is_alive_low_after_ensure_high(void) {
     ecs_sparse_t *sp = flecs_sparse_new(NULL, NULL, int);
 
-    int *ptr_1 = flecs_sparse_ensure_t(sp, int, 5000);
+    int *ptr_1 = flecs_sparse_insert_t(sp, int, 5000);
     test_assert(ptr_1 != NULL);
 
     bool v = flecs_sparse_is_alive(sp, 100);
@@ -385,7 +387,7 @@ void Sparse_is_alive_low_after_ensure_high(void) {
 void Sparse_remove_low_after_ensure_high(void) {
     ecs_sparse_t *sp = flecs_sparse_new(NULL, NULL, int);
 
-    int *ptr_1 = flecs_sparse_ensure_t(sp, int, 5000);
+    int *ptr_1 = flecs_sparse_insert_t(sp, int, 5000);
     test_assert(ptr_1 != NULL);
 
     flecs_sparse_remove_t(sp, int, 100);
@@ -393,49 +395,58 @@ void Sparse_remove_low_after_ensure_high(void) {
     flecs_sparse_free(sp);
 }
 
-void Sparse_ensure_skip_generation(void) {
-    ecs_sparse_t *sp1 = flecs_sparse_new(NULL, NULL, int);
-    ecs_sparse_t *sp2 = flecs_sparse_new(NULL, NULL, int);
+void Sparse_recreate_pages_after_shrink(void) {
+    ecs_sparse_t *sp = flecs_sparse_new(NULL, NULL, int);
+    test_assert(sp != NULL);
+    test_int(flecs_sparse_count(sp), 0);
 
-    uint64_t id = flecs_sparse_new_id(sp1);
-    flecs_sparse_ensure(sp2, 0, id);
+    populate(sp, 1000);
 
-    test_assert(flecs_sparse_is_alive(sp1, id));
-    test_assert(flecs_sparse_is_alive(sp2, id));
+    flecs_sparse_clear(sp);
 
-    flecs_sparse_remove(sp1, 0, id);
-    flecs_sparse_remove(sp2, 0, id);
+    flecs_sparse_shrink(sp);
 
-    test_assert(!flecs_sparse_is_alive(sp1, id));
-    test_assert(!flecs_sparse_is_alive(sp2, id));
+    populate(sp, 1000);
 
-    uint64_t id_2 = flecs_sparse_new_id(sp1);
-    test_assert((uint32_t)id_2 == id);
+    flecs_sparse_free(sp);
+}
 
-    test_assert(flecs_sparse_is_alive(sp1, id_2));
-    test_assert(!flecs_sparse_is_alive(sp2, id_2));
-    test_assert(!flecs_sparse_is_alive(sp1, id));
-    test_assert(!flecs_sparse_is_alive(sp2, id));
+void Sparse_create_low_page_after_high(void) {
+    ecs_sparse_t *sp = flecs_sparse_new(NULL, NULL, int);
 
-    flecs_sparse_remove(sp1, 0, id_2);
+    bool is_new = true;
+    void *ptr = flecs_sparse_ensure_t(sp, int, 1000, &is_new);
+    test_assert(ptr != NULL);
+    test_bool(is_new, true);
 
-    test_assert(!flecs_sparse_is_alive(sp1, id_2));
-    test_assert(!flecs_sparse_is_alive(sp2, id_2));
-    test_assert(!flecs_sparse_is_alive(sp1, id));
-    test_assert(!flecs_sparse_is_alive(sp2, id));
+    test_assert(ptr == flecs_sparse_ensure_t(sp, int, 1000, &is_new));
+    test_bool(is_new, false);
 
-    uint64_t id_3 = flecs_sparse_new_id(sp1);
-    test_assert((uint32_t)id_3 == id);
-    flecs_sparse_ensure(sp2, 0, id_3);
+    populate(sp, 1000);
 
-    test_assert(flecs_sparse_is_alive(sp1, id_3));
-    test_assert(flecs_sparse_is_alive(sp2, id_3));
+    flecs_sparse_free(sp);
+}
 
-    test_assert(!flecs_sparse_is_alive(sp1, id_2));
-    test_assert(!flecs_sparse_is_alive(sp2, id_2));
-    test_assert(!flecs_sparse_is_alive(sp1, id));
-    test_assert(!flecs_sparse_is_alive(sp2, id));
+void Sparse_bitset_negative_index(void) {
+    install_test_abort();
 
-    flecs_sparse_free(sp1);
-    flecs_sparse_free(sp2);
+    ecs_bitset_t bs = {0};
+    flecs_bitset_init(&bs);
+    flecs_bitset_addn(&bs, 1);
+
+    test_expect_abort();
+    flecs_bitset_get(&bs, -1);
+
+    flecs_bitset_fini(&bs);
+}
+
+void Sparse_vec_set_min_size_w_type_info(void) {
+    ecs_vec_t vec = {0};
+
+    ecs_vec_set_min_size_w_type_info(NULL, &vec, ECS_SIZEOF(int32_t), 8, NULL);
+
+    test_assert(vec.array != NULL);
+    test_assert(vec.size >= 8);
+
+    ecs_vec_fini(NULL, &vec, ECS_SIZEOF(int32_t));
 }

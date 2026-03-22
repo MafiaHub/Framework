@@ -606,8 +606,10 @@ void PrintTime(ecs_iter_t *it) {
     printf("Time: %f\n", g->time);
 }
 
+ecs_add_id(world, Game, EcsSingleton);
+
 // System declaration using the ECS_SYSTEM macro
-ECS_SYSTEM(world, PrintTime, EcsOnUpdate, Game($));
+ECS_SYSTEM(world, PrintTime, EcsOnUpdate, Game);
 
 // System declaration using the descriptor API
 ecs_system(world, {
@@ -616,7 +618,7 @@ ecs_system(world, {
         .add = ecs_ids( ecs_dependson(EcsOnUpdate) )
     }),
     .query.terms = {
-        { .id = ecs_id(Game), .src.id = ecs_id(Game) } // Singleton source
+        { .id = ecs_id(Game) }
     },
     .callback = PrintTime
 });
@@ -625,8 +627,9 @@ ecs_system(world, {
 <li><b class="tab-title">C++</b>
 
 ```cpp
+world.component<Game>().add(flecs::Singleton);
+
 world.system<Game>("PrintTime")
-    .term_at(0).singleton()
     .kind(flecs::OnUpdate)
     .each([](Game& g) {
         printf("Time: %f\n", g.time);
@@ -636,8 +639,9 @@ world.system<Game>("PrintTime")
 <li><b class="tab-title">C#</b>
 
 ```cs
+world.Component<Game>().Entity.Add(flecs::Singleton);
+
 world.System<Game>("PrintTime")
-    .TermAt(0).Singleton()
     .Kind(Ecs.OnUpdate)
     .Each((ref Game g) =>
     {
@@ -648,10 +652,10 @@ world.System<Game>("PrintTime")
 <li><b class="tab-title">Rust</b>
 
 ```rust
+world.component::<Game>().add_trait::<flecs::Singleton>();
+
 world
     .system_named::<&Game>("PrintTime")
-    .term_at(0)
-    .singleton()
     .kind::<flecs::pipeline::OnUpdate>()
     .run_iter(|it, game| {
         println!("Time: {}", game[0].time);
@@ -791,12 +795,12 @@ An application can create custom phases, which can be (but don't need to be) bra
 
 ```c
 // Phases must have the EcsPhase tag
-ecs_entity_t Physics = ecs_new_w_id(ecs, EcsPhase);
-ecs_entity_t Collisions = ecs_new_w_id(ecs, EcsPhase);
+ecs_entity_t Physics = ecs_new_w_id(world, EcsPhase);
+ecs_entity_t Collisions = ecs_new_w_id(world, EcsPhase);
 
 // Phases can (but don't have to) depend on other phases which forces ordering
-ecs_add_pair(ecs, Physics, EcsDependsOn, EcsOnUpdate);
-ecs_add_pair(ecs, Collisions, EcsDependsOn, Physics);
+ecs_add_pair(world, Physics, EcsDependsOn, EcsOnUpdate);
+ecs_add_pair(world, Collisions, EcsDependsOn, Physics);
 
 // Custom phases can be used just like regular phases
 ECS_SYSTEM(world, Collide, Collisions, Position, Velocity);
@@ -997,14 +1001,6 @@ move_sys.add::<Foo>();
 ```
 </ul>
 </div>
-
-#### Pipeline switching performance
-When running a multithreaded application, switching pipelines can be an expensive operation. The reason for this is that it requires tearing down and recreating the worker threads with the new pipeline context. For this reason it can be more efficient to use queries that allow for enabling/disabling groups of systems vs. switching pipelines.
-
-For example, the builtin pipeline excludes groups of systems from the schedule that:
-- have the `Disabled` tag
-- have a parent (module) with the `Disabled` tag
-- depend on a phase with the `Disabled` tag
 
 ### Disabling systems
 Because pipelines use regular ECS queries, adding the `EcsDisabled`/`flecs::Disabled` tag to a system entity will exclude the system from the pipeline. An application can use the `ecs_enable` function or `entity::enable`/`entity::disable` methods to enable/disable a system:

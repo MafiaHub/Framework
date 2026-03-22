@@ -63,7 +63,10 @@ void Sparse_count_of_null(void);
 void Sparse_try_low_after_ensure_high(void);
 void Sparse_is_alive_low_after_ensure_high(void);
 void Sparse_remove_low_after_ensure_high(void);
-void Sparse_ensure_skip_generation(void);
+void Sparse_recreate_pages_after_shrink(void);
+void Sparse_create_low_page_after_high(void);
+void Sparse_bitset_negative_index(void);
+void Sparse_vec_set_min_size_w_type_info(void);
 
 // Testsuite 'Strbuf'
 void Strbuf_setup(void);
@@ -102,6 +105,7 @@ void Strbuf_append_nan(void);
 void Strbuf_append_inf(void);
 void Strbuf_append_nan_delim(void);
 void Strbuf_append_inf_delim(void);
+void Strbuf_append_int64_min(void);
 
 // Testsuite 'Allocator'
 void Allocator_setup(void);
@@ -312,8 +316,20 @@ bake_test_case Sparse_testcases[] = {
         Sparse_remove_low_after_ensure_high
     },
     {
-        "ensure_skip_generation",
-        Sparse_ensure_skip_generation
+        "recreate_pages_after_shrink",
+        Sparse_recreate_pages_after_shrink
+    },
+    {
+        "create_low_page_after_high",
+        Sparse_create_low_page_after_high
+    },
+    {
+        "bitset_negative_index",
+        Sparse_bitset_negative_index
+    },
+    {
+        "vec_set_min_size_w_type_info",
+        Sparse_vec_set_min_size_w_type_info
     }
 };
 
@@ -457,6 +473,10 @@ bake_test_case Strbuf_testcases[] = {
     {
         "append_inf_delim",
         Strbuf_append_inf_delim
+    },
+    {
+        "append_int64_min",
+        Strbuf_append_int64_min
     }
 };
 
@@ -480,14 +500,14 @@ static bake_test_suite suites[] = {
         "Sparse",
         Sparse_setup,
         NULL,
-        22,
+        25,
         Sparse_testcases
     },
     {
         "Strbuf",
         Strbuf_setup,
         NULL,
-        35,
+        36,
         Strbuf_testcases
     },
     {

@@ -651,10 +651,15 @@ void Monitor_monitor_other_table(void) {
         .ctx = &ctx
     });
 
+    ecs_table_t *root = ecs_table_find(world, NULL, 0);
+    test_assert(root != NULL);
+    test_int(ecs_table_get_type(root)->count, 0);
+
     ctx.table = ecs_get_table(world, x);
-    ctx.other_table = NULL;
+    ctx.other_table = root;
     ctx.event = EcsOnAdd;
-    ecs_entity_t e = ecs_new_w(world, X);
+    ecs_entity_t e = ecs_new(world);
+    ecs_add(world, e, X);
     test_int(ctx.invoked, 1);
 
     ctx.table = ecs_get_table(world, xy);
@@ -670,7 +675,7 @@ void Monitor_monitor_other_table(void) {
     test_int(ctx.invoked, 3);
 
     ctx.table = ecs_get_table(world, x);
-    ctx.other_table = NULL;
+    ctx.other_table = root;
     ctx.event = EcsOnRemove;
 
     ecs_fini(world);

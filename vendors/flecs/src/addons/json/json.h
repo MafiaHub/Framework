@@ -38,14 +38,17 @@ typedef struct ecs_json_value_ser_ctx_t {
 
 /* Cached data for serializer */
 typedef struct ecs_json_ser_ctx_t {
-    ecs_id_record_t *idr_doc_name;
-    ecs_id_record_t *idr_doc_color;
+    ecs_component_record_t *cr_doc_name;
+    ecs_component_record_t *cr_doc_color;
     ecs_json_value_ser_ctx_t value_ctx[64];
+    ecs_map_t serialized;
 } ecs_json_ser_ctx_t;
 
 typedef struct ecs_json_this_data_t {
+    const ecs_table_t *table;
     const ecs_entity_t *ids;
     const EcsIdentifier *names;
+    const EcsParent *parents;
     const EcsDocDescription *label;
     const EcsDocDescription *brief;
     const EcsDocDescription *detail;
@@ -197,7 +200,7 @@ void flecs_json_id_member(
     bool fullpath);
 
 ecs_primitive_kind_t flecs_json_op_to_primitive_kind(
-    ecs_meta_type_op_kind_t kind);
+    ecs_meta_op_kind_t kind);
 
 int flecs_json_serialize_iter_result(
     const ecs_world_t *world,
@@ -244,6 +247,7 @@ int flecs_json_serialize_iter_result_table(
     const ecs_iter_t *it, 
     ecs_strbuf_t *buf,
     const ecs_iter_to_json_desc_t *desc,
+    ecs_json_ser_ctx_t *ser_ctx,
     int32_t count,
     bool has_this,
     const char *parent_path,
@@ -260,13 +264,14 @@ int flecs_json_serialize_iter_result_query(
     const char *parent_path,
     const ecs_json_this_data_t *this_data);
 
-void flecs_json_serialize_iter_this(
+bool flecs_json_serialize_iter_this(
     const ecs_iter_t *it,
     const char *parent_path,
     const ecs_json_this_data_t *this_data,
     int32_t row,
     ecs_strbuf_t *buf,
-    const ecs_iter_to_json_desc_t *desc);
+    const ecs_iter_to_json_desc_t *desc,
+    ecs_json_ser_ctx_t *ser_ctx);
 
 bool flecs_json_serialize_vars(
     const ecs_world_t *world,
@@ -292,6 +297,22 @@ int flecs_json_serialize_alerts(
 
 bool flecs_json_is_builtin(
     ecs_id_t id);
+
+int flecs_entity_to_json_buf(
+    const ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_strbuf_t *buf,
+    const ecs_iter_to_json_desc_t *desc,
+    ecs_json_ser_ctx_t *ser_ctx);
+
+bool flecs_json_should_serialize(
+    ecs_entity_t entity,
+    const ecs_iter_t *it,
+    const ecs_json_ser_ctx_t *ser_ctx);
+
+void flecs_json_mark_serialized(
+    ecs_entity_t entity,
+    ecs_json_ser_ctx_t *ser_ctx);
 
 #endif
 

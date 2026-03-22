@@ -762,6 +762,8 @@ static
 void flecs_query_compile_pop(
     ecs_query_compile_ctx_t *ctx)
 {
+    /* Should've been caught by query validator */
+    ecs_assert(ctx->scope > 0, ECS_INTERNAL_ERROR, NULL);
     ctx->cur = &ctx->ctrlflow[-- ctx->scope];
 }
 
@@ -816,7 +818,8 @@ ecs_flags32_t flecs_query_to_table_flags(
 
         return table_flags;
     }
-    return 0;
+
+    return EcsTableNotQueryable;
 }
 
 static
@@ -834,7 +837,7 @@ bool flecs_query_select_all(
         term->oper == EcsNotFrom || pred_match) 
     {
         ecs_query_op_t match_any = {0};
-        match_any.kind = EcsAnd;
+        match_any.kind = EcsQueryAll;
         match_any.flags = EcsQueryIsSelf | (EcsQueryIsEntity << EcsQueryFirst);
         match_any.flags |= (EcsQueryIsVar << EcsQuerySrc);
         match_any.src = op->src;
@@ -1061,10 +1064,13 @@ void flecs_query_mark_last_or_op(
 
 static
 void flecs_query_set_op_kind(
+    ecs_query_impl_t *query,
     ecs_query_op_t *op,
     ecs_term_t *term,
     bool src_is_var)
 {
+    (void)query;
+
     /* Default instruction for And operators. If the source is fixed (like for
      * singletons or terms with an entity source), use With, which like And but
      * just matches against a source (vs. finding a source). */
@@ -1083,39 +1089,92 @@ void flecs_query_set_op_kind(
 
     /* If query is transitive, use Trav(ersal) instruction */
     } else if (term->flags_ & EcsTermTransitive) {
-        ecs_assert(ecs_term_ref_is_set(&term->second), ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(ecs_term_ref_is_set(&term->second), 
+            ECS_INTERNAL_ERROR, NULL);
         op->kind = EcsQueryTrav;
-
-    /* If term queries for union pair, use union instruction */
-    } else if (term->flags_ & EcsTermIsUnion) {
+    
+    /* Handle non-fragmenting components */
+    } else if (term->flags_ & EcsTermDontFragment) {
         if (op->kind == EcsQueryAnd) {
-            op->kind = EcsQueryUnionEq;
+            op->kind = EcsQuerySparse;
             if (term->oper == EcsNot) {
-                if (!ecs_id_is_wildcard(ECS_TERM_REF_ID(&term->second))) {
-                    term->oper = EcsAnd;
-                    op->kind = EcsQueryUnionNeq;
-                }
+                op->kind = EcsQuerySparseNot;
             }
         } else {
-            op->kind = EcsQueryUnionEqWith;
+            op->kind = EcsQuerySparseWith;
         }
 
         if ((term->src.id & trav_flags) == EcsUp) {
-            if (op->kind == EcsQueryUnionEq) {
-                op->kind = EcsQueryUnionEqUp;
-            }
+            op->kind = EcsQuerySparseUp;
         } else if ((term->src.id & trav_flags) == (EcsSelf|EcsUp)) {
-            if (op->kind == EcsQueryUnionEq) {
-                op->kind = EcsQueryUnionEqSelfUp;
-            }
+            op->kind = EcsQuerySparseSelfUp;
         }
     } else {
         if ((term->src.id & trav_flags) == EcsUp) {
             op->kind = EcsQueryUp;
+            if (term->trav == EcsChildOf) {
+                if (term->flags_ & EcsTermIsCacheable && query->cache) {
+                    op->kind = EcsQueryTreeUpPost;
+                } else if (query->pub.flags & EcsQueryNested) {
+                    op->kind = EcsQueryTreeUpPre;
+                }
+            }
         } else if ((term->src.id & trav_flags) == (EcsSelf|EcsUp)) {
             op->kind = EcsQuerySelfUp;
+            if (term->trav == EcsChildOf) {
+                if (term->flags_ & EcsTermIsCacheable && query->cache) {
+                    op->kind = EcsQueryTreeSelfUpPost;
+                } else if (query->pub.flags & EcsQueryNested) {
+                    op->kind = EcsQueryTreeSelfUpPre;
+                }
+            }
         } else if (term->flags_ & (EcsTermMatchAny|EcsTermMatchAnySrc)) {
             op->kind = EcsQueryAndAny;
+        } else if (ECS_IS_PAIR(term->id) && 
+            ECS_PAIR_FIRST(term->id) == EcsWildcard) 
+        {
+            if (op->kind == EcsQueryAnd) {
+                op->kind = EcsQueryAndWcTgt;
+            } else {
+                op->kind = EcsQueryWithWcTgt;
+            }
+        }
+
+        /* ChildOf terms need to take into account both ChildOf pairs and the 
+         * Parent component for non-fragmenting hierarchies. */
+        if (term->flags_ & EcsTermNonFragmentingChildOf && !term->trav) {
+            if (query->pub.flags & EcsQueryNested) {
+                /* If this is a nested query (used to populate a cache), insert
+                 * instruction that matches tables with ChildOf pairs and Parent
+                 * component, without filtering the non-fragmenting parents as
+                 * this cannot be cached. */
+                op->kind = EcsQueryTreePre;
+            } else {
+                if (!src_is_var) {
+                    op->kind = EcsQueryTreeWith;
+                } else {
+                    if (op->kind == EcsQueryAnd) {
+                        if (ECS_PAIR_SECOND(term->id) == EcsWildcard) {
+                            op->kind = EcsQueryTreeWildcard;
+                        } else {
+                            op->kind = EcsQueryTree;
+                        }
+
+                        if (term->flags_ & EcsTermIsCacheable) {
+                            if (query->cache) {
+                                op->kind = EcsQueryTreePost;
+                            }
+                        }
+                    } else if (op->kind == EcsQueryAndAny) {
+                        if (ECS_PAIR_SECOND(term->id)) {
+                            op->kind = EcsQueryTreeWildcard;
+                        } else {
+                            /* If it's a (ChildOf, 0) query then we don't need to
+                            * evaluate it as a wildcard. */
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1171,8 +1230,8 @@ int flecs_query_compile_term(
 
         for (i = 0; i < count; i ++) {
             ecs_id_t ti_id = ti_ids[i];
-            ecs_id_record_t *idr = flecs_id_record_get(world, ti_id);
-            if (!(idr->flags & EcsIdOnInstantiateDontInherit)) {
+            ecs_component_record_t *cr = flecs_components_get(world, ti_id);
+            if (!(cr->flags & EcsIdOnInstantiateDontInherit)) {
                 break;
             }
         }
@@ -1216,9 +1275,12 @@ int flecs_query_compile_term(
     op.field_index = flecs_ito(int8_t, term->field_index);
     op.term_index = flecs_ito(int8_t, term - q->terms);
 
-    flecs_query_set_op_kind(&op, term, src_is_var);
+    flecs_query_set_op_kind(query, &op, term, src_is_var);
 
     bool is_not = (term->oper == EcsNot) && !builtin_pred;
+    if (op.kind == EcsQuerySparseNot) {
+        is_not = false;
+    }
 
     /* Save write state at start of term so we can use it to reliably track
      * variables got written by this term. */
@@ -1316,7 +1378,7 @@ int flecs_query_compile_term(
     } else if (!src_written && term->id == EcsAny && op.kind == EcsQueryAndAny) {
         /* Lookup variables ($var.child_name) are always written */
         if (!src_is_lookup) {
-            op.kind = EcsQueryOnlyAny; /* Uses Any (_) id record */
+            op.kind = EcsQueryAll; /* Uses Any (_) component record */
         }
     }
 

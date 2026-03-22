@@ -1,6 +1,6 @@
 /**
  * @file addons/cpp/ref.hpp
- * @brief Class that caches data to speedup get operations.
+ * @brief Class that caches data to speed up get operations.
  */
 
 #pragma once
@@ -16,49 +16,79 @@ namespace flecs
  * @{
  */
 
-/** Component reference.
+/** Untyped component reference.
  * Reference to a component from a specific entity.
  */
-template <typename T>
-struct ref {
-    ref() : world_(nullptr), ref_{} { }
+struct untyped_ref {
 
-    ref(world_t *world, entity_t entity, flecs::id_t id = 0)
-        : ref_()
-    {
-        // the world we were called with may be a stage; convert it to a world
-        // here if that is the case
+    /** Default constructor. Creates an empty reference. */
+    untyped_ref () : world_(nullptr), ref_{} {}
+
+    /** Construct a reference from a world, entity, and component ID.
+     *
+     * @param world The world.
+     * @param entity The entity.
+     * @param id The component ID.
+     */
+    untyped_ref(world_t *world, entity_t entity, flecs::id_t id)
+        : ref_() {
+        ecs_assert(id != 0, ECS_INVALID_PARAMETER,
+            "invalid id");
+        // The world we were called with may be a stage; convert it to a world
+        // here if that is the case.
         world_ = world ? const_cast<flecs::world_t *>(ecs_get_world(world))
             : nullptr;
-        if (!id) {
-            id = _::type<T>::id(world);
-        }
 
-        ecs_assert(_::type<T>::size() != 0, ECS_INVALID_PARAMETER,
-            "operation invalid for empty type");
-
+#ifdef FLECS_DEBUG
+        flecs::entity_t type = ecs_get_typeid(world, id);
+        const flecs::type_info_t *ti = ecs_get_type_info(world, type);
+        ecs_assert(ti && ti->size != 0, ECS_INVALID_PARAMETER,
+            "cannot create ref to empty type");
+#endif
         ref_ = ecs_ref_init_id(world_, entity, id);
     }
 
-    ref(flecs::entity entity, flecs::id_t id = 0)
-        : ref(entity.world(), entity.id(), id) { }
+    /** Construct a reference from an entity and component ID.
+     *
+     * @param entity The entity.
+     * @param id The component ID.
+     */
+    untyped_ref(flecs::entity entity, flecs::id_t id);
 
-    T* operator->() {
-        T* result = static_cast<T*>(ecs_ref_get_id(
-            world_, &ref_, this->ref_.id));
+    /** Return the entity associated with the reference. */
+    flecs::entity entity() const;
 
-        ecs_assert(result != NULL, ECS_INVALID_PARAMETER,
-            "nullptr dereference by flecs::ref");
-
-        return result;
+    /** Return the component associated with the reference. */
+    flecs::id component() const {
+        return flecs::id(world_, ref_.id);
     }
 
-    T* get() {
-        return static_cast<T*>(ecs_ref_get_id(
-            world_, &ref_, this->ref_.id));
+    /** Get a pointer to the component value. */
+    void* get() {
+        return ecs_ref_get_id(world_, &ref_, this->ref_.id);
     }
 
-    T* try_get() {
+    /** Check if the reference has a valid component value. */
+    bool has() {
+        return !!try_get();
+    }
+
+    /** Get the world associated with the reference. */
+    flecs::world world() const {
+        return flecs::world(world_);
+    }
+
+    /** Implicit conversion to bool.
+     * Return true if there is a valid component instance being referred to.
+     */
+    operator bool() {
+        return has();
+    }
+
+    /** Try to get a pointer to the component value.
+     * Return nullptr if the reference is invalid.
+     */
+    void* try_get() {
         if (!world_ || !ref_.entity) {
             return nullptr;
         }
@@ -66,20 +96,57 @@ struct ref {
         return get();
     }
 
-    bool has() {
-        return !!try_get();
-    }
-
-    /** implicit conversion to bool.  return true if there is a valid T* being referred to **/
-    operator bool() {
-        return has();
-    }
-
-    flecs::entity entity() const;
-
 private:
     world_t *world_;
     flecs::ref_t ref_;
+};
+
+/** Component reference.
+ * Reference to a component from a specific entity.
+ */
+template <typename T>
+struct ref : public untyped_ref {
+    /** Default constructor. Creates an empty reference. */
+    ref() : untyped_ref() { }
+
+    /** Construct a reference from a world, entity, and optional component ID.
+     *
+     * @param world The world.
+     * @param entity The entity.
+     * @param id The component ID (defaults to type T's ID).
+     */
+    ref(world_t *world, entity_t entity, flecs::id_t id = 0)
+        : untyped_ref(world, entity, id ? id : _::type<T>::id(world))
+    {    }
+
+    /** Construct a reference from an entity and optional component ID.
+     *
+     * @param entity The entity.
+     * @param id The component ID (defaults to type T's ID).
+     */
+    ref(flecs::entity entity, flecs::id_t id = 0);
+
+    /** Dereference operator. Return a pointer to the component value. */
+    T* operator->() {
+        T* result = static_cast<T*>(get());
+
+        ecs_assert(result != NULL, ECS_INVALID_PARAMETER,
+            "nullptr dereference by flecs::ref");
+
+        return result;
+    }
+
+    /** Get a typed pointer to the component value. */
+    T* get() {
+        return static_cast<T*>(untyped_ref::get());
+    }
+
+    /** Try to get a typed pointer to the component value.
+     * Return nullptr if the reference is invalid.
+     */
+    T* try_get() {
+        return static_cast<T*>(untyped_ref::try_get());
+    }
 };
 
 /** @} */

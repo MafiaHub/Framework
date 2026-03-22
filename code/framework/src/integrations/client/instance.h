@@ -33,7 +33,7 @@
 
 #include <input/input.h>
 
-#include <flecs/flecs.h>
+#include <flecs/distr/flecs.h>
 
 namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;

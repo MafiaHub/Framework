@@ -75,6 +75,19 @@ public:
     }
 };
 
+namespace RenamedRootModule {
+    struct Module {
+        Module(flecs::world& world) {
+            world.module<Module>("::MyModule");
+            for(int i = 0; i < 5; ++i) {
+                auto e = world.entity();
+                test_assert(e.id() == (uint32_t)e.id());
+            }
+        }
+    };
+}
+
+
 namespace ns_parent {
     struct NsType {
         float x;
@@ -360,8 +373,8 @@ void Module_lookup_module_after_reparent(void) {
 
     // Tests if symbol resolving (used by query DSL) interferes with getting the
     // correct object
-    test_int(world.query_builder()
-        .expr("(ChildOf, p.NestedModule)").build().count(), 1);
+    test_assert(world.query_builder()
+        .expr("(ChildOf, p.NestedModule)").build().count() > 0);
     test_int(world.query_builder()
         .expr("(ChildOf, ns.NestedModule)").build().count(), 0);
 }
@@ -481,6 +494,7 @@ void Module_rename_namespace_nested(void) {
 
     auto m = ecs.import<ns_parent::ns_child::Nested>();
     test_assert(m.has(flecs::Module));
+
     test_str(m.path(), "::ns::child::Nested");
     test_assert(ecs.lookup("::ns::child::Nested::NsType") != 0);
     test_assert(ecs.lookup("::ns_parent::ns_child::Nested::NsType") == 0);
@@ -505,4 +519,108 @@ void Module_rename_reparent_root_module(void) {
     test_assert(p != 0);
     test_str(p.name(), "ns");
     test_str(m.name(), "ReparentRootModule");
+}
+
+void Module_no_recycle_after_rename_reparent(void) {
+    flecs::world ecs;
+
+    flecs::entity m = ecs.import<RenamedRootModule::Module>();
+    flecs::entity p = m.parent();
+    test_assert(p == 0);
+    test_str(m.name(), "MyModule");
+}
+
+void Module_reimport_after_delete(void) {
+    flecs::world ecs;
+
+    {
+        auto m = ecs.import<Module>();
+        test_assert(m.lookup("Position") == ecs.component<Position>());
+        test_assert(m == ecs.entity<Module>());
+    }
+
+    ecs.entity<Module>().destruct();
+
+    {
+        auto m = ecs.import<Module>();
+        test_assert(m.lookup("Position") == ecs.component<Position>());
+        test_assert(m == ecs.entity<Module>());
+    }
+}
+
+struct module_a_component { };
+
+struct module_a {
+    module_a(flecs::world &world) {
+        world.component<module_a_component>();
+    }
+};
+
+void Module_component_name_w_module_name(void) {
+    flecs::world world;
+
+    flecs::entity m = world.import<module_a>();
+    test_assert(m != 0);
+    flecs::entity c = world.lookup("module_a::module_a_component");
+    test_assert(c != 0);
+    test_str(c.name().c_str(), "module_a_component");
+    test_str(c.parent().name().c_str(), "module_a");
+}
+
+struct SystemAndImplicitComponent {
+    SystemAndImplicitComponent(flecs::world& world) {
+        world.system("VelocitySys").with<Velocity>().each([]() {});
+    }
+};
+
+void Module_delete_module_w_implicit_component_and_system(void) {
+    flecs::world world;
+
+    auto m = world.import<SystemAndImplicitComponent>();
+
+    test_assert(m.lookup("Velocity") == 0);
+    test_assert(world.lookup("Velocity") != 0);
+    test_assert(m.lookup("VelocitySys") != 0);
+
+    m.destruct();
+
+    test_assert(true); // verify code doesn't crash
+}
+
+struct SystemAndExplicitComponent {
+    SystemAndExplicitComponent(flecs::world& world) {
+        world.component<Velocity>();
+        world.system("VelocitySys").with<Velocity>().each([]() {});
+    }
+};
+
+void Module_delete_module_w_explicit_component_and_system(void) {
+    flecs::world world;
+
+    auto m = world.import<SystemAndExplicitComponent>();
+
+    test_assert(m.lookup("Velocity") != 0);
+    test_assert(m.lookup("VelocitySys") != 0);
+
+    m.destruct();
+
+    test_assert(true); // verify code doesn't crash
+}
+
+static int singleton_test_invoked = 0;
+
+struct SingletonTest {
+    SingletonTest(flecs::world& world) {
+        test_assert(world.entity<SingletonTest>().has(flecs::Singleton));
+
+        singleton_test_invoked ++;
+    }
+};
+
+void Module_module_has_singleton(void) {
+    flecs::world world;
+
+    auto e = world.import<SingletonTest>();
+
+    test_assert(e.has(flecs::Singleton));
 }

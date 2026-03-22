@@ -543,6 +543,41 @@ void SerializeIterToJson_serialize_type_info_1_component_1_struct(void) {
     ecs_fini(world);
 }
 
+void SerializeIterToJson_serialize_type_info_1_component_1_pair_tag(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, Obj);
+
+    ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(Position),
+        .members = {
+            {"x", ecs_id(ecs_i32_t)},
+            {"y", ecs_id(ecs_i32_t)}
+        }
+    });
+
+    ecs_entity_t e = ecs_entity(world, { .name = "Foo" });
+    ecs_set(world, e, Position, {10, 20});
+    ecs_add_pair(world, e, Rel, Obj);
+
+    ecs_query_t *q = ecs_query(world, { .expr = "Position, (Rel, Obj)" });
+    ecs_iter_t it = ecs_query_iter(world, q);
+
+    ecs_iter_to_json_desc_t desc = ECS_ITER_TO_JSON_INIT;
+    desc.serialize_type_info = true;
+    char *json = ecs_iter_to_json(&it, &desc);
+
+    test_json(json, "{\"type_info\":{\"Position\":{\"x\":[\"int\"], \"y\":[\"int\"]}, \"(Rel,Obj)\":0}, \"results\":[{\"name\":\"Foo\", \"fields\":{\"values\":[{\"x\":10, \"y\":20}, 0]}}]}");
+
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
 void SerializeIterToJson_serialize_type_info_2_structs(void) {
     ecs_world_t *world = ecs_init();
 
@@ -732,6 +767,49 @@ void SerializeIterToJson_serialize_type_info_w_unit_over(void) {
     char *json = ecs_iter_to_json(&it, &desc);
 
     test_json(json, "{\"type_info\":{\"T\":{\"value\":[\"int\", {\"unit\":\"meters_per_second\", \"symbol\":\"m/s\"}]}}, \"results\":[{\"name\":\"Foo\", \"fields\":{\"values\":[{\"value\":24}]}}, {\"name\":\"Bar\", \"fields\":{\"values\":[{\"value\":16}]}}]}");
+
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToJson_serialize_type_info_w_unit_array(void) {
+    typedef struct {
+        ecs_i32_t value[2];
+    } T;
+
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t u = ecs_unit_init(world, &(ecs_unit_desc_t){
+        .entity = ecs_entity(world, {.name = "celsius"}),
+        .symbol = "°"
+    });
+    test_assert(u != 0);
+
+    ecs_entity_t ecs_id(T) = ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_entity(world, {.name = "T"}),
+        .members = {
+            {"value", ecs_id(ecs_i32_t), .unit = u, .count = 2}
+        }
+    });
+    test_assert(ecs_id(T) != 0);
+
+    ecs_entity_t e1 = ecs_entity(world, { .name = "Foo" });
+    ecs_entity_t e2 = ecs_entity(world, { .name = "Bar" });
+
+    ecs_set(world, e1, T, {12, 24});
+    ecs_set(world, e2, T, {16, 32});
+
+    ecs_query_t *q = ecs_query(world, { .expr = "T" });
+    ecs_iter_t it = ecs_query_iter(world, q);
+
+    ecs_iter_to_json_desc_t desc = ECS_ITER_TO_JSON_INIT;
+    desc.serialize_type_info = true;
+    char *json = ecs_iter_to_json(&it, &desc);
+
+    test_json(json, "{\"type_info\":{\"T\":{\"value\":[\"array\", [\"int\"], 2, {\"unit\":\"celsius\", \"symbol\":\"°\"}]}}, \"results\":[{\"name\":\"Foo\", \"fields\":{\"values\":[{\"value\":[12, 24]}]}}, {\"name\":\"Bar\", \"fields\":{\"values\":[{\"value\":[16, 32]}]}}]}");
 
     ecs_os_free(json);
 
@@ -1484,7 +1562,7 @@ void SerializeIterToJson_serialize_anonymous_component(void) {
     ecs_query_t *q = ecs_query(world, { .expr = "#10000" });
 
     ecs_entity_t e = ecs_entity(world, { .name = "e" });
-    int32_t *ptr = ecs_ensure_id(world, e, tag);
+    int32_t *ptr = ecs_ensure_id(world, e, tag, 4);
     *ptr = 10;
 
     ecs_iter_t it = ecs_query_iter(world, q);
@@ -1854,8 +1932,8 @@ void SerializeIterToJson_serialize_paged_iterator_w_vars(void) {
     ecs_iter_t it = ecs_query_iter(world, r);
     ecs_iter_t pit = ecs_page_iter(&it, 1, 3);
 
-    test_assert(var < pit.variable_count);
-    test_json("Var", pit.variable_names[var]);
+    test_assert(var < ecs_iter_get_var_count(&pit));
+    test_json("Var", ecs_iter_get_var_name(&pit, var));
 
     test_bool(true, ecs_page_next(&pit));
     test_int(2, pit.count);
@@ -2307,6 +2385,36 @@ void SerializeIterToJson_serialize_null_doc_name(void) {
     ECS_TAG(world, Tag);
 
     ecs_entity_t e = ecs_entity(world, { .name = "foo" });
+    ecs_set_pair(world, e, EcsDocDescription, EcsName, { NULL });
+    ecs_add(world, e, Tag);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms[0] = {
+            .id = Tag
+        }
+    });
+    test_assert(q != NULL);
+
+    ecs_iter_to_json_desc_t desc = ECS_ITER_TO_JSON_INIT;
+    desc.serialize_doc = true;
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    char *json = ecs_iter_to_json(&it, &desc);
+    test_assert(json != NULL);
+    test_json(json, "{\"results\":[{\"name\":\"foo\", \"doc\":{\"label\":null}, \"fields\":{}}]}");
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToJson_serialize_overwrite_null_doc_name(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Tag);
+
+    ecs_entity_t e = ecs_entity(world, { .name = "foo" });
     ecs_doc_set_name(world, e, "bar");
     ecs_doc_set_name(world, e, NULL);
     ecs_add(world, e, Tag);
@@ -2722,6 +2830,120 @@ void SerializeIterToJson_serialize_field_w_escaped_sep(void) {
     ecs_iter_t it = ecs_query_iter(world, q);
     char *json = ecs_iter_to_json(&it, NULL);
     test_json(json, "{\"results\":[{\"name\":\"e\", \"fields\":{\"ids\":[[\"Rel\",\"Tgt\\\\.Foo\"]]}}]}");
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToJson_serialize_children_w_parent_component(void) {
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t parent = ecs_entity(world, { .name = "parent" });
+    ecs_new_w_parent(world, parent, "child_a");
+    ecs_new_w_parent(world, parent, "child_b");
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ ecs_pair(EcsChildOf, parent) }}
+    });
+
+    test_assert(q != NULL);
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    char *json = ecs_iter_to_json(&it, NULL);
+    test_json(json, "{\"results\":[{\"name\":\"child_a\", \"fields\":{}}, {\"name\":\"child_b\", \"fields\":{}}]}");
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToJson_serialize_children_w_parent_component_table(void) {
+    test_quarantine("Feb 4 2026");
+
+    ecs_world_t *world = ecs_init();
+
+    ecs_entity_t parent = ecs_entity(world, { .name = "parent" });
+    ecs_new_w_parent(world, parent, "child_a");
+    ecs_new_w_parent(world, parent, "child_b");
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ ecs_pair(EcsChildOf, parent) }}
+    });
+
+    test_assert(q != NULL);
+
+    ecs_iter_to_json_desc_t desc = {
+        .serialize_table = true
+    };
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    char *json = ecs_iter_to_json(&it, &desc);
+    test_json(json, "{...}");
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToJson_serialize_children_w_tag_w_parent_component(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Foo);
+
+    ecs_entity_t parent = ecs_entity(world, { .name = "parent" });
+    ecs_entity_t child_a = ecs_new_w_parent(world, parent, "child_a");
+    ecs_new_w_parent(world, parent, "child_b");
+    ecs_entity_t child_c = ecs_new_w_parent(world, parent, "child_c");
+
+    ecs_add(world, child_a, Foo);
+    ecs_add(world, child_c, Foo);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ ecs_pair(EcsChildOf, parent) }, { Foo }}
+    });
+
+    test_assert(q != NULL);
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    char *json = ecs_iter_to_json(&it, NULL);
+    test_json(json, "{\"results\":[{\"parent\":\"parent\", \"name\":\"child_a\", \"fields\":{}}, {\"parent\":\"parent\", \"name\":\"child_c\", \"fields\":{}}]}");
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToJson_serialize_children_w_tag_w_parent_component_table(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_TAG(world, Foo);
+
+    ecs_entity_t parent = ecs_entity(world, { .name = "parent" });
+    ecs_entity_t child_a = ecs_new_w_parent(world, parent, "child_a");
+    ecs_new_w_parent(world, parent, "child_b");
+    ecs_entity_t child_c = ecs_new_w_parent(world, parent, "child_c");
+
+    ecs_add(world, child_a, Foo);
+    ecs_add(world, child_c, Foo);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ ecs_pair(EcsChildOf, parent) }, { Foo }}
+    });
+
+    test_assert(q != NULL);
+
+    ecs_iter_to_json_desc_t desc = {
+        .serialize_table = true
+    };
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    char *json = ecs_iter_to_json(&it, &desc);
+    test_json(json, "{\"results\":[{\"parent\":\"parent\", \"name\":\"child_a\", \"tags\":[\"Foo\"],\"pairs\":{\"ParentDepth\":\"@1\"}, \"components\":{\"Parent\":null}}, {\"parent\":\"parent\", \"name\":\"child_c\", \"tags\":[\"Foo\"],\"pairs\":{\"ParentDepth\":\"@1\"}, \"components\":{\"Parent\":null}}]}");
     ecs_os_free(json);
 
     ecs_query_fini(q);

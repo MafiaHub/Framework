@@ -1,6 +1,6 @@
 /**
  * @file addons/cpp/flecs.hpp
- * @brief Flecs C++11 API.
+ * @brief Flecs C++17 API.
  */
 
 #pragma once
@@ -29,6 +29,7 @@ struct untyped_component;
 template <typename T>
 struct component;
 
+struct untyped_ref;
 template <typename T>
 struct ref;
 
@@ -101,10 +102,10 @@ struct each_delegate;
 #include "world.hpp"
 #include "field.hpp"
 #include "iter.hpp"
+#include "ref.hpp"
 #include "entity.hpp"
 #include "delegate.hpp"
 #include "component.hpp"
-#include "ref.hpp"
 #include "type.hpp"
 #include "table.hpp"
 #include "utils/iterable.hpp"
@@ -129,9 +130,6 @@ struct each_delegate;
 #endif
 #ifdef FLECS_TIMER
 #include "mixins/timer/impl.hpp"
-#endif
-#ifdef FLECS_DOC
-#include "mixins/doc/impl.hpp"
 #endif
 #ifdef FLECS_DOC
 #include "mixins/doc/impl.hpp"
@@ -164,7 +162,7 @@ struct each_delegate;
 
 /**
  * @defgroup cpp_core Core
- * Core ECS functionality (entities, storage, queries)
+ * Core ECS functionality (entities, storage, queries).
  *
  * @{
  * @}

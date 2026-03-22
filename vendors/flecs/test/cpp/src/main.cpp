@@ -18,6 +18,7 @@ void Entity_new_named(void);
 void Entity_new_named_from_scope(void);
 void Entity_new_nested_named_from_scope(void);
 void Entity_new_nested_named_from_nested_scope(void);
+void Entity_new_named_from_scope_with_custom_separator(void);
 void Entity_new_add(void);
 void Entity_new_add_2(void);
 void Entity_new_set(void);
@@ -48,18 +49,74 @@ void Entity_get_generic_w_id(void);
 void Entity_get_generic_w_id_t(void);
 void Entity_ensure_generic_w_id(void);
 void Entity_ensure_generic_w_id_t(void);
+void Entity_get_w_id(void);
+void Entity_get_T(void);
+void Entity_get_n_T(void);
+void Entity_get_r_t(void);
+void Entity_get_R_t(void);
+void Entity_get_R_T(void);
+void Entity_get_r_T(void);
+void Entity_get_w_id_not_found(void);
+void Entity_get_T_not_found(void);
+void Entity_get_r_t_not_found(void);
+void Entity_get_R_t_not_found(void);
+void Entity_get_R_T_not_found(void);
+void Entity_get_r_T_not_found(void);
+void Entity_try_get_w_id(void);
+void Entity_try_get_T(void);
+void Entity_try_get_n_T(void);
+void Entity_try_get_r_t(void);
+void Entity_try_get_R_t(void);
+void Entity_try_get_R_T(void);
+void Entity_try_get_r_T(void);
 void Entity_get_mut_w_id(void);
 void Entity_get_mut_T(void);
+void Entity_get_mut_n_T(void);
 void Entity_get_mut_r_t(void);
 void Entity_get_mut_R_t(void);
 void Entity_get_mut_R_T(void);
 void Entity_get_mut_r_T(void);
+void Entity_get_mut_pair_second_type(void);
+void Entity_get_mut_w_id_not_found(void);
+void Entity_get_mut_T_not_found(void);
+void Entity_get_mut_r_t_not_found(void);
+void Entity_get_mut_R_t_not_found(void);
+void Entity_get_mut_R_T_not_found(void);
+void Entity_get_mut_r_T_not_found(void);
+void Entity_try_get_mut_w_id(void);
+void Entity_try_get_mut_T(void);
+void Entity_try_get_mut_n_T(void);
+void Entity_try_get_mut_r_t(void);
+void Entity_try_get_mut_R_t(void);
+void Entity_try_get_mut_R_T(void);
+void Entity_try_get_mut_enum_constant(void);
+void Entity_try_get_mut_r_T(void);
+void Entity_try_get_mut_pair_second_type(void);
 void Entity_set_generic(void);
 void Entity_set_generic_w_id(void);
 void Entity_set_generic_w_id_t(void);
 void Entity_set_generic_no_size(void);
 void Entity_set_generic_no_size_w_id(void);
 void Entity_set_generic_no_size_w_id_t(void);
+void Entity_set_T(void);
+void Entity_set_R_t(void);
+void Entity_set_R_T(void);
+void Entity_set_r_T(void);
+void Entity_set_r_t_generic_no_size(void);
+void Entity_assign_T(void);
+void Entity_assign_R_t(void);
+void Entity_assign_R_T(void);
+void Entity_assign_r_T(void);
+void Entity_assign_T_not_found(void);
+void Entity_assign_R_t_not_found(void);
+void Entity_assign_R_T_not_found(void);
+void Entity_assign_r_T_not_found(void);
+void Entity_assign_w_on_set_hook(void);
+void Entity_assign_w_on_set_observer(void);
+void Entity_assign_w_change_detect(void);
+void Entity_defer_assign_w_on_set_hook(void);
+void Entity_defer_assign_w_on_set_observer(void);
+void Entity_defer_assign_w_change_detect(void);
 void Entity_add_role(void);
 void Entity_remove_role(void);
 void Entity_has_role(void);
@@ -108,7 +165,9 @@ void Entity_set_deduced(void);
 void Entity_override(void);
 void Entity_override_id(void);
 void Entity_override_pair(void);
+void Entity_override_pair_second(void);
 void Entity_override_pair_w_tgt_id(void);
+void Entity_override_pair_w_rel_id(void);
 void Entity_override_pair_w_ids(void);
 void Entity_set_override(void);
 void Entity_set_override_lvalue(void);
@@ -210,6 +269,9 @@ void Entity_is_a(void);
 void Entity_is_a_w_type(void);
 void Entity_child_of(void);
 void Entity_child_of_w_type(void);
+void Entity_child(void);
+void Entity_child_custom_rel(void);
+void Entity_child_custom_type(void);
 void Entity_slot_of(void);
 void Entity_slot_of_w_type(void);
 void Entity_slot(void);
@@ -234,6 +296,7 @@ void Entity_entity_w_root_name_from_scope(void);
 void Entity_entity_w_type(void);
 void Entity_entity_w_nested_type(void);
 void Entity_entity_w_type_defer(void);
+void Entity_prefab_w_type(void);
 void Entity_prefab_hierarchy_w_types(void);
 void Entity_prefab_hierarchy_w_root_types(void);
 void Entity_prefab_hierarchy_w_child_override(void);
@@ -281,6 +344,8 @@ void Entity_const_entity_set_doc(void);
 void Entity_set_sparse(void);
 void Entity_insert_1_sparse(void);
 void Entity_insert_2_w_1_sparse(void);
+void Entity_insert_1_dont_fragment(void);
+void Entity_insert_2_w_1_dont_fragment(void);
 void Entity_emplace_sparse(void);
 void Entity_override_sparse(void);
 void Entity_delete_w_override_sparse(void);
@@ -289,6 +354,70 @@ void Entity_get_mut_pair_second_invalid_type(void);
 void Entity_ensure_pair_second_invalid_type(void);
 void Entity_set_pair_second_invalid_type(void);
 void Entity_get_ref_pair_second_invalid_type(void);
+void Entity_iter_type(void);
+void Entity_iter_empty_type(void);
+void Entity_untyped_component_use_low_id(void);
+void Entity_add_remove_enum_component(void);
+void Entity_on_replace_w_get_mut(void);
+void Entity_on_replace_w_ensure(void);
+void Entity_on_replace_w_emplace(void);
+void Entity_on_replace_w_set(void);
+void Entity_on_replace_w_set_existing(void);
+void Entity_on_replace_w_assign(void);
+void Entity_on_replace_w_assign_existing(void);
+void Entity_defer_on_replace_w_set(void);
+void Entity_defer_on_replace_w_set_twice(void);
+void Entity_defer_on_replace_w_set_existing(void);
+void Entity_defer_on_replace_w_set_existing_twice(void);
+void Entity_defer_on_replace_w_set_batched(void);
+void Entity_defer_on_replace_w_set_batched_twice(void);
+void Entity_defer_on_replace_w_set_batched_existing(void);
+void Entity_defer_on_replace_w_set_batched_existing_twice(void);
+void Entity_defer_on_replace_w_assign(void);
+void Entity_defer_on_replace_w_assign_existing(void);
+void Entity_defer_on_replace_w_assign_existing_twice(void);
+void Entity_defer_on_replace_w_assign_batched_existing(void);
+void Entity_defer_on_replace_w_assign_batched_existing_twice(void);
+void Entity_set_lvalue_to_mutable(void);
+void Entity_set_lvalue_to_const(void);
+void Entity_set_rvalue(void);
+void Entity_assign_rvalue(void);
+void Entity_set_non_copy_assignable(void);
+void Entity_set_non_copy_assignable_w_move_assign(void);
+void Entity_assign_non_copy_assignable(void);
+void Entity_assign_non_copy_assignable_w_move_assign(void);
+void Entity_set_parent(void);
+void Entity_defer_set_parent(void);
+void Entity_set_change_parent(void);
+void Entity_defer_set_change_parent(void);
+void Entity_assign_parent(void);
+void Entity_defer_assign_parent(void);
+void Entity_set_parent_on_stage(void);
+void Entity_assign_parent_on_stage(void);
+void Entity_entity_w_childof(void);
+void Entity_entity_w_childof_w_name(void);
+void Entity_entity_w_childof_w_name_existing_w_name(void);
+void Entity_entity_w_parent(void);
+void Entity_entity_w_parent_w_name(void);
+void Entity_entity_w_parent_w_name_existing_w_name(void);
+void Entity_prefab_w_childof(void);
+void Entity_prefab_w_childof_w_name(void);
+void Entity_prefab_w_childof_w_name_existing_w_name(void);
+void Entity_prefab_w_parent(void);
+void Entity_prefab_w_parent_w_name(void);
+void Entity_prefab_w_parent_w_name_existing_w_name(void);
+void Entity_defer_set_parent_to_deleted(void);
+void Entity_defer_set_parent_to_deleted_batched(void);
+void Entity_defer_set_existing_parent_to_deleted(void);
+void Entity_defer_set_existing_parent_to_deleted_batched(void);
+void Entity_defer_assign_parent_to_deleted(void);
+void Entity_defer_assign_parent_to_deleted_batched(void);
+
+// Testsuite 'OrderedChildren'
+void OrderedChildren_iter_no_children(void);
+void OrderedChildren_children_1_table(void);
+void OrderedChildren_children_2_tables(void);
+void OrderedChildren_set_child_order(void);
 
 // Testsuite 'Pairs'
 void Pairs_add_component_pair(void);
@@ -373,23 +502,25 @@ void Enum_prefixed_enum_reflection(void);
 void Enum_constant_with_num_reflection(void);
 void Enum_get_constant_id(void);
 void Enum_add_enum_constant(void);
+void Enum_add_enum_constant_explicit(void);
 void Enum_add_enum_class_constant(void);
+void Enum_add_singleton_enum_constant(void);
 void Enum_replace_enum_constants(void);
 void Enum_has_enum(void);
 void Enum_has_enum_wildcard(void);
-void Enum_get_enum(void);
+void Enum_get_constant(void);
 void Enum_remove_enum(void);
 void Enum_remove_wildcard(void);
 void Enum_enum_as_component(void);
 void Enum_query_enum_wildcard(void);
 void Enum_query_enum_constant(void);
+void Enum_query_singleton_enum_constant(void);
 void Enum_enum_type_from_stage(void);
 void Enum_add_enum_from_stage(void);
 void Enum_enum_w_2_worlds(void);
 void Enum_add_enum_constant_w_tag(void);
 void Enum_remove_enum_constant_w_tag(void);
 void Enum_set_enum_constant_w_tag(void);
-void Enum_enum_w_incorrect_size(void);
 void Enum_add_union_enum(void);
 void Enum_add_2_union_enums(void);
 void Enum_add_2_union_enums_reverse(void);
@@ -397,11 +528,23 @@ void Enum_constant_from_entity(void);
 void Enum_add_if(void);
 void Enum_add_if_other(void);
 void Enum_query_union_enum(void);
-void Enum_query_union_enum_invalid_query_type(void);
 void Enum_component_registered_as_enum(void);
 void Enum_mixed_auto_manual_constants(void);
 void Enum_enum_class_mixed_auto_manual_constants(void);
 void Enum_enum_child_count(void);
+void Enum_multi_world_constant_ids(void);
+void Enum_empty_enum(void);
+void Enum_enum_w_one_constant_index_of(void);
+void Enum_enum_i8(void);
+void Enum_enum_i16(void);
+void Enum_enum_i32(void);
+void Enum_enum_i64(void);
+void Enum_enum_u8(void);
+void Enum_enum_u16(void);
+void Enum_enum_u32(void);
+void Enum_enum_u64(void);
+void Enum_runtime_type_constant_u8_template(void);
+void Enum_multithreaded_enum_registration(void);
 
 // Testsuite 'Union'
 void Union_add_case(void);
@@ -495,6 +638,7 @@ void System_multithread_system_w_query_each_w_world(void);
 void System_multithread_system_w_query_iter(void);
 void System_multithread_system_w_query_iter_w_iter(void);
 void System_multithread_system_w_query_iter_w_world(void);
+void System_multithread_system_w_get_var(void);
 void System_run_callback(void);
 void System_startup_system(void);
 void System_interval_tick_source(void);
@@ -511,6 +655,7 @@ void System_register_twice_w_each(void);
 void System_register_twice_w_run(void);
 void System_register_twice_w_run_each(void);
 void System_register_twice_w_each_run(void);
+void System_set_group(void);
 void System_run_w_0_src_query(void);
 
 // Testsuite 'Event'
@@ -570,11 +715,25 @@ void Query_run_const(void);
 void Query_run_shared(void);
 void Query_run_optional(void);
 void Query_run_sparse(void);
+void Query_run_sparse_w_with(void);
+void Query_run_dont_fragment(void);
+void Query_run_dont_fragment_w_with(void);
+void Query_run_dont_fragment_add(void);
+void Query_run_dont_fragment_add_remove(void);
+void Query_run_dont_fragment_set(void);
 void Query_each(void);
 void Query_each_const(void);
 void Query_each_shared(void);
 void Query_each_optional(void);
 void Query_each_sparse(void);
+void Query_each_sparse_w_with(void);
+void Query_each_sparse_many(void);
+void Query_each_dont_fragment(void);
+void Query_each_dont_fragment_w_with(void);
+void Query_each_dont_fragment_many(void);
+void Query_each_dont_fragment_add(void);
+void Query_each_dont_fragment_add_remove(void);
+void Query_each_dont_fragment_set(void);
 void Query_signature(void);
 void Query_signature_const(void);
 void Query_signature_shared(void);
@@ -645,11 +804,16 @@ void Query_instanced_nested_query_w_world(void);
 void Query_captured_query(void);
 void Query_page_iter_captured_query(void);
 void Query_worker_iter_captured_query(void);
+void Query_set_group_captured_query(void);
+void Query_set_var_captured_query(void);
+void Query_set_var_id_captured_query(void);
 void Query_iter_entities(void);
 void Query_iter_get_pair_w_id(void);
 void Query_find(void);
 void Query_find_not_found(void);
 void Query_find_w_entity(void);
+void Query_find_w_match_empty_tables(void);
+void Query_find_w_entity_w_match_empty_tables(void);
 void Query_optional_pair_term(void);
 void Query_empty_tables_each(void);
 void Query_empty_tables_each_w_entity(void);
@@ -669,6 +833,9 @@ void Query_iter_targets_2nd_field(void);
 void Query_iter_targets_field_out_of_range(void);
 void Query_iter_targets_field_not_a_pair(void);
 void Query_iter_targets_field_not_set(void);
+void Query_copy_operators(void);
+void Query_optional_singleton(void);
+void Query_optional_module(void);
 
 // Testsuite 'QueryBuilder'
 void QueryBuilder_setup(void);
@@ -728,6 +895,8 @@ void QueryBuilder_relation_w_object_wildcard(void);
 void QueryBuilder_relation_w_predicate_wildcard(void);
 void QueryBuilder_add_pair_w_rel_type(void);
 void QueryBuilder_template_term(void);
+void QueryBuilder_typed_term_at(void);
+void QueryBuilder_typed_term_at_indexed(void);
 void QueryBuilder_explicit_subject_w_id(void);
 void QueryBuilder_explicit_subject_w_type(void);
 void QueryBuilder_explicit_object_w_id(void);
@@ -746,6 +915,7 @@ void QueryBuilder_world_each_filter_1_component(void);
 void QueryBuilder_world_each_filter_2_components(void);
 void QueryBuilder_world_each_filter_1_component_no_entity(void);
 void QueryBuilder_world_each_filter_2_components_no_entity(void);
+void QueryBuilder_world_each_entity(void);
 void QueryBuilder_10_terms(void);
 void QueryBuilder_16_terms(void);
 void QueryBuilder_32_terms(void);
@@ -822,6 +992,7 @@ void QueryBuilder_create_w_no_template_args(void);
 void QueryBuilder_any_wildcard(void);
 void QueryBuilder_cascade(void);
 void QueryBuilder_cascade_w_relationship(void);
+void QueryBuilder_cascade_w_set_var(void);
 void QueryBuilder_up_w_type(void);
 void QueryBuilder_cascade_w_type(void);
 void QueryBuilder_cascade_desc(void);
@@ -838,6 +1009,17 @@ void QueryBuilder_named_scoped_rule(void);
 void QueryBuilder_is_valid(void);
 void QueryBuilder_unresolved_by_name(void);
 void QueryBuilder_scope(void);
+void QueryBuilder_each_w_field_w_fixed_src(void);
+void QueryBuilder_each_w_field_at_w_fixed_src(void);
+void QueryBuilder_each_w_const_field_w_fixed_src(void);
+void QueryBuilder_each_w_const_field_at_w_fixed_src(void);
+void QueryBuilder_each_w_untyped_field_w_fixed_src(void);
+void QueryBuilder_each_w_untyped_field_at_w_fixed_src(void);
+void QueryBuilder_singleton_pair(void);
+void QueryBuilder_query_w_this_second(void);
+void QueryBuilder_pred_eq(void);
+void QueryBuilder_pred_eq_name(void);
+void QueryBuilder_pred_match(void);
 
 // Testsuite 'SystemBuilder'
 void SystemBuilder_builder_assign_same_type(void);
@@ -860,6 +1042,12 @@ void SystemBuilder_10_terms(void);
 void SystemBuilder_16_terms(void);
 void SystemBuilder_name_arg(void);
 void SystemBuilder_create_w_no_template_args(void);
+void SystemBuilder_deduce_terms_from_each_callback(void);
+void SystemBuilder_deduce_optional_terms_from_each_callback(void);
+void SystemBuilder_deduce_pair_term_from_each_callback(void);
+void SystemBuilder_deduce_singleton_term_from_each_callback(void);
+void SystemBuilder_deduce_singleton_and_component_terms_from_each_callback(void);
+void SystemBuilder_with_terms_after_deduced_terms(void);
 void SystemBuilder_write_annotation(void);
 void SystemBuilder_name_from_root(void);
 
@@ -923,6 +1111,11 @@ void Observer_on_set_after_remove_override(void);
 void Observer_on_set_after_remove_override_create_observer_before(void);
 void Observer_on_set_w_override_after_delete(void);
 void Observer_on_set_w_override_after_clear(void);
+void Observer_trigger_on_set_in_on_add_implicit_registration(void);
+void Observer_trigger_on_set_in_on_add_implicit_registration_namespaced(void);
+void Observer_fixed_src_w_each(void);
+void Observer_fixed_src_w_run(void);
+void Observer_untyped_field(void);
 
 // Testsuite 'ComponentLifecycle'
 void ComponentLifecycle_ctor_on_add(void);
@@ -1013,6 +1206,23 @@ void ComponentLifecycle_register_parent_after_child_w_hooks_implicit(void);
 void ComponentLifecycle_sparse_component(void);
 void ComponentLifecycle_count_in_add_hook(void);
 void ComponentLifecycle_count_in_remove_hook(void);
+void ComponentLifecycle_set_multiple_hooks(void);
+void ComponentLifecycle_compare_WithGreaterThan(void);
+void ComponentLifecycle_compare_WithLessThan(void);
+void ComponentLifecycle_compare_WithLessAndGreaterThan(void);
+void ComponentLifecycle_compare_WithEqualsAndGreaterThan(void);
+void ComponentLifecycle_compare_WithEqualsAndLessThan(void);
+void ComponentLifecycle_compare_WithEqualsOnly(void);
+void ComponentLifecycle_compare_WithoutOperators(void);
+void ComponentLifecycle_compare_uint8_Enum(void);
+void ComponentLifecycle_compare_uint16_Enum(void);
+void ComponentLifecycle_compare_uint32_Enum(void);
+void ComponentLifecycle_compare_uint64_Enum(void);
+void ComponentLifecycle_compare_int8_Enum(void);
+void ComponentLifecycle_compare_int16_Enum(void);
+void ComponentLifecycle_compare_int32_Enum(void);
+void ComponentLifecycle_compare_int64_Enum(void);
+void ComponentLifecycle_move_ctor_no_default_ctor(void);
 
 // Testsuite 'Refs'
 void Refs_get_ref_by_ptr(void);
@@ -1023,6 +1233,8 @@ void Refs_ref_after_set(void);
 void Refs_ref_before_set(void);
 void Refs_non_const_ref(void);
 void Refs_pair_ref(void);
+void Refs_pair_ref_w_pair_type(void);
+void Refs_pair_ref_w_pair_type_second(void);
 void Refs_pair_ref_w_entity(void);
 void Refs_pair_ref_second(void);
 void Refs_from_stage(void);
@@ -1030,8 +1242,16 @@ void Refs_default_ctor(void);
 void Refs_ctor_from_entity(void);
 void Refs_implicit_operator_bool(void);
 void Refs_try_get(void);
+void Refs_try_get_after_delete(void);
 void Refs_has(void);
 void Refs_bool_operator(void);
+void Refs_base_type(void);
+void Refs_empty_base_type(void);
+void Refs_get_component(void);
+void Refs_untyped_get_ref_by_method(void);
+void Refs_untyped_pair_ref(void);
+void Refs_untyped_runtime_component_ref(void);
+void Refs_ref_world(void);
 
 // Testsuite 'Module'
 void Module_import(void);
@@ -1055,6 +1275,12 @@ void Module_rename_namespace_shorter(void);
 void Module_rename_namespace_longer(void);
 void Module_rename_namespace_nested(void);
 void Module_rename_reparent_root_module(void);
+void Module_no_recycle_after_rename_reparent(void);
+void Module_reimport_after_delete(void);
+void Module_component_name_w_module_name(void);
+void Module_delete_module_w_implicit_component_and_system(void);
+void Module_delete_module_w_explicit_component_and_system(void);
+void Module_module_has_singleton(void);
 
 // Testsuite 'ImplicitComponents'
 void ImplicitComponents_add(void);
@@ -1084,6 +1310,8 @@ void ImplicitComponents_implicit_const(void);
 void ImplicitComponents_implicit_ref(void);
 void ImplicitComponents_implicit_const_ref(void);
 void ImplicitComponents_vector_elem_type(void);
+void ImplicitComponents_tag_has_component(void);
+void ImplicitComponents_component_has_component(void);
 
 // Testsuite 'WorldFactory'
 void WorldFactory_entity(void);
@@ -1104,15 +1332,14 @@ void World_multi_world_empty(void);
 void World_multi_world_component(void);
 void World_multi_world_component_namespace(void);
 void World_multi_world_module(void);
-void World_multi_world_recycled_component(void);
 void World_multi_world_recycled_component_different_generation(void);
 void World_type_id(void);
 void World_different_comp_same_name(void);
 void World_reregister_after_reset(void);
 void World_reregister_after_reset_w_namespace(void);
 void World_reregister_namespace(void);
+void World_reregister_after_delete(void);
 void World_implicit_reregister_after_reset(void);
-void World_reregister_after_reset_different_name(void);
 void World_register_short_template(void);
 void World_reimport(void);
 void World_reimport_module_after_reset(void);
@@ -1120,6 +1347,7 @@ void World_reimport_module_new_world(void);
 void World_reimport_namespaced_module(void);
 void World_c_interop_module(void);
 void World_c_interop_after_reset(void);
+void World_c_interop_module_no_names(void);
 void World_implicit_register_w_new_world(void);
 void World_implicit_register_after_reset_register_w_custom_name(void);
 void World_register_after_reset_register_w_custom_name(void);
@@ -1127,7 +1355,6 @@ void World_register_builtin_after_reset(void);
 void World_register_meta_after_reset(void);
 void World_reregister_after_reset_w_hooks_and_in_use(void);
 void World_reregister_after_reset_w_hooks_and_in_use_implicit(void);
-void World_register_component_w_reset_in_multithreaded(void);
 void World_register_component_w_core_name(void);
 void World_register_nested_component_in_module(void);
 void World_count(void);
@@ -1185,7 +1412,6 @@ void World_is_valid(void);
 void World_exists(void);
 void World_get_alive(void);
 void World_make_alive(void);
-void World_reset_all(void);
 void World_get_tick(void);
 void World_register_from_scope(void);
 void World_register_nested_from_scope(void);
@@ -1215,6 +1441,20 @@ void World_world_mini(void);
 void World_copy_world(void);
 void World_fini_reentrancy(void);
 void World_fini_copy_move_assign(void);
+void World_world_init_fini_log_all(void);
+void World_exclusive_access_self_mutate(void);
+void World_exclusive_access_other_mutate(void);
+void World_id_if_registered(void);
+void World_get_type_info_t(void);
+void World_get_type_info_T(void);
+void World_get_type_info_r_t(void);
+void World_get_type_info_R_t(void);
+void World_get_type_info_R_T(void);
+void World_get_type_info_t_tag(void);
+void World_get_type_info_T_tag(void);
+void World_get_type_info_r_t_tag(void);
+void World_get_type_info_R_t_tag(void);
+void World_get_type_info_R_T_tag(void);
 
 // Testsuite 'Singleton'
 void Singleton_set_get_singleton(void);
@@ -1237,61 +1477,35 @@ void Singleton_add_remove_singleton_pair_R_T(void);
 void Singleton_add_remove_singleton_pair_R_t(void);
 void Singleton_add_remove_singleton_pair_r_t(void);
 void Singleton_get_target(void);
-
-// Testsuite 'Misc'
-void Misc_setup(void);
-void Misc_string_compare_w_char_ptr(void);
-void Misc_string_compare_w_char_ptr_length_diff(void);
-void Misc_string_compare_w_string(void);
-void Misc_string_view_compare_w_char_ptr(void);
-void Misc_string_view_compare_w_string(void);
-void Misc_string_compare_nullptr(void);
-void Misc_nullptr_string_compare(void);
-void Misc_nullptr_string_compare_nullptr(void);
-void Misc_c_macros(void);
-void Misc_app_run(void);
-void Misc_app_run_target_fps(void);
-void Misc_app_run_set_frames(void);
-void Misc_app_on_remove_on_fini(void);
-void Misc_member_gauge_metric(void);
-void Misc_id_gauge_metric(void);
-void Misc_oneof_gauge_metric(void);
-void Misc_id_counter_metric(void);
-void Misc_oneof_counter_metric(void);
-void Misc_component_mixin_member_metric(void);
-void Misc_component_mixin_member_metric_custom_parent_entity(void);
-void Misc_metric_description(void);
-void Misc_component_mixin_member_metric_description(void);
-void Misc_member_metric_w_value_name(void);
-void Misc_member_metric_w_value_name_camel_case_type(void);
-void Misc_member_metric_w_custom_name(void);
-void Misc_dotmember_metric(void);
-void Misc_counter_id_metric(void);
-void Misc_counter_target_metric(void);
-void Misc_member_metric_w_pair_R_T(void);
-void Misc_member_metric_w_pair_R_t(void);
-void Misc_member_metric_w_pair_r_t(void);
-void Misc_member_metric_w_pair_r_T(void);
-void Misc_alert(void);
-void Misc_alert_w_message(void);
-void Misc_alert_w_brief(void);
-void Misc_alert_doc_name(void);
-void Misc_alert_severity_info(void);
-void Misc_alert_severity_warning(void);
-void Misc_alert_severity_error(void);
-void Misc_alert_severity_implicit(void);
-void Misc_alert_w_retain_period(void);
-void Misc_alert_w_severity_filter(void);
-void Misc_alert_w_severity_filter_severity_type(void);
-void Misc_alert_w_severity_filter_severity_type_id_type(void);
-void Misc_alert_w_severity_filter_severity_type_enum_constant(void);
-void Misc_alert_w_severity_filter_w_var(void);
-void Misc_alert_w_severity_filter_severity_type_w_var(void);
-void Misc_alert_w_severity_filter_severity_type_id_type_w_var(void);
-void Misc_alert_w_severity_filter_severity_type_enum_constant_w_var(void);
-void Misc_alert_for_member_range(void);
-void Misc_alert_w_member_range_from_var(void);
-void Misc_map_api(void);
+void Singleton_singleton_enum(void);
+void Singleton_get_w_id(void);
+void Singleton_get_T(void);
+void Singleton_get_r_t(void);
+void Singleton_get_R_t(void);
+void Singleton_get_R_T(void);
+void Singleton_get_w_id_not_found(void);
+void Singleton_get_T_not_found(void);
+void Singleton_get_r_t_not_found(void);
+void Singleton_get_R_t_not_found(void);
+void Singleton_get_R_T_not_found(void);
+void Singleton_try_get_w_id(void);
+void Singleton_try_get_T(void);
+void Singleton_try_get_R_t(void);
+void Singleton_try_get_R_T(void);
+void Singleton_get_mut_w_id(void);
+void Singleton_get_mut_T(void);
+void Singleton_get_mut_R_t(void);
+void Singleton_get_mut_R_T(void);
+void Singleton_get_mut_w_id_not_found(void);
+void Singleton_get_mut_T_not_found(void);
+void Singleton_get_mut_r_t_not_found(void);
+void Singleton_get_mut_R_t_not_found(void);
+void Singleton_get_mut_R_T_not_found(void);
+void Singleton_try_get_mut_w_id(void);
+void Singleton_try_get_mut_T(void);
+void Singleton_try_get_mut_r_t(void);
+void Singleton_try_get_mut_R_t(void);
+void Singleton_try_get_mut_R_T(void);
 
 // Testsuite 'Meta'
 void Meta_struct(void);
@@ -1336,6 +1550,11 @@ void Meta_ser_deser_std_string(void);
 void Meta_ser_deser_std_vector_int(void);
 void Meta_ser_deser_std_vector_std_string(void);
 void Meta_ser_deser_type_w_std_string_std_vector_std_string(void);
+void Meta_ser_deser_std_optional_int(void);
+void Meta_ser_deser_std_optional_std_vector_int(void);
+void Meta_ser_deser_std_optional_std_string(void);
+void Meta_std_vector_random_access(void);
+void Meta_struct_random_access(void);
 void Meta_ser_deser_flecs_entity(void);
 void Meta_world_ser_deser_flecs_entity(void);
 void Meta_new_world_ser_deser_flecs_entity(void);
@@ -1350,6 +1569,14 @@ void Meta_struct_member_ptr(void);
 void Meta_struct_member_ptr_packed_struct(void);
 void Meta_component_as_array(void);
 void Meta_out_of_order_member_declaration(void);
+void Meta_entity_to_json(void);
+void Meta_iter_to_json(void);
+void Meta_query_to_json(void);
+void Meta_entity_to_json_w_default_desc(void);
+void Meta_query_to_json_w_default_desc(void);
+void Meta_script_to_std_vector_int(void);
+void Meta_script_to_std_vector_std_string(void);
+void Meta_ser_deser_alias(void);
 
 // Testsuite 'Table'
 void Table_each(void);
@@ -1384,14 +1611,14 @@ void Table_range_get_pair_R_T(void);
 void Table_get_depth(void);
 void Table_get_depth_w_type(void);
 void Table_iter_type(void);
-
-// Testsuite 'Doc'
-void Doc_set_brief(void);
-void Doc_set_name(void);
-void Doc_set_link(void);
-void Doc_set_color(void);
-void Doc_set_uuid(void);
-void Doc_get_name_no_doc_name(void);
+void Table_get_size(void);
+void Table_get_entities(void);
+void Table_get_records(void);
+void Table_get_id(void);
+void Table_lock(void);
+void Table_unlock(void);
+void Table_has_flags(void);
+void Table_clear_entities(void);
 
 bake_test_case PrettyFunction_testcases[] = {
     {
@@ -1424,6 +1651,10 @@ bake_test_case Entity_testcases[] = {
     {
         "new_nested_named_from_nested_scope",
         Entity_new_nested_named_from_nested_scope
+    },
+    {
+        "new_named_from_scope_with_custom_separator",
+        Entity_new_named_from_scope_with_custom_separator
     },
     {
         "new_add",
@@ -1546,12 +1777,96 @@ bake_test_case Entity_testcases[] = {
         Entity_ensure_generic_w_id_t
     },
     {
+        "get_w_id",
+        Entity_get_w_id
+    },
+    {
+        "get_T",
+        Entity_get_T
+    },
+    {
+        "get_n_T",
+        Entity_get_n_T
+    },
+    {
+        "get_r_t",
+        Entity_get_r_t
+    },
+    {
+        "get_R_t",
+        Entity_get_R_t
+    },
+    {
+        "get_R_T",
+        Entity_get_R_T
+    },
+    {
+        "get_r_T",
+        Entity_get_r_T
+    },
+    {
+        "get_w_id_not_found",
+        Entity_get_w_id_not_found
+    },
+    {
+        "get_T_not_found",
+        Entity_get_T_not_found
+    },
+    {
+        "get_r_t_not_found",
+        Entity_get_r_t_not_found
+    },
+    {
+        "get_R_t_not_found",
+        Entity_get_R_t_not_found
+    },
+    {
+        "get_R_T_not_found",
+        Entity_get_R_T_not_found
+    },
+    {
+        "get_r_T_not_found",
+        Entity_get_r_T_not_found
+    },
+    {
+        "try_get_w_id",
+        Entity_try_get_w_id
+    },
+    {
+        "try_get_T",
+        Entity_try_get_T
+    },
+    {
+        "try_get_n_T",
+        Entity_try_get_n_T
+    },
+    {
+        "try_get_r_t",
+        Entity_try_get_r_t
+    },
+    {
+        "try_get_R_t",
+        Entity_try_get_R_t
+    },
+    {
+        "try_get_R_T",
+        Entity_try_get_R_T
+    },
+    {
+        "try_get_r_T",
+        Entity_try_get_r_T
+    },
+    {
         "get_mut_w_id",
         Entity_get_mut_w_id
     },
     {
         "get_mut_T",
         Entity_get_mut_T
+    },
+    {
+        "get_mut_n_T",
+        Entity_get_mut_n_T
     },
     {
         "get_mut_r_t",
@@ -1568,6 +1883,70 @@ bake_test_case Entity_testcases[] = {
     {
         "get_mut_r_T",
         Entity_get_mut_r_T
+    },
+    {
+        "get_mut_pair_second_type",
+        Entity_get_mut_pair_second_type
+    },
+    {
+        "get_mut_w_id_not_found",
+        Entity_get_mut_w_id_not_found
+    },
+    {
+        "get_mut_T_not_found",
+        Entity_get_mut_T_not_found
+    },
+    {
+        "get_mut_r_t_not_found",
+        Entity_get_mut_r_t_not_found
+    },
+    {
+        "get_mut_R_t_not_found",
+        Entity_get_mut_R_t_not_found
+    },
+    {
+        "get_mut_R_T_not_found",
+        Entity_get_mut_R_T_not_found
+    },
+    {
+        "get_mut_r_T_not_found",
+        Entity_get_mut_r_T_not_found
+    },
+    {
+        "try_get_mut_w_id",
+        Entity_try_get_mut_w_id
+    },
+    {
+        "try_get_mut_T",
+        Entity_try_get_mut_T
+    },
+    {
+        "try_get_mut_n_T",
+        Entity_try_get_mut_n_T
+    },
+    {
+        "try_get_mut_r_t",
+        Entity_try_get_mut_r_t
+    },
+    {
+        "try_get_mut_R_t",
+        Entity_try_get_mut_R_t
+    },
+    {
+        "try_get_mut_R_T",
+        Entity_try_get_mut_R_T
+    },
+    {
+        "try_get_mut_enum_constant",
+        Entity_try_get_mut_enum_constant
+    },
+    {
+        "try_get_mut_r_T",
+        Entity_try_get_mut_r_T
+    },
+    {
+        "try_get_mut_pair_second_type",
+        Entity_try_get_mut_pair_second_type
     },
     {
         "set_generic",
@@ -1592,6 +1971,82 @@ bake_test_case Entity_testcases[] = {
     {
         "set_generic_no_size_w_id_t",
         Entity_set_generic_no_size_w_id_t
+    },
+    {
+        "set_T",
+        Entity_set_T
+    },
+    {
+        "set_R_t",
+        Entity_set_R_t
+    },
+    {
+        "set_R_T",
+        Entity_set_R_T
+    },
+    {
+        "set_r_T",
+        Entity_set_r_T
+    },
+    {
+        "set_r_t_generic_no_size",
+        Entity_set_r_t_generic_no_size
+    },
+    {
+        "assign_T",
+        Entity_assign_T
+    },
+    {
+        "assign_R_t",
+        Entity_assign_R_t
+    },
+    {
+        "assign_R_T",
+        Entity_assign_R_T
+    },
+    {
+        "assign_r_T",
+        Entity_assign_r_T
+    },
+    {
+        "assign_T_not_found",
+        Entity_assign_T_not_found
+    },
+    {
+        "assign_R_t_not_found",
+        Entity_assign_R_t_not_found
+    },
+    {
+        "assign_R_T_not_found",
+        Entity_assign_R_T_not_found
+    },
+    {
+        "assign_r_T_not_found",
+        Entity_assign_r_T_not_found
+    },
+    {
+        "assign_w_on_set_hook",
+        Entity_assign_w_on_set_hook
+    },
+    {
+        "assign_w_on_set_observer",
+        Entity_assign_w_on_set_observer
+    },
+    {
+        "assign_w_change_detect",
+        Entity_assign_w_change_detect
+    },
+    {
+        "defer_assign_w_on_set_hook",
+        Entity_defer_assign_w_on_set_hook
+    },
+    {
+        "defer_assign_w_on_set_observer",
+        Entity_defer_assign_w_on_set_observer
+    },
+    {
+        "defer_assign_w_change_detect",
+        Entity_defer_assign_w_change_detect
     },
     {
         "add_role",
@@ -1786,8 +2241,16 @@ bake_test_case Entity_testcases[] = {
         Entity_override_pair
     },
     {
+        "override_pair_second",
+        Entity_override_pair_second
+    },
+    {
         "override_pair_w_tgt_id",
         Entity_override_pair_w_tgt_id
+    },
+    {
+        "override_pair_w_rel_id",
+        Entity_override_pair_w_rel_id
     },
     {
         "override_pair_w_ids",
@@ -2194,6 +2657,18 @@ bake_test_case Entity_testcases[] = {
         Entity_child_of_w_type
     },
     {
+        "child",
+        Entity_child
+    },
+    {
+        "child_custom_rel",
+        Entity_child_custom_rel
+    },
+    {
+        "child_custom_type",
+        Entity_child_custom_type
+    },
+    {
         "slot_of",
         Entity_slot_of
     },
@@ -2288,6 +2763,10 @@ bake_test_case Entity_testcases[] = {
     {
         "entity_w_type_defer",
         Entity_entity_w_type_defer
+    },
+    {
+        "prefab_w_type",
+        Entity_prefab_w_type
     },
     {
         "prefab_hierarchy_w_types",
@@ -2478,6 +2957,14 @@ bake_test_case Entity_testcases[] = {
         Entity_insert_2_w_1_sparse
     },
     {
+        "insert_1_dont_fragment",
+        Entity_insert_1_dont_fragment
+    },
+    {
+        "insert_2_w_1_dont_fragment",
+        Entity_insert_2_w_1_dont_fragment
+    },
+    {
         "emplace_sparse",
         Entity_emplace_sparse
     },
@@ -2508,6 +2995,257 @@ bake_test_case Entity_testcases[] = {
     {
         "get_ref_pair_second_invalid_type",
         Entity_get_ref_pair_second_invalid_type
+    },
+    {
+        "iter_type",
+        Entity_iter_type
+    },
+    {
+        "iter_empty_type",
+        Entity_iter_empty_type
+    },
+    {
+        "untyped_component_use_low_id",
+        Entity_untyped_component_use_low_id
+    },
+    {
+        "add_remove_enum_component",
+        Entity_add_remove_enum_component
+    },
+    {
+        "on_replace_w_get_mut",
+        Entity_on_replace_w_get_mut
+    },
+    {
+        "on_replace_w_ensure",
+        Entity_on_replace_w_ensure
+    },
+    {
+        "on_replace_w_emplace",
+        Entity_on_replace_w_emplace
+    },
+    {
+        "on_replace_w_set",
+        Entity_on_replace_w_set
+    },
+    {
+        "on_replace_w_set_existing",
+        Entity_on_replace_w_set_existing
+    },
+    {
+        "on_replace_w_assign",
+        Entity_on_replace_w_assign
+    },
+    {
+        "on_replace_w_assign_existing",
+        Entity_on_replace_w_assign_existing
+    },
+    {
+        "defer_on_replace_w_set",
+        Entity_defer_on_replace_w_set
+    },
+    {
+        "defer_on_replace_w_set_twice",
+        Entity_defer_on_replace_w_set_twice
+    },
+    {
+        "defer_on_replace_w_set_existing",
+        Entity_defer_on_replace_w_set_existing
+    },
+    {
+        "defer_on_replace_w_set_existing_twice",
+        Entity_defer_on_replace_w_set_existing_twice
+    },
+    {
+        "defer_on_replace_w_set_batched",
+        Entity_defer_on_replace_w_set_batched
+    },
+    {
+        "defer_on_replace_w_set_batched_twice",
+        Entity_defer_on_replace_w_set_batched_twice
+    },
+    {
+        "defer_on_replace_w_set_batched_existing",
+        Entity_defer_on_replace_w_set_batched_existing
+    },
+    {
+        "defer_on_replace_w_set_batched_existing_twice",
+        Entity_defer_on_replace_w_set_batched_existing_twice
+    },
+    {
+        "defer_on_replace_w_assign",
+        Entity_defer_on_replace_w_assign
+    },
+    {
+        "defer_on_replace_w_assign_existing",
+        Entity_defer_on_replace_w_assign_existing
+    },
+    {
+        "defer_on_replace_w_assign_existing_twice",
+        Entity_defer_on_replace_w_assign_existing_twice
+    },
+    {
+        "defer_on_replace_w_assign_batched_existing",
+        Entity_defer_on_replace_w_assign_batched_existing
+    },
+    {
+        "defer_on_replace_w_assign_batched_existing_twice",
+        Entity_defer_on_replace_w_assign_batched_existing_twice
+    },
+    {
+        "set_lvalue_to_mutable",
+        Entity_set_lvalue_to_mutable
+    },
+    {
+        "set_lvalue_to_const",
+        Entity_set_lvalue_to_const
+    },
+    {
+        "set_rvalue",
+        Entity_set_rvalue
+    },
+    {
+        "assign_rvalue",
+        Entity_assign_rvalue
+    },
+    {
+        "set_non_copy_assignable",
+        Entity_set_non_copy_assignable
+    },
+    {
+        "set_non_copy_assignable_w_move_assign",
+        Entity_set_non_copy_assignable_w_move_assign
+    },
+    {
+        "assign_non_copy_assignable",
+        Entity_assign_non_copy_assignable
+    },
+    {
+        "assign_non_copy_assignable_w_move_assign",
+        Entity_assign_non_copy_assignable_w_move_assign
+    },
+    {
+        "set_parent",
+        Entity_set_parent
+    },
+    {
+        "defer_set_parent",
+        Entity_defer_set_parent
+    },
+    {
+        "set_change_parent",
+        Entity_set_change_parent
+    },
+    {
+        "defer_set_change_parent",
+        Entity_defer_set_change_parent
+    },
+    {
+        "assign_parent",
+        Entity_assign_parent
+    },
+    {
+        "defer_assign_parent",
+        Entity_defer_assign_parent
+    },
+    {
+        "set_parent_on_stage",
+        Entity_set_parent_on_stage
+    },
+    {
+        "assign_parent_on_stage",
+        Entity_assign_parent_on_stage
+    },
+    {
+        "entity_w_childof",
+        Entity_entity_w_childof
+    },
+    {
+        "entity_w_childof_w_name",
+        Entity_entity_w_childof_w_name
+    },
+    {
+        "entity_w_childof_w_name_existing_w_name",
+        Entity_entity_w_childof_w_name_existing_w_name
+    },
+    {
+        "entity_w_parent",
+        Entity_entity_w_parent
+    },
+    {
+        "entity_w_parent_w_name",
+        Entity_entity_w_parent_w_name
+    },
+    {
+        "entity_w_parent_w_name_existing_w_name",
+        Entity_entity_w_parent_w_name_existing_w_name
+    },
+    {
+        "prefab_w_childof",
+        Entity_prefab_w_childof
+    },
+    {
+        "prefab_w_childof_w_name",
+        Entity_prefab_w_childof_w_name
+    },
+    {
+        "prefab_w_childof_w_name_existing_w_name",
+        Entity_prefab_w_childof_w_name_existing_w_name
+    },
+    {
+        "prefab_w_parent",
+        Entity_prefab_w_parent
+    },
+    {
+        "prefab_w_parent_w_name",
+        Entity_prefab_w_parent_w_name
+    },
+    {
+        "prefab_w_parent_w_name_existing_w_name",
+        Entity_prefab_w_parent_w_name_existing_w_name
+    },
+    {
+        "defer_set_parent_to_deleted",
+        Entity_defer_set_parent_to_deleted
+    },
+    {
+        "defer_set_parent_to_deleted_batched",
+        Entity_defer_set_parent_to_deleted_batched
+    },
+    {
+        "defer_set_existing_parent_to_deleted",
+        Entity_defer_set_existing_parent_to_deleted
+    },
+    {
+        "defer_set_existing_parent_to_deleted_batched",
+        Entity_defer_set_existing_parent_to_deleted_batched
+    },
+    {
+        "defer_assign_parent_to_deleted",
+        Entity_defer_assign_parent_to_deleted
+    },
+    {
+        "defer_assign_parent_to_deleted_batched",
+        Entity_defer_assign_parent_to_deleted_batched
+    }
+};
+
+bake_test_case OrderedChildren_testcases[] = {
+    {
+        "iter_no_children",
+        OrderedChildren_iter_no_children
+    },
+    {
+        "children_1_table",
+        OrderedChildren_children_1_table
+    },
+    {
+        "children_2_tables",
+        OrderedChildren_children_2_tables
+    },
+    {
+        "set_child_order",
+        OrderedChildren_set_child_order
     }
 };
 
@@ -2836,8 +3574,16 @@ bake_test_case Enum_testcases[] = {
         Enum_add_enum_constant
     },
     {
+        "add_enum_constant_explicit",
+        Enum_add_enum_constant_explicit
+    },
+    {
         "add_enum_class_constant",
         Enum_add_enum_class_constant
+    },
+    {
+        "add_singleton_enum_constant",
+        Enum_add_singleton_enum_constant
     },
     {
         "replace_enum_constants",
@@ -2852,8 +3598,8 @@ bake_test_case Enum_testcases[] = {
         Enum_has_enum_wildcard
     },
     {
-        "get_enum",
-        Enum_get_enum
+        "get_constant",
+        Enum_get_constant
     },
     {
         "remove_enum",
@@ -2874,6 +3620,10 @@ bake_test_case Enum_testcases[] = {
     {
         "query_enum_constant",
         Enum_query_enum_constant
+    },
+    {
+        "query_singleton_enum_constant",
+        Enum_query_singleton_enum_constant
     },
     {
         "enum_type_from_stage",
@@ -2898,10 +3648,6 @@ bake_test_case Enum_testcases[] = {
     {
         "set_enum_constant_w_tag",
         Enum_set_enum_constant_w_tag
-    },
-    {
-        "enum_w_incorrect_size",
-        Enum_enum_w_incorrect_size
     },
     {
         "add_union_enum",
@@ -2932,10 +3678,6 @@ bake_test_case Enum_testcases[] = {
         Enum_query_union_enum
     },
     {
-        "query_union_enum_invalid_query_type",
-        Enum_query_union_enum_invalid_query_type
-    },
-    {
         "component_registered_as_enum",
         Enum_component_registered_as_enum
     },
@@ -2950,6 +3692,58 @@ bake_test_case Enum_testcases[] = {
     {
         "enum_child_count",
         Enum_enum_child_count
+    },
+    {
+        "multi_world_constant_ids",
+        Enum_multi_world_constant_ids
+    },
+    {
+        "empty_enum",
+        Enum_empty_enum
+    },
+    {
+        "enum_w_one_constant_index_of",
+        Enum_enum_w_one_constant_index_of
+    },
+    {
+        "enum_i8",
+        Enum_enum_i8
+    },
+    {
+        "enum_i16",
+        Enum_enum_i16
+    },
+    {
+        "enum_i32",
+        Enum_enum_i32
+    },
+    {
+        "enum_i64",
+        Enum_enum_i64
+    },
+    {
+        "enum_u8",
+        Enum_enum_u8
+    },
+    {
+        "enum_u16",
+        Enum_enum_u16
+    },
+    {
+        "enum_u32",
+        Enum_enum_u32
+    },
+    {
+        "enum_u64",
+        Enum_enum_u64
+    },
+    {
+        "runtime_type_constant_u8_template",
+        Enum_runtime_type_constant_u8_template
+    },
+    {
+        "multithreaded_enum_registration",
+        Enum_multithreaded_enum_registration
     }
 };
 
@@ -3309,6 +4103,10 @@ bake_test_case System_testcases[] = {
         System_multithread_system_w_query_iter_w_world
     },
     {
+        "multithread_system_w_get_var",
+        System_multithread_system_w_get_var
+    },
+    {
         "run_callback",
         System_run_callback
     },
@@ -3371,6 +4169,10 @@ bake_test_case System_testcases[] = {
     {
         "register_twice_w_each_run",
         System_register_twice_w_each_run
+    },
+    {
+        "set_group",
+        System_set_group
     },
     {
         "run_w_0_src_query",
@@ -3594,6 +4396,30 @@ bake_test_case Query_testcases[] = {
         Query_run_sparse
     },
     {
+        "run_sparse_w_with",
+        Query_run_sparse_w_with
+    },
+    {
+        "run_dont_fragment",
+        Query_run_dont_fragment
+    },
+    {
+        "run_dont_fragment_w_with",
+        Query_run_dont_fragment_w_with
+    },
+    {
+        "run_dont_fragment_add",
+        Query_run_dont_fragment_add
+    },
+    {
+        "run_dont_fragment_add_remove",
+        Query_run_dont_fragment_add_remove
+    },
+    {
+        "run_dont_fragment_set",
+        Query_run_dont_fragment_set
+    },
+    {
         "each",
         Query_each
     },
@@ -3612,6 +4438,38 @@ bake_test_case Query_testcases[] = {
     {
         "each_sparse",
         Query_each_sparse
+    },
+    {
+        "each_sparse_w_with",
+        Query_each_sparse_w_with
+    },
+    {
+        "each_sparse_many",
+        Query_each_sparse_many
+    },
+    {
+        "each_dont_fragment",
+        Query_each_dont_fragment
+    },
+    {
+        "each_dont_fragment_w_with",
+        Query_each_dont_fragment_w_with
+    },
+    {
+        "each_dont_fragment_many",
+        Query_each_dont_fragment_many
+    },
+    {
+        "each_dont_fragment_add",
+        Query_each_dont_fragment_add
+    },
+    {
+        "each_dont_fragment_add_remove",
+        Query_each_dont_fragment_add_remove
+    },
+    {
+        "each_dont_fragment_set",
+        Query_each_dont_fragment_set
     },
     {
         "signature",
@@ -3894,6 +4752,18 @@ bake_test_case Query_testcases[] = {
         Query_worker_iter_captured_query
     },
     {
+        "set_group_captured_query",
+        Query_set_group_captured_query
+    },
+    {
+        "set_var_captured_query",
+        Query_set_var_captured_query
+    },
+    {
+        "set_var_id_captured_query",
+        Query_set_var_id_captured_query
+    },
+    {
         "iter_entities",
         Query_iter_entities
     },
@@ -3912,6 +4782,14 @@ bake_test_case Query_testcases[] = {
     {
         "find_w_entity",
         Query_find_w_entity
+    },
+    {
+        "find_w_match_empty_tables",
+        Query_find_w_match_empty_tables
+    },
+    {
+        "find_w_entity_w_match_empty_tables",
+        Query_find_w_entity_w_match_empty_tables
     },
     {
         "optional_pair_term",
@@ -3988,6 +4866,18 @@ bake_test_case Query_testcases[] = {
     {
         "iter_targets_field_not_set",
         Query_iter_targets_field_not_set
+    },
+    {
+        "copy_operators",
+        Query_copy_operators
+    },
+    {
+        "optional_singleton",
+        Query_optional_singleton
+    },
+    {
+        "optional_module",
+        Query_optional_module
     }
 };
 
@@ -4217,6 +5107,14 @@ bake_test_case QueryBuilder_testcases[] = {
         QueryBuilder_template_term
     },
     {
+        "typed_term_at",
+        QueryBuilder_typed_term_at
+    },
+    {
+        "typed_term_at_indexed",
+        QueryBuilder_typed_term_at_indexed
+    },
+    {
         "explicit_subject_w_id",
         QueryBuilder_explicit_subject_w_id
     },
@@ -4287,6 +5185,10 @@ bake_test_case QueryBuilder_testcases[] = {
     {
         "world_each_filter_2_components_no_entity",
         QueryBuilder_world_each_filter_2_components_no_entity
+    },
+    {
+        "world_each_entity",
+        QueryBuilder_world_each_entity
     },
     {
         "10_terms",
@@ -4593,6 +5495,10 @@ bake_test_case QueryBuilder_testcases[] = {
         QueryBuilder_cascade_w_relationship
     },
     {
+        "cascade_w_set_var",
+        QueryBuilder_cascade_w_set_var
+    },
+    {
         "up_w_type",
         QueryBuilder_up_w_type
     },
@@ -4655,6 +5561,50 @@ bake_test_case QueryBuilder_testcases[] = {
     {
         "scope",
         QueryBuilder_scope
+    },
+    {
+        "each_w_field_w_fixed_src",
+        QueryBuilder_each_w_field_w_fixed_src
+    },
+    {
+        "each_w_field_at_w_fixed_src",
+        QueryBuilder_each_w_field_at_w_fixed_src
+    },
+    {
+        "each_w_const_field_w_fixed_src",
+        QueryBuilder_each_w_const_field_w_fixed_src
+    },
+    {
+        "each_w_const_field_at_w_fixed_src",
+        QueryBuilder_each_w_const_field_at_w_fixed_src
+    },
+    {
+        "each_w_untyped_field_w_fixed_src",
+        QueryBuilder_each_w_untyped_field_w_fixed_src
+    },
+    {
+        "each_w_untyped_field_at_w_fixed_src",
+        QueryBuilder_each_w_untyped_field_at_w_fixed_src
+    },
+    {
+        "singleton_pair",
+        QueryBuilder_singleton_pair
+    },
+    {
+        "query_w_this_second",
+        QueryBuilder_query_w_this_second
+    },
+    {
+        "pred_eq",
+        QueryBuilder_pred_eq
+    },
+    {
+        "pred_eq_name",
+        QueryBuilder_pred_eq_name
+    },
+    {
+        "pred_match",
+        QueryBuilder_pred_match
     }
 };
 
@@ -4738,6 +5688,30 @@ bake_test_case SystemBuilder_testcases[] = {
     {
         "create_w_no_template_args",
         SystemBuilder_create_w_no_template_args
+    },
+    {
+        "deduce_terms_from_each_callback",
+        SystemBuilder_deduce_terms_from_each_callback
+    },
+    {
+        "deduce_optional_terms_from_each_callback",
+        SystemBuilder_deduce_optional_terms_from_each_callback
+    },
+    {
+        "deduce_pair_term_from_each_callback",
+        SystemBuilder_deduce_pair_term_from_each_callback
+    },
+    {
+        "deduce_singleton_term_from_each_callback",
+        SystemBuilder_deduce_singleton_term_from_each_callback
+    },
+    {
+        "deduce_singleton_and_component_terms_from_each_callback",
+        SystemBuilder_deduce_singleton_and_component_terms_from_each_callback
+    },
+    {
+        "with_terms_after_deduced_terms",
+        SystemBuilder_with_terms_after_deduced_terms
     },
     {
         "write_annotation",
@@ -4985,6 +5959,26 @@ bake_test_case Observer_testcases[] = {
     {
         "on_set_w_override_after_clear",
         Observer_on_set_w_override_after_clear
+    },
+    {
+        "trigger_on_set_in_on_add_implicit_registration",
+        Observer_trigger_on_set_in_on_add_implicit_registration
+    },
+    {
+        "trigger_on_set_in_on_add_implicit_registration_namespaced",
+        Observer_trigger_on_set_in_on_add_implicit_registration_namespaced
+    },
+    {
+        "fixed_src_w_each",
+        Observer_fixed_src_w_each
+    },
+    {
+        "fixed_src_w_run",
+        Observer_fixed_src_w_run
+    },
+    {
+        "untyped_field",
+        Observer_untyped_field
     }
 };
 
@@ -5340,6 +6334,74 @@ bake_test_case ComponentLifecycle_testcases[] = {
     {
         "count_in_remove_hook",
         ComponentLifecycle_count_in_remove_hook
+    },
+    {
+        "set_multiple_hooks",
+        ComponentLifecycle_set_multiple_hooks
+    },
+    {
+        "compare_WithGreaterThan",
+        ComponentLifecycle_compare_WithGreaterThan
+    },
+    {
+        "compare_WithLessThan",
+        ComponentLifecycle_compare_WithLessThan
+    },
+    {
+        "compare_WithLessAndGreaterThan",
+        ComponentLifecycle_compare_WithLessAndGreaterThan
+    },
+    {
+        "compare_WithEqualsAndGreaterThan",
+        ComponentLifecycle_compare_WithEqualsAndGreaterThan
+    },
+    {
+        "compare_WithEqualsAndLessThan",
+        ComponentLifecycle_compare_WithEqualsAndLessThan
+    },
+    {
+        "compare_WithEqualsOnly",
+        ComponentLifecycle_compare_WithEqualsOnly
+    },
+    {
+        "compare_WithoutOperators",
+        ComponentLifecycle_compare_WithoutOperators
+    },
+    {
+        "compare_uint8_Enum",
+        ComponentLifecycle_compare_uint8_Enum
+    },
+    {
+        "compare_uint16_Enum",
+        ComponentLifecycle_compare_uint16_Enum
+    },
+    {
+        "compare_uint32_Enum",
+        ComponentLifecycle_compare_uint32_Enum
+    },
+    {
+        "compare_uint64_Enum",
+        ComponentLifecycle_compare_uint64_Enum
+    },
+    {
+        "compare_int8_Enum",
+        ComponentLifecycle_compare_int8_Enum
+    },
+    {
+        "compare_int16_Enum",
+        ComponentLifecycle_compare_int16_Enum
+    },
+    {
+        "compare_int32_Enum",
+        ComponentLifecycle_compare_int32_Enum
+    },
+    {
+        "compare_int64_Enum",
+        ComponentLifecycle_compare_int64_Enum
+    },
+    {
+        "move_ctor_no_default_ctor",
+        ComponentLifecycle_move_ctor_no_default_ctor
     }
 };
 
@@ -5377,6 +6439,14 @@ bake_test_case Refs_testcases[] = {
         Refs_pair_ref
     },
     {
+        "pair_ref_w_pair_type",
+        Refs_pair_ref_w_pair_type
+    },
+    {
+        "pair_ref_w_pair_type_second",
+        Refs_pair_ref_w_pair_type_second
+    },
+    {
         "pair_ref_w_entity",
         Refs_pair_ref_w_entity
     },
@@ -5405,12 +6475,44 @@ bake_test_case Refs_testcases[] = {
         Refs_try_get
     },
     {
+        "try_get_after_delete",
+        Refs_try_get_after_delete
+    },
+    {
         "has",
         Refs_has
     },
     {
         "bool_operator",
         Refs_bool_operator
+    },
+    {
+        "base_type",
+        Refs_base_type
+    },
+    {
+        "empty_base_type",
+        Refs_empty_base_type
+    },
+    {
+        "get_component",
+        Refs_get_component
+    },
+    {
+        "untyped_get_ref_by_method",
+        Refs_untyped_get_ref_by_method
+    },
+    {
+        "untyped_pair_ref",
+        Refs_untyped_pair_ref
+    },
+    {
+        "untyped_runtime_component_ref",
+        Refs_untyped_runtime_component_ref
+    },
+    {
+        "ref_world",
+        Refs_ref_world
     }
 };
 
@@ -5498,6 +6600,30 @@ bake_test_case Module_testcases[] = {
     {
         "rename_reparent_root_module",
         Module_rename_reparent_root_module
+    },
+    {
+        "no_recycle_after_rename_reparent",
+        Module_no_recycle_after_rename_reparent
+    },
+    {
+        "reimport_after_delete",
+        Module_reimport_after_delete
+    },
+    {
+        "component_name_w_module_name",
+        Module_component_name_w_module_name
+    },
+    {
+        "delete_module_w_implicit_component_and_system",
+        Module_delete_module_w_implicit_component_and_system
+    },
+    {
+        "delete_module_w_explicit_component_and_system",
+        Module_delete_module_w_explicit_component_and_system
+    },
+    {
+        "module_has_singleton",
+        Module_module_has_singleton
     }
 };
 
@@ -5609,6 +6735,14 @@ bake_test_case ImplicitComponents_testcases[] = {
     {
         "vector_elem_type",
         ImplicitComponents_vector_elem_type
+    },
+    {
+        "tag_has_component",
+        ImplicitComponents_tag_has_component
+    },
+    {
+        "component_has_component",
+        ImplicitComponents_component_has_component
     }
 };
 
@@ -5681,10 +6815,6 @@ bake_test_case World_testcases[] = {
         World_multi_world_module
     },
     {
-        "multi_world_recycled_component",
-        World_multi_world_recycled_component
-    },
-    {
         "multi_world_recycled_component_different_generation",
         World_multi_world_recycled_component_different_generation
     },
@@ -5709,12 +6839,12 @@ bake_test_case World_testcases[] = {
         World_reregister_namespace
     },
     {
-        "implicit_reregister_after_reset",
-        World_implicit_reregister_after_reset
+        "reregister_after_delete",
+        World_reregister_after_delete
     },
     {
-        "reregister_after_reset_different_name",
-        World_reregister_after_reset_different_name
+        "implicit_reregister_after_reset",
+        World_implicit_reregister_after_reset
     },
     {
         "register_short_template",
@@ -5745,6 +6875,10 @@ bake_test_case World_testcases[] = {
         World_c_interop_after_reset
     },
     {
+        "c_interop_module_no_names",
+        World_c_interop_module_no_names
+    },
+    {
         "implicit_register_w_new_world",
         World_implicit_register_w_new_world
     },
@@ -5771,10 +6905,6 @@ bake_test_case World_testcases[] = {
     {
         "reregister_after_reset_w_hooks_and_in_use_implicit",
         World_reregister_after_reset_w_hooks_and_in_use_implicit
-    },
-    {
-        "register_component_w_reset_in_multithreaded",
-        World_register_component_w_reset_in_multithreaded
     },
     {
         "register_component_w_core_name",
@@ -6005,10 +7135,6 @@ bake_test_case World_testcases[] = {
         World_make_alive
     },
     {
-        "reset_all",
-        World_reset_all
-    },
-    {
         "get_tick",
         World_get_tick
     },
@@ -6123,6 +7249,62 @@ bake_test_case World_testcases[] = {
     {
         "fini_copy_move_assign",
         World_fini_copy_move_assign
+    },
+    {
+        "world_init_fini_log_all",
+        World_world_init_fini_log_all
+    },
+    {
+        "exclusive_access_self_mutate",
+        World_exclusive_access_self_mutate
+    },
+    {
+        "exclusive_access_other_mutate",
+        World_exclusive_access_other_mutate
+    },
+    {
+        "id_if_registered",
+        World_id_if_registered
+    },
+    {
+        "get_type_info_t",
+        World_get_type_info_t
+    },
+    {
+        "get_type_info_T",
+        World_get_type_info_T
+    },
+    {
+        "get_type_info_r_t",
+        World_get_type_info_r_t
+    },
+    {
+        "get_type_info_R_t",
+        World_get_type_info_R_t
+    },
+    {
+        "get_type_info_R_T",
+        World_get_type_info_R_T
+    },
+    {
+        "get_type_info_t_tag",
+        World_get_type_info_t_tag
+    },
+    {
+        "get_type_info_T_tag",
+        World_get_type_info_T_tag
+    },
+    {
+        "get_type_info_r_t_tag",
+        World_get_type_info_r_t_tag
+    },
+    {
+        "get_type_info_R_t_tag",
+        World_get_type_info_R_t_tag
+    },
+    {
+        "get_type_info_R_T_tag",
+        World_get_type_info_R_T_tag
     }
 };
 
@@ -6206,217 +7388,122 @@ bake_test_case Singleton_testcases[] = {
     {
         "get_target",
         Singleton_get_target
-    }
-};
-
-bake_test_case Misc_testcases[] = {
-    {
-        "string_compare_w_char_ptr",
-        Misc_string_compare_w_char_ptr
     },
     {
-        "string_compare_w_char_ptr_length_diff",
-        Misc_string_compare_w_char_ptr_length_diff
+        "singleton_enum",
+        Singleton_singleton_enum
     },
     {
-        "string_compare_w_string",
-        Misc_string_compare_w_string
+        "get_w_id",
+        Singleton_get_w_id
     },
     {
-        "string_view_compare_w_char_ptr",
-        Misc_string_view_compare_w_char_ptr
+        "get_T",
+        Singleton_get_T
     },
     {
-        "string_view_compare_w_string",
-        Misc_string_view_compare_w_string
+        "get_r_t",
+        Singleton_get_r_t
     },
     {
-        "string_compare_nullptr",
-        Misc_string_compare_nullptr
+        "get_R_t",
+        Singleton_get_R_t
     },
     {
-        "nullptr_string_compare",
-        Misc_nullptr_string_compare
+        "get_R_T",
+        Singleton_get_R_T
     },
     {
-        "nullptr_string_compare_nullptr",
-        Misc_nullptr_string_compare_nullptr
+        "get_w_id_not_found",
+        Singleton_get_w_id_not_found
     },
     {
-        "c_macros",
-        Misc_c_macros
+        "get_T_not_found",
+        Singleton_get_T_not_found
     },
     {
-        "app_run",
-        Misc_app_run
+        "get_r_t_not_found",
+        Singleton_get_r_t_not_found
     },
     {
-        "app_run_target_fps",
-        Misc_app_run_target_fps
+        "get_R_t_not_found",
+        Singleton_get_R_t_not_found
     },
     {
-        "app_run_set_frames",
-        Misc_app_run_set_frames
+        "get_R_T_not_found",
+        Singleton_get_R_T_not_found
     },
     {
-        "app_on_remove_on_fini",
-        Misc_app_on_remove_on_fini
+        "try_get_w_id",
+        Singleton_try_get_w_id
     },
     {
-        "member_gauge_metric",
-        Misc_member_gauge_metric
+        "try_get_T",
+        Singleton_try_get_T
     },
     {
-        "id_gauge_metric",
-        Misc_id_gauge_metric
+        "try_get_R_t",
+        Singleton_try_get_R_t
     },
     {
-        "oneof_gauge_metric",
-        Misc_oneof_gauge_metric
+        "try_get_R_T",
+        Singleton_try_get_R_T
     },
     {
-        "id_counter_metric",
-        Misc_id_counter_metric
+        "get_mut_w_id",
+        Singleton_get_mut_w_id
     },
     {
-        "oneof_counter_metric",
-        Misc_oneof_counter_metric
+        "get_mut_T",
+        Singleton_get_mut_T
     },
     {
-        "component_mixin_member_metric",
-        Misc_component_mixin_member_metric
+        "get_mut_R_t",
+        Singleton_get_mut_R_t
     },
     {
-        "component_mixin_member_metric_custom_parent_entity",
-        Misc_component_mixin_member_metric_custom_parent_entity
+        "get_mut_R_T",
+        Singleton_get_mut_R_T
     },
     {
-        "metric_description",
-        Misc_metric_description
+        "get_mut_w_id_not_found",
+        Singleton_get_mut_w_id_not_found
     },
     {
-        "component_mixin_member_metric_description",
-        Misc_component_mixin_member_metric_description
+        "get_mut_T_not_found",
+        Singleton_get_mut_T_not_found
     },
     {
-        "member_metric_w_value_name",
-        Misc_member_metric_w_value_name
+        "get_mut_r_t_not_found",
+        Singleton_get_mut_r_t_not_found
     },
     {
-        "member_metric_w_value_name_camel_case_type",
-        Misc_member_metric_w_value_name_camel_case_type
+        "get_mut_R_t_not_found",
+        Singleton_get_mut_R_t_not_found
     },
     {
-        "member_metric_w_custom_name",
-        Misc_member_metric_w_custom_name
+        "get_mut_R_T_not_found",
+        Singleton_get_mut_R_T_not_found
     },
     {
-        "dotmember_metric",
-        Misc_dotmember_metric
+        "try_get_mut_w_id",
+        Singleton_try_get_mut_w_id
     },
     {
-        "counter_id_metric",
-        Misc_counter_id_metric
+        "try_get_mut_T",
+        Singleton_try_get_mut_T
     },
     {
-        "counter_target_metric",
-        Misc_counter_target_metric
+        "try_get_mut_r_t",
+        Singleton_try_get_mut_r_t
     },
     {
-        "member_metric_w_pair_R_T",
-        Misc_member_metric_w_pair_R_T
+        "try_get_mut_R_t",
+        Singleton_try_get_mut_R_t
     },
     {
-        "member_metric_w_pair_R_t",
-        Misc_member_metric_w_pair_R_t
-    },
-    {
-        "member_metric_w_pair_r_t",
-        Misc_member_metric_w_pair_r_t
-    },
-    {
-        "member_metric_w_pair_r_T",
-        Misc_member_metric_w_pair_r_T
-    },
-    {
-        "alert",
-        Misc_alert
-    },
-    {
-        "alert_w_message",
-        Misc_alert_w_message
-    },
-    {
-        "alert_w_brief",
-        Misc_alert_w_brief
-    },
-    {
-        "alert_doc_name",
-        Misc_alert_doc_name
-    },
-    {
-        "alert_severity_info",
-        Misc_alert_severity_info
-    },
-    {
-        "alert_severity_warning",
-        Misc_alert_severity_warning
-    },
-    {
-        "alert_severity_error",
-        Misc_alert_severity_error
-    },
-    {
-        "alert_severity_implicit",
-        Misc_alert_severity_implicit
-    },
-    {
-        "alert_w_retain_period",
-        Misc_alert_w_retain_period
-    },
-    {
-        "alert_w_severity_filter",
-        Misc_alert_w_severity_filter
-    },
-    {
-        "alert_w_severity_filter_severity_type",
-        Misc_alert_w_severity_filter_severity_type
-    },
-    {
-        "alert_w_severity_filter_severity_type_id_type",
-        Misc_alert_w_severity_filter_severity_type_id_type
-    },
-    {
-        "alert_w_severity_filter_severity_type_enum_constant",
-        Misc_alert_w_severity_filter_severity_type_enum_constant
-    },
-    {
-        "alert_w_severity_filter_w_var",
-        Misc_alert_w_severity_filter_w_var
-    },
-    {
-        "alert_w_severity_filter_severity_type_w_var",
-        Misc_alert_w_severity_filter_severity_type_w_var
-    },
-    {
-        "alert_w_severity_filter_severity_type_id_type_w_var",
-        Misc_alert_w_severity_filter_severity_type_id_type_w_var
-    },
-    {
-        "alert_w_severity_filter_severity_type_enum_constant_w_var",
-        Misc_alert_w_severity_filter_severity_type_enum_constant_w_var
-    },
-    {
-        "alert_for_member_range",
-        Misc_alert_for_member_range
-    },
-    {
-        "alert_w_member_range_from_var",
-        Misc_alert_w_member_range_from_var
-    },
-    {
-        "map_api",
-        Misc_map_api
+        "try_get_mut_R_T",
+        Singleton_try_get_mut_R_T
     }
 };
 
@@ -6590,6 +7677,26 @@ bake_test_case Meta_testcases[] = {
         Meta_ser_deser_type_w_std_string_std_vector_std_string
     },
     {
+        "ser_deser_std_optional_int",
+        Meta_ser_deser_std_optional_int
+    },
+    {
+        "ser_deser_std_optional_std_vector_int",
+        Meta_ser_deser_std_optional_std_vector_int
+    },
+    {
+        "ser_deser_std_optional_std_string",
+        Meta_ser_deser_std_optional_std_string
+    },
+    {
+        "std_vector_random_access",
+        Meta_std_vector_random_access
+    },
+    {
+        "struct_random_access",
+        Meta_struct_random_access
+    },
+    {
         "ser_deser_flecs_entity",
         Meta_ser_deser_flecs_entity
     },
@@ -6644,6 +7751,38 @@ bake_test_case Meta_testcases[] = {
     {
         "out_of_order_member_declaration",
         Meta_out_of_order_member_declaration
+    },
+    {
+        "entity_to_json",
+        Meta_entity_to_json
+    },
+    {
+        "iter_to_json",
+        Meta_iter_to_json
+    },
+    {
+        "query_to_json",
+        Meta_query_to_json
+    },
+    {
+        "entity_to_json_w_default_desc",
+        Meta_entity_to_json_w_default_desc
+    },
+    {
+        "query_to_json_w_default_desc",
+        Meta_query_to_json_w_default_desc
+    },
+    {
+        "script_to_std_vector_int",
+        Meta_script_to_std_vector_int
+    },
+    {
+        "script_to_std_vector_std_string",
+        Meta_script_to_std_vector_std_string
+    },
+    {
+        "ser_deser_alias",
+        Meta_ser_deser_alias
     }
 };
 
@@ -6775,33 +7914,38 @@ bake_test_case Table_testcases[] = {
     {
         "iter_type",
         Table_iter_type
-    }
-};
-
-bake_test_case Doc_testcases[] = {
-    {
-        "set_brief",
-        Doc_set_brief
     },
     {
-        "set_name",
-        Doc_set_name
+        "get_size",
+        Table_get_size
     },
     {
-        "set_link",
-        Doc_set_link
+        "get_entities",
+        Table_get_entities
     },
     {
-        "set_color",
-        Doc_set_color
+        "get_records",
+        Table_get_records
     },
     {
-        "set_uuid",
-        Doc_set_uuid
+        "get_id",
+        Table_get_id
     },
     {
-        "get_name_no_doc_name",
-        Doc_get_name_no_doc_name
+        "lock",
+        Table_lock
+    },
+    {
+        "unlock",
+        Table_unlock
+    },
+    {
+        "has_flags",
+        Table_has_flags
+    },
+    {
+        "clear_entities",
+        Table_clear_entities
     }
 };
 
@@ -6822,8 +7966,15 @@ static bake_test_suite suites[] = {
         "Entity",
         NULL,
         NULL,
-        276,
+        399,
         Entity_testcases
+    },
+    {
+        "OrderedChildren",
+        NULL,
+        NULL,
+        4,
+        OrderedChildren_testcases
     },
     {
         "Pairs",
@@ -6836,7 +7987,7 @@ static bake_test_suite suites[] = {
         "Enum",
         NULL,
         NULL,
-        39,
+        53,
         Enum_testcases
     },
     {
@@ -6857,7 +8008,7 @@ static bake_test_suite suites[] = {
         "System",
         NULL,
         NULL,
-        73,
+        75,
         System_testcases
     },
     {
@@ -6878,14 +8029,14 @@ static bake_test_suite suites[] = {
         "Query",
         NULL,
         NULL,
-        116,
+        138,
         Query_testcases
     },
     {
         "QueryBuilder",
         QueryBuilder_setup,
         NULL,
-        166,
+        181,
         QueryBuilder_testcases,
         1,
         QueryBuilder_params
@@ -6894,42 +8045,42 @@ static bake_test_suite suites[] = {
         "SystemBuilder",
         NULL,
         NULL,
-        22,
+        28,
         SystemBuilder_testcases
     },
     {
         "Observer",
         NULL,
         NULL,
-        59,
+        64,
         Observer_testcases
     },
     {
         "ComponentLifecycle",
         NULL,
         NULL,
-        88,
+        105,
         ComponentLifecycle_testcases
     },
     {
         "Refs",
         NULL,
         NULL,
-        17,
+        27,
         Refs_testcases
     },
     {
         "Module",
         NULL,
         NULL,
-        21,
+        27,
         Module_testcases
     },
     {
         "ImplicitComponents",
         NULL,
         NULL,
-        27,
+        29,
         ImplicitComponents_testcases
     },
     {
@@ -6943,46 +8094,32 @@ static bake_test_suite suites[] = {
         "World",
         NULL,
         NULL,
-        116,
+        128,
         World_testcases
     },
     {
         "Singleton",
         NULL,
         NULL,
-        20,
+        49,
         Singleton_testcases
-    },
-    {
-        "Misc",
-        Misc_setup,
-        NULL,
-        52,
-        Misc_testcases
     },
     {
         "Meta",
         NULL,
         NULL,
-        56,
+        69,
         Meta_testcases
     },
     {
         "Table",
         NULL,
         NULL,
-        32,
+        40,
         Table_testcases
-    },
-    {
-        "Doc",
-        NULL,
-        NULL,
-        6,
-        Doc_testcases
     }
 };
 
 int main(int argc, char *argv[]) {
-    return bake_test_run("cpp", argc, argv, suites, 24);
+    return bake_test_run("cpp", argc, argv, suites, 23);
 }

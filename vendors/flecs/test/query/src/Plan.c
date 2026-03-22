@@ -5,9 +5,10 @@ void Plan_reordered_plan_1(void) {
 
     ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
     ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+    ECS_TAG(world, Rel);
 
     ecs_query_t *r = ecs_query(world, {
-        .expr = "Foo, ChildOf($this, $p, $gp, $ggp), Bar($ggp)"
+        .expr = "Foo, Rel($this, $p, $gp, $ggp), Bar($ggp)"
     });
 
     test_assert(r != NULL);
@@ -15,14 +16,14 @@ void Plan_reordered_plan_1(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  selfup      $[this]           (Foo)"
-    LINE " 2. [ 1,  3]  and         $[this]           (ChildOf, $p)"
-    LINE " 3. [ 2,  4]  and         $p                (ChildOf, $gp)"
-    LINE " 4. [ 3,  5]  and         $gp               (ChildOf, $ggp)"
-    LINE " 5. [ 4,  6]  selfup      $ggp              (Bar)"
-    LINE " 6. [ 5,  7]  setvars     "
-    LINE " 7. [ 6,  8]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  selfup       $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  and          $[this]          (Rel, $p)"
+    LINE " 3. [ 2,  4]  and          $p               (Rel, $gp)"
+    LINE " 4. [ 3,  5]  and          $gp              (Rel, $ggp)"
+    LINE " 5. [ 4,  6]  selfup       $ggp             (Bar)"
+    LINE " 6. [ 5,  7]  setvars      "
+    LINE " 7. [ 6,  8]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -39,6 +40,78 @@ void Plan_reordered_plan_2(void) {
 
     ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
     ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+    ECS_TAG(world, Rel);
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo($ggp), Rel($this, $p, $gp, $ggp), Bar($this)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  selfup       $[ggp]           (Foo)"
+    LINE " 2. [ 1,  3]  each         $ggp             ($[ggp])"
+    LINE " 3. [ 2,  4]  and          $[gp]            (Rel, $ggp)"
+    LINE " 4. [ 3,  5]  each         $gp              ($[gp])"
+    LINE " 5. [ 4,  6]  and          $[p]             (Rel, $gp)"
+    LINE " 6. [ 5,  7]  each         $p               ($[p])"
+    LINE " 7. [ 6,  8]  and          $[this]          (Rel, $p)"
+    LINE " 8. [ 7,  9]  selfup       $[this]          (Bar)"
+    LINE " 9. [ 8, 10]  setvars      "
+    LINE "10. [ 9, 11]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_reordered_plan_1_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo, ChildOf($this, $p, $gp, $ggp), Bar($ggp)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  selfup       $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  tree_wc      $[this]          (ChildOf, $p)"
+    LINE " 3. [ 2,  4]  tree_wc      $p               (ChildOf, $gp)"
+    LINE " 4. [ 3,  5]  tree_wc      $gp              (ChildOf, $ggp)"
+    LINE " 5. [ 4,  6]  selfup       $ggp             (Bar)"
+    LINE " 6. [ 5,  7]  setvars      "
+    LINE " 7. [ 6,  8]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_reordered_plan_2_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
 
     ecs_query_t *r = ecs_query(world, {
         .expr = "Foo($ggp), ChildOf($this, $p, $gp, $ggp), Bar($this)"
@@ -49,17 +122,17 @@ void Plan_reordered_plan_2(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  selfup      $[ggp]            (Foo)"
-    LINE " 2. [ 1,  3]  each        $ggp              ($[ggp])"
-    LINE " 3. [ 2,  4]  and         $[gp]             (ChildOf, $ggp)"
-    LINE " 4. [ 3,  5]  each        $gp               ($[gp])"
-    LINE " 5. [ 4,  6]  and         $[p]              (ChildOf, $gp)"
-    LINE " 6. [ 5,  7]  each        $p                ($[p])"
-    LINE " 7. [ 6,  8]  and         $[this]           (ChildOf, $p)"
-    LINE " 8. [ 7,  9]  selfup      $[this]           (Bar)"
-    LINE " 9. [ 8, 10]  setvars     "
-    LINE "10. [ 9, 11]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  selfup       $[ggp]           (Foo)"
+    LINE " 2. [ 1,  3]  each         $ggp             ($[ggp])"
+    LINE " 3. [ 2,  4]  tree_wc      $[gp]            (ChildOf, $ggp)"
+    LINE " 4. [ 3,  5]  each         $gp              ($[gp])"
+    LINE " 5. [ 4,  6]  tree_wc      $[p]             (ChildOf, $gp)"
+    LINE " 6. [ 5,  7]  each         $p               ($[p])"
+    LINE " 7. [ 6,  8]  tree_wc      $[this]          (ChildOf, $p)"
+    LINE " 8. [ 7,  9]  selfup       $[this]          (Bar)"
+    LINE " 9. [ 8, 10]  setvars      "
+    LINE "10. [ 9, 11]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -86,12 +159,12 @@ void Plan_reordered_plan_3(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  and         $[this]           (Bar)"
-    LINE " 2. [ 1,  4]  option      "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Bar)"
+    LINE " 2. [ 1,  4]  option       "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -120,15 +193,15 @@ void Plan_reordered_plan_4(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  and         $[this]           (Hello)"
-    LINE " 2. [ 1,  4]  option      "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  7]  option      "
-    LINE " 6. [ 5,  7]   and        $[this]           (Bar)"
-    LINE " 7. [ 5,  8]  end         $[this]           (Bar)"
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Hello)"
+    LINE " 2. [ 1,  4]  option       "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  7]  option       "
+    LINE " 6. [ 5,  7]   and          $[this]         (Bar)"
+    LINE " 7. [ 5,  8]  end          $[this]          (Bar)"
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -156,15 +229,15 @@ void Plan_reordered_plan_5(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  and         $[this]           (Hello)"
-    LINE " 2. [ 1,  4]  option      "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  7]  option      "
-    LINE " 6. [ 5,  7]   and        $[this]           (Bar)"
-    LINE " 7. [ 5,  8]  end         $[this]           (Bar)"
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Hello)"
+    LINE " 2. [ 1,  4]  option       "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  7]  option       "
+    LINE " 6. [ 5,  7]   and          $[this]         (Bar)"
+    LINE " 7. [ 5,  8]  end          $[this]          (Bar)"
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -193,15 +266,15 @@ void Plan_reordered_plan_6(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  triv        {1,3}"
-    LINE " 2. [ 1,  4]  option      "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  7]  option      "
-    LINE " 6. [ 5,  7]   and        $[this]           (Bar)"
-    LINE " 7. [ 5,  8]  end         $[this]           (Bar)"
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {1,3}"
+    LINE " 2. [ 1,  4]  option       "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  7]  option       "
+    LINE " 6. [ 5,  7]   and          $[this]         (Bar)"
+    LINE " 7. [ 5,  8]  end          $[this]          (Bar)"
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -230,19 +303,19 @@ void Plan_reordered_plan_7(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  and         $[this]           (Hello)"
-    LINE " 2. [ 1,  4]  option      "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  7]  option      "
-    LINE " 6. [ 5,  7]   and        $[this]           (Bar, $foo)"
-    LINE " 7. [ 5,  8]  end         $[this]           (Bar, $foo)"
-    LINE " 8. [ 7, 10]  ifvar       $foo"
-    LINE " 9. [ 8, 10]   and        $foo              (World)"
-    LINE "10. [ 8, 11]  end         $foo              (World)"
-    LINE "11. [10, 12]  setvars     "
-    LINE "12. [11, 13]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Hello)"
+    LINE " 2. [ 1,  4]  option       "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  7]  option       "
+    LINE " 6. [ 5,  7]   and          $[this]         (Bar, $foo)"
+    LINE " 7. [ 5,  8]  end          $[this]          (Bar, $foo)"
+    LINE " 8. [ 7, 10]  ifvar        $foo"
+    LINE " 9. [ 8, 10]   and          $foo            (World)"
+    LINE "10. [ 8, 11]  end          $foo             (World)"
+    LINE "11. [10, 12]  setvars      "
+    LINE "12. [11, 13]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -351,13 +424,14 @@ void Plan_2_trivial_plan_component(void) {
 void Plan_3_trivial_plan_w_pair(void) {
     ecs_world_t *world = ecs_mini();
 
+    ECS_TAG(world, Rel);
     ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
     ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
 
     ecs_entity(world, { .name = "p" });
 
     ecs_query_t *r = ecs_query(world, {
-        .expr = "Foo(self), Bar(self), ChildOf(self, p)"
+        .expr = "Foo(self), Bar(self), Rel(self, p)"
     });
 
     test_assert(r != NULL);
@@ -378,11 +452,12 @@ void Plan_3_trivial_plan_w_wildcard(void) {
 
     ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
     ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+    ECS_TAG(world, Rel);
 
     ecs_entity(world, { .name = "p" });
 
     ecs_query_t *r = ecs_query(world, {
-        .expr = "Foo(self), Bar(self), ChildOf(self, *)"
+        .expr = "Foo(self), Bar(self), Rel(self, *)"
     });
 
     test_assert(r != NULL);
@@ -390,10 +465,10 @@ void Plan_3_trivial_plan_w_wildcard(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  triv        {0,1}"
-    LINE " 2. [ 1,  3]  and         $[this]           (ChildOf, $*'1)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  and          $[this]          (Rel, $*'1)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -410,6 +485,102 @@ void Plan_3_trivial_plan_w_any(void) {
 
     ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
     ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+    ECS_TAG(world, Rel);
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo(self), Bar(self), Rel(self, _)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       " 
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  and_any      $[this]          (Rel, $_'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_pair_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo(self), Bar(self), ChildOf(self, p)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree         $[this]          (ChildOf, p)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_wildcard_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo(self), Bar(self), ChildOf(self, *)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree_wc      $[this]          (ChildOf, $*'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_any_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
 
     ecs_entity(world, { .name = "p" });
 
@@ -422,10 +593,10 @@ void Plan_3_trivial_plan_w_any(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      " 
-    LINE " 1. [ 0,  2]  triv        {0,1}"
-    LINE " 2. [ 1,  3]  andany      $[this]           (ChildOf, $_'1)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setids       " 
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree_wc      $[this]          (ChildOf, $_'1)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -455,8 +626,14 @@ void Plan_3_trivial_plan_w_pair_component(void) {
 
     ecs_log_enable_colors(false);
 
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree         $[this]          (ChildOf, p)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
     char *plan = ecs_query_plan(r);
-    test_str(NULL, plan);
+    test_str(expect, plan);
     ecs_os_free(plan);
 
     ecs_query_fini(r);
@@ -471,11 +648,12 @@ void Plan_3_trivial_plan_w_wildcard_component(void) {
     ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
     ECS_COMPONENT(world, Velocity);
     ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+    ECS_TAG(world, Rel);
 
     ecs_entity(world, { .name = "p" });
 
     ecs_query_t *r = ecs_query(world, {
-        .expr = "Position(self), Velocity(self), ChildOf(self, *)"
+        .expr = "Position(self), Velocity(self), Rel(self, *)"
     });
 
     test_assert(r != NULL);
@@ -483,10 +661,10 @@ void Plan_3_trivial_plan_w_wildcard_component(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  triv        {0,1}"
-    LINE " 2. [ 1,  3]  and         $[this]           (ChildOf, $*'1)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  and          $[this]          (Rel, $*'1)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -505,6 +683,109 @@ void Plan_3_trivial_plan_w_any_component(void) {
     ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
     ECS_COMPONENT(world, Velocity);
     ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+    ECS_TAG(world, Rel);
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Position(self), Velocity(self), Rel(self, _)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       " 
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  and_any      $[this]          (Rel, $_'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_pair_component_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
+    ECS_COMPONENT(world, Velocity);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Position(self), Velocity(self), ChildOf(self, p)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree         $[this]          (ChildOf, p)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_wildcard_component_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
+    ECS_COMPONENT(world, Velocity);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Position(self), Velocity(self), ChildOf(self, *)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree_wc      $[this]          (ChildOf, $*'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_any_component_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ecs_add_pair(world, ecs_id(Position), EcsOnInstantiate, EcsInherit);
+    ECS_COMPONENT(world, Velocity);
+    ecs_add_pair(world, ecs_id(Velocity), EcsOnInstantiate, EcsInherit);
 
     ecs_entity(world, { .name = "p" });
 
@@ -517,15 +798,97 @@ void Plan_3_trivial_plan_w_any_component(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      " 
-    LINE " 1. [ 0,  2]  triv        {0,1}"
-    LINE " 2. [ 1,  3]  andany      $[this]           (ChildOf, $_'1)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setids       " 
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree_wc      $[this]          (ChildOf, $_'1)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
     test_str(expect, plan);
     ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_any_cached(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo(self), Bar(self), ChildOf(self, _)",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       " 
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree_pre     $[this]          (ChildOf, $_'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    
+    char *plan = ecs_query_plan(r);
+    test_str(NULL, plan);
+
+    const ecs_query_t *cq = ecs_query_get_cache_query(r);
+    test_assert(cq != NULL);
+
+    char *cached_plan = ecs_query_plan(cq);
+    test_str(expect, cached_plan);
+    ecs_os_free(cached_plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
+void Plan_3_trivial_plan_w_any_cached_no_expr(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_ENTITY(world, Bar, (OnInstantiate, Inherit));
+
+    ecs_entity(world, { .name = "p" });
+
+    ecs_query_t *r = ecs_query(world, {
+        .terms = {
+            { ecs_id(Foo), .src.id = EcsSelf },
+            { ecs_id(Bar), .src.id = EcsSelf },
+            { ecs_childof(EcsAny), .src.id = EcsSelf }
+        },
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       " 
+    LINE " 1. [ 0,  2]  triv         {0,1}"
+    LINE " 2. [ 1,  3]  tree_pre     $[this]          (ChildOf, $_'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    
+    char *plan = ecs_query_plan(r);
+    test_str(NULL, plan);
+
+    const ecs_query_t *cq = ecs_query_get_cache_query(r);
+    test_assert(cq != NULL);
+
+    char *cached_plan = ecs_query_plan(cq);
+    test_str(expect, cached_plan);
+    ecs_os_free(cached_plan);
 
     ecs_query_fini(r);
 
@@ -590,9 +953,10 @@ void Plan_2_trivial_plan_w_wildcard(void) {
     ecs_world_t *world = ecs_mini();
 
     ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+    ECS_TAG(world, Rel);
 
     ecs_query_t *r = ecs_query(world, {
-        .expr = "Foo(self), ChildOf(self, *)"
+        .expr = "Foo(self), Rel(self, *)"
     });
 
     test_assert(r != NULL);
@@ -600,10 +964,10 @@ void Plan_2_trivial_plan_w_wildcard(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  and         $[this]           (Foo)"
-    LINE " 2. [ 1,  3]  and         $[this]           (ChildOf, $*'1)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  and          $[this]          (Rel, $*'1)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -614,6 +978,36 @@ void Plan_2_trivial_plan_w_wildcard(void) {
 
     ecs_fini(world);
 }
+
+void Plan_2_trivial_plan_w_wildcard_childof(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, (OnInstantiate, Inherit));
+
+    ecs_query_t *r = ecs_query(world, {
+        .expr = "Foo(self), ChildOf(self, *)"
+    });
+
+    test_assert(r != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  tree_wc      $[this]          (ChildOf, $*'1)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+    char *plan = ecs_query_plan(r);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(r);
+
+    ecs_fini(world);
+}
+
 
 void Plan_this_before_fixed_src(void) {
     ecs_world_t *world = ecs_mini();
@@ -632,11 +1026,11 @@ void Plan_this_before_fixed_src(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Bar)"
-    LINE " 3. [ 2,  4]  selfup      $[this]           (Foo)"
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Bar)"
+    LINE " 3. [ 2,  4]  selfup       $[this]          (Foo)"
+    LINE " 4. [ 3,  5]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -665,11 +1059,11 @@ void Plan_fixed_src_before_this(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Bar)"
-    LINE " 3. [ 2,  4]  selfup      $[this]           (Foo)"
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Bar)"
+    LINE " 3. [ 2,  4]  selfup       $[this]          (Foo)"
+    LINE " 4. [ 3,  5]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -698,13 +1092,13 @@ void Plan_var_before_fixed_src(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Bar)"
-    LINE " 3. [ 2,  4]  selfup      $[var]            (Foo)"
-    LINE " 4. [ 3,  5]  each        $var              ($[var])"
-    LINE " 5. [ 4,  6]  setvars     "
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Bar)"
+    LINE " 3. [ 2,  4]  selfup       $[var]           (Foo)"
+    LINE " 4. [ 3,  5]  each         $var             ($[var])"
+    LINE " 5. [ 4,  6]  setvars      "
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -733,13 +1127,13 @@ void Plan_fixed_src_before_var(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Bar)"
-    LINE " 3. [ 2,  4]  selfup      $[var]            (Foo)"
-    LINE " 4. [ 3,  5]  each        $var              ($[var])"
-    LINE " 5. [ 4,  6]  setvars     "
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Bar)"
+    LINE " 3. [ 2,  4]  selfup       $[var]           (Foo)"
+    LINE " 4. [ 3,  5]  each         $var             ($[var])"
+    LINE " 5. [ 4,  6]  setvars      "
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -768,13 +1162,13 @@ void Plan_this_before_fixed_src_w_not(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  4]  not         "
-    LINE " 3. [ 2,  4]   selfup     e                 (Bar)"
-    LINE " 4. [ 2,  5]  end         e                 (Bar)"
-    LINE " 5. [ 4,  6]  selfup      $[this]           (Foo)"
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  4]  not          "
+    LINE " 3. [ 2,  4]   selfup       e               (Bar)"
+    LINE " 4. [ 2,  5]  end          e                (Bar)"
+    LINE " 5. [ 4,  6]  selfup       $[this]          (Foo)"
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -803,12 +1197,12 @@ void Plan_this_before_fixed_src_w_first_var(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  with        e                 ($this)"
-    LINE " 3. [ 2,  4]  selfup      $this             (Foo)"
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  with         e                ($this)"
+    LINE " 3. [ 2,  4]  selfup       $this            (Foo)"
     LINE " 4. [ 3,  5]  setthis                       ($this)"
-    LINE " 5. [ 4,  6]  yield       "
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -837,15 +1231,15 @@ void Plan_this_before_fixed_src_w_first_var_w_not(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      $[this]           (Foo)"
-    LINE " 3. [ 2,  4]  each        $this             ($[this])"
-    LINE " 4. [ 3,  6]  not         "
-    LINE " 5. [ 4,  6]   with       e                 ($this)"
-    LINE " 6. [ 4,  7]  end         e                 ($this)"
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       $[this]          (Foo)"
+    LINE " 3. [ 2,  4]  each         $this            ($[this])"
+    LINE " 4. [ 3,  6]  not          "
+    LINE " 5. [ 4,  6]   with         e               ($this)"
+    LINE " 6. [ 4,  7]  end          e                ($this)"
     LINE " 7. [ 6,  8]  setthis                       ($this)"
-    LINE " 8. [ 7,  9]  yield       "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -874,12 +1268,12 @@ void Plan_this_before_fixed_src_w_second_var(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Bar, $this)"
-    LINE " 3. [ 2,  4]  selfup      $this             (Foo)"
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Bar, $this)"
+    LINE " 3. [ 2,  4]  selfup       $this            (Foo)"
     LINE " 4. [ 3,  5]  setthis                       ($this)"
-    LINE " 5. [ 4,  6]  yield       "
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -908,15 +1302,15 @@ void Plan_this_before_fixed_src_w_second_var_w_not(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      $[this]           (Foo)"
-    LINE " 3. [ 2,  4]  each        $this             ($[this])"
-    LINE " 4. [ 3,  6]  not         "
-    LINE " 5. [ 4,  6]   selfup     e                 (Bar, $this)"
-    LINE " 6. [ 4,  7]  end         e                 (Bar, $this)"
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       $[this]          (Foo)"
+    LINE " 3. [ 2,  4]  each         $this            ($[this])"
+    LINE " 4. [ 3,  6]  not          "
+    LINE " 5. [ 4,  6]   selfup       e               (Bar, $this)"
+    LINE " 6. [ 4,  7]  end          e                (Bar, $this)"
     LINE " 7. [ 6,  8]  setthis                       ($this)"
-    LINE " 8. [ 7,  9]  yield       "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -947,10 +1341,10 @@ void Plan_populate_1_fixed(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -981,11 +1375,11 @@ void Plan_populate_2_fixed(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1016,11 +1410,11 @@ void Plan_populate_1_fixed_1_this_self(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  and         $[this]           (Velocity)"
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  and          $[this]          (Velocity)"
+    LINE " 4. [ 3,  5]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1055,12 +1449,12 @@ void Plan_populate_2_fixed_2_this_self(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  triv        {2,3}"
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  triv         {2,3}"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1095,12 +1489,12 @@ void Plan_populate_2_fixed_2_this_self_interleaved(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  triv        {1,3}"
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  triv         {1,3}"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1135,12 +1529,12 @@ void Plan_populate_2_this_self_2_fixed(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  triv        {0,1}"
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  triv         {0,1}"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1171,11 +1565,11 @@ void Plan_populate_1_fixed_1_this_up(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  up          $[this]           (Velocity)"
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  up           $[this]          (Velocity)"
+    LINE " 4. [ 3,  5]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1210,13 +1604,13 @@ void Plan_populate_2_fixed_2_this_up(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  up          $[this]           (Mass)"
-    LINE " 5. [ 4,  6]  up          $[this]           (Rotation)"
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  up           $[this]          (Mass)"
+    LINE " 5. [ 4,  6]  up           $[this]          (Rotation)"
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1251,13 +1645,13 @@ void Plan_populate_2_fixed_2_this_up_interleaved(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  up          $[this]           (Mass)"
-    LINE " 5. [ 4,  6]  up          $[this]           (Rotation)"
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  up           $[this]          (Mass)"
+    LINE " 5. [ 4,  6]  up           $[this]          (Rotation)"
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1292,13 +1686,13 @@ void Plan_populate_2_this_up_2_fixed(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  up          $[this]           (Mass)"
-    LINE " 5. [ 4,  6]  up          $[this]           (Rotation)"
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  up           $[this]          (Mass)"
+    LINE " 5. [ 4,  6]  up           $[this]          (Rotation)"
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1330,11 +1724,11 @@ void Plan_populate_1_fixed_1_this_self_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  cache       "
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  cache        "
+    LINE " 4. [ 3,  5]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1370,12 +1764,12 @@ void Plan_populate_2_fixed_2_this_self_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  cache       "
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  cache        "
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1411,12 +1805,12 @@ void Plan_populate_2_fixed_2_this_self_interleaved_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  cache       "
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  cache        "
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1452,12 +1846,12 @@ void Plan_populate_2_this_self_2_fixed_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  cache       "
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  cache        "
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1489,11 +1883,12 @@ void Plan_populate_1_fixed_1_this_up_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  cache       "
-    LINE " 4. [ 3,  5]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  cache        "
+    LINE " 4. [ 3,  5]  treeup_post  $[this]          (Velocity)"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1529,12 +1924,14 @@ void Plan_populate_2_fixed_2_this_up_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  cache       "
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  cache        "
+    LINE " 5. [ 4,  6]  treeup_post  $[this]          (Mass)"
+    LINE " 6. [ 5,  7]  treeup_post  $[this]          (Rotation)"
+    LINE " 7. [ 6,  8]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1570,12 +1967,14 @@ void Plan_populate_2_fixed_2_this_up_interleaved_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  cache       "
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  cache        "
+    LINE " 5. [ 4,  6]  treeup_post  $[this]          (Mass)"
+    LINE " 6. [ 5,  7]  treeup_post  $[this]          (Rotation)"
+    LINE " 7. [ 6,  8]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1611,12 +2010,14 @@ void Plan_populate_2_this_up_2_fixed_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  cache       "
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  cache        "
+    LINE " 5. [ 4,  6]  treeup_post  $[this]          (Mass)"
+    LINE " 6. [ 5,  7]  treeup_post  $[this]          (Rotation)"
+    LINE " 7. [ 6,  8]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1648,13 +2049,13 @@ void Plan_populate_1_fixed_1_var_self(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  and         $[var]            (Velocity)"
-    LINE " 4. [ 3,  5]  each        $var              ($[var])"
-    LINE " 5. [ 4,  6]  setvars     "
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  and          $[var]           (Velocity)"
+    LINE " 4. [ 3,  5]  each         $var             ($[var])"
+    LINE " 5. [ 4,  6]  setvars      "
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1690,15 +2091,15 @@ void Plan_populate_2_fixed_2_var_self(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  and         $[var]            (Mass)"
-    LINE " 5. [ 4,  6]  and         $[var]            (Rotation)"
-    LINE " 6. [ 5,  7]  each        $var              ($[var])"
-    LINE " 7. [ 6,  8]  setvars     "
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  and          $[var]           (Mass)"
+    LINE " 5. [ 4,  6]  and          $[var]           (Rotation)"
+    LINE " 6. [ 5,  7]  each         $var             ($[var])"
+    LINE " 7. [ 6,  8]  setvars      "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1734,15 +2135,15 @@ void Plan_populate_2_fixed_2_var_self_interleaved(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  and         $[var]            (Mass)"
-    LINE " 5. [ 4,  6]  and         $[var]            (Rotation)"
-    LINE " 6. [ 5,  7]  each        $var              ($[var])"
-    LINE " 7. [ 6,  8]  setvars     "
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  and          $[var]           (Mass)"
+    LINE " 5. [ 4,  6]  and          $[var]           (Rotation)"
+    LINE " 6. [ 5,  7]  each         $var             ($[var])"
+    LINE " 7. [ 6,  8]  setvars      "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1778,15 +2179,15 @@ void Plan_populate_2_var_self_2_fixed(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  and         $[var]            (Mass)"
-    LINE " 5. [ 4,  6]  and         $[var]            (Rotation)"
-    LINE " 6. [ 5,  7]  each        $var              ($[var])"
-    LINE " 7. [ 6,  8]  setvars     "
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  and          $[var]           (Mass)"
+    LINE " 5. [ 4,  6]  and          $[var]           (Rotation)"
+    LINE " 6. [ 5,  7]  each         $var             ($[var])"
+    LINE " 7. [ 6,  8]  setvars      "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1818,13 +2219,13 @@ void Plan_populate_1_fixed_1_var_up(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  up          $[var]            (Velocity)"
-    LINE " 4. [ 3,  5]  each        $var              ($[var])"
-    LINE " 5. [ 4,  6]  setvars     "
-    LINE " 6. [ 5,  7]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  up           $[var]           (Velocity)"
+    LINE " 4. [ 3,  5]  each         $var             ($[var])"
+    LINE " 5. [ 4,  6]  setvars      "
+    LINE " 6. [ 5,  7]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1860,15 +2261,15 @@ void Plan_populate_2_fixed_2_var_up(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  up          $[var]            (Mass)"
-    LINE " 5. [ 4,  6]  up          $[var]            (Rotation)"
-    LINE " 6. [ 5,  7]  each        $var              ($[var])"
-    LINE " 7. [ 6,  8]  setvars     "
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  up           $[var]           (Mass)"
+    LINE " 5. [ 4,  6]  up           $[var]           (Rotation)"
+    LINE " 6. [ 5,  7]  each         $var             ($[var])"
+    LINE " 7. [ 6,  8]  setvars      "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1904,15 +2305,15 @@ void Plan_populate_2_fixed_2_var_up_interleaved(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  up          $[var]            (Mass)"
-    LINE " 5. [ 4,  6]  up          $[var]            (Rotation)"
-    LINE " 6. [ 5,  7]  each        $var              ($[var])"
-    LINE " 7. [ 6,  8]  setvars     "
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  up           $[var]           (Mass)"
+    LINE " 5. [ 4,  6]  up           $[var]           (Rotation)"
+    LINE " 6. [ 5,  7]  each         $var             ($[var])"
+    LINE " 7. [ 6,  8]  setvars      "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1948,15 +2349,15 @@ void Plan_populate_2_var_up_2_fixed(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  selfup      e                 (Position)"
-    LINE " 3. [ 2,  4]  selfup      e                 (Velocity)"
-    LINE " 4. [ 3,  5]  up          $[var]            (Mass)"
-    LINE " 5. [ 4,  6]  up          $[var]            (Rotation)"
-    LINE " 6. [ 5,  7]  each        $var              ($[var])"
-    LINE " 7. [ 6,  8]  setvars     "
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  selfup       e                (Position)"
+    LINE " 3. [ 2,  4]  selfup       e                (Velocity)"
+    LINE " 4. [ 3,  5]  up           $[var]           (Mass)"
+    LINE " 5. [ 4,  6]  up           $[var]           (Rotation)"
+    LINE " 6. [ 5,  7]  each         $var             ($[var])"
+    LINE " 7. [ 6,  8]  setvars      "
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -1987,10 +2388,7 @@ void Plan_cache_2_or(void) {
 
     ecs_log_enable_colors(false);
 
-    const char *expect = 
-    HEAD " 0. [-1,  1]  xcache      "
-    LINE " 1. [ 0,  2]  yield       "
-    LINE "";
+    const char *expect = NULL;
     char *plan = ecs_query_plan(r);
 
     test_str(expect, plan);
@@ -2022,10 +2420,7 @@ void Plan_cache_2_or_w_not(void) {
 
     ecs_log_enable_colors(false);
 
-    const char *expect = 
-    HEAD " 0. [-1,  1]  xcache      "
-    LINE " 1. [ 0,  2]  yield       "
-    LINE "";
+    const char *expect = NULL;
     char *plan = ecs_query_plan(r);
 
     test_str(expect, plan);
@@ -2052,8 +2447,8 @@ void Plan_1_plan_any_src(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  ids         $[_'1]            (RelA)"
-    LINE " 1. [ 0,  2]  yield       "
+    HEAD " 0. [-1,  1]  ids          $[_'1]           (RelA)"
+    LINE " 1. [ 0,  2]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -2079,10 +2474,10 @@ void Plan_1_plan_not_any_src(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  2]  not         "
-    LINE " 1. [ 0,  2]   ids        $[_'1]            (RelA)"
-    LINE " 2. [ 0,  3]  end         $[_'1]            (RelA)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  2]  not          "
+    LINE " 1. [ 0,  2]   ids          $[_'1]          (RelA)"
+    LINE " 2. [ 0,  3]  end          $[_'1]           (RelA)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
 
@@ -2110,10 +2505,10 @@ void Plan_1_plan_optional_any_src(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  2]  option      "
-    LINE " 1. [ 0,  2]   ids        $[_'1]            (RelA)"
-    LINE " 2. [ 0,  3]  end         $[_'1]            (RelA)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  2]  option       "
+    LINE " 1. [ 0,  2]   ids          $[_'1]          (RelA)"
+    LINE " 2. [ 0,  3]  end          $[_'1]           (RelA)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
     test_str(expect, plan);
@@ -2139,8 +2534,8 @@ void Plan_pair_first_wildcard(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  and         $[this]           ($*'1, Tgt)"
-    LINE " 1. [ 0,  2]  yield       "
+    HEAD " 0. [-1,  1]  and_wct      $[this]          ($*'1, Tgt)"
+    LINE " 1. [ 0,  2]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
     test_str(expect, plan);
@@ -2166,8 +2561,8 @@ void Plan_pair_first_wildcard_cached(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  xcache      "
-    LINE " 1. [ 0,  2]  yield       "
+    HEAD " 0. [-1,  1]  and_wct      $[this]          ($*'1, Tgt)"
+    LINE " 1. [ 0,  2]  yield        "
     LINE "";    
     char *plan = ecs_query_plan(r);
     test_str(expect, plan);
@@ -2193,8 +2588,8 @@ void Plan_pair_second_wildcard(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  and         $[this]           (Rel, $*'1)"
-    LINE " 1. [ 0,  2]  yield       "
+    HEAD " 0. [-1,  1]  and          $[this]          (Rel, $*'1)"
+    LINE " 1. [ 0,  2]  yield        "
     LINE "";
     char *plan = ecs_query_plan(r);
     test_str(expect, plan);
@@ -2219,10 +2614,7 @@ void Plan_pair_second_wildcard_cached(void) {
 
     ecs_log_enable_colors(false);
 
-    const char *expect = 
-    HEAD " 0. [-1,  1]  xcache      "
-    LINE " 1. [ 0,  2]  yield       "
-    LINE "";
+    const char *expect = NULL;
     char *plan = ecs_query_plan(r);
 
     test_str(expect, plan);
@@ -2247,9 +2639,9 @@ void Plan_0_src_tag(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2275,9 +2667,9 @@ void Plan_0_src_component(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2305,9 +2697,9 @@ void Plan_0_src_w_sparse(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2335,39 +2727,9 @@ void Plan_0_src_w_toggle(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  yield       "
-    LINE "";
-    char *plan = ecs_query_plan(q);
-
-    test_str(expect, plan);
-    ecs_os_free(plan);
-
-    ecs_query_fini(q);
-
-    ecs_fini(world);
-}
-
-void Plan_0_src_w_union(void) {
-    ecs_world_t *world = ecs_mini();
-
-    ECS_TAG(world, Movement);
-
-    ecs_add_id(world, ecs_id(Movement), EcsUnion);
-
-    ecs_query_t *q = ecs_query(world, {
-        .expr = "Movement(#0, *)"
-    });
-
-    test_assert(q != NULL);
-
-    ecs_log_enable_colors(false);
-
-    const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2396,10 +2758,10 @@ void Plan_0_src_w_sparse_and_component(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  and         $[this]           (Velocity)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  and          $[this]          (Velocity)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2428,10 +2790,10 @@ void Plan_0_src_w_toggle_and_component(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  and         $[this]           (Velocity)"
-    LINE " 3. [ 2,  4]  yield       "
+    HEAD " 0. [-1,  1]  setfix       "
+    LINE " 1. [ 0,  2]  setids       "
+    LINE " 2. [ 1,  3]  and          $[this]          (Velocity)"
+    LINE " 3. [ 2,  4]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2441,38 +2803,6 @@ void Plan_0_src_w_toggle_and_component(void) {
     ecs_query_fini(q);
 
     ecs_fini(world); 
-}
-
-void Plan_0_src_w_union_and_component(void) {
-    ecs_world_t *world = ecs_mini();
-
-    ECS_TAG(world, Movement);
-    ECS_COMPONENT(world, Velocity);
-
-    ecs_add_id(world, ecs_id(Movement), EcsUnion);
-
-    ecs_query_t *q = ecs_query(world, {
-        .expr = "Movement(#0, *), Velocity"
-    });
-
-    test_assert(q != NULL);
-
-    ecs_log_enable_colors(false);
-
-    const char *expect = 
-    HEAD " 0. [-1,  1]  setfix      "
-    LINE " 1. [ 0,  2]  setids      "
-    LINE " 2. [ 1,  3]  and         $[this]           (Velocity)"
-    LINE " 3. [ 2,  4]  yield       "
-    LINE "";
-    char *plan = ecs_query_plan(q);
-
-    test_str(expect, plan);
-    ecs_os_free(plan);
-
-    ecs_query_fini(q);
-
-    ecs_fini(world);
 }
 
 void Plan_cached_isa_tgt(void) {
@@ -2490,8 +2820,8 @@ void Plan_cached_isa_tgt(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  trav        $[this]           (IsA, Tgt)"
-    LINE " 1. [ 0,  2]  yield       "
+    HEAD " 0. [-1,  1]  trav         $[this]          (IsA, Tgt)"
+    LINE " 1. [ 0,  2]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2517,10 +2847,7 @@ void Plan_cached_isa_tgt_w_self_second(void) {
 
     ecs_log_enable_colors(false);
 
-    const char *expect = 
-    HEAD " 0. [-1,  1]  xcache      "
-    LINE " 1. [ 0,  2]  yield       "
-    LINE "";
+    const char *expect = NULL;
     char *plan = ecs_query_plan(q);
 
     test_str(expect, plan);
@@ -2546,8 +2873,8 @@ void Plan_cached_isa_tgt_no_expr(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  trav        $[this]           (IsA, Tgt)"
-    LINE " 1. [ 0,  2]  yield       "
+    HEAD " 0. [-1,  1]  trav         $[this]          (IsA, Tgt)"
+    LINE " 1. [ 0,  2]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2573,10 +2900,7 @@ void Plan_cached_isa_tgt_w_self_second_no_expr(void) {
 
     ecs_log_enable_colors(false);
 
-    const char *expect = 
-    HEAD " 0. [-1,  1]  xcache      "
-    LINE " 1. [ 0,  2]  yield       "
-    LINE "";
+    const char *expect = NULL;
     char *plan = ecs_query_plan(q);
 
     test_str(expect, plan);
@@ -2603,12 +2927,12 @@ void Plan_cached_w_not_and_uncacheable(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  trav        $[this]           (IsA, Tgt)"
-    LINE " 2. [ 1,  4]  not         "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  trav         $[this]          (IsA, Tgt)"
+    LINE " 2. [ 1,  4]  not          "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2636,12 +2960,12 @@ void Plan_cached_w_optional_and_uncacheable(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  trav        $[this]           (IsA, Tgt)"
-    LINE " 2. [ 1,  4]  option      "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  6]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  trav         $[this]          (IsA, Tgt)"
+    LINE " 2. [ 1,  4]  option       "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  6]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
@@ -2670,20 +2994,586 @@ void Plan_cached_w_not_optional_and_uncacheable(void) {
     ecs_log_enable_colors(false);
 
     const char *expect = 
-    HEAD " 0. [-1,  1]  setids      "
-    LINE " 1. [ 0,  2]  trav        $[this]           (IsA, Tgt)"
-    LINE " 2. [ 1,  4]  not         "
-    LINE " 3. [ 2,  4]   and        $[this]           (Foo)"
-    LINE " 4. [ 2,  5]  end         $[this]           (Foo)"
-    LINE " 5. [ 4,  7]  option      "
-    LINE " 6. [ 5,  7]   and        $[this]           (Bar)"
-    LINE " 7. [ 5,  8]  end         $[this]           (Bar)"
-    LINE " 8. [ 7,  9]  yield       "
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  trav         $[this]          (IsA, Tgt)"
+    LINE " 2. [ 1,  4]  not          "
+    LINE " 3. [ 2,  4]   and          $[this]         (Foo)"
+    LINE " 4. [ 2,  5]  end          $[this]          (Foo)"
+    LINE " 5. [ 4,  7]  option       "
+    LINE " 6. [ 5,  7]   and          $[this]         (Bar)"
+    LINE " 7. [ 5,  8]  end          $[this]          (Bar)"
+    LINE " 8. [ 7,  9]  yield        "
     LINE "";
     char *plan = ecs_query_plan(q);
 
     test_str(expect, plan);
     ecs_os_free(plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_not(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "Foo, !Bar",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_not_wildcard(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "Foo, !(Bar, *)",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_not_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {
+            { Foo },
+            { Bar, .oper = EcsNot }
+        },
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_not_wildcard_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {
+            { Foo },
+            { ecs_pair(Bar, EcsWildcard), .oper = EcsNot }
+        },
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_optional(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "Foo, ?Bar",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_optional_wildcard(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "Foo, ?(Bar, *)",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_optional_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {
+            { Foo },
+            { Bar, .oper = EcsOptional }
+        },
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cached_w_optional_wildcard_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Bar);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {
+            { Foo },
+            { ecs_pair(Bar, EcsWildcard), .oper = EcsOptional }
+        },
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    char *plan = ecs_query_plan(q);
+
+    test_str(NULL, plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cache_plan_childof_parent(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tgt);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "(ChildOf, Tgt)",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const ecs_query_t *cq = ecs_query_get_cache_query(q);
+    test_assert(cq == NULL);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cache_plan_childof_parent_w_tag(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tgt);
+    ECS_TAG(world, Foo);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "(ChildOf, Tgt), Foo",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  cache        "
+        LINE " 2. [ 1,  3]  tree         $[this]          (ChildOf, Tgt)"
+        LINE " 3. [ 2,  4]  yield        "
+        LINE "";
+
+        char *plan = ecs_query_plan(q);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    {
+        const ecs_query_t *cq = ecs_query_get_cache_query(q);
+        test_assert(cq != NULL);
+        char *plan = ecs_query_plan(cq);
+        test_str(NULL, plan);
+        ecs_os_free(plan);
+    }
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cache_plan_childof_parent_written(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Tgt);
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "Foo, (ChildOf, Tgt)",
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  and          $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  tree_pre     $[this]          (ChildOf, Tgt)"
+    LINE " 3. [ 2,  4]  yield        "
+    LINE "";
+
+    const ecs_query_t *cq = ecs_query_get_cache_query(q);
+    test_assert(cq != NULL);
+    char *plan = ecs_query_plan(cq);
+
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cache_plan_childof_parent_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tgt);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ ecs_childof(Tgt) }},
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  children     $[this]          (ChildOf, Tgt)"
+        LINE " 2. [ 1,  3]  yield        "
+        LINE "";
+
+        char *plan = ecs_query_plan(q);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    {
+        const ecs_query_t *cq = ecs_query_get_cache_query(q);
+        test_assert(cq == NULL);
+    }
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cache_plan_childof_parent_w_tag_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Tgt);
+    ECS_TAG(world, Foo);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ ecs_childof(Tgt) }, { Foo }},
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  cache        "
+        LINE " 2. [ 1,  3]  tree         $[this]          (ChildOf, Tgt)"
+        LINE " 3. [ 2,  4]  yield        "
+        LINE "";
+
+        char *plan = ecs_query_plan(q);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    {
+        const ecs_query_t *cq = ecs_query_get_cache_query(q);
+        test_assert(cq != NULL);
+        char *plan = ecs_query_plan(cq);
+        test_str(NULL, plan);
+        ecs_os_free(plan);
+    }
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_cache_plan_childof_parent_written_simple(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_TAG(world, Tgt);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ Foo }, { ecs_childof(Tgt) }},
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  cache        "
+        LINE " 2. [ 1,  3]  tree_post    $[this]          (ChildOf, Tgt)"
+        LINE " 3. [ 2,  4]  yield        "
+        LINE "";
+
+        char *plan = ecs_query_plan(q);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  and          $[this]          (Foo)"
+        LINE " 2. [ 1,  3]  tree_pre     $[this]          (ChildOf, Tgt)"
+        LINE " 3. [ 2,  4]  yield        "
+        LINE "";
+
+        const ecs_query_t *cq = ecs_query_get_cache_query(q);
+        test_assert(cq != NULL);
+        char *plan = ecs_query_plan(cq);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_up_w_custom_rel(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_ENTITY(world, Rel, Traversable);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ Foo, .src.id = EcsUp, .trav = Rel }},
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  up           $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  yield        "
+    LINE "";
+
+    char *plan = ecs_query_plan(q);
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_up_w_custom_rel_cached(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_ENTITY(world, Rel, Traversable);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ Foo, .src.id = EcsUp, .trav = Rel }},
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    const ecs_query_t *cq = ecs_query_get_cache_query(q);
+    test_assert(cq != NULL);
+
+    ecs_log_enable_colors(false);
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  up           $[this]          (Foo)"
+        LINE " 2. [ 1,  3]  yield        "
+        LINE "";
+
+        char *plan = ecs_query_plan(cq);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    {
+        char *plan = ecs_query_plan(q);
+        test_str(NULL, plan);
+        ecs_os_free(plan);
+    }
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_self_up_w_custom_rel(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_ENTITY(world, Rel, Traversable);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ Foo, .src.id = EcsSelf | EcsUp, .trav = Rel }},
+    });
+
+    test_assert(q != NULL);
+
+    ecs_log_enable_colors(false);
+
+    const char *expect = 
+    HEAD " 0. [-1,  1]  setids       "
+    LINE " 1. [ 0,  2]  selfup       $[this]          (Foo)"
+    LINE " 2. [ 1,  3]  yield        "
+    LINE "";
+
+    char *plan = ecs_query_plan(q);
+    test_str(expect, plan);
+    ecs_os_free(plan);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void Plan_self_up_w_custom_rel_cached(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Foo);
+    ECS_ENTITY(world, Rel, Traversable);
+
+    ecs_query_t *q = ecs_query(world, {
+        .terms = {{ Foo, .src.id = EcsSelf | EcsUp, .trav = Rel }},
+        .cache_kind = EcsQueryCacheAuto
+    });
+
+    test_assert(q != NULL);
+
+    const ecs_query_t *cq = ecs_query_get_cache_query(q);
+    test_assert(cq != NULL);
+
+    ecs_log_enable_colors(false);
+
+    {
+        const char *expect = 
+        HEAD " 0. [-1,  1]  setids       "
+        LINE " 1. [ 0,  2]  selfup       $[this]          (Foo)"
+        LINE " 2. [ 1,  3]  yield        "
+        LINE "";
+
+        char *plan = ecs_query_plan(cq);
+        test_str(expect, plan);
+        ecs_os_free(plan);
+    }
+
+    {
+        char *plan = ecs_query_plan(q);
+        test_str(NULL, plan);
+        ecs_os_free(plan);
+    }
 
     ecs_query_fini(q);
 

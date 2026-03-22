@@ -10,7 +10,8 @@ void Get_component_get_empty(void) {
     ecs_entity_t e = ecs_new(world);
     test_assert(e != 0);
 
-    test_assert(ecs_get_type(world, e) == NULL);
+    test_assert(ecs_get_type(world, e) != NULL);
+    test_int(ecs_get_type(world, e)->count, 0);
     
     ecs_fini(world);
 }
@@ -260,7 +261,7 @@ void Get_component_get_wildcard(void) {
     ECS_COMPONENT(world, Position);
     ECS_TAG(world, Tgt);
 
-    ecs_entity_t e = ecs_insert(world, ecs_value_pair(Position, Tgt, {10, 20}));
+    ecs_entity_t e = ecs_insert(world, ecs_pair_value(Position, Tgt, {10, 20}));
     test_assert(e != 0);
     test_assert(ecs_has_pair(world, e, ecs_id(Position), Tgt));
 

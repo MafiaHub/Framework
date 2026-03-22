@@ -7,14 +7,14 @@ void StackAlloc_init_fini(void) {
     ecs_stack_t stack = {0};
     flecs_stack_init(&stack);
 
-    test_int(stack.tail_page->sp, 0);
-    test_assert(stack.tail_page == &stack.first);
+    test_assert(stack.tail_page == NULL);
+    test_assert(stack.tail_page == stack.first);
 
     flecs_stack_fini(&stack);
     ecs_fini(world);
 }
 
-/// @brief Utililty for creating a mock allocation on the stack allocator
+/// @brief Utility for creating a mock allocation on the stack allocator
 /// @param stack Stack to use
 /// @param allocSizes Array of sizes to alloc. All of alignment 1. Ends with a size of 0.
 /// @return cursor to start of allocations
