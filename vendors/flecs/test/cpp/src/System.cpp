@@ -21,11 +21,11 @@ void System_iter(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -51,11 +51,11 @@ void System_iter_const(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -99,11 +99,11 @@ void System_iter_shared(void) {
 
     world.progress();
 
-    const Position *p = e1.get<Position>();
+    const Position *p = e1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e2.get<Position>();
+    p = e2.try_get<Position>();
     test_int(p->x, 13);
     test_int(p->y, 24);
 }
@@ -151,19 +151,19 @@ void System_iter_optional(void) {
 
     world.progress();
 
-    const Position *p = e1.get<Position>();
+    const Position *p = e1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e2.get<Position>();
+    p = e2.try_get<Position>();
     test_int(p->x, 33);
     test_int(p->y, 44);
 
-    p = e3.get<Position>();
+    p = e3.try_get<Position>();
     test_int(p->x, 51);
     test_int(p->y, 61);
 
-    p = e4.get<Position>();
+    p = e4.try_get<Position>();
     test_int(p->x, 71);
     test_int(p->y, 81);
 }
@@ -183,7 +183,7 @@ void System_each(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -203,7 +203,7 @@ void System_each_const(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -230,11 +230,11 @@ void System_each_shared(void) {
 
     world.progress();
 
-    const Position *p = e1.get<Position>();
+    const Position *p = e1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e2.get<Position>();
+    p = e2.try_get<Position>();
     test_int(p->x, 13);
     test_int(p->y, 24);
 }
@@ -272,19 +272,19 @@ void System_each_optional(void) {
 
     world.progress();
 
-    const Position *p = e1.get<Position>();
+    const Position *p = e1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e2.get<Position>();
+    p = e2.try_get<Position>();
     test_int(p->x, 33);
     test_int(p->y, 44);
 
-    p = e3.get<Position>();
+    p = e3.try_get<Position>();
     test_int(p->x, 51);
     test_int(p->y, 61);
 
-    p = e4.get<Position>();
+    p = e4.try_get<Position>();
     test_int(p->x, 71);
     test_int(p->y, 81);
 }
@@ -312,11 +312,11 @@ void System_signature(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -343,11 +343,11 @@ void System_signature_const(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -391,11 +391,11 @@ void System_signature_shared(void) {
 
     world.progress();
 
-    const Position *p = e1.get<Position>();
+    const Position *p = e1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e2.get<Position>();
+    p = e2.try_get<Position>();
     test_int(p->x, 13);
     test_int(p->y, 24);
 }
@@ -443,19 +443,19 @@ void System_signature_optional(void) {
 
     world.progress();
 
-    const Position *p = e1.get<Position>();
+    const Position *p = e1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e2.get<Position>();
+    p = e2.try_get<Position>();
     test_int(p->x, 33);
     test_int(p->y, 44);
 
-    p = e3.get<Position>();
+    p = e3.try_get<Position>();
     test_int(p->x, 51);
     test_int(p->y, 61);
 
-    p = e4.get<Position>();
+    p = e4.try_get<Position>();
     test_int(p->x, 71);
     test_int(p->y, 81);
 }
@@ -778,9 +778,9 @@ void System_add_from_each_world_handle(void) {
 
     world.progress();
 
-    test_assert(e1.get<Entity>()->e.has<Position>());
-    test_assert(e2.get<Entity>()->e.has<Position>());
-    test_assert(e3.get<Entity>()->e.has<Position>());
+    test_assert(e1.try_get<Entity>()->e.has<Position>());
+    test_assert(e2.try_get<Entity>()->e.has<Position>());
+    test_assert(e3.try_get<Entity>()->e.has<Position>());
 }
 
 void System_new_from_each(void) {
@@ -803,9 +803,9 @@ void System_new_from_each(void) {
     test_assert(e2.has<Entity>());
     test_assert(e3.has<Entity>());
 
-    test_assert(e1.get<Entity>()->e.has<Velocity>());
-    test_assert(e2.get<Entity>()->e.has<Velocity>());
-    test_assert(e3.get<Entity>()->e.has<Velocity>());
+    test_assert(e1.try_get<Entity>()->e.has<Velocity>());
+    test_assert(e2.try_get<Entity>()->e.has<Velocity>());
+    test_assert(e3.try_get<Entity>()->e.has<Velocity>());
 }
 
 void System_add_from_iter(void) {
@@ -876,9 +876,9 @@ void System_add_from_iter_world_handle(void) {
 
     world.progress();
 
-    test_assert(e1.get<Entity>()->e.has<Position>());
-    test_assert(e2.get<Entity>()->e.has<Position>());
-    test_assert(e3.get<Entity>()->e.has<Position>());
+    test_assert(e1.try_get<Entity>()->e.has<Position>());
+    test_assert(e2.try_get<Entity>()->e.has<Position>());
+    test_assert(e3.try_get<Entity>()->e.has<Position>());
 }
 
 void System_new_from_iter(void) {
@@ -905,9 +905,9 @@ void System_new_from_iter(void) {
     test_assert(e2.has<Entity>());
     test_assert(e3.has<Entity>());
 
-    test_assert(e1.get<Entity>()->e.has<Velocity>());
-    test_assert(e2.get<Entity>()->e.has<Velocity>());
-    test_assert(e3.get<Entity>()->e.has<Velocity>());
+    test_assert(e1.try_get<Entity>()->e.has<Velocity>());
+    test_assert(e2.try_get<Entity>()->e.has<Velocity>());
+    test_assert(e3.try_get<Entity>()->e.has<Velocity>());
 }
 
 void System_each_w_mut_children_it(void) {
@@ -959,7 +959,7 @@ void System_readonly_children_iter(void) {
                 for (auto i : it) {
                     c[i].e.children([&](flecs::entity child) {
                         // Dummy code to ensure we can access the entity
-                        const Position *p = child.get<Position>();
+                        const Position *p = child.try_get<Position>();
                         test_int(p->x, 1);
                         test_int(p->y, 0);
 
@@ -1146,9 +1146,9 @@ void System_test_auto_defer_each(void) {
     test_assert(e2.has<Value>());
     test_assert(e3.has<Value>());
 
-    test_int(e1.get<Value>()->value, 11);
-    test_int(e2.get<Value>()->value, 21);
-    test_int(e3.get<Value>()->value, 31);
+    test_int(e1.try_get<Value>()->value, 11);
+    test_int(e2.try_get<Value>()->value, 21);
+    test_int(e3.try_get<Value>()->value, 31);
 }
 
 void System_test_auto_defer_iter(void) {
@@ -1182,9 +1182,9 @@ void System_test_auto_defer_iter(void) {
     test_assert(e2.has<Value>());
     test_assert(e3.has<Value>());
 
-    test_int(e1.get<Value>()->value, 11);
-    test_int(e2.get<Value>()->value, 21);
-    test_int(e3.get<Value>()->value, 31);
+    test_int(e1.try_get<Value>()->value, 11);
+    test_int(e2.try_get<Value>()->value, 21);
+    test_int(e3.try_get<Value>()->value, 31);
 }
 
 void System_custom_pipeline(void) {
@@ -1293,6 +1293,8 @@ void System_custom_pipeline_w_kind(void) {
 void System_instanced_query_w_singleton_each(void) {
     flecs::world ecs;
 
+    ecs.component<Velocity>().add(flecs::Singleton);
+
     ecs.set<Velocity>({1, 2});
 
     auto e1 = ecs.entity().set<Position>({10, 20}); e1.set<Self>({e1});
@@ -1307,7 +1309,6 @@ void System_instanced_query_w_singleton_each(void) {
     int32_t count = 0;
 
     auto s = ecs.system<Self, Position, const Velocity>()
-        .term_at(2).singleton()
         .each([&](flecs::entity e, Self& s, Position&p, const Velocity& v) {
             test_assert(e == s.value);
             p.x += v.x;
@@ -1410,6 +1411,8 @@ void System_instanced_query_w_base_each(void) {
 void System_instanced_query_w_singleton_iter(void) {
     flecs::world ecs;
 
+    ecs.component<Velocity>().add(flecs::Singleton);
+
     ecs.set<Velocity>({1, 2});
 
     auto e1 = ecs.entity().set<Position>({10, 20}); e1.set<Self>({e1});
@@ -1424,7 +1427,6 @@ void System_instanced_query_w_singleton_iter(void) {
     int32_t count = 0;
 
     auto s = ecs.system<Self, Position, const Velocity>()
-        .term_at(2).singleton()
         .run([&](flecs::iter it) {
             while (it.next()) {
                 auto s = it.field<Self>(0);
@@ -1700,7 +1702,7 @@ void System_multithread_system_w_query_each(void) {
 
     world.progress();
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -1727,7 +1729,7 @@ void System_multithread_system_w_query_each_w_iter(void) {
 
     world.progress();
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -1754,7 +1756,7 @@ void System_multithread_system_w_query_each_w_world(void) {
 
     world.progress();
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -1787,7 +1789,7 @@ void System_multithread_system_w_query_iter(void) {
 
     world.progress();
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -1819,7 +1821,7 @@ void System_multithread_system_w_query_iter_w_iter(void) {
 
     world.progress();
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 }
@@ -1851,9 +1853,41 @@ void System_multithread_system_w_query_iter_w_world(void) {
 
     world.progress();
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
+}
+
+struct Rel { };
+
+void System_multithread_system_w_get_var(void) {
+    flecs::world world;
+    world.set_threads(4);
+
+    flecs::entity bob = world.entity("bob").add<Position>();
+    flecs::entity alice = world.entity("alice").add<Position>();
+
+    bob.add<Rel>(alice);
+
+    int count = 0;
+
+    world.system<const Position>()
+        .with<Rel>("$other")
+        .term_at(0).src("$other")
+        .multi_threaded()
+        .each([&](flecs::iter &it, size_t row, const Position &pos) {
+            flecs::entity e = it.entity(row);
+            flecs::entity other = it.get_var("other");
+
+            test_assert(e == bob);
+            test_assert(other == alice);
+            
+            count ++;
+        });
+
+    world.progress();
+
+    test_int(count, 1);
 }
 
 void System_run_callback(void) {
@@ -1877,11 +1911,11 @@ void System_run_callback(void) {
 
     world.progress();
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -2052,7 +2086,7 @@ void System_table_get(void) {
         .with<Position>()
         .each([&](flecs::iter& iter, size_t index) {
             flecs::entity e = iter.entity(index);
-            const Position *p = &iter.table().get<Position>()[index];
+            const Position *p = &iter.table().try_get<Position>()[index];
             test_assert(p != nullptr);
             test_assert(e == e1 || e == e2);
             if (e == e1) {
@@ -2077,7 +2111,7 @@ void System_range_get(void) {
         .with<Position>()
         .each([&](flecs::iter& iter, size_t index) {
             flecs::entity e = iter.entity(index);
-            const Position *p = &iter.range().get<Position>()[index];
+            const Position *p = &iter.range().try_get<Position>()[index];
             test_assert(p != nullptr);
             test_assert(e == e1 || e == e2);
             if (e == e1) {
@@ -2100,7 +2134,7 @@ void System_randomize_timers(void) {
         .run([](flecs::iter& it) { while (it.next()) {} });
 
     {
-        const flecs::Timer *t = s1.get<flecs::Timer>();
+        const flecs::Timer *t = s1.try_get<flecs::Timer>();
         test_assert(t != nullptr);
         test_assert(t->time == 0);
     }
@@ -2112,13 +2146,13 @@ void System_randomize_timers(void) {
         .run([](flecs::iter& it) { while (it.next()) {} });
 
     {
-        const flecs::Timer *t = s1.get<flecs::Timer>();
+        const flecs::Timer *t = s1.try_get<flecs::Timer>();
         test_assert(t != nullptr);
         test_assert(t->time != 0);
     }
 
     {
-        const flecs::Timer *t = s2.get<flecs::Timer>();
+        const flecs::Timer *t = s2.try_get<flecs::Timer>();
         test_assert(t != nullptr);
         test_assert(t->time != 0);
     }
@@ -2309,6 +2343,89 @@ void System_register_twice_w_each_run(void) {
 
     sys2.run();
     test_int(count2, 1);
+}
+
+static
+uint64_t system_group_by_rel(
+    flecs::world_t *world,
+    flecs::table_t *table,
+    flecs::entity_t id,
+    void *ctx)
+{
+    (void)ctx;
+
+    ecs_id_t match;
+    if (ecs_search(world, table, ecs_pair(id, EcsWildcard), &match) != -1) {
+        return ECS_PAIR_SECOND(match);
+    }
+
+    return 0;
+}
+
+void System_set_group(void) {
+    flecs::world world;
+
+    struct Rel { };
+    struct TgtA { };
+    struct TgtB { };
+    struct TgtC { };
+    struct Tag { };
+
+    auto e1 = world.entity().add<Rel, TgtA>();
+    auto e2 = world.entity().add<Rel, TgtB>();
+    world.entity().add<Rel, TgtC>();
+
+    auto e4 = world.entity().add<Rel, TgtA>().add<Tag>();
+    auto e5 = world.entity().add<Rel, TgtB>().add<Tag>();
+    world.entity().add<Rel, TgtC>().add<Tag>();
+
+    flecs::entity_t expected_group = 0;
+    int count = 0;
+    bool e1_found = false;
+    bool e2_found = false;
+    bool e4_found = false;
+    bool e5_found = false;
+
+    auto sys = world.system()
+        .with<Rel>(flecs::Wildcard)
+        .group_by<Rel>(system_group_by_rel)
+        .run([&](flecs::iter& it) {
+            while (it.next()) {
+                test_assert(it.group_id() == expected_group);
+                for (auto i : it) {
+                    auto e = it.entity(i);
+                    if (e == e1) e1_found = true;
+                    if (e == e2) e2_found = true;
+                    if (e == e4) e4_found = true;
+                    if (e == e5) e5_found = true;
+                    count ++;
+                }
+            }
+        });
+
+    expected_group = world.id<TgtB>();
+    sys.set_group<TgtB>().run();
+
+    test_int(count, 2);
+    test_bool(e1_found, false);
+    test_bool(e2_found, true);
+    test_bool(e4_found, false);
+    test_bool(e5_found, true);
+
+    count = 0;
+    e1_found = false;
+    e2_found = false;
+    e4_found = false;
+    e5_found = false;
+
+    expected_group = world.id<TgtA>();
+    sys.set_group(expected_group).run();
+
+    test_int(count, 2);
+    test_bool(e1_found, true);
+    test_bool(e2_found, false);
+    test_bool(e4_found, true);
+    test_bool(e5_found, false);
 }
 
 void System_run_w_0_src_query(void) {

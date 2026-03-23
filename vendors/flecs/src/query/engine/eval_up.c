@@ -15,19 +15,27 @@ bool flecs_query_up_select_table(
     ecs_query_up_select_kind_t kind)
 {
     ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
+    ecs_query_up_impl_t *impl = op_ctx->impl;
+    ecs_assert(impl != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_iter_t *it = ctx->it;
     bool self = trav_kind == FlecsQueryUpSelectSelfUp;
     ecs_table_range_t range;
 
     do {
         bool result;
-        if (kind == FlecsQueryUpSelectId) {
+        if (ECS_PAIR_FIRST(impl->with) == EcsChildOf) {
+            if (impl->with == ecs_childof(EcsWildcard)) {
+                result = flecs_query_tree_and_wildcard(op, redo, ctx, false);
+            } else {
+                result = flecs_query_tree_and(op, redo, ctx);
+            }
+        } else if (kind == FlecsQueryUpSelectId) {
             result = flecs_query_select_id(op, redo, ctx, 0);
         } else if (kind == FlecsQueryUpSelectDefault) {
             result = flecs_query_select_w_id(op, redo, ctx, 
-                op_ctx->with, 0);
-        } else if (kind == FlecsQueryUpSelectUnion) {
-            result = flecs_query_union_select(op, redo, ctx);
+                impl->with, 0);
+        } else if (kind == FlecsQueryUpSelectSparse) {
+            result = flecs_query_sparse_select(op, redo, ctx, 0);
         } else {
             ecs_abort(ECS_INTERNAL_ERROR, NULL);
         }
@@ -43,17 +51,17 @@ bool flecs_query_up_select_table(
         ecs_assert(range.table != NULL, ECS_INTERNAL_ERROR, NULL);
 
         /* Keep searching until we find a table that has the requested component, 
-         * with traversable entities */
+        * with traversable entities */
     } while (!self && range.table->_->traversable_count == 0);
 
     if (!range.count) {
         range.count = ecs_table_count(range.table);
     }
 
-    op_ctx->table = range.table;
-    op_ctx->row = range.offset;
-    op_ctx->end = range.offset + range.count;
-    op_ctx->matched = it->ids[op->field_index];
+    impl->table = range.table;
+    impl->row = range.offset;
+    impl->end = range.offset + range.count;
+    impl->matched = it->ids[op->field_index];
 
     return true;
 }
@@ -66,22 +74,24 @@ ecs_trav_down_t* flecs_query_up_find_next_traversable(
     ecs_query_up_select_trav_kind_t trav_kind)
 {
     ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
+    ecs_query_up_impl_t *impl = op_ctx->impl;
+    ecs_assert(impl != NULL, ECS_INTERNAL_ERROR, NULL);
     ecs_world_t *world = ctx->world;
     ecs_iter_t *it = ctx->it;
     const ecs_query_t *q = &ctx->query->pub;
-    ecs_table_t *table = op_ctx->table;
+    ecs_table_t *table = impl->table;
     bool self = trav_kind == FlecsQueryUpSelectSelfUp;
 
     if (table->_->traversable_count == 0) {
         /* No traversable entities in table */
-        op_ctx->table = NULL;
+        impl->table = NULL;
         return NULL;
     } else {
         int32_t row;
         ecs_entity_t entity = 0;
         const ecs_entity_t *entities = ecs_table_entities(table);
 
-        for (row = op_ctx->row; row < op_ctx->end; row ++) {
+        for (row = impl->row; row < impl->end; row ++) {
             entity = entities[row];
             ecs_record_t *record = flecs_entities_get(world, entity);
             if (record->row & EcsEntityIsTraversable) {
@@ -91,22 +101,22 @@ ecs_trav_down_t* flecs_query_up_find_next_traversable(
             }
         }
 
-        if (row == op_ctx->end) {
+        if (row == impl->end) {
             /* No traversable entities remaining in table */
-            op_ctx->table = NULL;
+            impl->table = NULL;
             return NULL;
         }
 
-        op_ctx->row = row;
+        impl->row = row;
 
         /* Get down cache entry for traversable entity */
         bool match_empty = (q->flags & EcsQueryMatchEmptyTables) != 0;
-        op_ctx->down = flecs_query_get_down_cache(ctx, &op_ctx->cache, 
-            op_ctx->trav, entity, op_ctx->idr_with, self, match_empty);
-        op_ctx->cache_elem = -1;
+        impl->down = flecs_query_get_down_cache(ctx, &impl->cache, 
+            impl->trav, entity, impl->cr_with, self, match_empty);
+        impl->cache_elem = -1;
     }
 
-    return op_ctx->down;
+    return impl->down;
 }
 
 /* Select all tables that can reach the target component through the traversal
@@ -119,23 +129,31 @@ bool flecs_query_up_select(
     ecs_query_up_select_kind_t kind)
 {
     ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
+    ecs_query_up_impl_t *impl = op_ctx->impl;
+    
+    if (!impl) {
+        ecs_iter_t *it = ctx->it;
+        ecs_allocator_t *a = flecs_query_get_allocator(it);
+        impl = op_ctx->impl = flecs_calloc_t(a, ecs_query_up_impl_t);
+    }
+
     ecs_iter_t *it = ctx->it;
     bool redo_select = redo;
     const ecs_query_t *q = &ctx->query->pub;
     bool self = trav_kind == FlecsQueryUpSelectSelfUp;
 
-    op_ctx->trav = q->terms[op->term_index].trav;
+    impl->trav = q->terms[op->term_index].trav;
 
-    /* Reuse id record from previous iteration if possible*/
-    if (!op_ctx->idr_trav) {
-        op_ctx->idr_trav = flecs_id_record_get(ctx->world, 
-            ecs_pair(op_ctx->trav, EcsWildcard));
+    /* Reuse component record from previous iteration if possible*/
+    if (!impl->cr_trav) {
+        impl->cr_trav = flecs_components_get(ctx->world, 
+            ecs_pair(impl->trav, EcsWildcard));
     }
 
-    /* If id record is not found, or if it doesn't have any tables, revert to
+    /* If component record is not found, or if it doesn't have any tables, revert to
      * iterating owned components (no traversal) */
-    if (!op_ctx->idr_trav || 
-        !flecs_table_cache_all_count(&op_ctx->idr_trav->cache))
+    if (!impl->cr_trav || 
+        !flecs_table_cache_count(&impl->cr_trav->cache))
     {
         if (!self) {
             /* If operation does not match owned components, return false */
@@ -145,8 +163,8 @@ bool flecs_query_up_select(
                 (EcsTableNotQueryable|EcsTableIsPrefab|EcsTableIsDisabled));
         } else if (kind == FlecsQueryUpSelectDefault) {
             return flecs_query_select(op, redo, ctx);
-        } else if (kind == FlecsQueryUpSelectUnion) {
-            return flecs_query_union_select(op, redo, ctx);
+        } else if (kind == FlecsQueryUpSelectSparse) {
+            return flecs_query_sparse_select(op, redo, ctx, 0);
         } else {
             /* Invalid select kind */
             ecs_abort(ECS_INTERNAL_ERROR, NULL);
@@ -155,29 +173,29 @@ bool flecs_query_up_select(
 
     if (!redo) {
         /* Get component id to match */
-        op_ctx->with = flecs_query_op_get_id(op, ctx);
+        impl->with = flecs_query_op_get_id(op, ctx);
 
-        /* Get id record for component to match */
-        op_ctx->idr_with = flecs_id_record_get(ctx->world, op_ctx->with);
-        if (!op_ctx->idr_with) {
-            /* If id record does not exist, there can't be any results */
+        /* Get component record for component to match */
+        impl->cr_with = flecs_components_get(ctx->world, impl->with);
+        if (!impl->cr_with) {
+            /* If component record does not exist, there can't be any results */
             return false;
         }
 
-        op_ctx->down = NULL;
-        op_ctx->cache_elem = 0;
+        impl->down = NULL;
+        impl->cache_elem = 0;
     }
 
     /* Get last used entry from down traversal cache. Cache entries in the down
      * traversal cache contain a list of tables that can reach the requested 
      * component through the traversal relationship, for a traversable entity
      * which acts as the key for the cache. */
-    ecs_trav_down_t *down = op_ctx->down;
+    ecs_trav_down_t *down = impl->down;
 
 next_down_entry:
     /* Get (next) entry in down traversal cache */
     while (!down) {
-        ecs_table_t *table = op_ctx->table;
+        ecs_table_t *table = impl->table;
 
         /* Get (next) table with traversable entities that have the 
          * requested component. We'll traverse downwards from the 
@@ -194,7 +212,7 @@ next_down_entry:
                 return false;
             }
 
-            table = op_ctx->table;
+            table = impl->table;
 
             /* If 'self' is true, we're evaluating a term with self|up. This
              * means that before traversing downwards, we should also return 
@@ -204,7 +222,7 @@ next_down_entry:
                     (EcsTableNotQueryable|EcsTableIsPrefab|EcsTableIsDisabled)))
                 {
                     flecs_reset_source_set_flag(it, op->field_index);
-                    op_ctx->row --;
+                    impl->row --;
                     return true;
                 }
             }
@@ -212,7 +230,7 @@ next_down_entry:
             redo_select = true;
         } else {
             /* Evaluate next entity in table */
-            op_ctx->row ++;
+            impl->row ++;
         }
 
         /* Get down cache entry for next traversable entity in table */
@@ -224,18 +242,19 @@ next_down_entry:
 
 next_down_elem:
     /* Get next element (table) in cache entry */
-    if ((++ op_ctx->cache_elem) >= ecs_vec_count(&down->elems)) {
+    if ((++ impl->cache_elem) >= ecs_vec_count(&down->elems)) {
         /* No more elements in cache entry, find next.*/
         down = NULL;
         goto next_down_entry;
     }
 
     ecs_trav_down_elem_t *elem = ecs_vec_get_t(
-        &down->elems, ecs_trav_down_elem_t, op_ctx->cache_elem);
-    flecs_query_var_set_range(op, op->src.var, elem->table, 0, 0, ctx);
-    flecs_query_set_vars(op, op_ctx->matched, ctx);
+        &down->elems, ecs_trav_down_elem_t, impl->cache_elem);
+    flecs_query_var_set_range(op, op->src.var, elem->range.table, 
+        elem->range.offset, elem->range.count, ctx);
+    flecs_query_set_vars(op, impl->matched, ctx);
 
-    if (flecs_query_table_filter(elem->table, op->other, 
+    if (flecs_query_table_filter(elem->range.table, op->other, 
         (EcsTableNotQueryable|EcsTableIsPrefab|EcsTableIsDisabled)))
     {
         /* Go to next table if table contains prefabs, disabled entities or
@@ -257,16 +276,22 @@ bool flecs_query_up_with(
 {
     const ecs_query_t *q = &ctx->query->pub;
     ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
+    ecs_query_up_impl_t *impl = op_ctx->impl;
     ecs_iter_t *it = ctx->it;
 
-    op_ctx->trav = q->terms[op->term_index].trav;
-    if (!op_ctx->idr_trav) {
-        op_ctx->idr_trav = flecs_id_record_get(ctx->world, 
-            ecs_pair(op_ctx->trav, EcsWildcard));
+    if (!impl) {
+        ecs_allocator_t *a = flecs_query_get_allocator(it);
+        impl = op_ctx->impl = flecs_calloc_t(a, ecs_query_up_impl_t);
     }
 
-    if (!op_ctx->idr_trav || 
-        !flecs_table_cache_all_count(&op_ctx->idr_trav->cache))
+    impl->trav = q->terms[op->term_index].trav;
+    if (!impl->cr_trav) {
+        impl->cr_trav = flecs_components_get(ctx->world, 
+            ecs_pair(impl->trav, EcsWildcard));
+    }
+
+    if (!impl->cr_trav || 
+        !flecs_table_cache_count(&impl->cr_trav->cache))
     {
         /* If there are no tables with traversable relationship, there are no
          * matches. */
@@ -274,12 +299,12 @@ bool flecs_query_up_with(
     }
 
     if (!redo) {
-        op_ctx->trav = q->terms[op->term_index].trav;
-        op_ctx->with = flecs_query_op_get_id(op, ctx);
-        op_ctx->idr_with = flecs_id_record_get(ctx->world, op_ctx->with);
+        impl->trav = q->terms[op->term_index].trav;
+        impl->with = flecs_query_op_get_id(op, ctx);
+        impl->cr_with = flecs_components_get(ctx->world, impl->with);
 
-        /* If id record for component doesn't exist, there are no matches */
-        if (!op_ctx->idr_with) {
+        /* If component record for component doesn't exist, there are no matches */
+        if (!impl->cr_with) {
             return false;
         }
 
@@ -292,30 +317,77 @@ bool flecs_query_up_with(
             return false;
         }
 
-        /* Get entry from up traversal cache. The up traversal cache contains 
-         * the entity on which the component was found, with additional metadata
-         * on where it is stored. */
-        ecs_trav_up_t *up = flecs_query_get_up_cache(ctx, &op_ctx->cache, 
-            range.table, op_ctx->with, op_ctx->trav, op_ctx->idr_with,
-            op_ctx->idr_trav);
+        op_ctx->range = range;
+        if (!op_ctx->range.count) {
+            op_ctx->range.count = ecs_table_count(op_ctx->range.table);
+        }
 
-        if (!up) {
-            /* Component is not reachable from table */
+        op_ctx->cur = -1;
+
+        /* Handle tables with non-fragmenting ChildOf */
+        if (impl->trav == EcsChildOf) {
+            if (range.table->flags & EcsTableHasParent) {
+                if (q->flags & EcsQueryNested) {
+                    /* If this is a nested query (used to populate a cache), 
+                     * don't store entries for individual entities in the cache.
+                     * Instead, match the entire table, and figure out from 
+                     * which parent the entity gets the component in an uncached
+                     * operation. */
+
+                    /* Signal that the uncached instruction needs to search. 
+                     * This helps distinguish between tables with a Parent 
+                     * component that own the component vs. those that don't. */
+                    it->sources[op->field_index] = EcsWildcard;
+                    return true;
+                }
+
+                /* Signals that we need to evaluate individual rows. */
+                op_ctx->cur = 0;
+                flecs_query_src_set_single(op, range.offset, ctx);
+            }
+        }
+    } else {
+next_row:
+        if (op_ctx->cur == -1) {
+            /* The table either can or can't reach the component, nothing to do 
+             * for a second evaluation of this operation.*/
             return false;
         }
 
-        it->sources[op->field_index] = flecs_entities_get_alive(
-            ctx->world, up->src);
-        it->trs[op->field_index] = up->tr;
-        it->ids[op->field_index] = up->id;
-        flecs_query_set_vars(op, up->id, ctx);
-        flecs_set_source_set_flag(it, op->field_index);
-        return true;
-    } else {
-        /* The table either can or can't reach the component, nothing to do for
-         * a second evaluation of this operation.*/
-        return false;
+        /* Evaluate next row. Only necessary for non-fragmenting ChildOf since
+         * in that case different table rows can have different parents. */
+        op_ctx->cur ++;
+        if (op_ctx->cur >= op_ctx->range.count) {
+            return false;
+        }
+
+        flecs_query_src_set_single(op, op_ctx->range.offset + op_ctx->cur, ctx);
     }
+
+    /* Get entry from up traversal cache. The up traversal cache contains 
+     * the entity on which the component was found, with additional metadata
+     * on where it is stored. */
+    ecs_trav_up_t *up = flecs_query_get_up_cache(ctx, &impl->cache, 
+        op_ctx->range.table, op_ctx->range.offset + op_ctx->cur, impl->with, 
+        impl->trav, impl->cr_with, impl->cr_trav);
+
+    if (!up) {
+        /* Component is not reachable from table */
+        goto next_row;
+    }
+
+    it->sources[op->field_index] = flecs_entities_get_alive(
+        ctx->world, up->src);
+    it->trs[op->field_index] = up->tr;
+    it->ids[op->field_index] = up->id;
+    if (op->match_flags & EcsTermMatchAny) {
+        it->ids[op->field_index] = ecs_pair(impl->trav, EcsWildcard);
+    }
+    
+    flecs_query_set_vars(op, up->id, ctx);
+    flecs_set_source_set_flag(it, op->field_index);
+
+    return true;
 }
 
 /* Check if a table can reach the target component through the traversal
@@ -323,45 +395,76 @@ bool flecs_query_up_with(
 bool flecs_query_self_up_with(
     const ecs_query_op_t *op,
     bool redo,
-    const ecs_query_run_ctx_t *ctx,
-    bool id_only)
+    const ecs_query_run_ctx_t *ctx)
 {
-    if (!redo) {
-        bool result;
+    ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
+    ecs_query_up_impl_t *impl = op_ctx->impl;
+    ecs_iter_t *it = ctx->it;
 
-        if (id_only) {
-            /* Simple id, no wildcards */
-            result = flecs_query_with_id(op, redo, ctx);
-            ecs_query_and_ctx_t *op_ctx = flecs_op_ctx(ctx, and);
-            op_ctx->remaining = 1;
+    if (!redo) {        
+        if (!op_ctx->impl) {
+            ecs_allocator_t *a = flecs_query_get_allocator(it);
+            impl = op_ctx->impl = flecs_calloc_t(a, ecs_query_up_impl_t);
+        }
+
+        flecs_reset_source_set_flag(ctx->it, op->field_index);
+        op_ctx->cur = -1;
+        impl->trav = 0;
+        impl->with = flecs_query_op_get_id(op, ctx);
+    }
+
+    /* First check if table has the component */
+    if (op_ctx->impl->trav == 0) {
+        bool result;
+        ecs_id_t with = impl->with;
+        if (ECS_PAIR_FIRST(with) == EcsChildOf) {
+            if (with == ecs_childof(EcsWildcard)) {
+                result = flecs_query_tree_and_wildcard(op, redo, ctx, false);
+            } else {
+                result = flecs_query_tree_and(op, redo, ctx);
+            }
         } else {
             result = flecs_query_with(op, redo, ctx);
         }
 
-        flecs_reset_source_set_flag(ctx->it, op->field_index);
-
         if (result) {
-            /* Table has component, no need to traverse*/
-            ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
-            op_ctx->trav = 0;
+            /* Table has component, no need to traverse*/            
             if (flecs_query_ref_flags(op->flags, EcsQuerySrc) & EcsQueryIsVar) {
                 /* Matching self, so set sources to 0 */
-                ecs_iter_t *it = ctx->it;
                 it->sources[op->field_index] = 0;
             }
             return true;
         }
-
-        /* Table doesn't have component, traverse relationship */
-        return flecs_query_up_with(op, redo, ctx);
-    } else {
-        ecs_query_up_ctx_t *op_ctx = flecs_op_ctx(ctx, up);
-        if (op_ctx->trav == 0) {
-            /* If matching components without traversing, make sure to still
-             * match remaining components that match the id (wildcard). */
-            return flecs_query_with(op, redo, ctx);
-        }
     }
 
-    return false;
+    /* Table doesn't have component, traverse relationship */
+    return flecs_query_up_with(op, redo, ctx);
+}
+
+bool flecs_query_up(
+    const ecs_query_op_t *op,
+    bool redo,
+    const ecs_query_run_ctx_t *ctx)
+{
+    uint64_t written = ctx->written[ctx->op_index];
+    if (flecs_ref_is_written(op, &op->src, EcsQuerySrc, written)) {
+        return flecs_query_up_with(op, redo, ctx);
+    } else {
+        return flecs_query_up_select(op, redo, ctx, 
+            FlecsQueryUpSelectUp, FlecsQueryUpSelectDefault);
+    }
+}
+
+bool flecs_query_self_up(
+    const ecs_query_op_t *op,
+    bool redo,
+    const ecs_query_run_ctx_t *ctx)
+{
+    uint64_t written = ctx->written[ctx->op_index];
+    if (flecs_ref_is_written(op, &op->src, EcsQuerySrc, written)) {
+        return flecs_query_self_up_with(op, redo, ctx);
+    } else {
+        return flecs_query_up_select(op, redo, ctx, 
+            FlecsQueryUpSelectSelfUp, FlecsQueryUpSelectDefault);
+    }
 }

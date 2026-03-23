@@ -6,10 +6,10 @@
  * entities, with components that store the reflection data. A type has at least
  * two components:
  *
- * - EcsComponent: core component, contains size & alignment
- * - EcsType:  component that indicates what kind of type the entity is
+ * - EcsComponent: core component, contains size and alignment
+ * - EcsType: component that indicates what kind of type the entity is
  *
- * Additionally the type may have an additional component that contains the
+ * Additionally, the type may have an additional component that contains the
  * reflection data for the type. For example, structs have these components:
  *
  * - EcsComponent
@@ -20,9 +20,9 @@
  * component. Adding a child with a Member component to an entity will
  * automatically add the EcsStruct component to the parent.
  *
- * Enums/bitmasks can be populated by adding child entities with the Constant
- * tag. By default constants are automatically assigned values when they are
- * added to the enum/bitmask. The parent entity must have the EcsEnum or
+ * Enums and bitmasks can be populated by adding child entities with the Constant
+ * tag. By default, constants are automatically assigned values when they are
+ * added to the enum or bitmask. The parent entity must have the EcsEnum or
  * EcsBitmask component before adding the constants.
  *
  * To create enum constants with a manual value, set (Constant, i32) to the
@@ -33,7 +33,7 @@
  * The _init APIs are convenience wrappers around creating the entities and
  * components for the types.
  *
- * When a type is created it automatically receives the EcsComponent and
+ * When a type is created, it automatically receives the EcsComponent and
  * EcsType components. The former means that the resulting type can be
  * used as a regular component:
  *
@@ -64,8 +64,6 @@
  * @{
  */
 
-#include <stddef.h>
-
 #ifndef FLECS_MODULE
 #define FLECS_MODULE
 #endif
@@ -77,11 +75,11 @@
 extern "C" {
 #endif
 
-/** Max number of constants/members that can be specified in desc structs. */
+/** Max number of constants and members that can be specified in desc structs. */
 #define ECS_MEMBER_DESC_CACHE_SIZE (32)
 
 /** Primitive type definitions.
- * These typedefs allow the builtin primitives to be used as regular components:
+ * These typedefs allow the built-in primitives to be used as regular components:
  *
  * @code
  * ecs_set(world, e, ecs_i32_t, {10});
@@ -94,62 +92,62 @@ extern "C" {
  * @endcode
  */
 
-typedef bool ecs_bool_t;                                        /**< Builtin bool type */
-typedef char ecs_char_t;                                        /**< Builtin char type */
-typedef unsigned char ecs_byte_t;                               /**< Builtin  ecs_byte type */
-typedef uint8_t ecs_u8_t;                                       /**< Builtin u8 type */
-typedef uint16_t ecs_u16_t;                                     /**< Builtin u16 type */
-typedef uint32_t ecs_u32_t;                                     /**< Builtin u32 type */
-typedef uint64_t ecs_u64_t;                                     /**< Builtin u64 type */
-typedef uintptr_t ecs_uptr_t;                                   /**< Builtin uptr type */
-typedef int8_t ecs_i8_t;                                        /**< Builtin i8 type */
-typedef int16_t ecs_i16_t;                                      /**< Builtin i16 type */
-typedef int32_t ecs_i32_t;                                      /**< Builtin i32 type */
-typedef int64_t ecs_i64_t;                                      /**< Builtin i64 type */
-typedef intptr_t ecs_iptr_t;                                    /**< Builtin iptr type */
-typedef float ecs_f32_t;                                        /**< Builtin f32 type */
-typedef double ecs_f64_t;                                       /**< Builtin f64 type */
-typedef char* ecs_string_t;                                     /**< Builtin string type */
+typedef bool ecs_bool_t;                                        /**< Built-in bool type. */
+typedef char ecs_char_t;                                        /**< Built-in char type. */
+typedef unsigned char ecs_byte_t;                               /**< Built-in ecs_byte type. */
+typedef uint8_t ecs_u8_t;                                       /**< Built-in u8 type. */
+typedef uint16_t ecs_u16_t;                                     /**< Built-in u16 type. */
+typedef uint32_t ecs_u32_t;                                     /**< Built-in u32 type. */
+typedef uint64_t ecs_u64_t;                                     /**< Built-in u64 type. */
+typedef uintptr_t ecs_uptr_t;                                   /**< Built-in uptr type. */
+typedef int8_t ecs_i8_t;                                        /**< Built-in i8 type. */
+typedef int16_t ecs_i16_t;                                      /**< Built-in i16 type. */
+typedef int32_t ecs_i32_t;                                      /**< Built-in i32 type. */
+typedef int64_t ecs_i64_t;                                      /**< Built-in i64 type. */
+typedef intptr_t ecs_iptr_t;                                    /**< Built-in iptr type. */
+typedef float ecs_f32_t;                                        /**< Built-in f32 type. */
+typedef double ecs_f64_t;                                       /**< Built-in f64 type. */
+typedef char* ecs_string_t;                                     /**< Built-in string type. */
 
-/* Meta module component ids */
-FLECS_API extern const ecs_entity_t ecs_id(EcsType);            /**< Id for component added to all types with reflection data. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsTypeSerializer);  /**< Id for component that stores a type specific serializer. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsPrimitive);       /**< Id for component that stores reflection data for a primitive type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsEnum);            /**< Id for component that stores reflection data for an enum type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsBitmask);         /**< Id for component that stores reflection data for a bitmask type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsMember);          /**< Id for component that stores reflection data for struct members. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsMemberRanges);    /**< Id for component that stores min/max ranges for member values. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsStruct);          /**< Id for component that stores reflection data for a struct type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsArray);           /**< Id for component that stores reflection data for an array type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsVector);          /**< Id for component that stores reflection data for a vector type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsOpaque);          /**< Id for component that stores reflection data for an opaque type. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsUnit);            /**< Id for component that stores unit data. */
-FLECS_API extern const ecs_entity_t ecs_id(EcsUnitPrefix);      /**< Id for component that stores unit prefix data. */
-FLECS_API extern const ecs_entity_t EcsConstant;                /**< Tag added to enum/bitmask constants. */
+/* Meta module component IDs */
+FLECS_API extern const ecs_entity_t ecs_id(EcsType);            /**< ID for component added to all types with reflection data. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsTypeSerializer);  /**< ID for component that stores a type-specific serializer. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsPrimitive);       /**< ID for component that stores reflection data for a primitive type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsEnum);            /**< ID for component that stores reflection data for an enum type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsBitmask);         /**< ID for component that stores reflection data for a bitmask type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsConstants);       /**< ID for component that stores reflection data for constants. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsMember);          /**< ID for component that stores reflection data for struct members. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsMemberRanges);    /**< ID for component that stores min and max ranges for member values. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsStruct);          /**< ID for component that stores reflection data for a struct type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsArray);           /**< ID for component that stores reflection data for an array type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsVector);          /**< ID for component that stores reflection data for a vector type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsOpaque);          /**< ID for component that stores reflection data for an opaque type. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsUnit);            /**< ID for component that stores unit data. */
+FLECS_API extern const ecs_entity_t ecs_id(EcsUnitPrefix);      /**< ID for component that stores unit prefix data. */
 FLECS_API extern const ecs_entity_t EcsQuantity;                /**< Tag added to unit quantities. */
 
-/* Primitive type component ids */
+/* Primitive type component IDs */
 
-FLECS_API extern const ecs_entity_t ecs_id(ecs_bool_t);         /**< Builtin boolean type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_char_t);         /**< Builtin char type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_byte_t);         /**< Builtin byte type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_u8_t);           /**< Builtin 8 bit unsigned int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_u16_t);          /**< Builtin 16 bit unsigned int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_u32_t);          /**< Builtin 32 bit unsigned int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_u64_t);          /**< Builtin 64 bit unsigned int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_uptr_t);         /**< Builtin pointer sized unsigned int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_i8_t);           /**< Builtin 8 bit signed int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_i16_t);          /**< Builtin 16 bit signed int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_i32_t);          /**< Builtin 32 bit signed int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_i64_t);          /**< Builtin 64 bit signed int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_iptr_t);         /**< Builtin pointer sized signed int type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_f32_t);          /**< Builtin 32 bit floating point type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_f64_t);          /**< Builtin 64 bit floating point type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_string_t);       /**< Builtin string type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_entity_t);       /**< Builtin entity type. */
-FLECS_API extern const ecs_entity_t ecs_id(ecs_id_t);           /**< Builtin (component) id type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_bool_t);         /**< Built-in boolean type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_char_t);         /**< Built-in char type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_byte_t);         /**< Built-in byte type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_u8_t);           /**< Built-in 8-bit unsigned int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_u16_t);          /**< Built-in 16-bit unsigned int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_u32_t);          /**< Built-in 32-bit unsigned int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_u64_t);          /**< Built-in 64-bit unsigned int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_uptr_t);         /**< Built-in pointer-sized unsigned int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_i8_t);           /**< Built-in 8-bit signed int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_i16_t);          /**< Built-in 16-bit signed int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_i32_t);          /**< Built-in 32-bit signed int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_i64_t);          /**< Built-in 64-bit signed int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_iptr_t);         /**< Built-in pointer-sized signed int type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_f32_t);          /**< Built-in 32-bit floating-point type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_f64_t);          /**< Built-in 64-bit floating-point type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_string_t);       /**< Built-in string type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_entity_t);       /**< Built-in entity type. */
+FLECS_API extern const ecs_entity_t ecs_id(ecs_id_t);           /**< Built-in (component) ID type. */
 
-/** Type kinds supported by meta addon */
+/** Type kinds supported by meta addon. */
 typedef enum ecs_type_kind_t {
     EcsPrimitiveType,
     EcsBitmaskType,
@@ -164,11 +162,11 @@ typedef enum ecs_type_kind_t {
 /** Component that is automatically added to every type with the right kind. */
 typedef struct EcsType {
     ecs_type_kind_t kind;  /**< Type kind. */
-    bool existing;         /**< Did the type exist or is it populated from reflection */
-    bool partial;          /**< Is the reflection data a partial type description */
+    bool existing;         /**< Whether the type existed or was populated from reflection. */
+    bool partial;          /**< Whether the reflection data is a partial type description. */
 } EcsType;
 
-/** Primitive type kinds supported by meta addon */
+/** Primitive type kinds supported by meta addon. */
 typedef enum ecs_primitive_kind_t {
     EcsBool = 1,
     EcsChar,
@@ -191,49 +189,50 @@ typedef enum ecs_primitive_kind_t {
     EcsPrimitiveKindLast = EcsId
 } ecs_primitive_kind_t;
 
-/** Component added to primitive types */
+/** Component added to primitive types. */
 typedef struct EcsPrimitive {
     ecs_primitive_kind_t kind;                     /**< Primitive type kind. */
 } EcsPrimitive;
 
-/** Component added to member entities */
+/** Component added to member entities. */
 typedef struct EcsMember {
     ecs_entity_t type;                             /**< Member type. */
-    int32_t count;                                 /**< Number of elements (for inline arrays). */
+    int32_t count;                                 /**< Number of elements for inline arrays. Leave to 0 for non-array members. */
     ecs_entity_t unit;                             /**< Member unit. */
     int32_t offset;                                /**< Member offset. */
     bool use_offset;                               /**< If offset should be explicitly used. */
 } EcsMember;
 
-/** Type expressing a range for a member value */
+/** Type expressing a range for a member value. */
 typedef struct ecs_member_value_range_t {
     double min;                                    /**< Min member value. */
     double max;                                    /**< Max member value. */
 } ecs_member_value_range_t;
 
-/** Component added to member entities to express valid value ranges */
+/** Component added to member entities to express valid value ranges. */
 typedef struct EcsMemberRanges {
     ecs_member_value_range_t value;                /**< Member value range. */
     ecs_member_value_range_t warning;              /**< Member value warning range. */
     ecs_member_value_range_t error;                /**< Member value error range. */
 } EcsMemberRanges;
 
-/** Element type of members vector in EcsStruct */
+/** Element type of members vector in EcsStruct. */
 typedef struct ecs_member_t {
-    /** Must be set when used with ecs_struct_desc_t */
+    /** Must be set when used with ecs_struct_desc_t. */
     const char *name;
 
     /** Member type. */
     ecs_entity_t type;
 
-    /** Element count (for inline arrays). May be set when used with ecs_struct_desc_t */
+    /** Element count (for inline arrays). May be set when used with 
+     * ecs_struct_desc_t. Leave to 0 for non-array members. */
     int32_t count;
 
     /** May be set when used with ecs_struct_desc_t. Member offset. */
     int32_t offset;
 
-    /** May be set when used with ecs_struct_desc_t, will be auto-populated if
-     * type entity is also a unit */
+    /** May be set when used with ecs_struct_desc_t. Will be auto-populated if
+     * the type entity is also a unit. */
     ecs_entity_t unit;
 
     /** Set to true to prevent automatic offset computation. This option should
@@ -250,68 +249,81 @@ typedef struct ecs_member_t {
      * range may be used by UI elements to style a value. */
     ecs_member_value_range_t error_range;
 
-    /** Numerical range outside of which the value represents an warning. This
+    /** Numerical range outside of which the value represents a warning. This
      * range may be used by UI elements to style a value. */
     ecs_member_value_range_t warning_range;
 
-    /** Should not be set by ecs_struct_desc_t */
+    /** Should not be set by ecs_struct_desc_t. */
     ecs_size_t size;
 
-    /** Should not be set by ecs_struct_desc_t */
+    /** Should not be set by ecs_struct_desc_t. */
     ecs_entity_t member;
 } ecs_member_t;
 
-/** Component added to struct type entities */
+/** Component added to struct type entities. */
 typedef struct EcsStruct {
-    /** Populated from child entities with Member component */
+    /** Populated from child entities with Member component. */
     ecs_vec_t members; /* vector<ecs_member_t> */
 } EcsStruct;
 
-/** Type that describes an enum constant */
+/** Type that describes an enum constant. */
 typedef struct ecs_enum_constant_t {
-    /** Must be set when used with ecs_enum_desc_t */
+    /** Must be set when used with ecs_enum_desc_t. */
     const char *name;
 
-    /** May be set when used with ecs_enum_desc_t */
-    int32_t value;
+    /** May be set when used with ecs_enum_desc_t. */
+    int64_t value;
 
-    /** Should not be set by ecs_enum_desc_t */
+    /** For when the underlying type is unsigned. */
+    uint64_t value_unsigned;
+
+    /** Should not be set by ecs_enum_desc_t. */
     ecs_entity_t constant;
 } ecs_enum_constant_t;
 
-/** Component added to enum type entities */
+/** Component added to enum type entities. */
 typedef struct EcsEnum {
-    /** Populated from child entities with Constant component */
-    ecs_map_t constants; /**< map<i32_t, ecs_enum_constant_t> */
+    ecs_entity_t underlying_type;  /**< Underlying type for enum. */
 } EcsEnum;
 
-/** Type that describes an bitmask constant */
+/** Type that describes a bitmask constant. */
 typedef struct ecs_bitmask_constant_t {
-    /** Must be set when used with ecs_bitmask_desc_t */
+    /** Must be set when used with ecs_bitmask_desc_t. */
     const char *name;
 
-    /** May be set when used with ecs_bitmask_desc_t */
-    ecs_flags32_t value;
+    /** May be set when used with ecs_bitmask_desc_t. */
+    ecs_flags64_t value;
 
-    /** Should not be set by ecs_bitmask_desc_t */
+    /** Keep layout the same with ecs_enum_constant_t. */
+    int64_t _unused;
+
+    /** Should not be set by ecs_bitmask_desc_t. */
     ecs_entity_t constant;
 } ecs_bitmask_constant_t;
 
-/** Component added to bitmask type entities */
+/** Component added to bitmask type entities. */
 typedef struct EcsBitmask {
-    /* Populated from child entities with Constant component */
-    ecs_map_t constants; /**< map<u32_t, ecs_bitmask_constant_t> */
+    int32_t dummy_;                /**< Unused. */
 } EcsBitmask;
 
-/** Component added to array type entities */
+/** Component with data structures for looking up enum or bitmask constants. */
+typedef struct EcsConstants {
+    /** Populated from child entities with Constant component. */
+    ecs_map_t *constants; /**< map<i32_t, ecs_enum_constant_t> */
+
+    /** Stores the constants in registration order. */
+    ecs_vec_t ordered_constants; /**< vector<ecs_enum_constants_t> */
+} EcsConstants;
+
+/** Component added to array type entities. */
 typedef struct EcsArray {
-    ecs_entity_t type; /**< Element type */
-    int32_t count;     /**< Number of elements */
+    ecs_entity_t type; /**< Element type. */
+    int32_t count;     /**< Number of elements. */
 } EcsArray;
 
-/** Component added to vector type entities */
+/** Component added to vector type entities. */
 typedef struct EcsVector {
-    ecs_entity_t type; /**< Element type */
+    ecs_entity_t type; /**< Element type. */
 } EcsVector;
 
 
@@ -319,18 +331,18 @@ typedef struct EcsVector {
 
 #if !defined(__cplusplus) || !defined(FLECS_CPP)
 
-/** Serializer interface */
+/** Serializer interface. */
 typedef struct ecs_serializer_t {
-    /* Serialize value */
+    /** Serialize value. */
     int (*value)(
-        const struct ecs_serializer_t *ser, /**< Serializer */
-        ecs_entity_t type,                  /**< Type of the value to serialize */
-        const void *value);                 /**< Pointer to the value to serialize */
+        const struct ecs_serializer_t *ser, /**< Serializer. */
+        ecs_entity_t type,                  /**< Type of the value to serialize. */
+        const void *value);                 /**< Pointer to the value to serialize. */
 
-    /* Serialize member */
+    /** Serialize member. */
     int (*member)(
-        const struct ecs_serializer_t *ser, /**< Serializer */
-        const char *member);                /**< Member name */
+        const struct ecs_serializer_t *ser, /**< Serializer. */
+        const char *member);                /**< Member name. */
 
     const ecs_world_t *world;               /**< The world. */
     void *ctx;                              /**< Serializer context. */
@@ -340,7 +352,7 @@ typedef struct ecs_serializer_t {
 
 } /* extern "C" { */
 
-/** Serializer interface (same layout as C, but with convenience methods) */
+/** Serializer interface (same layout as C, but with convenience methods). */
 typedef struct ecs_serializer_t {
     /* Serialize value */
     int (*value_)(
@@ -373,15 +385,31 @@ extern "C" {
 /** Callback invoked serializing an opaque type. */
 typedef int (*ecs_meta_serialize_t)(
     const ecs_serializer_t *ser,
-    const void *src);                  /**< Pointer to value to serialize */
+    const void *src);                  /**< Pointer to value to serialize. */
+
+
+/** Callback invoked to serialize an opaque struct member. */
+typedef int (*ecs_meta_serialize_member_t)(
+    const ecs_serializer_t *ser,
+    const void *src,                   /**< Pointer to value to serialize. */
+    const char* name);                 /**< Name of member to serialize. */
+
+/** Callback invoked to serialize an opaque vector or array element. */
+typedef int (*ecs_meta_serialize_element_t)(
+    const ecs_serializer_t *ser,
+    const void *src,                   /**< Pointer to value to serialize. */
+    size_t elem);                      /**< Element index to serialize. */
+
 
 /** Opaque type reflection data. 
  * An opaque type is a type with an unknown layout that can be mapped to a type
  * known to the reflection framework. See the opaque type reflection examples.
  */
 typedef struct EcsOpaque {
-    ecs_entity_t as_type;              /**< Type that describes the serialized output */
-    ecs_meta_serialize_t serialize;    /**< Serialize action */
+    ecs_entity_t as_type;              /**< Type that describes the serialized output. */
+    ecs_meta_serialize_t serialize;    /**< Serialize action. */
+    ecs_meta_serialize_member_t serialize_member; /**< Serialize member action. */
+    ecs_meta_serialize_element_t serialize_element; /**< Serialize element action. */
 
     /* Deserializer interface
      * Only override the callbacks that are valid for the opaque type. If a
@@ -389,71 +417,71 @@ typedef struct EcsOpaque {
      * interface, a conversion error is thrown.
      */
 
-    /** Assign bool value */
+    /** Assign bool value. */
     void (*assign_bool)(
         void *dst,
         bool value);
 
-    /** Assign char value */
+    /** Assign char value. */
     void (*assign_char)(
         void *dst,
         char value);
 
-    /** Assign int value */
+    /** Assign int value. */
     void (*assign_int)(
         void *dst,
         int64_t value);
 
-    /** Assign unsigned int value */
+    /** Assign unsigned int value. */
     void (*assign_uint)(
         void *dst,
         uint64_t value);
 
-    /** Assign float value */
+    /** Assign float value. */
     void (*assign_float)(
         void *dst,
         double value);
 
-    /** Assign string value */
+    /** Assign string value. */
     void (*assign_string)(
         void *dst,
         const char *value);
 
-    /** Assign entity value */
+    /** Assign entity value. */
     void (*assign_entity)(
         void *dst,
         ecs_world_t *world,
         ecs_entity_t entity);
 
-    /** Assign (component) id value */
+    /** Assign (component) ID value. */
     void (*assign_id)(
         void *dst,
         ecs_world_t *world,
         ecs_id_t id);
 
-    /** Assign null value */
+    /** Assign null value. */
     void (*assign_null)(
         void *dst);
 
-    /** Clear collection elements */
+    /** Clear collection elements. */
     void (*clear)(
         void *dst);
 
-    /** Ensure & get collection element */
+    /** Ensure and get collection element. */
     void* (*ensure_element)(
         void *dst,
         size_t elem);
 
-    /** Ensure & get element */
+    /** Ensure and get member. */
     void* (*ensure_member)(
         void *dst,
         const char *member);
 
-    /** Return number of elements */
+    /** Return number of elements. */
     size_t (*count)(
         const void *dst);
 
-    /** Resize to number of elements */
+    /** Resize to number of elements. */
     void (*resize)(
         void *dst,
         size_t count);
@@ -463,30 +491,30 @@ typedef struct EcsOpaque {
 /* Units */
 
 /** Helper type to describe translation between two units. Note that this
- * is not intended as a generic approach to unit conversions (e.g. from celsius
- * to fahrenheit) but to translate between units that derive from the same base
- * (e.g. meters to kilometers).
+ * is not intended as a generic approach to unit conversions (e.g., from Celsius
+ * to Fahrenheit) but to translate between units that derive from the same base
+ * (e.g., meters to kilometers).
  *
  * Note that power is applied to the factor. When describing a translation of
  * 1000, either use {factor = 1000, power = 1} or {factor = 1, power = 3}. */
 typedef struct ecs_unit_translation_t {
-    int32_t factor; /**< Factor to apply (e.g. "1000", "1000000", "1024") */
-    int32_t power;  /**< Power to apply to factor (e.g. "1", "3", "-9") */
+    int32_t factor; /**< Factor to apply (e.g., "1000", "1000000", "1024"). */
+    int32_t power;  /**< Power to apply to factor (e.g., "1", "3", "-9"). */
 } ecs_unit_translation_t;
 
 /** Component that stores unit data. */
 typedef struct EcsUnit {
     char *symbol;                                  /**< Unit symbol. */
-    ecs_entity_t prefix;                           /**< Order of magnitude prefix relative to derived */
-    ecs_entity_t base;                             /**< Base unit (e.g. "meters") */
-    ecs_entity_t over;                             /**< Over unit (e.g. "per second") */
-    ecs_unit_translation_t translation;            /**< Translation for derived unit */
+    ecs_entity_t prefix;                           /**< Order of magnitude prefix relative to derived. */
+    ecs_entity_t base;                             /**< Base unit (e.g., "meters"). */
+    ecs_entity_t over;                             /**< Over unit (e.g., "per second"). */
+    ecs_unit_translation_t translation;            /**< Translation for derived unit. */
 } EcsUnit;
 
 /** Component that stores unit prefix data. */
 typedef struct EcsUnitPrefix {
-    char *symbol;                                 /**< Symbol of prefix (e.g. "K", "M", "Ki") */
-    ecs_unit_translation_t translation;           /**< Translation of prefix */
+    char *symbol;                                 /**< Symbol of prefix (e.g., "K", "M", "Ki"). */
+    ecs_unit_translation_t translation;           /**< Translation of prefix. */
 } EcsUnitPrefix;
 
 
@@ -494,22 +522,27 @@ typedef struct EcsUnitPrefix {
 
 /** Serializer instruction opcodes. 
  * The meta type serializer works by generating a flattened array with 
- * instructions that tells a serializer what kind of fields can be found in a
+ * instructions that tell a serializer what kind of fields can be found in a
  * type at which offsets.
 */
-typedef enum ecs_meta_type_op_kind_t {
-    EcsOpArray,
-    EcsOpVector,
-    EcsOpOpaque,
-    EcsOpPush,
-    EcsOpPop,
+typedef enum ecs_meta_op_kind_t {
+    EcsOpPushStruct,   /**< Push struct. */
+    EcsOpPushArray,    /**< Push array. */
+    EcsOpPushVector,   /**< Push vector. */
+    EcsOpPop,          /**< Pop scope. */
 
-    EcsOpScope, /**< Marks last constant that can open/close a scope */
+    EcsOpOpaqueStruct, /**< Opaque struct. */
+    EcsOpOpaqueArray,  /**< Opaque array. */
+    EcsOpOpaqueVector, /**< Opaque vector. */
+    EcsOpForward,      /**< Forward to type. Allows for recursive types. */
 
+    EcsOpScope,        /**< Marks last constant that can open or close a scope. */
+
+    EcsOpOpaqueValue,  /**< Opaque value. */
     EcsOpEnum,
     EcsOpBitmask,
 
-    EcsOpPrimitive, /**< Marks first constant that's a primitive */
+    EcsOpPrimitive,    /**< Marks first constant that's a primitive. */
 
     EcsOpBool,
     EcsOpChar,
@@ -530,75 +563,89 @@ typedef enum ecs_meta_type_op_kind_t {
     EcsOpEntity,
     EcsOpId,
     EcsMetaTypeOpKindLast = EcsOpId
-} ecs_meta_type_op_kind_t;
+} ecs_meta_op_kind_t;
 
 /** Meta type serializer instruction data. */
-typedef struct ecs_meta_type_op_t {
-    ecs_meta_type_op_kind_t kind;                  /**< Instruction opcode. */
-    ecs_size_t offset;                             /**< Offset of current field */
-    int32_t count;                                 /**< Number of elements (for inline arrays). */
-    const char *name;                              /**< Name of value (only used for struct members) */
-    int32_t op_count;                              /**< Number of operations until next field or end */
-    ecs_size_t size;                               /**< Size of type of operation */
-    ecs_entity_t type;                             /**< Type entity */
-    int32_t member_index;                          /**< Index of member in struct */
-    ecs_hashmap_t *members;                        /**< string -> member index (structs only) */
-} ecs_meta_type_op_t;
+typedef struct ecs_meta_op_t {
+    ecs_meta_op_kind_t kind;                       /**< Instruction opcode. */
+    ecs_meta_op_kind_t underlying_kind;            /**< Underlying type kind (for enums). */
+    ecs_size_t offset;                             /**< Offset of current field. */
+    const char *name;                              /**< Name of value (only used for struct members). */
+    ecs_size_t elem_size;                          /**< Element size (for PushArray or PushVector) and element count (for PopArray). */
+    int16_t op_count;                              /**< Number of operations until next field or end. */
+    int16_t member_index;                          /**< Index of member in struct. */
+    ecs_entity_t type;                             /**< Type entity. */
+    const ecs_type_info_t *type_info;              /**< Type info. */
+    union {
+        ecs_hashmap_t *members;                    /**< string -> member index (structs). */
+        ecs_map_t *constants;                      /**< (u)int -> constant entity (enums and bitmasks). */
+        ecs_meta_serialize_t opaque;               /**< Serialize callback for opaque types. */
+    } is;
+} ecs_meta_op_t;
 
 /** Component that stores the type serializer.
- * Added to all types with reflection data.
- */
+ * Added to all types with reflection data. */
 typedef struct EcsTypeSerializer {
-    ecs_vec_t ops;      /**< vector<ecs_meta_type_op_t> */
+    ecs_type_kind_t kind;         /**< Quick access to type kind (same as EcsType). */
+    ecs_vec_t ops;                /**< vector<ecs_meta_op_t> */
 } EcsTypeSerializer;
 
 
 /* Deserializer utilities */
 
 /** Maximum level of type nesting. 
- * >32 levels of nesting is not sane.
+ * >32 levels of nesting are not sane.
  */
 #define ECS_META_MAX_SCOPE_DEPTH (32)
 
-/** Type with information about currently serialized scope. */
+/** Type with information about the currently iterated scope. */
 typedef struct ecs_meta_scope_t {
-    ecs_entity_t type;                             /**< The type being iterated */
-    ecs_meta_type_op_t *ops;                       /**< The type operations (see ecs_meta_type_op_t) */
-    int32_t op_count;                              /**< Number of operations in ops array to process */
-    int32_t op_cur;                                /**< Current operation */
-    int32_t elem_cur;                              /**< Current element (for collections) */
-    int32_t prev_depth;                            /**< Depth to restore, in case dotmember was used */
-    void *ptr;                                     /**< Pointer to the value being iterated */
-    const EcsComponent *comp;                      /**< Pointer to component, in case size/alignment is needed */
-    const EcsOpaque *opaque;                       /**< Opaque type interface */
-    ecs_vec_t *vector;                             /**< Current vector, in case a vector is iterated */
-    ecs_hashmap_t *members;                        /**< string -> member index */
-    bool is_collection;                            /**< Is the scope iterating elements? */
-    bool is_inline_array;                          /**< Is the scope iterating an inline array? */
-    bool is_empty_scope;                           /**< Was scope populated (for collections) */
+    ecs_entity_t type;                             /**< The type being iterated. */
+    ecs_meta_op_t *ops;                       /**< The type operations (see ecs_meta_op_t). */
+    int16_t ops_count;                             /**< Number of elements in ops. */
+    int16_t ops_cur;                               /**< Current element in ops. */
+    int16_t prev_depth;                            /**< Depth to restore, in case dotmember was used. */
+    void *ptr;                                     /**< Pointer to ops[0]. */
+    const EcsOpaque *opaque;                       /**< Opaque type interface. */
+    ecs_hashmap_t *members;                        /**< string -> member index. */
+    bool is_collection;                            /**< Whether the scope is iterating elements. */
+    bool is_empty_scope;                           /**< Whether the scope was populated (for vectors). */
+    bool is_moved_scope;                           /**< Whether the scope was moved in (with ecs_meta_elem(), for vectors). */
+    int32_t elem, elem_count;                      /**< Set for collections. */
 } ecs_meta_scope_t;
 
-/** Type that enables iterating/populating a value using reflection data. */
+/** Type that enables iterating and populating a value using reflection data. */
 typedef struct ecs_meta_cursor_t {
     const ecs_world_t *world;                      /**< The world. */
     ecs_meta_scope_t scope[ECS_META_MAX_SCOPE_DEPTH]; /**< Cursor scope stack. */
-    int32_t depth;                                 /**< Current scope depth. */
-    bool valid;                                    /**< Does the cursor point to a valid field. */
-    bool is_primitive_scope;                       /**< If in root scope, this allows for a push for primitive types */
+    int16_t depth;                                 /**< Current scope depth. */
+    bool valid;                                    /**< Whether the cursor points to a valid field. */
+    bool is_primitive_scope;                       /**< If in root scope, this allows for a push for primitive types. */
 
-    /** Custom entity lookup action for overriding default ecs_lookup */
-    ecs_entity_t (*lookup_action)(const ecs_world_t*, const char*, void*);
-    void *lookup_ctx;                              /**< Context for lookup_action */
+    /** Custom entity lookup action for overriding default ecs_lookup(). */
+    ecs_entity_t (*lookup_action)(ecs_world_t*, const char*, void*);
+    void *lookup_ctx;                              /**< Context for lookup_action. */
 } ecs_meta_cursor_t;
 
+/** Convert serializer to string.
+ *
+ * @param world The world.
+ * @param type The type to convert.
+ * @return The serializer string, or NULL if failed.
+ */
+FLECS_API
+char* ecs_meta_serializer_to_str(
+    ecs_world_t *world,
+    ecs_entity_t type);
+
 /** Create meta cursor.
- * A meta cursor allows for walking over, reading and writing a value without
+ * A meta cursor allows for walking over, reading, and writing a value without
  * having to know its type at compile time.
  * 
  * When a value is assigned through the cursor API, it will get converted to
  * the actual value of the underlying type. This allows the underlying type to
  * change without having to update the serialized data. For example, an integer
- * field can be set by a string, a floating point can be set as integer etc.
+ * field can be set by a string, a floating-point value can be set as an integer, etc.
  * 
  * @param world The world.
  * @param type The type of the value.
@@ -650,19 +697,44 @@ int ecs_meta_member(
     ecs_meta_cursor_t *cursor,
     const char *name);
 
+/** Same as ecs_meta_member(), but doesn't throw an error.
+ * 
+ * @param cursor The cursor.
+ * @param name The name of the member.
+ * @return Zero if success, non-zero if failed.
+ * @see ecs_meta_member()
+ */
+FLECS_API
+int ecs_meta_try_member(
+    ecs_meta_cursor_t *cursor,
+    const char *name);
+
 /** Move cursor to member.
  * Same as ecs_meta_member(), but with support for "foo.bar" syntax.
  * 
  * @param cursor The cursor.
  * @param name The name of the member.
  * @return Zero if success, non-zero if failed.
+ * @see ecs_meta_member()
  */
 FLECS_API
 int ecs_meta_dotmember(
     ecs_meta_cursor_t *cursor,
     const char *name);
 
-/** Push a scope (required/only valid for structs & collections).
+/** Same as ecs_meta_dotmember(), but doesn't throw an error.
+ * 
+ * @param cursor The cursor.
+ * @param name The name of the member.
+ * @return Zero if success, non-zero if failed.
+ * @see ecs_meta_dotmember()
+ */
+FLECS_API
+int ecs_meta_try_dotmember(
+    ecs_meta_cursor_t *cursor,
+    const char *name);
+
+/** Push a scope (required and only valid for structs and collections).
  * 
  * @param cursor The cursor.
  * @return Zero if success, non-zero if failed.
@@ -680,7 +752,7 @@ FLECS_API
 int ecs_meta_pop(
     ecs_meta_cursor_t *cursor);
 
-/** Is the current scope a collection?.
+/** Is the current scope a collection?
  * 
  * @param cursor The cursor.
  * @return True if current scope is a collection, false if not.
@@ -726,7 +798,7 @@ ecs_entity_t ecs_meta_get_member_id(
     const ecs_meta_cursor_t *cursor);
 
 /* The set functions assign the field with the specified value. If the value
- * does not have the same type as the field, it will be cased to the field type.
+ * does not have the same type as the field, it will be cast to the field type.
  * If no valid conversion is available, the operation will fail. */
 
 /** Set field with boolean value.
@@ -817,7 +889,7 @@ int ecs_meta_set_entity(
     ecs_meta_cursor_t *cursor,
     ecs_entity_t value);
 
-/** Set field with (component) id value.
+/** Set field with (component) ID value.
  * 
  * @param cursor The cursor.
  * @param value The value to set.
@@ -916,12 +988,13 @@ FLECS_API
 ecs_entity_t ecs_meta_get_entity(
     const ecs_meta_cursor_t *cursor);
 
-/** Get field value as (component) id.
+/** Get field value as (component) ID.
  * This operation can convert from an entity. 
  * 
  * @param cursor The cursor.
  * @return The value of the current field.
  */
+FLECS_API
 ecs_id_t ecs_meta_get_id(
     const ecs_meta_cursor_t *cursor);
 
@@ -929,11 +1002,24 @@ ecs_id_t ecs_meta_get_id(
  * 
  * @param type_kind The primitive type kind of the value.
  * @param ptr Pointer to a value of a primitive type.
- * @return The value in floating point format.
+ * @return The value in floating-point format.
  */
 FLECS_API
 double ecs_meta_ptr_to_float(
     ecs_primitive_kind_t type_kind,
+    const void *ptr);
+
+/** Get element count for array or vector operations.
+ * The operation must either be EcsOpPushArray or EcsOpPushVector. If the 
+ * operation is EcsOpPushArray, the provided pointer may be NULL.
+ * 
+ * @param op The serializer operation.
+ * @param ptr Pointer to the array or vector value.
+ * @return The number of elements.
+ */
+FLECS_API
+ecs_size_t ecs_meta_op_get_elem_count(
+    const ecs_meta_op_t *op,
     const void *ptr);
 
 /* API functions for creating meta types */
@@ -960,6 +1046,7 @@ ecs_entity_t ecs_primitive_init(
 typedef struct ecs_enum_desc_t {
     ecs_entity_t entity;       /**< Existing entity to use for type (optional). */
     ecs_enum_constant_t constants[ECS_MEMBER_DESC_CACHE_SIZE]; /**< Enum constants. */
+    ecs_entity_t underlying_type; /**< Underlying type for enum. */
 } ecs_enum_desc_t;
 
 /** Create a new enum type. 
@@ -1033,6 +1120,7 @@ ecs_entity_t ecs_vector_init(
 typedef struct ecs_struct_desc_t {
     ecs_entity_t entity; /**< Existing entity to use for type (optional). */
     ecs_member_t members[ECS_MEMBER_DESC_CACHE_SIZE]; /**< Struct members. */
+    bool create_member_entities; /**< Create entities for members. */
 } ecs_struct_desc_t;
 
 /** Create a new struct type. 
@@ -1046,6 +1134,45 @@ ecs_entity_t ecs_struct_init(
     ecs_world_t *world,
     const ecs_struct_desc_t *desc);
 
+/** Add member to struct.
+ * This operation adds a member to a struct type. If the provided entity is not
+ * a struct type, this operation will add the Struct component.
+ * 
+ * @param world The world.
+ * @param type The struct type.
+ * @param member The member data.
+ */
+FLECS_API
+int ecs_struct_add_member(
+    ecs_world_t *world,
+    ecs_entity_t type,
+    const ecs_member_t *member);
+
+/** Get member by name from struct.
+ * 
+ * @param world The world.
+ * @param type The struct type.
+ * @param name The member name.
+ * @return The member if found, or NULL if no member with the provided name exists.
+ */
+FLECS_API
+ecs_member_t* ecs_struct_get_member(
+    ecs_world_t *world,
+    ecs_entity_t type,
+    const char *name);
+
+/** Get member by index from struct.
+ * 
+ * @param world The world.
+ * @param type The struct type.
+ * @param i The member index.
+ * @return The member if found, or NULL if index is larger than the number of members for the struct.
+ */
+FLECS_API
+ecs_member_t* ecs_struct_get_nth_member(
+    ecs_world_t *world,
+    ecs_entity_t type,
+    int32_t i);
 
 /** Used with ecs_opaque_init(). */
 typedef struct ecs_opaque_desc_t {
@@ -1057,8 +1184,8 @@ typedef struct ecs_opaque_desc_t {
  * Opaque types are types of which the layout doesn't match what can be modelled
  * with the primitives of the meta framework, but which have a structure
  * that can be described with meta primitives. Typical examples are STL types
- * such as std::string or std::vector, types with a nontrivial layout, and types
- * that only expose getter/setter methods.
+ * such as std::string or std::vector, types with a non-trivial layout, and types
+ * that only expose getter and setter methods.
  *
  * An opaque type is a combination of a serialization function, and a handle to
  * a meta type which describes the structure of the serialized output. For
@@ -1086,16 +1213,16 @@ typedef struct ecs_unit_desc_t {
     /** Existing entity to associate with unit (optional). */
     ecs_entity_t entity;
 
-    /** Unit symbol, e.g. "m", "%", "g". (optional). */
+    /** Unit symbol, e.g., "m", "%", "g". (optional). */
     const char *symbol;
 
-    /** Unit quantity, e.g. distance, percentage, weight. (optional). */
+    /** Unit quantity, e.g., distance, percentage, weight. (optional). */
     ecs_entity_t quantity;
 
-    /** Base unit, e.g. "meters" (optional). */
+    /** Base unit, e.g., "meters" (optional). */
     ecs_entity_t base;
 
-    /** Over unit, e.g. "per second" (optional). */
+    /** Over unit, e.g., "per second" (optional). */
     ecs_entity_t over;
 
     /** Translation to apply to derived unit (optional). */
@@ -1106,7 +1233,7 @@ typedef struct ecs_unit_desc_t {
      * set, setting prefix will auto-populate it.
      * Additionally, setting the prefix will enforce that the symbol (if set)
      * is consistent with the prefix symbol + symbol of the derived unit. If the
-     * symbol is not set, it will be auto populated. */
+     * symbol is not set, it will be auto-populated. */
     ecs_entity_t prefix;
 } ecs_unit_desc_t;
 
@@ -1127,7 +1254,7 @@ typedef struct ecs_unit_prefix_desc_t {
     /** Existing entity to associate with unit prefix (optional). */
     ecs_entity_t entity;
 
-    /** Unit symbol, e.g. "m", "%", "g". (optional). */
+    /** Unit prefix symbol, e.g., "K", "M", "Ki". (optional). */
     const char *symbol;
 
     /** Translation to apply to derived unit (optional). */

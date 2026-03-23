@@ -10,7 +10,7 @@
 
 #include "engine.h"
 
-#include <flecs/flecs.h>
+#include <flecs/distr/flecs.h>
 
 #include <function2.hpp>
 

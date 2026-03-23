@@ -4,7 +4,6 @@
  */
 
 #include "private_api.h"
-#include <ctype.h>
 
 #define ECS_NAME_BUFFER_LENGTH (64)
 
@@ -27,10 +26,9 @@ bool flecs_path_append(
 
     if (child && ecs_is_alive(world, child)) {
         ecs_record_t *r = flecs_entities_get(world, child);
-        bool hasName = false;
-        if (r && r->table) {
-            hasName = r->table->flags & EcsTableHasName;
-        }
+        ecs_assert(r != NULL, ECS_INVALID_OPERATION, NULL);
+        ecs_assert(r->table != NULL, ECS_INTERNAL_ERROR, NULL);
+        bool hasName = r->table->flags & EcsTableHasName;
 
         if (hasName) {
             cur = ecs_get_target(world, child, EcsChildOf, 0);
@@ -131,7 +129,11 @@ ecs_entity_t flecs_name_to_id(
 {
     ecs_assert(name != NULL, ECS_INVALID_PARAMETER, NULL);
     ecs_assert(name[0] == '#', ECS_INVALID_PARAMETER, NULL);
-    return flecs_ito(uint64_t, atoll(name + 1));
+    ecs_entity_t res = flecs_ito(uint64_t, atoll(name + 1));
+    if (res >= UINT32_MAX) {
+        return 0; /* Invalid id */
+    }
+    return res;
 }
 
 static
@@ -185,27 +187,29 @@ const char* flecs_path_elem(
     ecs_size_t size = size_out ? *size_out : 0;
 
     for (ptr = path; (ch = *ptr); ptr ++) {
+        bool escaped = false;
         if (ch == '<') {
             template_nesting ++;
         } else if (ch == '>') {
             template_nesting --;
         } else if (ch == '\\') {
             ptr ++;
-            if (buffer) {
-                buffer[pos] = ptr[0];
+            ch = ptr[0];
+            if (!ch) {
+                break;
             }
-            pos ++;
-            continue;
+            escaped = true;
         }
 
-        ecs_check(template_nesting >= 0, ECS_INVALID_PARAMETER, path);
+        ecs_check(template_nesting >= 0, ECS_INVALID_PARAMETER, "%s", path);
 
-        if (!template_nesting && flecs_is_sep(&ptr, sep)) {
+        if (!escaped && !template_nesting && flecs_is_sep(&ptr, sep)) {
             break;
         }
 
         if (buffer) {
-            if (pos == (size - 1)) {
+            ecs_assert(size > 0, ECS_INTERNAL_ERROR, NULL);
+            if (pos >= (size - 1)) {
                 if (size == ECS_NAME_BUFFER_LENGTH) { /* stack buffer */
                     char *new_buffer = ecs_os_malloc(size * 2 + 1);
                     ecs_os_memcpy(new_buffer, buffer, size);
@@ -228,7 +232,7 @@ const char* flecs_path_elem(
         *size_out = size;
     }
 
-    if (pos) {
+    if (pos || ptr[0]) {
         return ptr;
     } else {
         return NULL;
@@ -256,8 +260,11 @@ ecs_entity_t flecs_get_parent_from_path(
     const char **path_ptr,
     const char *sep,
     const char *prefix,
-    bool new_entity)
+    bool new_entity,
+    bool *error)
 {
+    ecs_assert(error != NULL, ECS_INTERNAL_ERROR, NULL);
+
     bool start_from_root = false;
     const char *path = *path_ptr;
 
@@ -269,6 +276,10 @@ ecs_entity_t flecs_get_parent_from_path(
 
     if (path[0] == '#') {
         parent = flecs_name_to_id(path);
+        if (!parent && ecs_os_strncmp(path, "#0", 2)) {
+            *error = true;
+            return 0;
+        }
 
         path ++;
         while (path[0] && isdigit(path[0])) {
@@ -295,7 +306,9 @@ ecs_entity_t flecs_get_parent_from_path(
 }
 
 static
-void flecs_on_set_symbol(ecs_iter_t *it) {
+void flecs_on_set_symbol(
+    ecs_iter_t *it) 
+{
     EcsIdentifier *n = ecs_field(it, EcsIdentifier, 0);
     ecs_world_t *world = it->real_world;
 
@@ -307,18 +320,233 @@ void flecs_on_set_symbol(ecs_iter_t *it) {
     }
 }
 
-void flecs_bootstrap_hierarchy(ecs_world_t *world) {
+void flecs_bootstrap_entity_name(
+    ecs_world_t *world) 
+{
     ecs_observer(world, {
-        .entity = ecs_entity(world, { .parent = EcsFlecsInternals }),
         .query.terms[0] = {
             .id = ecs_pair(ecs_id(EcsIdentifier), EcsSymbol)
         },
         .callback = flecs_on_set_symbol,
         .events = {EcsOnSet},
-        .yield_existing = true
+        .yield_existing = true,
+        .global_observer = true
     });
 }
 
+void ecs_on_set(EcsIdentifier)(
+    ecs_iter_t *it) 
+{
+    ecs_world_t *world = it->real_world;
+    EcsIdentifier *ptr = ecs_field(it, EcsIdentifier, 0);
+
+    ecs_assert(it->table != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    ecs_entity_t evt = it->event;
+    ecs_id_t evt_id = it->event_id;
+    ecs_entity_t kind = ECS_PAIR_SECOND(evt_id); /* Name, Symbol, Alias */
+    ecs_id_t pair = ecs_childof(0);
+    ecs_hashmap_t *index = NULL;
+    bool has_parent = false;
+    EcsParent *parents = NULL;
+
+    if (kind == EcsSymbol) {
+        index = &world->symbols;
+    } else if (kind == EcsAlias) {
+        index = &world->aliases;
+    } else if (kind == EcsName) {
+        ecs_assert(it->table != NULL, ECS_INTERNAL_ERROR, NULL);
+
+        if (it->table->flags & EcsTableHasParent) {
+            has_parent = true;
+            parents = ecs_table_get(world, it->table, EcsParent, it->offset);
+        } else {
+            ecs_search(world, it->table, ecs_childof(EcsWildcard), &pair);
+            ecs_assert(pair != 0, ECS_INTERNAL_ERROR, NULL);
+
+            ecs_component_record_t *cr = flecs_components_get(world, pair);
+            if (evt == EcsOnSet) {
+                index = flecs_component_name_index_ensure(world, cr);
+            } else {
+                index = flecs_component_name_index_get(world, cr);
+            }
+        }
+    }
+
+    int i, count = it->count;
+
+    for (i = 0; i < count; i ++) {
+        EcsIdentifier *cur = &ptr[i];
+        uint64_t hash;
+        ecs_size_t len;
+        const char *name = cur->value;
+
+        if (kind == EcsName) {
+            ecs_assert((world->flags & (EcsWorldInit|EcsWorldFini)) || 
+                !(cur->index) ||
+                !(it->table->flags & EcsTableHasBuiltins), 
+                    ECS_INVALID_OPERATION, 
+                    "cannot rename builtin entity to '%s'", name);
+            ecs_assert((world->flags & (EcsWorldInit|EcsWorldFini)) ||
+                (it->entities[i] != EcsFlecs),
+                ECS_INVALID_OPERATION,
+                    "cannot rename flecs root module");
+            ecs_assert((world->flags & (EcsWorldInit|EcsWorldFini)) ||
+                (it->entities[i] != EcsFlecsCore),
+                ECS_INVALID_OPERATION,
+                    "cannot rename flecs.core module");
+
+            if (has_parent) {
+                ecs_component_record_t *cr = flecs_components_get(
+                    world, ecs_childof(parents[i].value));
+                ecs_assert(cr != NULL, ECS_INTERNAL_ERROR, NULL);
+                index = flecs_component_name_index_ensure(world, cr);
+            }
+        }
+
+        if (cur->index && cur->index != index) {
+            /* If index doesn't match up, the value must have been copied from
+             * another entity, so reset index & cached index hash */
+            cur->index = NULL;
+            cur->index_hash = 0;
+        }
+
+        if (cur->value && (evt == EcsOnSet)) {
+            len = cur->length = ecs_os_strlen(name);
+            hash = cur->hash = flecs_hash(name, len);
+        } else {
+            len = cur->length = 0;
+            hash = cur->hash = 0;
+            cur->index = NULL;
+        }
+
+        if (index) {
+            uint64_t index_hash = cur->index_hash;
+            ecs_entity_t e = it->entities[i];
+
+            if (hash != index_hash) {
+                if (index_hash) {
+                    flecs_name_index_remove(index, e, index_hash);
+                }
+                if (hash) {
+                    flecs_name_index_ensure(index, e, name, len, hash);
+                    cur->index_hash = hash;
+                    cur->index = index;
+                }
+            } else {
+                /* Name didn't change, but the string could have been 
+                 * reallocated. Make sure name index points to correct string */
+                flecs_name_index_update_name(index, e, hash, name);
+            }
+        }
+    }
+}
+
+static
+void flecs_reparent_name_index_intern(
+    const ecs_entity_t *entities,
+    ecs_hashmap_t *src_index,
+    ecs_hashmap_t *dst_index,
+    EcsIdentifier *names,
+    int32_t count) 
+{
+    int32_t i;
+    for (i = 0; i < count; i ++) {
+        ecs_entity_t e = entities[i];
+        EcsIdentifier *name = &names[i];
+
+        ecs_assert(e != EcsFlecs, ECS_INVALID_OPERATION,
+            "cannot reparent flecs root module");
+        ecs_assert(e != EcsFlecsCore, ECS_INVALID_OPERATION,
+            "cannot reparent flecs.core module");
+
+        uint64_t index_hash = name->index_hash;
+        if (index_hash) {
+            flecs_name_index_remove(src_index, e, index_hash);
+        }
+    
+        if (dst_index) {
+            const char *name_str = name->value;
+            if (name_str) {
+                if (name->hash == 0) {
+                    name->length = ecs_os_strlen(name_str);
+                    name->hash = flecs_hash(name_str, name->length);
+                }
+
+                ecs_assert(name->hash != 0, ECS_INTERNAL_ERROR, NULL);
+        
+                flecs_name_index_ensure(
+                    dst_index, e, name_str, name->length, name->hash);
+                name->index = dst_index;
+            }
+        }
+    }
+}
+
+void flecs_reparent_name_index(
+    ecs_world_t *world,
+    ecs_table_t *dst,
+    ecs_table_t *src, 
+    int32_t offset,
+    int32_t count) 
+{
+    ecs_assert(dst != NULL, ECS_INTERNAL_ERROR, NULL);
+    if (!(dst->flags & EcsTableHasName)) {
+        /* If destination table doesn't have a name, we don't need to update the
+         * name index. Even if the src table had a name, the on_remove hook for
+         * EcsIdentifier will remove the entity from the index. */
+        return;
+    }
+
+    if (!src) {
+        src = &world->store.root;
+    }
+
+    ecs_hashmap_t *src_index = flecs_table_get_name_index(world, src);
+    ecs_hashmap_t *dst_index = flecs_table_get_name_index(world, dst);
+    ecs_assert(src_index != dst_index, ECS_INTERNAL_ERROR, NULL);
+    if ((!src_index && !dst_index)) {
+        return;
+    }
+
+    EcsIdentifier *names = ecs_table_get_pair(world, 
+        dst, EcsIdentifier, EcsName, offset);
+    ecs_assert(names != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    flecs_reparent_name_index_intern(&ecs_table_entities(dst)[offset],
+        src_index, dst_index, names, count);
+
+}
+
+void flecs_unparent_name_index(
+    ecs_world_t *world,
+    ecs_table_t *src,
+    ecs_table_t *dst,
+    int32_t offset,
+    int32_t count) 
+{
+    if (!(src->flags & EcsTableHasName)) {
+        return;
+    }
+
+    if (!dst || !(dst->flags & EcsTableHasName)) {
+        /* If destination table doesn't have a name, we don't need to update the
+         * name index. Even if the src table had a name, the on_remove hook for
+         * EcsIdentifier will remove the entity from the index. */
+        return;
+    }
+
+    ecs_hashmap_t *src_index = flecs_table_get_name_index(world, src);
+    ecs_hashmap_t *dst_index = dst ? flecs_table_get_name_index(world, dst) : NULL;
+    ecs_assert(src_index != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    EcsIdentifier *names = ecs_table_get_pair(world, 
+        src, EcsIdentifier, EcsName, offset);
+    ecs_assert(names != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    flecs_reparent_name_index_intern(&ecs_table_entities(src)[offset],
+        src_index, dst_index, names, count);
+}
 
 /* Public functions */
 
@@ -390,7 +618,11 @@ ecs_entity_t ecs_lookup_child(
     }
 
     ecs_id_t pair = ecs_childof(parent);
-    ecs_hashmap_t *index = flecs_id_name_index_get(world, pair);
+    ecs_component_record_t *cr = flecs_components_get(world, pair);
+    ecs_hashmap_t *index = NULL;
+    if (cr) {
+        index = flecs_component_name_index_get(world, cr);
+    }
     if (index) {
         return flecs_name_index_find(index, name, 0, 0);
     } else {
@@ -447,6 +679,8 @@ ecs_entity_t ecs_lookup_path_w_sep(
     }
 
     ecs_check(world != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_check(!parent || ecs_is_valid(world, parent), 
+        ECS_INVALID_PARAMETER, NULL);
     const ecs_world_t *stage = world;
     world = ecs_get_world(world);
 
@@ -476,8 +710,12 @@ ecs_entity_t ecs_lookup_path_w_sep(
         sep = ".";
     }
 
+    bool error = false;
     parent = flecs_get_parent_from_path(
-        stage, parent, &path, sep, prefix, true);
+        stage, parent, &path, sep, prefix, true, &error);
+    if (error) {
+        return 0;
+    }
 
     if (parent && !(parent = ecs_get_alive(world, parent))) {
         return 0;
@@ -612,9 +850,6 @@ void flecs_add_path(
         ecs_add_pair(world, entity, EcsChildOf, parent);
     }
 
-    ecs_assert(name[0] != '#', ECS_INVALID_PARAMETER, 
-        "path should not contain identifier with #");
-
     ecs_set_name(world, entity, name);
 
     if (defer_suspend) {
@@ -633,6 +868,10 @@ ecs_entity_t ecs_add_path_w_sep(
     const char *prefix)
 {
     ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    const ecs_world_t *real_world = world;
+    if (flecs_poly_is(world, ecs_stage_t)) {
+        real_world = ecs_get_world(world);
+    }
 
     if (!sep) {
         sep = ".";
@@ -651,8 +890,14 @@ ecs_entity_t ecs_add_path_w_sep(
     }
 
     bool root_path = flecs_is_root_path(path, prefix);
+    bool error = false;
     parent = flecs_get_parent_from_path(
-        world, parent, &path, sep, prefix, !entity);
+        world, parent, &path, sep, prefix, !entity, &error);
+    if (error) {
+        /* Invalid id */
+        ecs_err("invalid identifier: '%s'", path);
+        return 0;
+    }
 
     char buff[ECS_NAME_BUFFER_LENGTH];
     const char *ptr = path;
@@ -663,7 +908,7 @@ ecs_entity_t ecs_add_path_w_sep(
      * immediately updated. Without this, we could create multiple entities for
      * the same name in a single command queue. */
     bool suspend_defer = ecs_is_deferred(world) &&
-        !(world->flags & EcsWorldMultiThreaded);
+        !(real_world->flags & EcsWorldMultiThreaded);
         
     ecs_entity_t cur = parent;
     char *name = NULL;
@@ -706,7 +951,9 @@ ecs_entity_t ecs_add_path_w_sep(
         }
 
         if (entity && (cur != entity)) {
-            ecs_throw(ECS_ALREADY_DEFINED, name);
+            ecs_throw(ECS_ALREADY_DEFINED, "cannot assign name '%s' to "
+                "entity %u, name already used by entity '%s'", path, 
+                    (uint32_t)cur, flecs_errstr(ecs_get_path(world, entity)));
         }
 
         if (name) {
@@ -733,4 +980,120 @@ ecs_entity_t ecs_new_from_path_w_sep(
     const char *prefix)
 {
     return ecs_add_path_w_sep(world, 0, parent, path, sep, prefix);
+}
+
+static
+const char* flecs_get_identifier(
+    const ecs_world_t *world,
+    ecs_entity_t entity,
+    ecs_entity_t tag)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(ecs_is_alive(world, entity), ECS_INVALID_PARAMETER, NULL);
+
+    const EcsIdentifier *ptr = ecs_get_pair(
+        world, entity, EcsIdentifier, tag);
+
+    if (ptr) {
+        return ptr->value;
+    } else {
+        return NULL;
+    }
+error:
+    return NULL;
+}
+
+const char* ecs_get_name(
+    const ecs_world_t *world,
+    ecs_entity_t entity)
+{
+    return flecs_get_identifier(world, entity, EcsName);
+}
+
+const char* ecs_get_symbol(
+    const ecs_world_t *world,
+    ecs_entity_t entity)
+{
+    world = ecs_get_world(world);
+    if (ecs_owns_pair(world, entity, ecs_id(EcsIdentifier), EcsSymbol)) {
+        return flecs_get_identifier(world, entity, EcsSymbol);
+    } else {
+        return NULL;
+    }
+}
+
+ecs_entity_t flecs_set_identifier(
+    ecs_world_t *world,
+    ecs_stage_t *stage,
+    ecs_entity_t entity,
+    ecs_entity_t tag,
+    const char *name)
+{
+    ecs_check(world != NULL, ECS_INVALID_PARAMETER, NULL);
+    ecs_check(entity != 0 || name != NULL, ECS_INVALID_PARAMETER, NULL);
+
+    if (!entity) {
+        entity = ecs_new(world);
+    }
+
+    if (!name) {
+        ecs_remove_pair(world, entity, ecs_id(EcsIdentifier), tag);
+        return entity;
+    }
+
+    EcsIdentifier *ptr = ecs_ensure_pair(world, entity, EcsIdentifier, tag);
+    ecs_assert(ptr != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    if (tag == EcsName) {
+        /* Insert command after ensure, but before the name is potentially 
+         * freed. Even though the name is a const char*, it is possible that the
+         * application passed in the existing name of the entity which could 
+         * still cause it to be freed. */
+        flecs_defer_path(stage, 0, entity, name);
+    }
+
+    char *old = ptr->value;
+    ptr->value = ecs_os_strdup(name);
+
+    ecs_modified_pair(world, entity, ecs_id(EcsIdentifier), tag);
+
+    /* Free old name after updating name index in on_set handler. */
+    ecs_os_free(old);
+
+    return entity;
+error:
+    return 0;
+}
+
+ecs_entity_t ecs_set_name(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    const char *name)
+{
+    if (!entity) {
+        return ecs_entity(world, {
+            .name = name
+        });
+    }
+
+    ecs_stage_t *stage = flecs_stage_from_world(&world);
+    flecs_set_identifier(world, stage, entity, EcsName, name);
+
+    return entity;
+}
+
+ecs_entity_t ecs_set_symbol(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    const char *name)
+{
+    return flecs_set_identifier(world, NULL, entity, EcsSymbol, name);
+}
+
+void ecs_set_alias(
+    ecs_world_t *world,
+    ecs_entity_t entity,
+    const char *name)
+{
+    flecs_set_identifier(world, NULL, entity, EcsAlias, name);
 }

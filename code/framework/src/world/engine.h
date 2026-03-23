@@ -15,7 +15,7 @@
 
 #include "networking/network_peer.h"
 
-#include <flecs/flecs.h>
+#include <flecs/distr/flecs.h>
 #include <memory>
 
 #include "core_modules.h"

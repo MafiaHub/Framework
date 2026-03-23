@@ -530,9 +530,8 @@ void Lookup_resolve_builtin_symbols(void) {
 
     test_assert(ecs_lookup_symbol(world, "EcsComponent", false, true) == ecs_id(EcsComponent));
     test_assert(ecs_lookup_symbol(world, "EcsIdentifier", false, true) == ecs_id(EcsIdentifier));
-
-    test_assert(ecs_lookup_symbol(world, "EcsName", false, true) == EcsName);
-    test_assert(ecs_lookup_symbol(world, "EcsSymbol", false, true) == EcsSymbol);
+    test_assert(ecs_lookup_symbol(world, "EcsPoly", false, true) == ecs_id(EcsPoly));
+    test_assert(ecs_lookup_symbol(world, "EcsParent", false, true) == ecs_id(EcsParent));
 
     ecs_fini(world);
 }
@@ -947,5 +946,14 @@ void Lookup_lookup_path_65_chars(void) {
     test_assert(ecs_lookup(world, "Abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl."
         "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl") == e);
 
+    ecs_fini(world);
+}
+
+void Lookup_lookup_malformed(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t r = ecs_lookup(world, "''<'''. =!f'''!'''g '''\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'''''''");
+    test_assert(r == 0);
+    
     ecs_fini(world);
 }

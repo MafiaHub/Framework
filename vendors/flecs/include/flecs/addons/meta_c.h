@@ -24,11 +24,11 @@ extern "C" {
  * macro is not defined, it defaults to IMPL. */
 
 /* Define variables used by reflection utilities. This should only be defined
- * by the module itself, not by the code importing the module */
+ * by the module itself, not by the code importing the module. */
 /* #define ECS_META_IMPL IMPL */
 
-/* Don't define variables used by reflection utilities but still declare the
- * variable for the component id. This enables the reflection utilities to be
+/* Don't define variables used by reflection utilities, but still declare the
+ * variable for the component ID. This enables the reflection utilities to be
  * used for global component variables, even if no reflection is used. */
 /* #define ECS_META_IMPL DECLARE */
 
@@ -81,7 +81,7 @@ int ecs_meta_from_desc(
 
 /* ECS_STRUCT implementation */
 #define ECS_STRUCT_TYPE(name, ...)\
-    typedef struct __VA_ARGS__ name
+    typedef struct name __VA_ARGS__ name
 
 #define ECS_STRUCT_ECS_META_IMPL ECS_STRUCT_IMPL
 
@@ -101,7 +101,7 @@ int ecs_meta_from_desc(
 
 /* ECS_ENUM implementation */
 #define ECS_ENUM_TYPE(name, ...)\
-    typedef enum __VA_ARGS__ name
+    typedef enum name __VA_ARGS__ name
 
 #define ECS_ENUM_ECS_META_IMPL ECS_ENUM_IMPL
 
@@ -121,7 +121,7 @@ int ecs_meta_from_desc(
 
 /* ECS_BITMASK implementation */
 #define ECS_BITMASK_TYPE(name, ...)\
-    typedef enum __VA_ARGS__ name
+    typedef enum name __VA_ARGS__ name
 
 #define ECS_BITMASK_ECS_META_IMPL ECS_BITMASK_IMPL
 
@@ -144,7 +144,7 @@ int ecs_meta_from_desc(
 }
 #endif
 
-#endif // FLECS_META_H
+#endif // FLECS_META_C_H
 
 /** @} */
 

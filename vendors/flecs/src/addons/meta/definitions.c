@@ -5,6 +5,7 @@
  */
 
 #include "meta.h"
+#include "type_support/type_support.h"
 
 #ifdef FLECS_META
 
@@ -51,6 +52,24 @@ void flecs_meta_import_core_definitions(
     });
 
     ecs_struct(world, {
+        .entity = ecs_id(EcsIdentifier),
+        .members = {
+            {
+                .name = "value", 
+                .type = ecs_id(ecs_string_t), 
+                .offset = offsetof(EcsIdentifier, value) 
+            }
+        }
+    });
+
+    ecs_struct(world, {
+        .entity = ecs_id(EcsParent),
+        .members = {
+            { .name = "value", .type = ecs_id(ecs_entity_t) }
+        }
+    });
+
+    ecs_struct(world, {
         .entity = ecs_id(EcsDefaultChildComponent),
         .members = {
             { .name = "component", .type = ecs_id(ecs_entity_t) }
@@ -71,7 +90,11 @@ void flecs_meta_import_core_definitions(
             }),
             .type = {
                 .size = ECS_SIZEOF(const char*),
-                .alignment = ECS_ALIGNOF(const char*)
+                .alignment = ECS_ALIGNOF(const char*),
+                .hooks = {
+                    .cmp = flecs_compare_string,
+                    .equals = flecs_equals_string
+                }
             }          
         }),
         .type = {
@@ -108,12 +131,13 @@ void flecs_meta_import_core_definitions(
 
     ecs_struct(world, {
         .entity = ecs_entity(world, { 
-            .name = "flecs.core.build_info_t",
+            .name = "flecs.core.BuildInfo",
             .root_sep = ""
         }),
         .members = {
             { .name = "compiler", .type = const_string },
             { .name = "addons", .type = addon_vec },
+            { .name = "flags", .type = addon_vec },
             { .name = "version", .type = const_string },
             { .name = "version_major", .type = ecs_id(ecs_i16_t) },
             { .name = "version_minor", .type = ecs_id(ecs_i16_t) },
@@ -123,22 +147,6 @@ void flecs_meta_import_core_definitions(
             { .name = "perf_trace", .type = ecs_id(ecs_bool_t) }
         }
     });
-}
-
-/* Initialize reflection data for doc components */
-static
-void flecs_meta_import_doc_definitions(
-    ecs_world_t *world)
-{
-    (void)world;
-#ifdef FLECS_DOC
-    ecs_struct(world, {
-        .entity = ecs_id(EcsDocDescription),
-        .members = {
-            { .name = "value", .type = ecs_id(ecs_string_t) }
-        }
-    });
-#endif
 }
 
 /* Initialize reflection data for meta components */
@@ -226,6 +234,13 @@ void flecs_meta_import_meta_definitions(
     });
 
     ecs_struct_init(world, &(ecs_struct_desc_t){
+        .entity = ecs_id(EcsEnum),
+        .members = {
+            { .name = "underlying_type", .type = ecs_id(ecs_entity_t) }
+        }
+    });
+
+    ecs_struct_init(world, &(ecs_struct_desc_t){
         .entity = ecs_id(EcsArray),
         .members = {
             { .name = "type", .type = ecs_id(ecs_entity_t) },
@@ -273,47 +288,12 @@ void flecs_meta_import_meta_definitions(
             { .name = "translation", .type = ut }
         }
     });
-
-    /* Meta doc definitions */
-#ifdef FLECS_DOC
-    ecs_entity_t meta = ecs_lookup(world, "flecs.meta");
-    ecs_doc_set_brief(world, meta, "Flecs module with reflection components");
-
-    ecs_doc_set_brief(world, ecs_id(EcsType), "Component added to types");
-    ecs_doc_set_brief(world, ecs_id(EcsTypeSerializer), "Component that stores reflection data in an optimized format");
-    ecs_doc_set_brief(world, ecs_id(EcsPrimitive), "Component added to primitive types");
-    ecs_doc_set_brief(world, ecs_id(EcsEnum), "Component added to enumeration types");
-    ecs_doc_set_brief(world, ecs_id(EcsBitmask), "Component added to bitmask types");
-    ecs_doc_set_brief(world, ecs_id(EcsMember), "Component added to struct members");
-    ecs_doc_set_brief(world, ecs_id(EcsStruct), "Component added to struct types");
-    ecs_doc_set_brief(world, ecs_id(EcsArray), "Component added to array types");
-    ecs_doc_set_brief(world, ecs_id(EcsVector), "Component added to vector types");
-
-    ecs_doc_set_brief(world, ecs_id(ecs_bool_t), "bool component");
-    ecs_doc_set_brief(world, ecs_id(ecs_char_t), "char component");
-    ecs_doc_set_brief(world, ecs_id(ecs_byte_t), "byte component");
-    ecs_doc_set_brief(world, ecs_id(ecs_u8_t), "8 bit unsigned int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_u16_t), "16 bit unsigned int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_u32_t), "32 bit unsigned int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_u64_t), "64 bit unsigned int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_uptr_t), "word sized unsigned int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_i8_t), "8 bit signed int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_i16_t), "16 bit signed int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_i32_t), "32 bit signed int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_i64_t), "64 bit signed int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_iptr_t), "word sized signed int component");
-    ecs_doc_set_brief(world, ecs_id(ecs_f32_t), "32 bit floating point component");
-    ecs_doc_set_brief(world, ecs_id(ecs_f64_t), "64 bit floating point component");
-    ecs_doc_set_brief(world, ecs_id(ecs_string_t), "string component");
-    ecs_doc_set_brief(world, ecs_id(ecs_entity_t), "entity component");
-#endif
 }
 
 void flecs_meta_import_definitions(
     ecs_world_t *world)
 {
     flecs_meta_import_core_definitions(world);
-    flecs_meta_import_doc_definitions(world);
     flecs_meta_import_meta_definitions(world);
 }
 

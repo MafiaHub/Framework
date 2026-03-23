@@ -46,7 +46,7 @@ namespace Framework::World {
             return 0;
         }
 
-        if(const auto serverID = entity.get<Modules::Base::ServerID>())
+        if(const auto serverID = entity.try_get<Modules::Base::ServerID>())
             return serverID->id;
         return 0;
     }
@@ -115,7 +115,7 @@ namespace Framework::World {
             if (!e.is_alive()) {
                 return;
             }
-            const auto tr = e.get_mut<World::Modules::Base::Transform>();
+            const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
@@ -126,7 +126,7 @@ namespace Framework::World {
             if (!e.is_alive()) {
                 return;
             }
-            const auto fr = e.get_mut<World::Modules::Base::Frame>();
+            const auto fr = e.try_get_mut<World::Modules::Base::Frame>();
             *fr           = msg->GetFrame();
         });
     }
@@ -136,10 +136,10 @@ namespace Framework::World {
             return;
         }
 
-        auto tr = entity.get_mut<Modules::Base::Transform>();
+        auto tr = entity.try_get_mut<Modules::Base::Transform>();
         *tr     = rhs;
 
-        const auto str = entity.get_mut<Modules::Base::Streamable>();
+        const auto str = entity.try_get_mut<Modules::Base::Streamable>();
         if (str->modEvents.updateTransformProc) {
             str->modEvents.updateTransformProc(entity);
         }

@@ -1,6 +1,6 @@
 /**
  * @file addons/cpp/utils/node_builder.hpp
- * @brief Base builder class for node objects, like systems, observers.
+ * @brief Base builder class for node objects, like systems and observers.
  */
 
 #pragma once
@@ -8,7 +8,7 @@
 namespace flecs {
 namespace _ {
 
-// Macros for template types so we don't go cross-eyed
+// Macros for template types so we don't go cross-eyed.
 #define FLECS_IBUILDER template<typename IBase, typename ... Components> class
 
 template<typename T, typename TDesc, typename Base, FLECS_IBUILDER IBuilder, typename ... Components>
@@ -37,8 +37,7 @@ public:
         auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(func));
         desc_.run = Delegate::run;
         desc_.run_ctx = ctx;
-        desc_.run_ctx_free = reinterpret_cast<
-            ecs_ctx_free_t>(_::free_obj<Delegate>);
+        desc_.run_ctx_free = _::free_obj<Delegate>;
         return T(world_, &desc_);
     }
 
@@ -50,8 +49,7 @@ public:
         auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(func));
         desc_.run = Delegate::run;
         desc_.run_ctx = ctx;
-        desc_.run_ctx_free = reinterpret_cast<
-            ecs_ctx_free_t>(_::free_obj<Delegate>);
+        desc_.run_ctx_free = _::free_obj<Delegate>;
         return each(FLECS_FWD(each_func));
     }
 
@@ -62,8 +60,18 @@ public:
         auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(func));
         desc_.callback = Delegate::run;
         desc_.callback_ctx = ctx;
-        desc_.callback_ctx_free = reinterpret_cast<
-            ecs_ctx_free_t>(_::free_obj<Delegate>);
+        desc_.callback_ctx_free = _::free_obj<Delegate>;
+        return T(world_, &desc_);
+    }
+
+    template <typename Func>
+    T run_each(Func&& func) {
+        using Delegate = typename _::each_delegate<
+            typename std::decay<Func>::type, Components...>;
+        auto ctx = FLECS_NEW(Delegate)(FLECS_FWD(func));
+        desc_.run = Delegate::run_each;
+        desc_.run_ctx = ctx;
+        desc_.run_ctx_free = _::free_obj<Delegate>;
         return T(world_, &desc_);
     }
 

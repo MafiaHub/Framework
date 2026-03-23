@@ -74,6 +74,25 @@ void Entity_new_nested_named_from_nested_scope(void) {
     test_str(child.path().c_str(), "::Foo::Bar::Hello::World");
 }
 
+void Entity_new_named_from_scope_with_custom_separator(void) {
+    flecs::world world;
+
+    auto entity = flecs::entity(world, "Foo.Bar", ".", ".");
+    test_assert(entity);
+    test_str(entity.name().c_str(), "Bar");
+    test_str(entity.path(".", ".").c_str(), ".Foo.Bar");
+
+    auto parent = world.lookup("Foo");
+    test_assert(parent != 0);
+    test_str(parent.name().c_str(), "Foo");
+
+    auto child = world.lookup("Foo.Bar", ".", ".");
+    test_assert(child != 0);
+    test_str(child.name().c_str(), "Bar");
+    test_str(child.path(".", ".").c_str(), ".Foo.Bar");
+}
+
+
 void Entity_new_add(void) {
     flecs::world world;
 
@@ -112,7 +131,7 @@ void Entity_new_set(void) {
     test_assert(entity);
     test_assert(entity.has<Position>());
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 }
@@ -131,11 +150,11 @@ void Entity_new_set_2(void) {
     test_assert(entity.has<Position>());
     test_assert(entity.has<Velocity>());
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -178,7 +197,7 @@ void Entity_set(void) {
     entity.set<Position>({10, 20});
     test_assert(entity.has<Position>());
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 }
@@ -193,12 +212,12 @@ void Entity_emplace_2(void) {
     test_assert(e.has<Position>());
     test_assert(e.has<Velocity>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_assert(v != NULL);
     test_int(v->x, 30);
     test_int(v->y, 40);
@@ -214,7 +233,7 @@ void Entity_emplace_after_add(void) {
     test_assert(e.has<Position>());
     test_assert(e.has<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_assert(v != NULL);
     test_int(v->x, 30);
     test_int(v->y, 40);
@@ -232,7 +251,7 @@ void Entity_emplace_after_add_pair(void) {
     test_assert(e.has(flecs::ChildOf, dummy));
     test_assert(e.has<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_assert(v != NULL);
     test_int(v->x, 30);
     test_int(v->y, 40);
@@ -246,7 +265,7 @@ void Entity_emplace_pair(void) {
 
     test_assert((e.has<Position, Tag>()));
 
-    const Position *p = e.get<Position, Tag>();
+    const Position *p = e.try_get<Position, Tag>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -262,7 +281,7 @@ void Entity_emplace_pair_w_entity(void) {
 
     test_assert((e.has<Position>(tag)));
 
-    const Position *p = e.get<Position>(tag);
+    const Position *p = e.try_get<Position>(tag);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -276,7 +295,7 @@ void Entity_emplace_pair_type(void) {
 
     test_assert((e.has<Position, Tag>()));
 
-    const Position *p = e.get<Position, Tag>();
+    const Position *p = e.try_get<Position, Tag>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -292,7 +311,7 @@ void Entity_emplace_pair_second(void) {
 
     test_assert((e.has_second<Position>(tag)));
 
-    const Position *p = e.get_second<Position>(tag);
+    const Position *p = e.try_get_second<Position>(tag);
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -389,11 +408,11 @@ void Entity_set_2(void) {
     test_assert(entity.has<Position>());
     test_assert(entity.has<Velocity>());
 
-    const Position *p = entity.get<Position>();
+    const Position *p = entity.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Velocity *v = entity.get<Velocity>();
+    const Velocity *v = entity.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);    
 }
@@ -594,17 +613,307 @@ void Entity_ensure_generic_w_id_t(void) {
     test_bool(invoked, true);
 }
 
-void Entity_get_mut_w_id(void) {
+void Entity_get_w_id(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    
+    const Position *p = static_cast<const Position*>(e.get(world.id<Position>()));
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_get_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_get_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    const auto [p, v] = e.get_n<Position, Velocity>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+    test_int(v.x, 1);
+    test_int(v.y, 2);
+}
+
+void Entity_get_r_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity();
+
+    e.set<Position>(tgt, {10, 20});
+    
+    const Position* p = static_cast<const Position*>(e.get(world.id<Position>(), tgt));
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_get_R_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity();
+    e.set<Position>(tgt, {10, 20});
+    
+    const Position& p = e.get<Position>(tgt);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_get_R_T(void) {
+    flecs::world world;
+
+    struct Tgt { };
+
+    flecs::entity e = world.entity();
+    e.set<Position, Tgt>({10, 20});
+    
+    const Position& p = e.get<Position, Tgt>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_get_r_T(void) {
+    flecs::world world;
+
+    flecs::entity rel = world.entity();
+    flecs::entity e = world.entity();
+    e.set_second<Position>(rel, {10, 20});
+    
+    const Position& p = e.get_second<Position>(rel);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_get_w_id_not_found(void) {
+    install_test_abort();
+
     flecs::world world;
 
     flecs::entity e = world.entity();
 
-    Position *p = static_cast<Position*>(e.get_mut(world.id<Position>()));
+    test_expect_abort();
+    e.get(world.id<Position>());
+}
+
+void Entity_get_T_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    test_expect_abort();
+    e.get<Position>();
+}
+
+void Entity_get_r_t_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    e.get(world.id<Position>(), tgt);
+}
+
+void Entity_get_R_t_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    e.get<Position>(tgt);
+}
+
+void Entity_get_R_T_not_found(void) {
+    struct Tgt { };
+
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    test_expect_abort();
+    e.get<Position, Tgt>();
+}
+
+void Entity_get_r_T_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    e.get_second<Position>(tgt);
+}
+
+void Entity_try_get_w_id(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    const Position *p = static_cast<const Position*>(e.try_get(world.id<Position>()));
     test_assert(p == nullptr);
 
     e.set<Position>({10, 20});
     
-    p = static_cast<Position*>(e.get_mut(world.id<Position>()));
+    p = static_cast<const Position*>(e.try_get(world.id<Position>()));
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    const Position *p = e.try_get<Position>();
+    test_assert(p == nullptr);
+
+    e.set<Position>({10, 20});
+    
+    p = e.try_get<Position>();
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    {
+        const auto [p, v] = e.try_get_n<Position, Velocity>();
+        test_assert(p == nullptr);
+        test_assert(v == nullptr);
+    }
+
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    {
+        const auto [p, v] = e.try_get_n<Position, Velocity>();
+        test_assert(p != nullptr);
+        test_assert(v != nullptr);
+
+        test_int(p->x, 10);
+        test_int(p->y, 20);
+        test_int(v->x, 1);
+        test_int(v->y, 2);
+    }
+}
+
+void Entity_try_get_r_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity();
+
+    const Position *p = static_cast<const Position*>(e.try_get_mut(world.id<Position>(), tgt));
+    test_assert(p == nullptr);
+
+    e.set<Position>(tgt, {10, 20});
+    
+    p = static_cast<const Position*>(e.get_mut(world.id<Position>(), tgt));
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_R_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity();
+
+    const Position *p = e.try_get<Position>(tgt);
+    test_assert(p == nullptr);
+
+    e.set<Position>(tgt, {10, 20});
+    
+    p = e.try_get<Position>(tgt);
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_R_T(void) {
+    flecs::world world;
+
+    struct Tgt { };
+
+    flecs::entity e = world.entity();
+
+    const Position *p = e.try_get<Position, Tgt>();
+    test_assert(p == nullptr);
+
+    e.set<Position, Tgt>({10, 20});
+    
+    p = e.try_get<Position, Tgt>();
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_r_T(void) {
+    flecs::world world;
+
+    flecs::entity rel = world.entity();
+    flecs::entity e = world.entity();
+
+    const Position *p = e.try_get_second<Position>(rel);
+    test_assert(p == nullptr);
+
+    e.set_second<Position>(rel, {10, 20});
+    
+    p = e.try_get_second<Position>(rel);
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_get_mut_w_id(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    
+    Position *p = static_cast<Position*>(e.get_mut(world.id<Position>()));
     test_assert(p != nullptr);
 
     test_int(p->x, 10);
@@ -615,17 +924,27 @@ void Entity_get_mut_T(void) {
     flecs::world world;
 
     flecs::entity e = world.entity();
-
-    Position *p = e.get_mut<Position>();
-    test_assert(p == nullptr);
-
     e.set<Position>({10, 20});
     
-    p = e.get_mut<Position>();
-    test_assert(p != nullptr);
+    Position& p = e.get_mut<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
 
-    test_int(p->x, 10);
-    test_int(p->y, 20);
+void Entity_get_mut_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    auto [p, v] = e.get_mut_n<Position, Velocity>();
+    p.x += 15;
+    v.y += 2;
+    test_int(e.get<Position>().x, 25);
+    test_int(e.get<Position>().y, 20);
+    test_int(e.get<Velocity>().x, 1);
+    test_int(e.get<Velocity>().y, 4);
 }
 
 void Entity_get_mut_r_t(void) {
@@ -634,12 +953,9 @@ void Entity_get_mut_r_t(void) {
     flecs::entity tgt = world.entity();
     flecs::entity e = world.entity();
 
-    Position *p = static_cast<Position*>(e.get_mut(world.id<Position>(), tgt));
-    test_assert(p == nullptr);
-
     e.set<Position>(tgt, {10, 20});
     
-    p = static_cast<Position*>(e.get_mut(world.id<Position>(), tgt));
+    Position* p = static_cast<Position*>(e.get_mut(world.id<Position>(), tgt));
     test_assert(p != nullptr);
 
     test_int(p->x, 10);
@@ -651,17 +967,11 @@ void Entity_get_mut_R_t(void) {
 
     flecs::entity tgt = world.entity();
     flecs::entity e = world.entity();
-
-    Position *p = e.get_mut<Position>(tgt);
-    test_assert(p == nullptr);
-
     e.set<Position>(tgt, {10, 20});
     
-    p = e.get_mut<Position>(tgt);
-    test_assert(p != nullptr);
-
-    test_int(p->x, 10);
-    test_int(p->y, 20);
+    Position& p = e.get_mut<Position>(tgt);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
 }
 
 void Entity_get_mut_R_T(void) {
@@ -670,17 +980,11 @@ void Entity_get_mut_R_T(void) {
     struct Tgt { };
 
     flecs::entity e = world.entity();
-
-    Position *p = e.get_mut<Position, Tgt>();
-    test_assert(p == nullptr);
-
     e.set<Position, Tgt>({10, 20});
     
-    p = e.get_mut<Position, Tgt>();
-    test_assert(p != nullptr);
-
-    test_int(p->x, 10);
-    test_int(p->y, 20);
+    Position& p = e.get_mut<Position, Tgt>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
 }
 
 void Entity_get_mut_r_T(void) {
@@ -688,17 +992,279 @@ void Entity_get_mut_r_T(void) {
 
     flecs::entity rel = world.entity();
     flecs::entity e = world.entity();
-
-    Position *p = e.get_mut_second<Position>(rel);
-    test_assert(p == nullptr);
-
     e.set_second<Position>(rel, {10, 20});
     
-    p = e.get_mut_second<Position>(rel);
+    Position& p = e.get_mut_second<Position>(rel);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_get_mut_pair_second_type(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    e.set_second<Tag, Position>({10, 20});
+
+    Position& p = e.get_mut_second<Tag, Position>();
+    p.x += 5;
+    p.y += 7;
+
+    const Position *ptr = e.try_get_second<Tag, Position>();
+    test_assert(ptr != nullptr);
+    test_int(ptr->x, 15);
+    test_int(ptr->y, 27);
+}
+
+
+void Entity_get_mut_w_id_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    test_expect_abort();
+    e.get_mut(world.id<Position>());
+}
+
+void Entity_get_mut_T_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    test_expect_abort();
+    e.get_mut<Position>();
+}
+
+void Entity_get_mut_r_t_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    e.get_mut(world.id<Position>(), tgt);
+}
+
+void Entity_get_mut_R_t_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    e.get_mut<Position>(tgt);
+}
+
+void Entity_get_mut_R_T_not_found(void) {
+    struct Tgt { };
+
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    test_expect_abort();
+    e.get_mut<Position, Tgt>();
+}
+
+void Entity_get_mut_r_T_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    e.get_mut_second<Position>(tgt);
+}
+
+void Entity_try_get_mut_w_id(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    Position *p = static_cast<Position*>(e.try_get_mut(world.id<Position>()));
+    test_assert(p == nullptr);
+
+    e.set<Position>({10, 20});
+    
+    p = static_cast<Position*>(e.try_get_mut(world.id<Position>()));
     test_assert(p != nullptr);
 
     test_int(p->x, 10);
     test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    Position *p = e.try_get_mut<Position>();
+    test_assert(p == nullptr);
+
+    e.set<Position>({10, 20});
+    
+    p = e.try_get_mut<Position>();
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_n_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    {
+        auto [p, v] = e.try_get_mut_n<Position, Velocity>();
+        test_assert(p == nullptr);
+        test_assert(v == nullptr);
+    }
+
+    e.set<Position>({10, 20});
+    e.set<Velocity>({1, 2});
+
+    {
+        auto [p, v] = e.try_get_mut_n<Position, Velocity>();
+        test_assert(p != nullptr);
+        test_assert(v != nullptr);
+
+        p->x += 15;
+        v->y += 2;
+
+        test_int(e.get<Position>().x, 25);
+        test_int(e.get<Position>().y, 20);
+        test_int(e.get<Velocity>().x, 1);
+        test_int(e.get<Velocity>().y, 4);
+    }
+}
+
+void Entity_try_get_mut_r_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity();
+
+    Position *p = static_cast<Position*>(e.try_get_mut(world.id<Position>(), tgt));
+    test_assert(p == nullptr);
+
+    e.set<Position>(tgt, {10, 20});
+    
+    p = static_cast<Position*>(e.get_mut(world.id<Position>(), tgt));
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_R_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity();
+
+    Position *p = e.try_get_mut<Position>(tgt);
+    test_assert(p == nullptr);
+
+    e.set<Position>(tgt, {10, 20});
+    
+    p = e.try_get_mut<Position>(tgt);
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_R_T(void) {
+    flecs::world world;
+
+    struct Tgt { };
+
+    flecs::entity e = world.entity();
+
+    Position *p = e.try_get_mut<Position, Tgt>();
+    test_assert(p == nullptr);
+
+    e.set<Position, Tgt>({10, 20});
+    
+    p = e.try_get_mut<Position, Tgt>();
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_enum_constant(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    Position *p = e.try_get_mut<Position>(One);
+    test_assert(p == nullptr);
+
+    e.set<Position>(One, {10, 20});
+
+    p = e.try_get_mut<Position>(One);
+    test_assert(p != nullptr);
+
+    p->x += 1;
+    p->y += 2;
+
+    const Position *ptr = e.try_get<Position>(One);
+    test_assert(ptr != nullptr);
+    test_int(ptr->x, 11);
+    test_int(ptr->y, 22);
+}
+
+void Entity_try_get_mut_r_T(void) {
+    flecs::world world;
+
+    flecs::entity rel = world.entity();
+    flecs::entity e = world.entity();
+
+    Position *p = e.try_get_mut_second<Position>(rel);
+    test_assert(p == nullptr);
+
+    e.set_second<Position>(rel, {10, 20});
+    
+    p = e.try_get_mut_second<Position>(rel);
+    test_assert(p != nullptr);
+
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_try_get_mut_pair_second_type(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    Position *p = e.try_get_mut_second<Tag, Position>();
+    test_assert(p == nullptr);
+
+    e.set_second<Tag, Position>({10, 20});
+
+    p = e.try_get_mut_second<Tag, Position>();
+    test_assert(p != nullptr);
+
+    p->x += 1;
+    p->y += 2;
+
+    const Position *ptr = e.try_get_second<Tag, Position>();
+    test_assert(ptr != nullptr);
+    test_int(ptr->x, 11);
+    test_int(ptr->y, 22);
 }
 
 void Entity_set_generic(void) {
@@ -714,7 +1280,7 @@ void Entity_set_generic(void) {
     test_assert(e.has<Position>());
     test_assert(e.has(position));
 
-    const Position *ptr = e.get<Position>();
+    const Position *ptr = e.try_get<Position>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
 }
@@ -733,7 +1299,7 @@ void Entity_set_generic_w_id(void) {
     test_assert(e.has<Position>());
     test_assert(e.has(id));
 
-    const Position *ptr = e.get<Position>();
+    const Position *ptr = e.try_get<Position>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
 }
@@ -752,7 +1318,7 @@ void Entity_set_generic_w_id_t(void) {
     test_assert(e.has<Position>());
     test_assert(e.has(id));
 
-    const Position *ptr = e.get<Position>();
+    const Position *ptr = e.try_get<Position>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
 }
@@ -770,7 +1336,7 @@ void Entity_set_generic_no_size(void) {
     test_assert(e.has<Position>());
     test_assert(e.has(position));
 
-    const Position *ptr = e.get<Position>();
+    const Position *ptr = e.try_get<Position>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
 }
@@ -789,7 +1355,7 @@ void Entity_set_generic_no_size_w_id(void) {
     test_assert(e.has<Position>());
     test_assert(e.has(id));
 
-    const Position *ptr = e.get<Position>();
+    const Position *ptr = e.try_get<Position>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
 }
@@ -808,9 +1374,338 @@ void Entity_set_generic_no_size_w_id_t(void) {
     test_assert(e.has<Position>());
     test_assert(e.has(id));
 
-    const Position *ptr = e.get<Position>();
+    const Position *ptr = e.try_get<Position>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
+}
+
+void Entity_set_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity()
+        .set(Position{10, 20});
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_set_R_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity()
+        .set<Position>(tgt, {10, 20});
+
+    const Position& p = e.get<Position>(tgt);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_set_R_T(void) {
+    flecs::world world;
+
+    struct Tgt { };
+    
+    flecs::entity e = world.entity()
+        .set<Position, Tgt>({10, 20});
+
+    const Position& p = e.get<Position, Tgt>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_set_r_T(void) {
+    flecs::world world;
+
+    flecs::entity rel = world.entity();
+    
+    flecs::entity e = world.entity()
+        .set_second<Position>(rel, {10, 20});
+
+    const Position& p = e.get_second<Position>(rel);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_set_r_t_generic_no_size(void) {
+    flecs::world world;
+
+    auto position = world.component<Position>();
+
+    Position position_data = {10, 20};
+
+    flecs::entity rel = world.entity();
+    
+    flecs::entity e = world.entity()
+        .set_ptr(ecs_pair(rel, position), &position_data);
+
+    const Position* p = e.try_get_second<Position>(rel);
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+}
+
+void Entity_assign_T(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity().add<Position>();
+
+    e.assign(Position{10, 20});
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_assign_R_t(void) {
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+    flecs::entity e = world.entity().add<Position>(tgt);
+    e.assign<Position>(tgt, {10, 20});
+
+    const Position& p = e.get<Position>(tgt);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_assign_R_T(void) {
+    flecs::world world;
+
+    struct Tgt { };
+    
+    flecs::entity e = world.entity().add<Position, Tgt>();
+    e.assign<Position, Tgt>({10, 20});
+
+    const Position& p = e.get<Position, Tgt>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_assign_r_T(void) {
+    flecs::world world;
+
+    flecs::entity rel = world.entity();
+    
+    flecs::entity e = world.entity().add_second<Position>(rel);
+    e.assign_second<Position>(rel, {10, 20});
+
+    const Position& p = e.get_second<Position>(rel);
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_assign_T_not_found(void) {
+    install_test_abort();
+    
+    flecs::world world;
+
+    test_expect_abort();
+    world.entity()
+        .assign(Position{10, 20});
+}
+
+void Entity_assign_R_t_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity tgt = world.entity();
+
+    test_expect_abort();
+    world.entity()
+        .assign<Position>(tgt, {10, 20});
+}
+
+void Entity_assign_R_T_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    struct Tgt { };
+    
+    test_expect_abort();
+    world.entity()
+        .assign<Position, Tgt>({10, 20});
+}
+
+void Entity_assign_r_T_not_found(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    flecs::entity rel = world.entity();
+    
+    test_expect_abort();
+    world.entity()
+        .assign_second<Position>(rel, {10, 20});
+}
+
+void Entity_assign_w_on_set_hook(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_set([&](Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+
+    test_int(invoked, 0);
+
+    e.assign(Position{10, 20});
+
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_assign_w_on_set_observer(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+
+    test_int(invoked, 0);
+
+    e.assign(Position{10, 20});
+
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_assign_w_change_detect(void) {
+    flecs::world world;
+
+    auto q = world.query_builder<const Position>()
+        .detect_changes()
+        .build();
+
+    test_bool(true, q.changed());
+    q.each([](const Position& p) {});
+    test_bool(false, q.changed());
+
+    flecs::entity e = world.entity().add<Position>();
+
+    test_bool(true, q.changed());
+    q.each([](const Position& p) {});
+    test_bool(false, q.changed());
+
+    e.assign(Position{10, 20});
+
+    test_bool(true, q.changed());
+    q.each([](const Position& p) {});
+    test_bool(false, q.changed());
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_defer_assign_w_on_set_hook(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_set([&](Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    test_int(invoked, 0);
+    world.defer_end();
+
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_defer_assign_w_on_set_observer(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.observer<Position>()
+        .event(flecs::OnSet)
+        .each([&](Position& p) {
+            test_int(p.x, 10);
+            test_int(p.y, 20);
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    test_int(invoked, 0);
+    world.defer_end();
+
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_defer_assign_w_change_detect(void) {
+    flecs::world world;
+
+    auto q = world.query_builder<const Position>()
+        .detect_changes()
+        .build();
+
+    test_bool(true, q.changed());
+    q.each([](const Position& p) {});
+    test_bool(false, q.changed());
+
+    flecs::entity e = world.entity().add<Position>();
+
+    test_bool(true, q.changed());
+    q.each([](const Position& p) {});
+    test_bool(false, q.changed());
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    test_bool(false, q.changed());
+    world.defer_end();
+
+    test_bool(true, q.changed());
+    q.each([](const Position& p) {});
+    test_bool(false, q.changed());
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
 }
 
 void Entity_add_role(void) {
@@ -1244,7 +2139,7 @@ void Entity_tag_has_size_zero(void) {
 
     auto comp = world.component<MyTag>();
 
-    auto ptr = comp.get<flecs::Component>();
+    auto ptr = comp.try_get<flecs::Component>();
     test_int(ptr->size, 0);
     test_int(ptr->alignment, 0);
 }
@@ -1510,7 +2405,7 @@ void Entity_set_no_copy(void) {
     test_int(Pod::copy_invoked, 0);
 
     test_assert(e.has<Pod>());
-    const Pod *p = e.get<Pod>();
+    const Pod *p = e.try_get<Pod>();
     test_assert(p != NULL);
     test_int(p->value, 10);
 }
@@ -1525,7 +2420,7 @@ void Entity_set_copy(void) {
     test_int(Pod::copy_invoked, 1);
 
     test_assert(e.has<Pod>());
-    const Pod *p = e.get<Pod>();
+    const Pod *p = e.try_get<Pod>();
     test_assert(p != NULL);
     test_int(p->value, 10);
 }
@@ -1538,7 +2433,7 @@ void Entity_set_deduced(void) {
 
     test_assert(e.has<Position>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 }
@@ -1599,6 +2494,27 @@ void Entity_override_pair_w_tgt_id(void) {
     test_assert(!e.owns<Position>(tgt_b));
 }
 
+void Entity_override_pair_w_rel_id(void) {
+    flecs::world world;
+
+    world.component<Position>();
+    auto rel_a = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+    auto rel_b = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+
+    auto base = world.entity()
+        .auto_override_second<Position>(rel_a)
+        .add_second<Position>(rel_b);
+
+    auto e = world.entity()
+        .add(flecs::IsA, base);
+
+    test_assert(e.has_second<Position>(rel_a));
+    test_assert(e.owns_second<Position>(rel_a));
+
+    test_assert(e.has_second<Position>(rel_b));
+    test_assert(!e.owns_second<Position>(rel_b));
+}
+
 void Entity_override_pair_w_ids(void) {
     flecs::world world;
 
@@ -1642,6 +2558,28 @@ void Entity_override_pair(void) {
     test_assert((!e.owns<Position, TagB>()));
 }
 
+void Entity_override_pair_second(void) {
+    flecs::world world;
+
+    flecs::entity TagA = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+    flecs::entity TagB = world.entity().add(flecs::OnInstantiate, flecs::Inherit);
+
+    world.component<Position>();
+
+    auto base = world.entity()
+        .auto_override_second<Position>(TagA)
+        .add_second<Position>(TagB);
+
+    auto e = world.entity()
+        .add(flecs::IsA, base);
+
+    test_assert((e.has_second<Position>(TagA)));
+    test_assert((e.owns_second<Position>(TagA)));
+
+    test_assert((e.has_second<Position>(TagB)));
+    test_assert((!e.owns_second<Position>(TagB)));
+}
+
 void Entity_set_override(void) {
     flecs::world world;
 
@@ -1656,11 +2594,11 @@ void Entity_set_override(void) {
     test_assert(e.has<Position>());
     test_assert(e.owns<Position>());
 
-    const Position* p = e.get<Position>();
+    const Position* p = e.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Position* p_base = base.get<Position>();
+    const Position* p_base = base.try_get<Position>();
     test_assert(p != p_base);
     test_int(p_base->x, 10);
     test_int(p_base->y, 20);
@@ -1682,11 +2620,11 @@ void Entity_set_override_lvalue(void) {
     test_assert(e.has<Position>());
     test_assert(e.owns<Position>());
 
-    const Position* p = e.get<Position>();
+    const Position* p = e.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Position* p_base = base.get<Position>();
+    const Position* p_base = base.try_get<Position>();
     test_assert(p != p_base);
     test_int(p_base->x, 10);
     test_int(p_base->y, 20);
@@ -1708,11 +2646,11 @@ void Entity_set_override_pair(void) {
     test_assert((e.has<Position, Tgt>()));
     test_assert((e.owns<Position, Tgt>()));
 
-    const Position* p = e.get<Position, Tgt>();
+    const Position* p = e.try_get<Position, Tgt>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Position* p_base = base.get<Position, Tgt>();
+    const Position* p_base = base.try_get<Position, Tgt>();
     test_assert(p != p_base);
     test_int(p_base->x, 10);
     test_int(p_base->y, 20);
@@ -1734,11 +2672,11 @@ void Entity_set_override_pair_w_tgt_id(void) {
     test_assert((e.has<Position>(tgt)));
     test_assert((e.owns<Position>(tgt)));
 
-    const Position* p = e.get<Position>(tgt);
+    const Position* p = e.try_get<Position>(tgt);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Position* p_base = base.get<Position>(tgt);
+    const Position* p_base = base.try_get<Position>(tgt);
     test_assert(p != p_base);
     test_int(p_base->x, 10);
     test_int(p_base->y, 20);
@@ -1760,11 +2698,11 @@ void Entity_set_override_pair_w_rel_tag(void) {
     test_assert((e.has<Tgt, Position>()));
     test_assert((e.owns<Tgt, Position>()));
 
-    const Position* p = e.get<Tgt, Position>();
+    const Position* p = e.try_get<Tgt, Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Position* p_base = base.get<Tgt, Position>();
+    const Position* p_base = base.try_get<Tgt, Position>();
     test_assert(p != p_base);
     test_int(p_base->x, 10);
     test_int(p_base->y, 20);
@@ -1776,7 +2714,7 @@ void Entity_emplace_override(void) {
     auto e = world.entity().emplace_auto_override<NoDefaultCtor>(10);
     test_assert(e.has<NoDefaultCtor>());
 
-    const NoDefaultCtor *ptr = e.get<NoDefaultCtor>();
+    const NoDefaultCtor *ptr = e.try_get<NoDefaultCtor>();
     test_assert(ptr != nullptr);
     test_int(ptr->x_, 10);
 }
@@ -1787,7 +2725,7 @@ void Entity_emplace_override_pair(void) {
     auto e = world.entity().emplace_auto_override<NoDefaultCtor, Tag>(10);
     test_assert((e.has<NoDefaultCtor, Tag>()));
 
-    const NoDefaultCtor *ptr = e.get<NoDefaultCtor, Tag>();
+    const NoDefaultCtor *ptr = e.try_get<NoDefaultCtor, Tag>();
     test_assert(ptr != nullptr);
     test_int(ptr->x_, 10);
 }
@@ -1888,7 +2826,7 @@ void Entity_entity_to_entity_view(void) {
     test_assert(ev != 0);
     test_assert(e == ev);
 
-    const Position *p = ev.get<Position>();
+    const Position *p = ev.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -1909,7 +2847,7 @@ void Entity_entity_view_to_entity_world(void) {
     ew.set<Position>({10, 20});
 
     test_assert(ev.has<Position>());
-    const Position *p = ev.get<Position>();
+    const Position *p = ev.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -1934,7 +2872,7 @@ void Entity_entity_view_to_entity_stage(void) {
     test_assert(ew.has<Position>());
     test_assert(ev.has<Position>());
 
-    const Position *p = ev.get<Position>();
+    const Position *p = ev.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -1957,7 +2895,7 @@ void Entity_create_entity_view_from_stage(void) {
     ew.set<Position>({10, 20});
     test_assert(ev.has<Position>());
 
-    const Position *p = ev.get<Position>();
+    const Position *p = ev.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -1969,7 +2907,7 @@ void Entity_set_template(void) {
     auto e = ecs.entity()
         .set<Template<int>>({10, 20});
 
-    const Template<int> *ptr = e.get<Template<int>>();
+    const Template<int> *ptr = e.try_get<Template<int>>();
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
 }
@@ -2054,11 +2992,11 @@ void Entity_ensure_1_component_w_callback(void) {
     }), true);
 
     const Position* 
-    p = e_1.get<Position>();
+    p = e_1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    p = e_2.get<Position>();
+    p = e_2.try_get<Position>();
     test_int(p->x, 12);
     test_int(p->y, 24);
 
@@ -2095,11 +3033,11 @@ void Entity_ensure_2_components_w_callback(void) {
 
     test_bool(e_3.get([](const Position& p, const Velocity& v) {}), false);
 
-    const Position* p = e_1.get<Position>();
+    const Position* p = e_1.try_get<Position>();
     test_int(p->x, 11);
     test_int(p->y, 22);
 
-    const Velocity* v = e_1.get<Velocity>();
+    const Velocity* v = e_1.try_get<Velocity>();
     test_int(v->x, 4);
     test_int(v->y, 6);
 }
@@ -2152,7 +3090,7 @@ void Entity_set_1_component_w_callback(void) {
 
     test_assert(e.has<Position>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -2169,12 +3107,12 @@ void Entity_set_2_components_w_callback(void) {
 
     test_assert(e.has<Position>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_assert(v != NULL);
     test_int(v->x, 1);
     test_int(v->y, 2);
@@ -2192,17 +3130,17 @@ void Entity_set_3_components_w_callback(void) {
 
     test_assert(e.has<Position>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_assert(v != NULL);
     test_int(v->x, 1);
     test_int(v->y, 2);
 
-    const Mass *m = e.get<Mass>();
+    const Mass *m = e.try_get<Mass>();
     test_assert(m != NULL);
     test_int(m->value, 50);
 }
@@ -2978,7 +3916,7 @@ void Entity_defer_ensure(void) {
         world.defer_end();
     }
 
-    Position* p = e.get_mut<Position>();
+    Position* p = e.try_get_mut<Position>();
     test_assert(p != nullptr);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -3116,7 +4054,7 @@ void Entity_emplace(void) {
 
     test_assert(e.has<Position>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_assert(p != NULL);
     test_int(p->x, 10);
     test_int(p->y, 20);
@@ -3649,6 +4587,41 @@ void Entity_child_of_w_type(void) {
     test_assert(e.has_second<Parent>(flecs::ChildOf));
 }
 
+
+void Entity_child(void) {
+    flecs::world world;
+
+    auto base = world.entity();
+
+    auto e = base.child();
+
+    test_assert(e.has(flecs::ChildOf, base));
+}
+
+void Entity_child_custom_rel(void) {
+    flecs::world world;
+
+    auto r = world.entity();
+
+    auto base = world.entity();
+
+    auto e = base.child(r);
+
+    test_assert(e.has(r, base));
+}
+
+void Entity_child_custom_type(void) {
+    flecs::world world;
+
+    struct R { };
+
+    auto base = world.entity();
+
+    auto e = base.child<R>();
+
+    test_assert(e.has<R>(base));
+}
+
 void Entity_slot_of(void) {
     flecs::world world;
 
@@ -3869,7 +4842,7 @@ void Entity_clone(void) {
     test_assert(dst.has<Tag>());
     test_assert(dst.has<PositionInitialized>());
 
-    const PositionInitialized *ptr = dst.get<PositionInitialized>();
+    const PositionInitialized *ptr = dst.try_get<PositionInitialized>();
     test_assert(ptr != NULL);
     test_int(ptr->x, -1);
     test_int(ptr->y, -1);
@@ -3885,7 +4858,7 @@ void Entity_clone_w_value(void) {
     test_assert(dst.has<Tag>());
     test_assert(dst.has<PositionInitialized>());
 
-    const PositionInitialized *ptr = dst.get<PositionInitialized>();
+    const PositionInitialized *ptr = dst.try_get<PositionInitialized>();
     test_assert(ptr != NULL);
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
@@ -3904,7 +4877,7 @@ void Entity_clone_to_existing(void) {
     test_assert(dst.has<Tag>());
     test_assert(dst.has<PositionInitialized>());
 
-    const PositionInitialized *ptr = dst.get<PositionInitialized>();
+    const PositionInitialized *ptr = dst.try_get<PositionInitialized>();
     test_assert(ptr != NULL);
     test_int(ptr->x, 10);
     test_int(ptr->y, 20);
@@ -3993,6 +4966,20 @@ void Entity_entity_w_type(void) {
     test_str(e.name().c_str(), "EntityType");
     test_str(e.path().c_str(), "::EntityType");
     test_assert(!e.has<flecs::Component>());
+
+    auto e_2 = ecs.entity<EntityType>();
+    test_assert(e == e_2);
+}
+
+void Entity_prefab_w_type(void) {
+    flecs::world ecs;
+
+    auto e = ecs.prefab<EntityType>();
+
+    test_str(e.name().c_str(), "EntityType");
+    test_str(e.path().c_str(), "::EntityType");
+    test_assert(!e.has<flecs::Component>());
+    test_assert(e.has(flecs::Prefab));
 
     auto e_2 = ecs.entity<EntityType>();
     test_assert(e == e_2);
@@ -4092,6 +5079,7 @@ void Entity_prefab_hierarchy_w_child_override(void) {
     test_assert(i != 0);
     auto ib = i.lookup("Base");
     test_assert(ib != 0);
+
     test_assert(ib.has<Foo>());
     test_assert(ib.has<Bar>());
 }
@@ -4532,10 +5520,10 @@ void Entity_emplace_w_observer(void) {
 
     test_assert(e.has<Position>());
     test_assert(e.has<Velocity>());
-    test_int(e.get<Velocity>()->x, 1);
-    test_int(e.get<Velocity>()->y, 2);
-    test_int(e.get<Position>()->x, 10);
-    test_int(e.get<Position>()->y, 20);
+    test_int(e.try_get<Velocity>()->x, 1);
+    test_int(e.try_get<Velocity>()->y, 2);
+    test_int(e.try_get<Position>()->x, 10);
+    test_int(e.try_get<Position>()->y, 20);
 }
 
 void Entity_scoped_world(void) {
@@ -4623,9 +5611,9 @@ void Entity_const_entity_set(void) {
     const flecs::entity e = world.entity();
 
     e.set<Position>({10, 20});
-    test_assert(e.get<Position>() != nullptr);
-    test_int(e.get<Position>()->x, 10);
-    test_int(e.get<Position>()->y, 20);
+    test_assert(e.try_get<Position>() != nullptr);
+    test_int(e.try_get<Position>()->x, 10);
+    test_int(e.try_get<Position>()->y, 20);
 }
 
 void Entity_const_entity_get_mut(void) {
@@ -4633,12 +5621,12 @@ void Entity_const_entity_get_mut(void) {
 
     const flecs::entity e = world.entity();
 
-    Position *p = e.get_mut<Position>();
+    Position *p = e.try_get_mut<Position>();
     test_assert(p == nullptr);
     test_assert(!e.has<Position>());
 
     e.add<Position>();
-    p = e.get_mut<Position>();
+    p = e.try_get_mut<Position>();
     test_assert(p != nullptr);
     test_assert(e.has<Position>());
 
@@ -4678,9 +5666,9 @@ void Entity_const_entity_emit_after_build(void) {
 
     e.set<Position>({10, 20}).emit<Velocity>({1, 2});
 
-    test_assert(e.get<Position>() != nullptr);
-    test_int(e.get<Position>()->x, 10);
-    test_int(e.get<Position>()->y, 20);
+    test_assert(e.try_get<Position>() != nullptr);
+    test_int(e.try_get<Position>()->x, 10);
+    test_int(e.try_get<Position>()->y, 20);
 
     test_int(count, 1);
 }
@@ -4712,7 +5700,7 @@ void Entity_set_sparse(void) {
 
     test_assert(e.has<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -4729,7 +5717,7 @@ void Entity_insert_1_sparse(void) {
 
     test_assert(e.has<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -4750,11 +5738,53 @@ void Entity_insert_2_w_1_sparse(void) {
     test_assert(e.has<Position>());
     test_assert(e.has<Velocity>());
 
-    const Position *p = e.get<Position>();
+    const Position *p = e.try_get<Position>();
     test_int(p->x, 10);
     test_int(p->y, 20);
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
+    test_int(v->x, 1);
+    test_int(v->y, 2);
+}
+
+void Entity_insert_1_dont_fragment(void) {
+    flecs::world world;
+
+    world.component<Velocity>().add(flecs::DontFragment);
+
+    flecs::entity e = world.entity().insert([](Velocity& v) {
+        v.x = 1;
+        v.y = 2;
+    });
+
+    test_assert(e.has<Velocity>());
+
+    const Velocity *v = e.try_get<Velocity>();
+    test_int(v->x, 1);
+    test_int(v->y, 2);
+}
+
+void Entity_insert_2_w_1_dont_fragment(void) {
+    flecs::world world;
+
+    world.component<Position>();
+    world.component<Velocity>().add(flecs::DontFragment);
+
+    flecs::entity e = world.entity().insert([](Position& p, Velocity& v) {
+        p.x = 10;
+        p.y = 20;
+        v.x = 1;
+        v.y = 2;
+    });
+
+    test_assert(e.has<Position>());
+    test_assert(e.has<Velocity>());
+
+    const Position *p = e.try_get<Position>();
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+
+    const Velocity *v = e.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -4768,7 +5798,7 @@ void Entity_emplace_sparse(void) {
 
     test_assert(e.has<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -4785,7 +5815,7 @@ void Entity_override_sparse(void) {
     test_assert(e.has<Velocity>());
     test_assert(e.owns<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 }
@@ -4802,7 +5832,7 @@ void Entity_delete_w_override_sparse(void) {
     test_assert(e.has<Velocity>());
     test_assert(e.owns<Velocity>());
 
-    const Velocity *v = e.get<Velocity>();
+    const Velocity *v = e.try_get<Velocity>();
     test_int(v->x, 1);
     test_int(v->y, 2);
 
@@ -4862,4 +5892,1465 @@ void Entity_get_ref_pair_second_invalid_type(void) {
 
     test_expect_abort();
     world.entity().get_ref_second<Position>(v);
+}
+
+void Entity_iter_type(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity().add<Position>().add<Velocity>();
+
+    int32_t count = 0;
+    bool pos_found = false;
+    bool velocity_found = false;
+
+    for (auto id : e.type()) {
+        count ++;
+        if (id == world.id<Position>()) {
+            pos_found = true;
+        }
+        if (id == world.id<Velocity>()) {
+            velocity_found = true;
+        }
+    }
+
+    test_int(count, 2);
+    test_assert(pos_found == true);
+    test_assert(velocity_found == true);
+}
+
+void Entity_iter_empty_type(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    int32_t count = 0;
+
+    for (auto id : e.type()) {
+        test_assert(id != 0);
+        count ++;
+    }
+
+    test_int(count, 0);
+}
+
+void Entity_untyped_component_use_low_id(void) {
+    flecs::world world;
+    
+    flecs::untyped_component c = world.component("test_low_id_comp");
+    test_assert(c.is_valid());
+    test_assert(c < FLECS_HI_COMPONENT_ID);
+}
+
+enum Color {
+    Red, Green, Blue
+};
+
+void Entity_add_remove_enum_component(void) {
+    flecs::world world;
+
+    flecs::entity e = world.entity();
+
+    e.set<Color>(Blue);
+    test_assert(e.has<Color>());
+
+    {
+        const Color *c = e.try_get<Color>();
+        test_assert(c != nullptr);
+        test_assert(*c == Blue);
+    }
+
+    e.set<Color>(Green);
+    test_assert(e.has<Color>());
+
+    {
+        const Color *c = e.try_get<Color>();
+        test_assert(c != nullptr);
+        test_assert(*c == Green);
+    }
+
+    e.remove<Color>();
+    test_assert(!e.has<Color>());
+}
+
+void Entity_on_replace_w_get_mut(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_replace([&](Position& prev, Position& next) {
+            invoked ++;
+        });
+
+    test_expect_abort();
+    world.entity().get_mut<Position>();
+}
+
+void Entity_on_replace_w_ensure(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_replace([&](Position& prev, Position& next) {
+            invoked ++;
+        });
+
+    test_expect_abort();
+    world.entity().ensure<Position>();
+}
+
+void Entity_on_replace_w_emplace(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_replace([&](Position& prev, Position& next) {
+            invoked ++;
+        });
+
+    test_expect_abort();
+    world.entity().emplace<Position>();
+}
+
+void Entity_on_replace_w_set(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    e.set(Position{10, 20});
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_on_replace_w_set_existing(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    e.set(Position{10, 20});
+    test_int(invoked, 1);
+
+    e.set(Position{11, 21});
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+}
+
+void Entity_on_replace_w_assign(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    e.assign(Position{10, 20});
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_on_replace_w_assign_existing(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    e.assign(Position{10, 20});
+    test_int(invoked, 1);
+
+    e.assign(Position{11, 21});
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+}
+
+void Entity_defer_on_replace_w_set(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    test_int(invoked, 0);
+    world.defer_end();
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_defer_on_replace_w_set_twice(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    test_int(invoked, 0);
+    e.set(Position{11, 21});
+    test_int(invoked, 0);
+    world.defer_end();
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+}
+
+void Entity_defer_on_replace_w_set_existing(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    test_int(invoked, 1);
+    world.defer_end();
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_defer_on_replace_w_set_existing_twice(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    test_int(invoked, 1);
+    e.set(Position{11, 21});
+    test_int(invoked, 2);
+    world.defer_end();
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+}
+
+void Entity_defer_on_replace_w_set_batched(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    e.add<Velocity>();
+    test_int(invoked, 0);
+    world.defer_end();
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+
+    test_assert(e.has<Velocity>());
+}
+
+void Entity_defer_on_replace_w_set_batched_twice(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    e.set(Position{11, 21});
+    e.add<Velocity>();
+    test_int(invoked, 0);
+    world.defer_end();
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+
+    test_assert(e.has<Velocity>());
+}
+
+void Entity_defer_on_replace_w_set_batched_existing(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    e.add<Velocity>();
+    test_int(invoked, 1);
+    world.defer_end();
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+
+    test_assert(e.has<Velocity>());
+}
+
+void Entity_defer_on_replace_w_set_batched_existing_twice(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.set(Position{10, 20});
+    test_int(invoked, 1);
+    e.set(Position{11, 21});
+    test_int(invoked, 2);
+    e.add<Velocity>();
+    world.defer_end();
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+
+    test_assert(e.has<Velocity>());
+}
+
+void Entity_defer_on_replace_w_assign(void) {
+    install_test_abort();
+
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+
+    test_expect_abort();
+    e.assign(Position{10, 20});
+}
+
+void Entity_defer_on_replace_w_assign_existing(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    test_int(invoked, 1);
+    world.defer_end();
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+}
+
+void Entity_defer_on_replace_w_assign_existing_twice(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    test_int(invoked, 1);
+    e.assign(Position{11, 21});
+    test_int(invoked, 2);
+    world.defer_end();
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+}
+
+void Entity_defer_on_replace_w_assign_batched_existing(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    e.add<Velocity>();
+    test_int(invoked, 1);
+    world.defer_end();
+    test_int(invoked, 1);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 10);
+    test_int(p.y, 20);
+
+    test_assert(e.has<Velocity>());
+}
+
+void Entity_defer_on_replace_w_assign_batched_existing_twice(void) {
+    flecs::world world;
+
+    int invoked = 0;
+
+    world.component<Position>()
+        .on_add([&](Position& p) {
+            p.x = 0; p.y = 0;
+        })
+        .on_replace([&](Position& prev, Position& next) {
+            switch(invoked) {
+            case 0:
+                test_int(prev.x, 0); test_int(prev.y, 0);
+                test_int(next.x, 10); test_int(next.y, 20);
+                break;
+            case 1:
+                test_int(prev.x, 10); test_int(prev.y, 20);
+                test_int(next.x, 11); test_int(next.y, 21);
+                break;
+            }
+            invoked ++;
+        });
+
+    flecs::entity e = world.entity().add<Position>();
+    test_int(invoked, 0);
+
+    world.defer_begin();
+    e.assign(Position{10, 20});
+    test_int(invoked, 1);
+    e.assign(Position{11, 21});
+    test_int(invoked, 2);
+    e.add<Velocity>();
+    world.defer_end();
+    test_int(invoked, 2);
+
+    const Position& p = e.get<Position>();
+    test_int(p.x, 11);
+    test_int(p.y, 21);
+
+    test_assert(e.has<Velocity>());
+}
+
+void Entity_set_lvalue_to_mutable(void) {
+    flecs::world world;
+
+    auto e = world.entity();
+
+    LifecycleTracker src;
+
+    e.set(src);
+
+    // Assertions are the exact same as in set_lvalue_to_const; src should have been copied, not moved
+    const auto* attached = e.try_get<LifecycleTracker>();
+    test_assert(attached != nullptr);
+    
+    test_assert(attached->constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(attached->times_copy_assigned_into, 1);
+    test_int(attached->times_copy_assigned_from, 0);
+    test_int(attached->times_copy_constructed_from, 0);
+    test_false(attached->moved_into() || attached->moved_from());
+    test_int(attached->times_destructed, 0);
+    
+    test_assert(src.constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(src.times_copy_assigned_into, 0);
+    test_int(src.times_copy_assigned_from, 1);
+    test_int(src.times_copy_constructed_from, 0);
+    test_false(src.moved_into() || src.moved_from());
+    test_int(src.times_destructed, 0);
+}
+
+void Entity_set_lvalue_to_const(void) {
+    flecs::world world;
+
+    auto e = world.entity();
+
+    LifecycleTracker const src;
+
+    e.set(src);
+
+    const auto* attached = e.try_get<LifecycleTracker>();
+    test_assert(attached != nullptr);
+    
+    test_assert(attached->constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(attached->times_copy_assigned_into, 1);
+    test_int(attached->times_copy_assigned_from, 0);
+    test_int(attached->times_copy_constructed_from, 0);
+    test_false(attached->moved_into() || attached->moved_from());
+    test_int(attached->times_destructed, 0);
+    
+    test_assert(src.constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(src.times_copy_assigned_into, 0);
+    test_int(src.times_copy_assigned_from, 1);
+    test_int(src.times_copy_constructed_from, 0);
+    test_false(src.moved_into() || src.moved_from());
+    test_int(src.times_destructed, 0);
+}
+
+void Entity_set_rvalue(void) {
+    flecs::world world;
+
+    auto e = world.entity();
+
+    LifecycleTracker src;
+
+    e.set(std::move(src));
+
+    const auto* attached = e.try_get<LifecycleTracker>();
+    test_assert(attached != nullptr);
+    
+    test_assert(attached->constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(attached->times_move_assigned_into, 1);
+    test_int(attached->times_move_assigned_from, 0);
+    test_int(attached->times_move_constructed_from, 0);
+    test_false(attached->copied_into() || attached->copied_from());
+    test_int(attached->times_destructed, 0);
+    
+    test_assert(src.constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(src.times_move_assigned_into, 0);
+    test_int(src.times_move_assigned_from, 1);
+    test_int(src.times_move_constructed_from, 0);
+    test_false(src.copied_into() || src.copied_from());
+    test_int(src.times_destructed, 0);
+}
+
+void Entity_assign_rvalue(void) {
+    flecs::world world;
+
+    auto e = world.entity();
+
+    LifecycleTracker src;
+
+    e.add<LifecycleTracker>();
+    e.assign(std::move(src));
+
+    const auto* attached = e.try_get<LifecycleTracker>();
+    test_assert(attached != nullptr);
+    
+    test_assert(attached->constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(attached->times_move_assigned_into, 1);
+    test_int(attached->times_move_assigned_from, 0);
+    test_int(attached->times_move_constructed_from, 0);
+    test_false(attached->copied_into() || attached->copied_from());
+    test_int(attached->times_destructed, 0);
+    
+    test_assert(src.constructed_via == LifecycleTracker::Constructor::default_);
+    test_int(src.times_move_assigned_into, 0);
+    test_int(src.times_move_assigned_from, 1);
+    test_int(src.times_move_constructed_from, 0);
+    test_false(src.copied_into() || src.copied_from());
+    test_int(src.times_destructed, 0);
+}
+
+struct NonCopyAssignable {
+    NonCopyAssignable() { }
+    NonCopyAssignable(const NonCopyAssignable& obj) = delete;
+    NonCopyAssignable& operator=(const NonCopyAssignable& obj) = delete;
+
+    NonCopyAssignable(NonCopyAssignable&& obj) = default;
+    NonCopyAssignable& operator=(NonCopyAssignable&& obj) = default;
+    
+    int x;
+};
+
+struct NonCopyAssignableWMoveAssign {
+    NonCopyAssignableWMoveAssign() { }
+    NonCopyAssignableWMoveAssign(const NonCopyAssignableWMoveAssign& obj) = delete;
+    NonCopyAssignableWMoveAssign& operator=(const NonCopyAssignableWMoveAssign& obj) = delete;
+
+    NonCopyAssignableWMoveAssign(NonCopyAssignableWMoveAssign&& obj) {
+        x = obj.x;
+        moved = 1;
+    }
+    NonCopyAssignableWMoveAssign& operator=(NonCopyAssignableWMoveAssign&& obj) {
+        x = obj.x;
+        moved = 1;
+        return *this;
+    }
+    
+    int x;
+    int moved = 0;
+};
+
+void Entity_set_non_copy_assignable(void) {
+    flecs::world world;
+
+    NonCopyAssignable v;
+    v.x = 10;
+
+    flecs::entity e = world.entity().set(v);
+
+    const NonCopyAssignable* comp = e.try_get<NonCopyAssignable>();
+    test_assert(comp != nullptr);
+    test_int(comp->x, 10);
+}
+
+void Entity_set_non_copy_assignable_w_move_assign(void) {
+    flecs::world world;
+
+    NonCopyAssignableWMoveAssign v;
+    v.x = 10;
+    test_int(v.moved, 0);
+
+    flecs::entity e = world.entity().set(v);
+
+    const NonCopyAssignableWMoveAssign* comp = e.try_get<NonCopyAssignableWMoveAssign>();
+    test_assert(comp != nullptr);
+    test_int(comp->x, 10);
+    test_int(comp->moved, 1);
+}
+
+void Entity_assign_non_copy_assignable(void) {
+    flecs::world world;
+
+    NonCopyAssignable v;
+    v.x = 10;
+
+    flecs::entity e = world.entity().add<NonCopyAssignable>();
+    e.assign(v);
+
+    const NonCopyAssignable* comp = e.try_get<NonCopyAssignable>();
+    test_assert(comp != nullptr);
+    test_int(comp->x, 10);
+}
+
+void Entity_assign_non_copy_assignable_w_move_assign(void) {
+    flecs::world world;
+
+    NonCopyAssignableWMoveAssign v;
+    v.x = 10;
+    test_int(v.moved, 0);
+
+    flecs::entity e = world.entity().add<NonCopyAssignableWMoveAssign>();
+    e.assign(v);
+
+    const NonCopyAssignableWMoveAssign* comp = e.try_get<NonCopyAssignableWMoveAssign>();
+    test_assert(comp != nullptr);
+    test_int(comp->x, 10);
+    test_int(comp->moved, 1);
+}
+
+void Entity_set_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    const flecs::Parent& p = child.get<flecs::Parent>();
+    test_assert(p.value == parent);
+}
+
+void Entity_defer_set_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+
+    world.defer_begin();
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(!child.has<flecs::Parent>());
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+    world.defer_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    const flecs::Parent& p = child.get<flecs::Parent>();
+    test_assert(p.value == parent);
+}
+
+void Entity_set_change_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    child.set(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_defer_set_change_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    world.defer_begin();
+    child.set(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+    world.defer_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_assign_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    child.assign(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_defer_assign_parent(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+    flecs::entity child = world.entity().set(flecs::Parent{parent});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    world.defer_begin();
+    child.assign(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+    world.defer_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_set_parent_on_stage(void) {
+    flecs::world world;
+
+    flecs::world stage = world.get_stage(0);
+
+    flecs::entity parent = world.entity();
+
+    world.readonly_begin();
+
+    flecs::entity child = stage.entity().set(flecs::Parent{parent});
+
+    test_assert(!child.has<flecs::Parent>());
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    world.readonly_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    const flecs::Parent& p = child.get<flecs::Parent>();
+    test_assert(p.value == parent);
+}
+
+void Entity_assign_parent_on_stage(void) {
+    flecs::world world;
+
+    flecs::world stage = world.get_stage(0);
+
+    flecs::entity parent = world.entity();
+    flecs::entity parent_2 = world.entity().child_of(parent);
+
+    world.readonly_begin();
+
+    flecs::entity child = stage.entity().set(flecs::Parent{parent});
+
+    test_assert(!child.has<flecs::Parent>());
+    test_assert(!child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    world.readonly_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent);
+    }
+
+    world.readonly_begin();
+
+    child.assign(flecs::Parent{parent_2});
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 1)));
+
+    world.readonly_end();
+
+    test_assert(child.has<flecs::Parent>());
+    test_assert(child.has(ecs_value_pair(flecs::ParentDepth, 2)));
+
+    {
+        const flecs::Parent& p = child.get<flecs::Parent>();
+        test_assert(p.value == parent_2);
+    }
+}
+
+void Entity_entity_w_childof(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.entity(p, nullptr);
+
+    test_assert(e.has(flecs::ChildOf, p));
+}
+
+void Entity_entity_w_childof_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.entity(p, "Foo");
+
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_entity_w_childof_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.entity(p, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_entity_w_parent(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.entity(flecs::Parent{p});
+
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+}
+
+void Entity_entity_w_parent_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.entity(flecs::Parent{p}, "Foo");
+
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_entity_w_parent_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.entity(flecs::Parent{p}, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(!f.has<flecs::Parent>());
+    test_assert(e.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_childof(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.prefab(p, nullptr);
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, p));
+}
+
+void Entity_prefab_w_childof_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.prefab(p, "Foo");
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_childof_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.prefab(p, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_parent(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity();
+    flecs::entity e = world.prefab(flecs::Parent{p});
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+}
+
+void Entity_prefab_w_parent_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity e = world.prefab(flecs::Parent{p}, "Foo");
+
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == 0);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_prefab_w_parent_w_name_existing_w_name(void) {
+    flecs::world world;
+
+    flecs::entity p = world.entity("Parent");
+    flecs::entity f = world.entity("Foo");
+    flecs::entity e = world.prefab(flecs::Parent{p}, "Foo");
+
+    test_assert(f != e);
+    test_assert(!f.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(!f.has<flecs::Parent>());
+    test_assert(e.has(flecs::Prefab));
+    test_assert(e.has(flecs::ChildOf, flecs::Wildcard));
+    test_assert(e.has(flecs::ChildOf, p));
+    test_assert(e.has<flecs::Parent>());
+    test_assert(e.get<flecs::Parent>().value == p);
+    test_str(e.name().c_str(), "Foo");
+
+    test_assert(world.lookup("Foo") == f);
+    test_assert(world.lookup("Parent::Foo") == e);
+}
+
+void Entity_defer_set_parent_to_deleted(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity child = world.entity();
+
+    world.defer_begin();
+    parent.destruct();
+    child.set(flecs::Parent{parent});
+    world.defer_end();
+
+    test_assert(!parent.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_set_parent_to_deleted_batched(void) {
+    flecs::world world;
+
+    flecs::entity parent = world.entity();
+    flecs::entity child = world.entity();
+
+    world.defer_begin();
+    parent.destruct();
+    child.set(Position{10, 20});
+    child.set(flecs::Parent{parent});
+    child.set(Velocity{1, 2});
+    world.defer_end();
+
+    test_assert(!parent.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_set_existing_parent_to_deleted(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.set(flecs::Parent{parent_b});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_set_existing_parent_to_deleted_batched(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.set(Position{10, 20});
+    child.set(flecs::Parent{parent_b});
+    child.set(Velocity{1, 2});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_assign_parent_to_deleted(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.assign(flecs::Parent{parent_b});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
+}
+
+void Entity_defer_assign_parent_to_deleted_batched(void) {
+    flecs::world world;
+
+    flecs::entity parent_a = world.entity();
+    flecs::entity parent_b = world.entity();
+    flecs::entity child = world.entity(flecs::Parent{parent_a}, nullptr);
+
+    world.defer_begin();
+    parent_b.destruct();
+    child.set(Position{10, 20});
+    child.assign(flecs::Parent{parent_b});
+    child.set(Velocity{1, 2});
+    world.defer_end();
+
+    test_assert(parent_a.is_alive());
+    test_assert(!parent_b.is_alive());
+    test_assert(!child.is_alive());
 }

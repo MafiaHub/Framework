@@ -5,9 +5,6 @@
 
 #pragma once
 
-#include <ctype.h>
-#include <stdio.h>
-
 /**
  * @defgroup cpp_components Components
  * @ingroup cpp_core
@@ -20,319 +17,235 @@ namespace flecs {
 
 namespace _ {
 
-// Trick to obtain typename from type, as described here
-// https://blog.molecular-matters.com/2015/12/11/getting-the-type-of-a-template-argument-as-string-without-rtti/
-//
-// The code from the link has been modified to work with more types, and across
-// multiple compilers. The resulting string should be the same on all platforms
-// for all compilers.
-//
-
-#if defined(__GNUC__) || defined(_WIN32)
 template <typename T>
-inline const char* type_name() {
-    static const size_t len = ECS_FUNC_TYPE_LEN(const char*, type_name, ECS_FUNC_NAME);
-    static char result[len + 1] = {};
-    static const size_t front_len = ECS_FUNC_NAME_FRONT(const char*, type_name);
-    static const char* cppTypeName = ecs_cpp_get_type_name(result, ECS_FUNC_NAME, len, front_len);
-    return cppTypeName;
-}
-#else
-#error "implicit component registration not supported"
-#endif
-
-// Translate a typename into a language-agnostic identifier. This allows for
-// registration of components/modules across language boundaries.
-template <typename T>
-inline const char* symbol_name() {
-    static const size_t len = ECS_FUNC_TYPE_LEN(const char*, symbol_name, ECS_FUNC_NAME);
-    static char result[len + 1] = {};
-    static const char* cppSymbolName = ecs_cpp_get_symbol_name(result, type_name<T>(), len);
-    return cppSymbolName;
+inline const char* component_symbol_name() {
+    return nullptr;
 }
 
-template <> inline const char* symbol_name<uint8_t>() {
+template <> inline const char* component_symbol_name<uint8_t>() {
     return "u8";
 }
-template <> inline const char* symbol_name<uint16_t>() {
+template <> inline const char* component_symbol_name<uint16_t>() {
     return "u16";
 }
-template <> inline const char* symbol_name<uint32_t>() {
+template <> inline const char* component_symbol_name<uint32_t>() {
     return "u32";
 }
-template <> inline const char* symbol_name<uint64_t>() {
+template <> inline const char* component_symbol_name<uint64_t>() {
     return "u64";
 }
-template <> inline const char* symbol_name<int8_t>() {
+template <> inline const char* component_symbol_name<int8_t>() {
     return "i8";
 }
-template <> inline const char* symbol_name<int16_t>() {
+template <> inline const char* component_symbol_name<int16_t>() {
     return "i16";
 }
-template <> inline const char* symbol_name<int32_t>() {
+template <> inline const char* component_symbol_name<int32_t>() {
     return "i32";
 }
-template <> inline const char* symbol_name<int64_t>() {
+template <> inline const char* component_symbol_name<int64_t>() {
     return "i64";
 }
-template <> inline const char* symbol_name<float>() {
+template <> inline const char* component_symbol_name<float>() {
     return "f32";
 }
-template <> inline const char* symbol_name<double>() {
+template <> inline const char* component_symbol_name<double>() {
     return "f64";
 }
 
-// If type is trivial, don't register lifecycle actions. While the functions
-// that obtain the lifecycle callback do detect whether the callback is required
+// If the type is trivial, don't register lifecycle actions. While the functions
+// that obtain the lifecycle callback do detect whether the callback is required,
 // adding a special case for trivial types eases the burden a bit on the
-// compiler as it reduces the number of templates to evaluate.
-template<typename T, enable_if_t<
-    std::is_trivial<T>::value == true
-        >* = nullptr>
-void register_lifecycle_actions(ecs_world_t*, ecs_entity_t) { }
-
-// If the component is non-trivial, register component lifecycle actions.
-// Depending on the type not all callbacks may be available.
-template<typename T, enable_if_t<
-    std::is_trivial<T>::value == false
-        >* = nullptr>
+// compiler, as it reduces the number of templates to evaluate.
+template<typename T>
 void register_lifecycle_actions(
     ecs_world_t *world,
     ecs_entity_t component)
 {
-    ecs_type_hooks_t cl{};
-    cl.ctor = ctor<T>();
-    cl.dtor = dtor<T>();
+    (void)world; (void)component;
+    if constexpr (!std::is_trivial<T>::value) {
+        // If the component is non-trivial, register component lifecycle actions.
+        // Depending on the type, not all callbacks may be available.
+        ecs_type_hooks_t cl{};
+        cl.ctor = ctor<T>(cl.flags);
+        cl.dtor = dtor<T>(cl.flags);
 
-    cl.copy = copy<T>();
-    cl.copy_ctor = copy_ctor<T>();
-    cl.move = move<T>();
-    cl.move_ctor = move_ctor<T>();
+        cl.copy = copy<T>(cl.flags);
+        cl.copy_ctor = copy_ctor<T>(cl.flags);
+        cl.move = move<T>(cl.flags);
+        cl.move_ctor = move_ctor<T>(cl.flags);
 
-    cl.ctor_move_dtor = ctor_move_dtor<T>();
-    cl.move_dtor = move_dtor<T>();
+        cl.ctor_move_dtor = ctor_move_dtor<T>(cl.flags);
+        cl.move_dtor = move_dtor<T>(cl.flags);
 
-    ecs_set_hooks_id( world, component, &cl);
+        cl.flags &= ECS_TYPE_HOOKS_ILLEGAL;
+        ecs_set_hooks_id(world, component, &cl);
 
-    if (cl.move == ecs_move_illegal || cl.move_ctor == ecs_move_ctor_illegal) {
-        ecs_add_id(world, component, flecs::Sparse);
+        if (cl.flags & (ECS_TYPE_HOOK_MOVE_ILLEGAL|ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL))
+        {
+            ecs_add_id(world, component, flecs::Sparse);
+        }
     }
 }
 
-// Class that manages component ids across worlds & binaries.
-// The type class stores the component id for a C++ type in a static global
-// variable that is shared between worlds. Whenever a component is used this
-// class will check if it already has been registered (has the global id been
-// set), and if not, register the component with the world.
-//
-// If the id has been set, the class will ensure it is known by the world. If it
-// is not known the component has been registered by another world and will be
-// registered with the world using the same id. If the id does exist, the class
-// will register it as a component, and verify whether the input is consistent.
+template <typename T>
+inline ecs_cpp_type_action_t lifecycle_action() {
+    if constexpr (std::is_trivial<T>::value) {
+        return nullptr;
+    } else {
+        return &register_lifecycle_actions<T>;
+    }
+}
+
+template <typename T>
+inline ecs_cpp_type_action_t enum_action() {
+#if FLECS_CPP_ENUM_REFLECTION_SUPPORT
+    if constexpr (is_enum_v<T>) {
+        return &_::init_enum<T>;
+    }
+#endif
+    return nullptr;
+}
+
 template <typename T>
 struct type_impl {
     static_assert(is_pointer<T>::value == false,
         "pointer types are not allowed for components");
 
-    // Initialize component identifier
+    // Initialize the component identifier.
     static void init(
-        entity_t entity,
         bool allow_tag = true)
     {
-        if (s_reset_count != ecs_cpp_reset_count_get()) {
-            reset();
-        }
+        index(); // Make sure the global component index is initialized.
 
-        // If an identifier was already set, check for consistency
-        if (s_id) {
-            ecs_assert(s_id == entity, ECS_INCONSISTENT_COMPONENT_ID,
-                type_name<T>());
-            ecs_assert(allow_tag == s_allow_tag, ECS_INVALID_PARAMETER, NULL);
-
-            // Component was already registered and data is consistent with new
-            // identifier, so nothing else to be done.
-            return;
-        }
-
-        // Component wasn't registered yet, set the values. Register component
-        // name as the fully qualified flecs path.
-        s_id = entity;
-        s_allow_tag = allow_tag;
         s_size = sizeof(T);
         s_alignment = alignof(T);
         if (is_empty<T>::value && allow_tag) {
             s_size = 0;
             s_alignment = 0;
         }
-
-        s_reset_count = ecs_cpp_reset_count_get();
     }
 
-    // Obtain a component identifier for explicit component registration.
-    static entity_t id_explicit(world_t *world = nullptr,
-        const char *name = nullptr, bool allow_tag = true, flecs::id_t id = 0,
-        bool is_component = true, bool *existing = nullptr)
-    {
-        if (!s_id) {
-            // If no world was provided the component cannot be registered
-            ecs_assert(world != nullptr, ECS_COMPONENT_NOT_REGISTERED, name);
-        } else {
-            ecs_assert(!id || s_id == id, ECS_INCONSISTENT_COMPONENT_ID, NULL);
-        }
-
-        // If no id has been registered yet for the component (indicating the
-        // component has not yet been registered, or the component is used
-        // across more than one binary), or if the id does not exists in the
-        // world (indicating a multi-world application), register it.
-        if (!s_id || (world && !ecs_exists(world, s_id))) {
-            init(s_id ? s_id : id, allow_tag);
-
-            ecs_assert(!id || s_id == id, ECS_INTERNAL_ERROR, NULL);
-
-            const char *symbol = nullptr;
-            if (id) {
-                symbol = ecs_get_symbol(world, id);
-            }
-            if (!symbol) {
-                symbol = symbol_name<T>();
-            }
-
-            entity_t entity = ecs_cpp_component_register_explicit(
-                    world, s_id, id, name, type_name<T>(), symbol,
-                        s_size, s_alignment, is_component, existing);
-
-            s_id = entity;
-
-            // If component is enum type, register constants
-            #if FLECS_CPP_ENUM_REFLECTION_SUPPORT
-            _::init_enum<T>(world, entity);
-            #endif
-        }
-
-        // By now the identifier must be valid and known with the world.
-        ecs_assert(s_id != 0 && ecs_exists(world, s_id),
-            ECS_INTERNAL_ERROR, NULL);
-
-        return s_id;
-    }
-
-    // Obtain a component identifier for implicit component registration. This
-    // is almost the same as id_explicit, except that this operation
-    // automatically registers lifecycle callbacks.
-    // Additionally, implicit registration temporarily resets the scope & with
-    // state of the world, so that the component is not implicitly created with
-    // the scope/with of the code it happens to be first used by.
-    static id_t id(world_t *world = nullptr, const char *name = nullptr,
+    static void init_builtin(
+        flecs::world_t *world,
+        flecs::entity_t id,
         bool allow_tag = true)
     {
-        // If no id has been registered yet, do it now.
-#ifndef FLECS_CPP_NO_AUTO_REGISTRATION
-        if (!registered(world)) {
-            ecs_entity_t prev_scope = 0;
-            ecs_id_t prev_with = 0;
+        init(allow_tag);
+        flecs_component_ids_set(world, index(), id);
+    }
 
-            if (world) {
-                prev_scope = ecs_set_scope(world, 0);
-                prev_with = ecs_set_with(world, 0);
-            }
+    // Register the component ID.
+    static entity_t register_id(
+        world_t *world,                     // The world
+        const char *name = nullptr,         // User-provided name (overrides typename)
+        bool allow_tag = true,              // Register empty types as zero-sized components
+        bool is_component = true,           // Add flecs::Component to the result
+        bool explicit_registration = false, // Entered from world.component<T>()?
+        flecs::id_t id = 0)                 // User-provided component ID
+    {
+        init(allow_tag);
+        ecs_assert(index() != 0, ECS_INTERNAL_ERROR, NULL);
 
-            // This will register a component id, but will not register
-            // lifecycle callbacks.
-            bool existing;
-            id_explicit(world, name, allow_tag, 0, true, &existing);
+        ecs_cpp_component_desc_t desc = {
+            id,
+            index(),
+            name,
+            type_name<T>(),
+            component_symbol_name<T>(),
+            size(),
+            alignment(),
+            lifecycle_action<T>(),
+            enum_action<T>(),
+            is_component,
+            explicit_registration
+        };
 
-            // Register lifecycle callbacks, but only if the component has a
-            // size. Components that don't have a size are tags, and tags don't
-            // require construction/destruction/copy/move's.
-            if (size() && !existing) {
-                register_lifecycle_actions<T>(world, s_id);
-            }
+        flecs::entity_t c = ecs_cpp_component_register(world, &desc);
 
-            if (prev_with) {
-                ecs_set_with(world, prev_with);
-            }
-            if (prev_scope) {
-                ecs_set_scope(world, prev_scope);
-            }
-        }
-#else
-        (void)world;
-        (void)name;
-        (void)allow_tag;
+        ecs_assert(c != 0, ECS_INTERNAL_ERROR, NULL);
 
+        return c;
+    }
+
+    // Get the type (component) ID.
+    // If the type was not yet registered and automatic registration is allowed,
+    // this function will also register the type.
+    static entity_t id(world_t *world)
+    {
+#ifdef FLECS_CPP_NO_AUTO_REGISTRATION
         ecs_assert(registered(world), ECS_INVALID_OPERATION, 
-            "component '%s' was not registered before use",
+            "component '%s' must be registered before use",
             type_name<T>());
+
+        flecs::entity_t c = flecs_component_ids_get(world, index());
+        ecs_assert(c != 0, ECS_INTERNAL_ERROR, NULL);
+        ecs_assert(ecs_is_alive(world, c), ECS_INVALID_OPERATION,
+            "component '%s' was deleted, reregister before using",
+            type_name<T>());
+#else
+        flecs::entity_t c = flecs_component_ids_get_alive(world, index());
+        if (!c) {
+            c = register_id(world);
+        }
 #endif
-
-        // By now we should have a valid identifier
-        ecs_assert(s_id != 0, ECS_INTERNAL_ERROR, NULL);
-
-        return s_id;
+        return c;
     }
 
     // Return the size of a component.
     static size_t size() {
-        ecs_assert(s_id != 0, ECS_INTERNAL_ERROR, NULL);
         return s_size;
     }
 
     // Return the alignment of a component.
     static size_t alignment() {
-        ecs_assert(s_id != 0, ECS_INTERNAL_ERROR, NULL);
         return s_alignment;
     }
 
-    // Was the component already registered.
+    // Was the component already registered?
     static bool registered(flecs::world_t *world) {
-        if (s_reset_count != ecs_cpp_reset_count_get()) {
-            reset();
-        }
-        if (s_id == 0) {
+        ecs_assert(world != nullptr, ECS_INVALID_PARAMETER, NULL);
+
+        if (!flecs_component_ids_get(world, index())) {
             return false;
         }
-        if (world && !ecs_exists(world, s_id)) {
-            return false;
-        }
+
         return true;
     }
 
-    // This function is only used to test cross-translation unit features. No
+    // This function is only used to test cross-translation-unit features. No
     // code other than test cases should invoke this function.
     static void reset() {
-        s_id = 0;
         s_size = 0;
         s_alignment = 0;
-        s_allow_tag = true;
     }
 
-    static entity_t s_id;
+    static int32_t index() {
+        static int32_t index_ = flecs_component_ids_index_get();
+        return index_;
+    }
+
     static size_t s_size;
     static size_t s_alignment;
-    static bool s_allow_tag;
-    static int32_t s_reset_count;
 };
 
-// Global templated variables that hold component identifier and other info
-template <typename T> entity_t      type_impl<T>::s_id;
-template <typename T> size_t        type_impl<T>::s_size;
-template <typename T> size_t        type_impl<T>::s_alignment;
-template <typename T> bool          type_impl<T>::s_allow_tag( true );
-template <typename T> int32_t       type_impl<T>::s_reset_count;
+// Global templated variables that hold the component identifier and other info.
+template <typename T> inline size_t   type_impl<T>::s_size;
+template <typename T> inline size_t   type_impl<T>::s_alignment;
 
-// Front facing class for implicitly registering a component & obtaining
-// static component data
+// Front-facing class for implicitly registering a component and obtaining
+// static component data.
 
-// Regular type
+// Regular type.
 template <typename T>
 struct type<T, if_not_t< is_pair<T>::value >>
     : type_impl<base_type_t<T>> { };
 
-// Pair type
+// Pair type.
 template <typename T>
 struct type<T, if_t< is_pair<T>::value >>
 {
-    // Override id method to return id of pair
+    // Override the id() method to return the ID of a pair.
     static id_t id(world_t *world = nullptr) {
         return ecs_pair(
             type< pair_first_t<T> >::id(world),
@@ -349,6 +262,120 @@ struct type<T, if_t< is_pair<T>::value >>
  */
 struct untyped_component : entity {
     using entity::entity;
+
+    /** Default constructor. */
+    untyped_component() : entity() { }
+
+    /** Construct from world and entity ID.
+     *
+     * @param world The world.
+     * @param id The component entity ID.
+     */
+    explicit untyped_component(flecs::world_t *world, flecs::entity_t id) : entity(world, id) { }
+
+    /** Construct from entity ID.
+     *
+     * @param id The component entity ID.
+     */
+    explicit untyped_component(flecs::entity_t id) : entity(id) { }
+
+    /** Construct from world and name.
+     *
+     * @param world The world.
+     * @param name The component name.
+     */
+    explicit untyped_component(flecs::world_t *world, const char *name)
+    {
+        world_ = world;
+
+        ecs_entity_desc_t desc = {};
+        desc.name = name;
+        desc.sep = "::";
+        desc.root_sep = "::";
+        desc.use_low_id = true;
+        id_ = ecs_entity_init(world, &desc);
+    }
+
+    /** Construct from world, name, and scope separators.
+     *
+     * @param world The world.
+     * @param name The component name.
+     * @param sep The scope separator.
+     * @param root_sep The root scope separator.
+     */
+    explicit untyped_component(world_t *world, const char *name, const char *sep, const char *root_sep)
+    {
+        world_ = world;
+
+        ecs_entity_desc_t desc = {};
+        desc.name = name;
+        desc.sep = sep;
+        desc.root_sep = root_sep;
+        desc.use_low_id = true;
+        id_ = ecs_entity_init(world, &desc);
+    }
+
+protected:
+
+    /** Get the type hooks for this component.
+     *
+     * @return The type hooks, or empty hooks if none are set.
+     */
+    flecs::type_hooks_t get_hooks() const {
+        const flecs::type_hooks_t* h = ecs_get_hooks_id(world_, id_);
+        if (h) {
+            return *h;
+        } else {
+            return {};
+        }
+    }
+
+    /** Set the type hooks for this component.
+     *
+     * @param h The type hooks to set.
+     */
+    void set_hooks(flecs::type_hooks_t &h) {
+        h.flags &= ECS_TYPE_HOOKS_ILLEGAL;
+        ecs_set_hooks_id(world_, id_, &h);
+    }
+
+public:
+
+/** Register a custom compare hook for this component.
+ *
+ * @param compare_callback The comparison callback function.
+ * @return Reference to self for chaining.
+ */
+untyped_component& on_compare(
+    ecs_cmp_t compare_callback)
+{
+    ecs_assert(compare_callback, ECS_INVALID_PARAMETER, NULL);
+    flecs::type_hooks_t h = get_hooks();
+    h.cmp = compare_callback;
+    h.flags &= ~ECS_TYPE_HOOK_CMP_ILLEGAL;
+    if(h.flags & ECS_TYPE_HOOK_EQUALS_ILLEGAL) {
+        h.flags &= ~ECS_TYPE_HOOK_EQUALS_ILLEGAL;
+        h.equals = NULL;
+    }
+    set_hooks(h);
+    return *this;
+}
+
+/** Register a custom equals hook for this component.
+ *
+ * @param equals_callback The equality callback function.
+ * @return Reference to self for chaining.
+ */
+untyped_component& on_equals(
+    ecs_equals_t equals_callback)
+{
+    ecs_assert(equals_callback, ECS_INVALID_PARAMETER, NULL);
+    flecs::type_hooks_t h = get_hooks();
+    h.equals = equals_callback;
+    h.flags &= ~ECS_TYPE_HOOK_EQUALS_ILLEGAL;
+    set_hooks(h);
+    return *this;
+}
 
 #   ifdef FLECS_META
 #   include "mixins/meta/untyped_component.inl"
@@ -372,7 +399,7 @@ struct component : untyped_component {
      * @param world The world for which to register the component.
      * @param name Optional name (overrides typename).
      * @param allow_tag If true, empty types will be registered with size 0.
-     * @param id Optional id to register component with.
+     * @param id Optional component ID to register the component with.
      */
     component(
         flecs::world_t *world,
@@ -380,70 +407,15 @@ struct component : untyped_component {
         bool allow_tag = true,
         flecs::id_t id = 0)
     {
-        const char *n = name;
-        bool implicit_name = false;
-        if (!n) {
-            n = _::type_name<T>();
-
-            /* Keep track of whether name was explicitly set. If not, and the
-            * component was already registered, just use the registered name.
-            *
-            * The registered name may differ from the typename as the registered
-            * name includes the flecs scope. This can in theory be different from
-            * the C++ namespace though it is good practice to keep them the same */
-            implicit_name = true;
-        }
-
-        if (_::type<T>::registered(world)) {
-            /* Obtain component id. Because the component is already registered,
-             * this operation does nothing besides returning the existing id */
-            id = _::type<T>::id_explicit(world, name, allow_tag, id);
-
-            ecs_cpp_component_validate(world, id, n, _::symbol_name<T>(),
-                _::type<T>::size(),
-                _::type<T>::alignment(),
-                implicit_name);
-        } else {
-            /* If component is registered from an existing scope, ignore the
-             * namespace in the name of the component. */
-            if (implicit_name && (ecs_get_scope(world) != 0)) {
-                /* If the type is a template type, make sure to ignore ':'
-                 * inside the template parameter list. */
-                const char *start = strchr(n, '<'), *last_elem = NULL;
-                if (start) {
-                    const char *ptr = start;
-                    while (ptr[0] && (ptr[0] != ':') && (ptr > n)) {
-                        ptr --;
-                    }
-                    if (ptr[0] == ':') {
-                        last_elem = ptr;
-                    }
-                }
-
-                if (last_elem) {
-                    name = last_elem + 1;
-                }
-            }
-
-            /* Find or register component */
-            bool existing;
-            id = ecs_cpp_component_register(world, id, n, _::symbol_name<T>(),
-                ECS_SIZEOF(T), ECS_ALIGNOF(T), implicit_name, &existing);
-
-            /* Initialize static component data */
-            id = _::type<T>::id_explicit(world, name, allow_tag, id);
-
-            /* Initialize lifecycle actions (ctor, dtor, copy, move) */
-            if (_::type<T>::size() && !existing) {
-                _::register_lifecycle_actions<T>(world, id);
-            }
-        }
-
         world_ = world;
-        id_ = id;
+        id_ = _::type<T>::register_id(world, name, allow_tag, true, true, id);
     }
 
-    /** Register on_add hook. */
+    /** Register on_add hook.
+     *
+     * @param func The callback function.
+     * @return Reference to self for chaining.
+     */
     template <typename Func>
     component<T>& on_add(Func&& func) {
         using Delegate = typename _::each_delegate<typename std::decay<Func>::type, T>;
@@ -453,13 +425,16 @@ struct component : untyped_component {
         BindingCtx *ctx = get_binding_ctx(h);
         h.on_add = Delegate::run_add;
         ctx->on_add = FLECS_NEW(Delegate)(FLECS_FWD(func));
-        ctx->free_on_add = reinterpret_cast<ecs_ctx_free_t>(
-            _::free_obj<Delegate>);
-        ecs_set_hooks_id(world_, id_, &h);
+        ctx->free_on_add = _::free_obj<Delegate>;
+        set_hooks(h);
         return *this;
     }
 
-    /** Register on_remove hook. */
+    /** Register on_remove hook.
+     *
+     * @param func The callback function.
+     * @return Reference to self for chaining.
+     */
     template <typename Func>
     component<T>& on_remove(Func&& func) {
         using Delegate = typename _::each_delegate<
@@ -470,13 +445,16 @@ struct component : untyped_component {
         BindingCtx *ctx = get_binding_ctx(h);
         h.on_remove = Delegate::run_remove;
         ctx->on_remove = FLECS_NEW(Delegate)(FLECS_FWD(func));
-        ctx->free_on_remove = reinterpret_cast<ecs_ctx_free_t>(
-            _::free_obj<Delegate>);
-        ecs_set_hooks_id(world_, id_, &h);
+        ctx->free_on_remove = _::free_obj<Delegate>;
+        set_hooks(h);
         return *this;
     }
 
-    /** Register on_set hook. */
+    /** Register on_set hook.
+     *
+     * @param func The callback function.
+     * @return Reference to self for chaining.
+     */
     template <typename Func>
     component<T>& on_set(Func&& func) {
         using Delegate = typename _::each_delegate<
@@ -487,9 +465,80 @@ struct component : untyped_component {
         BindingCtx *ctx = get_binding_ctx(h);
         h.on_set = Delegate::run_set;
         ctx->on_set = FLECS_NEW(Delegate)(FLECS_FWD(func));
-        ctx->free_on_set = reinterpret_cast<ecs_ctx_free_t>(
-            _::free_obj<Delegate>);
-        ecs_set_hooks_id(world_, id_, &h);
+        ctx->free_on_set = _::free_obj<Delegate>;
+        set_hooks(h);
+        return *this;
+    }
+
+    /** Register on_replace hook.
+     *
+     * @param func The callback function.
+     * @return Reference to self for chaining.
+     */
+    template <typename Func>
+    component<T>& on_replace(Func&& func) {
+        using Delegate = typename _::each_delegate<
+            typename std::decay<Func>::type, T, T>;
+        flecs::type_hooks_t h = get_hooks();
+        ecs_assert(h.on_replace == nullptr, ECS_INVALID_OPERATION,
+            "on_replace hook is already set");
+        BindingCtx *ctx = get_binding_ctx(h);
+        h.on_replace = Delegate::run_replace;
+        ctx->on_replace = FLECS_NEW(Delegate)(FLECS_FWD(func));
+        ctx->free_on_replace = _::free_obj<Delegate>;
+        set_hooks(h);
+        return *this;
+    }
+
+    using untyped_component::on_compare;
+
+    /** Register an operator compare hook using type T's comparison operators.
+     *
+     * @return Reference to self for chaining.
+     */
+    component<T>& on_compare() {
+        ecs_cmp_t handler = _::compare<T>();
+        ecs_assert(handler != NULL, ECS_INVALID_OPERATION, 
+            "Type does not have operator> or operator< const or is inaccessible");
+        on_compare(handler);
+        return *this;
+    }
+
+    using cmp_hook = int(*)(const T* a, const T* b, const ecs_type_info_t *ti);
+
+    /** Type-safe variant of the compare op function.
+     *
+     * @param callback The comparison callback function.
+     * @return Reference to self for chaining.
+     */
+    component<T>& on_compare(cmp_hook callback) {
+        on_compare(reinterpret_cast<ecs_cmp_t>(callback));
+        return *this;
+    }
+
+    using untyped_component::on_equals;
+
+    /** Register an operator equals hook using type T's equality operator.
+     *
+     * @return Reference to self for chaining.
+     */
+    component<T>& on_equals() {
+        ecs_equals_t handler = _::equals<T>();
+        ecs_assert(handler != NULL, ECS_INVALID_OPERATION, 
+            "Type does not have operator== const or is inaccessible");
+        on_equals(handler);
+        return *this;
+    }
+
+    using equals_hook = bool(*)(const T* a, const T* b, const ecs_type_info_t *ti);
+
+    /** Type-safe variant of the equals op function.
+     *
+     * @param callback The equality callback function.
+     * @return Reference to self for chaining.
+     */
+    component<T>& on_equals(equals_hook callback) {
+        on_equals(reinterpret_cast<ecs_equals_t>(callback));
         return *this;
     }
 
@@ -505,58 +554,11 @@ private:
         if (!result) {
             result = FLECS_NEW(BindingCtx);
             h.binding_ctx = result;
-            h.binding_ctx_free = reinterpret_cast<ecs_ctx_free_t>(
-                _::free_obj<BindingCtx>);
+            h.binding_ctx_free = _::free_obj<BindingCtx>;
         }
         return result;
     }
-
-    flecs::type_hooks_t get_hooks() {
-        const flecs::type_hooks_t* h = ecs_get_hooks_id(world_, id_);
-        if (h) {
-            return *h;
-        } else {
-            return {};
-        }
-    }
 };
-
-/** Get id currently assigned to component. If no world has registered the
- * component yet, this operation will return 0. */
-template <typename T>
-flecs::entity_t type_id() {
-    if (_::type<T>::s_reset_count == ecs_cpp_reset_count_get()) {
-        return _::type<T>::s_id;
-    } else {
-        return 0;
-    }
-}
-
-/** Reset static component ids.
- * When components are registered their component ids are stored in a static
- * type specific variable. This stored id is passed into component registration
- * functions to ensure consistent ids across worlds.
- *
- * In some cases this can be undesirable, like when a process repeatedly creates
- * worlds with different components. A typical example where this can happen is
- * when running multiple tests in a single process, where each test registers
- * its own set of components.
- *
- * This operation can be used to prevent reusing of component ids and force
- * generating a new ids upon registration.
- *
- * Note that this operation should *never* be called while there are still
- * alive worlds in a process. Doing so results in undefined behavior.
- *
- * Also note that this operation does not actually change the static component
- * variables. It only ensures that the next time a component id is requested, a
- * new id will be generated.
- *
- * @ingroup cpp_components
- */
-inline void reset() {
-    ecs_cpp_reset_count_inc();
-}
 
 }
 

@@ -45,8 +45,8 @@ namespace Framework::World {
                 uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
                 float closestDist         = std::numeric_limits<float>::max();
                 _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                    const auto rhsTr      = rhsE.get<Modules::Base::Transform>();
-                    const auto rhsRs      = rhsE.get<Modules::Base::Streamable>();
+                    const auto rhsTr      = rhsE.try_get<Modules::Base::Transform>();
+                    const auto rhsRs      = rhsE.try_get<Modules::Base::Streamable>();
                     const auto canBeOwner = this->IsEntityVisibleToStreamer(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
                     if (canBeOwner) {
                         const auto dist = glm::distance(tr.pos, rhsTr->pos);
@@ -127,7 +127,7 @@ namespace Framework::World {
 
                     for (auto i : it) {
                         // Skip streamer entities we plan to remove.
-                        if (it.entity(i).get<Modules::Base::PendingRemoval>() != nullptr)
+                        if (it.entity(i).has<Modules::Base::PendingRemoval>())
                             continue;
 
                         // Grab all streamable entities.
@@ -211,7 +211,7 @@ namespace Framework::World {
     }
 
     void ServerEngine::SetOwner(flecs::entity e, uint64_t guid) {
-        const auto es = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        const auto es = e.try_get_mut<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return;
         }
@@ -219,7 +219,7 @@ namespace Framework::World {
     }
 
     flecs::entity ServerEngine::GetOwner(flecs::entity e) const {
-        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return flecs::entity::null();
         }
@@ -228,14 +228,14 @@ namespace Framework::World {
 
     std::vector<flecs::entity> ServerEngine::FindVisibleStreamers(flecs::entity e) const {
         std::vector<flecs::entity> streamers;
-        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return {};
         }
         _findAllStreamerEntities.each([this, e, &streamers, es](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-            const auto rhsTr = rhsE.get<Modules::Base::Transform>();
-            const auto rhsST = rhsE.get<Modules::Base::Streamable>();
-            const auto lhsTr = e.get<Modules::Base::Transform>();
+            const auto rhsTr = rhsE.try_get<Modules::Base::Transform>();
+            const auto rhsST = rhsE.try_get<Modules::Base::Streamable>();
+            const auto lhsTr = e.try_get<Modules::Base::Transform>();
             if (!rhsTr || !rhsST || !lhsTr) {
                 return;
             }
@@ -271,7 +271,7 @@ namespace Framework::World {
             return false;
 
         // Discard entities that we plan to remove.
-        if (e.get<Modules::Base::PendingRemoval>() != nullptr)
+        if (e.has<Modules::Base::PendingRemoval>())
             return false;
 
         // Allow user to override visibility rules completely.
@@ -294,8 +294,8 @@ namespace Framework::World {
                 // Skip if already visited (part of a cycle)
                 if (visited.contains(dependentEntity.id()))
                     continue;
-                const auto &dependentS  = dependentEntity.get<Modules::Base::Streamable>();
-                const auto &dependentTr = dependentEntity.get<Modules::Base::Transform>();
+                const auto &dependentS  = dependentEntity.try_get<Modules::Base::Streamable>();
+                const auto &dependentTr = dependentEntity.try_get<Modules::Base::Transform>();
                 if (!dependentS || !dependentTr)
                     continue;
                 if (IsEntityVisibleToStreamerInternal(streamerEntity, dependentEntity, lhsTr, streamer, lhsS, *dependentTr, *dependentS, visited)) {

@@ -18,6 +18,15 @@
 #ifdef FLECS_NO_SCRIPT
 #undef FLECS_SCRIPT
 #endif
+#ifdef FLECS_NO_PARSER
+#undef FLECS_PARSER
+#endif
+#ifdef FLECS_NO_QUERY_DSL
+#undef FLECS_QUERY_DSL
+#endif
+#ifdef FLECS_NO_SCRIPT_MATH
+#undef FLECS_SCRIPT_MATH
+#endif
 #ifdef FLECS_NO_STATS
 #undef FLECS_STATS
 #endif
@@ -64,11 +73,10 @@
 #undef FLECS_JOURNAL
 #endif
 
-/* Always included, if disabled functions are replaced with dummy macros */
-#include "flecs/private/journal.h"
+/* Always included; if disabled, functions are replaced with dummy macros. */
 #include "flecs/addons/log.h"
 
-/* Handle addon dependencies that need declarations to be visible in header */
+/* Handle addon dependencies that need declarations to be visible in the header. */
 #ifdef FLECS_STATS
 #ifndef FLECS_PIPELINE
 #define FLECS_PIPELINE
@@ -161,6 +169,28 @@
 #include "../addons/units.h"
 #endif
 
+#ifdef FLECS_SCRIPT_MATH
+#ifdef FLECS_NO_SCRIPT_MATH
+#error "FLECS_NO_SCRIPT_MATH failed: SCRIPT_MATH is required by other addons"
+#endif
+#include "../addons/script_math.h"
+#endif
+
+#ifdef FLECS_PARSER
+#ifdef FLECS_NO_PARSER
+#error "FLECS_NO_PARSER failed: PARSER is required by other addons"
+#endif
+#endif
+
+#ifdef FLECS_QUERY_DSL
+#ifdef FLECS_NO_QUERY_DSL
+#error "FLECS_NO_QUERY_DSL failed: QUERY_DSL is required by other addons"
+#endif
+#ifndef FLECS_PARSER
+#define FLECS_PARSER
+#endif
+#endif
+
 #ifdef FLECS_SCRIPT
 #ifdef FLECS_NO_SCRIPT
 #error "FLECS_NO_SCRIPT failed: SCRIPT is required by other addons"
@@ -186,7 +216,7 @@
 #ifdef FLECS_NO_OS_API_IMPL
 #error "FLECS_NO_OS_API_IMPL failed: OS_API_IMPL is required by other addons"
 #endif
-#include "../private/os_api_impl.h"
+#include "../addons/os_api_impl.h"
 #endif
 
 #ifdef FLECS_MODULE

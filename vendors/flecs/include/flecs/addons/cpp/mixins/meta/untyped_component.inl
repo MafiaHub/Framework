@@ -12,7 +12,7 @@
 
 private:
 
-/** Private method that adds member to component. */
+/** Add a member to a component. */
 untyped_component& internal_member(
     flecs::entity_t type_id, 
     flecs::entity_t unit, 
@@ -21,38 +21,32 @@ untyped_component& internal_member(
     size_t offset = 0, 
     bool use_offset = false) 
 {
-    ecs_entity_desc_t desc = {};
-    desc.name = name;
-    desc.parent = id_;
-    ecs_entity_t eid = ecs_entity_init(world_, &desc);
-    ecs_assert(eid != 0, ECS_INTERNAL_ERROR, NULL);
-
-    flecs::entity e(world_, eid);
-
-    Member m = {};
+    ecs_member_t m = {};
+    m.name = name;
     m.type = type_id;
     m.unit = unit;
     m.count = count;
     m.offset = static_cast<int32_t>(offset);
     m.use_offset = use_offset;
-    e.set<Member>(m);
+    
+    ecs_struct_add_member(world_, id_, &m);
 
     return *this;
 }
 
 public: 
 
-/** Add member with unit. */
+/** Add a member with unit. */
 untyped_component& member(
-    flecs::entity_t type_id, 
-    flecs::entity_t unit, 
-    const char *name, 
+    flecs::entity_t type_id,
+    flecs::entity_t unit,
+    const char *name,
     int32_t count = 0) 
 {
     return internal_member(type_id, unit, name, count, 0, false);
 }
 
-/** Add member with unit, count and offset. */
+/** Add a member with unit, count, and offset. */
 untyped_component& member(
     flecs::entity_t type_id, 
     flecs::entity_t unit, 
@@ -63,16 +57,16 @@ untyped_component& member(
     return internal_member(type_id, unit, name, count, offset, true);
 }
 
-/** Add member. */
+/** Add a member. */
 untyped_component& member(
-    flecs::entity_t type_id, 
+    flecs::entity_t type_id,
     const char* name,
     int32_t count = 0) 
 {
     return member(type_id, 0, name, count);
 }
 
-/** Add member with count and offset. */
+/** Add a member with count and offset. */
 untyped_component& member(
     flecs::entity_t type_id, 
     const char* name, 
@@ -82,7 +76,7 @@ untyped_component& member(
     return member(type_id, 0, name, count, offset);
 }
 
-/** Add member. */
+/** Add a member. */
 template <typename MemberType>
 untyped_component& member(
     const char *name,
@@ -92,41 +86,41 @@ untyped_component& member(
     return member(type_id, name, count);
 }
 
-/** Add member. */
+/** Add a member. */
 template <typename MemberType>
 untyped_component& member(
     const char *name,
-    int32_t count, 
+    int32_t count,
     size_t offset) 
 {
     flecs::entity_t type_id = _::type<MemberType>::id(world_);
     return member(type_id, name, count, offset);
 }
 
-/** Add member with unit. */
+/** Add a member with unit. */
 template <typename MemberType>
 untyped_component& member(
     flecs::entity_t unit,
-    const char *name, 
+    const char *name,
     int32_t count = 0) 
 {
     flecs::entity_t type_id = _::type<MemberType>::id(world_);
     return member(type_id, unit, name, count);
 }
 
-/** Add member with unit. */
+/** Add a member with unit. */
 template <typename MemberType>
 untyped_component& member(
     flecs::entity_t unit,
-    const char *name, 
-    int32_t count, 
+    const char *name,
+    int32_t count,
     size_t offset) 
 {
     flecs::entity_t type_id = _::type<MemberType>::id(world_);
     return member(type_id, unit, name, count, offset);
 }
 
-/** Add member with unit. */
+/** Add a member with unit. */
 template <typename MemberType, typename UnitType>
 untyped_component& member(
     const char *name,
@@ -137,11 +131,11 @@ untyped_component& member(
     return member(type_id, unit_id, name, count);
 }
 
-/** Add member with unit. */
+/** Add a member with unit. */
 template <typename MemberType, typename UnitType>
 untyped_component& member(
-    const char *name, 
-    int32_t count, 
+    const char *name,
+    int32_t count,
     size_t offset) 
 {
     flecs::entity_t type_id = _::type<MemberType>::id(world_);
@@ -149,7 +143,7 @@ untyped_component& member(
     return member(type_id, unit_id, name, count, offset);
 }
 
-/** Add member using pointer-to-member. */
+/** Add a member using pointer-to-member. */
 template <typename MemberType, typename ComponentType, 
     typename RealType = typename std::remove_extent<MemberType>::type>
 untyped_component& member(
@@ -161,7 +155,7 @@ untyped_component& member(
     return member(type_id, name, std::extent<MemberType>::value, offset);
 }
 
-/** Add member with unit using pointer-to-member. */
+/** Add a member with unit using pointer-to-member. */
 template <typename MemberType, typename ComponentType, 
     typename RealType = typename std::remove_extent<MemberType>::type>
 untyped_component& member(
@@ -174,7 +168,7 @@ untyped_component& member(
     return member(type_id, unit, name, std::extent<MemberType>::value, offset);
 }
 
-/** Add member with unit using pointer-to-member. */
+/** Add a member with unit using pointer-to-member. */
 template <typename UnitType, typename MemberType, typename ComponentType, 
     typename RealType = typename std::remove_extent<MemberType>::type>
 untyped_component& member(
@@ -187,10 +181,11 @@ untyped_component& member(
     return member(type_id, unit_id, name, std::extent<MemberType>::value, offset);
 }
 
-/** Add constant. */
+/** Add a constant. */
+template <typename T = int32_t>
 untyped_component& constant(
     const char *name,
-    int32_t value) 
+    T value)
 {
     ecs_add_id(world_, id_, _::type<flecs::Enum>::id(world_));
 
@@ -201,16 +196,17 @@ untyped_component& constant(
     ecs_assert(eid != 0, ECS_INTERNAL_ERROR, NULL);
 
     ecs_set_id(world_, eid, 
-        ecs_pair(flecs::Constant, flecs::I32), sizeof(int32_t),
+        ecs_pair(flecs::Constant, _::type<T>::id(world_)), sizeof(T),
         &value);
 
     return *this;
 }
 
-/** Add bitmask constant. */
+/** Add a bitmask constant. */
+template <typename T = uint32_t>
 untyped_component& bit(
     const char *name, 
-    uint32_t value) 
+    T value)
 {
     ecs_add_id(world_, id_, _::type<flecs::Bitmask>::id(world_));
 
@@ -221,13 +217,13 @@ untyped_component& bit(
     ecs_assert(eid != 0, ECS_INTERNAL_ERROR, NULL);
 
     ecs_set_id(world_, eid, 
-        ecs_pair(flecs::Constant, flecs::U32), sizeof(uint32_t),
+        ecs_pair(flecs::Constant, _::type<T>::id(world_)), sizeof(T),
         &value);
 
     return *this;
 }
 
-/** Register array metadata for component */
+/** Register array metadata for a component. */
 template <typename Elem>
 untyped_component& array(
     int32_t elem_count) 
@@ -240,69 +236,84 @@ untyped_component& array(
     return *this;
 }
 
-/** Add member value range */
+/** Add a member value range. */
 untyped_component& range(
     double min,
     double max) 
 {
-    const flecs::member_t *m = ecs_cpp_last_member(world_, id_);
+    flecs::member_t *m = ecs_cpp_last_member(world_, id_);
     if (!m) {
         return *this;
     }
 
-    flecs::world w(world_);
-    flecs::entity me = w.entity(m->member);
+    m->range.min = min;
+    m->range.max = max;
 
-    // Don't use C++ ensure because Unreal defines a macro called ensure
-    flecs::MemberRanges *mr = static_cast<flecs::MemberRanges*>(
-        ecs_ensure_id(w, me, w.id<flecs::MemberRanges>()));
-    mr->value.min = min;
-    mr->value.max = max;
-    me.modified<flecs::MemberRanges>();
+    if (m->member) {
+        flecs::world w(world_);
+        flecs::entity me = w.entity(m->member);
+        flecs::MemberRanges *mr = static_cast<flecs::MemberRanges*>(
+            ecs_ensure_id(w, me, w.id<flecs::MemberRanges>(), 
+                sizeof(flecs::MemberRanges)));
+        mr->value.min = min;
+        mr->value.max = max;
+        me.modified<flecs::MemberRanges>();
+    }
+
     return *this;
 }
 
-/** Add member warning range */
+/** Add a member warning range. */
 untyped_component& warning_range(
     double min,
     double max) 
 {
-    const flecs::member_t *m = ecs_cpp_last_member(world_, id_);
+    flecs::member_t *m = ecs_cpp_last_member(world_, id_);
     if (!m) {
         return *this;
     }
 
-    flecs::world w(world_);
-    flecs::entity me = w.entity(m->member);
+    m->warning_range.min = min;
+    m->warning_range.max = max;
 
-    // Don't use C++ ensure because Unreal defines a macro called ensure
-    flecs::MemberRanges *mr = static_cast<flecs::MemberRanges*>(
-        ecs_ensure_id(w, me, w.id<flecs::MemberRanges>()));
-    mr->warning.min = min;
-    mr->warning.max = max;
-    me.modified<flecs::MemberRanges>();
+    if (m->member) {
+        flecs::world w(world_);
+        flecs::entity me = w.entity(m->member);
+        flecs::MemberRanges *mr = static_cast<flecs::MemberRanges*>(
+            ecs_ensure_id(w, me, w.id<flecs::MemberRanges>(), 
+                sizeof(flecs::MemberRanges)));
+        mr->warning.min = min;
+        mr->warning.max = max;
+        me.modified<flecs::MemberRanges>();
+    }
+
     return *this;
 }
 
-/** Add member error range */
+/** Add a member error range. */
 untyped_component& error_range(
     double min,
     double max) 
 {
-    const flecs::member_t *m = ecs_cpp_last_member(world_, id_);
+    flecs::member_t *m = ecs_cpp_last_member(world_, id_);
     if (!m) {
         return *this;
     }
 
-    flecs::world w(world_);
-    flecs::entity me = w.entity(m->member);
+    m->error_range.min = min;
+    m->error_range.max = max;
 
-    // Don't use C++ ensure because Unreal defines a macro called ensure
-    flecs::MemberRanges *mr = static_cast<flecs::MemberRanges*>(ecs_ensure_id(
-        w, me, w.id<flecs::MemberRanges>()));
-    mr->error.min = min;
-    mr->error.max = max;
-    me.modified<flecs::MemberRanges>();
+    if (m->member) {
+        flecs::world w(world_);
+        flecs::entity me = w.entity(m->member);
+        flecs::MemberRanges *mr = static_cast<flecs::MemberRanges*>(
+            ecs_ensure_id(w, me, w.id<flecs::MemberRanges>(), 
+                sizeof(flecs::MemberRanges)));
+        mr->error.min = min;
+        mr->error.max = max;
+        me.modified<flecs::MemberRanges>();
+    }
+
     return *this;
 }
 

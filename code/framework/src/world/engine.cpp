@@ -34,7 +34,7 @@ namespace Framework::World {
     }
 
     bool Engine::IsEntityOwner(flecs::entity e, uint64_t guid) {
-        const auto es = e.get<Framework::World::Modules::Base::Streamable>();
+        const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
         if (!es) {
             return false;
         }
@@ -42,12 +42,12 @@ namespace Framework::World {
     }
 
     void Engine::WakeEntity(flecs::entity e) {
-        if (!e.get<Framework::World::Modules::Base::TickRateRegulator>()) {
+        if (!e.has<Framework::World::Modules::Base::TickRateRegulator>()) {
             return;
         }
-        const auto tr = e.get_mut<Framework::World::Modules::Base::TickRateRegulator>();
+        const auto tr = e.try_get_mut<Framework::World::Modules::Base::TickRateRegulator>();
         tr->lastGenID--;
-        const auto es      = e.get_mut<Framework::World::Modules::Base::Streamable>();
+        const auto es      = e.try_get_mut<Framework::World::Modules::Base::Streamable>();
         es->updateInterval = es->defaultUpdateInterval;
     }
 

@@ -12,7 +12,7 @@
 
 #include <BitStream.h>
 
-#include <flecs/flecs.h>
+#include <flecs/distr/flecs.h>
 
 namespace Framework::Networking::Messages {
     class ClientInitPlayer final: public IMessage {

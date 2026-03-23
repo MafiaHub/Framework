@@ -13,20 +13,19 @@ void flecs_trav_entity_down_isa(
     ecs_trav_down_t *dst,
     ecs_entity_t trav,
     ecs_entity_t entity,
-    ecs_id_record_t *idr_with,
+    ecs_component_record_t *cr_with,
     bool self,
     bool empty);
 
 static
-ecs_trav_down_t* flecs_trav_entity_down(
+void flecs_trav_entity_down(
     ecs_world_t *world,
     ecs_allocator_t *a,
     ecs_trav_up_cache_t *cache,
     ecs_trav_down_t *dst,
     ecs_entity_t trav,
-    ecs_entity_t entity,
-    ecs_id_record_t *idr_trav,
-    ecs_id_record_t *idr_with,
+    ecs_component_record_t *cr_trav,
+    ecs_component_record_t *cr_with,
     bool self,
     bool empty);
 
@@ -53,22 +52,23 @@ ecs_trav_down_t* flecs_trav_table_down(
     ecs_trav_up_cache_t *cache,
     ecs_trav_down_t *dst,
     ecs_entity_t trav,
-    const ecs_table_t *table,
-    ecs_id_record_t *idr_with,
+    const ecs_table_range_t *range,
+    ecs_component_record_t *cr_with,
     bool self,
     bool empty)
 {
+    ecs_table_t *table = range->table;
     ecs_assert(table->id != 0, ECS_INTERNAL_ERROR, NULL);
 
     if (!table->_->traversable_count) {
         return dst;
     }
 
-    ecs_assert(idr_with != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(cr_with != NULL, ECS_INTERNAL_ERROR, NULL);
 
     const ecs_entity_t *entities = ecs_table_entities(table);
-    int32_t i, count = ecs_table_count(table);
-    for (i = 0; i < count; i ++) {
+    int32_t i = range->offset, end = i + range->count;
+    for (; i < end; i ++) {
         ecs_entity_t entity = entities[i];
         ecs_record_t *record = flecs_entities_get(world, entity);
         if (!record) {
@@ -77,14 +77,14 @@ ecs_trav_down_t* flecs_trav_table_down(
 
         uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(record->row);
         if (flags & EcsEntityIsTraversable) {
-            ecs_id_record_t *idr_trav = flecs_id_record_get(world, 
+            ecs_component_record_t *cr_trav = flecs_components_get(world, 
                 ecs_pair(trav, entity));
-            if (!idr_trav) {
+            if (!cr_trav) {
                 continue;
             }
 
             flecs_trav_entity_down(world, a, cache, dst, 
-                trav, entity, idr_trav, idr_with, self, empty);
+                trav, cr_trav, cr_with, self, empty);
         }
     }
 
@@ -99,30 +99,30 @@ void flecs_trav_entity_down_isa(
     ecs_trav_down_t *dst,
     ecs_entity_t trav,
     ecs_entity_t entity,
-    ecs_id_record_t *idr_with,
+    ecs_component_record_t *cr_with,
     bool self,
     bool empty)
 {
-    if (trav == EcsIsA || !world->idr_isa_wildcard) {
+    if (trav == EcsIsA || !world->cr_isa_wildcard) {
         return;
     }
 
-    ecs_id_record_t *idr_isa = flecs_id_record_get(
+    ecs_component_record_t *cr_isa = flecs_components_get(
         world, ecs_pair(EcsIsA, entity));
-    if (!idr_isa) {
+    if (!cr_isa) {
         return;
     }
 
     ecs_table_cache_iter_t it;
-    if (flecs_table_cache_iter(&idr_isa->cache, &it)) {
-        ecs_table_record_t *tr;
+    if (flecs_table_cache_iter(&cr_isa->cache, &it)) {
+        const ecs_table_record_t *tr;
         while ((tr = flecs_table_cache_next(&it, ecs_table_record_t))) {
             ecs_table_t *table = tr->hdr.table;
             if (!table->_->traversable_count) {
                 continue;
             }
 
-            if (ecs_table_has_id(world, table, idr_with->id)) {
+            if (ecs_table_has_id(world, table, cr_with->id)) {
                 /* Table owns component */
                 continue;
             }
@@ -138,15 +138,15 @@ void flecs_trav_entity_down_isa(
 
                 uint32_t flags = ECS_RECORD_TO_ROW_FLAGS(record->row);
                 if (flags & EcsEntityIsTraversable) {
-                    ecs_id_record_t *idr_trav = flecs_id_record_get(world, 
+                    ecs_component_record_t *cr_trav = flecs_components_get(world, 
                         ecs_pair(trav, e));
-                    if (idr_trav) {
-                        flecs_trav_entity_down(world, a, cache, dst, trav, e,
-                            idr_trav, idr_with, self, empty);
+                    if (cr_trav) {
+                        flecs_trav_entity_down(world, a, cache, dst, trav,
+                            cr_trav, cr_with, self, empty);
                     }
 
                     flecs_trav_entity_down_isa(world, a, cache, dst, trav, e, 
-                        idr_with, self, empty);
+                        cr_with, self, empty);
                 }
             }
         }
@@ -154,33 +154,72 @@ void flecs_trav_entity_down_isa(
 }
 
 static
-ecs_trav_down_t* flecs_trav_entity_down(
+void flecs_trav_entity_down_iter_children(
     ecs_world_t *world,
     ecs_allocator_t *a,
     ecs_trav_up_cache_t *cache,
     ecs_trav_down_t *dst,
     ecs_entity_t trav,
-    ecs_entity_t e,
-    ecs_id_record_t *idr_trav,
-    ecs_id_record_t *idr_with,
+    ecs_component_record_t *cr_trav,
+    ecs_component_record_t *cr_with,
     bool self,
     bool empty)
 {
-    ecs_assert(dst != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(idr_with != NULL, ECS_INTERNAL_ERROR, NULL);
-    ecs_assert(idr_trav != NULL, ECS_INTERNAL_ERROR, NULL);
+    (void)cache;
+    (void)trav;
+    (void)empty;
 
-    flecs_trav_entity_down_isa(
-        world, a, cache, dst, trav, e, idr_with, self, empty);
+    ecs_vec_t *children = &cr_trav->pair->ordered_children;
+    int32_t i, count = ecs_vec_count(children);
+    ecs_entity_t *elems = ecs_vec_first(children);
 
-    int32_t first = ecs_vec_count(&dst->elems);
+    for (i = 0; i < count; i ++) {
+        ecs_entity_t e = elems[i];
+        ecs_record_t *r = flecs_entities_get(world, e);
+        bool leaf = false;
+
+        /* Check if table has the component*/
+        if (flecs_component_get_table(cr_with, r->table) != NULL) {
+            if (self) {
+                /* If matching self and the table has the component, entity
+                 * shouldn't be matched through traversal and will instead
+                 * be matched directly.*/
+                continue;
+            }
+
+            leaf = true;
+        }
+
+        /* Add element to the cache for a single child */
+        ecs_trav_down_elem_t *elem = ecs_vec_append_t(
+            a, &dst->elems, ecs_trav_down_elem_t);
+        elem->range.table = r->table;
+        elem->range.offset = ECS_RECORD_TO_ROW(r->row);
+        elem->range.count = 1;
+        elem->leaf = leaf;
+    }
+}
+
+static
+void flecs_trav_entity_down_iter_tables(
+    ecs_world_t *world,
+    ecs_allocator_t *a,
+    ecs_trav_up_cache_t *cache,
+    ecs_trav_down_t *dst,
+    ecs_entity_t trav,
+    ecs_component_record_t *cr_trav,
+    ecs_component_record_t *cr_with,
+    bool self,
+    bool empty)
+{
+    (void)cache;
 
     ecs_table_cache_iter_t it;
     bool result;
     if (empty) {
-        result = flecs_table_cache_all_iter(&idr_trav->cache, &it);
+        result = flecs_table_cache_all_iter(&cr_trav->cache, &it);
     } else {
-        result = flecs_table_cache_iter(&idr_trav->cache, &it);
+        result = flecs_table_cache_iter(&cr_trav->cache, &it);
     }
 
     if (result) {
@@ -190,7 +229,7 @@ ecs_trav_down_t* flecs_trav_entity_down(
             ecs_table_t *table = tr->hdr.table;
             bool leaf = false;
 
-            if (flecs_id_record_get_table(idr_with, table) != NULL) {
+            if (flecs_component_get_table(cr_with, table) != NULL) {
                 if (self) {
                     continue;
                 }
@@ -204,7 +243,7 @@ ecs_trav_down_t* flecs_trav_entity_down(
                 ecs_id_t id = table->type.array[index - 1];
                 if (ECS_IS_PAIR(id) && ECS_PAIR_FIRST(id) == trav) {
                     int32_t col = ecs_search_relation(world, table, 0, 
-                        idr_with->id, trav, EcsUp, NULL, NULL, &tr);
+                        cr_with->id, trav, EcsUp, NULL, NULL, &tr);
                     ecs_assert(col >= 0, ECS_INTERNAL_ERROR, NULL);
 
                     if (col != index) {
@@ -217,9 +256,38 @@ ecs_trav_down_t* flecs_trav_entity_down(
 
             ecs_trav_down_elem_t *elem = ecs_vec_append_t(
                 a, &dst->elems, ecs_trav_down_elem_t);
-            elem->table = table;
+            elem->range.table = table;
+            elem->range.offset = 0;
+            elem->range.count = ecs_table_count(table);
             elem->leaf = leaf;
         }
+    }
+}
+
+static
+void flecs_trav_entity_down(
+    ecs_world_t *world,
+    ecs_allocator_t *a,
+    ecs_trav_up_cache_t *cache,
+    ecs_trav_down_t *dst,
+    ecs_entity_t trav,
+    ecs_component_record_t *cr_trav,
+    ecs_component_record_t *cr_with,
+    bool self,
+    bool empty)
+{
+    ecs_assert(dst != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(cr_with != NULL, ECS_INTERNAL_ERROR, NULL);
+    ecs_assert(cr_trav != NULL, ECS_INTERNAL_ERROR, NULL);
+
+    int32_t first = ecs_vec_count(&dst->elems);
+
+    if (cr_trav->flags & EcsIdOrderedChildren) {
+        flecs_trav_entity_down_iter_children(
+            world, a, cache, dst, trav, cr_trav, cr_with, self, empty);
+    } else {
+        flecs_trav_entity_down_iter_tables(
+            world, a, cache, dst, trav, cr_trav, cr_with, self, empty);
     }
 
     /* Breadth first walk */
@@ -229,11 +297,9 @@ ecs_trav_down_t* flecs_trav_entity_down(
             &dst->elems, ecs_trav_down_elem_t, t);
         if (!elem->leaf) {
             flecs_trav_table_down(world, a, cache, dst, trav,
-                elem->table, idr_with, self, empty);
+                &elem->range, cr_with, self, empty);
         }
     }
-
-    return dst;
 }
 
 ecs_trav_down_t* flecs_query_get_down_cache(
@@ -241,7 +307,7 @@ ecs_trav_down_t* flecs_query_get_down_cache(
     ecs_trav_up_cache_t *cache,
     ecs_entity_t trav,
     ecs_entity_t e,
-    ecs_id_record_t *idr_with,
+    ecs_component_record_t *cr_with,
     bool self,
     bool empty)
 {
@@ -257,19 +323,30 @@ ecs_trav_down_t* flecs_query_get_down_cache(
         return result;
     }
 
-    ecs_id_record_t *idr_trav = flecs_id_record_get(world, ecs_pair(trav, e));
-    if (!idr_trav) {
+    ecs_component_record_t *cr_trav = flecs_components_get(world, ecs_pair(trav, e));
+    if (!cr_trav) {
         if (trav != EcsIsA) {
-            flecs_trav_entity_down_isa(
-                world, a, cache, result, trav, e, idr_with, self, empty);
+            if (cr_with->flags & EcsIdOnInstantiateInherit) {
+                flecs_trav_entity_down_isa(
+                    world, a, cache, result, trav, e, cr_with, self, empty);
+            }
+
         }
         result->ready = true;
         return result;
     }
 
     ecs_vec_init_t(a, &result->elems, ecs_trav_down_elem_t, 0);
+
+    /* Cover IsA -> trav paths. If a parent inherits a component, then children
+     * of that parent should find the component through up traversal. */
+    if (cr_with->flags & EcsIdOnInstantiateInherit) {
+        flecs_trav_entity_down_isa(
+            world, a, cache, result, trav, e, cr_with, self, empty);
+    }
+
     flecs_trav_entity_down(
-        world, a, cache, result, trav, e, idr_trav, idr_with, self, empty);
+        world, a, cache, result, trav, cr_trav, cr_with, self, empty);
     result->ready = true;
 
     return result;

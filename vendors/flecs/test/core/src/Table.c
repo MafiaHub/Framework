@@ -618,6 +618,31 @@ void Table_has_any_pair(void) {
     ecs_fini(world);
 }
 
+void Table_get_target_out_of_range(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel0);
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, Rel2);
+    ECS_TAG(world, Tgt0);
+    ECS_TAG(world, Tgt1);
+    ECS_TAG(world, Tgt2);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, Rel0, Tgt0);
+    ecs_add_pair(world, e, Rel, Tgt1);
+    ecs_add_pair(world, e, Rel2, Tgt2);
+
+    ecs_table_t *table = ecs_get_table(world, e);
+    test_assert(table != NULL);
+
+    test_uint(ecs_table_get_target(world, table, Rel, 0), Tgt1);
+    test_uint(ecs_table_get_target(world, table, Rel, -1), 0);
+    test_uint(ecs_table_get_target(world, table, Rel, 1), 0);
+
+    ecs_fini(world);
+}
+
 void Table_clear_table_kills_entities(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -748,8 +773,8 @@ void Table_clear_table_on_remove_hooks(void) {
     });
 
     ecs_entity_t e1 = ecs_insert(world, ecs_value(Position, {10, 20}));
-    ecs_entity_t e2 = ecs_insert(world, ecs_value(Position, {10, 20}));
-    ecs_entity_t e3 = ecs_insert(world, ecs_value(Position, {10, 20}));
+    /* e2 */ ecs_insert(world, ecs_value(Position, {10, 20}));
+    /* e3 */ ecs_insert(world, ecs_value(Position, {10, 20}));
 
     ecs_table_t *table = ecs_get_table(world, e1);
     ecs_table_clear_entities(world, table);
@@ -765,7 +790,7 @@ void Observer(ecs_iter_t *it) {
 }
 
 void Table_clear_table_on_remove_observer(void) {
-     ecs_world_t *world = ecs_mini();
+    ecs_world_t *world = ecs_mini();
 
     ECS_COMPONENT(world, Position);
 
@@ -790,6 +815,41 @@ void Table_clear_table_on_remove_observer(void) {
 
     test_int(ctx.invoked, 1);
     test_int(ctx.count, 2);
+
+    ecs_fini(world);
+}
+
+void Table_65_records_w_tgt(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, RelA);
+    ECS_TAG(world, TgtA);
+
+    ECS_TAG(world, RelB);
+    ECS_TAG(world, TgtB);
+
+    ecs_id_t *ids = ecs_os_malloc_n(ecs_id_t, 39);
+    int32_t i;
+
+    for (i = 0; i < 19; i ++) {
+        ids[i] = ecs_new(world);
+    }
+
+    for (; i < 37; i ++) {
+        ids[i] = ECS_AUTO_OVERRIDE | ecs_new(world);
+    }
+
+    ids[i ++] = ecs_pair(RelA, TgtA);
+    ids[i ++] = ecs_pair(RelB, TgtB);
+
+    ecs_table_t *table = ecs_table_find(world, ids, i);
+    test_assert(table != NULL);
+
+    for (i = 0; i < 39; i ++) {
+        test_assert(ecs_table_has_id(world, table, ids[i]));
+    }
+
+    ecs_os_free(ids);
 
     ecs_fini(world);
 }

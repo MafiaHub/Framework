@@ -17,7 +17,7 @@ void flecs_json_serialize_id_str(
     ecs_strbuf_appendch(buf, '"');
     if (ECS_IS_PAIR(id)) {
         ecs_entity_t first = ecs_pair_first(world, id);
-        ecs_entity_t second = ecs_pair_first(world, id);
+        ecs_entity_t second = ecs_pair_second(world, id);
         ecs_strbuf_appendch(buf, '(');
         ecs_get_path_w_sep_buf(world, 0, first, ".", "", buf, true);
         ecs_strbuf_appendch(buf, ',');
@@ -281,13 +281,13 @@ int ecs_iter_to_json_buf(
 {
     ecs_world_t *world = it->real_world;
 
-    /* Cache id record for flecs.doc ids */
+    /* Cache component record for flecs.doc ids */
     ecs_json_ser_ctx_t ser_ctx;
     ecs_os_zeromem(&ser_ctx);
 #ifdef FLECS_DOC
-    ser_ctx.idr_doc_name = flecs_id_record_get(world, 
+    ser_ctx.cr_doc_name = flecs_components_get(world, 
         ecs_pair_t(EcsDocDescription, EcsName));
-    ser_ctx.idr_doc_color = flecs_id_record_get(world, 
+    ser_ctx.cr_doc_color = flecs_components_get(world, 
         ecs_pair_t(EcsDocDescription, EcsDocColor));
 #endif
 
@@ -329,14 +329,26 @@ int ecs_iter_to_json_buf(
             ECS_BIT_SET(it->flags, EcsIterNoData);
         }
 
+        /* Keep track of serialized entities. This allows entities to be 
+         * serialized depth first, which avoids weird side effects from children
+         * being created before parents. */
+        if (desc && desc->serialize_parents_before_children) {
+            ecs_map_init(&ser_ctx.serialized, &world->allocator);
+        }
+
         ecs_iter_next_action_t next = it->next;
         while (next(it)) {
             if (flecs_json_serialize_iter_result(world, it, buf, desc, &ser_ctx)) {
                 ecs_strbuf_reset(buf);
                 flecs_iter_free_ser_ctx(it, &ser_ctx);
                 ecs_iter_fini(it);
+                ecs_map_fini(&ser_ctx.serialized);
                 return -1;
             }
+        }
+
+        if (desc && desc->serialize_parents_before_children) {
+            ecs_map_fini(&ser_ctx.serialized);
         }
 
         flecs_json_array_pop(buf);
