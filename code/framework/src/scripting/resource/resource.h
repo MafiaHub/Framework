@@ -3,6 +3,7 @@
 #include "package_manifest.h"
 
 #include <v8.h>
+#include <flecs/distr/flecs.h>
 
 #include <chrono>
 #include <map>
@@ -44,6 +45,12 @@ namespace Framework::Scripting {
         Stopping, // Shutting down
         Stopped,  // Cleanly stopped, can be restarted
         Error     // Failed to load or runtime error
+    };
+
+    class Resource;
+
+    struct OwnedResource {
+        Resource *value;
     };
 
     /**
@@ -191,6 +198,9 @@ namespace Framework::Scripting {
         v8::Isolate *GetIsolate() const { return _isolate; }
         void SetIsolate(v8::Isolate *isolate) { _isolate = isolate; }
 
+        // Flecs world integration
+        flecs::entity GetRootEntity() const { return _rootEntity; }
+
         // State transitions (called by ResourceManager)
         friend class ResourceManager;
 
@@ -207,6 +217,9 @@ namespace Framework::Scripting {
         // Get restart attempt count without locking
         int GetRestartAttemptCountUnlocked() const;
 
+        // Remove all child entities of the flecs root entity
+        void DestroyChildEntities();
+
         // Path to resource directory
         std::string _path;
 
@@ -222,6 +235,9 @@ namespace Framework::Scripting {
 
         // V8 isolate for this resource (set by manager)
         v8::Isolate *_isolate = nullptr;
+
+        // Flecs root entity
+        flecs::entity _rootEntity;
 
         // Exports registered by this resource
         std::map<std::string, v8::Global<v8::Value>, std::less<>> _exports;

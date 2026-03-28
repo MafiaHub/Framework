@@ -1,6 +1,8 @@
 #include "resource_manager.h"
 
 #include "../builtins/events.h"
+#include "core_modules.h"
+#include "world/engine.h"
 
 #include <algorithm>
 #include <cctype>
@@ -39,12 +41,17 @@ namespace Framework::Scripting {
         if (_jsEngine) {
             _jsEngine->SetResourceManager(this);
         }
+
+        _rootEntity = CoreModules::GetWorldEngine()->GetWorld()->entity("Resources");
     }
 
     ResourceManager::~ResourceManager() {
         StopAll();
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
+        }
+        if (_rootEntity.is_valid()) {
+            _rootEntity.destruct();
         }
     }
 
@@ -104,6 +111,8 @@ namespace Framework::Scripting {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Duplicate resource name: {}", name);
                 return false;
             }
+
+            resource->GetRootEntity().child_of(_rootEntity);
             _resources[name] = std::move(resource);
         }
 

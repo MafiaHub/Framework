@@ -1,5 +1,6 @@
 #include "resource.h"
-
+#include "core_modules.h"
+#include "world/engine.h"
 #include <filesystem>
 
 namespace Framework::Scripting {
@@ -27,9 +28,16 @@ namespace Framework::Scripting {
             _errorMessage = _manifest.GetError();
             _state = ResourceState::Error;
         }
+
+        _rootEntity = CoreModules::GetWorldEngine()->GetWorld()->entity(_manifest.GetName().c_str());
+        _rootEntity.set<OwnedResource>({this});
     }
 
     Resource::~Resource() {
+        if (_rootEntity.is_valid()) {
+            _rootEntity.destruct();
+        }
+
         ClearExports();
     }
 
@@ -42,6 +50,7 @@ namespace Framework::Scripting {
         , _stateTimestamp(other._stateTimestamp)
         , _loadTimestamp(other._loadTimestamp)
         , _isolate(other._isolate)
+        , _rootEntity(other._rootEntity)
         , _exports(std::move(other._exports))
         , _restartAttempts(std::move(other._restartAttempts)) {
         other._isolate = nullptr;
@@ -59,10 +68,12 @@ namespace Framework::Scripting {
             _stateTimestamp = other._stateTimestamp;
             _loadTimestamp = other._loadTimestamp;
             _isolate = other._isolate;
+            _rootEntity = other._rootEntity;
             _exports = std::move(other._exports);
             _restartAttempts = std::move(other._restartAttempts);
 
             other._isolate = nullptr;
+            other._rootEntity = {};
         }
         return *this;
     }
@@ -265,6 +276,18 @@ namespace Framework::Scripting {
         return it->second.Get(_isolate);
     }
 
+    void Resource::DestroyChildEntities() {
+        if (!_rootEntity.is_valid()) {
+            return;
+        }
+
+        _rootEntity.world().defer_begin();
+        _rootEntity.children([&](flecs::entity child) {
+            child.destruct();
+        });
+        _rootEntity.world().defer_end();
+    }
+
     bool Resource::TransitionTo(ResourceState newState) {
         if (!IsValidTransition(_state, newState)) {
             return false;
@@ -272,6 +295,10 @@ namespace Framework::Scripting {
 
         _state = newState;
         _stateTimestamp = std::chrono::system_clock::now();
+
+        if (newState == ResourceState::Stopped) {
+            DestroyChildEntities();
+        }
 
         if (newState != ResourceState::Error) {
             ClearError();

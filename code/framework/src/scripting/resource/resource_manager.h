@@ -364,6 +364,9 @@ namespace Framework::Scripting {
 
         // Events instance owned by this manager
         Events _events;
+
+        // Root entity for all resources
+        flecs::entity _rootEntity;
     };
 
 } // namespace Framework::Scripting
