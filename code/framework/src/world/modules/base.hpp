@@ -78,7 +78,6 @@ namespace Framework::World::Modules {
             using IsVisibleProc         = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
             using AssignOwnerProc       = fu2::function<bool(flecs::entity e, Streamable &streamable)>;
             using OnDisconnectProc      = fu2::function<void(flecs::entity e)>;
-            using OnUpdateTransformProc = fu2::function<void(flecs::entity e)>;
 
             enum class HeuristicMode {
                 ADD,
