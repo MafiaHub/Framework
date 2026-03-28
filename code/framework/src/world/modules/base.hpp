@@ -110,7 +110,6 @@ namespace Framework::World::Modules {
                 // Events used locally for special needs
                 // These are NOT emitted through the network!
                 OnDisconnectProc disconnectProc; // called when the client disconnects from server
-                OnUpdateTransformProc updateTransformProc; // called whenever the server enforces a new transform upon the entity
             };
 
             // Extra set of events so mod can supply custom data.

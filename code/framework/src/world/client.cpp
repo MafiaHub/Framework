@@ -106,42 +106,21 @@ namespace Framework::World {
 
         _networkPeer = nullptr;
     }
+
     void ClientEngine::InitRPCs(Networking::NetworkPeer *net) const {
         net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
             const auto e = GetEntityByServerID(msg->GetServerID());
             if (!e.is_alive()) {
                 return;
             }
-            const auto tr = e.get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
+            e.set(msg->GetTransform());
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
             const auto e = GetEntityByServerID(msg->GetServerID());
             if (!e.is_alive()) {
                 return;
             }
-            const auto fr = e.get_mut<World::Modules::Base::Frame>();
-            *fr           = msg->GetFrame();
+            e.set(msg->GetFrame());
         });
-    }
-
-    void ClientEngine::UpdateEntityTransform(flecs::entity entity, const Modules::Base::Transform &rhs) {
-        if (!entity.is_valid() || !entity.is_alive()) {
-            return;
-        }
-
-        auto tr = entity.get_mut<Modules::Base::Transform>();
-        *tr     = rhs;
-
-        const auto str = entity.get_mut<Modules::Base::Streamable>();
-        if (str->modEvents.updateTransformProc) {
-            str->modEvents.updateTransformProc(entity);
-        }
     }
 } // namespace Framework::World
