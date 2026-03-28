@@ -89,7 +89,7 @@ namespace Framework::Networking {
         const auto streamers = world->FindVisibleStreamers(ent);
 
         for (const auto &streamer_ent : streamers) {
-            const auto streamer = streamer_ent.get<World::Modules::Base::Streamer>();
+            const auto streamer = streamer_ent.try_get<World::Modules::Base::Streamer>();
             if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g) {
                 continue;
             }

@@ -8,7 +8,6 @@
  */
 
 #include "private_api.h"
-#include <ctype.h>
 #include <time.h>
 
 void ecs_os_api_impl(ecs_os_api_t *api);
@@ -63,7 +62,7 @@ void ecs_os_fini(void) {
 
 /* Assume every non-glibc Linux target has no execinfo.
    This mainly fixes musl support, as musl doesn't define any preprocessor macro specifying its presence. */ 
-#if defined(ECS_TARGET_LINUX) && !defined(__GLIBC__)
+#if (defined(ECS_TARGET_LINUX) && !defined(__GLIBC__)) || defined(__COSMOCC__)
 #define HAVE_EXECINFO 0
 #elif !defined(ECS_TARGET_WINDOWS) && !defined(ECS_TARGET_EM) && !defined(ECS_TARGET_ANDROID)
 #define HAVE_EXECINFO 1
@@ -71,9 +70,56 @@ void ecs_os_fini(void) {
 #define HAVE_EXECINFO 0
 #endif
 
-#if HAVE_EXECINFO
-#include <execinfo.h>
 #define ECS_BT_BUF_SIZE 100
+
+#ifdef ECS_TARGET_WINDOWS
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+#include <windows.h>
+#include <dbghelp.h>
+
+#ifdef ECS_TARGET_MSVC
+#pragma comment(lib, "DbgHelp.lib")
+#endif
+
+void flecs_dump_backtrace(
+    void *stream) 
+{
+    void* stack[ECS_BT_BUF_SIZE];
+    unsigned short frames;
+    SYMBOL_INFO *symbol;
+    HANDLE hProcess = GetCurrentProcess();
+
+    if (!SymInitialize(hProcess, NULL, TRUE)) {
+        return;
+    }
+
+    frames = CaptureStackBackTrace(0, ECS_BT_BUF_SIZE, stack, NULL);
+    symbol = (SYMBOL_INFO*)ecs_os_calloc(
+        sizeof(SYMBOL_INFO) + 256 * sizeof(char));
+    symbol->MaxNameLen = 255;
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+    for (int i = 0; i < frames; i++) {
+        if (SymFromAddr(hProcess, (DWORD64)(uintptr_t)stack[i], NULL, symbol)) {
+            fprintf(stream, "%s\n", symbol->Name);
+        } else {
+            fprintf(stream, "%p\n", stack[i]);
+        }
+    }
+
+    ecs_os_free(symbol);
+    SymCleanup(hProcess);
+}
+
+#elif HAVE_EXECINFO
+#include <execinfo.h>
 
 void flecs_dump_backtrace(
     void *stream) 
@@ -295,6 +341,62 @@ void ecs_os_gettime(ecs_time_t *time) {
     time->nanosec = (uint32_t)(now - sec * 1000000000);
 }
 
+#ifdef FLECS_TRACK_OS_ALLOC
+ecs_size_t ecs_os_allocated_bytes = 0;
+static
+void* ecs_os_api_malloc(ecs_size_t size) {
+    ecs_os_linc(&ecs_os_api_malloc_count);
+    ecs_assert(size > 0, ECS_INVALID_PARAMETER, NULL);
+    void *result = malloc((size_t)size + 16);
+    *(ecs_size_t*)result = size;
+    ecs_os_allocated_bytes += size;
+    return ECS_OFFSET(result, 16);
+}
+
+static
+void* ecs_os_api_calloc(ecs_size_t size) {
+    ecs_os_linc(&ecs_os_api_calloc_count);
+    ecs_assert(size > 0, ECS_INVALID_PARAMETER, NULL);
+    void *result = calloc(1, (size_t)size + 16);
+    *(ecs_size_t*)result = size;
+    ecs_os_allocated_bytes += size;
+    return ECS_OFFSET(result, 16);
+}
+
+static
+void* ecs_os_api_realloc(void *ptr, ecs_size_t size) {
+    ecs_assert(size > 0, ECS_INVALID_PARAMETER, NULL);
+
+    if (ptr) {
+        ecs_os_linc(&ecs_os_api_realloc_count);
+        ptr = ECS_OFFSET(ptr, -16);
+        ecs_os_allocated_bytes -= *(ecs_size_t*)ptr;
+    } else {
+        /* If not actually reallocing, treat as malloc */
+        ecs_os_linc(&ecs_os_api_malloc_count);
+    }
+    
+    if (!size) {
+        return NULL;
+    }
+
+    ptr = realloc(ptr, (size_t)size + 16);
+    *(ecs_size_t*)ptr = size;
+    ecs_os_allocated_bytes += size;
+    return ECS_OFFSET(ptr, 16);
+}
+
+static
+void ecs_os_api_free(void *ptr) {
+    if (ptr) {
+        ptr = ECS_OFFSET(ptr, -16);
+        ecs_size_t size = *(ecs_size_t*)ptr;
+        ecs_os_allocated_bytes -= size;
+        ecs_os_linc(&ecs_os_api_free_count);
+    }
+    free(ptr);
+}
+#else
 static
 void* ecs_os_api_malloc(ecs_size_t size) {
     ecs_os_linc(&ecs_os_api_malloc_count);
@@ -330,6 +432,7 @@ void ecs_os_api_free(void *ptr) {
     }
     free(ptr);
 }
+#endif
 
 static
 char* ecs_os_api_strdup(const char *str) {

@@ -5,7 +5,23 @@ void Entity_init_id(void) {
 
     ecs_entity_t e = ecs_entity_init(world, &(ecs_entity_desc_t){0});
     test_assert(e != 0);
-    test_assert(ecs_get_type(world, e) == NULL);
+    test_assert(ecs_get_type(world, e) != NULL);
+    test_assert(ecs_get_type(world, e)->count == 0);
+
+    ecs_fini(world);
+}
+
+void Entity_init_id_exceed_32_bits(void) {
+	install_test_abort();
+    ecs_world_t *world = ecs_mini();
+
+    ecs_set_entity_range(world, UINT32_MAX, 0);
+
+    ecs_new(world);
+
+    test_expect_abort();
+
+    ecs_new(world);
 
     ecs_fini(world);
 }
@@ -403,7 +419,7 @@ void Entity_find_id_name_w_scope(void) {
     char *path = ecs_get_path(world, e);
     test_assert(path != NULL);
     test_str(path, "parent.child");
-    ecs_os_free(path);   
+    ecs_os_free(path);
 
     ecs_entity_t r = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "child"
@@ -426,7 +442,7 @@ void Entity_find_id_path(void) {
     char *path = ecs_get_path(world, e);
     test_assert(path != NULL);
     test_str(path, "parent.child");
-    ecs_os_free(path);    
+    ecs_os_free(path);
 
     ecs_entity_t r = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "parent.child"
@@ -458,7 +474,7 @@ void Entity_find_id_path_w_scope(void) {
     char *path = ecs_get_path(world, e);
     test_assert(path != NULL);
     test_str(path, "parent.child.grandchild");
-    ecs_os_free(path);    
+    ecs_os_free(path);
 
     ecs_entity_t r = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "child.grandchild"
@@ -509,7 +525,7 @@ void Entity_find_id_name_match_w_scope(void) {
     char *path = ecs_get_path(world, e);
     test_assert(path != NULL);
     test_str(path, "parent.child");
-    ecs_os_free(path);  
+    ecs_os_free(path);
 
     ecs_entity_t r = ecs_entity_init(world, &(ecs_entity_desc_t){
         .id = e,
@@ -525,7 +541,7 @@ void Entity_find_id_name_match_w_scope(void) {
         .name = "parent.child"
     });
     test_assert(r != 0);
-    test_assert(r == e);     
+    test_assert(r == e);
 
     ecs_fini(world);
 }
@@ -597,7 +613,7 @@ void Entity_find_id_name_mismatch(void) {
 
     ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "bar"
-    });    
+    });
 
     ecs_log_set_level(-4);
     ecs_entity_t r = ecs_entity_init(world, &(ecs_entity_desc_t){
@@ -648,7 +664,7 @@ void Entity_find_id_path_mismatch(void) {
 
     ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "parent.foo"
-    }); 
+    });
 
     ecs_log_set_level(-4);
     ecs_entity_t r = ecs_entity_init(world, &(ecs_entity_desc_t){
@@ -799,7 +815,7 @@ void Entity_init_w_with_w_name(void) {
 
     ecs_set_with(world, Tag);
 
-    ecs_entity_t e = ecs_entity_init(world, &(ecs_entity_desc_t){ 
+    ecs_entity_t e = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "foo"
     });
 
@@ -903,7 +919,7 @@ void Entity_is_junk_valid(void) {
 
     ecs_make_alive(world, 1000);
     ecs_make_alive(world, 0xFFFFFFFF);
-    
+
     test_bool(ecs_is_alive(world, 1000), true);
     test_bool(ecs_is_alive(world, 0xFFFFFFFF), true);
     test_bool(ecs_is_alive(world, 0x4DCDCDCDCDCD), false);
@@ -942,6 +958,53 @@ void Entity_is_nonzero_gen_valid(void) {
     test_bool(ecs_is_alive(world, id), false);
     test_bool(ecs_exists(world, id), false);
     test_bool(ecs_is_valid(world, id), false);
+
+    ecs_fini(world);
+}
+
+void Entity_is_get_alive_alive(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_delete(world, e);
+
+    e = ecs_new(world);
+    test_assert(e != (uint32_t)e);
+
+    e = ecs_get_alive(world, e);
+    test_assert(e != 0);
+    test_assert(ecs_is_alive(world, e));
+    test_assert(!ecs_is_alive(world, (uint32_t)e));
+
+    ecs_fini(world);
+}
+
+void Entity_get_alive_after_delete(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_delete(world, e);
+
+    e = ecs_get_alive(world, e);
+    test_assert(e == 0);
+
+    ecs_fini(world);
+}
+
+void Entity_get_alive_after_delete_twice(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_delete(world, e);
+
+    e = ecs_new(world);
+    test_assert(e != (uint32_t)e);
+    ecs_delete(world, e);
+
+    test_assert(!ecs_is_alive(world, e));
+
+    e = ecs_get_alive(world, e);
+    test_assert(e == 0);
 
     ecs_fini(world);
 }
@@ -1134,7 +1197,8 @@ void Entity_record_find_for_empty(void) {
 
     ecs_record_t *r = ecs_record_find(world, e);
     test_assert(r != NULL);
-    test_assert(r->table == NULL);
+    test_assert(r->table != NULL);
+    test_int(ecs_table_get_type(r->table)->count, 0);
 
     ecs_fini(world);
 }
@@ -1270,7 +1334,7 @@ void Entity_make_alive_zero_gen_exists_alive(void) {
 
 void Entity_make_alive_nonzero_gen_exists_alive(void) {
     install_test_abort();
-    
+
     ecs_world_t *world = ecs_mini();
 
     ecs_entity_t e = ecs_new(world);
@@ -1289,6 +1353,38 @@ void Entity_make_alive_nonzero_gen_exists_alive(void) {
 
     test_expect_abort();
     ecs_make_alive(world, e); // not allowed, can't ensure gen 2 if gen 1 is alive
+}
+
+void Entity_make_alive_pair_nonzero_tgt(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+
+    ecs_entity_t tgt = 1000;
+    test_assert(!ecs_is_alive(world, tgt));
+    ecs_make_alive_id(world, ecs_pair(Rel, tgt));
+
+    test_assert(ecs_is_alive(world, Rel));
+    test_assert(ecs_is_alive(world, tgt));
+
+    ecs_fini(world);
+}
+
+void Entity_make_alive_pair_nonzero_existing_tgt(void) {
+    install_test_abort();
+
+    ecs_world_t *world = ecs_mini();
+
+    ECS_TAG(world, Rel);
+
+    ecs_entity_t tgt = ecs_new(world);
+    ecs_delete(world, tgt);
+
+    /* Cannot make existing id alive */
+    test_expect_abort();
+    ecs_make_alive_id(world, ecs_pair(Rel, tgt));
+
+    ecs_fini(world);
 }
 
 void Entity_set_scope_w_entity_init_from_stage(void) {
@@ -1320,7 +1416,7 @@ void Entity_entity_init_w_scope_twice(void) {
     ecs_world_t *world = ecs_mini();
 
     ecs_entity_t parent = ecs_set_name(world, 0, "Parent");
-    
+
     test_assert(ecs_set_scope(world, parent) == 0);
     ecs_entity_t e1 = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "Child"
@@ -1548,7 +1644,7 @@ void Entity_entity_init_w_empty_string_name(void) {
     ecs_entity_t e = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = ""
     });
-    
+
     test_assert(e != 0);
     test_assert(!ecs_has_pair(world, e, ecs_id(EcsIdentifier), EcsName));
 
@@ -1561,7 +1657,7 @@ void Entity_entity_init_w_empty_string_symbol(void) {
     ecs_entity_t e = ecs_entity_init(world, &(ecs_entity_desc_t){
         .symbol = ""
     });
-    
+
     test_assert(e != 0);
     test_assert(!ecs_has_pair(world, e, ecs_id(EcsIdentifier), EcsSymbol));
 
@@ -1748,7 +1844,7 @@ void Entity_entity_w_short_notation(void) {
 
 void Entity_override_inherited_symbol(void) {
     ecs_world_t *world = ecs_mini();
-    
+
     ecs_entity_t Foo = ecs_entity_init(world, &(ecs_entity_desc_t){
         .name = "Foo",
         .symbol = "FooSymbol"
@@ -1903,7 +1999,7 @@ void Entity_set_name_w_same_ptr(void) {
     test_str(name, "foo");
 
     ecs_set_name(world, e, name);
-    name = ecs_get_name(world, e); 
+    name = ecs_get_name(world, e);
     test_assert(name != NULL);
     test_str(name, "foo");
 
@@ -1919,7 +2015,7 @@ void Entity_set_name_w_overlapping_ptr(void) {
     test_str(name, "foo");
 
     ecs_set_name(world, e, &name[1]);
-    name = ecs_get_name(world, e); 
+    name = ecs_get_name(world, e);
     test_assert(name != NULL);
     test_str(name, "oo");
 
@@ -1938,7 +2034,7 @@ void Entity_defer_set_name_w_overlapping_ptr(void) {
     ecs_set_name(world, e, &name[1]);
     ecs_defer_end(world);
 
-    name = ecs_get_name(world, e); 
+    name = ecs_get_name(world, e);
     test_assert(name != NULL);
     test_str(name, "oo");
 
@@ -2163,9 +2259,41 @@ void Entity_set_version_while_deferred(void) {
     ecs_world_t* world = ecs_mini();
     ecs_entity_t e1 = ecs_new(world);
 
-    ecs_defer_begin(world);    
+    ecs_defer_begin(world);
     test_expect_abort();
     ecs_set_version(world, e1 |= 0x200000000ul);
+}
+
+void Entity_set_version_on_not_alive(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_delete(world, e);
+
+    ecs_set_version(world, e);
+
+    ecs_entity_t e_ = ecs_new(world);
+    test_assert(e == e_);
+
+    ecs_fini(world);
+}
+
+void Entity_get_version_after_reuse(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_new(world);
+
+    uint32_t v0 = ecs_get_version(e);
+    test_assert(v0 == 0);
+
+    ecs_delete(world, e);
+
+    ecs_entity_t e_new = ecs_new(world);
+    uint32_t v1 = ecs_get_version(e_new);
+    test_assert((uint32_t)(e & 0xFFFFFFFF) == (uint32_t)(e_new & 0xFFFFFFFF));
+    test_assert(v1 == v0 + 1);
+
+    ecs_fini(world);
 }
 
 static
@@ -2340,7 +2468,7 @@ void Entity_entity_init_w_set_2_comp(void) {
     ECS_COMPONENT(world, Velocity);
 
     ecs_entity_t e = ecs_entity(world, {
-        .set = ecs_values( 
+        .set = ecs_values(
             ecs_value(Position, {10, 20}),
             ecs_value(Velocity, {1, 2})
         )
@@ -2593,7 +2721,7 @@ void Entity_entity_init_w_set_1_comp_defer(void) {
 
     test_assert(e != 0);
     test_assert(!ecs_has(world, e, Position));
-    
+
     ecs_defer_end(world);
 
     test_assert(ecs_has(world, e, Position));
@@ -2614,7 +2742,7 @@ void Entity_entity_init_w_set_2_comp_defer(void) {
     ecs_defer_begin(world);
 
     ecs_entity_t e = ecs_entity(world, {
-        .set = ecs_values( 
+        .set = ecs_values(
             ecs_value(Position, {10, 20}),
             ecs_value(Velocity, {1, 2})
         )
@@ -2688,7 +2816,7 @@ void Entity_entity_init_w_set_2_comp_2_tag_defer(void) {
     });
 
     test_assert(e != 0);
-    
+
     test_assert(!ecs_has(world, e, Position));
     test_assert(!ecs_has(world, e, Velocity));
     test_assert(!ecs_has(world, e, TagA));
@@ -2835,6 +2963,40 @@ void Entity_entity_init_w_set_1_comp_1_tag_w_set_defer(void) {
     ecs_fini(world);
 }
 
+void Entity_entity_init_w_set_1_comp_suspend_defer(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+    ECS_TAG(world, TagA);
+
+    ecs_defer_begin(world);
+
+    ecs_defer_suspend(world);
+
+    ecs_entity_t e = ecs_entity(world, {
+        .set = ecs_values( ecs_value(Position, {10, 20}), {TagA} )
+    });
+
+    test_assert(e != 0);
+
+    test_assert(ecs_has(world, e, Position));
+    test_assert(ecs_has(world, e, TagA));
+
+    const Position *p = ecs_get(world, e, Position);
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+
+    ecs_defer_resume(world);
+
+    ecs_defer_end(world);
+
+    p = ecs_get(world, e, Position);
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+
+    ecs_fini(world);
+}
+
 void Entity_insert_1_comp(void) {
     ecs_world_t *world = ecs_mini();
 
@@ -2857,11 +3019,11 @@ void Entity_insert_2_comp(void) {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Velocity);
 
-    ecs_entity_t e = ecs_insert(world, 
+    ecs_entity_t e = ecs_insert(world,
         ecs_value(Position, {10, 20}),
         ecs_value(Velocity, {1, 2})
     );
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has(world, e, Position));
@@ -2884,11 +3046,11 @@ void Entity_insert_1_comp_1_tag(void) {
     ECS_COMPONENT(world, Position);
     ECS_TAG(world, TagA);
 
-    ecs_entity_t e = ecs_insert(world, 
+    ecs_entity_t e = ecs_insert(world,
         ecs_value(Position, {10, 20}),
         {TagA}
     );
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has(world, e, Position));
@@ -2909,7 +3071,7 @@ void Entity_entity_w_parent(void) {
     ecs_entity_t e = ecs_entity(world, {
         .parent = parent
     });
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has_pair(world, e, EcsChildOf, parent));
@@ -2926,7 +3088,7 @@ void Entity_entity_w_parent_w_name(void) {
         .parent = parent,
         .name = "Foo"
     });
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has_pair(world, e, EcsChildOf, parent));
@@ -2946,7 +3108,7 @@ void Entity_entity_w_parent_w_add(void) {
         .parent = parent,
         .add = (ecs_id_t[]){TagA, 0}
     });
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has_pair(world, e, EcsChildOf, parent));
@@ -2967,7 +3129,7 @@ void Entity_entity_w_parent_w_add_w_parent(void) {
         .name = "Foo",
         .add = (ecs_id_t[]){TagA, 0}
     });
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has_pair(world, e, EcsChildOf, parent));
@@ -2988,7 +3150,7 @@ void Entity_entity_w_parent_w_set(void) {
         .parent = parent,
         .set = (ecs_value_t[]){{ .type = TagA}, {0}}
     });
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has_pair(world, e, EcsChildOf, parent));
@@ -3009,12 +3171,112 @@ void Entity_entity_w_parent_w_set_w_parent(void) {
         .name = "Foo",
         .set = (ecs_value_t[]){{ .type = TagA}, {0}}
     });
-    
+
     test_assert(e != 0);
 
     test_assert(ecs_has_pair(world, e, EcsChildOf, parent));
     test_assert(ecs_has(world, e, TagA));
     test_str(ecs_get_name(world, e), "Foo");
+
+    ecs_fini(world);
+}
+
+void Entity_entity_w_new_id_and_double_dot(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_entity(world, {
+        .name = "#400..bar"
+    });
+
+    test_assert(e != 0);
+
+    ecs_fini(world);
+}
+
+void Entity_entity_w_existing_id_and_double_dot(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t e = ecs_entity(world, {
+        .name = "#10..bar"
+    });
+
+    test_assert(e != 0);
+
+    ecs_fini(world);
+}
+
+void Entity_entity_w_large_id_name(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_log_set_level(-4);
+    ecs_entity_t e = ecs_entity(world, {
+        .name = "#44444444444444444444a"
+    });
+
+    test_assert(e == 0);
+    
+    ecs_entity_t f = ecs_new(world);
+
+    test_assert(f != 0);
+
+    ecs_fini(world);
+}
+
+void Entity_toggle_component(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, CanToggle);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add(world, e, Foo);
+
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+    test_bool(true, ecs_is_enabled_id(world, e, Foo));
+
+    ecs_enable_id(world, e, Foo, false);
+
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+    test_bool(false, ecs_is_enabled_id(world, e, Foo));
+
+    ecs_enable_id(world, e, Foo, true);
+
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+    test_bool(true, ecs_is_enabled_id(world, e, Foo));
+
+    ecs_fini(world);
+}
+
+void Entity_toggle_component_before_add(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_ENTITY(world, Foo, CanToggle);
+
+    ecs_entity_t e = ecs_new(world);
+
+    test_assert(!ecs_has(world, e, Foo));
+    test_assert(!ecs_owns(world, e, Foo));
+    test_bool(false, ecs_is_enabled_id(world, e, Foo));
+
+    ecs_enable_id(world, e, Foo, false);
+
+    test_assert(!ecs_has(world, e, Foo));
+    test_assert(!ecs_owns(world, e, Foo));
+    test_bool(false, ecs_is_enabled_id(world, e, Foo));
+
+    ecs_add(world, e, Foo);
+
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+    test_bool(false, ecs_is_enabled_id(world, e, Foo));
+
+    ecs_enable_id(world, e, Foo, true);
+
+    test_assert(ecs_has(world, e, Foo));
+    test_assert(ecs_owns(world, e, Foo));
+    test_bool(true, ecs_is_enabled_id(world, e, Foo));
 
     ecs_fini(world);
 }

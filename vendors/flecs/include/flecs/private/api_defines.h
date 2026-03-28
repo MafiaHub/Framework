@@ -14,6 +14,8 @@
 
 #if defined(_WIN32) || defined(_MSC_VER)
 #define ECS_TARGET_WINDOWS
+#elif defined(__COSMOCC__)
+#define ECS_TARGET_POSIX
 #elif defined(__ANDROID__)
 #define ECS_TARGET_ANDROID
 #define ECS_TARGET_POSIX
@@ -49,8 +51,8 @@
 #define ECS_TARGET_GNU
 #endif
 
-/* Map between clang and apple clang versions, as version 13 has a difference in
- * the format of __PRETTY_FUNCTION__ which enum reflection depends on. */
+/* Map between clang and Apple clang versions, as version 13 has a difference in
+ * the format of __PRETTY_FUNCTION__, which enum reflection depends on. */
 #if defined(__clang__)
     #if defined(__APPLE__)
         #if __clang_major__ == 13
@@ -67,14 +69,21 @@
     #endif
 #endif
 
+/* Define noreturn attribute only for GCC or Clang. */
+#if defined(ECS_TARGET_GNU) || defined(ECS_TARGET_CLANG)
+    #define ECS_NORETURN __attribute__((noreturn))
+#else
+    #define ECS_NORETURN
+#endif
+
 /* Ignored warnings */
 #if defined(ECS_TARGET_CLANG)
-/* Ignore unknown options so we don't have to care about the compiler version */
+/* Ignore unknown options so we don't have to care about the compiler version. */
 #pragma clang diagnostic ignored "-Wunknown-warning-option"
 /* Warns for double or redundant semicolons. There are legitimate cases where a
- * semicolon after an empty statement is useful, for example after a macro that
+ * semicolon after an empty statement is useful, for example, after a macro that
  * is replaced with a code block. With this warning enabled, semicolons would 
- * only have to be added after macro's that are not code blocks, which in some
+ * only have to be added after macros that are not code blocks, which in some
  * cases isn't possible as the implementation of a macro can be different in
  * debug/release mode. */
 #pragma clang diagnostic ignored "-Wextra-semi-stmt"
@@ -82,42 +91,47 @@
 #pragma clang diagnostic ignored "-Wdeclaration-after-statement"
 /* Clang attribute to detect fallthrough isn't supported on older versions. 
  * Implicit fallthrough is still detected by gcc and ignored with "fall through"
- * comments */
+ * comments. */
 #pragma clang diagnostic ignored "-Wimplicit-fallthrough"
 /* This warning prevents adding a default case when all enum constants are part
- * of the switch. In C however an enum type can assume any value in the range of
+ * of the switch. In C, however, an enum type can assume any value in the range of
  * the type, and this warning makes it harder to catch invalid enum values. */
 #pragma clang diagnostic ignored "-Wcovered-switch-default"
 /* This warning prevents some casts of function results to a different kind of
- * type, e.g. casting an int result to double. Not very useful in practice, as
+ * type, e.g., casting an int result to double. Not very useful in practice, as
  * it just forces the code to assign to a variable first, then cast. */
 #pragma clang diagnostic ignored "-Wbad-function-cast"
 /* Format strings can be passed down from other functions. */
 #pragma clang diagnostic ignored "-Wformat-nonliteral"
-/* Useful, but not reliable enough. It can incorrectly flag macro's as unused
+/* Useful, but not reliable enough. It can incorrectly flag macros as unused
  * in standalone builds. */
 #pragma clang diagnostic ignored "-Wunused-macros"
+/* This warning gets thrown by clang even when the code is handling all case
+ * values but not all cases (for example, when the switch contains a LastValue
+ * case). Adding a "default" case fixes the warning, but silences future 
+ * warnings about unhandled cases, which is worse. */
+#pragma clang diagnostic ignored "-Wswitch-default"
 #if __clang_major__ == 13
-/* clang 13 can throw this warning for a define in ctype.h */
+/* clang 13 can throw this warning for a macro in ctype.h. */
 #pragma clang diagnostic ignored "-Wreserved-identifier"
 #endif
 /* Filenames aren't consistent across targets as they can use different casing 
- * (e.g. WinSock2 vs winsock2). */
+ * (e.g., WinSock2 vs. winsock2). */
 #pragma clang diagnostic ignored "-Wnonportable-system-include-path"
-/* Very difficult to workaround this warning in C, especially for an ECS. */
+/* Very difficult to work around this warning in C, especially for an ECS. */
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-/* This warning gets thrown when trying to cast pointer returned from dlproc */
+/* This warning gets thrown when trying to cast a pointer returned from dlproc. */
 #pragma clang diagnostic ignored "-Wcast-function-type-strict"
 /* This warning can get thrown for expressions that evaluate to constants
  * in debug/release mode. */
 #pragma clang diagnostic ignored "-Wconstant-logical-operand"
-/* With soft asserts enabled the code won't abort, which in some cases means
+/* With soft asserts enabled, the code won't abort, which in some cases means
  * code paths are reached where values are uninitialized. */
 #ifdef FLECS_SOFT_ASSERT
 #pragma clang diagnostic ignored "-Wsometimes-uninitialized"
 #endif
 
-/* Allows for enum reflection support on legacy compilers */
+/* Allows for enum reflection support on legacy compilers. */
 #if __clang_major__ < 16
 #pragma clang diagnostic ignored "-Wenum-constexpr-conversion"
 #endif
@@ -131,24 +145,24 @@
 #pragma GCC diagnostic ignored "-Wunused-macros"
 /* This warning gets thrown *sometimes* when not all members for a struct are
  * provided in an initializer. Flecs heavily relies on descriptor structs that
- * only require partly initialization, so this warning isn't useful.
+ * only require partial initialization, so this warning isn't useful.
  * It doesn't introduce any safety issues (fields are guaranteed to be 0 
  * initialized), and later versions of gcc (>=11) seem to no longer throw this 
  * warning. */
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 /* Produces false positives in addons/cpp/delegate.hpp. */
 #pragma GCC diagnostic ignored "-Warray-bounds"
-/* Produces false positives in queries/src/cache.c */
+/* Produces false positives in queries/src/cache.c. */
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
 #pragma GCC diagnostic ignored "-Wrestrict"
 
 #elif defined(ECS_TARGET_MSVC)
-/* recursive on all control paths, function will cause runtime stack overflow
+/* Recursive on all control paths, the function will cause runtime stack overflow.
  * This warning is incorrectly thrown on enum reflection code. */
 #pragma warning(disable: 4717)
 #endif
 
-/* Allows for enum reflection support on legacy compilers */
+/* Allows for enum reflection support on legacy compilers. */
 #if defined(__GNUC__) && __GNUC__ <= 10
 #pragma GCC diagnostic ignored "-Wconversion"
 #endif
@@ -157,11 +171,12 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
 
-/* Non-standard but required. If not provided by platform, add manually. */
+/* Non-standard but required. If not provided by the platform, add manually. */
 #include <stdint.h>
 
-/* Contains macros for importing / exporting symbols */
+/* Contains macros for importing and exporting symbols. */
 #include "../bake_config.h"
 
 #ifdef __cplusplus
@@ -172,8 +187,8 @@ extern "C" {
 #define FLECS_LEGACY
 #endif
 
-/* Some symbols are only exported when building in debug build, to enable
- * white-box testing of internal data structures */
+/* Some symbols are only exported when building in a debug build, to enable
+ * white-box testing of internal data structures. */
 #ifndef FLECS_NDEBUG
 #define FLECS_DBG_API FLECS_API
 #else
@@ -193,7 +208,7 @@ extern "C" {
 #define NULL ((void*)0)
 #endif
 
-/* The API uses the native bool type in C++, or a custom one in C */
+/* The API uses the native bool type in C++, or a custom one in C. */
 #if !defined(__cplusplus) && !defined(__bool_true_false_are_defined)
 #undef bool
 #undef true
@@ -203,30 +218,30 @@ typedef char bool;
 #define true !false
 #endif
 
-/* Utility types to indicate usage as bitmask */
+/* Utility types to indicate usage as a bitmask. */
 typedef uint8_t ecs_flags8_t;
 typedef uint16_t ecs_flags16_t;
 typedef uint32_t ecs_flags32_t;
 typedef uint64_t ecs_flags64_t;
 
-/* Bitmask type with compile-time defined size */
+/* Bitmask type with compile-time-defined size. */
 #define ecs_flagsn_t_(bits) ecs_flags##bits##_t
 #define ecs_flagsn_t(bits) ecs_flagsn_t_(bits)
 
-/* Bitset type that can store exactly as many bits as there are terms */
+/* Bitset type that can store exactly as many bits as there are terms. */
 #define ecs_termset_t ecs_flagsn_t(FLECS_TERM_COUNT_MAX)
 
-/* Utility macro's for setting/clearing termset bits */
+/* Utility macros for setting/clearing termset bits. */
 #define ECS_TERMSET_SET(set, flag) ((set) |= (ecs_termset_t)(flag))
 #define ECS_TERMSET_CLEAR(set, flag) ((set) &= (ecs_termset_t)~(flag))
 #define ECS_TERMSET_COND(set, flag, cond) ((cond) \
     ? (ECS_TERMSET_SET(set, flag)) \
     : (ECS_TERMSET_CLEAR(set, flag)))
 
-/* Keep unsigned integers out of the codebase as they do more harm than good */
+/* Keep unsigned integers out of the codebase as they do more harm than good. */
 typedef int32_t ecs_size_t;
 
-/* Allocator type */
+/* Allocator type. */
 typedef struct ecs_allocator_t ecs_allocator_t;
 
 #define ECS_SIZEOF(T) ECS_CAST(ecs_size_t, sizeof(T))
@@ -236,12 +251,33 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ECS_ALIGNOF(T) static_cast<int64_t>(alignof(T))
 #elif defined(ECS_TARGET_MSVC)
 #define ECS_ALIGNOF(T) (int64_t)__alignof(T)
-#elif defined(ECS_TARGET_GNU)
-#define ECS_ALIGNOF(T) (int64_t)__alignof__(T)
-#elif defined(ECS_TARGET_CLANG)
-#define ECS_ALIGNOF(T) (int64_t)__alignof__(T)
 #else
-#define ECS_ALIGNOF(T) ((int64_t)&((struct { char c; T d; } *)0)->d)
+/* Use the struct trick since on 32-bit platforms __alignof__ can return different
+ * results than C++'s alignof. This is illustrated when doing:
+ *
+ * __alignof__(uint64_t) == 8 on 32-bit platforms
+ * alignof(uint64_t) == 4 on 32-bit platforms
+ * 
+ * typedef struct {
+ *   uint64_t value;
+ * } Foo;
+ * 
+ * __alignof__(Foo) == 4 on 32-bit platforms
+ * alignof(Foo) == 4 on 32-bit platforms
+ */
+#define ECS_ALIGNOF(T) ((int64_t)(size_t)&((struct { char c; T d; } *)0)->d)
+#endif
+
+#ifndef FLECS_NO_ALWAYS_INLINE
+    #if defined(ECS_TARGET_CLANG) || defined(ECS_TARGET_GCC)
+        #define FLECS_ALWAYS_INLINE __attribute__((always_inline))
+    #elif defined(ECS_TARGET_MSVC)
+        #define FLECS_ALWAYS_INLINE
+    #else
+        #define FLECS_ALWAYS_INLINE
+    #endif
+#else
+    #define FLECS_ALWAYS_INLINE
 #endif
 
 #ifndef FLECS_NO_DEPRECATED_WARNINGS
@@ -258,39 +294,39 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 
 #define ECS_ALIGN(size, alignment) (ecs_size_t)((((((size_t)size) - 1) / ((size_t)alignment)) + 1) * ((size_t)alignment))
 
-/* Simple utility for determining the max of two values */
+/* Simple utility for determining the max of two values. */
 #define ECS_MAX(a, b) (((a) > (b)) ? a : b)
 #define ECS_MIN(a, b) (((a) < (b)) ? a : b)
 
 /* Abstraction on top of C-style casts so that C functions can be used in C++
- * code without producing warnings */
+ * code without producing warnings. */
 #ifndef __cplusplus
 #define ECS_CAST(T, V) ((T)(V))
 #else
 #define ECS_CAST(T, V) (static_cast<T>(V))
 #endif
 
-/* Utility macro for doing const casts without warnings */
+/* Utility macro for doing const casts without warnings. */
 #ifndef __cplusplus
 #define ECS_CONST_CAST(type, value) ((type)(uintptr_t)(value))
 #else
 #define ECS_CONST_CAST(type, value) (const_cast<type>(value))
 #endif
 
-/* Utility macro for doing pointer casts without warnings */
+/* Utility macro for doing pointer casts without warnings. */
 #ifndef __cplusplus
 #define ECS_PTR_CAST(type, value) ((type)(uintptr_t)(value))
 #else
 #define ECS_PTR_CAST(type, value) (reinterpret_cast<type>(value))
 #endif
 
-/* Utility macro's to do bitwise comparisons between floats without warnings */
+/* Utility macros to do bitwise comparisons between floats without warnings. */
 #define ECS_EQ(a, b) (ecs_os_memcmp(&(a), &(b), sizeof(a)) == 0)
 #define ECS_NEQ(a, b) (!ECS_EQ(a, b))
 #define ECS_EQZERO(a) ECS_EQ(a, (uint64_t){0})
 #define ECS_NEQZERO(a) ECS_NEQ(a, (uint64_t){0})
 
-/* Utilities to convert flecs version to string */
+/* Utilities to convert Flecs version to a string. */
 #define FLECS_VERSION_IMPLSTR(major, minor, patch) #major "." #minor "." #patch
 #define FLECS_VERSION_IMPL(major, minor, patch) \
     FLECS_VERSION_IMPLSTR(major, minor, patch)
@@ -301,7 +337,7 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 //// Magic numbers for sanity checking
 ////////////////////////////////////////////////////////////////////////////////
 
-/* Magic number to identify the type of the object */
+/* Magic number to identify the type of the object. */
 #define ecs_world_t_magic     (0x65637377)
 #define ecs_stage_t_magic     (0x65637373)
 #define ecs_query_t_magic     (0x65637375)
@@ -309,7 +345,7 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Entity id macros
+//// Entity ID macros
 ////////////////////////////////////////////////////////////////////////////////
 
 #define ECS_ROW_MASK                  (0x0FFFFFFFu)
@@ -325,7 +361,8 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ECS_GENERATION_INC(e)         ((e & ~ECS_GENERATION_MASK) | ((0xFFFF & (ECS_GENERATION(e) + 1)) << 32))
 #define ECS_COMPONENT_MASK            (~ECS_ID_FLAGS_MASK)
 #define ECS_HAS_ID_FLAG(e, flag)      ((e) & ECS_##flag)
-#define ECS_IS_PAIR(id)               (((id) & ECS_ID_FLAGS_MASK) == ECS_PAIR)
+#define ECS_IS_VALUE_PAIR(id)         (((id) & ECS_ID_FLAGS_MASK) == ECS_VALUE_PAIR)
+#define ECS_IS_PAIR(id)               ((((id) & ECS_ID_FLAGS_MASK) == ECS_PAIR) || ECS_IS_VALUE_PAIR(id))
 #define ECS_PAIR_FIRST(e)             (ecs_entity_t_hi(e & ECS_COMPONENT_MASK))
 #define ECS_PAIR_SECOND(e)            (ecs_entity_t_lo(e))
 #define ECS_HAS_RELATION(e, rel)      (ECS_HAS_ID_FLAG(e, PAIR) && (ECS_PAIR_FIRST(e) == rel))
@@ -337,7 +374,7 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 //// Convert between C typenames and variables
 ////////////////////////////////////////////////////////////////////////////////
 
-/** Translate C type to id. */
+/** Translate a C type to an ID. */
 #define ecs_id(T) FLECS_ID##T##ID_
 
 
@@ -349,12 +386,14 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ecs_entity_t_hi(value) ECS_CAST(uint32_t, (value) >> 32)
 #define ecs_entity_t_comb(lo, hi) ((ECS_CAST(uint64_t, hi) << 32) + ECS_CAST(uint32_t, lo))
 
-#define ecs_pair(pred, obj) (ECS_PAIR | ecs_entity_t_comb(obj, pred))
-#define ecs_pair_t(pred, obj) (ECS_PAIR | ecs_entity_t_comb(obj, ecs_id(pred)))
+#define ecs_pair(rel, tgt) (ECS_PAIR | ecs_entity_t_comb(tgt, rel))
+#define ecs_pair_t(rel, tgt) (ECS_PAIR | ecs_entity_t_comb(tgt, ecs_id(rel)))
 #define ecs_pair_first(world, pair) ecs_get_alive(world, ECS_PAIR_FIRST(pair))
 #define ecs_pair_second(world, pair) ecs_get_alive(world, ECS_PAIR_SECOND(pair))
 #define ecs_pair_relation ecs_pair_first
 #define ecs_pair_target ecs_pair_second
+
+#define ecs_value_pair(rel, val) (ECS_VALUE_PAIR | ecs_entity_t_comb(val, rel))
 
 #define flecs_poly_id(tag) ecs_pair(ecs_id(EcsPoly), tag)
 
@@ -373,15 +412,7 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 
 
 ////////////////////////////////////////////////////////////////////////////////
-//// Actions that drive iteration
-////////////////////////////////////////////////////////////////////////////////
-
-#define EcsIterNextYield  (0)   /* Move to next table, yield current */
-#define EcsIterYield      (-1)  /* Stay on current table, yield */
-#define EcsIterNext  (1)   /* Move to next table, don't yield */
-
-////////////////////////////////////////////////////////////////////////////////
-//// Convenience macros for ctor, dtor, move and copy
+//// Convenience macros for ctor, dtor, move, and copy
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifndef FLECS_LEGACY
@@ -448,9 +479,10 @@ typedef struct ecs_allocator_t ecs_allocator_t;
 #define ECS_HOOK_IMPL(type, func, var, ...)\
     void func(ecs_iter_t *_it)\
     {\
+        type *field_data = ecs_field(_it, type, 0);\
         for (int32_t i = 0; i < _it->count; i ++) {\
             ecs_entity_t entity = _it->entities[i];\
-            type *var = ecs_field(_it, type, 0);\
+            type *var = &field_data[i];\
             (void)entity;\
             (void)var;\
             __VA_ARGS__\

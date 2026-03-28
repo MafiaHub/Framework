@@ -10,8 +10,11 @@ void Clone_empty(void) {
     test_assert(e2 != 0);
     test_assert(e1 != e2);
 
-    test_assert(!ecs_get_type(world, e1));
-    test_assert(!ecs_get_type(world, e2));
+    test_assert(ecs_get_type(world, e1) != NULL);
+    test_int(ecs_get_type(world, e1)->count, 0);
+
+    test_assert(ecs_get_type(world, e2) != NULL);
+    test_int(ecs_get_type(world, e2)->count, 0);
 
     ecs_fini(world);
 }
@@ -26,8 +29,11 @@ void Clone_empty_w_value(void) {
     test_assert(e2 != 0);
     test_assert(e1 != e2);
 
-    test_assert(!ecs_get_type(world, e1));
-    test_assert(!ecs_get_type(world, e2));
+    test_assert(ecs_get_type(world, e1) != NULL);
+    test_int(ecs_get_type(world, e1)->count, 0);
+
+    test_assert(ecs_get_type(world, e2) != NULL);
+    test_int(ecs_get_type(world, e2)->count, 0);
 
     ecs_fini(world);
 }
@@ -316,6 +322,7 @@ void Clone_1_component_w_lifecycle(void) {
     p->y = 2;
 
     ecs_entity_t e2 = ecs_clone(world, 0, e1, true);
+
     /* Test for leaks. Only 2 position objects should be alive */
     test_int(2, ctor_position - dtor_position);
     test_assert(e2 != 0);
@@ -453,3 +460,78 @@ void Clone_clone_w_name(void) {
 
     ecs_fini(world);
 }
+
+void Clone_clone_component(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t clone = ecs_clone(world, 0, ecs_id(Position), false);
+
+    test_assert(ecs_has(world, clone, EcsComponent));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsName)));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsSymbol)));
+
+    ecs_fini(world);
+}
+
+
+void Clone_clone_component_w_value(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t clone = ecs_clone(world, 0, ecs_id(Position), true);
+
+    test_assert(ecs_has(world, clone, EcsComponent));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsName)));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsSymbol)));
+
+    {
+        const EcsComponent *ptr = ecs_get(world, clone, EcsComponent);
+        test_assert(ptr != NULL);
+        test_int(ptr->size, sizeof(Position));
+        test_int(ptr->alignment, ECS_ALIGNOF(Position));
+    }
+
+    ecs_fini(world);
+}
+
+
+void Clone_clone_component_w_entity(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t new = ecs_new(world);
+    ecs_entity_t clone = ecs_clone(world, new, ecs_id(Position), false);
+
+    test_assert(ecs_has(world, clone, EcsComponent));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsName)));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsSymbol)));
+
+    ecs_fini(world);
+}
+
+void Clone_clone_component_w_entity_w_value(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ECS_COMPONENT(world, Position);
+
+    ecs_entity_t new = ecs_new(world);
+    ecs_entity_t clone = ecs_clone(world, new, ecs_id(Position), true);
+
+    test_assert(ecs_has(world, clone, EcsComponent));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsName)));
+    test_assert(!ecs_has_id(world, clone, ecs_pair_t(EcsIdentifier, EcsSymbol)));
+
+    {
+        const EcsComponent *ptr = ecs_get(world, clone, EcsComponent);
+        test_assert(ptr != NULL);
+        test_int(ptr->size, sizeof(Position));
+        test_int(ptr->alignment, ECS_ALIGNOF(Position));
+    }
+
+    ecs_fini(world);
+}
+

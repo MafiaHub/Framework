@@ -46,7 +46,7 @@ namespace Framework::World {
             return 0;
         }
 
-        if(const auto serverID = entity.get<Modules::Base::ServerID>())
+        if(const auto serverID = entity.try_get<Modules::Base::ServerID>())
             return serverID->id;
         return 0;
     }

@@ -4,7 +4,6 @@
  */
 
 #include "json.h"
-#include <ctype.h>
 
 #ifdef FLECS_JSON
 
@@ -219,6 +218,7 @@ const char* flecs_json_expect(
             ecs_parser_error(desc->name, desc->expr, json - desc->expr, 
                 "expected %s, got %s",
                 flecs_json_token_str(token_kind), flecs_json_token_str(kind));
+            flecs_dump_backtrace(stdout);
             return NULL;
         }
     }
@@ -489,6 +489,11 @@ void flecs_json_string_escape(
     ecs_strbuf_t *buf,
     const char *value)
 {
+    if (!value) {
+        ecs_strbuf_appendlit(buf, "null");
+        return;
+    }
+
     ecs_size_t length = flecs_stresc(NULL, 0, '"', value);
     if (length == ecs_os_strlen(value)) {
         ecs_strbuf_appendch(buf, '"');
@@ -615,7 +620,12 @@ void flecs_json_id(
         ecs_strbuf_appendch(buf, '"');
         ecs_strbuf_appendch(buf, ',');
         ecs_strbuf_appendch(buf, '"');
-        ecs_get_path_w_sep_buf(world, 0, second, ".", "", buf, true);
+        if (ECS_IS_VALUE_PAIR(id)) {
+            ecs_strbuf_appendch(buf, '@');
+            ecs_strbuf_appendint(buf, ECS_PAIR_SECOND(id));
+        } else {
+            ecs_get_path_w_sep_buf(world, 0, second, ".", "", buf, true);
+        }
         ecs_strbuf_appendch(buf, '"');
     } else {
         ecs_strbuf_appendch(buf, '"');
@@ -695,9 +705,43 @@ void flecs_json_id_member(
 }
 
 ecs_primitive_kind_t flecs_json_op_to_primitive_kind(
-    ecs_meta_type_op_kind_t kind) 
+    ecs_meta_op_kind_t kind) 
 {
     return kind - EcsOpPrimitive;
 }
 
+bool flecs_json_should_serialize(
+    ecs_entity_t entity,
+    const ecs_iter_t *it,
+    const ecs_json_ser_ctx_t *ser_ctx)
+{
+    if (!ecs_map_is_init(&ser_ctx->serialized)) {
+        return true;
+    }
+
+    if (ecs_map_get(&ser_ctx->serialized, entity) != NULL) {
+        return false;
+    }
+
+    if (it->query) {
+        ecs_iter_t temp_it;
+        bool result = ecs_query_has(it->query, entity, &temp_it);
+        if (result) {
+            ecs_iter_fini(&temp_it);
+        } else {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void flecs_json_mark_serialized(
+    ecs_entity_t entity,
+    ecs_json_ser_ctx_t *ser_ctx)
+{
+    if (ecs_map_is_init(&ser_ctx->serialized)) {
+        ecs_map_ensure(&ser_ctx->serialized, entity);
+    }
+}
 #endif

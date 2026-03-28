@@ -20,7 +20,6 @@ typedef struct ecs_entity_index_t {
     ecs_vec_t pages;
     int32_t alive_count;
     uint64_t max_id;
-    ecs_block_allocator_t page_allocator;
     ecs_allocator_t *allocator;
 } ecs_entity_index_t;
 
@@ -116,6 +115,10 @@ int32_t flecs_entity_index_not_alive_count(
 
 /* Clear entity index */
 void flecs_entity_index_clear(
+    ecs_entity_index_t *index);
+
+/* Shrink entity index */
+void flecs_entity_index_shrink(
     ecs_entity_index_t *index);
 
 /* Return number of alive entities in index */

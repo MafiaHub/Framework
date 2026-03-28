@@ -1145,7 +1145,7 @@ Bob.add(Eats, Apples);
 Bob.add(Eats, Pears);
 
 // Find all (Eats, *) relationships in Bob's type
-bob.match(world.pair(Eats, flecs::Wildcard), [](flecs::id id) {
+bob.each(Eats, flecs::Wildcard, [](flecs::id id) {
   cout << "Bob eats " << id.second().name() << endl;
 });
 
@@ -1402,8 +1402,8 @@ v->value == 100; // true
 
 ```cpp
 // Obtain the inherited component from Spaceship
-const MaxSpeed *v = Frigate.get<MaxSpeed>();
-v->value == 100; // true
+const MaxSpeed& v = Frigate.get<MaxSpeed>();
+v.value == 100; // true
 ```
 
 </li>
@@ -1446,8 +1446,8 @@ v->value == 75; // true
 
 ```cpp
 // Obtain the overridden component from Frigate
-const Defense *v = Frigate.get<Defense>();
-v->value == 75; // true
+const Defense& v = Frigate.get<Defense>();
+v.value == 75; // true
 ```
 
 </li>
@@ -1488,7 +1488,7 @@ const MaxSpeed *s = ecs_get(world, Frigate, MaxSpeed);
 s->value == 200; // true
 
 // Obtain the inherited component from Frigate
-const Defense *d = Frigate.get<Defense>();
+const Defense *d = ecs_get(world, Frigate, Defense);
 d->value == 75; // true
 ```
 
@@ -1501,12 +1501,12 @@ auto FastFrigate = world.entity()
   .set<MaxSpeed>({200});
 
 // Obtain the overridden component from FastFrigate
-const MaxSpeed *s = Frigate.get<MaxSpeed>();
-s->value == 200; // true
+const MaxSpeed& s = Frigate.get<MaxSpeed>();
+s.value == 200; // true
 
 // Obtain the inherited component from Frigate
-const Defense *d = Frigate.get<Defense>();
-d->value == 75; // true
+const Defense& d = Frigate.get<Defense>();
+d.value == 75; // true
 ```
 
 </li>
@@ -1876,7 +1876,7 @@ Fragmentation is a property of archetype-based ECS implementations where entitie
 
 Applications that make extensive use of relationships might observe high levels of fragmentation, as relationships can introduce many different combinations of components. While the Flecs storage is optimized for supporting large amounts (hundreds of thousands) of tables, fragmentation is a factor to consider when using relationships.
 
-Fragmentation can be reduced by using [union relationships](#union-property). There are additional storage improvements on the roadmap that will decrease the overhead of fragmentation introduced by relationships.
+Fragmentation can be reduced by using DontFragment relationships. There are additional storage improvements on the roadmap that will decrease the overhead of fragmentation introduced by relationships.
 
 ### Table Creation
 When an id added to an entity is deleted, all references to that id are deleted from the storage (see [cleanup properties](#cleanup-properties)). For example, when the component `Position` is deleted it is removed from all entities, and all tables with the `Position` component are deleted. While not unique to relationships, it is more common for relationships to trigger cleanup actions, as relationship pairs contain regular entities.

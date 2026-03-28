@@ -17,7 +17,8 @@
  */
 
 #include "../private_api.h"
-#include <math.h>
+
+#include <math.h> // isnan, isinf
 
 /**
  *  stm32tpl --  STM32 C++ Template Peripheral Library
@@ -53,23 +54,26 @@ char* flecs_strbuf_itoa(
     char *ptr = buf;
     char * p1;
 	char c;
+    uint64_t uv;
 
-	if (!v) {
+    if (v < 0) {
+        ptr[0] = '-';
+        ptr ++;
+        uv = (uint64_t)0 - (uint64_t)v;
+    } else {
+        uv = (uint64_t)v;
+    }
+
+	if (!uv) {
 		*ptr++ = '0';
     } else {
-        if (v < 0) {
-            ptr[0] = '-';
-            ptr ++;
-            v *= -1;
-        }
-
 		char *p = ptr;
-		while (v) {
-            int64_t vdiv = v / 10;
-            int64_t vmod = v - (vdiv * 10);
-			p[0] = (char)('0' + vmod);
+		while (uv) {
+            uint64_t vdiv = uv / 10;
+            uint64_t vmod = uv - (vdiv * 10);
+			p[0] = (char)('0' + (char)vmod);
             p ++;
-			v = vdiv;
+			uv = vdiv;
 		}
 
 		p1 = p;
@@ -437,8 +441,13 @@ char* ecs_strbuf_get(
     ecs_strbuf_appendch(b, '\0');
     result = b->content;
 
+#ifdef FLECS_SANITIZE
+    ecs_assert(ecs_os_strlen(result) <= (b->length - 1), 
+        ECS_INTERNAL_ERROR, NULL);
+#endif
+
     if (result == b->small_string) {
-        result = ecs_os_memdup_n(result, char, b->length + 1);
+        result = ecs_os_memdup_n(result, char, b->length);
     }
 
     b->length = 0;

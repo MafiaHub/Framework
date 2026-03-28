@@ -18,7 +18,8 @@ void Units_member_w_unit(void) {
     ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
         .members = {
             { .name = "value", .type = ecs_id(ecs_f32_t), .unit = u }
-        }
+        },
+        .create_member_entities = true
     });
     test_assert(s != 0);
 
@@ -29,7 +30,7 @@ void Units_member_w_unit(void) {
     test_str(members[0].name, "value");
     test_uint(members[0].type, ecs_id(ecs_f32_t));
     test_uint(members[0].unit, u);
-    test_int(members[0].count, 1);
+    test_int(members[0].count, 0);
 
     ecs_entity_t m = ecs_lookup_child(world, s, "value");
     test_assert(m != 0);
@@ -67,7 +68,9 @@ void Units_member_w_unit_type(void) {
     ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
         .members = {
             { .name = "value", .type = u }
-        }
+        },
+        .create_member_entities = true
+        
     });
     test_assert(s != 0);
 
@@ -78,7 +81,7 @@ void Units_member_w_unit_type(void) {
     test_str(members[0].name, "value");
     test_uint(members[0].type, u);
     test_uint(members[0].unit, u);
-    test_int(members[0].count, 1);
+    test_int(members[0].count, 0);
 
     ecs_entity_t m = ecs_lookup_child(world, s, "value");
     test_assert(m != 0);
@@ -107,7 +110,7 @@ void Units_cursor_get_unit(void) {
     });
 
     ecs_entity_t e = ecs_new(world);
-    void *ptr = ecs_ensure_id(world, e, s);
+    void *ptr = ecs_ensure_id(world, e, s, 4);
     test_assert(ptr != NULL);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, s, ptr);
@@ -140,7 +143,7 @@ void Units_cursor_get_unit_type(void) {
     });
 
     ecs_entity_t e = ecs_new(world);
-    void *ptr = ecs_ensure_id(world, e, s);
+    void *ptr = ecs_ensure_id(world, e, s, 4);
     test_assert(ptr != NULL);
 
     ecs_meta_cursor_t cur = ecs_meta_cursor(world, s, ptr);
@@ -651,7 +654,8 @@ void Units_set_unit(void) {
     ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
         .members = {
             { .name = "value", .type = ecs_id(ecs_f32_t), .unit = u }
-        }
+        },
+        .create_member_entities = true
     });
     test_assert(s != 0);
 
@@ -662,7 +666,7 @@ void Units_set_unit(void) {
     test_str(members[0].name, "value");
     test_uint(members[0].type, ecs_id(ecs_f32_t));
     test_uint(members[0].unit, u);
-    test_int(members[0].count, 1);
+    test_int(members[0].count, 0);
 
     ecs_entity_t m = ecs_lookup_child(world, s, "value");
     test_assert(m != 0);
@@ -708,7 +712,8 @@ void Units_set_unit_w_derived(void) {
     ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
         .members = {
             { .name = "value", .type = ecs_id(ecs_f32_t), .unit = u }
-        }
+        },
+        .create_member_entities = true
     });
     test_assert(s != 0);
 
@@ -719,7 +724,7 @@ void Units_set_unit_w_derived(void) {
     test_str(members[0].name, "value");
     test_uint(members[0].type, ecs_id(ecs_f32_t));
     test_uint(members[0].unit, u);
-    test_int(members[0].count, 1);
+    test_int(members[0].count, 0);
 
     ecs_entity_t m = ecs_lookup_child(world, s, "value");
     test_assert(m != 0);
@@ -773,7 +778,8 @@ void Units_set_unit_w_over(void) {
     ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
         .members = {
             { .name = "value", .type = ecs_id(ecs_f32_t), .unit = u }
-        }
+        },
+        .create_member_entities = true
     });
     test_assert(s != 0);
 
@@ -784,7 +790,7 @@ void Units_set_unit_w_over(void) {
     test_str(members[0].name, "value");
     test_uint(members[0].type, ecs_id(ecs_f32_t));
     test_uint(members[0].unit, u);
-    test_int(members[0].count, 1);
+    test_int(members[0].count, 0);
 
     ecs_entity_t m = ecs_lookup_child(world, s, "value");
     test_assert(m != 0);
@@ -842,7 +848,8 @@ void Units_set_unit_w_prefix(void) {
     ecs_entity_t s = ecs_struct_init(world, &(ecs_struct_desc_t){
         .members = {
             { .name = "value", .type = ecs_id(ecs_f32_t), .unit = u }
-        }
+        },
+        .create_member_entities = true
     });
     test_assert(s != 0);
 
@@ -853,7 +860,7 @@ void Units_set_unit_w_prefix(void) {
     test_str(members[0].name, "value");
     test_uint(members[0].type, ecs_id(ecs_f32_t));
     test_uint(members[0].unit, u);
-    test_int(members[0].count, 1);
+    test_int(members[0].count, 0);
 
     ecs_entity_t m = ecs_lookup_child(world, s, "value");
     test_assert(m != 0);

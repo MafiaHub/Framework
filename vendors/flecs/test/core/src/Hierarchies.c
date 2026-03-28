@@ -1,4 +1,5 @@
 #include <core.h>
+#include <inttypes.h>
 
 void Hierarchies_setup(void) {
     ecs_log_set_level(-2);
@@ -44,6 +45,31 @@ void Hierarchies_get_parent_from_nested_2(void) {
 
     ecs_entity_t e = ecs_get_target(world, Child, EcsChildOf, 0);
     test_assert(e == ChildScope);
+
+    ecs_fini(world);
+}
+
+void Hierarchies_get_target_negative_index(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_entity_t parent = ecs_new(world);
+    ecs_entity_t child = ecs_new_w_pair(world, EcsChildOf, parent);
+    test_uint(ecs_get_target(world, child, EcsChildOf, -1), 0);
+
+    ECS_TAG(world, Rel0);
+    ECS_TAG(world, Rel);
+    ECS_TAG(world, Rel2);
+    ECS_TAG(world, Tgt0);
+    ECS_TAG(world, Tgt1);
+    ECS_TAG(world, Tgt2);
+
+    ecs_entity_t e = ecs_new(world);
+    ecs_add_pair(world, e, Rel0, Tgt0);
+    ecs_add_pair(world, e, Rel, Tgt1);
+    ecs_add_pair(world, e, Rel2, Tgt2);
+
+    test_uint(ecs_get_target(world, e, Rel, 0), Tgt1);
+    test_uint(ecs_get_target(world, e, Rel, -1), 0);
 
     ecs_fini(world);
 }
@@ -129,6 +155,19 @@ void Hierarchies_tree_iter_2_tables(void) {
     test_int( it.count, 2);
     test_int(it.entities[0], Child3);
     test_int(it.entities[1], Child4);
+
+    test_assert( !ecs_children_next(&it));
+
+    ecs_fini(world);
+}
+
+void Hierarchies_tree_iter_parent_0(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_iter_t it = ecs_children(world, 0);
+    test_assert( ecs_children_next(&it) == true);
+    test_int( it.count, 1);
+    test_int(it.entities[0], EcsFlecs);
 
     test_assert( !ecs_children_next(&it));
 
@@ -229,6 +268,19 @@ void Hierarchies_path_any_w_empty_prefix(void) {
 
     char *path = ecs_get_path_w_sep(world, 0, EcsAny, ".", "");
     test_str(path, "_");
+    ecs_os_free(path);
+
+    ecs_fini(world);
+}
+
+void Hierarchies_path_w_buf(void) {
+    ecs_world_t *world = ecs_mini();
+
+    ecs_strbuf_t buf = ECS_STRBUF_INIT;
+
+    ecs_get_path_w_sep_buf(world, 0, ecs_id(EcsComponent), ".", 0, &buf, false);
+    char *path = ecs_strbuf_get(&buf);
+    test_str(path, "Component");
     ecs_os_free(path);
 
     ecs_fini(world);
@@ -1513,7 +1565,8 @@ void Hierarchies_get_type_after_recycled_parent_add(void) {
 
     ecs_entity_t parent = ecs_new(world);
     test_assert(parent != 0);
-    test_assert( ecs_get_type(world, parent) == NULL);
+    test_assert( ecs_get_type(world, parent) != NULL);
+    test_int( ecs_get_type(world, parent)->count, 0 );
 
     ecs_delete(world, parent);
     test_assert( !ecs_is_alive(world, parent));
@@ -1915,6 +1968,23 @@ void Hierarchies_defer_batch_remove_childof_w_add_name(void) {
     test_assert(ecs_get_name(world, e) != NULL);
     test_assert(ecs_lookup(world, "e") == e);
     test_assert(!ecs_has_pair(world, e, EcsChildOf, parent));
+
+    ecs_fini(world);
+}
+
+void Hierarchies_recreated_parent_w_named_children(void) {
+    ecs_world_t *world = ecs_mini();
+
+    char child_name[128] = { '\0' };
+
+    ecs_entity_t parent = ecs_set_name(world, 0, "e1");
+    ecs_delete(world, parent);
+
+    ecs_log_set_level(-4);
+    parent = ecs_set_name(world, 0, "e1");
+    ecs_os_snprintf(child_name, 128, "#%" PRIu64 ".e2", parent);
+    ecs_entity_t child = ecs_set_name(world, 0, child_name);
+    test_assert(child == 0);
 
     ecs_fini(world);
 }

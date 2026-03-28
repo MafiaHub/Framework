@@ -167,7 +167,7 @@ bool flecs_query_trav_unknown_src_up_fixed_second(
     ecs_trav_elem_t *elems = ecs_vec_first(&trav_ctx->cache.entities);
     for (; trav_ctx->index < count; trav_ctx->index ++) {
         ecs_trav_elem_t *el = &elems[trav_ctx->index];
-        trav_ctx->and.idr = el->idr; /* prevents lookup by select */
+        trav_ctx->and.cr = el->cr; /* prevents lookup by select */
         if (flecs_query_select_w_id(op, redo, ctx, ecs_pair(trav, el->entity),
             (EcsTableNotQueryable|EcsTableIsPrefab|EcsTableIsDisabled))) 
         {
@@ -214,7 +214,7 @@ bool flecs_query_trav_yield_reflexive_src(
             ECS_INTERNAL_ERROR, NULL);
         (void)table;
         vars[src_var].entity = entity;
-        vars[src_var].range = flecs_range_from_entity(entity, ctx);
+        vars[src_var].range = flecs_range_from_entity(ctx->world, entity);
     }
 
     return true;

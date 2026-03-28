@@ -1743,7 +1743,7 @@ void SerializeIterToRowJson_serialize_scope(void) {
      *       hiding fields within scopes yet. This test is just here to make
      *       the serializer doesn't crash, and will be updated after the query
      *       refactor. */
-    char* expect = "{\"results\":[{\"name\":\"e1\", \"vars\":{\"child\":\"*\"},\"fields\":{\"is_set\":[true, false, true, true, false, true], \"ids\":[0, 0, [\"flecs.core.ChildOf\",\"e1\"], 0, 0, 0]}}, {\"name\":\"e3\", \"vars\":{\"child\":\"*\"},\"fields\":{\"is_set\":[true, false, true, true, false, true], \"ids\":[0, 0, [\"flecs.core.ChildOf\",\"e2\"], 0, 0, 0]}}]}";
+    char* expect = "{\"results\":[{\"name\":\"e1\", \"vars\":{\"child\":\"*\"},\"fields\":{\"is_set\":[true, false, true, true, false, true], \"ids\":[0, 0, [\"flecs.core.ChildOf\",\"e1\"], 0, 0, 0]}}, {\"name\":\"e3\", \"vars\":{\"child\":\"*\"},\"fields\":{\"is_set\":[true, false, true, true, false, true], \"ids\":[0, 0, [\"flecs.core.ChildOf\",\"e3\"], 0, 0, 0]}}]}";
     
     test_json(json, expect);
 
@@ -2375,8 +2375,6 @@ void SerializeIterToRowJson_serialize_everything_table(void) {
     ECS_COMPONENT(world, Position);
     ECS_COMPONENT(world, Mass);
 
-    ecs_add_id(world, TagA, EcsPrivate);
-
     ecs_struct(world, {
         .entity = ecs_id(Position),
         .members = {
@@ -2784,6 +2782,60 @@ void SerializeIterToRowJson_serialize_w_field_info_w_or(void) {
     test_assert(json != NULL);
 
     char* expect = "{\"field_info\":[{\"id\":0}], \"results\":[{\"name\":\"e1\", \"fields\":{\"ids\":[[\"Position\"]]}}, {\"name\":\"e2\", \"fields\":{\"ids\":[[\"Position\"]]}}, {\"name\":\"e3\", \"fields\":{\"ids\":[[\"Mass\"]]}}]}";
+    test_json(json, expect);
+
+    ecs_os_free(json);
+
+    ecs_query_fini(q);
+
+    ecs_fini(world);
+}
+
+void SerializeIterToRowJson_serialize_w_field_info_w_none(void) {
+    ecs_world_t *world = ecs_init();
+
+    ECS_COMPONENT(world, Position);
+    ECS_COMPONENT(world, Mass);
+
+    ecs_struct(world, {
+        .entity = ecs_id(Position),
+        .members = {
+            { "x", ecs_id(ecs_i32_t) },
+            { "y", ecs_id(ecs_i32_t) }
+        }
+    });
+
+    ecs_struct(world, {
+        .entity = ecs_id(Mass),
+        .members = {
+            { "value", ecs_id(ecs_i32_t) }
+        }
+    });
+
+    ecs_query_t *q = ecs_query(world, {
+        .expr = "Position, [none] Mass"
+    });
+
+    test_assert(q != NULL);
+
+    ecs_entity_t e1 = ecs_entity(world, { .name = "e1" });
+    ecs_entity_t e2 = ecs_entity(world, { .name = "e2" });
+    ecs_entity_t e3 = ecs_entity(world, { .name = "e3" });
+
+    ecs_set(world, e1, Position, {10, 20});
+    ecs_set(world, e2, Position, {20, 30});
+    ecs_set(world, e3, Position, {30, 40});
+
+    ecs_set(world, e3, Mass, {100});
+
+    ecs_iter_t it = ecs_query_iter(world, q);
+    char *json = ecs_iter_to_json(&it, &(ecs_iter_to_json_desc_t) {
+        .serialize_field_info = true,
+        .serialize_fields = true
+    });
+    test_assert(json != NULL);
+
+    char* expect = "{\"field_info\":[{\"id\":\"Position\", \"type\":\"Position\", \"symbol\":\"Position\", \"schema\":{\"x\":[\"int\"], \"y\":[\"int\"]}}, {\"id\":\"Mass\"}], \"results\":[{\"name\":\"e3\", \"fields\":{}}]}";
     test_json(json, expect);
 
     ecs_os_free(json);

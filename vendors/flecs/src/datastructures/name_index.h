@@ -6,6 +6,13 @@
 #ifndef FLECS_NAME_INDEX_H
 #define FLECS_NAME_INDEX_H
 
+/** Type used for internal string hashmap */
+typedef struct ecs_hashed_string_t {
+    char *value;
+    ecs_size_t length;
+    uint64_t hash;
+} ecs_hashed_string_t;
+
 void flecs_name_index_init(
     ecs_hashmap_t *hm,
     ecs_allocator_t *allocator);
@@ -18,7 +25,6 @@ bool flecs_name_index_is_init(
     const ecs_hashmap_t *hm);
 
 ecs_hashmap_t* flecs_name_index_new(
-    ecs_world_t *world,
     ecs_allocator_t *allocator);
 
 void flecs_name_index_fini(

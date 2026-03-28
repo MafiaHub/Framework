@@ -252,7 +252,7 @@ e.set(Position { x: 10.0, y: 20.0 });
 </ul>
 </div>
 
-### OnSet and Inheritance
+#### OnSet and Inheritance
 To ensure that OnSet events can be used reliably to detect component changes, events can be produced by operations that change inheritance relationships or operate on inherited from components. This is enabled by default for components with the `(OnInstantiate, Inherit)` trait. To prevent this behavior, add the `self` modifier to an observer term. The following inheritance scenarios produce OnSet events. All scenarios assume that the component has the `(OnInstantiate, Inherit)` trait.
 
 #### Adding an IsA pair
@@ -880,7 +880,7 @@ e.Set(new Position(10, 20));
 e.Set(new Velocity(1, 2));
 
 // Triggers, entity now matches observer query
-e.Set(new Velocity(20, 30));
+e.Set(new Position(20, 30));
 ```
 
 </li>
@@ -906,6 +906,101 @@ e.set(Velocity { x: 1.0, y: 2.0 });
 
 // Triggers, entity now matches observer query
 e.set(Position { x: 20.0, y: 30.0 });
+```
+
+</li>
+</ul>
+</div>
+
+### Query variables
+Observers terms can use query variables, with some limitations:
+ - Query variables can be used freely as first or second elements of a pair
+ - Terms with a (non-$this) query variable as source won't trigger observers (behavior is like filter terms)
+ - An observer must have at least one term that does not have a query variable as source, except for terms with the default $this source.
+
+The following example shows valid usage of an observer with query variables:
+
+<div class="flecs-snippet-tabs">
+<ul>
+<li><b class="tab-title">C</b>
+
+```c
+// Observer that listens for spaceships docked to planets. The observer triggers
+// only when the SpaceShip tag or DockedTo pair is added to an entity. It will
+// not trigger when Planet is added to the target of a DockedTo pair.
+//
+// The DSL notation for this query is
+//   SpaceShip, (DockedTo, $object), Planet($object)
+ecs_observer(world, {
+    .query.terms = {
+        { SpaceShip }, 
+        { .first.id = DockedTo, .second.name = "$object" },
+        { .first.id = Planet, .src.name = "$object" },
+    },
+    .events = { EcsOnAdd },
+    .callback = SpaceshipDocked
+});
+```
+
+</li>
+<li><b class="tab-title">C++</b>
+
+```cpp
+// Observer that listens for spaceships docked to planets. The observer triggers
+// only when the SpaceShip tag or DockedTo pair is added to an entity. It will
+// not trigger when Planet is added to the target of a DockedTo pair.
+//
+// The DSL notation for this query is
+//   SpaceShip, (DockedTo, $object), Planet($object)
+world.observer()
+    .with<SpaceShip>()
+    .with<DockedTo>("objectt")
+    .with<Planet>().src("$object")
+    .event(flecs::OnAdd)
+    .each([](flecs::entity e) {
+        // ...
+    });
+```
+
+</li>
+<li><b class="tab-title">C#</b>
+
+```cs
+// Observer that listens for spaceships docked to planets. The observer triggers
+// only when the SpaceShip tag or DockedTo pair is added to an entity. It will
+// not trigger when Planet is added to the target of a DockedTo pair.
+//
+// The DSL notation for this query is
+//   SpaceShip, (DockedTo, $object), Planet($object)
+world.Observer()
+    .With<SpaceShip>()
+    .With<DockedTo>("objectt")
+    .With<Planet>().Src("$object")
+    .Event(Ecs.OnAdd)
+    .Each((Iter it, int i, ref Position p) =>
+    {
+        // ...
+    });
+```
+
+</li>
+<li><b class="tab-title">Rust</b>
+
+```rust
+// Observer that listens for spaceships docked to planets. The observer triggers
+// only when the SpaceShip tag or DockedTo pair is added to an entity. It will
+// not trigger when Planet is added to the target of a DockedTo pair.
+//
+// The DSL notation for this query is
+//   SpaceShip, (DockedTo, $object), Planet($object)
+world
+    .observer::<flecs::OnAdd>()
+    .with::<SpaceShip>()
+    .with_first_name::<DockedTo>("$object")
+    .with::<Planet>().set_src_name("$object")
+    .each_entity(|e| {
+        // ...
+    });
 ```
 
 </li>
@@ -1150,23 +1245,28 @@ void MyMonitor(ecs_iter_t *it) {
     }
 }
 
-// Monitor observer
+// Monitor observer for Position, (ChildOf, *)
 ecs_observer(world, {
     .query.terms = {
         { ecs_id(Position) }, 
-        { ecs_id(Velocity) }
+        { ecs_pair(EcsChildOf, EcsWildcard) }
     },
     .events = { EcsMonitor },
     .callback = MyMonitor
 });
 
+ecs_entity_t p_a = ecs_new(world);
+ecs_entity_t p_b = ecs_new(world);
 ecs_entity_t e = ecs_new(world);
 
 // Doesn't trigger the monitor, entity doesn't match
 ecs_set(world, e, Position, {10, 20});
 
 // Entity now matches, triggers monitor with OnAdd event
-ecs_set(world, e, Velocity, {1, 2});
+ecs_add(world, e, EcsChildOf, p_a);
+
+// Entity still matches the query, monitor doesn't trigger
+ecs_add(world, e, EcsChildOf, p_b);
 
 // Entity no longer matches, triggers monitor with OnRemove event
 ecs_remove(world, e, Position);
@@ -1176,10 +1276,11 @@ ecs_remove(world, e, Position);
 <li><b class="tab-title">C++</b>
 
 ```cpp
-// Monitor observer
-world.observer<Position, Velocity>()
+// Monitor observer for Position, (ChildOf, *)
+world.observer<Position>()
+    .with(flecs::ChildOf, flecs::Wildcard)
     .event(flecs::Monitor)
-    .each([](flecs::iter& it, size_t i, Position& p, Velocity& v) {
+    .each([](flecs::iter& it, size_t i, Position& p) {
         if (it.event() == flecs::OnAdd) {
             // Entity started matching query
         } else if (it.event() == flecs::OnRemove) {
@@ -1187,13 +1288,18 @@ world.observer<Position, Velocity>()
         }
     });
 
+flecs::entity p_a = world.entity();
+flecs::entity p_b = world.entity();
 flecs::entity e = world.entity();
 
 // Doesn't trigger the monitor, entity doesn't match
 e.set(Position{10, 20});
 
 // Entity now matches, triggers monitor with OnAdd event
-e.set(Velocity{1, 2});
+e.child_of(p_a);
+
+// Entity still matches the query, monitor doesn't trigger
+e.child_of(p_b);
 
 // Entity no longer matches, triggers monitor with OnRemove event
 e.remove<Position>();
@@ -1203,10 +1309,11 @@ e.remove<Position>();
 <li><b class="tab-title">C#</b>
 
 ```cs
-// Monitor observer
-world.Observer<Position, Velocity>()
+// Monitor observer for Position, (ChildOf, *)
+world.Observer<Position>()
+    .With(Ecs.ChildOf, Ecs.WildCard)
     .Event(Ecs.Monitor)
-    .Each((Iter it, int i, ref Position p, ref Velocity v) =>
+    .Each((Iter it, int i, ref Position p) =>
     {
         if (it.Event() == Ecs.OnAdd) {
             // Entity started matching query
@@ -1215,13 +1322,18 @@ world.Observer<Position, Velocity>()
         }
     });
 
+Entity p_a = world.Entity();
+Entity p_b = world.Entity();
 Entity e = world.Entity();
 
 // Doesn't trigger the monitor, entity doesn't match
-e.set(new Position(10, 20));
+e.Set(new Position(10, 20));
 
 // Entity now matches, triggers monitor with OnAdd event
-e.Set(new Velocity(1, 2));
+e.ChildOf(p_a);
+
+// Entity still matches the query, monitor doesn't trigger
+e.ChildOf(p_b);
 
 // Entity no longer matches, triggers monitor with OnRemove event
 e.Remove<Velocity>();
@@ -1231,9 +1343,10 @@ e.Remove<Velocity>();
 <li><b class="tab-title">Rust</b>
 
 ```rust
-// Monitor observer
+// Monitor observer for Position, (ChildOf, *)
 world
-    .observer::<flecs::Monitor, (&Position, &Velocity)>()
+    .observer::<flecs::Monitor, (&Position)>()
+    .with::<flecs::ChildOf>(flecs::Wildcard)
     .each_iter(|it, i, (p, v)| {
         if it.event() == flecs::OnAdd::ID {
             // Entity started matching query
@@ -1242,13 +1355,18 @@ world
         }
     });
 
+let p_a = world.entity();
+let p_b = world.entity();
 let e = world.entity();
 
 // Doesn't trigger the monitor, entity doesn't match
 e.set(Position { x: 10.0, y: 20.0 });
 
 // Entity now matches, triggers monitor with OnAdd event
-e.set(Velocity { x: 1.0, y: 2.0 });
+e.child_of(p_a);
+
+// Entity still matches the query, monitor doesn't trigger
+e.child_of(p_b);
 
 // Entity no longer matches, triggers monitor with OnRemove event
 e.remove::<Position>();
@@ -1522,101 +1640,6 @@ let e = world.entity().set(TimeOfDay { value: 0.0 });
 </div>
 
 Observers may match terms on multiple different sources. However, when an observer matches components both on the `$this` source (default) and on a fixed source, the fixed source terms will not match events. The reason for this is that otherwise emitting an event for a fixed source term would mean iterating all matching entities for the `$this` term. If an observer only has fixed source terms, events will be matched for each of the terms.
-
-### Singletons
-Singletons are a special case of fixed source term, where the component is matched on itself. An example:
-
-<div class="flecs-snippet-tabs">
-<ul>
-<li><b class="tab-title">C</b>
-
-```c
-ecs_singleton_set(world, TimeOfDay, {0});
-
-// Observer with singleton source
-ecs_observer(world, {
-    .query.terms = {
-        { ecs_id(TimeOfDay), .src.id = ecs_id(TimeOfDay) }
-    },
-    .events = { EcsOnSet },
-    .callback = MyObserver
-});
-
-// Triggers observer
-ecs_singleton_set(world, TimeOfDay, {1});
-
-// Does not trigger observer
-ecs_entity_t e = ecs_insert(world, ecs_value(TimeOfDay, {0}));
-```
-
-</li>
-<li><b class="tab-title">C++</b>
-
-```cpp
-world.set(TimeOfDay{0});
-
-// Observer with singleton source
-world.observer<TimeOfDay>()
-    .term_at(0).singleton()
-    .event(flecs::OnSet)
-    .each([](flecs::iter& it, size_t i, TimeOfDay& t) {
-        // ...
-    });
-
-// Triggers observer
-world.set(TimeOfDay{1});
-
-// Does not trigger observer
-flecs::entity e = world.entity().set(TimeOfDay{0});
-```
-
-</li>
-<li><b class="tab-title">C#</b>
-
-```cs
-world.Set(new TimeOfDay(0));
-
-// Observer with singleton source
-world.Observer<TimeOfDay>()
-    .TermAt(0).Singleton()
-    .Event(Ecs.OnSet)
-    .Each((Iter it, int i, ref TimeOfDay t) =>
-    {
-        // ...
-    });
-
-// Triggers observer
-world.Set(new TimeOfDay(1));
-
-// Does not trigger observer
-Entity e = world.Entity().Set(new TimeOfDay(0));
-```
-
-</li>
-<li><b class="tab-title">Rust</b>
-
-```rust
-world.set(TimeOfDay { value: 0.0 });
-
-// Observer with singleton source
-world
-    .observer::<flecs::OnSet, &TimeOfDay>()
-    .term_at(0)
-    .singleton()
-    .each_iter(|it, i, time| {
-        // ...
-    });
-
-// Triggers observer
-world.set(TimeOfDay { value: 1.0 });
-
-// Does not trigger observer
-let e = world.entity().set(TimeOfDay { value: 0.0 });
-```
-
-</li>
-</ul>
-</div>
 
 ## Event Propagation
 When an observer has a query that uses (up) relationship traversal, events are propagated along the relationship edge. For example, when an observer requests component `Position` from a parent entity, setting `Position` on the parent will propagate an `OnSet` event along the `ChildOf` edge, notifying all child entities of the parent. 

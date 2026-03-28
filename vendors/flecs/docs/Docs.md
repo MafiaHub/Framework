@@ -5,8 +5,14 @@
 - [Quickstart](Quickstart.md)
 - [Designing with Flecs](DesignWithFlecs.md)
 - [Getting Started with Unreal Engine](https://github.com/PreyK/Unreal-Minimum-Viable-Flecs)
-- [Getting Started with Godot](https://github.com/paulfigiel/godot-flecs-sample)
+- [Unreal-Flecs (Unreal Engine Flecs plugin)](https://github.com/Reddy-dev/Unreal-Flecs)
+- [Godot-flecs-sample (example)](https://github.com/paulfigiel/godot-flecs-sample)
+- [Flecs-Godot (GDExtension)](https://github.com/VoxInteractive/Godot-Flecs)
+- [Godot-turbo (engine module)](https://github.com/callmefloof/godot-turbo/) ([demo project](https://github.com/callmefloof/godot_turbo_demo_projects))
 - [Getting Started with Raylib](https://github.com/kranzky/raylib-flecs-starter-kit)
+- [Getting Started with SDL3, ImGui, Sqlite](https://github.com/ilyas-taouaou/CodotakuCMakeRepo) ([video](https://www.youtube.com/watch?v=T32B7nf6B-8))
+- [Getting Started with SDL3, Blend2D](https://github.com/james-j-obrien/flecs-sdl3-blend2d)
+- [Flecs an Raylib template](https://github.com/aog05/Raylib-and-Flecs-Template)
 
 ## Manuals
 - [Manual](Manual.md)
@@ -15,6 +21,7 @@
 - [Query Language Manual](FlecsQueryLanguage.md)
 - [Systems Manual](Systems.md)
 - [Observers Manual](ObserversManual.md)
+- [Hierarchies Manual](HierarchiesManual.md)
 - [Prefabs Manual](PrefabsManual.md)
 - [Component Traits Manual](ComponentTraits.md)
 - [Relationships Manual](Relationships.md)
@@ -31,8 +38,26 @@
 - [C++ examples](https://github.com/SanderMertens/flecs/tree/master/examples/cpp)
 - [C# examples](https://github.com/BeanCheeseBurrito/Flecs.NET/tree/main/src/Flecs.NET.Examples)
 - [Rust examples](https://github.com/Indra-db/Flecs-Rust/tree/main/flecs_ecs/examples/flecs)
- 
-## Demos
+
+## Videos
+- [Setting Up The Project (E1)](https://www.youtube.com/watch?v=O632xG7ItL8)
+- [Creating Your First World (E2)](https://www.youtube.com/watch?v=ph2FjgNvlO4)
+- [Components In Flecs (E3)](https://www.youtube.com/watch?v=4qtdgAN82uo)
+- [Tagging Your Creations (E4)](https://www.youtube.com/watch?v=u71cuiyQk-8)
+- [Beaty Of Pairs In Flecs (E5)](https://www.youtube.com/watch?v=fJuHMzVC_bE)
+- [What is a Prefab? (E6)](https://www.youtube.com/watch?v=qz5eblX8yoc)
+- [Some Pointers for C (E7)](https://www.youtube.com/watch?v=0LscDsVy-28)
+- [Demistifying Queries Part 1 (E8)](https://www.youtube.com/watch?v=PKvCpUO55yw&t=216s)
+- [Demistifying Queries Part 2 (E9)](https://www.youtube.com/watch?v=4KZGkT9MqHI)
+- [Flecs Systems (E10)](https://www.youtube.com/watch?v=gXzgO6unZkI)
+- [Observing Changes (E11)](https://www.youtube.com/watch?v=XaZOmWoSKfQ)
+- [One to Rule Them All (singletons, E12)](https://www.youtube.com/watch?v=IpuZIFcaUBU)
+
+(Shoutout to [jellycake222](https://www.youtube.com/@jellycake222) for making the awesome tutorial series <3!)
+
+## Open Source Projects
+- [Extermination Shock Source](https://github.com/Wizard-Of-Chaos/ExShock_code)
+- [ECS Survivors Source](https://github.com/ptidejteam/ecs-survivors)
 - [Playground (Flecs Script)](https://www.flecs.dev/explorer/?host=flecs_explorer.wasm)
 - [Tower Defense (C++)](https://github.com/SanderMertens/tower_defense)
 - [City (C)](https://github.com/flecs-hub/city)
@@ -54,7 +79,6 @@
 ### Resources provided by the community
 Some of these are quite old, and might contain information that is out of date!
 
-- [Extermination Shock Source](https://github.com/Wizard-Of-Chaos/ExShock_code)
 - [Bgfx/Imgui module](https://github.com/flecs-hub/flecs-systems-bgfx/tree/bgfx_imgui)
 - [Tower defense example](https://gist.github.com/oldmanauz/b4ced44737bf9d248233538fa06a989e)
 - [Unreal + Flecs example](https://github.com/PreyK/Unreal-Minimum-Viable-Flecs)

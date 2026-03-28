@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <flecs/flecs.h>
+#include <flecs/distr/flecs.h>
 
 #include "world/modules/base.hpp"
 

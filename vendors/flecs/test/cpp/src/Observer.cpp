@@ -886,15 +886,14 @@ void Observer_on_set_w_set_sparse(void) {
     test_int(count, 1);
 }
 
-#include <iostream>
-
 void Observer_on_add_singleton(void) {
     flecs::world world;
+
+    world.component<Position>().add(flecs::Singleton);
 
     int32_t count = 0;
 
     world.observer<Position>()
-        .term_at(0).singleton()
         .event(flecs::OnSet)
         .each([&](Position& p) {
             test_int(p.x, 10);
@@ -910,12 +909,14 @@ void Observer_on_add_singleton(void) {
 void Observer_on_add_pair_singleton(void) {
     flecs::world world;
 
+    world.component<Position>().add(flecs::Singleton);
+
     int32_t count = 0;
 
     flecs::entity tgt = world.entity();
 
     world.observer<Position>()
-        .term_at(0).second(tgt).singleton()
+        .term_at(0).second(tgt)
         .event(flecs::OnSet)
         .each([&](Position& p) {
             test_int(p.x, 10);
@@ -931,13 +932,15 @@ void Observer_on_add_pair_singleton(void) {
 void Observer_on_add_pair_wildcard_singleton(void) {
     flecs::world world;
 
+    world.component<Position>().add(flecs::Singleton);
+
     int32_t count = 0;
 
     flecs::entity tgt_1 = world.entity();
     flecs::entity tgt_2 = world.entity();
 
     world.observer<Position>()
-        .term_at(0).second(flecs::Wildcard).singleton()
+        .term_at(0).second(flecs::Wildcard)
         .event(flecs::OnSet)
         .each([&](Position& p) {
             test_int(p.x, 10);
@@ -954,15 +957,17 @@ void Observer_on_add_pair_wildcard_singleton(void) {
 
 void Observer_on_add_with_pair_singleton(void) {
     flecs::world world;
+    
+    world.component<Position>().add(flecs::Singleton);
 
     int32_t count = 0;
 
     flecs::entity tgt = world.entity();
 
     world.observer()
-        .with<Position>(tgt).singleton()
+        .with<Position>(tgt)
         .event(flecs::OnSet)
-        .each([&](flecs::entity) {
+        .each([&](flecs::iter&, size_t) {
             count ++;
         });
 
@@ -1473,4 +1478,158 @@ void Observer_on_set_w_override_after_clear(void) {
     e1.clear();
 
     test_int(count, 0);
+}
+
+void Observer_trigger_on_set_in_on_add_implicit_registration(void) {
+  flecs::world world;
+
+  struct Tag {};
+  
+  world.observer<Tag>()
+    .event(flecs::OnAdd)
+    .each([](flecs::entity e, Tag) {
+        e.set<Position>({ 10, 20 });
+    });
+
+  world.observer<Position>()
+    .event(flecs::OnSet)
+    .each([](flecs::entity e, Position&) {
+        e.set<Velocity>({ 1, 2 });
+    });
+
+  auto e = world.entity().add<Tag>();
+
+  {
+    const Position *p = e.try_get<Position>();
+    test_int(p->x, 10);
+    test_int(p->y, 20);
+  }
+
+  {
+    const Velocity *v = e.try_get<Velocity>();
+    test_int(v->x, 1);
+    test_int(v->y, 2);
+  }
+}
+
+namespace ns {
+    struct Velocity {
+        float x, y;
+    };
+}
+
+void Observer_trigger_on_set_in_on_add_implicit_registration_namespaced(void) {
+    flecs::world world;
+
+    struct Tag { };
+    
+    world.observer<Tag>()
+        .event(flecs::OnAdd)
+        .each([](flecs::entity e, Tag) {
+            e.set<Position>({ 10, 20 });
+        });
+
+    world.observer<Position>()
+        .event(flecs::OnSet)
+        .each([](flecs::entity e, Position&) {
+            e.set<ns::Velocity>({ 1, 2 });
+        });
+
+    auto e = world.entity().add<Tag>();
+
+    {
+        const Position *p = e.try_get<Position>();
+        test_int(p->x, 10);
+        test_int(p->y, 20);
+    }
+
+    {
+        const ns::Velocity *v = e.try_get<ns::Velocity>();
+        test_int(v->x, 1);
+        test_int(v->y, 2);
+    }
+}
+
+void Observer_fixed_src_w_each(void) {
+    flecs::world world;
+
+    struct Tag { };
+
+    flecs::entity matched;
+    flecs::entity e = world.entity();
+
+    world.observer()
+        .with<Tag>().src(e)
+        .event(flecs::OnAdd)
+        .each([&](flecs::iter& it, size_t) {
+            matched = it.src(0);
+        });
+
+    test_assert(matched == 0);
+
+    e.add<Tag>();
+
+    test_assert(matched == e);
+
+    matched = flecs::entity::null();
+
+    world.entity().add<Tag>();
+    
+    test_assert(matched == 0);
+}
+
+void Observer_fixed_src_w_run(void) {
+    flecs::world world;
+
+    struct Tag { };
+
+    flecs::entity matched;
+    flecs::entity e = world.entity();
+
+    world.observer()
+        .with<Tag>().src(e)
+        .event(flecs::OnAdd)
+        .run([&](flecs::iter& it) {
+            while (it.next()) {
+                test_int(it.count(), 0);
+                matched = it.src(0);
+            }
+        });
+
+    test_assert(matched == 0);
+
+    e.add<Tag>();
+
+    test_assert(matched == e);
+
+    matched = flecs::entity::null();
+
+    world.entity().add<Tag>();
+    
+    test_assert(matched == 0);
+}
+
+void Observer_untyped_field(void) {
+    flecs::world world;
+
+    int invoked = 0, count = 0;
+
+    world.observer<Position>()
+        .event(flecs::OnSet)
+        .run([&](flecs::iter& it) {
+            invoked ++;
+            while (it.next()) {
+                count ++;
+                test_uint(sizeof(Position), it.size(0));
+                auto f = it.field(0);
+                Position *p = static_cast<Position*>(f[0]);
+                test_int(p->x, 10);
+                test_int(p->y, 20);
+            }
+        });
+
+    world.entity().set(Position{10, 20});
+
+    test_int(invoked, 1);
+    test_int(count, 1);
 }

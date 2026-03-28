@@ -5,23 +5,14 @@
 
 #include "../private_api.h"
 
-#include "script/script.h"
+#include "query_dsl/query_dsl.h"
 #include "pipeline/pipeline.h"
+#include "json/json.h"
 
 #ifdef FLECS_REST
 
 /* Retain captured commands for one minute at 60 FPS */
 #define FLECS_REST_COMMAND_RETAIN_COUNT (60 * 60)
-
-static ECS_TAG_DECLARE(EcsRestPlecs);
-
-typedef struct {
-    ecs_world_t *world;
-    ecs_http_server_t *srv;
-    int32_t rc;
-    ecs_map_t cmd_captures;
-    double last_time;
-} ecs_rest_ctx_t;
 
 typedef struct {
     char *cmds;
@@ -63,6 +54,16 @@ static ECS_DTOR(EcsRest, ptr, {
 
 static char *rest_last_err;
 static ecs_os_api_log_t rest_prev_log;
+static ecs_os_api_log_t rest_prev_fatal_log;
+
+static
+void flecs_rest_set_prev_log(
+    ecs_os_api_log_t prev_log,
+    bool try)
+{
+    rest_prev_log = try ? NULL : prev_log;
+    rest_prev_fatal_log = prev_log;
+}
 
 static 
 void flecs_rest_capture_log(
@@ -73,7 +74,20 @@ void flecs_rest_capture_log(
 {
     (void)file; (void)line;
 
+    if (level <= -4) {
+        /* Make sure to always log fatal errors */
+        if (rest_prev_fatal_log) {
+            ecs_log_enable_colors(true);
+            rest_prev_fatal_log(level, file, line, msg);
+            ecs_log_enable_colors(false);
+            return;
+        } else {
+            fprintf(stderr, "%s:%d: %s", file, line, msg);
+        }
+    }
+
 #ifdef FLECS_DEBUG
+    /* In debug mode, log unexpected errors to the console */
     if (level < 0) {
         /* Also log to previous log function in debug mode */
         if (rest_prev_log) {
@@ -84,7 +98,7 @@ void flecs_rest_capture_log(
     }
 #endif
 
-    if (!rest_last_err && level < 0) {
+    if (!rest_last_err && level <= -3) {
         rest_last_err = ecs_os_strdup(msg);
     }
 }
@@ -294,6 +308,32 @@ ecs_entity_t flecs_rest_entity_from_path(
 }
 
 static
+bool flecs_rest_get_type_info(
+    ecs_world_t *world,
+    ecs_http_reply_t *reply,
+    const char *path)
+{
+    ecs_dbg_2("rest: request type info '%s'", path);
+
+    ecs_entity_t e;
+    if (!(e = flecs_rest_entity_from_path(world, reply, path))) {
+        return true;
+    }
+
+    char *json = ecs_type_info_to_json(world, e);
+    if (!json) {
+        flecs_reply_error(reply, "failed to serialize type info for '%s'", path);
+        reply->code = 500;
+        return true;
+    }
+
+    ecs_strbuf_appendstr(&reply->body, json);
+    ecs_os_free(json);
+
+    return true;
+}
+
+static
 bool flecs_rest_get_component(
     ecs_world_t *world,
     const ecs_http_request_t* req,
@@ -370,20 +410,21 @@ bool flecs_rest_put_component(
         return true;
     }
 
-    ecs_entity_t type = ecs_get_typeid(world, id);
-    if (!type) {
+    const ecs_type_info_t *ti = ecs_get_type_info(world, id);
+    if (!ti) {
         flecs_reply_error(reply, "component '%s' is not a type", component);
         reply->code = 400;
         return true;
     }
 
-    void *ptr = ecs_ensure_id(world, e, id);
+    void *ptr = ecs_ensure_id(world, e, id, flecs_ito(size_t, ti->size));
     if (!ptr) {
         flecs_reply_error(reply, "failed to create component '%s'", component);
         reply->code = 500;
         return true;
     }
 
+    ecs_entity_t type = ti->component;
     if (!ecs_ptr_from_json(world, type, ptr, data, NULL)) {
         flecs_reply_error(reply, "invalid value for component '%s'", component);
         reply->code = 400;
@@ -498,53 +539,127 @@ bool flecs_rest_script(
     (void)world;
     (void)req;
     (void)reply;
+    (void)path;
 #ifdef FLECS_SCRIPT
     ecs_entity_t script = flecs_rest_entity_from_path(world, reply, path);
     if (!script) {
         script = ecs_entity(world, { .name = path });
     }
 
+    /* If true, check if file changed */
+    bool check_file = false;
+    flecs_rest_bool_param(req, "check_file", &check_file);
+
+    /* If true, save code to file */
+    bool save_file = false;
+    flecs_rest_bool_param(req, "save_file", &save_file);
+
     const char *code = ecs_http_get_param(req, "code");
     if (!code) {
-        flecs_reply_error(reply, "missing data parameter");
-        return true;
+        code = req->body;
     }
 
     bool try = false;
     flecs_rest_bool_param(req, "try", &try);
 
-    bool prev_color = ecs_log_enable_colors(false);
-    ecs_os_api_log_t prev_log = ecs_os_api.log_;
-    rest_prev_log = try ? NULL : prev_log;
-    ecs_os_api.log_ = flecs_rest_capture_log;
+    if (!code) {
+        code = "";
+    }
 
-    script = ecs_script(world, {
+    ecs_strbuf_appendlit(&reply->body, "{");
+
+    const EcsScript *s = ecs_get(world, script, EcsScript);
+
+    if (s && s->filename && save_file) {
+        FILE *f;
+        ecs_os_fopen(&f, s->filename, "w");
+        fwrite(code, strlen(code), 1, f);
+        fclose(f);
+    }
+
+    if (s && check_file) {
+        ecs_strbuf_appendlit(&reply->body, "\"changed\": ");
+        if (s->filename) {
+            bool file_is_same;
+            char *file_code = flecs_load_from_file(s->filename);
+            if (!file_code) {
+                file_is_same = code[0] == '\0';
+            } else {
+                file_is_same = !ecs_os_strcmp(code, file_code);
+                ecs_os_free(file_code);
+            }
+
+            ecs_strbuf_appendstr(&reply->body, file_is_same ? "false" : "true");
+        } else {
+            ecs_strbuf_appendstr(&reply->body, "false");
+        }
+    }
+
+    /* Update script code */
+    ecs_script(world, {
         .entity = script,
         .code = code
     });
 
-    if (!script) {
-        char *err = flecs_rest_get_captured_log();
-        char *escaped_err = flecs_astresc('"', err);
-        if (escaped_err) {
-            flecs_reply_error(reply, escaped_err);
-        } else {
-            flecs_reply_error(reply, "error parsing script");
+    /* Refetch in case it moved around */
+    s = ecs_get(world, script, EcsScript);
+
+    if (!s || s->error) {
+        if (check_file) {
+            ecs_strbuf_appendlit(&reply->body, ", ");
         }
-        if (!try) {
-            reply->code = 400; /* bad request */
-        }
+
+        char *escaped_err = flecs_astresc('"', s->error);
+        ecs_strbuf_append(&reply->body, 
+            "\"error\": \"%s\"", escaped_err);
         ecs_os_free(escaped_err);
-        ecs_os_free(err);
+
+        if (!try) {
+            reply->code = 400;
+        }
     }
 
-    ecs_os_api.log_ = prev_log;
-    ecs_log_enable_colors(prev_color);
+    ecs_strbuf_appendlit(&reply->body, "}");
 
     return true;
 #else
     return false;
 #endif
+}
+
+static
+void flecs_rest_shrink_memory(
+    ecs_world_t *world,
+    void *ctx)
+{
+    (void)ctx;
+    ecs_shrink(world);
+}
+
+static
+bool flecs_rest_action(
+    ecs_world_t *world,
+    const ecs_http_request_t* req,
+    ecs_http_reply_t *reply,
+    const char *path)
+{
+    (void)path;
+
+    char *action = &req->path[7];
+    ecs_dbg_2("rest: run action '%s'", action);
+
+    if (ecs_os_strcmp(action, "shrink_memory") == 0) {
+        if (ecs_world_get_flags(world) & EcsWorldFrameInProgress) {
+            ecs_run_post_frame(world, flecs_rest_shrink_memory, NULL);
+        } else {
+            flecs_rest_shrink_memory(world, NULL);
+        }
+    } else {
+        flecs_reply_error(reply, "unknown action '%s'", action);
+        reply->code = 400;
+    }
+
+    return true;
 }
 
 static
@@ -554,7 +669,7 @@ void flecs_rest_reply_set_captured_log(
     char *err = flecs_rest_get_captured_log();
     if (err) {
         char *escaped_err = flecs_astresc('"', err);
-        flecs_reply_error(reply, escaped_err);
+        flecs_reply_error(reply, "%s", escaped_err);
         ecs_os_free(escaped_err);
         ecs_os_free(err);
     }
@@ -606,6 +721,9 @@ bool flecs_rest_reply_existing_query(
         return true;
     }
 
+    bool try = false;
+    flecs_rest_bool_param(req, "try", &try);
+
     ecs_query_t *q = NULL;
     const EcsPoly *poly_comp = ecs_get_pair(world, qe, EcsPoly, EcsQuery);
     if (!poly_comp) {
@@ -632,12 +750,13 @@ bool flecs_rest_reply_existing_query(
 
     ecs_dbg_2("rest: request query '%s'", name);
     bool prev_color = ecs_log_enable_colors(false);
-    rest_prev_log = ecs_os_api.log_;
+    ecs_os_api_log_t prev_log = ecs_os_api.log_;
+    flecs_rest_set_prev_log(ecs_os_api.log_, try);
     ecs_os_api.log_ = flecs_rest_capture_log;
 
     const char *vars = ecs_http_get_param(req, "vars");
     if (vars) {
-    #ifdef FLECS_SCRIPT
+    #ifdef FLECS_QUERY_DSL
         if (ecs_query_args_parse(q, &it, vars) == NULL) {
             flecs_rest_reply_set_captured_log(reply);
             return true;
@@ -652,7 +771,7 @@ bool flecs_rest_reply_existing_query(
 
     flecs_rest_iter_to_reply(req, reply, q, &it);
 
-    ecs_os_api.log_ = rest_prev_log;
+    ecs_os_api.log_ = prev_log;
     ecs_log_enable_colors(prev_color);    
 
     return true;
@@ -682,7 +801,7 @@ bool flecs_rest_get_query(
     ecs_dbg_2("rest: request query '%s'", expr);
     bool prev_color = ecs_log_enable_colors(false);
     ecs_os_api_log_t prev_log = ecs_os_api.log_;
-    rest_prev_log = try ? NULL : prev_log;
+    flecs_rest_set_prev_log(ecs_os_api.log_, try);
     ecs_os_api.log_ = flecs_rest_capture_log;
 
     ecs_query_t *q = ecs_query(world, { .expr = expr });
@@ -790,7 +909,7 @@ void flecs_world_stats_to_json(
     ecs_strbuf_t *reply,
     const EcsWorldStats *monitor_stats)
 {
-    const ecs_world_stats_t *stats = &monitor_stats->stats;
+    const ecs_world_stats_t *stats = monitor_stats->stats;
 
     ecs_strbuf_list_push(reply, "{", ",");
     ECS_GAUGE_APPEND(reply, stats, entities.count, "Alive entity ids in the world");
@@ -977,15 +1096,17 @@ void flecs_pipeline_stats_to_json(
     ecs_strbuf_list_push(&reply->body, "[", ",");
 
     ecs_pipeline_op_t *ops = ecs_vec_first_t(&p->state->ops, ecs_pipeline_op_t);
-    ecs_entity_t *systems = ecs_vec_first_t(&p->state->systems, ecs_entity_t);
+    ecs_system_t **systems = ecs_vec_first_t(&p->state->systems, ecs_system_t*);
     ecs_sync_stats_t *syncs = ecs_vec_first_t(
         &pstats->sync_points, ecs_sync_stats_t);
 
     int32_t s, o, op_count = ecs_vec_count(&p->state->ops);
+
     for (o = 0; o < op_count; o ++) {
         ecs_pipeline_op_t *op = &ops[o];
         for (s = op->offset; s < (op->offset + op->count); s ++) {
-            ecs_entity_t system = systems[s];
+            ecs_system_t *system_data = systems[s];
+            ecs_entity_t system = system_data->query->entity;
 
             if (!ecs_is_alive(world, system)) {
                 continue;
@@ -1060,6 +1181,443 @@ bool flecs_rest_get_stats(
 #endif
 
 static
+void flecs_rest_append_type_hook(
+    ecs_strbuf_t *reply,
+    const char *name,
+    uint64_t flags,
+    uint64_t illegal_flag,
+    bool has_hook)
+{
+    ecs_strbuf_list_appendlit(reply, "\"");
+    ecs_strbuf_appendstr(reply, name);
+    ecs_strbuf_appendlit(reply, "\":");
+
+    if (flags & illegal_flag) {
+        ecs_strbuf_appendlit(reply, "null");
+    } else {
+        ecs_strbuf_appendbool(reply, has_hook);
+    }
+}
+
+static
+void flecs_rest_append_component_memory(
+    ecs_world_t *world,
+    ecs_component_record_t *cr,
+    ecs_strbuf_t *reply,
+    int32_t storage_bytes)
+{
+    (void)world;
+    (void)cr;
+    (void)reply;
+    (void)storage_bytes;
+
+#ifdef FLECS_STATS
+    if (!ecs_id(ecs_component_index_memory_t)) {
+        return;
+    }
+
+    ecs_component_index_memory_t component_index_memory = {0};
+    ecs_component_record_memory_get(cr, &component_index_memory);
+
+    ecs_strbuf_list_appendlit(reply, "\"memory\":");
+
+    ecs_strbuf_list_push(reply, "{", ",");
+    ecs_strbuf_list_appendlit(reply, "\"component_index\":");
+    ecs_ptr_to_json_buf(
+        world, ecs_id(ecs_component_index_memory_t), &component_index_memory, reply);
+
+    /* Only count storage for actual components, not wildcards */
+    if (ecs_id_is_wildcard(cr->id)) {
+        storage_bytes = 0;
+    }
+    ecs_strbuf_list_appendlit(reply, "\"storage\":");
+    ecs_strbuf_append(reply, "%d", storage_bytes);
+    ecs_strbuf_list_pop(reply, "}");
+#endif
+}
+
+static
+void flecs_rest_append_component_traits(
+    ecs_component_record_t *cr,
+    ecs_strbuf_t *reply)
+{
+    ecs_flags32_t flags = cr->flags;
+    ecs_strbuf_list_appendlit(reply, "\"traits\":");
+    ecs_strbuf_list_push(reply, "[", ",");
+    
+    if (flags & EcsIdOnDeleteRemove) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnDelete,Remove)\"");
+    }
+    if (flags & EcsIdOnDeleteDelete) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnDelete,Delete)\"");
+    }
+    if (flags & EcsIdOnDeletePanic) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnDelete,Panic)\"");
+    }
+    if (flags & EcsIdOnDeleteTargetRemove) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnDeleteTarget,Remove)\"");
+    }
+    if (flags & EcsIdOnDeleteTargetDelete) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnDeleteTarget,Delete)\"");
+    }
+    if (flags & EcsIdOnDeleteTargetPanic) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnDeleteTarget,Panic)\"");
+    }
+    if (flags & EcsIdOnInstantiateOverride) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnInstantiate,Override)\"");
+    }
+    if (flags & EcsIdOnInstantiateInherit) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnInstantiate,Inherit)\"");
+    }
+    if (flags & EcsIdOnInstantiateDontInherit) {
+        ecs_strbuf_list_appendlit(reply, "\"(OnInstantiate,DontInherit)\"");
+    }
+    if (flags & EcsIdExclusive) {
+        ecs_strbuf_list_appendlit(reply, "\"Exclusive\"");
+    }
+    if (flags & EcsIdTraversable) {
+        ecs_strbuf_list_appendlit(reply, "\"Traversable\"");
+    }
+    if (flags & EcsPairIsTag) {
+        ecs_strbuf_list_appendlit(reply, "\"PairIsTag\"");
+    }
+    if (flags & EcsIdWith) {
+        ecs_strbuf_list_appendlit(reply, "\"With\"");
+    }
+    if (flags & EcsIdCanToggle) {
+        ecs_strbuf_list_appendlit(reply, "\"CanToggle\"");
+    }
+    if (flags & EcsIdIsTransitive) {
+        ecs_strbuf_list_appendlit(reply, "\"IsTransitive\"");
+    }
+    if (flags & EcsIdInheritable) {
+        ecs_strbuf_list_appendlit(reply, "\"Inheritable\"");
+    }
+    if (flags & EcsIdSparse) {
+        ecs_strbuf_list_appendlit(reply, "\"Sparse\"");
+    }
+    if (flags & EcsIdDontFragment) {
+        ecs_strbuf_list_appendlit(reply, "\"DontFragment\"");
+    }
+    if (flags & EcsIdOrderedChildren) {
+        ecs_strbuf_list_appendlit(reply, "\"OrderedChildren\"");
+    }
+    if (flags & EcsIdSingleton) {
+        ecs_strbuf_list_appendlit(reply, "\"Singleton\"");
+    }
+
+    ecs_strbuf_list_pop(reply, "]");
+}
+
+static
+void flecs_rest_append_component(
+    ecs_world_t *world,
+    ecs_component_record_t *cr,
+    ecs_strbuf_t *reply)
+{
+    ecs_strbuf_list_next(reply);
+    ecs_strbuf_appendlit(reply, "\n");
+    ecs_strbuf_list_push(reply, "{", ",");
+    ecs_strbuf_list_appendlit(reply, "\"name\":");
+    char *str = ecs_id_str(world, cr->id);
+    flecs_json_string_escape(reply, str);
+    ecs_os_free(str);
+
+    ecs_strbuf_list_appendlit(reply, "\"tables\":");
+    ecs_strbuf_list_push(reply, "[", ",");
+    ecs_table_cache_iter_t it;
+    int32_t entity_count = 0, entity_size = 0, storage_bytes = 0;
+    flecs_table_cache_iter(&cr->cache, &it);
+    const ecs_table_record_t *tr;
+    while ((tr = flecs_table_cache_next(&it, ecs_table_record_t))) {
+        ecs_strbuf_list_next(reply);
+        ecs_strbuf_appendint(reply, (int64_t)tr->hdr.table->id);
+        entity_count += ecs_table_count(tr->hdr.table);
+        entity_size += ecs_table_size(tr->hdr.table);
+    }
+    ecs_strbuf_list_pop(reply, "]");
+
+    ecs_strbuf_list_appendlit(reply, "\"entity_count\":");
+    ecs_strbuf_appendint(reply, entity_count);
+    ecs_strbuf_list_appendlit(reply, "\"entity_size\":");
+    ecs_strbuf_appendint(reply, entity_size);
+
+    if (cr->type_info) {
+        ecs_strbuf_list_appendlit(reply, "\"type\":");
+        ecs_strbuf_list_push(reply, "{", ",");
+        ecs_strbuf_list_appendlit(reply, "\"size\":");
+        ecs_strbuf_appendint(reply, cr->type_info->size);
+        ecs_strbuf_list_appendlit(reply, "\"alignment\":");
+        ecs_strbuf_appendint(reply, cr->type_info->alignment);
+
+        ecs_type_hooks_t hooks = cr->type_info->hooks;
+        uint64_t flags = hooks.flags;
+        flecs_rest_append_type_hook(
+            reply, "ctor", flags, ECS_TYPE_HOOK_CTOR_ILLEGAL, 
+                hooks.ctor != NULL);
+        flecs_rest_append_type_hook(
+            reply, "dtor", flags, ECS_TYPE_HOOK_DTOR_ILLEGAL, 
+                hooks.dtor != NULL);
+        flecs_rest_append_type_hook(
+            reply, "copy", flags, ECS_TYPE_HOOK_COPY_ILLEGAL, 
+                hooks.copy != NULL);
+        flecs_rest_append_type_hook(
+            reply, "move", flags, ECS_TYPE_HOOK_MOVE_ILLEGAL, 
+                hooks.move != NULL);
+        flecs_rest_append_type_hook(
+            reply, "move_ctor", flags, ECS_TYPE_HOOK_MOVE_CTOR_ILLEGAL, 
+                hooks.move_ctor != NULL);
+        flecs_rest_append_type_hook(
+            reply, "copy_ctor", flags, ECS_TYPE_HOOK_COPY_CTOR_ILLEGAL, 
+                hooks.copy_ctor != NULL);
+        ecs_strbuf_list_appendlit(reply, "\"on_add\":");
+        ecs_strbuf_appendbool(reply, cr->type_info->hooks.on_add != NULL);
+        ecs_strbuf_list_appendlit(reply, "\"on_set\":");
+        ecs_strbuf_appendbool(reply, cr->type_info->hooks.on_set != NULL);
+        ecs_strbuf_list_appendlit(reply, "\"on_remove\":");
+        ecs_strbuf_appendbool(reply, cr->type_info->hooks.on_remove != NULL);
+        ecs_strbuf_list_appendlit(reply, "\"on_replace\":");
+        ecs_strbuf_appendbool(reply, cr->type_info->hooks.on_replace != NULL);
+        ecs_strbuf_list_pop(reply, "}");
+
+        storage_bytes += entity_size * cr->type_info->size;
+    }
+
+    if (cr->sparse) {
+        int32_t i, count = flecs_sparse_count(cr->sparse);
+        ecs_strbuf_list_appendlit(reply, "\"sparse\":");
+        ecs_strbuf_list_push(reply, "{", ",");
+        ecs_strbuf_list_appendlit(reply, "\"count\":");
+        ecs_strbuf_appendint(reply, count);
+        ecs_strbuf_list_appendlit(reply, "\"entities\":");
+        ecs_strbuf_list_push(reply, "[", ",");
+        
+        for (i = 0; i < count; i ++) {
+            ecs_strbuf_list_next(reply);
+            ecs_strbuf_appendint(reply, (int64_t)
+                flecs_sparse_ids(cr->sparse)[i]);
+        }
+
+        ecs_strbuf_list_pop(reply, "]");
+        ecs_strbuf_list_pop(reply, "}");
+
+        if (cr->type_info) {
+            storage_bytes += count * cr->type_info->size;
+        }
+    }
+
+    flecs_rest_append_component_memory(world, cr, reply, storage_bytes);
+    flecs_rest_append_component_traits(cr, reply);
+    
+    ecs_strbuf_list_pop(reply, "}");
+}
+
+static
+bool flecs_rest_get_components(
+    ecs_world_t *world,
+    const ecs_http_request_t* req,
+    ecs_http_reply_t *reply)
+{
+    (void)req;
+
+    ecs_strbuf_list_push(&reply->body, "[", ",");
+
+    FLECS_EACH_COMPONENT_RECORD(cr, {
+        flecs_rest_append_component(world, cr, &reply->body);
+    })
+
+    ecs_strbuf_list_pop(&reply->body, "]");
+
+    return true;
+}
+
+static
+void flecs_rest_append_query_memory(
+    ecs_world_t *world,
+    ecs_query_t *query,
+    ecs_strbuf_t *reply)
+{
+    (void)world;
+    (void)query;
+    (void)reply;
+
+#ifdef FLECS_STATS
+    if (!ecs_id(ecs_query_memory_t)) {
+        return;
+    }
+
+    ecs_query_memory_t query_memory = {0};
+    ecs_query_memory_get(query, &query_memory);
+
+    ecs_strbuf_list_appendlit(reply, "\"memory\":");
+
+    ecs_ptr_to_json_buf(
+        world, ecs_id(ecs_query_memory_t), &query_memory, reply);
+#endif
+}
+
+static
+void flecs_rest_append_query(
+    ecs_world_t *world,
+    ecs_query_t *query,
+    ecs_entity_t entity,
+    ecs_strbuf_t *reply)
+{
+    ecs_strbuf_list_next(reply);
+    ecs_strbuf_appendlit(reply, "\n");
+    ecs_strbuf_list_push(reply, "{", ",");
+    
+    ecs_strbuf_list_appendlit(reply, "\"name\":");
+    char *str = ecs_get_path(world, entity);
+    flecs_json_string_escape(reply, str);
+    ecs_os_free(str);
+
+    ecs_strbuf_list_appendlit(reply, "\"kind\":");
+    if (ecs_has_id(world, entity, EcsSystem)) {
+        ecs_strbuf_appendlit(reply, "\"System\"");
+    } else if (ecs_has_id(world, entity, EcsObserver)) {
+        ecs_strbuf_appendlit(reply, "\"Observer\"");
+    } else {
+        ecs_strbuf_appendlit(reply, "\"Query\"");
+    }
+
+    ecs_strbuf_list_appendlit(reply, "\"batched\":");
+    bool batched = false;
+    if ((query->flags & EcsQueryHasTableThisVar) && (query->flags & EcsQueryMatchThis)) {
+        batched = true;
+        ecs_strbuf_appendlit(reply, "true");
+    } else {
+        ecs_strbuf_appendlit(reply, "false");
+    }
+
+    ecs_iter_t it = ecs_query_iter(world, query);
+    it.flags |= EcsIterMatchEmptyTables;
+
+    ecs_strbuf_list_appendlit(reply, "\"eval_mode\":");
+    if (it.flags & EcsIterTrivialCached) ecs_strbuf_appendlit(reply, "\"TrivialCached\"");
+    else if (it.flags & EcsIterCached) ecs_strbuf_appendlit(reply, "\"Cached\"");
+    else if (it.flags & EcsIterTrivialSearch) ecs_strbuf_appendlit(reply, "\"TrivialUncached\"");
+    else if (!query->term_count) ecs_strbuf_appendlit(reply, "\"Noop\"");
+    else ecs_strbuf_appendlit(reply, "\"Plan\"");
+
+    ecs_strbuf_list_appendlit(reply, "\"cache_kind\":");
+    switch(query->cache_kind) {
+    case EcsQueryCacheDefault: ecs_strbuf_appendlit(reply, "\"Default\""); break;
+    case EcsQueryCacheAuto: ecs_strbuf_appendlit(reply, "\"Auto\""); break;
+    case EcsQueryCacheAll: ecs_strbuf_appendlit(reply, "\"All\""); break;
+    case EcsQueryCacheNone: ecs_strbuf_appendlit(reply, "\"None\""); break;
+    default: ecs_strbuf_appendlit(reply, "\"!! Invalid !!\"");
+    }
+
+    int32_t results = 0, count = 0, empty_tables = 0;
+    ecs_time_t t = {0}; ecs_time_measure(&t);
+    while (ecs_query_next(&it)) {
+        results ++;
+        count += it.count;
+        if (!count && batched) {
+            empty_tables ++;
+        }
+    }
+
+    /* Don't count own iteration */
+    query->eval_count --;
+
+    double eval_time = ecs_time_measure(&t);
+
+    ecs_strbuf_list_appendlit(reply, "\"eval_time\":");
+    ecs_strbuf_appendflt(reply, eval_time, '"');
+
+    ecs_strbuf_list_appendlit(reply, "\"eval_count\":");
+    ecs_strbuf_appendint(reply, query->eval_count);
+
+    ecs_strbuf_list_appendlit(reply, "\"results\":");
+    ecs_strbuf_appendint(reply, results);
+    ecs_strbuf_list_appendlit(reply, "\"count\":");
+    ecs_strbuf_appendint(reply, count);
+    ecs_strbuf_list_appendlit(reply, "\"empty_tables\":");
+    ecs_strbuf_appendint(reply, empty_tables);
+
+    ecs_strbuf_list_appendlit(reply, "\"count\":");
+    ecs_strbuf_appendint(reply, count);
+
+    ecs_strbuf_list_appendlit(reply, "\"expr\":");
+    char *expr = ecs_query_str(query);
+    flecs_json_string_escape(reply, expr);
+    ecs_os_free(expr);
+
+    ecs_strbuf_list_appendlit(reply, "\"plan_size\":");
+    ecs_strbuf_appendint(reply, flecs_query_impl(query)->op_count);
+
+    char *plan = ecs_query_plan(query);
+    ecs_strbuf_list_appendlit(reply, "\"plan\":");
+    flecs_json_string_escape(reply, plan);
+    ecs_os_free(plan);
+
+    const ecs_query_t *cache_query = ecs_query_get_cache_query(query);
+    if (cache_query) {
+        ecs_strbuf_list_appendlit(reply, "\"cache_plan\":");
+        char *cache_plan = ecs_query_plan(cache_query);
+        flecs_json_string_escape(reply, cache_plan);
+        ecs_os_free(cache_plan);
+    }
+
+    flecs_rest_append_query_memory(world, query, reply);
+
+    ecs_strbuf_list_pop(reply, "}");
+}
+
+static
+bool flecs_rest_get_queries(
+    ecs_world_t *world,
+    const ecs_http_request_t* req,
+    ecs_http_reply_t *reply)
+{
+    (void)req;
+
+    ecs_strbuf_list_push(&reply->body, "[", ",");
+
+    {
+        ecs_iter_t it = ecs_each_pair_t(world, EcsPoly, EcsQuery);
+        while (ecs_each_next(&it)) {
+            EcsPoly *queries = ecs_field(&it, EcsPoly, 0);
+
+            for (int32_t i = 0; i < it.count; i++) {
+                ecs_query_t *query = queries[i].poly;
+                if (!query) {
+                    continue;
+                }
+
+                flecs_poly_assert(query, ecs_query_t);
+                flecs_rest_append_query(
+                    world, query, it.entities[i], &reply->body);
+            }
+        }
+    }
+
+    {
+        ecs_iter_t it = ecs_each_pair_t(world, EcsPoly, EcsObserver);
+        while (ecs_each_next(&it)) {
+            EcsPoly *observers = ecs_field(&it, EcsPoly, 0);
+
+            for (int32_t i = 0; i < it.count; i++) {
+                ecs_observer_t *observer = observers[i].poly;
+                if (!observer || !observer->query) {
+                    continue;
+                }
+
+                flecs_poly_assert(observer, ecs_observer_t);
+                flecs_rest_append_query(
+                    world, observer->query, it.entities[i], &reply->body);
+            }
+        }
+    }
+
+    ecs_strbuf_list_pop(&reply->body, "]");
+
+    return true;
+}
+
+static
 void flecs_rest_reply_table_append_type(
     ecs_world_t *world,
     ecs_strbuf_t *reply,
@@ -1070,38 +1628,44 @@ void flecs_rest_reply_table_append_type(
     ecs_id_t *ids = table->type.array;
     for (i = 0; i < count; i ++) {
         ecs_strbuf_list_next(reply);
-        ecs_strbuf_appendch(reply, '"');
-        ecs_id_str_buf(world, ids[i], reply);
-        ecs_strbuf_appendch(reply, '"');
+        char *idstr = ecs_id_str(world, ids[i]);
+        flecs_json_string_escape(reply, idstr);
+        ecs_os_free(idstr);
     }
     ecs_strbuf_list_pop(reply, "]");
 }
 
 static
 void flecs_rest_reply_table_append_memory(
+    const ecs_world_t *world,
     ecs_strbuf_t *reply,
     const ecs_table_t *table)
 {
-    int32_t used = 0, allocated = 0;
-    int32_t count = ecs_table_count(table), size = ecs_table_size(table);
+    (void)world;
+    (void)reply;
+    (void)table;
 
-    used += count * ECS_SIZEOF(ecs_entity_t);
-    allocated += size * ECS_SIZEOF(ecs_entity_t);
-
-    int32_t i, storage_count = table->column_count;
-    ecs_column_t *columns = table->data.columns;
-
-    for (i = 0; i < storage_count; i ++) {
-        used += count * columns[i].ti->size;
-        allocated += size * columns[i].ti->size;
+#ifdef FLECS_STATS
+    if (!ecs_id(ecs_table_memory_t) || !ecs_id(ecs_component_memory_t)) {
+        return;
     }
+    ecs_table_memory_t table_memory = {0};
+    ecs_table_memory_get(table, &table_memory);
 
+    ecs_component_memory_t component_memory = {0};
+    ecs_table_component_memory_get(table, &component_memory);
+
+    ecs_strbuf_list_appendlit(reply, "\"memory\":");
     ecs_strbuf_list_push(reply, "{", ",");
-    ecs_strbuf_list_appendlit(reply, "\"used\":");
-    ecs_strbuf_appendint(reply, used);
-    ecs_strbuf_list_appendlit(reply, "\"allocated\":");
-    ecs_strbuf_appendint(reply, allocated);
+    ecs_strbuf_list_appendlit(reply, "\"table\":");
+    ecs_ptr_to_json_buf(
+        world, ecs_id(ecs_table_memory_t), &table_memory, reply);
+
+    ecs_strbuf_list_appendlit(reply, "\"components\":");
+    ecs_ptr_to_json_buf(
+        world, ecs_id(ecs_component_memory_t), &component_memory, reply);
     ecs_strbuf_list_pop(reply, "}");
+#endif
 }
 
 static
@@ -1111,6 +1675,7 @@ void flecs_rest_reply_table_append(
     const ecs_table_t *table)
 {
     ecs_strbuf_list_next(reply);
+    ecs_strbuf_appendlit(reply, "\n");
     ecs_strbuf_list_push(reply, "{", ",");
     ecs_strbuf_list_appendlit(reply, "\"id\":");
     ecs_strbuf_appendint(reply, (uint32_t)table->id);
@@ -1118,8 +1683,9 @@ void flecs_rest_reply_table_append(
     flecs_rest_reply_table_append_type(world, reply, table);
     ecs_strbuf_list_appendlit(reply, "\"count\":");
     ecs_strbuf_appendint(reply, ecs_table_count(table));
-    ecs_strbuf_list_appendlit(reply, "\"memory\":");
-    flecs_rest_reply_table_append_memory(reply, table);
+    ecs_strbuf_list_appendlit(reply, "\"size\":");
+    ecs_strbuf_appendint(reply, ecs_table_size(table));
+    flecs_rest_reply_table_append_memory(world, reply, table);
     ecs_strbuf_list_pop(reply, "}");
 }
 
@@ -1152,6 +1718,7 @@ const char* flecs_rest_cmd_kind_to_str(
     case EcsCmdBulkNew: return "BulkNew";
     case EcsCmdAdd: return "Add";
     case EcsCmdRemove: return "Remove";
+    case EcsCmdSetDontFragment:
     case EcsCmdSet: return "Set";
     case EcsCmdEmplace: return "Emplace";
     case EcsCmdEnsure: return "Ensure";
@@ -1185,6 +1752,7 @@ bool flecs_rest_cmd_has_id(
     case EcsCmdAdd:
     case EcsCmdRemove:
     case EcsCmdSet:
+    case EcsCmdSetDontFragment:
     case EcsCmdEmplace:
     case EcsCmdEnsure:
     case EcsCmdModified:
@@ -1456,6 +2024,10 @@ bool flecs_rest_reply(
         } else if (!ecs_os_strncmp(req->path, "component/", 10)) {
             return flecs_rest_get_component(world, req, reply, &req->path[10]);
 
+        /* Type info endpoint */
+        } else if (!ecs_os_strncmp(req->path, "type_info/", 10)) {
+            return flecs_rest_get_type_info(world, reply, &req->path[10]);
+
         /* Query endpoint */
         } else if (!ecs_os_strcmp(req->path, "query")) {
             return flecs_rest_get_query(world, req, reply);
@@ -1467,6 +2039,14 @@ bool flecs_rest_reply(
         /* Stats endpoint */
         } else if (!ecs_os_strncmp(req->path, "stats/", 6)) {
             return flecs_rest_get_stats(world, req, reply);
+
+        /* Components endpoint */
+        } else if (!ecs_os_strncmp(req->path, "components", 10)) {
+            return flecs_rest_get_components(world, req, reply);
+
+        /* Tables endpoint */
+        } else if (!ecs_os_strncmp(req->path, "queries", 7)) {
+            return flecs_rest_get_queries(world, req, reply);
 
         /* Tables endpoint */
         } else if (!ecs_os_strncmp(req->path, "tables", 6)) {
@@ -1497,6 +2077,10 @@ bool flecs_rest_reply(
         /* Script endpoint */
         } else if (!ecs_os_strncmp(req->path, "script/", 7)) {
             return flecs_rest_script(world, req, reply, &req->path[7]);
+
+        /* Action endpoint */
+        } else if (!ecs_os_strncmp(req->path, "action/", 7)) {
+            return flecs_rest_action(world, req, reply, &req->path[7]);
         }
     } else if (req->method == EcsHttpDelete) {
         /* Entity DELETE endpoint */
@@ -1533,7 +2117,14 @@ ecs_http_server_t* ecs_rest_server_init(
     srv_ctx->world = world;
     srv_ctx->srv = srv;
     srv_ctx->rc = 1;
-    srv_ctx->srv = srv;
+
+    /* Set build info on world so clients know which version they're using */
+    ecs_id_t build_info = ecs_lookup(world, "flecs.core.BuildInfo");
+    if (build_info) {
+        const ecs_build_info_t *bi = ecs_get_build_info();
+        ecs_set_id(world, EcsWorld, build_info, sizeof(ecs_build_info_t), bi);
+    }
+
     return srv;
 }
 
@@ -1635,14 +2226,7 @@ void FlecsRestImport(
     ECS_MODULE(world, FlecsRest);
 
     ECS_IMPORT(world, FlecsPipeline);
-#ifdef FLECS_SCRIPT
-    ECS_IMPORT(world, FlecsScript);
-#endif
-#ifdef FLECS_DOC
-    ECS_IMPORT(world, FlecsDoc);
-    ecs_doc_set_brief(world, ecs_id(FlecsRest), 
-        "Module that implements Flecs REST API");
-#endif
+    ECS_IMPORT(world, FlecsMeta);
 
     ecs_set_name_prefix(world, "Ecs");
 
@@ -1657,7 +2241,7 @@ void FlecsRestImport(
     });
 
     ecs_system(world, {
-        .entity = ecs_entity(world, {.name = "DequeueRest", .add = ecs_ids( ecs_dependson(EcsPostFrame))}),
+        .entity = ecs_entity(world, { .name = "DequeueRest", .add = ecs_ids( ecs_dependson(EcsPostFrame)) }),
         .query.terms = {
             { .id = ecs_id(EcsRest) },
         },
@@ -1670,11 +2254,11 @@ void FlecsRestImport(
             .terms = {{ .id = EcsDisabled, .src.id = ecs_id(FlecsRest) }}
         },
         .events = {EcsOnAdd, EcsOnRemove},
-        .callback = DisableRest
+        .callback = DisableRest,
+        .global_observer = true
     });
 
     ecs_set_name_prefix(world, "EcsRest");
-    ECS_TAG_DEFINE(world, EcsRestPlecs);
 
     /* Enable frame time measurements so we're guaranteed to have a delta time
      * value to pass into the HTTP server. */

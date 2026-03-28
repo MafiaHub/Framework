@@ -362,7 +362,7 @@ namespace Framework::Integrations::Client {
                 return;
             }
 
-            const auto tr = e.get_mut<Framework::World::Modules::Base::Transform>();
+            const auto tr = e.try_get_mut<Framework::World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
