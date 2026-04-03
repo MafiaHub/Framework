@@ -1,5 +1,4 @@
 #include "resource.h"
-#include "core_modules.h"
 #include "world/engine.h"
 #include <filesystem>
 
@@ -17,7 +16,7 @@ namespace Framework::Scripting {
         }
     }
 
-    Resource::Resource(const std::string &path)
+    Resource::Resource(const std::string &path, flecs::world* world)
         : _path(path)
         , _stateTimestamp(std::chrono::system_clock::now()) {
         // Try to load the manifest
@@ -29,7 +28,7 @@ namespace Framework::Scripting {
             _state = ResourceState::Error;
         }
 
-        _rootEntity = CoreModules::GetWorldEngine()->GetWorld()->entity(_manifest.GetName().c_str());
+        _rootEntity = world->entity(_manifest.GetName().c_str());
         _rootEntity.set<OwnedResource>({this});
     }
 
@@ -296,7 +295,7 @@ namespace Framework::Scripting {
         _state = newState;
         _stateTimestamp = std::chrono::system_clock::now();
 
-        if (newState == ResourceState::Stopped) {
+        if (newState == ResourceState::Stopped || newState == ResourceState::Error) {
             DestroyChildEntities();
         }
 

@@ -65,7 +65,7 @@ namespace Framework::Scripting {
      */
     class ResourceManager final {
       public:
-        explicit ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config = {});
+        explicit ResourceManager(Engine *jsEngine, flecs::world *world, const ResourceManagerConfig &config = {});
         ~ResourceManager();
 
         // Non-copyable
@@ -333,6 +333,9 @@ namespace Framework::Scripting {
 
         // JS engine (not owned)
         Engine *_jsEngine = nullptr;
+
+        // Flecs world (not owned)
+        flecs::world *_world = nullptr;
 
         // Resource registry
         std::map<std::string, std::unique_ptr<Resource>, std::less<>> _resources;

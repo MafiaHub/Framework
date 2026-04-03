@@ -70,7 +70,7 @@ namespace Framework::Scripting {
          * Create a resource from a directory path.
          * @param path Path to the resource directory (containing package.json)
          */
-        explicit Resource(const std::string &path);
+        explicit Resource(const std::string &path, flecs::world* world);
 
         ~Resource();
 

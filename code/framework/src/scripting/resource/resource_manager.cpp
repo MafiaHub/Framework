@@ -1,7 +1,6 @@
 #include "resource_manager.h"
 
 #include "../builtins/events.h"
-#include "core_modules.h"
 #include "world/engine.h"
 
 #include <algorithm>
@@ -35,14 +34,15 @@ namespace Framework::Scripting {
         }
     } // anonymous namespace
 
-    ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
+    ResourceManager::ResourceManager(Engine *jsEngine, flecs::world *world, const ResourceManagerConfig &config)
         : _config(config)
+        , _world(world)
         , _jsEngine(jsEngine) {
         if (_jsEngine) {
             _jsEngine->SetResourceManager(this);
         }
 
-        _rootEntity = CoreModules::GetWorldEngine()->GetWorld()->entity("Resources");
+        _rootEntity = world->entity("Resources");
     }
 
     ResourceManager::~ResourceManager() {
@@ -95,7 +95,7 @@ namespace Framework::Scripting {
     }
 
     bool ResourceManager::DiscoverResource(const std::string &path) {
-        auto resource = std::make_unique<Resource>(path);
+        auto resource = std::make_unique<Resource>(path, _world);
 
         if (!resource->IsManifestValid()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Invalid package.json in {}: {}", path, resource->GetErrorMessage());
