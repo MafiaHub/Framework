@@ -117,6 +117,7 @@ namespace Framework::World {
             }
             const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
+            e.modified<World::Modules::Base::Transform>();
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
             if (!msg->Valid()) {
@@ -128,6 +129,7 @@ namespace Framework::World {
             }
             const auto fr = e.try_get_mut<World::Modules::Base::Frame>();
             *fr           = msg->GetFrame();
+            e.modified<World::Modules::Base::Frame>();
         });
     }
 
@@ -143,5 +145,6 @@ namespace Framework::World {
         if (str->modEvents.updateTransformProc) {
             str->modEvents.updateTransformProc(entity);
         }
+        entity.modified<World::Modules::Base::Transform>();
     }
 } // namespace Framework::World
