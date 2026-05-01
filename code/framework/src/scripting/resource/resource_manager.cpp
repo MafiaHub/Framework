@@ -1,6 +1,7 @@
 #include "resource_manager.h"
 
 #include "../builtins/events.h"
+#include "world/engine.h"
 
 #include <algorithm>
 #include <cctype>
@@ -33,18 +34,24 @@ namespace Framework::Scripting {
         }
     } // anonymous namespace
 
-    ResourceManager::ResourceManager(Engine *jsEngine, const ResourceManagerConfig &config)
+    ResourceManager::ResourceManager(Engine *jsEngine, flecs::world *world, const ResourceManagerConfig &config)
         : _config(config)
+        , _world(world)
         , _jsEngine(jsEngine) {
         if (_jsEngine) {
             _jsEngine->SetResourceManager(this);
         }
+
+        _rootEntity = world->entity("Resources");
     }
 
     ResourceManager::~ResourceManager() {
         StopAll();
         if (_jsEngine) {
             _jsEngine->SetResourceManager(nullptr);
+        }
+        if (_rootEntity.is_valid()) {
+            _rootEntity.destruct();
         }
     }
 
@@ -88,7 +95,7 @@ namespace Framework::Scripting {
     }
 
     bool ResourceManager::DiscoverResource(const std::string &path) {
-        auto resource = std::make_unique<Resource>(path);
+        auto resource = std::make_unique<Resource>(path, _world);
 
         if (!resource->IsManifestValid()) {
             Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Invalid package.json in {}: {}", path, resource->GetErrorMessage());
@@ -104,6 +111,8 @@ namespace Framework::Scripting {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->warn("Duplicate resource name: {}", name);
                 return false;
             }
+
+            resource->GetRootEntity().child_of(_rootEntity);
             _resources[name] = std::move(resource);
         }
 

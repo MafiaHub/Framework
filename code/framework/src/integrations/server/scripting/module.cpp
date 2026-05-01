@@ -50,7 +50,7 @@ namespace Framework::Integrations::Server::Scripting {
         config.cascadeStopDependents = true;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
-            _nodeEngine.get(), config);
+            _nodeEngine.get(), _world->GetWorld(), config);
 
         // Register Framework SDK bindings
         RegisterFrameworkBindings();

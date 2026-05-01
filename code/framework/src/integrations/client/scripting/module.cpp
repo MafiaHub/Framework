@@ -79,9 +79,9 @@ namespace Framework::Integrations::Client::Scripting {
         config.resourcesPath = _resourceCachePath;
         config.isClient = true;
         config.cascadeStopDependents = true;
-
+        
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
-            _engine.get(), config);
+            _engine.get(), _world->GetWorld(), config);
 
         // Register Framework SDK bindings for the new ResourceManager
         RegisterFrameworkBindings();

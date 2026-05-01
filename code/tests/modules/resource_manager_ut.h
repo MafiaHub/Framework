@@ -83,12 +83,14 @@ MODULE(resource_manager, {
 
     IT("can create and destroy resource manager", {
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager *manager = new ResourceManager(&engine, config);
+        ResourceManager *manager = new ResourceManager(&engine, &world, config);
         NEQUALS(manager, nullptr);
 
         delete manager;
@@ -97,6 +99,8 @@ MODULE(resource_manager, {
 
     IT("GetConfig returns configuration", {
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
@@ -104,7 +108,7 @@ MODULE(resource_manager, {
         config.isClient = true;
         config.cascadeStopDependents = false;
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         const auto &retrievedConfig = manager.GetConfig();
         STREQUALS(retrievedConfig.resourcesPath.c_str(), config.resourcesPath.c_str());
@@ -116,12 +120,14 @@ MODULE(resource_manager, {
 
     IT("SetConfig updates configuration", {
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = "/old/path";
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         ResourceManagerConfig newConfig;
         newConfig.resourcesPath = "/new/path";
@@ -145,12 +151,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         size_t discovered = manager.DiscoverResources();
 
         EQUALS(discovered, 2u);
@@ -169,12 +177,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         bool result = manager.DiscoverResource(TestManagerHelper::GetTestResourcePath() + "/single-disc");
         EQUALS(result, true);
@@ -193,12 +203,14 @@ MODULE(resource_manager, {
         }
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         size_t discovered = manager.DiscoverResources();
 
         EQUALS(discovered, 0u);
@@ -221,12 +233,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         auto names = manager.GetAllResourceNames();
@@ -243,12 +257,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         const Resource *resource = manager.GetResource("get-test");
@@ -262,12 +278,14 @@ MODULE(resource_manager, {
 
     IT("GetResource returns nullptr for unknown resource", {
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         const Resource *resource = manager.GetResource("nonexistent");
         EQUALS(resource, nullptr);
@@ -282,12 +300,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         EQUALS(manager.HasResource("has-test"), true);
@@ -306,12 +326,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         ResourceState state = manager.GetResourceState("state-test");
@@ -328,12 +350,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         EQUALS(manager.IsResourceRunning("running-test"), false);
@@ -358,12 +382,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         auto deps = manager.GetDependencies("dep-child");
@@ -387,12 +413,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         auto dependents = manager.GetDependents("parent-res");
@@ -411,12 +439,14 @@ MODULE(resource_manager, {
         })");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         EQUALS(manager.GetRunningResourceCount(), 0u);
@@ -440,12 +470,14 @@ MODULE(resource_manager, {
         outsideFile.close();
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
         manager.DiscoverResources();
 
         auto startResult = manager.StartResource("escape-test");
@@ -470,12 +502,14 @@ MODULE(resource_manager, {
         TestManagerHelper::CreateTestScript("callback-start", "main.js", "// empty script");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         std::string startedResource;
         manager.SetOnResourceStarted([&startedResource](const std::string &name) {
@@ -503,12 +537,14 @@ MODULE(resource_manager, {
         TestManagerHelper::CreateTestScript("callback-stop", "main.js", "// empty script");
 
         NodeEngine engine;
+        flecs::world world;
+
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         std::string stoppedResource;
         manager.SetOnResourceStopped([&stoppedResource](const std::string &name) {
@@ -532,9 +568,11 @@ MODULE(resource_manager, {
         EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
 
         ResourceManagerConfig config;
+        flecs::world world;
+
         config.resourcesPath = TestManagerHelper::GetTestResourcePath();
 
-        ResourceManager manager(&engine, config);
+        ResourceManager manager(&engine, &world, config);
 
         STREQUALS(manager.GetCurrentResourceContext().c_str(), "");
 
@@ -545,6 +583,61 @@ MODULE(resource_manager, {
         STREQUALS(manager.GetCurrentResourceContext().c_str(), "");
 
         engine.Shutdown();
+    });
+
+    // ==================== Root entity ====================
+
+    IT("child entities should be removed", {
+        TestManagerHelper::CreateTestResource("child-entities", R"({
+            "name": "child-entities",
+            "version": "1.0.0",
+            "mafiahub": {
+                "server": "main.js"
+            }
+        })");
+        TestManagerHelper::CreateTestScript("child-entities", "main.js", "// empty script");
+
+        NodeEngine engine;
+        flecs::world world;
+
+        EQUALS(engine.Init(), ScriptingError::SCRIPTING_NONE);
+
+        ResourceManagerConfig config;
+        config.resourcesPath = TestManagerHelper::GetTestResourcePath();
+
+        flecs::entity root;
+        {
+            ResourceManager manager(&engine, &world, config);
+
+            manager.DiscoverResources();
+            manager.StartResource("child-entities");
+
+            const Resource *resource = manager.GetResource("child-entities");
+            flecs::entity childEntity = world.entity("child");
+            root = resource->GetRootEntity();
+            childEntity.child_of(root);
+
+            int beforeChildCount = 0;
+            root.children([&](flecs::entity) {
+                beforeChildCount++;
+            });
+
+            manager.StopResource("child-entities");
+
+            int childCount = 0;
+            root.children([&](flecs::entity) {
+                childCount++;
+            });
+
+            EQUALS(beforeChildCount, 1);
+            EQUALS(childCount, 0);
+            EQUALS(root.is_alive(), true); // Root entity should be alive even if resource is stopped
+        }
+
+        EQUALS(root.is_alive(), false);
+
+        engine.Shutdown();
+        TestManagerHelper::Cleanup();
     });
 
     // ==================== Cleanup ====================

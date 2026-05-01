@@ -102,7 +102,8 @@ MODULE(resource, {
             "description": "A test resource"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/pkg-test-1");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/pkg-test-1", &world);
 
         EQUALS(resource.IsManifestValid(), true);
         STREQUALS(resource.GetName().c_str(), "pkg-test-1");
@@ -129,7 +130,8 @@ MODULE(resource, {
             resourceDir.createDirectory();
         }
 
-        Resource resource(resourcePath);
+        flecs::world world;
+        Resource resource(resourcePath, &world);
 
         EQUALS(resource.IsManifestValid(), false);
         EQUALS(resource.GetState(), ResourceState::Error);
@@ -143,7 +145,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/pkg-test-2");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/pkg-test-2", &world);
 
         EQUALS(resource.IsManifestValid(), false);
         EQUALS(resource.GetState(), ResourceState::Error);
@@ -158,7 +161,8 @@ MODULE(resource, {
         })");
 
         // Path with trailing slash
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/path-test/");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/path-test/", &world);
 
         EQUALS(resource.IsManifestValid(), true);
         STREQUALS(resource.GetName().c_str(), "path-test");
@@ -174,7 +178,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/state-test-1");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/state-test-1", &world);
 
         EQUALS(resource.GetState(), ResourceState::Unloaded);
         EQUALS(resource.IsRunning(), false);
@@ -189,7 +194,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/state-test-2");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/state-test-2", &world);
 
         EQUALS(resource.GetState(), ResourceState::Error);
         EQUALS(resource.IsRunning(), false);
@@ -211,7 +217,8 @@ MODULE(resource, {
             }
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/entry-test");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/entry-test", &world);
 
         std::string serverEntry = resource.GetServerEntryPoint();
         std::string clientEntry = resource.GetClientEntryPoint();
@@ -229,7 +236,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/no-entry");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/no-entry", &world);
 
         STREQUALS(resource.GetServerEntryPoint().c_str(), "");
         STREQUALS(resource.GetClientEntryPoint().c_str(), "");
@@ -248,7 +256,8 @@ MODULE(resource, {
             }
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/export-test");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/export-test", &world);
 
         EQUALS(resource.HasExport("getData"), true);
         EQUALS(resource.HasExport("setConfig"), true);
@@ -271,7 +280,8 @@ MODULE(resource, {
             }
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/depends-test");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/depends-test", &world);
 
         EQUALS(resource.DependsOn("core"), true);
         EQUALS(resource.DependsOn("utils"), true);
@@ -288,7 +298,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-1");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-1", &world);
 
         EQUALS(resource.GetRestartAttemptCount(), 0);
 
@@ -308,7 +319,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-2");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/restart-test-2", &world);
 
         resource.RecordRestartAttempt();
         resource.RecordRestartAttempt();
@@ -326,7 +338,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource resource(TestResourceHelper::GetTestResourcePath() + "/backoff-test");
+        flecs::world world;
+        Resource resource(TestResourceHelper::GetTestResourcePath() + "/backoff-test", &world);
 
         EQUALS(resource.GetRestartBackoffMs(), 0);
 
@@ -349,7 +362,8 @@ MODULE(resource, {
             "version": "1.0.0"
         })");
 
-        Resource original(TestResourceHelper::GetTestResourcePath() + "/move-test-1");
+        flecs::world world;
+        Resource original(TestResourceHelper::GetTestResourcePath() + "/move-test-1", &world);
         original.RecordRestartAttempt();
 
         Resource moved(std::move(original));
@@ -371,8 +385,9 @@ MODULE(resource, {
             "version": "2.0.0"
         })");
 
-        Resource original(TestResourceHelper::GetTestResourcePath() + "/move-test-2a");
-        Resource target(TestResourceHelper::GetTestResourcePath() + "/move-test-2b");
+        flecs::world world;
+        Resource original(TestResourceHelper::GetTestResourcePath() + "/move-test-2a", &world);
+        Resource target(TestResourceHelper::GetTestResourcePath() + "/move-test-2b", &world);
 
         target = std::move(original);
 
@@ -391,9 +406,34 @@ MODULE(resource, {
         })");
 
         std::string expectedPath = TestResourceHelper::GetTestResourcePath() + "/path-access";
-        Resource resource(expectedPath);
+        flecs::world world;
+        Resource resource(expectedPath, &world);
 
         STREQUALS(resource.GetPath().c_str(), expectedPath.c_str());
+
+        TestResourceHelper::Cleanup();
+    });
+
+    // ==================== Root entity ====================
+
+    IT("Resource creates root resource", {
+        TestResourceHelper::CreateTestResource("fooResource", R"({
+            "name": "foo-bar",
+            "version": "1.0.0"
+        })");
+
+        std::string expectedPath = TestResourceHelper::GetTestResourcePath() + "/fooResource";
+        flecs::world world;
+        flecs::entity root;
+        {
+            Resource resource(expectedPath, &world);
+
+            root = resource.GetRootEntity();
+            EQUALS(root.is_alive(), true);
+            STREQUALS(root.name().c_str(), "foo-bar");
+            EQUALS(root.get<OwnedResource>().value, &resource);
+        }
+        EQUALS(root.is_alive(), false);
 
         TestResourceHelper::Cleanup();
     });
