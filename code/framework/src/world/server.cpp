@@ -118,8 +118,13 @@ namespace Framework::World {
                 if (glm::abs(t.vel.x - snap.vel.x) > EPSILON || glm::abs(t.vel.y - snap.vel.y) > EPSILON || glm::abs(t.vel.z - snap.vel.z) > EPSILON) {
                     decreaseRate = false;
                 }
+                // A generation mismatch is the deliberate wake signal raised
+                // by Engine::WakeEntity() (which also resets updateInterval to
+                // default). Treat it as "stay at the high rate", not as a
+                // slowdown — the previous code did the opposite and silently
+                // undid the wake on the very next tick.
                 if (t.GetGeneration() != reg.lastGenID) {
-                    decreaseRate = true;
+                    decreaseRate = false;
                 }
 
                 reg.lastGenID = t.GetGeneration();
