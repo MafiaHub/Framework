@@ -96,8 +96,7 @@ namespace Framework::World {
         SetNetworkPeer(peer);
 
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).run([this](flecs::iter &it) {
-            const auto peerHandle = _world->try_get<Modules::Base::NetworkPeerHandle>();
-            Framework::Networking::NetworkPeer *peer = peerHandle ? peerHandle->peer : nullptr;
+            const auto peer = GetNetworkPeer();
             if (!peer) return;
             const auto myGUID = peer->GetPeer()->GetMyGUID();
 
@@ -126,21 +125,15 @@ namespace Framework::World {
             _streamEntities.destruct();
         }
 
-        _world->defer_begin();
-        _allStreamableEntities.each([this](flecs::entity e, Modules::Base::Transform&, Modules::Base::Streamable& str) {
-            if (_onEntityDestroyCallback) {
-                if (!_onEntityDestroyCallback(e)) {
+        _world->defer([&] {
+            _allStreamableEntities.each([this](flecs::entity e, Modules::Base::Transform &, Modules::Base::Streamable &str) {
+                if (_onEntityDestroyCallback && !_onEntityDestroyCallback(e))
                     return;
-                }
-            }
-
-            if (str.modEvents.disconnectProc) {
-                str.modEvents.disconnectProc(e);
-            }
-
-            e.destruct();
+                if (str.modEvents.disconnectProc)
+                    str.modEvents.disconnectProc(e);
+                e.destruct();
+            });
         });
-        _world->defer_end();
 
         SetNetworkPeer(nullptr);
     }

@@ -65,9 +65,10 @@ namespace Framework::World {
         // Reverse map so we can drop the stale forward entry when an entity's
         // guid is reassigned (the OnSet observer only sees the new value).
         std::unordered_map<flecs::entity_t, uint64_t> _entityToGuid;
-        Networking::NetworkPeer *_networkPeer = nullptr;
-
         void RegisterStreamerGuidCacheObservers();
+        // Publishes the active peer through the NetworkPeerHandle singleton.
+        // The singleton is the only source of truth — there is no Engine-side
+        // raw pointer to keep in sync.
         void SetNetworkPeer(Networking::NetworkPeer *peer);
 
       public:
@@ -84,6 +85,15 @@ namespace Framework::World {
 
         flecs::world *GetWorld() const {
             return _world.get();
+        }
+
+        // Convenience accessor for the NetworkPeerHandle singleton. Returns
+        // nullptr when no world is initialized or the peer slot is empty —
+        // the typical state during shutdown or before OnConnect on the client.
+        Networking::NetworkPeer *GetNetworkPeer() const {
+            if (!_world) return nullptr;
+            const auto *h = _world->try_get<Modules::Base::NetworkPeerHandle>();
+            return h ? h->peer : nullptr;
         }
     };
 } // namespace Framework::World

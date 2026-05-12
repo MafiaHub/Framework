@@ -186,7 +186,14 @@ namespace Framework::World::Modules {
             // Empty structs are auto-registered as zero-size tags by Flecs.
             world.component<RemovedOnResourceReload>();
             world.component<PendingRemoval>();
-            world.component<DependsOn>();
+
+            // DependsOn is acyclic by contract — visibility recursion would
+            // diverge otherwise. We also tell Flecs to drop the relation pair
+            // automatically when the target dies, so dependents stop carrying
+            // dangling references the moment a dependency entity is destroyed.
+            world.component<DependsOn>()
+                .add(flecs::Acyclic)
+                .add(flecs::OnDeleteTarget, flecs::Remove);
             world.component<ServerID>();
             world.component<TickRateRegulator>();
             world.component<NetworkPeerHandle>().add(flecs::Singleton);
@@ -199,8 +206,9 @@ namespace Framework::World::Modules {
             world.component<StreamOwnerUpdateEvent>();
             world.component<StreamSelfUpdateEvent>();
 
-// Windows bind metadata
-#ifdef _WIN32
+            // Component metadata for the Flecs explorer / REST API. Used to
+            // be Windows-only, but the explorer runs on every platform and
+            // there is no runtime cost to keeping these registrations on.
             {
                 auto _vec3 = world.component<glm::vec3>();
                 auto _quat = world.component<glm::quat>();
@@ -211,7 +219,6 @@ namespace Framework::World::Modules {
                 _streamable.member<int>("virtualWorld").member<bool>("isVisible").member<bool>("alwaysVisible").member<double>("updateInterval").member<uint64_t>("owner");
                 _streamer.member<float>("range").member<uint64_t>("guid");
             }
-#endif
         }
 
         // Framework streaming-event observers translating the custom events

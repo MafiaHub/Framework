@@ -12,8 +12,7 @@
 
 namespace Framework::World {
     WorldError Engine::Init(Networking::NetworkPeer *networkPeer) {
-        _networkPeer = networkPeer;
-        _world       = std::make_unique<flecs::world>();
+        _world = std::make_unique<flecs::world>();
 
         // Register a base module
         _world->import <Modules::Base>();
@@ -36,7 +35,6 @@ namespace Framework::World {
     }
 
     void Engine::SetNetworkPeer(Networking::NetworkPeer *peer) {
-        _networkPeer = peer;
         if (_world) {
             _world->set<Modules::Base::NetworkPeerHandle>({peer});
         }
@@ -117,13 +115,14 @@ namespace Framework::World {
     }
 
     void Engine::PurgeAllResourceEntities() const {
-        _world->defer_begin();
         // RemovedOnResourceReload is a zero-size tag, so the each() callback
-        // takes only the entity.
-        _findAllResourceEntities.each([](flecs::entity e) {
-            if (e.is_alive())
-                e.add<Modules::Base::PendingRemoval>();
+        // takes only the entity. The defer() block batches the structural
+        // changes (PendingRemoval adds) until iteration is complete.
+        _world->defer([&] {
+            _findAllResourceEntities.each([](flecs::entity e) {
+                if (e.is_alive())
+                    e.add<Modules::Base::PendingRemoval>();
+            });
         });
-        _world->defer_end();
     }
 } // namespace Framework::World

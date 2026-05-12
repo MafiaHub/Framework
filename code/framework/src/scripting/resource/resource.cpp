@@ -283,11 +283,11 @@ namespace Framework::Scripting {
             return;
         }
 
-        _rootEntity.world().defer_begin();
-        _rootEntity.children([&](flecs::entity child) {
-            child.destruct();
+        _rootEntity.world().defer([&] {
+            _rootEntity.children([&](flecs::entity child) {
+                child.destruct();
+            });
         });
-        _rootEntity.world().defer_end();
     }
 
     bool Resource::TransitionTo(ResourceState newState) {

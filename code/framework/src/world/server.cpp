@@ -46,8 +46,7 @@ namespace Framework::World {
                     e.destruct();
                     return;
                 }
-                const auto peerHandle = _world->try_get<Modules::Base::NetworkPeerHandle>();
-                Framework::Networking::NetworkPeer *peer = peerHandle ? peerHandle->peer : nullptr;
+                const auto peer = GetNetworkPeer();
 
                 _findAllStreamerEntities.each([this, &e, peer](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     if (rhsS.entities.contains(e)) {
@@ -98,7 +97,12 @@ namespace Framework::World {
                 streamer.collectRangeExemptEntitiesProc(e, streamer);
         });
 
+        // Multi-threaded: this system only mutates its own entities' regulator
+        // snapshot and updateInterval. No event emission, no structural ops,
+        // safe to split across worker threads when the world is configured
+        // with set_threads(N). Single-threaded for N=1.
         _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator")
+            .multi_threaded()
             .interval(cfg.tickRegulatorInterval)
             .each([](Modules::Base::TickRateRegulator &reg, Modules::Base::Transform &t, Modules::Base::Streamable &s) {
                 constexpr float EPSILON = 0.01f;
@@ -138,8 +142,7 @@ namespace Framework::World {
             .kind(streamingPhase)
             .interval(cfg.tickInterval)
             .run([this](flecs::iter &it) {
-                const auto peerHandle = _world->try_get<Modules::Base::NetworkPeerHandle>();
-                Framework::Networking::NetworkPeer *peer = peerHandle ? peerHandle->peer : nullptr;
+                const auto peer = GetNetworkPeer();
                 if (!peer) return; // no peer, nothing to send
 
                 while (it.next()) {
