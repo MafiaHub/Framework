@@ -52,19 +52,24 @@ namespace Framework::World {
         void PurgeAllResourceEntities() const;
 
       protected:
-        // NOTE: _world must be declared BEFORE queries so it's destroyed LAST.
-        // Queries reference the world and must be destroyed before the world.
+        // NOTE: Destruction order matters here.
+        //   - Queries reference internal world state, so they must be destroyed
+        //     *before* _world (queries are declared *after* _world below ->
+        //     destroyed first in reverse declaration order).
+        //   - The guid cache maps are touched by OnRemove observers that fire
+        //     while _world is being destroyed, so they must outlive _world
+        //     (declared *before* _world here -> destroyed last).
+        // Cache of Streamer.guid -> entity id, maintained by observers on the Streamer component.
+        std::unordered_map<uint64_t, flecs::entity_t> _guidToEntity;
+        // Reverse map so we can drop the stale forward entry when an entity's
+        // guid is reassigned (the OnSet observer only sees the new value).
+        std::unordered_map<flecs::entity_t, uint64_t> _entityToGuid;
         std::unique_ptr<flecs::world> _world;
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
         // Tag-only query, so the component list is empty and the entity is the
         // sole "field" produced by iteration.
         flecs::query<> _findAllResourceEntities;
-        // Cache of Streamer.guid -> entity id, maintained by observers on the Streamer component.
-        std::unordered_map<uint64_t, flecs::entity_t> _guidToEntity;
-        // Reverse map so we can drop the stale forward entry when an entity's
-        // guid is reassigned (the OnSet observer only sees the new value).
-        std::unordered_map<flecs::entity_t, uint64_t> _entityToGuid;
         void RegisterStreamerGuidCacheObservers();
         // Publishes the active peer through the NetworkPeerHandle singleton.
         // The singleton is the only source of truth — there is no Engine-side

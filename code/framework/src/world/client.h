@@ -54,6 +54,15 @@ namespace Framework::World {
         void InitRPCs(Networking::NetworkPeer *peer) const;
 
       public:
+        // Tear down the world here, while ClientEngine members are still
+        // alive. ~flecs::world fires OnRemove observers on every entity, and
+        // the ServerID observers touch _serverIDToEntity / _entityToServerID.
+        // If we let the implicit destruction order run, the derived maps would
+        // be destroyed before _world, and the observers would see freed memory.
+        ~ClientEngine() override {
+            _world.reset();
+        }
+
         [[nodiscard]] WorldError Init();
 
         void Shutdown() override;

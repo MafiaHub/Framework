@@ -127,14 +127,14 @@ namespace Framework::World::Modules {
                 if (!payload || !payload->peer) return;
                 const auto e = it.entity(i);
 
-                Framework::Networking::Messages::GameSyncEntityUpdate msg;
                 const auto tr  = e.try_get<Transform>();
                 const auto sid = e.try_get<ServerID>();
                 if (tr && sid) {
+                    Framework::Networking::Messages::GameSyncEntityUpdate msg;
                     msg.FromParameters(*tr, 0);
                     msg.SetServerID(sid->id);
+                    payload->peer->Send(msg, payload->targetGuid);
                 }
-                payload->peer->Send(msg, payload->targetGuid);
 
                 InvokeModProc(s.modEvents.updateProc, payload->peer, payload->targetGuid, e);
             });

@@ -26,9 +26,11 @@ namespace Framework::World::Archetypes {
         }
 
       public:
-        // OnAdd observers on Streamable (registered at engine init time) wire
-        // up the server/client emitter procs automatically, so the factories
-        // just need to ensure the component exists.
+        // Streaming-event observers (registered once at engine init via
+        // Base::RegisterServerStreamObservers / RegisterClientStreamObservers)
+        // translate stream events into network messages. The factories only
+        // need to ensure Streamable exists on the entity — no per-entity
+        // emitter wiring is required.
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
             e.ensure<Framework::World::Modules::Base::Streamable>();

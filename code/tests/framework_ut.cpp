@@ -13,6 +13,7 @@
 /* TEST CATEGORIES */
 #include "modules/interpolator_ut.h"
 #include "modules/state_machine_ut.h"
+#include "modules/streaming_ut.h"
 
 // Scripting tests
 #include "modules/engine_ut.h"
@@ -28,6 +29,7 @@ int main() {
 
     UNIT_MODULE(interpolator);
     UNIT_MODULE(state_machine);
+    UNIT_MODULE(streaming);
 
     // Scripting tests
     UNIT_MODULE(engine);

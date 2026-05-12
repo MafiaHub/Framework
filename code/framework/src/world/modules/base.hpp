@@ -188,7 +188,17 @@ namespace Framework::World::Modules {
             world.component<PendingRemoval>();
 
             // DependsOn is acyclic by contract — visibility recursion would
-            // diverge otherwise. We also tell Flecs to drop the relation pair
+            // diverge otherwise.
+            //
+            // Behavior change from before this trait was set: Flecs will now
+            // assert (in debug builds) if downstream code creates a
+            // (DependsOn, *) cycle, where the previous code silently tolerated
+            // cycles via a `visited` set in the visibility traversal. The
+            // runtime guard still exists as defense in depth, but cycles are
+            // now considered a programming error rather than an accepted edge
+            // case.
+            //
+            // (OnDeleteTarget, Remove) makes Flecs drop the relation pair
             // automatically when the target dies, so dependents stop carrying
             // dangling references the moment a dependency entity is destroyed.
             world.component<DependsOn>()

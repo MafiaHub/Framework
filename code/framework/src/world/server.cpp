@@ -210,6 +210,15 @@ namespace Framework::World {
                                 }
                             }
                             else if (canSend) {
+                                // Contract change vs. the legacy spawnProc API:
+                                // spawn observers cannot reject a spawn — the
+                                // entity is recorded in the streamer's set
+                                // unconditionally. The previous bool-returning
+                                // spawnProc was always implemented to return
+                                // true, so this matches existing behavior; if
+                                // a future mod needs veto semantics, extend
+                                // StreamSpawnEvent with an `accepted` flag the
+                                // emitter can read back after emit().
                                 _world->event<Modules::Base::StreamSpawnEvent>()
                                     .id<Modules::Base::Streamable>()
                                     .entity(e)
