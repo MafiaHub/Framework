@@ -78,6 +78,28 @@ namespace Framework::World::Modules {
             flecs::entity_t id;
         };
 
+        // Singleton component holding the active NetworkPeer. Systems and
+        // observers read it via world.get<NetworkPeerHandle>() instead of
+        // capturing a raw pointer in lambdas.
+        struct NetworkPeerHandle {
+            Framework::Networking::NetworkPeer *peer = nullptr;
+        };
+
+        // Custom events emitted by the server's streaming loop. Framework
+        // observers translate them into network messages; mods can subscribe
+        // alongside for custom logic. The event struct itself carries the
+        // payload (peer + target guid), accessed inside the observer via
+        // flecs::iter::param().
+        struct StreamEventBase {
+            Framework::Networking::NetworkPeer *peer = nullptr;
+            uint64_t targetGuid                      = 0;
+        };
+        struct StreamSpawnEvent       : StreamEventBase {};
+        struct StreamDespawnEvent     : StreamEventBase {};
+        struct StreamUpdateEvent      : StreamEventBase {};
+        struct StreamOwnerUpdateEvent : StreamEventBase {};
+        struct StreamSelfUpdateEvent  : StreamEventBase {};
+
         struct Streamable {
             using IsVisibleProc         = fu2::function<bool(flecs::entity lhs, flecs::entity rhs) const>;
             using AssignOwnerProc       = fu2::function<bool(flecs::entity e, Streamable &streamable)>;
@@ -103,6 +125,10 @@ namespace Framework::World::Modules {
             // Allows custom owner assignment logic, if method returns true we bypass framework's proximity based owner assignment
             AssignOwnerProc assignOwnerProc;
 
+            // Per-entity callbacks invoked by the framework after each network
+            // event fires. Mods set these on individual entities to layer
+            // custom behavior on top of the framework's spawn/despawn/update
+            // messages without registering global observers.
             struct Events {
                 using Proc = fu2::function<bool(Framework::Networking::NetworkPeer *, uint64_t, flecs::entity) const>;
                 Proc spawnProc;
@@ -117,7 +143,6 @@ namespace Framework::World::Modules {
                 OnUpdateTransformProc updateTransformProc; // called whenever the server enforces a new transform upon the entity
             };
 
-            // Extra set of events so mod can supply custom data.
             Events modEvents;
 
             // Custom visibility proc that either complements the existing heuristic or replaces it
@@ -128,18 +153,7 @@ namespace Framework::World::Modules {
             // When set to false, we only stream spawn and despawn events, useful for immovable objects
             bool performTickUpdates = true;
 
-            // Framework-level events.
-            friend Base;
-
-          private:
-            Events events;
-
-          public:
-            Events& GetBaseEvents() {
-                return events;
-            }
-
-            [[maybe_unused]] Events& GetModEvents() {
+            Events& GetModEvents() {
                 return modEvents;
             }
         };
@@ -175,6 +189,15 @@ namespace Framework::World::Modules {
             world.component<DependsOn>();
             world.component<ServerID>();
             world.component<TickRateRegulator>();
+            world.component<NetworkPeerHandle>().add(flecs::Singleton);
+
+            // Streaming event types — registered as components so they can be
+            // used as flecs event ids with payload.
+            world.component<StreamSpawnEvent>();
+            world.component<StreamDespawnEvent>();
+            world.component<StreamUpdateEvent>();
+            world.component<StreamOwnerUpdateEvent>();
+            world.component<StreamSelfUpdateEvent>();
 
 // Windows bind metadata
 #ifdef _WIN32
@@ -191,8 +214,11 @@ namespace Framework::World::Modules {
 #endif
         }
 
-        static void SetupServerEmitters(Streamable& streamable);
-        static void SetupClientEmitters(Streamable& streamable);
+        // Framework streaming-event observers translating the custom events
+        // into network messages. Registered once at engine init time.
+        static void RegisterServerStreamObservers(flecs::world &world);
+        static void RegisterClientStreamObservers(flecs::world &world);
+
         static void SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine);
         static void SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory);
     };

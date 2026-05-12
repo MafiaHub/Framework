@@ -68,6 +68,7 @@ namespace Framework::World {
         Networking::NetworkPeer *_networkPeer = nullptr;
 
         void RegisterStreamerGuidCacheObservers();
+        void SetNetworkPeer(Networking::NetworkPeer *peer);
 
       public:
         [[nodiscard]] WorldError Init(Networking::NetworkPeer *networkPeer);

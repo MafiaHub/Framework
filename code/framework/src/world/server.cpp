@@ -16,7 +16,18 @@ namespace Framework::World {
             return WorldError::WORLD_FLECS_INIT_FAILED;
         }
 
-        _findAllResourceEntities = _world->query_builder().with<Modules::Base::RemovedOnResourceReload>().build();
+        _findAllResourceEntities = _world->query_builder().with<Modules::Base::RemovedOnResourceReload>().cached().build();
+
+        // Declare custom phases so server systems express their order via
+        // DependsOn relations instead of all crowding into PostUpdate. Each
+        // phase runs after the previous one within a single world.progress().
+        const auto ownershipPhase = _world->entity("OwnershipPhase").add(flecs::Phase).depends_on(flecs::PostUpdate);
+        const auto streamingPhase = _world->entity("StreamingPhase").add(flecs::Phase).depends_on(ownershipPhase);
+
+        // Translate StreamSpawnEvent/etc. into network messages. Mods can
+        // subscribe to the same events for additional behavior; the per-entity
+        // modEvents.* callbacks are invoked by these observers as well.
+        Modules::Base::RegisterServerStreamObservers(*_world);
 
         // Observer-driven removal: react the moment PendingRemoval is added,
         // instead of polling on an interval. Anchoring on PendingRemoval (not
@@ -29,19 +40,24 @@ namespace Framework::World {
             .with<Modules::Base::PendingRemoval>()
             .event(flecs::OnAdd)
             .each([this](flecs::entity e) {
-                const auto streamable = e.try_get_mut<Modules::Base::Streamable>();
-                if (!streamable) {
+                if (!e.has<Modules::Base::Streamable>()) {
                     // Non-streamable entity: nothing to despawn from streamers,
                     // just destroy it.
                     e.destruct();
                     return;
                 }
-                _findAllStreamerEntities.each([this, &e, streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                const auto peerHandle = _world->try_get<Modules::Base::NetworkPeerHandle>();
+                Framework::Networking::NetworkPeer *peer = peerHandle ? peerHandle->peer : nullptr;
+
+                _findAllStreamerEntities.each([this, &e, peer](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     if (rhsS.entities.contains(e)) {
                         rhsS.entities.erase(e);
-
-                        if (streamable->GetBaseEvents().despawnProc)
-                            streamable->GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+                        if (!peer) return;
+                        _world->event<Modules::Base::StreamDespawnEvent>()
+                            .id<Modules::Base::Streamable>()
+                            .entity(e)
+                            .ctx(Modules::Base::StreamDespawnEvent{{peer, rhsS.guid}})
+                            .emit();
                     }
                 });
 
@@ -49,7 +65,7 @@ namespace Framework::World {
             });
 
         // Set up a system to assign entity owners.
-        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(flecs::PostUpdate).interval(cfg.assignOwnershipTickInterval).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
+        _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(ownershipPhase).interval(cfg.assignOwnershipTickInterval).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
             // Let user provide custom ownership assignment.
             if (streamable.assignOwnerManually || (streamable.assignOwnerProc && streamable.assignOwnerProc(e, streamable))) {
                 /* no op */
@@ -76,65 +92,56 @@ namespace Framework::World {
         });
 
         // Set up a system to collect stream range exempt entities.
-        _world->system<Modules::Base::Streamer>("CollectRangeExemptEntities").kind(flecs::PostUpdate).interval(cfg.collectRangeExemptEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::Streamer &streamer) {
+        _world->system<Modules::Base::Streamer>("CollectRangeExemptEntities").kind(streamingPhase).interval(cfg.collectRangeExemptEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::Streamer &streamer) {
             streamer.rangeExemptEntities.clear();
             if (streamer.collectRangeExemptEntitiesProc)
                 streamer.collectRangeExemptEntitiesProc(e, streamer);
         });
 
-        _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator").interval(cfg.tickRegulatorInterval).run([](flecs::iter &it) {
-            while (it.next()) {
-                const auto tr = it.field<Modules::Base::TickRateRegulator>(0);
-                const auto t = it.field<Modules::Base::Transform>(1);
-                const auto s = it.field<Modules::Base::Streamable>(2);
+        _world->system<Modules::Base::TickRateRegulator, Modules::Base::Transform, Modules::Base::Streamable>("TickRateRegulator")
+            .interval(cfg.tickRegulatorInterval)
+            .each([](Modules::Base::TickRateRegulator &reg, Modules::Base::Transform &t, Modules::Base::Streamable &s) {
+                constexpr float EPSILON = 0.01f;
+                auto &snap              = reg.snapshot;
 
-                for (auto i : it) {
-                    bool decreaseRate       = true;
-                    constexpr float EPSILON = 0.01f;
-                    auto &snap              = tr[i].snapshot;
-
-                    // Check if position has changed
-                    if (glm::abs(t[i].pos.x - snap.pos.x) > EPSILON || glm::abs(t[i].pos.y - snap.pos.y) > EPSILON || glm::abs(t[i].pos.z - snap.pos.z) > EPSILON) {
-                        decreaseRate = false;
-                    }
-
-                    // Check if rotation quaternion has changed
-                    if (glm::abs(t[i].rot.x - snap.rot.x) > EPSILON || glm::abs(t[i].rot.y - snap.rot.y) > EPSILON || glm::abs(t[i].rot.z - snap.rot.z) > EPSILON || glm::abs(t[i].rot.w - snap.rot.w) > EPSILON) {
-                        decreaseRate = false;
-                    }
-
-                    // Check if velocity has changed
-                    if (glm::abs(t[i].vel.x - snap.vel.x) > EPSILON || glm::abs(t[i].vel.y - snap.vel.y) > EPSILON || glm::abs(t[i].vel.z - snap.vel.z) > EPSILON) {
-                        decreaseRate = false;
-                    }
-
-                    // Check if generation ID has changed
-                    if (t[i].GetGeneration() != tr[i].lastGenID) {
-                        decreaseRate = true;
-                    }
-
-                    // Snapshot current transform for comparison on the next tick.
-                    tr[i].lastGenID = t[i].GetGeneration();
-                    snap.pos        = t[i].pos;
-                    snap.rot        = t[i].rot;
-                    snap.vel        = t[i].vel;
-
-                    // Decrease tick rate if needed
-                    if (decreaseRate) {
-                        s[i].updateInterval += 5.0f;
-                    }
-                    else {
-                        s[i].updateInterval = s[i].defaultUpdateInterval;
-                    }
+                bool decreaseRate = true;
+                if (glm::abs(t.pos.x - snap.pos.x) > EPSILON || glm::abs(t.pos.y - snap.pos.y) > EPSILON || glm::abs(t.pos.z - snap.pos.z) > EPSILON) {
+                    decreaseRate = false;
                 }
-            }
-        });
+                if (glm::abs(t.rot.x - snap.rot.x) > EPSILON || glm::abs(t.rot.y - snap.rot.y) > EPSILON || glm::abs(t.rot.z - snap.rot.z) > EPSILON || glm::abs(t.rot.w - snap.rot.w) > EPSILON) {
+                    decreaseRate = false;
+                }
+                if (glm::abs(t.vel.x - snap.vel.x) > EPSILON || glm::abs(t.vel.y - snap.vel.y) > EPSILON || glm::abs(t.vel.z - snap.vel.z) > EPSILON) {
+                    decreaseRate = false;
+                }
+                if (t.GetGeneration() != reg.lastGenID) {
+                    decreaseRate = true;
+                }
 
-        // Set up a system to stream entities to clients.
+                reg.lastGenID = t.GetGeneration();
+                snap.pos      = t.pos;
+                snap.rot      = t.rot;
+                snap.vel      = t.vel;
+
+                if (decreaseRate) {
+                    s.updateInterval += 5.0f;
+                } else {
+                    s.updateInterval = s.defaultUpdateInterval;
+                }
+            });
+
+        // Set up a system to stream entities to clients. Visibility decisions
+        // here translate into custom-event emissions on the streamable entity;
+        // the framework's network observers (RegisterServerStreamObservers)
+        // and any mod-registered observers convert those events into messages.
         _world->system<Modules::Base::Transform, Modules::Base::Streamer, Modules::Base::Streamable>("StreamEntities")
-            .kind(flecs::PostUpdate)
+            .kind(streamingPhase)
             .interval(cfg.tickInterval)
             .run([this](flecs::iter &it) {
+                const auto peerHandle = _world->try_get<Modules::Base::NetworkPeerHandle>();
+                Framework::Networking::NetworkPeer *peer = peerHandle ? peerHandle->peer : nullptr;
+                if (!peer) return; // no peer, nothing to send
+
                 while (it.next()) {
                     const auto tr = it.field<Modules::Base::Transform>(0);
                     const auto s = it.field<Modules::Base::Streamer>(1);
@@ -145,60 +152,69 @@ namespace Framework::World {
                         if (it.entity(i).has<Modules::Base::PendingRemoval>())
                             continue;
 
-                        // Grab all streamable entities.
                         _allStreamableEntities.each([&](flecs::entity e, Modules::Base::Transform &otherTr, Modules::Base::Streamable &otherS) {
-                            // Skip dead entities.
                             if (!e.is_alive())
                                 return;
 
-                            // Let streamer send an update to self if an event is assigned.
-                            if (e == it.entity(i) && rs[i].GetBaseEvents().selfUpdateProc && rs[i].performTickUpdates) {
-                                rs[i].GetBaseEvents().selfUpdateProc(_networkPeer, s[i].guid, e);
+                            const auto guid = s[i].guid;
+
+                            // Let streamer send an update to self.
+                            if (e == it.entity(i) && rs[i].performTickUpdates) {
+                                _world->event<Modules::Base::StreamSelfUpdateEvent>()
+                                    .id<Modules::Base::Streamable>()
+                                    .entity(e)
+                                    .ctx(Modules::Base::StreamSelfUpdateEvent{{peer, guid}})
+                                    .emit();
                                 return;
                             }
 
-                            // Figure out entity visibility.
                             const auto id      = e.id();
                             const auto canSend = this->IsEntityVisibleToStreamer(it.entity(i), e, tr[i], s[i], rs[i], otherTr, otherS);
                             const auto map_it  = s[i].entities.find(id);
 
-                            // Entity is already known to this streamer.
                             if (map_it != s[i].entities.end()) {
-                                // If we can't stream an entity anymore, despawn it
                                 if (!canSend) {
                                     s[i].entities.erase(map_it);
-                                    if (otherS.GetBaseEvents().despawnProc)
-                                        otherS.GetBaseEvents().despawnProc(_networkPeer, s[i].guid, e);
+                                    _world->event<Modules::Base::StreamDespawnEvent>()
+                                        .id<Modules::Base::Streamable>()
+                                        .entity(e)
+                                        .ctx(Modules::Base::StreamDespawnEvent{{peer, guid}})
+                                        .emit();
                                 }
-
-                                // otherwise we do regular updates
                                 else if (rs[i].owner != otherS.owner) {
                                     auto &data = map_it->second;
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (otherS.GetBaseEvents().updateProc && rs[i].performTickUpdates)
-                                            otherS.GetBaseEvents().updateProc(_networkPeer, s[i].guid, e);
+                                        if (rs[i].performTickUpdates) {
+                                            _world->event<Modules::Base::StreamUpdateEvent>()
+                                                .id<Modules::Base::Streamable>()
+                                                .entity(e)
+                                                .ctx(Modules::Base::StreamUpdateEvent{{peer, guid}})
+                                                .emit();
+                                        }
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }
                                 }
                                 else {
                                     auto &data = map_it->second;
-
-                                    // If the entity is owned by this streamer, we send a full update.
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (otherS.GetBaseEvents().ownerUpdateProc)
-                                            otherS.GetBaseEvents().ownerUpdateProc(_networkPeer, s[i].guid, e);
+                                        _world->event<Modules::Base::StreamOwnerUpdateEvent>()
+                                            .id<Modules::Base::Streamable>()
+                                            .entity(e)
+                                            .ctx(Modules::Base::StreamOwnerUpdateEvent{{peer, guid}})
+                                            .emit();
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }
                                 }
                             }
-
-                            // this is a new entity, spawn it unless user says otherwise
-                            else if (canSend && otherS.GetBaseEvents().spawnProc) {
-                                if (otherS.GetBaseEvents().spawnProc(_networkPeer, s[i].guid, e)) {
-                                    Modules::Base::Streamer::StreamData data;
-                                    data.lastUpdate   = static_cast<double>(Utils::Time::GetTime());
-                                    s[i].entities[id] = data;
-                                }
+                            else if (canSend) {
+                                _world->event<Modules::Base::StreamSpawnEvent>()
+                                    .id<Modules::Base::Streamable>()
+                                    .entity(e)
+                                    .ctx(Modules::Base::StreamSpawnEvent{{peer, guid}})
+                                    .emit();
+                                Modules::Base::Streamer::StreamData data;
+                                data.lastUpdate   = static_cast<double>(Utils::Time::GetTime());
+                                s[i].entities[id] = data;
                             }
                         });
                     }

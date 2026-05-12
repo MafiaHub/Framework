@@ -17,6 +17,11 @@ namespace Framework::World {
             return WorldError::WORLD_FLECS_INIT_FAILED;
         }
 
+        // Translate StreamUpdateEvent into outbound network updates on the
+        // client. Mods can layer further behavior by subscribing to the same
+        // custom events.
+        Modules::Base::RegisterClientStreamObservers(*_world);
+
         // Observers maintain the serverID -> entity cache so lookups are O(1)
         // and we no longer scan all ServerID-bearing entities on every query.
         _world->observer<Modules::Base::ServerID>()
@@ -88,21 +93,26 @@ namespace Framework::World {
     }
 
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
-        _networkPeer = peer;
+        SetNetworkPeer(peer);
 
         _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).run([this](flecs::iter &it) {
-            const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
+            const auto peerHandle = _world->try_get<Modules::Base::NetworkPeerHandle>();
+            Framework::Networking::NetworkPeer *peer = peerHandle ? peerHandle->peer : nullptr;
+            if (!peer) return;
+            const auto myGUID = peer->GetPeer()->GetMyGUID();
 
             while (it.next()) {
-                const auto tr = it.field<Modules::Base::Transform>(0);
                 const auto rs = it.field<Modules::Base::Streamable>(1);
-
                 for (auto i : it) {
-                    const auto &es = &rs[i];
+                    const auto e = it.entity(i);
+                    if (!rs[i].performTickUpdates) continue;
+                    if (!Framework::World::Engine::IsEntityOwner(e, myGUID.g)) continue;
 
-                    if (es->GetBaseEvents().updateProc && es->performTickUpdates && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
-                        es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
-                    }
+                    _world->event<Modules::Base::StreamUpdateEvent>()
+                        .id<Modules::Base::Streamable>()
+                        .entity(e)
+                        .ctx(Modules::Base::StreamUpdateEvent{{peer, SLNet::UNASSIGNED_RAKNET_GUID.g}})
+                        .emit();
                 }
             }
         });
@@ -132,7 +142,7 @@ namespace Framework::World {
         });
         _world->defer_end();
 
-        _networkPeer = nullptr;
+        SetNetworkPeer(nullptr);
     }
     void ClientEngine::InitRPCs(Networking::NetworkPeer *net) const {
         net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {

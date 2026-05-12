@@ -16,84 +16,128 @@
 
 #include "world/types/streaming.hpp"
 
-#define CALL_CUSTOM_PROC(kind)                                                                                                                                                                                                                                                         \
-    const auto streamable = e.try_get<Framework::World::Modules::Base::Streamable>();                                                                                                                                                                                                      \
-    if (streamable != nullptr) {                                                                                                                                                                                                                                                       \
-        if (streamable->modEvents.kind != nullptr) {                                                                                                                                                                                                                                   \
-            streamable->modEvents.kind(peer, guid, e);                                                                                                                                                                                                                                 \
-        }                                                                                                                                                                                                                                                                              \
-    }
-
 namespace Framework::World::Modules {
-    void Base::SetupServerEmitters(Streamable& streamable) {
-        streamable.events.spawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntitySpawn entitySpawn;
-            const auto tr = e.try_get<Framework::World::Modules::Base::Transform>();
-            if (tr)
-                entitySpawn.FromParameters(*tr);
-            entitySpawn.SetServerID(e.id());
-            peer->Send(entitySpawn, guid);
-            CALL_CUSTOM_PROC(spawnProc);
-            return true;
-        };
+    namespace {
+        // Pull the payload that the streaming system attached to the event.
+        // Bails out gracefully if anyone emits one of these events without a
+        // payload — observers must be defensive since flecs lets you fire
+        // events from arbitrary call sites.
+        template <typename E>
+        const Base::StreamEventBase *PayloadFrom(flecs::iter &it) {
+            // flecs::iter::param() returns a void* to the event payload, which
+            // we cast back to the event type and slice up to the shared base.
+            return static_cast<const E *>(it.param());
+        }
 
-        streamable.events.despawnProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            CALL_CUSTOM_PROC(despawnProc);
-            Framework::Networking::Messages::GameSyncEntityDespawn entityDespawn;
-            entityDespawn.SetServerID(e.id());
-            peer->Send(entityDespawn, guid);
-            return true;
-        };
+        void InvokeModProc(const Base::Streamable::Events::Proc &proc, Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
+            if (proc)
+                proc(peer, guid, e);
+        }
+    } // anonymous namespace
 
-        streamable.events.selfUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntitySelfUpdate entitySelfUpdate;
-            entitySelfUpdate.SetServerID(e.id());
-            peer->Send(entitySelfUpdate, guid);
-            CALL_CUSTOM_PROC(selfUpdateProc);
-            return true;
-        };
+    void Base::RegisterServerStreamObservers(flecs::world &world) {
+        world.observer<Streamable>("ServerStreamSpawn")
+            .event<StreamSpawnEvent>()
+            .each([](flecs::iter &it, size_t i, Streamable &s) {
+                const auto *payload = PayloadFrom<StreamSpawnEvent>(it);
+                if (!payload || !payload->peer) return;
+                const auto e = it.entity(i);
 
-        streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            const auto tr = e.try_get<Framework::World::Modules::Base::Transform>();
-            const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
-            // Only send framework update if entity has a valid owner
-            if (tr && es && es->owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
-                Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
-                entityUpdate.FromParameters(*tr, es->owner);
-                entityUpdate.SetServerID(e.id());
-                peer->Send(entityUpdate, guid);
-            }
-            CALL_CUSTOM_PROC(updateProc);
-            return true;
-        };
+                Framework::Networking::Messages::GameSyncEntitySpawn msg;
+                if (const auto tr = e.try_get<Transform>())
+                    msg.FromParameters(*tr);
+                msg.SetServerID(e.id());
+                payload->peer->Send(msg, payload->targetGuid);
 
-        streamable.events.ownerUpdateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            const auto tr = e.try_get<Framework::World::Modules::Base::Transform>();
-            const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
-            // Only send framework owner update if entity has a valid owner
-            if (tr && es && es->owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
-                Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
-                entityUpdate.FromParameters(es->owner);
-                entityUpdate.SetServerID(e.id());
-                peer->Send(entityUpdate, guid);
-            }
-            CALL_CUSTOM_PROC(ownerUpdateProc);
-            return true;
-        };
+                InvokeModProc(s.modEvents.spawnProc, payload->peer, payload->targetGuid, e);
+            });
+
+        world.observer<Streamable>("ServerStreamDespawn")
+            .event<StreamDespawnEvent>()
+            .each([](flecs::iter &it, size_t i, Streamable &s) {
+                const auto *payload = PayloadFrom<StreamDespawnEvent>(it);
+                if (!payload || !payload->peer) return;
+                const auto e = it.entity(i);
+
+                // Mod's despawn proc runs BEFORE the network message so it can
+                // still read state that may rely on the entity being mapped on
+                // the recipient. Matches the legacy SetupServerEmitters order.
+                InvokeModProc(s.modEvents.despawnProc, payload->peer, payload->targetGuid, e);
+
+                Framework::Networking::Messages::GameSyncEntityDespawn msg;
+                msg.SetServerID(e.id());
+                payload->peer->Send(msg, payload->targetGuid);
+            });
+
+        world.observer<Streamable>("ServerStreamSelfUpdate")
+            .event<StreamSelfUpdateEvent>()
+            .each([](flecs::iter &it, size_t i, Streamable &s) {
+                const auto *payload = PayloadFrom<StreamSelfUpdateEvent>(it);
+                if (!payload || !payload->peer) return;
+                const auto e = it.entity(i);
+
+                Framework::Networking::Messages::GameSyncEntitySelfUpdate msg;
+                msg.SetServerID(e.id());
+                payload->peer->Send(msg, payload->targetGuid);
+
+                InvokeModProc(s.modEvents.selfUpdateProc, payload->peer, payload->targetGuid, e);
+            });
+
+        world.observer<Streamable>("ServerStreamUpdate")
+            .event<StreamUpdateEvent>()
+            .each([](flecs::iter &it, size_t i, Streamable &s) {
+                const auto *payload = PayloadFrom<StreamUpdateEvent>(it);
+                if (!payload || !payload->peer) return;
+                const auto e = it.entity(i);
+
+                const auto tr = e.try_get<Transform>();
+                if (tr && s.owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+                    Framework::Networking::Messages::GameSyncEntityUpdate msg;
+                    msg.FromParameters(*tr, s.owner);
+                    msg.SetServerID(e.id());
+                    payload->peer->Send(msg, payload->targetGuid);
+                }
+
+                InvokeModProc(s.modEvents.updateProc, payload->peer, payload->targetGuid, e);
+            });
+
+        world.observer<Streamable>("ServerStreamOwnerUpdate")
+            .event<StreamOwnerUpdateEvent>()
+            .each([](flecs::iter &it, size_t i, Streamable &s) {
+                const auto *payload = PayloadFrom<StreamOwnerUpdateEvent>(it);
+                if (!payload || !payload->peer) return;
+                const auto e = it.entity(i);
+
+                if (const auto tr = e.try_get<Transform>(); tr && s.owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+                    Framework::Networking::Messages::GameSyncEntityOwnerUpdate msg;
+                    msg.FromParameters(s.owner);
+                    msg.SetServerID(e.id());
+                    payload->peer->Send(msg, payload->targetGuid);
+                }
+
+                InvokeModProc(s.modEvents.ownerUpdateProc, payload->peer, payload->targetGuid, e);
+            });
     }
-    void Base::SetupClientEmitters(Streamable& streamable) {
-        streamable.events.updateProc = [&](Framework::Networking::NetworkPeer *peer, uint64_t guid, flecs::entity e) {
-            Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
-            const auto tr  = e.try_get<Framework::World::Modules::Base::Transform>();
-            const auto sid = e.try_get<Framework::World::Modules::Base::ServerID>();
-            if (tr && sid) {
-                entityUpdate.FromParameters(*tr, 0);
-                entityUpdate.SetServerID(sid->id);
-            }
-            peer->Send(entityUpdate, guid);
-            CALL_CUSTOM_PROC(updateProc);
-            return true;
-        };
+
+    void Base::RegisterClientStreamObservers(flecs::world &world) {
+        world.observer<Streamable>("ClientStreamUpdate")
+            .event<StreamUpdateEvent>()
+            .each([](flecs::iter &it, size_t i, Streamable &s) {
+                const auto *payload = PayloadFrom<StreamUpdateEvent>(it);
+                if (!payload || !payload->peer) return;
+                const auto e = it.entity(i);
+
+                Framework::Networking::Messages::GameSyncEntityUpdate msg;
+                const auto tr  = e.try_get<Transform>();
+                const auto sid = e.try_get<ServerID>();
+                if (tr && sid) {
+                    msg.FromParameters(*tr, 0);
+                    msg.SetServerID(sid->id);
+                }
+                payload->peer->Send(msg, payload->targetGuid);
+
+                InvokeModProc(s.modEvents.updateProc, payload->peer, payload->targetGuid, e);
+            });
     }
 
     void Base::SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine) {

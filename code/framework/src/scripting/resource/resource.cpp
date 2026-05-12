@@ -28,8 +28,11 @@ namespace Framework::Scripting {
             _state = ResourceState::Error;
         }
 
+        // The root entity is named after the manifest. Callers that need the
+        // C++ Resource for a given entity look it up by name via
+        // ResourceManager::GetResource(entity.name()) rather than carrying a
+        // back-pointer component.
         _rootEntity = world->entity(_manifest.GetName().c_str());
-        _rootEntity.set<OwnedResource>({this});
     }
 
     Resource::~Resource() {

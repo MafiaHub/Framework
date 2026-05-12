@@ -18,13 +18,28 @@ namespace Framework::World {
         // Register a base module
         _world->import <Modules::Base>();
 
-        _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
-        _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
+        // Publish the peer as a singleton so systems and observers can read it
+        // without capturing the Engine in their lambdas. Updated by clients
+        // through SetNetworkPeer() when the connection (re)opens.
+        _world->set<Modules::Base::NetworkPeerHandle>({networkPeer});
+
+        // Both queries are iterated multiple times per tick, so we ask Flecs
+        // to keep them fully cached. Without cached(), Flecs v4 queries are
+        // uncached by default and rebuild their match set on every iteration.
+        _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().cached().build();
+        _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().cached().build();
 
         RegisterStreamerGuidCacheObservers();
 
         _initialized = true;
         return WorldError::WORLD_NONE;
+    }
+
+    void Engine::SetNetworkPeer(Networking::NetworkPeer *peer) {
+        _networkPeer = peer;
+        if (_world) {
+            _world->set<Modules::Base::NetworkPeerHandle>({peer});
+        }
     }
 
     void Engine::RegisterStreamerGuidCacheObservers() {

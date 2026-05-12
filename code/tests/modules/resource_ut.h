@@ -431,7 +431,6 @@ MODULE(resource, {
             root = resource.GetRootEntity();
             EQUALS(root.is_alive(), true);
             STREQUALS(root.name().c_str(), "foo-bar");
-            EQUALS(root.get<OwnedResource>().value, &resource);
         }
         EQUALS(root.is_alive(), false);
 

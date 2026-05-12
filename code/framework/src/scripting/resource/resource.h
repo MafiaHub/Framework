@@ -49,10 +49,6 @@ namespace Framework::Scripting {
 
     class Resource;
 
-    struct OwnedResource {
-        Resource *value;
-    };
-
     /**
      * Convert ResourceState to string representation.
      */

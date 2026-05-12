@@ -26,21 +26,17 @@ namespace Framework::World::Archetypes {
         }
 
       public:
+        // OnAdd observers on Streamable (registered at engine init time) wire
+        // up the server/client emitter procs automatically, so the factories
+        // just need to ensure the component exists.
         inline void SetupClient(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
-
-            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
-            Framework::World::Modules::Base::SetupClientEmitters(streamable);
-
-            auto ass = e.get_mut<Framework::World::Modules::Base::Streamable>();
-            (void)ass;
+            e.ensure<Framework::World::Modules::Base::Streamable>();
         }
 
         inline void SetupServer(flecs::entity e, uint64_t guid) {
             SetupDefaults(e, guid);
-
-            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
-            Framework::World::Modules::Base::SetupServerEmitters(streamable);
+            e.ensure<Framework::World::Modules::Base::Streamable>();
         }
     };
 } // namespace Framework::World::Archetypes
