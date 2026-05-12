@@ -157,7 +157,9 @@ namespace Framework::World::Modules {
                 return;
             }
 
-            const auto tr         = e.try_get_mut<World::Modules::Base::Transform>();
+            const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
+            if (!tr)
+                return;
             const auto incomingTr = msg->GetTransform();
 
             if (tr->ValidateGeneration(incomingTr)) {
@@ -207,10 +209,11 @@ namespace Framework::World::Modules {
             }
 
             const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-
             const auto es = e.try_get_mut<World::Modules::Base::Streamable>();
-            es->owner     = msg->GetOwner();
+            if (!tr || !es)
+                return;
+            *tr       = msg->GetTransform();
+            es->owner = msg->GetOwner();
         });
         net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
             if (!msg->Valid()) {
@@ -223,7 +226,9 @@ namespace Framework::World::Modules {
                 return;
             }
             const auto es = e.try_get_mut<World::Modules::Base::Streamable>();
-            es->owner     = msg->GetOwner();
+            if (!es)
+                return;
+            es->owner = msg->GetOwner();
         });
         net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
             if (!msg->Valid()) {

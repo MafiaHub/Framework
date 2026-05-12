@@ -146,8 +146,12 @@ namespace Framework::World {
             if (!e.is_alive()) {
                 return;
             }
+            // Peer-controlled message: drop it if the target entity lacks the
+            // component instead of dereferencing a null pointer.
             const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
+            if (!tr)
+                return;
+            *tr = msg->GetTransform();
             e.modified<World::Modules::Base::Transform>();
         });
         net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
@@ -159,7 +163,9 @@ namespace Framework::World {
                 return;
             }
             const auto fr = e.try_get_mut<World::Modules::Base::Frame>();
-            *fr           = msg->GetFrame();
+            if (!fr)
+                return;
+            *fr = msg->GetFrame();
             e.modified<World::Modules::Base::Frame>();
         });
     }
@@ -170,11 +176,16 @@ namespace Framework::World {
         }
 
         auto tr = entity.try_get_mut<Modules::Base::Transform>();
-        *tr     = rhs;
+        if (!tr)
+            return;
+        *tr = rhs;
 
-        const auto str = entity.try_get_mut<Modules::Base::Streamable>();
-        if (str->modEvents.updateTransformProc) {
-            str->modEvents.updateTransformProc(entity);
+        // Streamable is optional on the entity — only fire the mod hook when
+        // the component is actually present.
+        if (const auto str = entity.try_get_mut<Modules::Base::Streamable>()) {
+            if (str->modEvents.updateTransformProc) {
+                str->modEvents.updateTransformProc(entity);
+            }
         }
         entity.modified<World::Modules::Base::Transform>();
     }

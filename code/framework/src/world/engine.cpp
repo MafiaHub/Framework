@@ -27,6 +27,11 @@ namespace Framework::World {
         // uncached by default and rebuild their match set on every iteration.
         _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().cached().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().cached().build();
+        // Resource-reload purge runs on both client and server, so the query
+        // belongs in the base Engine::Init rather than only ServerEngine.
+        // Otherwise the client would iterate a default-constructed (invalid)
+        // query inside PurgeAllResourceEntities.
+        _findAllResourceEntities = _world->query_builder().with<Modules::Base::RemovedOnResourceReload>().cached().build();
 
         RegisterStreamerGuidCacheObservers();
 
@@ -89,13 +94,16 @@ namespace Framework::World {
     }
 
     void Engine::WakeEntity(flecs::entity e) {
-        if (!e.has<Framework::World::Modules::Base::TickRateRegulator>()) {
-            return;
-        }
         const auto tr = e.try_get_mut<Framework::World::Modules::Base::TickRateRegulator>();
+        if (!tr)
+            return;
         tr->lastGenID--;
-        const auto es      = e.try_get_mut<Framework::World::Modules::Base::Streamable>();
-        es->updateInterval = es->defaultUpdateInterval;
+        // Streamable is added alongside TickRateRegulator by StreamingFactory
+        // today, but treat its absence as a non-fatal early-out rather than
+        // crashing on a null deref.
+        if (const auto es = e.try_get_mut<Framework::World::Modules::Base::Streamable>()) {
+            es->updateInterval = es->defaultUpdateInterval;
+        }
     }
 
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {

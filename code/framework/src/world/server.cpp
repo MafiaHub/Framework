@@ -16,8 +16,6 @@ namespace Framework::World {
             return WorldError::WORLD_FLECS_INIT_FAILED;
         }
 
-        _findAllResourceEntities = _world->query_builder().with<Modules::Base::RemovedOnResourceReload>().cached().build();
-
         // Declare custom phases so server systems express their order via
         // DependsOn relations instead of all crowding into PostUpdate. Each
         // phase runs after the previous one within a single world.progress().
@@ -74,8 +72,13 @@ namespace Framework::World {
                 uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
                 float closestDist         = std::numeric_limits<float>::max();
                 _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                    const auto rhsTr      = rhsE.try_get<Modules::Base::Transform>();
-                    const auto rhsRs      = rhsE.try_get<Modules::Base::Streamable>();
+                    // Streamer-only query — Transform/Streamable are not in
+                    // the term list, so a streamer entity that lacks either
+                    // would null-deref here without these guards.
+                    const auto rhsTr = rhsE.try_get<Modules::Base::Transform>();
+                    const auto rhsRs = rhsE.try_get<Modules::Base::Streamable>();
+                    if (!rhsTr || !rhsRs)
+                        return;
                     const auto canBeOwner = this->IsEntityVisibleToStreamer(rhsE, e, *rhsTr, rhsS, *rhsRs, tr, streamable);
                     if (canBeOwner) {
                         const auto dist = glm::distance(tr.pos, rhsTr->pos);
