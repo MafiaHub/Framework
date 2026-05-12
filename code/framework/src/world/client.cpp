@@ -17,7 +17,22 @@ namespace Framework::World {
             return WorldError::WORLD_FLECS_INIT_FAILED;
         }
 
-        _queryGetEntityByServerID = _world->query_builder<Modules::Base::ServerID>().build();
+        // Observers maintain the serverID -> entity cache so lookups are O(1)
+        // and we no longer scan all ServerID-bearing entities on every query.
+        _world->observer<Modules::Base::ServerID>()
+            .event(flecs::OnSet)
+            .each([this](flecs::entity e, Modules::Base::ServerID &sid) {
+                _serverIDToEntity[sid.id] = e.id();
+            });
+
+        _world->observer<Modules::Base::ServerID>()
+            .event(flecs::OnRemove)
+            .each([this](flecs::entity e, Modules::Base::ServerID &sid) {
+                const auto it = _serverIDToEntity.find(sid.id);
+                if (it != _serverIDToEntity.end() && it->second == e.id()) {
+                    _serverIDToEntity.erase(it);
+                }
+            });
 
         return WorldError::WORLD_NONE;
     }
@@ -31,14 +46,15 @@ namespace Framework::World {
     }
 
     flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
-        flecs::entity ent = {};
-        _queryGetEntityByServerID.each([&ent, id](flecs::entity e, Modules::Base::ServerID& rhs) {
-            if (id == rhs.id) {
-                ent = e;
-                return;
-            }
-        });
-        return ent;
+        const auto it = _serverIDToEntity.find(id);
+        if (it == _serverIDToEntity.end()) {
+            return flecs::entity::null();
+        }
+        flecs::entity e(_world->get_world(), it->second);
+        if (!e.is_alive()) {
+            return flecs::entity::null();
+        }
+        return e;
     }
 
     flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) {
@@ -54,8 +70,9 @@ namespace Framework::World {
     flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) const {
         const auto e = _world->entity();
 
-        auto &sid = e.ensure<Modules::Base::ServerID>();
-        sid.id        = serverID;
+        // Use set<> so the OnSet observer fires and the serverID cache is
+        // populated immediately. ensure<>() would only emit OnAdd.
+        e.set<Modules::Base::ServerID>({serverID});
         return e;
     }
 

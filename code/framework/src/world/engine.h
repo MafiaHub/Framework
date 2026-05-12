@@ -17,6 +17,7 @@
 
 #include <flecs/distr/flecs.h>
 #include <memory>
+#include <unordered_map>
 
 #include "core_modules.h"
 
@@ -56,8 +57,14 @@ namespace Framework::World {
         std::unique_ptr<flecs::world> _world;
         flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
         flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
-        flecs::query<Modules::Base::RemovedOnResourceReload> _findAllResourceEntities;
+        // Tag-only query, so the component list is empty and the entity is the
+        // sole "field" produced by iteration.
+        flecs::query<> _findAllResourceEntities;
+        // Cache of Streamer.guid -> entity id, maintained by observers on the Streamer component.
+        std::unordered_map<uint64_t, flecs::entity_t> _guidToEntity;
         Networking::NetworkPeer *_networkPeer = nullptr;
+
+        void RegisterStreamerGuidCacheObservers();
 
       public:
         [[nodiscard]] WorldError Init(Networking::NetworkPeer *networkPeer);

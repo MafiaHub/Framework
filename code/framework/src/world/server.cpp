@@ -16,23 +16,27 @@ namespace Framework::World {
             return WorldError::WORLD_FLECS_INIT_FAILED;
         }
 
-        _findAllResourceEntities = _world->query_builder<Modules::Base::RemovedOnResourceReload>().build();
+        _findAllResourceEntities = _world->query_builder().with<Modules::Base::RemovedOnResourceReload>().build();
 
-        // Set up a system to remove entities we no longer need.
-        _world->system<Modules::Base::PendingRemoval, Modules::Base::Streamable>("RemoveEntities").kind(flecs::PostUpdate).interval(cfg.removeEntitiesTickInterval).each([this](flecs::entity e, Modules::Base::PendingRemoval &pd, Modules::Base::Streamable &streamable) {
-            // Remove the entity from all streamers.
-            _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
-                if (rhsS.entities.contains(e)) {
-                    rhsS.entities.erase(e);
+        // Observer-driven removal: react the moment PendingRemoval is added to a
+        // streamable entity, instead of polling on an interval. Flecs defers the
+        // destruct call automatically so this is safe to invoke from within an
+        // observer callback.
+        _world->observer<Modules::Base::Streamable>("RemoveEntitiesOnPendingRemoval")
+            .with<Modules::Base::PendingRemoval>()
+            .event(flecs::OnAdd)
+            .each([this](flecs::entity e, Modules::Base::Streamable &streamable) {
+                _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+                    if (rhsS.entities.contains(e)) {
+                        rhsS.entities.erase(e);
 
-                    // Ensure we despawn the entity from the client.
-                    if (streamable.GetBaseEvents().despawnProc)
-                        streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
-                }
+                        if (streamable.GetBaseEvents().despawnProc)
+                            streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+                    }
+                });
+
+                e.destruct();
             });
-
-            e.destruct();
-        });
 
         // Set up a system to assign entity owners.
         _world->system<Modules::Base::Transform, Modules::Base::Streamable>("AssignEntityOwnership").kind(flecs::PostUpdate).interval(cfg.assignOwnershipTickInterval).each([this](flecs::entity e, Modules::Base::Transform &tr, Modules::Base::Streamable &streamable) {
@@ -77,19 +81,20 @@ namespace Framework::World {
                 for (auto i : it) {
                     bool decreaseRate       = true;
                     constexpr float EPSILON = 0.01f;
+                    auto &snap              = tr[i].snapshot;
 
                     // Check if position has changed
-                    if (glm::abs(t[i].pos.x - tr[i].pos.x) > EPSILON || glm::abs(t[i].pos.y - tr[i].pos.y) > EPSILON || glm::abs(t[i].pos.z - tr[i].pos.z) > EPSILON) {
+                    if (glm::abs(t[i].pos.x - snap.pos.x) > EPSILON || glm::abs(t[i].pos.y - snap.pos.y) > EPSILON || glm::abs(t[i].pos.z - snap.pos.z) > EPSILON) {
                         decreaseRate = false;
                     }
 
                     // Check if rotation quaternion has changed
-                    if (glm::abs(t[i].rot.x - tr[i].rot.x) > EPSILON || glm::abs(t[i].rot.y - tr[i].rot.y) > EPSILON || glm::abs(t[i].rot.z - tr[i].rot.z) > EPSILON || glm::abs(t[i].rot.w - tr[i].rot.w) > EPSILON) {
+                    if (glm::abs(t[i].rot.x - snap.rot.x) > EPSILON || glm::abs(t[i].rot.y - snap.rot.y) > EPSILON || glm::abs(t[i].rot.z - snap.rot.z) > EPSILON || glm::abs(t[i].rot.w - snap.rot.w) > EPSILON) {
                         decreaseRate = false;
                     }
 
                     // Check if velocity has changed
-                    if (glm::abs(t[i].vel.x - tr[i].vel.x) > EPSILON || glm::abs(t[i].vel.y - tr[i].vel.y) > EPSILON || glm::abs(t[i].vel.z - tr[i].vel.z) > EPSILON) {
+                    if (glm::abs(t[i].vel.x - snap.vel.x) > EPSILON || glm::abs(t[i].vel.y - snap.vel.y) > EPSILON || glm::abs(t[i].vel.z - snap.vel.z) > EPSILON) {
                         decreaseRate = false;
                     }
 
@@ -98,11 +103,11 @@ namespace Framework::World {
                         decreaseRate = true;
                     }
 
-                    // Update all values
+                    // Snapshot current transform for comparison on the next tick.
                     tr[i].lastGenID = t[i].GetGeneration();
-                    tr[i].pos       = t[i].pos;
-                    tr[i].rot       = t[i].rot;
-                    tr[i].vel       = t[i].vel;
+                    snap.pos        = t[i].pos;
+                    snap.rot        = t[i].rot;
+                    snap.vel        = t[i].vel;
 
                     // Decrease tick rate if needed
                     if (decreaseRate) {
@@ -285,23 +290,30 @@ namespace Framework::World {
             // Continue with the remaining visibility checks.
         }
         else {
-            // Check our dependents, if any of them are visible, we are visible as well.
-            for (const auto &dependentEntity : rhsS.dependentEntities) {
+            // Check our dependents via the (DependsOn, *) relation. If any
+            // target is visible, we are visible as well. Iterating the relation
+            // pairs avoids maintaining a separate vector on the component and
+            // keeps the dependency graph queryable via Flecs.
+            bool dependentVisible = false;
+            e.each<Modules::Base::DependsOn>([&](flecs::entity dependentEntity) {
+                if (dependentVisible)
+                    return;
                 if (!dependentEntity.is_valid() || !dependentEntity.is_alive())
-                    continue;
+                    return;
                 if (e == dependentEntity)
-                    continue;
-                // Skip if already visited (part of a cycle)
+                    return;
                 if (visited.contains(dependentEntity.id()))
-                    continue;
-                const auto &dependentS  = dependentEntity.try_get<Modules::Base::Streamable>();
-                const auto &dependentTr = dependentEntity.try_get<Modules::Base::Transform>();
+                    return;
+                const auto dependentS  = dependentEntity.try_get<Modules::Base::Streamable>();
+                const auto dependentTr = dependentEntity.try_get<Modules::Base::Transform>();
                 if (!dependentS || !dependentTr)
-                    continue;
+                    return;
                 if (IsEntityVisibleToStreamerInternal(streamerEntity, dependentEntity, lhsTr, streamer, lhsS, *dependentTr, *dependentS, visited)) {
-                    return true;
+                    dependentVisible = true;
                 }
-            }
+            });
+            if (dependentVisible)
+                return true;
         }
 
         // Entity is always visible to clients.

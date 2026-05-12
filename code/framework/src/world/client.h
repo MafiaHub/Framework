@@ -13,6 +13,7 @@
 #include <flecs/distr/flecs.h>
 
 #include <function2.hpp>
+#include <unordered_map>
 
 #define FW_SEND_CLIENT_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                               \
     do {                                                                                                                                                                                                                                                                               \
@@ -43,7 +44,8 @@ namespace Framework::World {
 
       protected:
         flecs::entity _streamEntities;
-        flecs::query<Modules::Base::ServerID> _queryGetEntityByServerID;
+        // Cache of ServerID.id -> entity id, maintained by observers on ServerID.
+        std::unordered_map<flecs::entity_t, flecs::entity_t> _serverIDToEntity;
         OnEntityDestroyCallback _onEntityDestroyCallback;
 
       private:

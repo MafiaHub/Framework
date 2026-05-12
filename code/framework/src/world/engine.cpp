@@ -21,8 +21,31 @@ namespace Framework::World {
         _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
         _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
 
+        RegisterStreamerGuidCacheObservers();
+
         _initialized = true;
         return WorldError::WORLD_NONE;
+    }
+
+    void Engine::RegisterStreamerGuidCacheObservers() {
+        // Maintain the guid -> entity map via observers instead of scanning all
+        // Streamer entities on every lookup. OnSet fires both when the component
+        // is added and whenever it is reassigned (including guid mutations made
+        // through ensure/try_get_mut + modified<>()).
+        _world->observer<Modules::Base::Streamer>()
+            .event(flecs::OnSet)
+            .each([this](flecs::entity e, Modules::Base::Streamer &s) {
+                _guidToEntity[s.guid] = e.id();
+            });
+
+        _world->observer<Modules::Base::Streamer>()
+            .event(flecs::OnRemove)
+            .each([this](flecs::entity e, Modules::Base::Streamer &s) {
+                auto it = _guidToEntity.find(s.guid);
+                if (it != _guidToEntity.end() && it->second == e.id()) {
+                    _guidToEntity.erase(it);
+                }
+            });
     }
 
     void Engine::Shutdown() {
@@ -52,13 +75,15 @@ namespace Framework::World {
     }
 
     flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
-        flecs::entity ourEntity = {};
-        _findAllStreamerEntities.each([&ourEntity, guid](flecs::entity e, Modules::Base::Streamer &s) {
-            if (ourEntity == flecs::entity::null() && s.guid == guid) {
-                ourEntity = e;
-            }
-        });
-        return ourEntity;
+        const auto it = _guidToEntity.find(guid);
+        if (it == _guidToEntity.end()) {
+            return flecs::entity::null();
+        }
+        flecs::entity e(_world->get_world(), it->second);
+        if (!e.is_alive()) {
+            return flecs::entity::null();
+        }
+        return e;
     }
 
     flecs::entity Engine::WrapEntity(flecs::entity_t serverID) const {
@@ -67,7 +92,9 @@ namespace Framework::World {
 
     void Engine::PurgeAllResourceEntities() const {
         _world->defer_begin();
-        _findAllResourceEntities.each([this](flecs::entity e, Modules::Base::RemovedOnResourceReload &rhs) {
+        // RemovedOnResourceReload is a zero-size tag, so the each() callback
+        // takes only the entity.
+        _findAllResourceEntities.each([](flecs::entity e) {
             if (e.is_alive())
                 e.add<Modules::Base::PendingRemoval>();
         });

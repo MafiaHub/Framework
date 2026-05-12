@@ -52,7 +52,8 @@ namespace Framework::World::Modules {
             }
         };
 
-        struct TickRateRegulator: public Transform {
+        struct TickRateRegulator {
+            Transform snapshot {};
             uint16_t lastGenID = 0;
         };
 
@@ -62,13 +63,16 @@ namespace Framework::World::Modules {
             std::string modelName;
         };
 
-        struct PendingRemoval {
-            [[maybe_unused]] uint8_t _unused;
-        };
+        // Zero-size tag: presence on an entity schedules it for removal.
+        struct PendingRemoval {};
 
-        struct RemovedOnResourceReload {
-            [[maybe_unused]] uint8_t _unused;
-        };
+        // Zero-size tag: entity is destroyed when the owning resource is reloaded.
+        struct RemovedOnResourceReload {};
+
+        // Zero-size tag relation: (DependsOn, target) means the source entity's
+        // streaming visibility depends on `target`. If any target is visible the
+        // source is forced to be visible as well.
+        struct DependsOn {};
 
         struct ServerID {
             flecs::entity_t id;
@@ -120,10 +124,6 @@ namespace Framework::World::Modules {
             HeuristicMode isVisibleHeuristic = HeuristicMode::ADD;
             IsVisibleProc isVisibleProc;
 
-            // Used to specify list of entities this streamable entity relies on.
-            // If any of these entities are visible and ours is not, we force ours to be visible too.
-            std::vector<flecs::entity> dependentEntities;
-
             // Controls whether this entity gets to be updated continuously or not
             // When set to false, we only stream spawn and despawn events, useful for immovable objects
             bool performTickUpdates = true;
@@ -169,8 +169,10 @@ namespace Framework::World::Modules {
             auto _streamable = world.component<Streamable>();
             auto _streamer   = world.component<Streamer>();
 
+            // Empty structs are auto-registered as zero-size tags by Flecs.
             world.component<RemovedOnResourceReload>();
             world.component<PendingRemoval>();
+            world.component<DependsOn>();
             world.component<ServerID>();
             world.component<TickRateRegulator>();
 
