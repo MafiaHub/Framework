@@ -166,8 +166,13 @@ namespace Framework::World {
 
                             const auto guid = s[i].guid;
 
-                            // Let streamer send an update to self.
-                            if (e == it.entity(i) && rs[i].performTickUpdates) {
+                            // Let streamer send an update to self. performTickUpdates
+                            // belongs to the entity being streamed; for the self-update
+                            // branch the streamer *is* that entity, so rs[i] and otherS
+                            // are the same component — reading via otherS keeps the
+                            // ownership intent consistent across all three emission
+                            // sites below.
+                            if (e == it.entity(i) && otherS.performTickUpdates) {
                                 _world->event<Modules::Base::StreamSelfUpdateEvent>()
                                     .id<Modules::Base::Streamable>()
                                     .entity(e)
@@ -192,7 +197,10 @@ namespace Framework::World {
                                 else if (rs[i].owner != otherS.owner) {
                                     auto &data = map_it->second;
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        if (rs[i].performTickUpdates) {
+                                        // performTickUpdates lives on the streamed entity,
+                                        // not on the streamer — the previous rs[i] read
+                                        // checked the wrong component.
+                                        if (otherS.performTickUpdates) {
                                             _world->event<Modules::Base::StreamUpdateEvent>()
                                                 .id<Modules::Base::Streamable>()
                                                 .entity(e)
@@ -205,11 +213,19 @@ namespace Framework::World {
                                 else {
                                     auto &data = map_it->second;
                                     if (static_cast<double>(Utils::Time::GetTime()) - data.lastUpdate > otherS.updateInterval) {
-                                        _world->event<Modules::Base::StreamOwnerUpdateEvent>()
-                                            .id<Modules::Base::Streamable>()
-                                            .entity(e)
-                                            .ctx(Modules::Base::StreamOwnerUpdateEvent{{peer, guid}})
-                                            .emit();
+                                        // Same gate as the update branch: skip the owner
+                                        // update for entities that opted out of continuous
+                                        // ticks (e.g. immovable objects). Legacy code
+                                        // missed this check, so non-streaming entities
+                                        // owned by a streamer still received owner-update
+                                        // messages every tick.
+                                        if (otherS.performTickUpdates) {
+                                            _world->event<Modules::Base::StreamOwnerUpdateEvent>()
+                                                .id<Modules::Base::Streamable>()
+                                                .entity(e)
+                                                .ctx(Modules::Base::StreamOwnerUpdateEvent{{peer, guid}})
+                                                .emit();
+                                        }
                                         data.lastUpdate = static_cast<double>(Utils::Time::GetTime());
                                     }
                                 }
