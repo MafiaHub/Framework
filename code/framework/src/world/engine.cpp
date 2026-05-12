@@ -35,7 +35,17 @@ namespace Framework::World {
         _world->observer<Modules::Base::Streamer>()
             .event(flecs::OnSet)
             .each([this](flecs::entity e, Modules::Base::Streamer &s) {
-                _guidToEntity[s.guid] = e.id();
+                // Drop the stale forward entry if this entity's guid was
+                // reassigned — OnSet only sees the new value.
+                auto prev = _entityToGuid.find(e.id());
+                if (prev != _entityToGuid.end() && prev->second != s.guid) {
+                    auto fwd = _guidToEntity.find(prev->second);
+                    if (fwd != _guidToEntity.end() && fwd->second == e.id()) {
+                        _guidToEntity.erase(fwd);
+                    }
+                }
+                _guidToEntity[s.guid]  = e.id();
+                _entityToGuid[e.id()] = s.guid;
             });
 
         _world->observer<Modules::Base::Streamer>()
@@ -45,6 +55,7 @@ namespace Framework::World {
                 if (it != _guidToEntity.end() && it->second == e.id()) {
                     _guidToEntity.erase(it);
                 }
+                _entityToGuid.erase(e.id());
             });
     }
 

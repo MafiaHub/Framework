@@ -67,7 +67,6 @@ namespace Framework::World {
             float streamerTickInterval                   = 0.033334f;
             float assignOwnershipTickInterval            = 3.0f;
             float collectRangeExemptEntitiesTickInterval = 0.066668f;
-            float removeEntitiesTickInterval             = 0.066668f;
             float tickRegulatorInterval                  = 3.0f;
         };
 

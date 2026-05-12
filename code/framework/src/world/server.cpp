@@ -18,20 +18,30 @@ namespace Framework::World {
 
         _findAllResourceEntities = _world->query_builder().with<Modules::Base::RemovedOnResourceReload>().build();
 
-        // Observer-driven removal: react the moment PendingRemoval is added to a
-        // streamable entity, instead of polling on an interval. Flecs defers the
-        // destruct call automatically so this is safe to invoke from within an
-        // observer callback.
-        _world->observer<Modules::Base::Streamable>("RemoveEntitiesOnPendingRemoval")
+        // Observer-driven removal: react the moment PendingRemoval is added,
+        // instead of polling on an interval. Anchoring on PendingRemoval (not
+        // Streamable) ensures the observer only fires for transitions of the
+        // tag itself — adding Streamable to an entity that already carries
+        // PendingRemoval would otherwise re-trigger the destruct path. Flecs
+        // defers the destruct call automatically so it is safe to invoke from
+        // within an observer callback.
+        _world->observer<>("RemoveEntitiesOnPendingRemoval")
             .with<Modules::Base::PendingRemoval>()
             .event(flecs::OnAdd)
-            .each([this](flecs::entity e, Modules::Base::Streamable &streamable) {
-                _findAllStreamerEntities.each([this, &e, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
+            .each([this](flecs::entity e) {
+                const auto streamable = e.try_get_mut<Modules::Base::Streamable>();
+                if (!streamable) {
+                    // Non-streamable entity: nothing to despawn from streamers,
+                    // just destroy it.
+                    e.destruct();
+                    return;
+                }
+                _findAllStreamerEntities.each([this, &e, streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     if (rhsS.entities.contains(e)) {
                         rhsS.entities.erase(e);
 
-                        if (streamable.GetBaseEvents().despawnProc)
-                            streamable.GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
+                        if (streamable->GetBaseEvents().despawnProc)
+                            streamable->GetBaseEvents().despawnProc(_networkPeer, rhsS.guid, e);
                     }
                 });
 

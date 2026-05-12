@@ -62,6 +62,9 @@ namespace Framework::World {
         flecs::query<> _findAllResourceEntities;
         // Cache of Streamer.guid -> entity id, maintained by observers on the Streamer component.
         std::unordered_map<uint64_t, flecs::entity_t> _guidToEntity;
+        // Reverse map so we can drop the stale forward entry when an entity's
+        // guid is reassigned (the OnSet observer only sees the new value).
+        std::unordered_map<flecs::entity_t, uint64_t> _entityToGuid;
         Networking::NetworkPeer *_networkPeer = nullptr;
 
         void RegisterStreamerGuidCacheObservers();

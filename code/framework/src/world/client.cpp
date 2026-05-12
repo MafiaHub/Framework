@@ -22,7 +22,17 @@ namespace Framework::World {
         _world->observer<Modules::Base::ServerID>()
             .event(flecs::OnSet)
             .each([this](flecs::entity e, Modules::Base::ServerID &sid) {
-                _serverIDToEntity[sid.id] = e.id();
+                // Drop the stale forward entry if this entity's serverID was
+                // reassigned — OnSet only sees the new value.
+                auto prev = _entityToServerID.find(e.id());
+                if (prev != _entityToServerID.end() && prev->second != sid.id) {
+                    auto fwd = _serverIDToEntity.find(prev->second);
+                    if (fwd != _serverIDToEntity.end() && fwd->second == e.id()) {
+                        _serverIDToEntity.erase(fwd);
+                    }
+                }
+                _serverIDToEntity[sid.id]  = e.id();
+                _entityToServerID[e.id()] = sid.id;
             });
 
         _world->observer<Modules::Base::ServerID>()
@@ -32,6 +42,7 @@ namespace Framework::World {
                 if (it != _serverIDToEntity.end() && it->second == e.id()) {
                     _serverIDToEntity.erase(it);
                 }
+                _entityToServerID.erase(e.id());
             });
 
         return WorldError::WORLD_NONE;

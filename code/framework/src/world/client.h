@@ -46,6 +46,8 @@ namespace Framework::World {
         flecs::entity _streamEntities;
         // Cache of ServerID.id -> entity id, maintained by observers on ServerID.
         std::unordered_map<flecs::entity_t, flecs::entity_t> _serverIDToEntity;
+        // Reverse map so we can drop the stale forward entry on reassignment.
+        std::unordered_map<flecs::entity_t, flecs::entity_t> _entityToServerID;
         OnEntityDestroyCallback _onEntityDestroyCallback;
 
       private:
