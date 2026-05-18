@@ -76,7 +76,12 @@
  * - All strings are null-terminated UTF-8 unless explicitly paired with a
  *   length argument.
  * - Pointers handed from host to plugin are valid only for the duration of
- *   the call that received them, unless documented otherwise.
+ *   the call that received them, with the following carve-outs:
+ *     * FwLogger* returned by logger_for() is valid for the plugin's
+ *       lifetime (until fw_plugin_shutdown returns).
+ *     * FwHost* itself is valid for the plugin's lifetime.
+ *   FwPlayer* and FwHttpResponse* are strictly call-scoped and must not
+ *   be stored for later use.
  * - The plugin never returns heap memory to the host. To produce output
  *   (e.g. HTTP response bodies), the plugin writes through host-provided
  *   setter functions that own the allocation.

@@ -47,6 +47,13 @@ namespace Framework::Integrations::Server::Plugins {
 
         std::shared_ptr<spdlog::logger> logger; /* scoped: "plugin:<name>" */
 
+        /* On-demand sub-loggers requested via logger_for(host, name).
+         * Keyed by the "plugin:<requested-name>" full identifier, holding
+         * the shared_ptr so the raw pointer handed to the plugin stays
+         * valid for the plugin's lifetime. */
+        std::unordered_map<std::string, std::shared_ptr<spdlog::logger>> loggerCache;
+        std::mutex                                                       loggerCacheMutex;
+
         /* Names of commands the plugin registered, so we can deregister
          * cleanly when the plugin unloads. */
         std::vector<std::string> registeredCommands;

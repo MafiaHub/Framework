@@ -172,19 +172,25 @@ namespace Framework::Plugin {
         }
 
         bool RegisterHttpEndpoint(const std::string &path, HttpFn callback) {
-            auto slot = std::make_unique<HttpFn>(std::move(callback));
-            int  rc   = _vtable->register_http_endpoint(
+            auto slot       = std::make_unique<HttpFn>(std::move(callback));
+            auto binding    = std::make_unique<HostBindings>();
+            binding->vtable = _vtable;
+            binding->fn     = slot.get();
+            int rc          = _vtable->register_http_endpoint(
                 _host, path.c_str(),
                 [](const char *method, const char *path_c, const char *body, size_t body_len, FwHttpResponse *response, void *userdata) {
-                    const FwHostVTable *vt = reinterpret_cast<HostBindings *>(userdata)->vtable;
-                    HttpResponse        wrappedResponse(vt, response);
-                    (*reinterpret_cast<HostBindings *>(userdata)->fn)(method, path_c, std::string_view(body, body_len), wrappedResponse);
+                    auto        *b = reinterpret_cast<HostBindings *>(userdata);
+                    HttpResponse wrappedResponse(b->vtable, response);
+                    (*b->fn)(method, path_c, std::string_view(body, body_len), wrappedResponse);
                 },
-                MakeHttpBinding(slot.get()));
+                binding.get());
             if (rc == 0) {
                 _httpSlots.push_back(std::move(slot));
+                _httpBindings.push_back(std::move(binding));
                 return true;
             }
+            /* slot + binding destroyed on this return; the host did not
+             * store the userdata pointer on failure. */
             return false;
         }
 
@@ -205,15 +211,6 @@ namespace Framework::Plugin {
             HttpFn             *fn;
         };
         std::vector<std::unique_ptr<HostBindings>> _httpBindings;
-
-        HostBindings *MakeHttpBinding(HttpFn *fn) {
-            auto binding    = std::make_unique<HostBindings>();
-            binding->vtable = _vtable;
-            binding->fn     = fn;
-            HostBindings *raw = binding.get();
-            _httpBindings.push_back(std::move(binding));
-            return raw;
-        }
 
         bool RegisterPlayerEvent(int (*registerFn)(FwHost *, FwPlayerEventCallback, void *), PlayerEventFn callback) {
             auto slot = std::make_unique<PlayerEventFn>(std::move(callback));

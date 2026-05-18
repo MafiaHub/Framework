@@ -29,6 +29,7 @@ namespace Framework::Integrations::Server::Plugins {
     struct PlayerHandle {
         HostImpl *host;
         uint64_t  entityId;
+        uint64_t  guid;
     };
 
     /* ----------------------------------------------------------------------- */
@@ -37,11 +38,24 @@ namespace Framework::Integrations::Server::Plugins {
 
     static FwLogger *VT_logger_for(FwHost *host, const char *plugin_name) {
         auto *impl = static_cast<HostImpl *>(host->internal);
-        /* All plugin loggers share the same underlying spdlog instance we
-         * created at plugin load time; the plugin_name argument is honoured
-         * by the host when constructing the logger and ignored here. */
-        (void)plugin_name;
-        return reinterpret_cast<FwLogger *>(impl->logger.get());
+        /* No name (or empty) → return the plugin's default logger. */
+        if (!plugin_name || !*plugin_name) {
+            return reinterpret_cast<FwLogger *>(impl->logger.get());
+        }
+
+        /* Namespace every plugin-requested logger under "plugin:" so a
+         * plugin can't impersonate a Framework-internal logger by passing
+         * names like FRAMEWORK_INNER_SERVER. */
+        std::string fullName = std::string("plugin:") + plugin_name;
+
+        std::lock_guard lock(impl->loggerCacheMutex);
+        auto            it = impl->loggerCache.find(fullName);
+        if (it != impl->loggerCache.end()) {
+            return reinterpret_cast<FwLogger *>(it->second.get());
+        }
+        auto sub                       = Framework::Logging::GetLogger(fullName.c_str());
+        auto [inserted, _]             = impl->loggerCache.emplace(fullName, std::move(sub));
+        return reinterpret_cast<FwLogger *>(inserted->second.get());
     }
 
     static void VT_log_debug(FwLogger *logger, const char *message) {
@@ -64,17 +78,17 @@ namespace Framework::Integrations::Server::Plugins {
         std::string nameStr(name);
         std::string descStr(description ? description : "");
 
-        /* The cxxopts::ParseResult passed in here is built from the original
-         * command-line tokens (including the command name as args[0]) with
-         * no options defined. result.unmatched() returns the positional
-         * tokens we hand straight to the plugin as argv. */
+        /* cxxopts treats the first parsed token as the program name and
+         * excludes it from unmatched(); we re-prepend the command name so
+         * the plugin sees the conventional argv[0]==command shape. */
         auto proc = [callback, userdata, nameStr](cxxopts::ParseResult &result) {
             std::vector<std::string>  args = result.unmatched();
             std::vector<const char *> argv;
-            argv.reserve(args.size());
+            argv.reserve(args.size() + 1);
+            argv.push_back(nameStr.c_str());
             for (auto &a : args) argv.push_back(a.c_str());
             try {
-                callback(static_cast<int>(argv.size()), argv.empty() ? nullptr : argv.data(), userdata);
+                callback(static_cast<int>(argv.size()), argv.data(), userdata);
             }
             catch (const std::exception &e) {
                 Framework::Logging::GetLogger("plugins")->error("Plugin command '{}' threw: {}", nameStr, e.what());
@@ -103,10 +117,14 @@ namespace Framework::Integrations::Server::Plugins {
             }
             catch (const std::exception &e) {
                 Framework::Logging::GetLogger("plugins")->error("Plugin HTTP handler '{}' threw: {}", pathStr, e.what());
+                /* Drop whatever the handler partially wrote so the client
+                 * doesn't get a 500 with a half-built body. */
+                res.body.clear();
                 res.status = 500;
             }
             catch (...) {
                 Framework::Logging::GetLogger("plugins")->error("Plugin HTTP handler '{}' threw non-std exception", pathStr);
+                res.body.clear();
                 res.status = 500;
             }
         });
@@ -149,14 +167,7 @@ namespace Framework::Integrations::Server::Plugins {
 
     static uint64_t VT_player_get_guid(FwPlayer *player) {
         if (!player) return 0;
-        auto *handle = reinterpret_cast<PlayerHandle *>(player);
-        if (!handle->host || !handle->host->worldEngine) return 0;
-        auto world = handle->host->worldEngine->GetWorld();
-        if (!world) return 0;
-        flecs::entity e(*world, handle->entityId);
-        if (!e.is_valid()) return 0;
-        const auto *streamer = e.get<Framework::World::Modules::Base::Streamer>();
-        return streamer ? streamer->guid : 0;
+        return reinterpret_cast<PlayerHandle *>(player)->guid;
     }
 
     static size_t VT_player_get_nickname(FwPlayer *player, char *buf, size_t buf_size) {
@@ -212,7 +223,7 @@ namespace Framework::Integrations::Server::Plugins {
 
     void DispatchPlayerConnect(HostImpl *impl, uint64_t entityId, uint64_t guid) {
         if (!impl) return;
-        PlayerHandle handle {impl, entityId};
+        PlayerHandle handle {impl, entityId, guid};
         /* Copy the slot list under the lock so callbacks can register more
          * slots without us iterating a mutating vector. */
         std::vector<HostImpl::PlayerEventSlot> snapshot;
@@ -236,7 +247,7 @@ namespace Framework::Integrations::Server::Plugins {
 
     void DispatchPlayerDisconnect(HostImpl *impl, uint64_t entityId, uint64_t guid) {
         if (!impl) return;
-        PlayerHandle handle {impl, entityId};
+        PlayerHandle handle {impl, entityId, guid};
         std::vector<HostImpl::PlayerEventSlot> snapshot;
         {
             std::lock_guard lock(impl->slotMutex);

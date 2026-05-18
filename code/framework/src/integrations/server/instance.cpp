@@ -245,10 +245,15 @@ namespace Framework::Integrations::Server {
             // relative to the server's working directory; modules is the
             // ordered list of plugin names to load.
             _opts.modulesDir = _fileConfig->GetDefault<std::string>("modules_dir", _opts.modulesDir);
-            if (auto *doc = _fileConfig->GetDocument(); doc && doc->contains("modules") && (*doc)["modules"].is_array()) {
-                _opts.modulesList.clear();
-                for (const auto &m : (*doc)["modules"]) {
-                    if (m.is_string()) _opts.modulesList.push_back(m.get<std::string>());
+            if (auto *doc = _fileConfig->GetDocument(); doc && doc->contains("modules")) {
+                if ((*doc)["modules"].is_array()) {
+                    _opts.modulesList.clear();
+                    for (const auto &m : (*doc)["modules"]) {
+                        if (m.is_string()) _opts.modulesList.push_back(m.get<std::string>());
+                    }
+                }
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("server.json 'modules' field exists but is not an array; ignoring");
                 }
             }
         }
@@ -543,12 +548,15 @@ namespace Framework::Integrations::Server {
             _scriptingModule->Shutdown();
         }
 
-        if (_pluginManager) {
-            _pluginManager->Shutdown();
-        }
-
         if (_webServer) {
             _webServer->Shutdown();
+        }
+
+        // Plugin libraries are unloaded last so any in-flight HTTP requests
+        // handled by plugin trampolines have already finished with the
+        // webserver stopped above.
+        if (_pluginManager) {
+            _pluginManager->Shutdown();
         }
 
         if (_worldEngine) {
