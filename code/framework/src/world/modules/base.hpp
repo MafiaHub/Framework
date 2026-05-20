@@ -181,7 +181,7 @@ namespace Framework::World::Modules {
                 auto _quat = world.component<glm::quat>();
                 _vec3.member<float>("x").member<float>("y").member<float>("z");
                 _quat.member<float>("w").member<float>("x").member<float>("y").member<float>("z");
-                _transform.member<glm::vec3>("pos").member<glm::quat>("rot").member<glm::vec3>("vel");
+                _transform.member<uint16_t>("generation").member<glm::vec3>("pos").member<glm::vec3>("vel").member<glm::quat>("rot");
                 _frame.member<uint64_t>("modelHash").member<glm::vec3>("scale");
                 _streamable.member<int>("virtualWorld").member<bool>("isVisible").member<bool>("alwaysVisible").member<double>("updateInterval").member<uint64_t>("owner");
                 _streamer.member<float>("range").member<uint64_t>("guid");
