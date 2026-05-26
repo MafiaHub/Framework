@@ -75,8 +75,6 @@ namespace Framework::GUI {
             return _viewportConfiguration;
         }
 
-        View *GetView(int id) const {
-            return _views[id].get();
-        }
+        View *GetView(int id) const;
     };
 } // namespace Framework::GUI

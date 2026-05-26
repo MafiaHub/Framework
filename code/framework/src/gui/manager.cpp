@@ -241,4 +241,13 @@ namespace Framework::GUI {
         }
         return views;
     }
+
+    View *Manager::GetView(int id) const {
+        for (auto it = _views.begin(); it != _views.end(); ++it) {
+            if ((*it)->GetId() == id) {
+                return it->get();
+            }
+        }
+        return nullptr;
+    }
 } // namespace Framework::GUI
