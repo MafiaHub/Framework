@@ -42,6 +42,7 @@ namespace Framework::GUI {
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer *_graphicsRenderer {};
         bool _gpuAccelerated = false;
+        int _id              = 0;
 
       public:
         Manager();
@@ -74,8 +75,6 @@ namespace Framework::GUI {
             return _viewportConfiguration;
         }
 
-        View *GetView(int id) const {
-            return _views[id].get();
-        }
+        View *GetView(int id) const;
     };
 } // namespace Framework::GUI

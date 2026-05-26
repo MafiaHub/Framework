@@ -145,7 +145,7 @@ namespace Framework::GUI {
         std::unique_ptr<View> view;
         switch (_graphicsRenderer->GetBackendType()) {
         case Graphics::RendererBackend::BACKEND_D3D_11:
-            view = std::make_unique<ViewD3D11>(_graphicsRenderer, this);
+            view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this);
             break;
         default:
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
@@ -163,9 +163,8 @@ namespace Framework::GUI {
 
         _views.push_back(std::move(view));
 
-        const auto viewId = _views.size() - 1;
-        Framework::Logging::GetLogger("Web")->debug("Created view with id {}", viewId);
-        return static_cast<int>(viewId);
+        Framework::Logging::GetLogger("Web")->debug("Created view with id {}", _id);
+        return _id;
     }
 
     bool Manager::DestroyView(int id) {
@@ -174,13 +173,23 @@ namespace Framework::GUI {
             return false;
         }
 
-        if (id < 0 || id >= static_cast<int>(_views.size())) {
+        int index = -1;
+        int i     = 0;
+
+        for (auto it = _views.begin(); it != _views.end(); ++it, ++i) {
+            if ((*it)->GetId() == id) {
+                index = i;
+                break;
+            }
+        }
+
+        if (index == -1) {
             Framework::Logging::GetLogger("Web")->error("Failed to destroy view: View does not exist");
             return false;
         }
 
-        _views[id].reset();
-        _views.erase(_views.begin() + id);
+        _views[index].reset();
+        _views.erase(_views.begin() + index);
 
         Framework::Logging::GetLogger("Web")->debug("Destroyed view with id {}", id);
         return true;
@@ -231,5 +240,14 @@ namespace Framework::GUI {
             }
         }
         return views;
+    }
+
+    View *Manager::GetView(int id) const {
+        for (auto it = _views.begin(); it != _views.end(); ++it) {
+            if ((*it)->GetId() == id) {
+                return it->get();
+            }
+        }
+        return nullptr;
     }
 } // namespace Framework::GUI

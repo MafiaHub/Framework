@@ -29,7 +29,7 @@ namespace Framework::GUI {
         uint32_t _cpuTextureID = 0;
 
       public:
-        ViewD3D11(Graphics::Renderer *graphicsRenderer, Manager *manager);
+        ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
 
         [[nodiscard]] GUIError Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false) override;
 
