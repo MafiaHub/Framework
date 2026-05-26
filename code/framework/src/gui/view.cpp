@@ -15,8 +15,9 @@
 #include "graphics/backend/d3d11.h"
 
 namespace Framework::GUI {
-    View::View(Graphics::Renderer *graphicsRenderer, Manager *manager)
-        : _graphicsRenderer(graphicsRenderer)
+    View::View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager)
+        : _id(id)
+        , _graphicsRenderer(graphicsRenderer)
         , _manager(manager)
         , _width(0)
         , _height(0)

@@ -42,6 +42,7 @@ namespace Framework::GUI {
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer *_graphicsRenderer {};
         bool _gpuAccelerated = false;
+        int _id              = 0;
 
       public:
         Manager();

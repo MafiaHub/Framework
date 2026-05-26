@@ -12,7 +12,7 @@
 #include "graphics/backend/d3d11.h"
 
 namespace Framework::GUI {
-    ViewD3D11::ViewD3D11(Graphics::Renderer *graphicsRenderer, Manager *manager): View(graphicsRenderer, manager) {
+    ViewD3D11::ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager): View(id, graphicsRenderer, manager) {
     }
 
     GUIError ViewD3D11::Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {

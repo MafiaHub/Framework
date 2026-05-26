@@ -74,9 +74,10 @@ namespace Framework::GUI {
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
+        int _id;
 
       public:
-        View(Graphics::Renderer *graphicsRenderer, Manager *manager);
+        View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
         virtual ~View();
 
         [[nodiscard]] virtual GUIError Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false);
@@ -86,6 +87,10 @@ namespace Framework::GUI {
 
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+        int GetId() const {
+            return _id;
+        }
 
         void Focus(bool enable) {
             _hasFocus = enable;
