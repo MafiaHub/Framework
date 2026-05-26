@@ -170,6 +170,10 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
+        if (_opts.webServerEnabled) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Host:\t{}", _opts.webBindHost);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Port:\t{}", _opts.webBindPort);
+        }
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
