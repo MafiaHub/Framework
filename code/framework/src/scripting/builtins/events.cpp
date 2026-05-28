@@ -1,4 +1,5 @@
 #include "events.h"
+#include "../engine_helpers.h"
 #include "../resource/resource_manager.h"
 
 #include <logging/logger.h>
@@ -319,8 +320,12 @@ namespace Framework::Scripting {
                                                                 argv.empty() ? nullptr : argv.data());
 
             if (tryCatch.HasCaught()) {
-                v8::String::Utf8Value error(isolate, tryCatch.Exception());
-                std::string errorStr = *error ? *error : "Unknown error";
+                // FormatV8Exception pulls the JS stack trace when available and
+                // otherwise falls back to "<message>\n    at <file>:<line>:<col>",
+                // so the script author can see where the throw actually happened
+                // instead of just the bare error string.
+                std::string errorStr = FormatV8Exception(isolate, tryCatch,
+                    "Unknown error in event handler");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                     "[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
 
