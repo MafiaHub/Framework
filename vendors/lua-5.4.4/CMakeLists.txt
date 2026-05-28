@@ -63,3 +63,9 @@ set_target_properties(lua54_shared PROPERTIES OUTPUT_NAME "lua")
 # Executable
 add_executable(lua54_exe ${LUA_FILES})
 set_target_properties(lua54_exe PROPERTIES OUTPUT_NAME "lua54")
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(lua54_exe PRIVATE m dl)
+    target_link_libraries(lua54_static PRIVATE m dl)
+    target_link_libraries(lua54_shared PRIVATE m dl)
+endif()
