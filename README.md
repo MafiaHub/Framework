@@ -55,6 +55,16 @@ cd Framework
 ```
 
 ### Build on macOS/Linux
+
+On Debian/Ubuntu, install the required system development packages first:
+
+```sh
+sudo apt install build-essential cmake \
+    libssl-dev zlib1g-dev libssh2-1-dev libcurl4-openssl-dev
+```
+
+Equivalents on other distributions: `openssl-devel`, `zlib-devel`, `libssh2-devel`, `libcurl-devel` (Fedora/RHEL).
+
 ```
 # Configure CMake project
 cmake -B build
