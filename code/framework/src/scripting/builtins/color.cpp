@@ -9,7 +9,7 @@ namespace Framework::Scripting::Builtins {
 
 std::unordered_map<v8::Isolate*, std::unique_ptr<v8pp::class_<Color>>> Color::_classes;
 
-std::string Color::toHex(bool includeAlpha) const {
+std::string Color::toHex(std::optional<bool> includeAlpha) const {
     int r = static_cast<int>(std::round(_color.r * 255.0f));
     int g = static_cast<int>(std::round(_color.g * 255.0f));
     int b = static_cast<int>(std::round(_color.b * 255.0f));
@@ -23,7 +23,7 @@ std::string Color::toHex(bool includeAlpha) const {
     std::ostringstream ss;
     ss << "#" << std::hex << std::setfill('0');
     ss << std::setw(2) << r << std::setw(2) << g << std::setw(2) << b;
-    if (includeAlpha) {
+    if (includeAlpha.value_or(false)) {
         ss << std::setw(2) << a;
     }
     return ss.str();
@@ -62,8 +62,8 @@ Color Color::fromHex(std::string_view hexInput) {
     return Color(r, g, b, a);
 }
 
-Color Color::fromRGB(float r, float g, float b, float a) {
-    return Color(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+Color Color::fromRGB(float r, float g, float b, std::optional<float> a) {
+    return Color(r / 255.0f, g / 255.0f, b / 255.0f, a.value_or(255.0f) / 255.0f);
 }
 
 v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
@@ -75,7 +75,7 @@ v8pp::class_<Color>& Color::GetClass(v8::Isolate* isolate) {
     auto& cls = _classes[isolate];
     cls = std::make_unique<v8pp::class_<Color>>(isolate);
     cls->auto_wrap_objects(true);  // Enable auto-wrapping for return values
-    cls->ctor<float, float, float, float>()
+    cls->ctor<float, float, float, std::optional<float>>()
         // Instance methods
         .function("lerp", &Color::lerp)
         .function("set", &Color::set)
