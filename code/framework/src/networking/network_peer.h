@@ -10,10 +10,10 @@
 
 #include "messages/messages.h"
 
-#include <PacketPriority.h>
-#include <RakPeerInterface.h>
-#include <FileListTransfer.h>
-#include <DirectoryDeltaTransfer.h>
+#include <mafianet/PacketPriority.h>
+#include <mafianet/peerinterface.h>
+#include <mafianet/FileListTransfer.h>
+#include <mafianet/DirectoryDeltaTransfer.h>
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
 #include <unordered_map>
@@ -24,32 +24,32 @@
 namespace Framework::Networking {
     class NetworkPeer : public Lifecycle {
       protected:
-        SLNet::RakPeerInterface *_peer = nullptr;
-        SLNet::Packet *_packet         = nullptr;
+        MafiaNet::RakPeerInterface *_peer = nullptr;
+        MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
         std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
         std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
-        mutable SLNet::DirectoryDeltaTransfer _assetStreamer;
+        mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
       public:
         NetworkPeer();
         ~NetworkPeer();
 
-        bool Send(Messages::IMessage &msg, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) const;
+        bool Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) const;
 
         bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 
         void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
 
         template <typename T>
-        void RegisterMessage(uint8_t message, fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
+        void RegisterMessage(uint8_t message, fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
             if (callback == nullptr) {
                 return;
             }
 
-            _registeredMessageCallbacks[message] = [this, callback, message](SLNet::Packet *p) {
-                SLNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
+            _registeredMessageCallbacks[message] = [this, callback, message](MafiaNet::Packet *p) {
+                MafiaNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
                 T msg = {};
                 msg.SetPacket(p);
                 msg.Serialize(&bs, false);
@@ -69,15 +69,15 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        void RegisterRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
+        void RegisterRPC(fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](SLNet::Packet *p) {
-                SLNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
+            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](MafiaNet::Packet *p) {
+                MafiaNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
@@ -91,15 +91,15 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        void RegisterGameRPC(fu2::function<void(SLNet::RakNetGUID, T *) const> callback) {
+        void RegisterGameRPC(fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
             T _rpc = {};
 
             if (callback == nullptr) {
                 return;
             }
 
-            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](SLNet::Packet *p) {
-                SLNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
+            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](MafiaNet::Packet *p) {
+                MafiaNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
                 T rpc = {};
                 rpc.SetPacket(p);
                 rpc.Serialize(&bs, false);
@@ -119,27 +119,27 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        bool SendRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
-            SLNet::BitStream bs;
+        bool SendRPC(T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            MafiaNet::BitStream bs;
             bs.Write(Messages::INTERNAL_RPC);
             bs.Write(rpc.GetHashName());
             rpc.Serialize(&bs, true);
             assert(!rpc.IsGameRPC() && "Game RPCs cannot be sent via SendRPC()");
 
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
                 return false;
             }
             return true;
         }
 
         void Update() override;
-        virtual bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) = 0;
+        virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
         void SetUnknownPacketHandler(Messages::PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
         }
 
-        SLNet::Packet *GetPacket() const noexcept {
+        MafiaNet::Packet *GetPacket() const noexcept {
             return _packet;
         }
 
@@ -147,14 +147,14 @@ namespace Framework::Networking {
             return _packetDataOffset;
         }
 
-        SLNet::RakPeerInterface *GetPeer() const noexcept {
+        MafiaNet::RakPeerInterface *GetPeer() const noexcept {
             return _peer;
         }
 
         static const char *GetStartupResultString(uint8_t id);
         static const char *GetConnectionAttemptString(uint8_t id);
 
-        SLNet::DirectoryDeltaTransfer* GetAssetStreamer() const noexcept {
+        MafiaNet::DirectoryDeltaTransfer* GetAssetStreamer() const noexcept {
             return &_assetStreamer;
         }
     };

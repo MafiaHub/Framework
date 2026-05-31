@@ -13,8 +13,8 @@
 #include "network_peer.h"
 #include "state.h"
 
-#include <RakNetTypes.h>
-#include <RakPeerInterface.h>
+#include <mafianet/types.h>
+#include <mafianet/peerinterface.h>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -22,13 +22,13 @@
 namespace Framework::Networking {
     using OnAssetsDownloadFailedCallback = fu2::function<void() const>;
     
-    class AssetFileTransfer final: public SLNet::FileListTransfer {
+    class AssetFileTransfer final: public MafiaNet::FileListTransfer {
       private:
         OnAssetsDownloadFailedCallback _cb {};
 
       public:
         void SetCallback(OnAssetsDownloadFailedCallback cb);
-        void OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) override;
+        void OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) override;
     };
     class NetworkClient: public NetworkPeer {
       private:
@@ -49,7 +49,7 @@ namespace Framework::Networking {
         void Shutdown() override;
 
         void Update() override;
-        bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
+        bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
         ConnectionError Connect(const std::string &host, int32_t port, const std::string &password = "");
 
@@ -78,14 +78,14 @@ namespace Framework::Networking {
         }
 
         template <typename T>
-        bool SendGameRPC(T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
-            SLNet::BitStream bs;
+        bool SendGameRPC(T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            MafiaNet::BitStream bs;
             bs.Write(Messages::INTERNAL_RPC);
             bs.Write(rpc.GetHashName());
             rpc.Serialize(&bs, true);
             rpc.Serialize2(&bs, true);
 
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
                 return false;
             }
             return true;

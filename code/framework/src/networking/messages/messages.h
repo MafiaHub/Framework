@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include <BitStream.h>
-#include <MessageIdentifiers.h>
-#include <RakNetTypes.h>
+#include <mafianet/BitStream.h>
+#include <mafianet/MessageIdentifiers.h>
+#include <mafianet/types.h>
 #include <function2.hpp>
 
 namespace Framework::Networking::Messages {
@@ -28,8 +28,8 @@ namespace Framework::Networking::Messages {
         UNKNOWN
     };
 
-    using PacketCallback           = fu2::function<void(SLNet::Packet *) const>;
-    using DisconnectPacketCallback = fu2::function<void(SLNet::Packet *, DisconnectionReason reason) const>;
+    using PacketCallback           = fu2::function<void(MafiaNet::Packet *) const>;
+    using DisconnectPacketCallback = fu2::function<void(MafiaNet::Packet *, DisconnectionReason reason) const>;
 
     // Internal Framework messages
     enum InternalMessages : uint8_t {
@@ -65,20 +65,20 @@ namespace Framework::Networking::Messages {
      */
     class IMessage {
       private:
-        SLNet::Packet *packet {};
+        MafiaNet::Packet *packet {};
 
       public:
         virtual ~IMessage()                  = default;
         virtual uint8_t GetMessageID() const = 0;
 
-        virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
+        virtual void Serialize(MafiaNet::BitStream *bs, bool write) = 0;
 
         /**
          * Extra serialization for middleware data
          * @param bs
          * @param write
          */
-        virtual void Serialize2(SLNet::BitStream *bs, bool write) {};
+        virtual void Serialize2(MafiaNet::BitStream *bs, bool write) {};
 
         virtual bool Valid() const = 0;
 
@@ -90,11 +90,11 @@ namespace Framework::Networking::Messages {
             return true;
         }
 
-        void SetPacket(SLNet::Packet *p) {
+        void SetPacket(MafiaNet::Packet *p) {
             packet = p;
         }
 
-        SLNet::Packet *GetPacket() const {
+        MafiaNet::Packet *GetPacket() const {
             return packet;
         }
     };

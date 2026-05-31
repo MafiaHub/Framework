@@ -10,7 +10,7 @@
 
 #include "messages.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 #include <flecs/distr/flecs.h>
 
@@ -30,7 +30,7 @@ namespace Framework::Networking::Messages {
             _entityID       = entityID;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _serverTickRate);
             bs->Serialize(write, _entityID);
         }

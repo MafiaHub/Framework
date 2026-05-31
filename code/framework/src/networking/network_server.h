@@ -15,8 +15,8 @@
 #include "network_peer.h"
 #include "world/server.h"
 
-#include <RakNetTypes.h>
-#include <RakPeerInterface.h>
+#include <mafianet/types.h>
+#include <mafianet/peerinterface.h>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -26,9 +26,9 @@ namespace Framework::Networking {
       private:
         Messages::PacketCallback _onPlayerConnectCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
-        SLNet::FileListTransfer _fileListTransfer;
+        MafiaNet::FileListTransfer _fileListTransfer;
 
-        bool SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, SLNet::RakNetGUID excludeGUID = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
+        bool SendGameRPCInternal(MafiaNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, MafiaNet::RakNetGUID excludeGUID = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
             PacketReliability reliability = RELIABLE_ORDERED) const;
 
       public:
@@ -37,12 +37,12 @@ namespace Framework::Networking {
         [[nodiscard]] NetworkPeerError Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password = "");
         void Shutdown() override;
 
-        bool HandlePacket(uint8_t packetID, SLNet::Packet *packet) override;
+        bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
         template <typename T>
-        bool SendGameRPC(Framework::World::ServerEngine *world, T &rpc, SLNet::RakNetGUID guid = SLNet::UNASSIGNED_RAKNET_GUID, SLNet::RakNetGUID excludeGUID = SLNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
+        bool SendGameRPC(Framework::World::ServerEngine *world, T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, MafiaNet::RakNetGUID excludeGUID = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
             PacketReliability reliability = RELIABLE_ORDERED) {
-            SLNet::BitStream bs;
+            MafiaNet::BitStream bs;
             bs.Write(Messages::INTERNAL_RPC);
             bs.Write(rpc.GetHashName());
             rpc.Serialize(&bs, true);
@@ -52,7 +52,7 @@ namespace Framework::Networking {
             return SendGameRPCInternal(bs, world, rpc.GetServerID(), guid, excludeGUID, priority, reliability);
         }
 
-        int GetPing(SLNet::RakNetGUID guid) const;
+        int GetPing(MafiaNet::RakNetGUID guid) const;
 
         void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
             _onPlayerConnectCallback = std::move(callback);

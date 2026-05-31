@@ -11,12 +11,12 @@
 #include "../messages.h"
 #include "message.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Networking::Messages {
     class GameSyncEntityOwnerUpdate final: public GameSyncMessage {
       private:
-        uint64_t _owner = SLNet::UNASSIGNED_RAKNET_GUID.g;
+        uint64_t _owner = MafiaNet::UNASSIGNED_RAKNET_GUID.g;
 
       public:
         uint8_t GetMessageID() const override {
@@ -27,12 +27,12 @@ namespace Framework::Networking::Messages {
             _owner = owner;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _owner);
         }
 
         bool Valid() const override {
-            return _owner != SLNet::UNASSIGNED_RAKNET_GUID.g;
+            return _owner != MafiaNet::UNASSIGNED_RAKNET_GUID.g;
         }
 
         uint64_t GetOwner() const {

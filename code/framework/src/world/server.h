@@ -36,7 +36,7 @@
         s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
         auto __net = static_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(static_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, SLNet::UNASSIGNED_RAKNET_GUID, guid);                                                                                                             \
+            __net->SendGameRPC<rpc>(static_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, MafiaNet::UNASSIGNED_RAKNET_GUID, guid);                                                                                                             \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
