@@ -14,7 +14,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: true
+        # The style check only inspects this repo's own tracked files
+        # (check_style.sh excludes vendors and submodules), so there is
+        # no need to fetch the private services-adapter submodule, which
+        # the default GITHUB_TOKEN cannot access.
+        submodules: false
     
     - name: Check if the code adheres to the standard style
       env:
