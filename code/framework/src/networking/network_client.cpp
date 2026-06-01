@@ -8,6 +8,8 @@
 
 #include "network_client.h"
 
+#include "replication/replication_manager.h"
+
 #include <logging/logger.h>
 
 namespace Framework::Networking {
@@ -28,6 +30,10 @@ namespace Framework::Networking {
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
+
+        // Drive native entity replication from the client side (receives constructions, serializes
+        // owned entities upstream).
+        _replicationManager->Init(_peer, &_networkIDManager, false);
 
         _initialized = true;
         return NetworkPeerError::NETWORK_PEER_NONE;

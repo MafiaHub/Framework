@@ -12,39 +12,32 @@
 
 #include <mafianet/BitStream.h>
 
-#include <flecs/distr/flecs.h>
-
 namespace Framework::Networking::Messages {
     class ClientConnectionFinalized final: public IMessage {
       private:
-        float _serverTickRate     = 0.0f;
-        flecs::entity_t _entityID = 0;
+        float _serverTickRate = 0.0f;
 
       public:
         uint8_t GetMessageID() const override {
             return GAME_CONNECTION_FINALIZED;
         }
 
-        void FromParameters(float tickRate, flecs::entity_t entityID) {
+        // The local player's avatar arrives via native replication (with its own NetworkID), so the
+        // finalize message only carries the server tick rate now.
+        void FromParameters(float tickRate) {
             _serverTickRate = tickRate;
-            _entityID       = entityID;
         }
 
         void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _serverTickRate);
-            bs->Serialize(write, _entityID);
         }
 
         bool Valid() const override {
-            return _serverTickRate > 0.0f && _entityID > 0;
+            return _serverTickRate > 0.0f;
         }
 
         float GetServerTickRate() const {
             return _serverTickRate;
-        }
-
-        flecs::entity_t GetEntityID() const {
-            return _entityID;
         }
     };
 } // namespace Framework::Networking::Messages

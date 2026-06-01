@@ -31,29 +31,18 @@ namespace Framework::Networking::Messages {
     using PacketCallback           = fu2::function<void(MafiaNet::Packet *) const>;
     using DisconnectPacketCallback = fu2::function<void(MafiaNet::Packet *, DisconnectionReason reason) const>;
 
-    // Internal Framework messages
-    enum InternalMessages : uint8_t {
-        INTERNAL_RPC = ID_USER_PACKET_ENUM + 1,
-        INTERNAL_NEXT_MESSAGE_ID
-    };
-
-    // Internal game flow messages
+    // Internal game flow messages. RPCs no longer use a message ID (RPC4 dispatches by string
+    // identifier), and entity sync no longer uses message IDs either (ReplicaManager3 reserves its
+    // own plugin message IDs). Only the connection-handshake flow remains on the message-ID path.
     enum GameMessages : uint8_t {
         // Game messages handling common client connection flow
-        GAME_CONNECTION_HANDSHAKE = INTERNAL_NEXT_MESSAGE_ID,
+        GAME_CONNECTION_HANDSHAKE = ID_USER_PACKET_ENUM + 1,
         GAME_CONNECTION_ACKNOWLEDGE_CLIENT,
         GAME_CONNECTION_READY_ASSETS,
         GAME_CONNECTION_REQUEST_STREAMER,
         GAME_CONNECTION_FINALIZED,
         GAME_CONNECTION_KICKED,
         GAME_INIT_PLAYER,
-
-        // Game sync entity streamer messages
-        GAME_SYNC_ENTITY_SPAWN,
-        GAME_SYNC_ENTITY_UPDATE,
-        GAME_SYNC_ENTITY_SELF_UPDATE,  // server sends data to streamer
-        GAME_SYNC_ENTITY_OWNER_UPDATE, // server sends data about owned entity
-        GAME_SYNC_ENTITY_DESPAWN,
 
         // Messages used by the mod
         GAME_NEXT_MESSAGE_ID

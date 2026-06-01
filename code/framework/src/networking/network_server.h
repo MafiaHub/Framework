@@ -13,6 +13,7 @@
 #include "errors.h"
 #include "messages/messages.h"
 #include "network_peer.h"
+#include "rpc/rpc.h"
 #include "world/server.h"
 
 #include <mafianet/types.h>
@@ -28,8 +29,10 @@ namespace Framework::Networking {
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
 
-        bool SendGameRPCInternal(MafiaNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, MafiaNet::RakNetGUID excludeGUID = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED) const;
+        // Signal an already-serialized RPC payload to every connected system except one. RPC4::Signal
+        // has no exclusion parameter, so we walk the ReplicaManager3 connection list and target each
+        // peer individually.
+        void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 
       public:
         NetworkServer(): NetworkPeer() {}
@@ -39,17 +42,12 @@ namespace Framework::Networking {
 
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
+        // Broadcast a native RPC payload to everyone except one system (typically the originator).
         template <typename T>
-        bool SendGameRPC(Framework::World::ServerEngine *world, T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, MafiaNet::RakNetGUID excludeGUID = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED) {
+        void BroadcastRPCExcept(T &payload, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             MafiaNet::BitStream bs;
-            bs.Write(Messages::INTERNAL_RPC);
-            bs.Write(rpc.GetHashName());
-            rpc.Serialize(&bs, true);
-            rpc.Serialize2(&bs, true);
-            assert(rpc.IsGameRPC() && "Regular RPCs cannot be sent via SendGameRPC()");
-
-            return SendGameRPCInternal(bs, world, rpc.GetServerID(), guid, excludeGUID, priority, reliability);
+            payload.Serialize(&bs, true);
+            SignalExcept(T::kIdentifier, bs, excludeGUID, priority, reliability);
         }
 
         int GetPing(MafiaNet::RakNetGUID guid) const;

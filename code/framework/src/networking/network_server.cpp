@@ -8,6 +8,8 @@
 
 #include "network_server.h"
 
+#include "replication/replication_manager.h"
+
 #include <mafianet/BitStream.h>
 #include <mafianet/MessageIdentifiers.h>
 #include <logging/logger.h>
@@ -31,6 +33,9 @@ namespace Framework::Networking {
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
+
+        // Drive native entity replication from the server side.
+        _replicationManager->Init(_peer, &_networkIDManager, true);
 
         _initialized = true;
         return NetworkPeerError::NETWORK_PEER_NONE;
@@ -79,26 +84,18 @@ namespace Framework::Networking {
     int NetworkServer::GetPing(MafiaNet::RakNetGUID guid) const {
         return _peer->GetAveragePing(guid);
     }
-    bool NetworkServer::SendGameRPCInternal(MafiaNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, MafiaNet::RakNetGUID guid, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) const {
-        const auto ent = world->WrapEntity(ent_id);
-
-        if (!ent.is_alive()) {
-            return false;
+    void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) {
+        auto *replication = GetReplicationManager();
+        if (!replication) {
+            return;
         }
-
-        const auto streamers = world->FindVisibleStreamers(ent);
-
-        for (const auto &streamer_ent : streamers) {
-            const auto streamer = streamer_ent.try_get<World::Modules::Base::Streamer>();
-            if (streamer->guid != guid.g && guid.g != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
+        const unsigned count = replication->GetConnectionCount();
+        for (unsigned i = 0; i < count; ++i) {
+            auto *connection = replication->GetConnectionAtIndex(i);
+            if (!connection || connection->GetRakNetGUID().g == excludeGUID.g) {
                 continue;
             }
-            if (streamer->guid == excludeGUID.g) {
-                continue;
-            }
-            _peer->Send(&bs, priority, reliability, 0, MafiaNet::RakNetGUID(streamer->guid), false);
+            _rpc.Signal(identifier, &bs, priority, reliability, 0, connection->GetRakNetGUID(), false, false);
         }
-
-        return true;
     }
 } // namespace Framework::Networking

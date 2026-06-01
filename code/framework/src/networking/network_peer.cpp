@@ -9,6 +9,7 @@
 #include "network_peer.h"
 
 #include "errors.h"
+#include "replication/replication_manager.h"
 
 #include <logging/logger.h>
 
@@ -16,17 +17,14 @@ namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
         _peer = MafiaNet::RakPeerInterface::GetInstance();
 
-        RegisterMessage(Messages::INTERNAL_RPC, [this](MafiaNet::Packet *p) {
-            MafiaNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
-            uint32_t hashName;
-            bs.Read(hashName);
+        // Attach the native subsystems common to both peer roles. RPC4 and StatisticsHistory
+        // do not use the reliability layer, so attaching before Startup() is safe. ReplicaManager3
+        // is attached later by the concrete peer once its connection factory exists (Phase 2).
+        _peer->AttachPlugin(&_rpc);
+        _peer->AttachPlugin(&_statisticsHistory);
+        _statisticsHistory.SetTrackConnections(true, 0, true);
 
-            if (_registeredRPCs.contains(hashName)) {
-                for (const auto &cb : _registeredRPCs[hashName]) {
-                    cb(p);
-                }
-            }
-        });
+        _replicationManager = std::make_unique<Replication::ReplicationManager>();
     }
 
     NetworkPeer::~NetworkPeer() = default;
@@ -63,6 +61,12 @@ namespace Framework::Networking {
     void NetworkPeer::Update() {
         if (!_peer) {
             return;
+        }
+
+        // Rebuild the replication spatial index before ReplicaManager3 (driven from Receive below)
+        // computes per-connection relevance for this tick.
+        if (_replicationManager) {
+            _replicationManager->Tick();
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
