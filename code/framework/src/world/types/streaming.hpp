@@ -8,39 +8,26 @@
 
 #pragma once
 
-#include <flecs/distr/flecs.h>
+#include "networking/replication/network_entity.h"
 
-#include "world/modules/base.hpp"
+#include <cstdint>
 
 namespace Framework::World::Archetypes {
+    namespace Replication = Framework::Networking::Replication;
+
+    // Configures a freshly created native entity for streaming. With native replication most of the
+    // old per-entity streaming state is gone; this just stamps ownership.
     class StreamingFactory {
-      private:
-        inline void SetupDefaults(flecs::entity e, uint64_t guid) {
-            e.add<Framework::World::Modules::Base::Transform>();
-
-            auto &streamable                 = e.ensure<Framework::World::Modules::Base::Streamable>();
-            streamable.owner                 = guid;
-            streamable.defaultUpdateInterval = CoreModules::GetTickRate() * 1000.0f; // we need ms here
-
-            e.add<Framework::World::Modules::Base::TickRateRegulator>();
-        }
-
       public:
-        inline void SetupClient(flecs::entity e, uint64_t guid) {
-            SetupDefaults(e, guid);
-
-            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
-            Framework::World::Modules::Base::SetupClientEmitters(streamable);
-
-            auto ass = e.get_mut<Framework::World::Modules::Base::Streamable>();
-            (void)ass;
+        void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {
+            if (entity) {
+                entity->ownerGUID = guid;
+            }
         }
-
-        inline void SetupServer(flecs::entity e, uint64_t guid) {
-            SetupDefaults(e, guid);
-
-            auto& streamable = e.ensure<Framework::World::Modules::Base::Streamable>();
-            Framework::World::Modules::Base::SetupServerEmitters(streamable);
+        void SetupClient(Replication::NetworkEntity *entity, uint64_t guid) {
+            if (entity) {
+                entity->ownerGUID = guid;
+            }
         }
     };
 } // namespace Framework::World::Archetypes

@@ -8,18 +8,9 @@
 
 #include "client.h"
 
-#include "game_rpc/set_frame.h"
-#include "game_rpc/set_transform.h"
-
 namespace Framework::World {
     WorldError ClientEngine::Init() {
-        if (Engine::Init(nullptr) != WorldError::WORLD_NONE) { // assigned by OnConnect
-            return WorldError::WORLD_FLECS_INIT_FAILED;
-        }
-
-        _queryGetEntityByServerID = _world->query_builder<Modules::Base::ServerID>().build();
-
-        return WorldError::WORLD_NONE;
+        return Engine::Init(nullptr); // peer assigned by OnConnect
     }
 
     void ClientEngine::Shutdown() {
@@ -30,121 +21,16 @@ namespace Framework::World {
         Engine::Update();
     }
 
-    flecs::entity ClientEngine::GetEntityByServerID(flecs::entity_t id) const {
-        flecs::entity ent = {};
-        _queryGetEntityByServerID.each([&ent, id](flecs::entity e, Modules::Base::ServerID& rhs) {
-            if (id == rhs.id) {
-                ent = e;
-                return;
-            }
-        });
-        return ent;
-    }
-
-    flecs::entity_t ClientEngine::GetServerID(flecs::entity entity) {
-        if (!entity.is_alive()) {
-            return 0;
-        }
-
-        if(const auto serverID = entity.try_get<Modules::Base::ServerID>())
-            return serverID->id;
-        return 0;
-    }
-
-    flecs::entity ClientEngine::CreateEntity(flecs::entity_t serverID) const {
-        const auto e = _world->entity();
-
-        auto &sid = e.ensure<Modules::Base::ServerID>();
-        sid.id        = serverID;
-        return e;
-    }
-
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
+        (void)tickInterval;
         _networkPeer = peer;
-
-        _streamEntities = _world->system<Modules::Base::Transform, Modules::Base::Streamable>("StreamEntities").kind(flecs::PostUpdate).interval(tickInterval).run([this](flecs::iter &it) {
-            const auto myGUID = _networkPeer->GetPeer()->GetMyGUID();
-
-            while (it.next()) {
-                const auto tr = it.field<Modules::Base::Transform>(0);
-                const auto rs = it.field<Modules::Base::Streamable>(1);
-
-                for (auto i : it) {
-                    const auto &es = &rs[i];
-
-                    if (es->GetBaseEvents().updateProc && es->performTickUpdates && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
-                        es->GetBaseEvents().updateProc(_networkPeer, (MafiaNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
-                    }
-                }
-            }
-        });
-
-        // Register built-in RPCs
-        InitRPCs(peer);
+        // Nothing else to wire: ReplicaManager3 constructs/serializes/destroys entities natively.
+        // Owned entities serialize upstream automatically via NetworkEntity::QuerySerialization.
     }
 
     void ClientEngine::OnDisconnect() {
-        if (_streamEntities.is_alive()) {
-            _streamEntities.destruct();
-        }
-
-        _world->defer_begin();
-        _allStreamableEntities.each([this](flecs::entity e, Modules::Base::Transform&, Modules::Base::Streamable& str) {
-            if (_onEntityDestroyCallback) {
-                if (!_onEntityDestroyCallback(e)) {
-                    return;
-                }
-            }
-
-            if (str.modEvents.disconnectProc) {
-                str.modEvents.disconnectProc(e);
-            }
-
-            e.destruct();
-        });
-        _world->defer_end();
-
+        // Entity teardown is handled natively by ReplicaManager3 when the connection drops
+        // (QueryActionOnPopConnection_Client deletes server-created replicas).
         _networkPeer = nullptr;
-    }
-    void ClientEngine::InitRPCs(Networking::NetworkPeer *net) const {
-        net->RegisterGameRPC<RPC::SetTransform>([this](MafiaNet::RakNetGUID guid, RPC::SetTransform *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
-            const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-            e.modified<World::Modules::Base::Transform>();
-        });
-        net->RegisterGameRPC<RPC::SetFrame>([this](MafiaNet::RakNetGUID guid, RPC::SetFrame *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
-            const auto fr = e.try_get_mut<World::Modules::Base::Frame>();
-            *fr           = msg->GetFrame();
-            e.modified<World::Modules::Base::Frame>();
-        });
-    }
-
-    void ClientEngine::UpdateEntityTransform(flecs::entity entity, const Modules::Base::Transform &rhs) {
-        if (!entity.is_valid() || !entity.is_alive()) {
-            return;
-        }
-
-        auto tr = entity.try_get_mut<Modules::Base::Transform>();
-        *tr     = rhs;
-
-        const auto str = entity.try_get_mut<Modules::Base::Streamable>();
-        if (str->modEvents.updateTransformProc) {
-            str->modEvents.updateTransformProc(entity);
-        }
-        entity.modified<World::Modules::Base::Transform>();
     }
 } // namespace Framework::World

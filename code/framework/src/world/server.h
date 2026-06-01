@@ -10,80 +10,44 @@
 
 #include "engine.h"
 
-#include <flecs/distr/flecs.h>
-
-#include <function2.hpp>
-#include <memory>
+#include <cstdint>
 #include <string>
-#include <unordered_set>
-#include <vector>
 
-#define FW_SEND_SERVER_COMPONENT_GAME_RPC(rpc, ent, ...)                                                                                                                                                                                                                               \
+// Broadcast an RPC payload from the server to everyone except one system (typically the originating
+// client). Entity identity, if any, is carried inside the payload (a NetworkID field) — there is no
+// separate game-RPC concept. For plain broadcast or targeted sends use FW_BROADCAST_RPC /
+// FW_SEND_RPC_TO from engine.h.
+#define FW_SERVER_BROADCAST_RPC_EXCEPT(rpc, guid, ...)                                                                                                                                                                                                                                 \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = static_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
+        auto __net = static_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                                     \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(static_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s);                                                                                                                                                  \
-        }                                                                                                                                                                                                                                                                              \
-    } while (0)
-
-#define FW_SEND_SERVER_COMPONENT_GAME_RPC_EXCEPT(rpc, ent, guid, ...)                                                                                                                                                                                                                  \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc {};                                                                                                                                                                                                                                                               \
-        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = static_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(static_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, MafiaNet::UNASSIGNED_RAKNET_GUID, guid);                                                                                                             \
-        }                                                                                                                                                                                                                                                                              \
-    } while (0)
-
-#define FW_SEND_SERVER_COMPONENT_GAME_RPC_TO(rpc, ent, guid, ...)                                                                                                                                                                                                                      \
-    do {                                                                                                                                                                                                                                                                               \
-        auto s = rpc {};                                                                                                                                                                                                                                                               \
-        s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        s.SetServerID(ent.id());                                                                                                                                                                                                                                                       \
-        auto __net = static_cast<Framework::Networking::NetworkServer *>(Framework::CoreModules::GetNetworkPeer());                                                                                                                                                               \
-        if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendGameRPC<rpc>(static_cast<Framework::World::ServerEngine *>(Framework::CoreModules::GetWorldEngine()), s, guid);                                                                                                                                            \
+            __net->BroadcastRPCExcept(s, guid);                                                                                                                                                                                                                                        \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
 namespace Framework::World {
     class ServerEngine final : public Engine {
-      protected:
-        using IsVisibleProc = fu2::function<bool(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
-            const Modules::Base::Streamable rhsS) const>;
-
-      private:
-        bool IsEntityVisibleToStreamerInternal(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
-            const Modules::Base::Streamable &rhsS, std::unordered_set<flecs::entity_t> &visited) const;
-
       public:
         struct ServerConfig {
-            float tickInterval                           = 0.016667f;
-            float streamerTickInterval                   = 0.033334f;
-            float assignOwnershipTickInterval            = 3.0f;
-            float collectRangeExemptEntitiesTickInterval = 0.066668f;
-            float removeEntitiesTickInterval             = 0.066668f;
-            float tickRegulatorInterval                  = 3.0f;
+            float tickInterval = 0.016667f;
         };
 
         [[nodiscard]] WorldError Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg);
 
         void Shutdown() override;
-
         void Update() override;
 
-        flecs::entity CreateEntity(const std::string &name = "") const;
-        static bool RemoveEntity(flecs::entity e);
+        // Native entity lifecycle. CreateEntity constructs a registered entity type and starts
+        // replicating it; the caller fills in its state and (for players) registers it as a viewer.
+        Replication::NetworkEntity *CreateEntity(uint32_t typeId) const;
+        void RemoveEntity(Replication::NetworkEntity *entity) const;
 
-        static void SetOwner(flecs::entity e, uint64_t guid);
-        flecs::entity GetOwner(flecs::entity e) const;
-        [[maybe_unused]] std::vector<flecs::entity> FindVisibleStreamers(flecs::entity e) const;
-        bool IsEntityVisibleToStreamer(const flecs::entity streamerEntity, const flecs::entity e, const Modules::Base::Transform &lhsTr, const Modules::Base::Streamer &streamer, const Modules::Base::Streamable &lhsS, const Modules::Base::Transform &rhsTr,
-            const Modules::Base::Streamable &rhsS) const;
+        void SetOwner(Replication::NetworkEntity *entity, uint64_t guid) const;
+        uint64_t GetOwner(Replication::NetworkEntity *entity) const;
+
+      private:
+        ServerConfig _cfg {};
     };
 } // namespace Framework::World

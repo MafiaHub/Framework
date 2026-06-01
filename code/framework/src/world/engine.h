@@ -9,34 +9,39 @@
 #pragma once
 
 #include "errors.h"
-#include "modules/base.hpp"
 
 #include <utils/lifecycle.h>
 
 #include "networking/network_peer.h"
+#include "networking/replication/network_entity.h"
+#include "networking/replication/replication_manager.h"
+#include "networking/rpc/rpc.h"
 
 #include <flecs/distr/flecs.h>
 #include <memory>
 
 #include "core_modules.h"
 
-#define FW_SEND_COMPONENT_RPC(rpc, ...)                                                                                                                                                                                                                                                \
+// Construct an RPC payload from parameters and broadcast it to every connected system. An entity is
+// targeted simply by serializing its NetworkID into the payload; there is no separate game-RPC path.
+#define FW_BROADCAST_RPC(rpc, ...)                                                                                                                                                                                                                                                      \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                         \
+        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                          \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendRPC<rpc>(s);                                                                                                                                                                                                                                                    \
+            Framework::Networking::RPC::Broadcast(__net->GetRPC(), s);                                                                                                                                                                                                                  \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
-#define FW_SEND_COMPONENT_RPC_TO(rpc, guid, ...)                                                                                                                                                                                                                                       \
+// Construct an RPC payload from parameters and send it to a single system.
+#define FW_SEND_RPC_TO(rpc, guid, ...)                                                                                                                                                                                                                                                 \
     do {                                                                                                                                                                                                                                                                               \
         auto s = rpc {};                                                                                                                                                                                                                                                               \
         s.FromParameters(__VA_ARGS__);                                                                                                                                                                                                                                                 \
-        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                         \
+        auto __net = Framework::CoreModules::GetNetworkPeer();                                                                                                                                                                                                                          \
         if (__net) {                                                                                                                                                                                                                                                                   \
-            __net->SendRPC<rpc>(s, guid);                                                                                                                                                                                                                                              \
+            Framework::Networking::RPC::SendTo(__net->GetRPC(), s, guid);                                                                                                                                                                                                               \
         }                                                                                                                                                                                                                                                                              \
     } while (0)
 
@@ -45,18 +50,19 @@ namespace Framework::Scripting {
 }
 
 namespace Framework::World {
+    namespace Replication = Framework::Networking::Replication;
+
+    // The world engine is now a thin native facade over MafiaNet's ReplicaManager3
+    // (Replication::ReplicationManager), which owns all networked entities (Replication::NetworkEntity).
+    // The flecs world it keeps is used ONLY by the scripting resource layer for its resource tree,
+    // not for any networked/entity-streaming purpose (that machinery was removed in the native
+    // migration).
     class Engine : public Lifecycle {
       private:
         friend class Framework::Scripting::ResourceManager;
-        void PurgeAllResourceEntities() const;
 
       protected:
-        // NOTE: _world must be declared BEFORE queries so it's destroyed LAST.
-        // Queries reference the world and must be destroyed before the world.
-        std::unique_ptr<flecs::world> _world;
-        flecs::query<Modules::Base::Streamer> _findAllStreamerEntities;
-        flecs::query<Modules::Base::Transform, Modules::Base::Streamable> _allStreamableEntities;
-        flecs::query<Modules::Base::RemovedOnResourceReload> _findAllResourceEntities;
+        std::unique_ptr<flecs::world> _world; // resource tree only
         Networking::NetworkPeer *_networkPeer = nullptr;
 
       public:
@@ -66,11 +72,17 @@ namespace Framework::World {
 
         void Update() override;
 
-        flecs::entity GetEntityByGUID(uint64_t guid) const;
-        flecs::entity WrapEntity(flecs::entity_t serverID) const;
-        static bool IsEntityOwner(flecs::entity e, uint64_t guid);
-        void WakeEntity(flecs::entity e);
+        // Native world access.
+        Replication::ReplicationManager *GetReplication() const {
+            return _networkPeer ? _networkPeer->GetReplicationManager() : nullptr;
+        }
+        Replication::NetworkEntity *GetEntityByNetworkID(MafiaNet::NetworkID networkId) const;
 
+        static bool IsEntityOwner(Replication::NetworkEntity *entity, uint64_t guid) {
+            return entity && entity->ownerGUID == guid;
+        }
+
+        // Resource-layer flecs world (scripting only).
         flecs::world *GetWorld() const {
             return _world.get();
         }

@@ -8,18 +8,12 @@
 
 #include "engine.h"
 
-#include "modules/base.hpp"
-
 namespace Framework::World {
     WorldError Engine::Init(Networking::NetworkPeer *networkPeer) {
         _networkPeer = networkPeer;
-        _world       = std::make_unique<flecs::world>();
-
-        // Register a base module
-        _world->import <Modules::Base>();
-
-        _allStreamableEntities   = _world->query_builder<Modules::Base::Transform, Modules::Base::Streamable>().build();
-        _findAllStreamerEntities = _world->query_builder<Modules::Base::Streamer>().build();
+        // The flecs world is retained solely for the scripting resource tree; networked entities
+        // live in the native ReplicationManager.
+        _world = std::make_unique<flecs::world>();
 
         _initialized = true;
         return WorldError::WORLD_NONE;
@@ -30,47 +24,15 @@ namespace Framework::World {
     }
 
     void Engine::Update() {
-        _world->progress();
-    }
-
-    bool Engine::IsEntityOwner(flecs::entity e, uint64_t guid) {
-        const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
-        if (!es) {
-            return false;
+        // Resource-tree bookkeeping only; entity replication is driven by ReplicaManager3 from the
+        // network peer's update loop.
+        if (_world) {
+            _world->progress();
         }
-        return (es->owner == guid);
     }
 
-    void Engine::WakeEntity(flecs::entity e) {
-        if (!e.has<Framework::World::Modules::Base::TickRateRegulator>()) {
-            return;
-        }
-        const auto tr = e.try_get_mut<Framework::World::Modules::Base::TickRateRegulator>();
-        tr->lastGenID--;
-        const auto es      = e.try_get_mut<Framework::World::Modules::Base::Streamable>();
-        es->updateInterval = es->defaultUpdateInterval;
-    }
-
-    flecs::entity Engine::GetEntityByGUID(uint64_t guid) const {
-        flecs::entity ourEntity = {};
-        _findAllStreamerEntities.each([&ourEntity, guid](flecs::entity e, Modules::Base::Streamer &s) {
-            if (ourEntity == flecs::entity::null() && s.guid == guid) {
-                ourEntity = e;
-            }
-        });
-        return ourEntity;
-    }
-
-    flecs::entity Engine::WrapEntity(flecs::entity_t serverID) const {
-        return flecs::entity(_world->get_world(), serverID);
-    }
-
-    void Engine::PurgeAllResourceEntities() const {
-        _world->defer_begin();
-        _findAllResourceEntities.each([this](flecs::entity e, Modules::Base::RemovedOnResourceReload &rhs) {
-            if (e.is_alive())
-                e.add<Modules::Base::PendingRemoval>();
-        });
-        _world->defer_end();
+    Replication::NetworkEntity *Engine::GetEntityByNetworkID(MafiaNet::NetworkID networkId) const {
+        auto *replication = GetReplication();
+        return replication ? replication->GetEntityByNetworkID(networkId) : nullptr;
     }
 } // namespace Framework::World
