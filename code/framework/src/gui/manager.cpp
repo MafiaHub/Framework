@@ -52,8 +52,15 @@ namespace Framework::GUI {
         settings.no_sandbox                   = true;
         settings.log_severity                 = LOGSEVERITY_FATAL;
 
-        CefString(&settings.cache_path) = rootDir + "/cache";
-        CefString(&settings.log_file)  = rootDir + "/logs/cef.log";
+        // CEF >=120 holds a process-singleton lock on root_cache_path. Two clients on the
+        // same machine sharing it would trigger the singleton relay (a stray blank browser
+        // window) and a startup crash in the second instance. Scope the cache per-process so
+        // dual-client debugging works. The path must be absolute; cache_path must equal or be
+        // a child of root_cache_path.
+        std::filesystem::path cacheRoot = std::filesystem::absolute(std::filesystem::path(rootDir) / "cache" / std::to_string(GetCurrentProcessId()));
+        CefString(&settings.root_cache_path) = cacheRoot.wstring();
+        CefString(&settings.cache_path)      = cacheRoot.wstring();
+        CefString(&settings.log_file)        = rootDir + "/logs/cef.log";
 
         // CEF requires an absolute path for the subprocess executable
         wchar_t exePath[MAX_PATH] = {};
