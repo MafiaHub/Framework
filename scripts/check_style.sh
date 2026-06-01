@@ -46,6 +46,7 @@ done < <(git ls-files -- \
 	':!:vendors' \
 	':!:code/tests/unit.h' \
 	':!:code/framework/utils/hooks' \
+	':!:code/framework/src/graphics/shaders' \
 )
 
 exit_status=0
