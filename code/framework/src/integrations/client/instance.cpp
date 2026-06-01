@@ -381,6 +381,10 @@ namespace Framework::Integrations::Client {
             // Reset the scripting engine (keeps engine alive, just stops resources)
             _scriptingModule->Reset();
 
+            // Unregister from CoreModules so a subsequent reconnect can re-register
+            // without tripping the "already registered" assertion
+            CoreModules::SetScriptingModule(nullptr);
+
             // Destroy scriptable web views
             if (_webManager) {
                 _webManager->CleanupViews();
