@@ -15,9 +15,10 @@
 #include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
 
-#include <world/game_rpc/set_transform.h>
 
 #include "integrations/shared/rpc/emit_lua_event.h"
+
+#include "networking/rpc/rpc.h"
 
 #include "../shared/modules/mod.hpp"
 
@@ -44,6 +45,70 @@
 #include "graphics/backend/d3d9.h"
 
 namespace Framework::Integrations::Client {
+    namespace {
+        // Native RPC4 handler for server-emitted scripting events. RPC4 dispatches to plain C
+        // functions, so this reaches the scripting engine through the CoreModules singleton rather
+        // than capturing the Instance.
+        void OnEmitLuaEvent(MafiaNet::BitStream *userData, MafiaNet::Packet *packet) {
+            (void)packet;
+            const auto rpc       = Framework::Networking::RPC::Read<Shared::RPC::EmitLuaEvent>(userData);
+            const auto eventName = rpc.GetEventName();
+            if (eventName.empty()) {
+                return;
+            }
+            const auto payloadStr = rpc.GetPayload();
+
+            auto *scriptingModule = static_cast<Client::Scripting::ClientScriptingModule *>(Framework::CoreModules::GetScriptingModule());
+            if (!scriptingModule) {
+                return;
+            }
+
+            // Emit to JavaScript resources via the Events system
+            auto resourceManager = scriptingModule->GetResourceManager();
+            if (!resourceManager) {
+                return;
+            }
+
+            auto *engine = scriptingModule->GetEngine();
+            if (!engine || !engine->IsInitialized()) {
+                return;
+            }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Parse JSON payload and emit event
+            std::vector<v8::Local<v8::Value>> args;
+            if (!payloadStr.empty()) {
+                v8::Local<v8::String> jsonStr;
+                if (!v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocal(&jsonStr)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to create V8 string from event payload: {}", payloadStr);
+                    return;
+                }
+
+                v8::TryCatch tryCatch(isolate);
+                v8::Local<v8::Value> parsed;
+                if (!v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+                    if (tryCatch.HasCaught()) {
+                        v8::String::Utf8Value errorMsg(isolate, tryCatch.Exception());
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", *errorMsg ? *errorMsg : "unknown error");
+                    }
+                    else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", payloadStr);
+                    }
+                    return;
+                }
+                args.push_back(parsed);
+            }
+
+            resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
+        }
+    } // namespace
+
     bool AssetDownloadFileProgress::OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
         if (onFileStruct->numberOfFilesInThisSet > 0) {
             auto &downloadStatus    = _instance->GetAssetDownloadStatus();
@@ -324,19 +389,15 @@ namespace Framework::Integrations::Client {
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](MafiaNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
             _worldEngine->OnConnect(net, msg->GetServerTickRate());
-            const auto guid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
 
-            const auto newPlayer = GetWorldEngine()->CreateEntity(msg->GetEntityID());
-            GetStreamingFactory()->SetupClient(newPlayer, guid.g);
-            GetPlayerFactory()->SetupClient(newPlayer, guid.g);
-
-            // Notify server we are ready to obtain player data
+            // The local player's avatar arrives via native replication (the server constructs it,
+            // owned by us); the game recognizes it in NetworkEntity::OnConstructed by ownerGUID.
             Framework::Networking::Messages::ClientInitPlayer initPlayer {};
             net->Send(initPlayer, MafiaNet::UNASSIGNED_RAKNET_GUID);
 
-            // Notify mod-level that network integration whole process succeeded
+            // Notify mod-level that the network integration handshake succeeded.
             if (_onConnectionFinalized) {
-                _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
+                _onConnectionFinalized(msg->GetServerTickRate());
             }
         });
         net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](MafiaNet::RakNetGUID guid, ClientKick *msg) {
@@ -352,18 +413,6 @@ namespace Framework::Integrations::Client {
             default: break;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
-        });
-        net->RegisterGameRPC<Framework::World::RPC::SetTransform>([this](MafiaNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetWorldEngine()->GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
-
-            const auto tr = e.try_get_mut<Framework::World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
         });
         net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
             // Reset initial asset download state
@@ -391,59 +440,9 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](MafiaNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
-            if (!rpc->Valid())
-                return;
-            const auto eventName  = rpc->GetEventName();
-            const auto payloadStr = rpc->GetPayload();
+        Framework::Networking::RPC::Register<Shared::RPC::EmitLuaEvent>(net->GetRPC(), &OnEmitLuaEvent);
 
-            // Emit to JavaScript resources via the Events system
-            auto resourceManager = _scriptingModule->GetResourceManager();
-            if (!resourceManager) {
-                return;
-            }
-
-            auto *engine = _scriptingModule->GetEngine();
-            if (!engine || !engine->IsInitialized()) {
-                return;
-            }
-
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
-
-            // Parse JSON payload and emit event
-            std::vector<v8::Local<v8::Value>> args;
-            if (!payloadStr.empty()) {
-                v8::Local<v8::String> jsonStr;
-                if (!v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocal(&jsonStr)) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to create V8 string from event payload: {}", payloadStr);
-                    return;
-                }
-
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> parsed;
-                if (!v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
-                    if (tryCatch.HasCaught()) {
-                        v8::String::Utf8Value errorMsg(isolate, tryCatch.Exception());
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", *errorMsg ? *errorMsg : "unknown error");
-                    } else {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", payloadStr);
-                    }
-                    return;
-                }
-                args.push_back(parsed);
-            }
-
-            resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
-        });
-
-        Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
-
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");
     }
 
     void Instance::DownloadsAssetsFromConnectedServer() {

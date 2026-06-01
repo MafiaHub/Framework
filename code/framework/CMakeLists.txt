@@ -22,10 +22,15 @@ set(FRAMEWORK_SRC
     src/world/engine.cpp
     src/world/server.cpp
     src/world/client.cpp
-    src/world/modules/modules_impl.cpp
 
     src/networking/network_peer.cpp
     src/networking/errors.cpp
+
+    # Native MafiaNet entity replication (ReplicaManager3-based; entities own their state, no ECS)
+    src/networking/replication/network_entity.cpp
+    src/networking/replication/entity_factory.cpp
+    src/networking/replication/replication_manager.cpp
+    src/networking/replication/replication_connection.cpp
 
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags

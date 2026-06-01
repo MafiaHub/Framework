@@ -313,53 +313,48 @@ namespace Framework::Integrations::Server {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 
-            const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (e.is_valid()) {
-                if (_onPlayerDisconnectCallback)
-                    _onPlayerDisconnectCallback(e, guid.g);
+            // Native replication tears down the player's entities when the connection drops
+            // (QueryActionOnPopConnection); we just notify the game and clear its viewer mapping.
+            if (_onPlayerDisconnectCallback)
+                _onPlayerDisconnectCallback(guid.g);
 
-                _worldEngine->RemoveEntity(e);
-            }
+            if (auto *replication = net->GetReplicationManager())
+                replication->ClearViewer(guid.g);
 
             net->GetPeer()->CloseConnection(guid, true);
         });
 
         
         net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](MafiaNet::RakNetGUID guid, ClientRequestStreamer *msg) {
-            // Create player entity and add on world
-            const auto newPlayer = _worldEngine->CreateEntity();
-            _streamingFactory->SetupServer(newPlayer, guid.g);
-
             auto nickname = msg->GetPlayerName();
             if (nickname.size() > 64) {
                 nickname = nickname.substr(0, 64);
             }
 
-            auto hardwareId = msg->GetPlayerHardwareID();
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", msg->GetPlayerName(), guid.g, msg->GetPlayerHardwareID());
 
-            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname, hardwareId);
+            // The game creates the player's avatar entity (a native NetworkEntity subclass) and
+            // registers it as this connection's viewer inside its onPlayerConnect handler.
+            if (_onPlayerConnectCallback)
+                _onPlayerConnectCallback(guid.g);
 
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {} hwid {}", msg->GetPlayerName(), guid.g, newPlayer.id(), hardwareId);
-
-            // Send the connection finalized packet
+            // Finalize the connection (carries the server tick rate).
             Framework::Networking::Messages::ClientConnectionFinalized answer;
-            answer.FromParameters(_opts.worldConfig.tickInterval, newPlayer.id());
+            answer.FromParameters(_opts.worldConfig.tickInterval);
             net->Send(answer, guid);
         });
 
         net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](MafiaNet::RakNetGUID guid, ClientInitPlayer *stub) {
-            const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
-                _onPlayerConnectCallback(e, guid.g);
+            (void)guid;
+            (void)stub;
+            // Player setup now happens on connect; retained only for protocol compatibility.
         });
 
         // Note: Client-to-server events are handled through the JS Events system
         // The client can emit events via Framework.events.emitToServer() which uses
         // the networking messages system to send events to the server
 
-        Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
     }
 
     void Instance::InitAssetStreamer() {

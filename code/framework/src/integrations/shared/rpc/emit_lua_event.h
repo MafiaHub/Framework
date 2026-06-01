@@ -8,37 +8,36 @@
 
 #pragma once
 
-#include <networking/rpc/rpc.h>
+#include <mafianet/BitStream.h>
+#include <mafianet/string.h>
 
 #include <string>
 
 namespace Framework::Integrations::Shared::RPC {
-    class EmitLuaEvent final: public Framework::Networking::RPC::IRPC<EmitLuaEvent> {
-      private:
-        MafiaNet::RakString _eventName;
-        MafiaNet::RakString _payload;
+    // Native RPC payload: forwards a named scripting event (with a JSON payload) to the other peer's
+    // resource layer. See networking/rpc/rpc.h for the dispatch model.
+    struct EmitLuaEvent {
+        static constexpr const char *kIdentifier = "Framework::EmitLuaEvent";
 
-      public:
-        void FromParameters(const std::string &name, const std::string &payload) {
-            _eventName = name.c_str();
-            _payload = payload.c_str();
+        MafiaNet::RakString eventName;
+        MafiaNet::RakString payload;
+
+        void FromParameters(const std::string &name, const std::string &payloadJson) {
+            eventName = name.c_str();
+            payload   = payloadJson.c_str();
         }
 
-        void Serialize(MafiaNet::BitStream *bs, bool write) override {
-            bs->Serialize(write, _eventName);
-            bs->Serialize(write, _payload);
-        }
-
-        bool Valid() const override {
-            return !_eventName.IsEmpty();
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
+            bs->Serialize(write, eventName);
+            bs->Serialize(write, payload);
         }
 
         std::string GetEventName() const {
-            return _eventName.C_String();
+            return eventName.C_String();
         }
 
         std::string GetPayload() const {
-            return _payload.C_String();
+            return payload.C_String();
         }
     };
-}
+} // namespace Framework::Integrations::Shared::RPC
