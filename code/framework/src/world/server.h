@@ -31,8 +31,5 @@ namespace Framework::World {
 
         void SetOwner(Replication::NetworkEntity *entity, uint64_t guid) const;
         uint64_t GetOwner(Replication::NetworkEntity *entity) const;
-
-      private:
-        ServerConfig _cfg {};
     };
 } // namespace Framework::World

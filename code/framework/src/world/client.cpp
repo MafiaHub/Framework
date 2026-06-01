@@ -22,10 +22,11 @@ namespace Framework::World {
     }
 
     void ClientEngine::OnConnect(Networking::NetworkPeer *peer, float tickInterval) {
-        (void)tickInterval;
         _networkPeer = peer;
-        // Nothing else to wire: ReplicaManager3 constructs/serializes/destroys entities natively.
-        // Owned entities serialize upstream automatically via NetworkEntity::QuerySerialization.
+        // Serialize owned entities upstream at the server's tick rate (tickInterval is in seconds).
+        if (auto *replication = GetReplication()) {
+            replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(tickInterval * 1000.0f));
+        }
     }
 
     void ClientEngine::OnDisconnect() {

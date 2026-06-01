@@ -10,10 +10,17 @@
 
 namespace Framework::World {
     WorldError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg) {
-        _cfg = cfg;
         // Relevance, ownership and serialization are handled by ReplicaManager3 (GridSectorizer
         // interest + per-entity QuerySerialization).
-        return Engine::Init(networkPeer);
+        const WorldError err = Engine::Init(networkPeer);
+        if (err != WorldError::WORLD_NONE) {
+            return err;
+        }
+        // Replicate entity updates at the configured tick rate (tickInterval is in seconds).
+        if (auto *replication = GetReplication()) {
+            replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(cfg.tickInterval * 1000.0f));
+        }
+        return WorldError::WORLD_NONE;
     }
 
     void ServerEngine::Shutdown() {
