@@ -46,9 +46,8 @@
 
 namespace Framework::Integrations::Client {
     namespace {
-        // Native RPC4 handler for server-emitted scripting events. RPC4 dispatches to plain C
-        // functions, so this reaches the scripting engine through the CoreModules singleton rather
-        // than capturing the Instance.
+        // Handler for server-emitted scripting events; reaches the scripting engine through the
+        // CoreModules singleton.
         void OnEmitLuaEvent(MafiaNet::BitStream *userData, MafiaNet::Packet *packet) {
             (void)packet;
             const auto rpc       = Framework::Networking::RPC::Read<Shared::RPC::EmitLuaEvent>(userData);
@@ -390,12 +389,11 @@ namespace Framework::Integrations::Client {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
             _worldEngine->OnConnect(net, msg->GetServerTickRate());
 
-            // The local player's avatar arrives via native replication (the server constructs it,
-            // owned by us); the game recognizes it in NetworkEntity::OnConstructed by ownerGUID.
+            // The server constructs the local avatar (owned by us); the game recognizes it in
+            // NetworkEntity::OnConstructed by ownerGUID. Signal we are ready for it.
             Framework::Networking::Messages::ClientInitPlayer initPlayer {};
             net->Send(initPlayer, MafiaNet::UNASSIGNED_RAKNET_GUID);
 
-            // Notify mod-level that the network integration handshake succeeded.
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(msg->GetServerTickRate());
             }
@@ -440,7 +438,7 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        Framework::Networking::RPC::Register<Shared::RPC::EmitLuaEvent>(net->GetRPC(), &OnEmitLuaEvent);
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>(&OnEmitLuaEvent);
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");
     }

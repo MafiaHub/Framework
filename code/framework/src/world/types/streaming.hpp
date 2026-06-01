@@ -15,8 +15,7 @@
 namespace Framework::World::Archetypes {
     namespace Replication = Framework::Networking::Replication;
 
-    // Configures a freshly created native entity for streaming. With native replication most of the
-    // old per-entity streaming state is gone; this just stamps ownership.
+    // Stamps ownership on a streamed entity.
     class StreamingFactory {
       public:
         void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {

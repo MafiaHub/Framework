@@ -10,12 +10,8 @@
 
 #include <flecs/distr/flecs.h>
 
-// NOTE: The flecs-based streaming model (Transform/Frame/Streamable/Streamer components, the
-// per-tick StreamEntities/AssignEntityOwnership/TickRateRegulator systems and the GameSync*
-// messages) has been removed in favour of native MafiaNet replication. Networked entities are now
-// Replication::NetworkEntity objects owned by Replication::ReplicationManager; see
-// networking/replication/. This Base module is retained only so the scripting resource world has a
-// module to import, and currently registers no networked components.
+// The module the scripting resource world imports. Networked entities live in
+// networking/replication/ (Replication::NetworkEntity), so this registers no components.
 namespace Framework::World::Modules {
     struct Base {
         explicit Base(flecs::world &world) {

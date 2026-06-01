@@ -14,9 +14,9 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
 
     // Per-remote-system state. On the client it constructs incoming replicas (AllocReplica); on the
-    // server it answers which replicas should exist on this connection (QueryReplicaList), which is
-    // where the streaming relevance rules live now that QUERY_CONNECTION_FOR_REPLICA_LIST is used
-    // (so Replica3::QueryConstruction/QueryDestruction are intentionally bypassed).
+    // server it decides which replicas should exist on this connection (QueryReplicaList). It runs in
+    // QUERY_CONNECTION_FOR_REPLICA_LIST mode, so the streaming relevance rules live in
+    // QueryReplicaList rather than in Replica3::QueryConstruction/QueryDestruction.
     class ReplicationConnection final : public MafiaNet::Connection_RM3 {
       public:
         ReplicationConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID guid, ReplicationManager *manager, bool isServer);

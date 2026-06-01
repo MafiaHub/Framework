@@ -39,17 +39,14 @@ namespace Framework::Networking {
         Messages::PacketCallback _onUnknownPacketCallback;
         mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
-        // Native MafiaNet subsystems, shared by client and server peers.
-        // RPC4 dispatches remote-procedure calls by string identifier to plain C handlers (see
-        // networking/rpc/rpc.h), NetworkIDManager hands out the cross-network object handles used
-        // by ReplicaManager3 replicas, and StatisticsHistoryPlugin tracks per-connection
-        // bandwidth/RTT/loss for diagnostics.
+        // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
+        // out the cross-network object handles used by replicas. StatisticsHistoryPlugin tracks
+        // per-connection bandwidth/RTT/loss.
         MafiaNet::RPC4 _rpc;
         MafiaNet::NetworkIDManager _networkIDManager;
         MafiaNet::StatisticsHistoryPlugin _statisticsHistory;
 
-        // Native entity replication (ReplicaManager3). Created here, attached to the peer and given
-        // its server/client role by the concrete peer's Init().
+        // Owns the replicated entity world. The concrete peer's Init() attaches it and sets its role.
         std::unique_ptr<Replication::ReplicationManager> _replicationManager;
 
       public:
@@ -88,8 +85,28 @@ namespace Framework::Networking {
             };
         }
 
-        // RPCs are registered and sent natively through RPC4 (GetRPC()) using the helpers in
-        // networking/rpc/rpc.h. There is no typed RegisterRPC/SendRPC layer anymore.
+        // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler is a
+        // plain function; decode the payload inside it with RPC::Read<T>.
+        template <typename T>
+        void RegisterRPC(void (*handler)(MafiaNet::BitStream *, MafiaNet::Packet *)) {
+            _rpc.RegisterFunction(T::kIdentifier, handler);
+        }
+
+        // Send an RPC payload to every connected system.
+        template <typename T>
+        void BroadcastRPC(T &payload, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            MafiaNet::BitStream bs;
+            payload.Serialize(&bs, true);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, MafiaNet::UNASSIGNED_RAKNET_GUID, true, false);
+        }
+
+        // Send an RPC payload to a single system.
+        template <typename T>
+        void SendRPC(T &payload, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            MafiaNet::BitStream bs;
+            payload.Serialize(&bs, true);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, guid, false, false);
+        }
 
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;

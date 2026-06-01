@@ -15,11 +15,10 @@
 namespace Framework::World::Archetypes {
     namespace Replication = Framework::Networking::Replication;
 
-    // Configures a native entity as a player's avatar: it owns itself and (on the server) acts as the
+    // Configures an entity as a player's avatar: it owns itself and (on the server) acts as the
     // connection's viewer — its position/streamRange drive that client's interest set. The caller
-    // must still register it with the ReplicationManager as the viewer for the player's GUID
-    // (ReplicationManager::SetViewer). Player metadata such as nickname or hardware id is no longer
-    // tracked here; carry it on your game's player NetworkEntity subclass.
+    // registers it as the viewer for the player's GUID via ReplicationManager::SetViewer. Player
+    // metadata (nickname, hardware id) belongs on the game's player NetworkEntity subclass.
     class PlayerFactory {
       public:
         void SetupClient(Replication::NetworkEntity *entity, uint64_t guid) {

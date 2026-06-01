@@ -81,7 +81,7 @@ namespace Framework::Integrations::Server {
 
     };
 
-    // The game creates/owns the player's entity; the framework only hands it the connection GUID.
+    // Invoked with the connecting player's GUID; the game creates and owns the player's entity.
     using OnPlayerConnectionCallback = fu2::function<void(uint64_t) const>;
 
     class Instance : public Framework::Lifecycle {

@@ -36,8 +36,7 @@
 #include <flecs/distr/flecs.h>
 
 namespace Framework::Integrations::Client {
-    // The local player's avatar arrives via replication; the handshake callback only carries the
-    // server tick rate now.
+    // Fired once the connection handshake completes, with the server tick rate.
     using NetworkConnectionFinalizedCallback = fu2::function<void(float) const>;
     using NetworkConnectionClosedCallback    = fu2::function<void() const>;
     using AssetsDownloadFinishedCallback     = fu2::function<void(bool success) const>;

@@ -313,8 +313,8 @@ namespace Framework::Integrations::Server {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 
-            // Native replication tears down the player's entities when the connection drops
-            // (QueryActionOnPopConnection); we just notify the game and clear its viewer mapping.
+            // ReplicaManager3 tears down the player's entities on drop (QueryActionOnPopConnection);
+            // here we notify the game and clear its viewer mapping.
             if (_onPlayerDisconnectCallback)
                 _onPlayerDisconnectCallback(guid.g);
 
@@ -333,21 +333,21 @@ namespace Framework::Integrations::Server {
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", msg->GetPlayerName(), guid.g, msg->GetPlayerHardwareID());
 
-            // The game creates the player's avatar entity (a native NetworkEntity subclass) and
-            // registers it as this connection's viewer inside its onPlayerConnect handler.
+            // The game creates the player's avatar entity and registers it as this connection's
+            // viewer inside its onPlayerConnect handler.
             if (_onPlayerConnectCallback)
                 _onPlayerConnectCallback(guid.g);
 
-            // Finalize the connection (carries the server tick rate).
             Framework::Networking::Messages::ClientConnectionFinalized answer;
             answer.FromParameters(_opts.worldConfig.tickInterval);
             net->Send(answer, guid);
         });
 
+        // The client signals it is ready for player data; the player entity is already created in the
+        // connect handler above, so there is nothing to do here.
         net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](MafiaNet::RakNetGUID guid, ClientInitPlayer *stub) {
             (void)guid;
             (void)stub;
-            // Player setup now happens on connect; retained only for protocol compatibility.
         });
 
         // Note: Client-to-server events are handled through the JS Events system

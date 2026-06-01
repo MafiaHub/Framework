@@ -23,10 +23,10 @@
 #include <vector>
 
 namespace Framework::Networking::Replication {
-    // The native replicated world: a ReplicaManager3 specialization that owns the set of
-    // NetworkEntity objects (there is no flecs world behind it). It creates/destroys entities,
-    // resolves them by NetworkID, tracks per-connection "viewer" entities, and maintains a
-    // GridSectorizer used by ReplicationConnection::QueryReplicaList for interest management.
+    // The replicated world: a ReplicaManager3 that owns the set of NetworkEntity objects. It
+    // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
+    // entity, and maintains a GridSectorizer used by ReplicationConnection::QueryReplicaList for
+    // interest management.
     class ReplicationManager final : public MafiaNet::ReplicaManager3 {
       public:
         ReplicationManager();

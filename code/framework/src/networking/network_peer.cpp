@@ -17,9 +17,8 @@ namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
         _peer = MafiaNet::RakPeerInterface::GetInstance();
 
-        // Attach the native subsystems common to both peer roles. RPC4 and StatisticsHistory
-        // do not use the reliability layer, so attaching before Startup() is safe. ReplicaManager3
-        // is attached later by the concrete peer once its connection factory exists (Phase 2).
+        // RPC4 and StatisticsHistory can be attached before Startup(); the ReplicationManager is
+        // attached by the concrete peer's Init() once its connection factory exists.
         _peer->AttachPlugin(&_rpc);
         _peer->AttachPlugin(&_statisticsHistory);
         _statisticsHistory.SetTrackConnections(true, 0, true);
@@ -63,8 +62,7 @@ namespace Framework::Networking {
             return;
         }
 
-        // Rebuild the replication spatial index before ReplicaManager3 (driven from Receive below)
-        // computes per-connection relevance for this tick.
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance.
         if (_replicationManager) {
             _replicationManager->Tick();
         }

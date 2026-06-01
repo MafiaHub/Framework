@@ -10,11 +10,6 @@
 
 #include "engine.h"
 
-// A client sends RPCs to the server with FW_BROADCAST_RPC (the client's only connection is the
-// server). Entity identity, if any, travels as a NetworkID field inside the payload. To observe
-// entity destruction, override Replication::NetworkEntity::DeallocReplica in your entity subclass —
-// ReplicaManager3 calls it when the server removes the replica or the connection drops.
-
 namespace Framework::World {
     class ClientEngine final : public Engine {
       public:

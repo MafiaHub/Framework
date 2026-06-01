@@ -14,7 +14,7 @@
 #include <string>
 
 namespace Framework::Integrations::Shared::RPC {
-    // Native RPC payload: forwards a named scripting event (with a JSON payload) to the other peer's
+    // RPC payload forwarding a named scripting event (with a JSON payload) to the other peer's
     // resource layer. See networking/rpc/rpc.h for the dispatch model.
     struct EmitLuaEvent {
         static constexpr const char *kIdentifier = "Framework::EmitLuaEvent";

@@ -34,7 +34,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
 
-        // Drive native entity replication from the server side.
+        // Run replication as the authoritative server.
         _replicationManager->Init(_peer, &_networkIDManager, true);
 
         _initialized = true;

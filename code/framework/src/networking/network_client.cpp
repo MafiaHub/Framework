@@ -31,8 +31,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
 
-        // Drive native entity replication from the client side (receives constructions, serializes
-        // owned entities upstream).
+        // Run replication as a client: receive constructions and serialize owned entities upstream.
         _replicationManager->Init(_peer, &_networkIDManager, false);
 
         _initialized = true;

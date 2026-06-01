@@ -11,8 +11,8 @@
 namespace Framework::World {
     WorldError ServerEngine::Init(Framework::Networking::NetworkPeer *networkPeer, ServerConfig cfg) {
         _cfg = cfg;
-        // No flecs streaming systems anymore — relevance, ownership and serialization are handled
-        // natively by ReplicaManager3 (GridSectorizer interest + per-entity QuerySerialization).
+        // Relevance, ownership and serialization are handled by ReplicaManager3 (GridSectorizer
+        // interest + per-entity QuerySerialization).
         return Engine::Init(networkPeer);
     }
 

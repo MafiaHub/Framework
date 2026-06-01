@@ -22,8 +22,6 @@ namespace Framework::Networking::Messages {
             return GAME_CONNECTION_FINALIZED;
         }
 
-        // The local player's avatar arrives via native replication (with its own NetworkID), so the
-        // finalize message only carries the server tick rate now.
         void FromParameters(float tickRate) {
             _serverTickRate = tickRate;
         }

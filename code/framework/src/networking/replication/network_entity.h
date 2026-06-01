@@ -18,28 +18,26 @@
 #include <string>
 
 namespace Framework::Networking::Replication {
-    // A NetworkEntity IS the replicated object — it owns its state directly as plain members. There
-    // is no ECS / flecs behind it; ReplicaManager3 + NetworkIDManager track it and GridSectorizer
-    // scopes it. Game-specific entities (player, vehicle, ...) derive from this, add their own
-    // fields, and override SerializeFields/DeserializeFields (per-tick delta state) and/or
-    // OnSerializeConstruction/OnDeserializeConstruction (one-shot spawn state).
+    // A replicated game object: it owns its state as plain members, and ReplicaManager3 +
+    // NetworkIDManager track it while GridSectorizer scopes it. Game-specific entities (player,
+    // vehicle, ...) derive from this, add their own fields, and override SerializeFields /
+    // DeserializeFields (per-tick state) and/or OnSerializeConstruction / OnDeserializeConstruction
+    // (one-shot spawn state).
     //
-    // Per-tick updates use MafiaNet::VariableDeltaSerializer (the documented ReplicaManager3 delta
-    // path): each variable is compared against the last value sent to a system and only transmitted
-    // when it changes. Construction sends a full snapshot once. Serialize() therefore returns
-    // RM3SR_SERIALIZED_UNIQUELY — ReplicaManager3 calls it per connection, while the delta serializer
-    // internally reuses the identical-broadcast bitstream within a tick for efficiency.
+    // Per-tick updates go through MafiaNet::VariableDeltaSerializer: each variable is compared
+    // against the last value sent to a system and transmitted only when it changes. Construction
+    // sends a full snapshot. Serialize() returns RM3SR_SERIALIZED_UNIQUELY; ReplicaManager3 calls it
+    // per connection while the delta serializer reuses one bitstream within a tick.
     //
-    // Authority (validated design point C1): we override QuerySerialization ourselves keyed on
-    // ownerGUID, not the stock creatingSystemGUID helpers. The server serializes to everyone except
-    // the owner; the owning client serializes upstream. Deserialize is gated on the current owner so
-    // a stale owner cannot write during a handover.
+    // Authority: QuerySerialization is keyed on ownerGUID — the server serializes to everyone except
+    // the owner, the owning client serializes upstream, and Deserialize accepts state only from the
+    // current owner so a stale owner cannot write during a handover.
     class NetworkEntity : public MafiaNet::Replica3 {
       public:
         NetworkEntity()           = default;
         ~NetworkEntity() override = default;
 
-        // --- Common replicated state (owned, no ECS) ---
+        // --- Common replicated state ---
         glm::vec3 position = glm::vec3(0.0f);
         glm::vec3 velocity = glm::vec3(0.0f);
         glm::quat rotation = glm::identity<glm::quat>();
