@@ -1,7 +1,5 @@
 #pragma once
 
-#include "events_reserved.h"
-
 #include <v8pp/convert.hpp>
 #include <v8.h>
 
@@ -58,15 +56,13 @@ namespace Framework::Scripting {
                      ResourceManager *resourceManager);
 
         /**
-         * Emit a reserved event (framework-only, bypasses protection).
+         * Emit an event from native code to all global handlers.
          * Returns a Promise that resolves when all handlers complete.
-         * @param bypassRunningCheck If true, skips the "resource is running" check (for resourceStart)
          */
         v8::Local<v8::Promise> EmitReserved(v8::Isolate *isolate,
                                             v8::Local<v8::Context> context,
                                             const std::string &eventName,
-                                            const std::vector<v8::Local<v8::Value>> &args,
-                                            bool bypassRunningCheck = false);
+                                            const std::vector<v8::Local<v8::Value>> &args);
 
         /**
          * Clean up all handlers for a resource (called on resource stop).
@@ -82,16 +78,6 @@ namespace Framework::Scripting {
          * Get count of handlers for an event.
          */
         size_t GetListenerCount(std::string_view eventName);
-
-        /**
-         * Add additional reserved events (e.g., from game-specific code).
-         */
-        void AddReservedEvents(const std::set<std::string> &events);
-
-        /**
-         * Check if an event name is reserved (static + dynamic).
-         */
-        bool IsEventReserved(std::string_view eventName) const;
 
       private:
         /**
@@ -128,8 +114,7 @@ namespace Framework::Scripting {
                                             v8::Local<v8::Context> context,
                                             const std::string &eventName,
                                             const std::vector<v8::Local<v8::Value>> &args,
-                                            const std::string &targetResource = "",
-                                            bool bypassRunningCheck = false);
+                                            const std::string &targetResource = "");
 
         // Helper: invoke handlers and collect results as promises
         // handlers: pairs of (callback, logContext) where logContext is used for error logging
@@ -163,10 +148,6 @@ namespace Framework::Scripting {
         std::map<std::string, std::map<std::string, std::vector<EventHandler>, std::less<>>, std::less<>> _localHandlers;
 
         mutable std::mutex _handlersMutex;
-        ResourceManager *_resourceManager = nullptr;
-
-        // Additional reserved events added at runtime
-        std::set<std::string, std::less<>> _additionalReservedEvents;
 
         // Stored callback context (lifetime tied to this Events instance)
         std::unique_ptr<CallbackContext> _callbackContext;

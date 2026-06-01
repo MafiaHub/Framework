@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include <BitStream.h>
-#include <MessageIdentifiers.h>
-#include <RakNetTypes.h>
+#include <mafianet/BitStream.h>
+#include <mafianet/MessageIdentifiers.h>
+#include <mafianet/types.h>
 #include <string>
 #include <utils/hashing.h>
 
@@ -22,7 +22,7 @@ namespace Framework::Networking::RPC {
     template <class T>
     class IGameRPC {
       private:
-        SLNet::Packet *packet {};
+        MafiaNet::Packet *packet {};
         uint32_t _hashName = 0;
         std::string _rpcName;
 
@@ -43,10 +43,10 @@ namespace Framework::Networking::RPC {
             return _rpcName;
         }
 
-        virtual void Serialize(SLNet::BitStream *bs, bool write) = 0;
+        virtual void Serialize(MafiaNet::BitStream *bs, bool write) = 0;
         virtual bool Valid() const                               = 0;
 
-        void Serialize2(SLNet::BitStream *bs, bool write) {
+        void Serialize2(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, _serverID);
         };
 
@@ -66,11 +66,11 @@ namespace Framework::Networking::RPC {
             return _hashName;
         }
 
-        void SetPacket(SLNet::Packet *p) {
+        void SetPacket(MafiaNet::Packet *p) {
             packet = p;
         }
 
-        SLNet::Packet *GetPacket() const {
+        MafiaNet::Packet *GetPacket() const {
             return packet;
         }
 

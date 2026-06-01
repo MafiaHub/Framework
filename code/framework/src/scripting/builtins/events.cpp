@@ -1,4 +1,5 @@
 #include "events.h"
+#include "../engine_helpers.h"
 #include "../resource/resource_manager.h"
 
 #include <logging/logger.h>
@@ -37,8 +38,6 @@ namespace Framework::Scripting {
                           v8::Local<v8::Context> context,
                           v8::Local<v8::Object> target,
                           ResourceManager *resourceManager) {
-        _resourceManager = resourceManager;
-
         // Create callback context that will be passed to all V8 callbacks
         _callbackContext = std::make_unique<CallbackContext>();
         _callbackContext->events = this;
@@ -319,8 +318,12 @@ namespace Framework::Scripting {
                                                                 argv.empty() ? nullptr : argv.data());
 
             if (tryCatch.HasCaught()) {
-                v8::String::Utf8Value error(isolate, tryCatch.Exception());
-                std::string errorStr = *error ? *error : "Unknown error";
+                // FormatV8Exception pulls the JS stack trace when available and
+                // otherwise falls back to "<message>\n    at <file>:<line>:<col>",
+                // so the script author can see where the throw actually happened
+                // instead of just the bare error string.
+                std::string errorStr = FormatV8Exception(isolate, tryCatch,
+                    "Unknown error in event handler");
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->error(
                     "[{}] Event '{}' handler error: {}", logContext, eventName, errorStr);
 
@@ -495,8 +498,7 @@ namespace Framework::Scripting {
                                                  v8::Local<v8::Context> context,
                                                  const std::string &eventName,
                                                  const std::vector<v8::Local<v8::Value>> &args,
-                                                 const std::string &targetResource,
-                                                 bool bypassRunningCheck) {
+                                                 const std::string &targetResource) {
         v8::EscapableHandleScope handleScope(isolate);
 
         // Create Promise resolver
@@ -516,11 +518,6 @@ namespace Framework::Scripting {
 
                     // Filter by target resource if specified
                     if (!targetResource.empty() && handler.resourceName != targetResource) {
-                        continue;
-                    }
-
-                    // Check if resource is still running (skip for resourceStart via bypass)
-                    if (!bypassRunningCheck && _resourceManager && !_resourceManager->IsResourceRunning(handler.resourceName)) {
                         continue;
                     }
 
@@ -560,9 +557,8 @@ namespace Framework::Scripting {
     v8::Local<v8::Promise> Events::EmitReserved(v8::Isolate *isolate,
                                                  v8::Local<v8::Context> context,
                                                  const std::string &eventName,
-                                                 const std::vector<v8::Local<v8::Value>> &args,
-                                                 bool bypassRunningCheck) {
-        return EmitInternal(isolate, context, eventName, args, "", bypassRunningCheck);
+                                                 const std::vector<v8::Local<v8::Value>> &args) {
+        return EmitInternal(isolate, context, eventName, args, "");
     }
 
     void Events::EmitCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -590,13 +586,6 @@ namespace Framework::Scripting {
         }
 
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[0]);
-
-        // Check reserved events (static + dynamic)
-        if (ctx->events->IsEventReserved(eventName)) {
-            isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.emit: cannot emit reserved event '" + eventName + "'")));
-            return;
-        }
 
         std::vector<v8::Local<v8::Value>> eventArgs;
         for (int i = 1; i < args.Length(); ++i) {
@@ -633,13 +622,6 @@ namespace Framework::Scripting {
 
         std::string resourceName = v8pp::from_v8<std::string>(isolate, args[0]);
         std::string eventName = v8pp::from_v8<std::string>(isolate, args[1]);
-
-        // Check reserved events (static + dynamic)
-        if (ctx->events->IsEventReserved(eventName)) {
-            isolate->ThrowException(v8::Exception::Error(
-                v8pp::to_v8(isolate, "Events.emitTo: cannot emit reserved event '" + eventName + "'")));
-            return;
-        }
 
         std::vector<v8::Local<v8::Value>> eventArgs;
         for (int i = 2; i < args.Length(); ++i) {
@@ -805,19 +787,6 @@ namespace Framework::Scripting {
             return it->second.size();
         }
         return 0;
-    }
-
-    void Events::AddReservedEvents(const std::set<std::string> &events) {
-        std::scoped_lock lock(_handlersMutex);
-        _additionalReservedEvents.insert(events.begin(), events.end());
-    }
-
-    bool Events::IsEventReserved(std::string_view eventName) const {
-        if (IsReservedEvent(eventName)) {
-            return true;
-        }
-        std::scoped_lock lock(_handlersMutex);
-        return _additionalReservedEvents.contains(eventName);
     }
 
     void Events::ListenerCountCallback(const v8::FunctionCallbackInfo<v8::Value> &args) {

@@ -42,7 +42,7 @@ namespace Framework::World {
             }
             else {
                 // Assign the entity to the closest streamer.
-                uint64_t closestOwnerGUID = SLNet::UNASSIGNED_RAKNET_GUID.g;
+                uint64_t closestOwnerGUID = MafiaNet::UNASSIGNED_RAKNET_GUID.g;
                 float closestDist         = std::numeric_limits<float>::max();
                 _findAllStreamerEntities.each([this, &e, &tr, &closestDist, &closestOwnerGUID, &streamable](flecs::entity rhsE, Modules::Base::Streamer &rhsS) {
                     const auto rhsTr      = rhsE.try_get<Modules::Base::Transform>();

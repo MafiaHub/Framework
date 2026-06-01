@@ -10,8 +10,8 @@
 
 #include "messages.h"
 
-#include <BitStream.h>
-#include <RakString.h>
+#include <mafianet/BitStream.h>
+#include <mafianet/string.h>
 #include <string>
 #include <vector>
 
@@ -25,7 +25,7 @@ namespace Framework::Networking::Messages {
         std::string version;
         uint32_t hash = 0; // Content hash for cache invalidation
 
-        void Serialize(SLNet::BitStream *bs, bool write) {
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
             if (write) {
                 // Write name
                 uint16_t nameLen = static_cast<uint16_t>(name.length());
@@ -73,7 +73,7 @@ namespace Framework::Networking::Messages {
      */
     class ClientReadyAssets final: public IMessage {
       private:
-        SLNet::RakString _clientEntryPoint;
+        MafiaNet::RakString _clientEntryPoint;
         std::vector<ResourceInfo> _resources;
 
       public:
@@ -89,7 +89,7 @@ namespace Framework::Networking::Messages {
             _resources.push_back({name, version, hash});
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _clientEntryPoint);
 
             if (write) {

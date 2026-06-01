@@ -57,7 +57,7 @@ namespace Framework::World::Modules {
             const auto tr = e.try_get<Framework::World::Modules::Base::Transform>();
             const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
             // Only send framework update if entity has a valid owner
-            if (tr && es && es->owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+            if (tr && es && es->owner != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
                 Framework::Networking::Messages::GameSyncEntityUpdate entityUpdate;
                 entityUpdate.FromParameters(*tr, es->owner);
                 entityUpdate.SetServerID(e.id());
@@ -71,7 +71,7 @@ namespace Framework::World::Modules {
             const auto tr = e.try_get<Framework::World::Modules::Base::Transform>();
             const auto es = e.try_get<Framework::World::Modules::Base::Streamable>();
             // Only send framework owner update if entity has a valid owner
-            if (tr && es && es->owner != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+            if (tr && es && es->owner != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
                 Framework::Networking::Messages::GameSyncEntityOwnerUpdate entityUpdate;
                 entityUpdate.FromParameters(es->owner);
                 entityUpdate.SetServerID(e.id());
@@ -98,7 +98,7 @@ namespace Framework::World::Modules {
 
     void Base::SetupServerReceivers(Framework::Networking::NetworkPeer *net, Framework::World::Engine *worldEngine) {
         using namespace Framework::Networking::Messages;
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](MafiaNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -124,7 +124,7 @@ namespace Framework::World::Modules {
 
     void Base::SetupClientReceivers(Framework::Networking::NetworkPeer *net, Framework::World::ClientEngine *worldEngine, Framework::World::Archetypes::StreamingFactory *streamingFactory) {
         using namespace Framework::Networking::Messages;
-        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [worldEngine, streamingFactory](SLNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
+        net->RegisterMessage<GameSyncEntitySpawn>(GameMessages::GAME_SYNC_ENTITY_SPAWN, [worldEngine, streamingFactory](MafiaNet::RakNetGUID guid, GameSyncEntitySpawn *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -132,13 +132,13 @@ namespace Framework::World::Modules {
                 return;
             }
             const auto e = worldEngine->CreateEntity(msg->GetServerID());
-            streamingFactory->SetupClient(e, SLNet::UNASSIGNED_RAKNET_GUID.g);
+            streamingFactory->SetupClient(e, MafiaNet::UNASSIGNED_RAKNET_GUID.g);
 
             e.add<World::Modules::Base::Transform>();
             const auto tr = e.try_get_mut<World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });
-        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
+        net->RegisterMessage<GameSyncEntityDespawn>(GameMessages::GAME_SYNC_ENTITY_DESPAWN, [worldEngine](MafiaNet::RakNetGUID guid, GameSyncEntityDespawn *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -151,7 +151,7 @@ namespace Framework::World::Modules {
 
             e.destruct();
         });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_UPDATE, [worldEngine](MafiaNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -168,7 +168,7 @@ namespace Framework::World::Modules {
             const auto es = e.try_get_mut<World::Modules::Base::Streamable>();
             es->owner     = msg->GetOwner();
         });
-        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
+        net->RegisterMessage<GameSyncEntityUpdate>(GameMessages::GAME_SYNC_ENTITY_OWNER_UPDATE, [worldEngine](MafiaNet::RakNetGUID guid, GameSyncEntityUpdate *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -181,7 +181,7 @@ namespace Framework::World::Modules {
             const auto es = e.try_get_mut<World::Modules::Base::Streamable>();
             es->owner     = msg->GetOwner();
         });
-        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [worldEngine](SLNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
+        net->RegisterMessage<GameSyncEntitySelfUpdate>(GameMessages::GAME_SYNC_ENTITY_SELF_UPDATE, [worldEngine](MafiaNet::RakNetGUID guid, GameSyncEntitySelfUpdate *msg) {
             if (!msg->Valid()) {
                 return;
             }

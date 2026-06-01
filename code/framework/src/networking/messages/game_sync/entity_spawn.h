@@ -12,7 +12,7 @@
 #include "message.h"
 #include "world/modules/base.hpp"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Networking::Messages {
     class GameSyncEntitySpawn final: public GameSyncMessage {
@@ -28,7 +28,7 @@ namespace Framework::Networking::Messages {
             _transform = tr;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _transform);
         }
 

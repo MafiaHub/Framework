@@ -170,6 +170,10 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Port:\t{}", _opts.bindPort);
+        if (_opts.webServerEnabled) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Host:\t{}", _opts.webBindHost);
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Http Port:\t{}", _opts.webBindPort);
+        }
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Max Players:\t{}", _opts.maxPlayers);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{} Server successfully started", _opts.modName);
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
@@ -242,7 +246,7 @@ namespace Framework::Integrations::Server {
     void Instance::InitNetworkingMessages() const {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
-        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](SLNet::RakNetGUID guid, ClientHandshake *msg) {
+        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](MafiaNet::RakNetGUID guid, ClientHandshake *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for incoming player guid {}", guid.g);
 
             // Make sure handshake payload was correctly formatted
@@ -305,7 +309,7 @@ namespace Framework::Integrations::Server {
             net->Send(readyMsg, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([this, net](SLNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
+        net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 
@@ -321,7 +325,7 @@ namespace Framework::Integrations::Server {
         });
 
         
-        net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](SLNet::RakNetGUID guid, ClientRequestStreamer *msg) {
+        net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](MafiaNet::RakNetGUID guid, ClientRequestStreamer *msg) {
             // Create player entity and add on world
             const auto newPlayer = _worldEngine->CreateEntity();
             _streamingFactory->SetupServer(newPlayer, guid.g);
@@ -343,7 +347,7 @@ namespace Framework::Integrations::Server {
             net->Send(answer, guid);
         });
 
-        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](SLNet::RakNetGUID guid, ClientInitPlayer *stub) {
+        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](MafiaNet::RakNetGUID guid, ClientInitPlayer *stub) {
             const auto e = _worldEngine->GetEntityByGUID(guid.g);
             if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
                 _onPlayerConnectCallback(e, guid.g);

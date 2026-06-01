@@ -10,7 +10,7 @@
 
 #include "messages.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 #include <flecs/distr/flecs.h>
 
@@ -18,7 +18,7 @@ namespace Framework::Networking::Messages {
     class ClientKick final: public IMessage {
       private:
         DisconnectionReason _reason = DisconnectionReason::UNKNOWN;
-        SLNet::RakString _customReason;
+        MafiaNet::RakString _customReason;
 
       public:
         uint8_t GetMessageID() const override {
@@ -30,7 +30,7 @@ namespace Framework::Networking::Messages {
             _customReason = customReason.c_str();
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _reason);
             bs->Serialize(write, _customReason);
         }

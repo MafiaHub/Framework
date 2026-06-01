@@ -18,7 +18,7 @@
 #include <graphics/renderio.h>
 
 #include "networking/engine.h"
-#include <FileListTransferCBInterface.h>
+#include <mafianet/FileListTransferCBInterface.h>
 
 #include <memory>
 #include <utility>
@@ -42,16 +42,16 @@ namespace Framework::Integrations::Client {
 
     class Instance;
 
-    class AssetDownloadFileProgress final: public SLNet::FileListTransferCBInterface {
+    class AssetDownloadFileProgress final: public MafiaNet::FileListTransferCBInterface {
       private:
         Instance *_instance = nullptr;
 
       public:
         AssetDownloadFileProgress(Instance *instance): _instance(instance) {}
 
-        bool OnFile(SLNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) override;
+        bool OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) override;
 
-        void OnFileProgress(SLNet::FileListTransferCBInterface::FileProgressStruct *fps) override;
+        void OnFileProgress(MafiaNet::FileListTransferCBInterface::FileProgressStruct *fps) override;
 
         bool OnDownloadComplete(DownloadCompleteStruct *dcs) override;
     };

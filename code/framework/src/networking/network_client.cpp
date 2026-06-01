@@ -18,9 +18,9 @@ namespace Framework::Networking {
     }
 
     NetworkPeerError NetworkClient::Init() {
-        SLNet::SocketDescriptor sd {};
-        const SLNet::StartupResult result = _peer->Startup(1, &sd, 1);
-        if (result != SLNet::RAKNET_STARTED && result != SLNet::RAKNET_ALREADY_STARTED) {
+        MafiaNet::SocketDescriptor sd {};
+        const MafiaNet::StartupResult result = _peer->Startup(1, &sd, 1);
+        if (result != MafiaNet::RAKNET_STARTED && result != MafiaNet::RAKNET_ALREADY_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
             return NetworkPeerError::NETWORK_PEER_INIT_FAILED;
         }
@@ -38,7 +38,7 @@ namespace Framework::Networking {
             return;
         }
         _registeredMessageCallbacks.clear();
-        SLNet::RakPeerInterface::DestroyInstance(_peer);
+        MafiaNet::RakPeerInterface::DestroyInstance(_peer);
         _peer = nullptr;
 
         Lifecycle::Shutdown();
@@ -60,8 +60,8 @@ namespace Framework::Networking {
 
         _state = PeerState::CONNECTING;
 
-        const SLNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
-        if (result != SLNet::CONNECTION_ATTEMPT_STARTED) {
+        const MafiaNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
+        if (result != MafiaNet::CONNECTION_ATTEMPT_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             _state = PeerState::DISCONNECTED;
             return ConnectionError::CONNECTION_CONNECT_FAILED;
@@ -99,7 +99,7 @@ namespace Framework::Networking {
         NetworkPeer::Update();
     }
 
-    bool NetworkClient::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
+    bool NetworkClient::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
         case ID_CONNECTION_REQUEST_ACCEPTED: {
             if (_onPlayerConnectedCallback) {
@@ -168,7 +168,7 @@ namespace Framework::Networking {
         return _peer->GetAveragePing(_peer->GetSystemAddressFromIndex(0));
     }
 
-    void AssetFileTransfer::OnClosedConnection(const SLNet::SystemAddress &systemAddress, SLNet::RakNetGUID rakNetGUID, SLNet::PI2_LostConnectionReason lostConnectionReason) {
+    void AssetFileTransfer::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
         if (_cb) {
             _cb();
         }

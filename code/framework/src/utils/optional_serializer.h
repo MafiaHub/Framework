@@ -10,11 +10,11 @@
 
 #include "utils/optional.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Networking {
     template <typename T>
-    inline void SerializeOptional(Utils::Optional<T> &opt, SLNet::BitStream *bs, bool write) {
+    inline void SerializeOptional(Utils::Optional<T> &opt, MafiaNet::BitStream *bs, bool write) {
         if (write) {
             bool hasValue = opt.HasValue();
             bs->Write(hasValue);

@@ -14,10 +14,10 @@
 
 namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
-        _peer = SLNet::RakPeerInterface::GetInstance();
+        _peer = MafiaNet::RakPeerInterface::GetInstance();
 
-        RegisterMessage(Messages::INTERNAL_RPC, [this](SLNet::Packet *p) {
-            SLNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
+        RegisterMessage(Messages::INTERNAL_RPC, [this](MafiaNet::Packet *p) {
+            MafiaNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
             uint32_t hashName;
             bs.Read(hashName);
 
@@ -31,17 +31,17 @@ namespace Framework::Networking {
 
     NetworkPeer::~NetworkPeer() = default;
 
-    bool NetworkPeer::Send(Messages::IMessage &msg, SLNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
+    bool NetworkPeer::Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
         if (!_peer) {
             return false;
         }
 
-        SLNet::BitStream bsOut;
+        MafiaNet::BitStream bsOut;
         bsOut.Write(msg.GetMessageID());
         msg.Serialize(&bsOut, true);
         msg.Serialize2(&bsOut, true);
 
-        if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == SLNet::UNASSIGNED_RAKNET_GUID) <= 0) {
+        if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
             return false;
         }
 
@@ -49,7 +49,7 @@ namespace Framework::Networking {
     }
 
     bool NetworkPeer::Send(Messages::IMessage &msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
-        return Send(msg, SLNet::RakNetGUID(guid), priority, reliability);
+        return Send(msg, MafiaNet::RakNetGUID(guid), priority, reliability);
     }
 
     void NetworkPeer::RegisterMessage(uint8_t message, Messages::PacketCallback callback) {
@@ -70,11 +70,11 @@ namespace Framework::Networking {
             if (_packet->length == 0) {
                 continue;
             }
-            SLNet::TimeMS TS  = 0;
-            if (_packet->length > 1 + sizeof(SLNet::TimeMS) && _packet->data[0] == ID_TIMESTAMP) {
-                SLNet::BitStream timestamp(_packet->data + 1, sizeof(SLNet::TimeMS) + 1, false);
+            MafiaNet::TimeMS TS  = 0;
+            if (_packet->length > 1 + sizeof(MafiaNet::TimeMS) && _packet->data[0] == ID_TIMESTAMP) {
+                MafiaNet::BitStream timestamp(_packet->data + 1, sizeof(MafiaNet::TimeMS) + 1, false);
                 timestamp.Read(TS);
-                _packetDataOffset = 1 + sizeof(SLNet::TimeMS);
+                _packetDataOffset = 1 + sizeof(MafiaNet::TimeMS);
             }
 
             if (static_cast<uint32_t>(_packetDataOffset) >= _packet->length) {

@@ -73,7 +73,7 @@ namespace Framework::World {
                     const auto &es = &rs[i];
 
                     if (es->GetBaseEvents().updateProc && es->performTickUpdates && Framework::World::Engine::IsEntityOwner(it.entity(i), myGUID.g)) {
-                        es->GetBaseEvents().updateProc(_networkPeer, (SLNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
+                        es->GetBaseEvents().updateProc(_networkPeer, (MafiaNet::UNASSIGNED_RAKNET_GUID).g, it.entity(i));
                     }
                 }
             }
@@ -107,7 +107,7 @@ namespace Framework::World {
         _networkPeer = nullptr;
     }
     void ClientEngine::InitRPCs(Networking::NetworkPeer *net) const {
-        net->RegisterGameRPC<RPC::SetTransform>([this](SLNet::RakNetGUID guid, RPC::SetTransform *msg) {
+        net->RegisterGameRPC<RPC::SetTransform>([this](MafiaNet::RakNetGUID guid, RPC::SetTransform *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -119,7 +119,7 @@ namespace Framework::World {
             *tr           = msg->GetTransform();
             e.modified<World::Modules::Base::Transform>();
         });
-        net->RegisterGameRPC<RPC::SetFrame>([this](SLNet::RakNetGUID guid, RPC::SetFrame *msg) {
+        net->RegisterGameRPC<RPC::SetFrame>([this](MafiaNet::RakNetGUID guid, RPC::SetFrame *msg) {
             if (!msg->Valid()) {
                 return;
             }

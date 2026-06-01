@@ -296,7 +296,7 @@ namespace Framework::Scripting {
             args.push_back(v8pp::to_v8(isolate, nameStr));
 
             SetCurrentResourceContext(nameStr);
-            _events.EmitReserved(isolate, context, "resourceStart", args, true);
+            _events.EmitReserved(isolate, context, "resourceStart", args);
             SetCurrentResourceContext("");
         }
 

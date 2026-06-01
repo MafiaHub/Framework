@@ -10,15 +10,15 @@
 
 #include "messages.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Networking::Messages {
     class ClientRequestStreamer final: public IMessage {
       private:
-        SLNet::RakString _playerName      = "";
-        SLNet::RakString _playerSteamId   = "";
-        SLNet::RakString _playerDiscordId = "";
-        SLNet::RakString _playerHardwareId = "";
+        MafiaNet::RakString _playerName      = "";
+        MafiaNet::RakString _playerSteamId   = "";
+        MafiaNet::RakString _playerDiscordId = "";
+        MafiaNet::RakString _playerHardwareId = "";
 
       public:
         uint8_t GetMessageID() const override {
@@ -26,13 +26,13 @@ namespace Framework::Networking::Messages {
         }
 
         void FromParameters(const std::string &playerName, const std::string &playerSteamId, const std::string &playerDiscordId, const std::string &playerHardwareId = "") {
-            _playerName       = SLNet::RakString(playerName.c_str());
-            _playerSteamId    = SLNet::RakString(playerSteamId.c_str());
-            _playerDiscordId  = SLNet::RakString(playerDiscordId.c_str());
-            _playerHardwareId = SLNet::RakString(playerHardwareId.c_str());
+            _playerName       = MafiaNet::RakString(playerName.c_str());
+            _playerSteamId    = MafiaNet::RakString(playerSteamId.c_str());
+            _playerDiscordId  = MafiaNet::RakString(playerDiscordId.c_str());
+            _playerHardwareId = MafiaNet::RakString(playerHardwareId.c_str());
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _playerName);
             bs->Serialize(write, _playerSteamId);
             bs->Serialize(write, _playerDiscordId);

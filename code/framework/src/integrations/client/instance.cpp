@@ -44,7 +44,7 @@
 #include "graphics/backend/d3d9.h"
 
 namespace Framework::Integrations::Client {
-    bool AssetDownloadFileProgress::OnFile(SLNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
+    bool AssetDownloadFileProgress::OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
         if (onFileStruct->numberOfFilesInThisSet > 0) {
             auto &downloadStatus    = _instance->GetAssetDownloadStatus();
             downloadStatus.progress = onFileStruct->bytesDownloadedForThisSet / float(onFileStruct->byteLengthOfThisSet);
@@ -56,7 +56,7 @@ namespace Framework::Integrations::Client {
         return true;
     }
 
-    void AssetDownloadFileProgress::OnFileProgress(SLNet::FileListTransferCBInterface::FileProgressStruct *fps) {
+    void AssetDownloadFileProgress::OnFileProgress(MafiaNet::FileListTransferCBInterface::FileProgressStruct *fps) {
         auto &downloadStatus    = _instance->GetAssetDownloadStatus();
         auto onFileStruct       = fps->onFileStruct;
         downloadStatus.progress = onFileStruct->byteLengthOfThisSet / float(onFileStruct->bytesDownloadedForThisSet);
@@ -295,15 +295,15 @@ namespace Framework::Integrations::Client {
     void Instance::InitNetworkingMessages() {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
-        net->SetOnPlayerConnectedCallback([this, net](SLNet::Packet *packet) {
+        net->SetOnPlayerConnectedCallback([this, net](MafiaNet::Packet *packet) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
 
             ClientHandshake msg;
             msg.FromParameters(_opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
 
-            net->Send(msg, SLNet::UNASSIGNED_RAKNET_GUID);
+            net->Send(msg, MafiaNet::UNASSIGNED_RAKNET_GUID);
         });
-        net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](SLNet::RakNetGUID _guid, ClientReadyAssets *msg) {
+        net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](MafiaNet::RakNetGUID _guid, ClientReadyAssets *msg) {
             // Store resource list on instance (survives scripting module reset)
             if (msg->GetResourceCount() > 0) {
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
@@ -321,7 +321,7 @@ namespace Framework::Integrations::Client {
 
             DownloadsAssetsFromConnectedServer();
         });
-        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](SLNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
+        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](MafiaNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
             _worldEngine->OnConnect(net, msg->GetServerTickRate());
             const auto guid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
@@ -332,14 +332,14 @@ namespace Framework::Integrations::Client {
 
             // Notify server we are ready to obtain player data
             Framework::Networking::Messages::ClientInitPlayer initPlayer {};
-            net->Send(initPlayer, SLNet::UNASSIGNED_RAKNET_GUID);
+            net->Send(initPlayer, MafiaNet::UNASSIGNED_RAKNET_GUID);
 
             // Notify mod-level that network integration whole process succeeded
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
             }
         });
-        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](SLNet::RakNetGUID guid, ClientKick *msg) {
+        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](MafiaNet::RakNetGUID guid, ClientKick *msg) {
             std::string reason = "Unknown.";
 
             switch (msg->GetDisconnectionReason()) {
@@ -353,7 +353,7 @@ namespace Framework::Integrations::Client {
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
         });
-        net->RegisterGameRPC<Framework::World::RPC::SetTransform>([this](SLNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
+        net->RegisterGameRPC<Framework::World::RPC::SetTransform>([this](MafiaNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
             if (!msg->Valid()) {
                 return;
             }
@@ -365,7 +365,7 @@ namespace Framework::Integrations::Client {
             const auto tr = e.try_get_mut<Framework::World::Modules::Base::Transform>();
             *tr           = msg->GetTransform();
         });
-        net->SetOnPlayerDisconnectedCallback([this](SLNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
+        net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
             // Reset initial asset download state
             _initialDownloadDone = false;
             _downloadStatus      = {};
@@ -381,13 +381,17 @@ namespace Framework::Integrations::Client {
             // Reset the scripting engine (keeps engine alive, just stops resources)
             _scriptingModule->Reset();
 
+            // Unregister from CoreModules so a subsequent reconnect can re-register
+            // without tripping the "already registered" assertion
+            CoreModules::SetScriptingModule(nullptr);
+
             // Destroy scriptable web views
             if (_webManager) {
                 _webManager->CleanupViews();
             }
         });
 
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](SLNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](MafiaNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
             if (!rpc->Valid())
                 return;
             const auto eventName  = rpc->GetEventName();
@@ -548,7 +552,7 @@ namespace Framework::Integrations::Client {
 
             Framework::Networking::Messages::ClientRequestStreamer req;
             req.FromParameters(_currentState.nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
-            net->Send(req, SLNet::UNASSIGNED_RAKNET_GUID);
+            net->Send(req, MafiaNet::UNASSIGNED_RAKNET_GUID);
         }
 
         _downloadStatus = {};
