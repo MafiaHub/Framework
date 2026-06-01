@@ -29,10 +29,6 @@ namespace Framework::Networking {
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
 
-        // Signal a serialized RPC payload to every connected system except one, by targeting each
-        // connection individually (RPC4::Signal has no exclusion parameter).
-        void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
-
       public:
         NetworkServer(): NetworkPeer() {}
 
@@ -41,13 +37,10 @@ namespace Framework::Networking {
 
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
-        // Send an RPC payload to everyone except one system (typically the originator).
-        template <typename T>
-        void BroadcastRPCExcept(T &payload, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
-            MafiaNet::BitStream bs;
-            payload.Serialize(&bs, true);
-            SignalExcept(T::kIdentifier, bs, excludeGUID, priority, reliability);
-        }
+        // Signal an RPC to every connected system except one (typically the originator) — the
+        // server-authoritative relay primitive, since RPC4::Signal has no exclusion parameter. The
+        // bitstream holds the already-written RPC arguments.
+        void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 
         int GetPing(MafiaNet::RakNetGUID guid) const;
 
