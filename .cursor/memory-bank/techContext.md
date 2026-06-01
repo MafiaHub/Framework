@@ -19,7 +19,7 @@
 ## Core Technologies
 
 ### Networking
-- **SLikeNet**: Networking library for reliable and unreliable communication
+- **MafiaNet**: Networking library (MafiaHub fork of RakNet/SLikeNet) for reliable and unreliable communication
 - **HTTP Library**: For RESTful API communication
 
 ### User Interface
@@ -55,7 +55,7 @@ The framework relies on numerous third-party libraries, all of which are include
 ```
 glm                  - Mathematics
 spdlog               - Logging
-slikenet             - Networking
+mafianet             - Networking
 json                 - Data serialization
 lua                  - Scripting
 sdl2                 - Window management

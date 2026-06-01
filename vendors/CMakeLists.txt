@@ -39,8 +39,8 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_COMPILE ON)
 add_subdirectory(httplib)
 
-# Build slikenet
-add_subdirectory(slikenet)
+# Build MafiaNet (networking, vendored fork of RakNet/SLikeNet)
+add_subdirectory(mafianet)
 
 # Build sentry
 set(CURL_STATICLIB ON)

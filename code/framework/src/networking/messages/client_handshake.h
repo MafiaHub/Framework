@@ -10,15 +10,15 @@
 
 #include "messages.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Networking::Messages {
     class ClientHandshake final: public IMessage {
       private:
-        SLNet::RakString _clientVersion   = "";
-        SLNet::RakString _fwVersion       = "";
-        SLNet::RakString _gameVersion     = "";
-        SLNet::RakString _gameName        = "";
+        MafiaNet::RakString _clientVersion   = "";
+        MafiaNet::RakString _fwVersion       = "";
+        MafiaNet::RakString _gameVersion     = "";
+        MafiaNet::RakString _gameName        = "";
 
       public:
         uint8_t GetMessageID() const override {
@@ -26,13 +26,13 @@ namespace Framework::Networking::Messages {
         }
 
         void FromParameters(const std::string &clientVersion, const std::string &fwVersion, const std::string &gameVersion, const std::string &gameName) {
-            _fwVersion       = SLNet::RakString(fwVersion.c_str());
-            _clientVersion   = SLNet::RakString(clientVersion.c_str());
-            _gameVersion     = SLNet::RakString(gameVersion.c_str());
-            _gameName        = SLNet::RakString(gameName.c_str());
+            _fwVersion       = MafiaNet::RakString(fwVersion.c_str());
+            _clientVersion   = MafiaNet::RakString(clientVersion.c_str());
+            _gameVersion     = MafiaNet::RakString(gameVersion.c_str());
+            _gameName        = MafiaNet::RakString(gameName.c_str());
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _fwVersion);
             bs->Serialize(write, _clientVersion);
             bs->Serialize(write, _gameVersion);

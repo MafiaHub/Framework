@@ -175,7 +175,7 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
         ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in world/modules/base.hpp)
-        ${CMAKE_SOURCE_DIR}/vendors/slikenet/Source        # Networking (used in messages.h)
+        ${CMAKE_SOURCE_DIR}/vendors/mafianet/Source/include # Networking / MafiaNet (used in messages.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
         ${CMAKE_SOURCE_DIR}/vendors                        # flecs, etc.
     )
@@ -201,7 +201,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} slikenet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl flecs_static semver Hash ftl)
+    target_link_libraries(${target_name} MafiaNet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl flecs_static semver Hash ftl)
 
     # Required libraries for windows
     if(WIN32)

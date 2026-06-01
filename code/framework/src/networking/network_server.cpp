@@ -8,15 +8,15 @@
 
 #include "network_server.h"
 
-#include <BitStream.h>
-#include <MessageIdentifiers.h>
+#include <mafianet/BitStream.h>
+#include <mafianet/MessageIdentifiers.h>
 #include <logging/logger.h>
 
 namespace Framework::Networking {
     NetworkPeerError NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
-        auto newSocketSd                  = SLNet::SocketDescriptor((uint16_t)port, host.c_str());
-        const SLNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
-        if (result != SLNet::RAKNET_STARTED) {
+        auto newSocketSd                  = MafiaNet::SocketDescriptor((uint16_t)port, host.c_str());
+        const MafiaNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
+        if (result != MafiaNet::RAKNET_STARTED) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
             return NetworkPeerError::NETWORK_PEER_INIT_FAILED;
         }
@@ -36,7 +36,7 @@ namespace Framework::Networking {
         return NetworkPeerError::NETWORK_PEER_NONE;
     }
 
-    bool NetworkServer::HandlePacket(uint8_t packetID, SLNet::Packet *packet) {
+    bool NetworkServer::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
         case ID_NEW_INCOMING_CONNECTION: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", packet->guid.ToString());
@@ -71,15 +71,15 @@ namespace Framework::Networking {
         }
 
         _peer->Shutdown(1000);
-        SLNet::RakPeerInterface::DestroyInstance(_peer);
+        MafiaNet::RakPeerInterface::DestroyInstance(_peer);
         _peer = nullptr;
         Lifecycle::Shutdown();
     }
 
-    int NetworkServer::GetPing(SLNet::RakNetGUID guid) const {
+    int NetworkServer::GetPing(MafiaNet::RakNetGUID guid) const {
         return _peer->GetAveragePing(guid);
     }
-    bool NetworkServer::SendGameRPCInternal(SLNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, SLNet::RakNetGUID guid, SLNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) const {
+    bool NetworkServer::SendGameRPCInternal(MafiaNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent_id, MafiaNet::RakNetGUID guid, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) const {
         const auto ent = world->WrapEntity(ent_id);
 
         if (!ent.is_alive()) {
@@ -90,13 +90,13 @@ namespace Framework::Networking {
 
         for (const auto &streamer_ent : streamers) {
             const auto streamer = streamer_ent.try_get<World::Modules::Base::Streamer>();
-            if (streamer->guid != guid.g && guid.g != SLNet::UNASSIGNED_RAKNET_GUID.g) {
+            if (streamer->guid != guid.g && guid.g != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
                 continue;
             }
             if (streamer->guid == excludeGUID.g) {
                 continue;
             }
-            _peer->Send(&bs, priority, reliability, 0, SLNet::RakNetGUID(streamer->guid), false);
+            _peer->Send(&bs, priority, reliability, 0, MafiaNet::RakNetGUID(streamer->guid), false);
         }
 
         return true;

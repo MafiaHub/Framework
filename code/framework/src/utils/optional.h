@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Utils {
     template <typename T>
@@ -58,7 +58,7 @@ namespace Framework::Utils {
             _hasValue = true;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) {
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
             if (write) {
                 bs->Write(_hasValue);
                 if (_hasValue) {

@@ -15,8 +15,8 @@
 namespace Framework::Integrations::Shared::RPC {
     class EmitLuaEvent final: public Framework::Networking::RPC::IRPC<EmitLuaEvent> {
       private:
-        SLNet::RakString _eventName;
-        SLNet::RakString _payload;
+        MafiaNet::RakString _eventName;
+        MafiaNet::RakString _payload;
 
       public:
         void FromParameters(const std::string &name, const std::string &payload) {
@@ -24,7 +24,7 @@ namespace Framework::Integrations::Shared::RPC {
             _payload = payload.c_str();
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _eventName);
             bs->Serialize(write, _payload);
         }

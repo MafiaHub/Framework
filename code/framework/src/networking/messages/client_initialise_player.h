@@ -10,7 +10,7 @@
 
 #include "messages.h"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 #include <flecs/distr/flecs.h>
 
@@ -21,7 +21,7 @@ namespace Framework::Networking::Messages {
             return GAME_INIT_PLAYER;
         }
 
-        void Serialize(SLNet::BitStream *bs, bool write) override {}
+        void Serialize(MafiaNet::BitStream *bs, bool write) override {}
 
         bool Valid() const override {
             return true;

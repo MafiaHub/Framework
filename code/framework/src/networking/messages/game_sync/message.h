@@ -11,7 +11,7 @@
 #include "../messages.h"
 #include "world/modules/base.hpp"
 
-#include <BitStream.h>
+#include <mafianet/BitStream.h>
 
 namespace Framework::Networking::Messages {
     class GameSyncMessage: public IMessage {
@@ -27,7 +27,7 @@ namespace Framework::Networking::Messages {
             return _serverID;
         }
 
-        void Serialize2(SLNet::BitStream *bs, bool write) override {
+        void Serialize2(MafiaNet::BitStream *bs, bool write) override {
             bs->Serialize(write, _serverID);
         };
 
