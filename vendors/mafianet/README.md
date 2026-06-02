@@ -271,7 +271,10 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.6.0 (Latest)
+### Version 0.6.1 (Latest)
+- **ReplicaManager3**: `GetReplicaAtIndex` is now `const`, matching the other read accessors (`GetReplicaCount`, `GetConnectionCount`, `GetConnectionAtIndex`) — const methods iterating replicas no longer need a `const_cast`. The returned `Replica3*` stays non-const. Source-compatible (no break for existing non-const call sites)
+
+### Version 0.6.0
 - **RPC4 user context**: `RegisterFunction`, `RegisterSlot`, `RegisterBlockingFunction` and the `RPC4GlobalRegistration` handler constructors now take an opaque `void *context` passed back to the handler on every call — no more file-static global pointers to route an RPC to an object instance (each registration carries its own context)
 - **Bug fix**: `RakPeer::CloseConnection` no longer dereferences a null `rakNetSocket` during teardown (a pre-existing crash in release builds); falls back to the primary socket
 - **Testing**: added `RPC4ContextTest` (slot/nonblocking/blocking context); quarantined the flaky `ManyClientsOneServerDeallocateBlockingTest` in CI pending a teardown-race fix

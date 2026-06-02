@@ -421,7 +421,7 @@ unsigned ReplicaManager3::GetReplicaCount(WorldId worldId) const
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Replica3 *ReplicaManager3::GetReplicaAtIndex(unsigned index, WorldId worldId)
+Replica3 *ReplicaManager3::GetReplicaAtIndex(unsigned index, WorldId worldId) const
 {
 	RakAssert(worldsArray[worldId]!=0 && "World not in use");
 	RM3World *world = worldsArray[worldId];

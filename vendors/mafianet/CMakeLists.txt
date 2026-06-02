@@ -1,5 +1,5 @@
 # MafiaNet - MafiaHub's networking engine (fork of RakNet/SLikeNet).
-# Vendored, pinned to tag v0.6.0 (see VERSION.txt). Built as a static library.
+# Vendored, pinned to tag v0.6.1 (see VERSION.txt). Built as a static library.
 #
 # Public headers live under Source/include and are consumed with the
 # "mafianet/" prefix, e.g. #include <mafianet/peerinterface.h>.

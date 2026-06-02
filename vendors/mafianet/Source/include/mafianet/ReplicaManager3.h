@@ -199,7 +199,7 @@ public:
 	/// \param[in] index An index, from 0 to GetReplicaCount()-1.
 	/// \param[in] worldId Used for multiple worlds. World 0 is created automatically by default. See AddWorld()
 	/// \return A Replica3 instance
-	Replica3 *GetReplicaAtIndex(unsigned index, WorldId worldId=0);
+	Replica3 *GetReplicaAtIndex(unsigned index, WorldId worldId=0) const;
 
 	/// \brief Returns the number of connections
 	/// \details Returns the number of connections added with ReplicaManager3::PushConnection(), minus the number removed with ReplicaManager3::PopConnection()
