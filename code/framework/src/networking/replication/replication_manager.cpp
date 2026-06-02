@@ -21,6 +21,32 @@ namespace Framework::Networking::Replication {
         // Half-extent of a point entity's bounding box in the spatial index. GridSectorizer requires
         // min < max (it asserts otherwise), so a point is inserted as a tiny box around its position.
         constexpr float kPointEpsilon = 0.01f;
+
+        // Built-in server->owner teleport RPC (see NetworkEntity::ForceTransform). Wire: id/pos/rot.
+        constexpr const char *kForceTransformId = "Framework::ForceTransform";
+
+        // The local manager, so the (non-capturing) RPC handler can resolve entities. One per peer.
+        ReplicationManager *g_manager = nullptr;
+
+        void OnForceTransform(MafiaNet::BitStream *bs, MafiaNet::Packet *) {
+            if (!g_manager) {
+                return;
+            }
+            MafiaNet::NetworkID networkId;
+            glm::vec3 position {};
+            glm::quat rotation {};
+            bs->Read(networkId);
+            bs->Read(position);
+            bs->Read(rotation);
+
+            auto *entity = g_manager->GetEntityByNetworkID(networkId);
+            if (!entity) {
+                return;
+            }
+            entity->position = position;
+            entity->rotation = rotation;
+            entity->OnTransformForced();
+        }
     } // namespace
 
     ReplicationManager::ReplicationManager() = default;
@@ -32,11 +58,30 @@ namespace Framework::Networking::Replication {
         _gridReady    = false; // re-initialised on next Tick()
     }
 
-    void ReplicationManager::Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, bool isServer) {
+    void ReplicationManager::Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, MafiaNet::RPC4 *rpc, bool isServer) {
         _isServer = isServer;
         _myGUID   = peer->GetMyGUID().g;
+        _rpc      = rpc;
         SetNetworkIDManager(networkIDManager);
         peer->AttachPlugin(this);
+
+        // The owning client applies forced transforms (server-sent teleports).
+        g_manager = this;
+        if (_rpc) {
+            _rpc->RegisterFunction(kForceTransformId, &OnForceTransform);
+        }
+    }
+
+    void ReplicationManager::ForceTransform(NetworkEntity *entity) {
+        if (!entity || !_rpc || entity->ownerGUID == 0xFFFFFFFFFFFFFFFF) {
+            return;
+        }
+        MafiaNet::BitStream bs;
+        MafiaNet::NetworkID networkId = entity->GetNetworkID();
+        bs.Write(networkId);
+        bs.Write(entity->position);
+        bs.Write(entity->rotation);
+        _rpc->Signal(kForceTransformId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
     }
 
     NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId) {

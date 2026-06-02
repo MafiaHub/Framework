@@ -12,6 +12,7 @@
 
 #include <mafianet/GridSectorizer.h>
 #include <mafianet/NetworkIDManager.h>
+#include <mafianet/RPC4Plugin.h>
 #include <mafianet/ReplicaManager3.h>
 #include <mafianet/peerinterface.h>
 
@@ -31,7 +32,11 @@ namespace Framework::Networking::Replication {
       public:
         ReplicationManager();
 
-        void Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, bool isServer);
+        void Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, MafiaNet::RPC4 *rpc, bool isServer);
+
+        // Server: push the entity's current transform to its owner as a teleport (see
+        // NetworkEntity::ForceTransform / OnTransformForced). No-op for unowned entities.
+        void ForceTransform(NetworkEntity *entity);
 
         bool IsServer() const {
             return _isServer;
@@ -78,6 +83,7 @@ namespace Framework::Networking::Replication {
         float _gridCellSize = 100.0f;
         float _gridMin      = -10000.0f;
         float _gridMax      = 10000.0f;
+        MafiaNet::RPC4 *_rpc = nullptr;
         GridSectorizer _grid;
         std::unordered_map<uint64_t, NetworkEntity *> _viewers;
     };

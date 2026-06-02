@@ -90,6 +90,12 @@ namespace Framework::Networking::Replication {
         delete this;
     }
 
+    void NetworkEntity::ForceTransform() {
+        if (auto *manager = static_cast<ReplicationManager *>(replicaManager)) {
+            manager->ForceTransform(this);
+        }
+    }
+
     // --- Per-tick delta serialization (VariableDeltaSerializer) ---
 
     void NetworkEntity::OnUserReplicaPreSerializeTick() {

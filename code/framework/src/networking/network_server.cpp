@@ -35,7 +35,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_assetStreamer);
 
         // Run replication as the authoritative server.
-        _replicationManager->Init(_peer, &_networkIDManager, true);
+        _replicationManager->Init(_peer, &_networkIDManager, &_rpc, true);
 
         _initialized = true;
         return NetworkPeerError::NETWORK_PEER_NONE;
