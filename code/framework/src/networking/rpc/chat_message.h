@@ -10,8 +10,6 @@
 
 #include "rpc.h"
 
-#include <mafianet/string.h>
-
 #include <string>
 
 namespace Framework::Networking::RPC {
@@ -24,14 +22,9 @@ namespace Framework::Networking::RPC {
         std::string text;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
-            if (write) {
-                bs->Write(MafiaNet::RakString(text.c_str()));
-            }
-            else {
-                MafiaNet::RakString raw;
-                bs->Read(raw);
-                text = raw.C_String();
-            }
+            // std::string is a first-class wire type in MafiaNet (length-prefixed, same format as
+            // RakString), so this stays a single symmetric line.
+            bs->Serialize(write, text);
         }
     };
 } // namespace Framework::Networking::RPC
