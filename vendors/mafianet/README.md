@@ -271,7 +271,13 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.5.1 (Latest)
+### Version 0.6.0 (Latest)
+- **RPC4 user context**: `RegisterFunction`, `RegisterSlot`, `RegisterBlockingFunction` and the `RPC4GlobalRegistration` handler constructors now take an opaque `void *context` passed back to the handler on every call — no more file-static global pointers to route an RPC to an object instance (each registration carries its own context)
+- **Bug fix**: `RakPeer::CloseConnection` no longer dereferences a null `rakNetSocket` during teardown (a pre-existing crash in release builds); falls back to the primary socket
+- **Testing**: added `RPC4ContextTest` (slot/nonblocking/blocking context); quarantined the flaky `ManyClientsOneServerDeallocateBlockingTest` in CI pending a teardown-race fix
+- _Breaking_: RPC4 handler signatures gained a trailing `void *context` and the registration calls take a context argument; there are no compatibility overloads (pass `nullptr` when unused)
+
+### Version 0.5.1
 - **Plugins**: Added `DirectoryDeltaTransfer::AddFile(filePath, fileName)` to queue a single file for upload (complements the recursive `AddUploadsFromSubdirectory`)
 
 ### Version 0.5.0

@@ -33,8 +33,9 @@ STATIC_FACTORY_DEFINITIONS(RPC4,RPC4);
 
 struct GlobalRegistration
 {
-	void ( *registerFunctionPointer ) (MafiaNet::BitStream *userData, Packet *packet );
-	void ( *registerBlockingFunctionPointer ) (MafiaNet::BitStream *userData, MafiaNet::BitStream *returnData, Packet *packet );
+	void ( *registerFunctionPointer ) (MafiaNet::BitStream *userData, Packet *packet, void *context );
+	void ( *registerBlockingFunctionPointer ) (MafiaNet::BitStream *userData, MafiaNet::BitStream *returnData, Packet *packet, void *context );
+	void *context;
 	char functionName[RPC4_GLOBAL_REGISTRATION_MAX_FUNCTION_NAME_LENGTH];
 	MessageID messageId;
 	int callPriority;
@@ -42,7 +43,7 @@ struct GlobalRegistration
 static GlobalRegistration globalRegistrationBuffer[RPC4_GLOBAL_REGISTRATION_MAX_FUNCTIONS];
 static unsigned int globalRegistrationIndex=0;
 
-RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet ))
+RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet, void *context ), void *context)
 {
 	RakAssert(globalRegistrationIndex!=RPC4_GLOBAL_REGISTRATION_MAX_FUNCTIONS);
 	unsigned int i;
@@ -53,10 +54,11 @@ RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *fun
 	}
 	globalRegistrationBuffer[globalRegistrationIndex].registerFunctionPointer=functionPointer;
 	globalRegistrationBuffer[globalRegistrationIndex].registerBlockingFunctionPointer=0;
+	globalRegistrationBuffer[globalRegistrationIndex].context=context;
 	globalRegistrationBuffer[globalRegistrationIndex].callPriority=0xFFFFFFFF;
 	globalRegistrationIndex++;
 }
-RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet ), int callPriority)
+RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet, void *context ), void *context, int callPriority)
 {
 	RakAssert(globalRegistrationIndex!=RPC4_GLOBAL_REGISTRATION_MAX_FUNCTIONS);
 	unsigned int i;
@@ -67,11 +69,12 @@ RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *fun
 	}
 	globalRegistrationBuffer[globalRegistrationIndex].registerFunctionPointer=functionPointer;
 	globalRegistrationBuffer[globalRegistrationIndex].registerBlockingFunctionPointer=0;
+	globalRegistrationBuffer[globalRegistrationIndex].context=context;
 	RakAssert(callPriority!=(int) 0xFFFFFFFF);
 	globalRegistrationBuffer[globalRegistrationIndex].callPriority=callPriority;
 	globalRegistrationIndex++;
 }
-RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, MafiaNet::BitStream *returnData, Packet *packet ))
+RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, MafiaNet::BitStream *returnData, Packet *packet, void *context ), void *context)
 {
 	RakAssert(globalRegistrationIndex!=RPC4_GLOBAL_REGISTRATION_MAX_FUNCTIONS);
 	unsigned int i;
@@ -82,6 +85,7 @@ RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, void ( *fun
 	}
 	globalRegistrationBuffer[globalRegistrationIndex].registerFunctionPointer=0;
 	globalRegistrationBuffer[globalRegistrationIndex].registerBlockingFunctionPointer=functionPointer;
+	globalRegistrationBuffer[globalRegistrationIndex].context=context;
 	globalRegistrationIndex++;
 }
 RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, MessageID messageId)
@@ -95,6 +99,7 @@ RPC4GlobalRegistration::RPC4GlobalRegistration(const char* uniqueID, MessageID m
 	}
 	globalRegistrationBuffer[globalRegistrationIndex].registerFunctionPointer=0;
 	globalRegistrationBuffer[globalRegistrationIndex].registerBlockingFunctionPointer=0;
+	globalRegistrationBuffer[globalRegistrationIndex].context=0;
 	globalRegistrationBuffer[globalRegistrationIndex].messageId=messageId;
 	globalRegistrationIndex++;
 }
@@ -153,18 +158,21 @@ RPC4::~RPC4()
 	}
 	localSlots.Clear(_FILE_AND_LINE_);
 }
-bool RPC4::RegisterFunction(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet ))
+bool RPC4::RegisterFunction(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet, void *context ), void *context)
 {
 	DataStructures::HashIndex skhi = registeredNonblockingFunctions.GetIndexOf(uniqueID);
 	if (skhi.IsInvalid()==false)
 		return false;
 
-	registeredNonblockingFunctions.Push(uniqueID,functionPointer,_FILE_AND_LINE_);
+	RegisteredNonblockingFunction rnf;
+	rnf.functionPointer=functionPointer;
+	rnf.context=context;
+	registeredNonblockingFunctions.Push(uniqueID,rnf,_FILE_AND_LINE_);
 	return true;
 }
-void RPC4::RegisterSlot(const char *sharedIdentifier, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet ), int callPriority)
+void RPC4::RegisterSlot(const char *sharedIdentifier, void ( *functionPointer ) (MafiaNet::BitStream *userData, Packet *packet, void *context ), void *context, int callPriority)
 {
-	LocalSlotObject lso(nextSlotRegistrationCount++, callPriority, functionPointer);
+	LocalSlotObject lso(nextSlotRegistrationCount++, callPriority, functionPointer, context);
 	DataStructures::HashIndex idx = GetLocalSlotIndex(sharedIdentifier);
 	LocalSlot *localSlot;
 	if (idx.IsInvalid())
@@ -178,13 +186,16 @@ void RPC4::RegisterSlot(const char *sharedIdentifier, void ( *functionPointer ) 
 	}
 	localSlot->slotObjects.Insert(lso,lso,true,_FILE_AND_LINE_);
 }
-bool RPC4::RegisterBlockingFunction(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, MafiaNet::BitStream *returnData, Packet *packet ))
+bool RPC4::RegisterBlockingFunction(const char* uniqueID, void ( *functionPointer ) (MafiaNet::BitStream *userData, MafiaNet::BitStream *returnData, Packet *packet, void *context ), void *context)
 {
 	DataStructures::HashIndex skhi = registeredBlockingFunctions.GetIndexOf(uniqueID);
 	if (skhi.IsInvalid()==false)
 		return false;
 
-	registeredBlockingFunctions.Push(uniqueID,functionPointer,_FILE_AND_LINE_);
+	RegisteredBlockingFunction rbf;
+	rbf.functionPointer=functionPointer;
+	rbf.context=context;
+	registeredBlockingFunctions.Push(uniqueID,rbf,_FILE_AND_LINE_);
 	return true;
 }
 void RPC4::RegisterLocalCallback(const char* uniqueID, MessageID messageId)
@@ -212,12 +223,12 @@ void RPC4::RegisterLocalCallback(const char* uniqueID, MessageID messageId)
 }
 bool RPC4::UnregisterFunction(const char* uniqueID)
 {
-	void ( *f ) (MafiaNet::BitStream *, Packet * );
+	RegisteredNonblockingFunction f;
 	return registeredNonblockingFunctions.Pop(f,uniqueID,_FILE_AND_LINE_);
 }
 bool RPC4::UnregisterBlockingFunction(const char* uniqueID)
 {
-	void ( *f ) (MafiaNet::BitStream *, MafiaNet::BitStream *,Packet * );
+	RegisteredBlockingFunction f;
 	return registeredBlockingFunctions.Pop(f,uniqueID,_FILE_AND_LINE_);
 }
 bool RPC4::UnregisterLocalCallback(const char* uniqueID, MessageID messageId)
@@ -482,7 +493,7 @@ void RPC4::InvokeSignal(DataStructures::HashIndex functionIndex, MafiaNet::BitSt
 	{
 		//t2 = GetTimeUS();
 
-		localSlot->slotObjects[i].functionPointer(serializedParameters, packet);
+		localSlot->slotObjects[i].functionPointer(serializedParameters, packet, localSlot->slotObjects[i].context);
 
 		//t3 = GetTimeUS();
 
@@ -513,12 +524,12 @@ void RPC4::OnAttach(void)
 		if (globalRegistrationBuffer[i].registerFunctionPointer)
 		{
 			if (globalRegistrationBuffer[i].callPriority==(int)0xFFFFFFFF)
-				RegisterFunction(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].registerFunctionPointer);
+				RegisterFunction(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].registerFunctionPointer, globalRegistrationBuffer[i].context);
 			else
-				RegisterSlot(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].registerFunctionPointer, globalRegistrationBuffer[i].callPriority);
+				RegisterSlot(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].registerFunctionPointer, globalRegistrationBuffer[i].context, globalRegistrationBuffer[i].callPriority);
 		}
 		else if (globalRegistrationBuffer[i].registerBlockingFunctionPointer)
-			RegisterBlockingFunction(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].registerBlockingFunctionPointer);
+			RegisterBlockingFunction(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].registerBlockingFunctionPointer, globalRegistrationBuffer[i].context);
 		else
 			RegisterLocalCallback(globalRegistrationBuffer[i].functionName, globalRegistrationBuffer[i].messageId);
 	}
@@ -549,10 +560,10 @@ PluginReceiveResult RPC4::OnReceive(Packet *packet)
 					return RR_STOP_PROCESSING_AND_DEALLOCATE;
 				}
 
-				void ( *fp ) (MafiaNet::BitStream *, Packet * );
-				fp = registeredNonblockingFunctions.ItemAtIndex(skhi);
+				RegisteredNonblockingFunction rnf;
+				rnf = registeredNonblockingFunctions.ItemAtIndex(skhi);
 				bsIn.AlignReadToByteBoundary();
-				fp(&bsIn,packet);
+				rnf.functionPointer(&bsIn,packet,rnf.context);
 			}
 			else
 			{
@@ -567,11 +578,11 @@ PluginReceiveResult RPC4::OnReceive(Packet *packet)
 					return RR_STOP_PROCESSING_AND_DEALLOCATE;
 				}
 
-				void ( *fp ) (MafiaNet::BitStream *, MafiaNet::BitStream *, Packet * );
-				fp = registeredBlockingFunctions.ItemAtIndex(skhi);
+				RegisteredBlockingFunction rbf;
+				rbf = registeredBlockingFunctions.ItemAtIndex(skhi);
 				MafiaNet::BitStream returnData;
 				bsIn.AlignReadToByteBoundary();
-				fp(&bsIn, &returnData, packet);
+				rbf.functionPointer(&bsIn, &returnData, packet, rbf.context);
 
 				MafiaNet::BitStream out;
 				out.Write((MessageID) ID_RPC_PLUGIN);
@@ -618,11 +629,11 @@ PluginReceiveResult RPC4::OnReceive(Packet *packet)
 			DataStructures::HashIndex skhi = registeredNonblockingFunctions.GetIndexOf(lc->functions[index2].C_String());
 			if (skhi.IsInvalid()==false)
 			{
-				void ( *fp ) (MafiaNet::BitStream *, Packet * );
-				fp = registeredNonblockingFunctions.ItemAtIndex(skhi);
+				RegisteredNonblockingFunction rnf;
+				rnf = registeredNonblockingFunctions.ItemAtIndex(skhi);
 				bsIn.AlignReadToByteBoundary();
-				fp(&bsIn,packet);
-			}		
+				rnf.functionPointer(&bsIn,packet,rnf.context);
+			}
 		}
 	}
 

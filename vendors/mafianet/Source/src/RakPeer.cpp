@@ -1655,9 +1655,17 @@ void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectio
 		remoteSystemListIndex = 0;
 	}
 
-	// #med - review this assertion - is it architecturally ensured?
-	RakAssert(remoteSystemList[remoteSystemListIndex].rakNetSocket != nullptr);
-	CloseConnectionInternal2(target, sendDisconnectionNotification, false, orderingChannel, disconnectionNotificationPriority, *(remoteSystemList[remoteSystemListIndex].rakNetSocket));
+	// remoteSystemList[remoteSystemListIndex].rakNetSocket may be null: the socket
+	// can be released between resolving the connection and closing it (e.g. during
+	// rapid connect/disconnect churn), and the index-0 fallback above can land on a
+	// free slot. RakAssert is a no-op in release (NDEBUG), so the bare dereference
+	// would crash there. Guard explicitly and fall back to the primary socket — the
+	// same pattern used by the BCS_CLOSE_CONNECTION path below.
+	RakNetSocket2 *closeSocket = remoteSystemList[remoteSystemListIndex].rakNetSocket;
+	if (closeSocket == nullptr && socketList.Size() > 0)
+		closeSocket = socketList[0];
+	if (closeSocket != nullptr)
+		CloseConnectionInternal2(target, sendDisconnectionNotification, false, orderingChannel, disconnectionNotificationPriority, *closeSocket);
 
 	// 12/14/09 Return ID_CONNECTION_LOST when calling CloseConnection with sendDisconnectionNotification==false, elsewise it is never returned
 	if (sendDisconnectionNotification==false && GetConnectionState(target)==IS_CONNECTED)
