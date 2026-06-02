@@ -9,6 +9,7 @@
 #pragma once
 
 #include "messages/messages.h"
+#include "rpc/rpc.h"
 
 #include <mafianet/PacketPriority.h>
 #include <mafianet/peerinterface.h>
@@ -49,6 +50,18 @@ namespace Framework::Networking {
         // Owns the replicated entity world. The concrete peer's Init() attaches it and sets its role.
         std::unique_ptr<Replication::ReplicationManager> _replicationManager;
 
+        // Decoded RPC handlers registered via RegisterRPC<T>. Each is kept alive here for the peer's
+        // lifetime; its address is the context RPC4 hands back to DispatchRPC, so handlers can capture.
+        using RPCSlot = fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)>;
+        std::vector<std::unique_ptr<RPCSlot>> _rpcHandlers;
+
+        static void DispatchRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet, void *context) {
+            auto *slot = static_cast<RPCSlot *>(context);
+            if (slot && *slot) {
+                (*slot)(bs, packet);
+            }
+        }
+
       public:
         NetworkPeer();
         ~NetworkPeer();
@@ -85,12 +98,18 @@ namespace Framework::Networking {
             };
         }
 
-        // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler is a
-        // plain function; decode the payload inside it with RPC::Read<T>. Registered as an RPC4 slot,
-        // matching the Signal() send below.
+        // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
+        // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
+        // The callable is stored for the peer's lifetime and reached through RPC4's per-slot context,
+        // so no file-static handler pointers are needed. Matches the Signal() send below.
         template <typename T>
-        void RegisterRPC(void (*handler)(MafiaNet::BitStream *, MafiaNet::Packet *)) {
-            _rpc.RegisterSlot(T::kIdentifier, handler, 0);
+        void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
+            auto slot = std::make_unique<RPCSlot>([cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
+                cb(RPC::Read<T>(bs), packet);
+            });
+            void *context = slot.get();
+            _rpcHandlers.push_back(std::move(slot));
+            _rpc.RegisterSlot(T::kIdentifier, &NetworkPeer::DispatchRPC, context, 0);
         }
 
         // Send an RPC payload to every connected system.

@@ -49,9 +49,8 @@ namespace Framework::Integrations::Client {
     namespace {
         // Handler for server-emitted scripting events; reaches the scripting engine through the
         // CoreModules singleton.
-        void OnEmitLuaEvent(MafiaNet::BitStream *userData, MafiaNet::Packet *packet) {
+        void OnEmitLuaEvent(const Shared::RPC::EmitLuaEvent &rpc, MafiaNet::Packet *packet) {
             (void)packet;
-            const auto rpc       = Framework::Networking::RPC::Read<Shared::RPC::EmitLuaEvent>(userData);
             const auto eventName = rpc.GetEventName();
             if (eventName.empty()) {
                 return;
@@ -106,18 +105,6 @@ namespace Framework::Integrations::Client {
             }
 
             resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
-        }
-
-        // The single client Instance, reachable from the plain RPC chat handler.
-        Instance *g_chatClientInstance = nullptr;
-
-        void OnChatMessageRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
-            (void)packet;
-            if (!g_chatClientInstance) {
-                return;
-            }
-            const auto payload = Framework::Networking::RPC::Read<Framework::Networking::RPC::ChatMessage>(bs);
-            g_chatClientInstance->DispatchReceivedChat(payload.text);
         }
     } // namespace
 
@@ -454,8 +441,9 @@ namespace Framework::Integrations::Client {
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>(&OnEmitLuaEvent);
 
         // Chat lines from the server are forwarded to the mod's UI via the received callback.
-        g_chatClientInstance = this;
-        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>(&OnChatMessageRPC);
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *) {
+            DispatchReceivedChat(payload.text);
+        });
 
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");
     }

@@ -38,30 +38,6 @@
 #include <csignal>
 
 namespace Framework::Integrations::Server {
-    namespace {
-        // RPC4 dispatches to plain functions; the single server Instance is reachable here so the
-        // chat handler can resolve the sender and forward to the instance callbacks.
-        const Instance *g_chatInstance = nullptr;
-
-        void OnChatMessageRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
-            if (!g_chatInstance) {
-                return;
-            }
-            const auto payload = Framework::Networking::RPC::Read<Framework::Networking::RPC::ChatMessage>(bs);
-            if (payload.text.empty()) {
-                return;
-            }
-            // Resolve the sender from its connection's viewer entity.
-            auto *engine = g_chatInstance->GetNetworkingEngine();
-            auto *server = engine ? engine->GetNetworkServer() : nullptr;
-            auto *repl   = server ? server->GetReplicationManager() : nullptr;
-            auto *sender = repl ? repl->GetViewer(packet->guid.g) : nullptr;
-            if (!sender) {
-                return;
-            }
-            g_chatInstance->HandleIncomingChat(sender->GetNetworkID(), payload.text);
-        }
-    } // namespace
 
     Instance::Instance(): _shuttingDown(false) {
         _networkingEngine = std::make_unique<Networking::Engine>();
@@ -380,10 +356,22 @@ namespace Framework::Integrations::Server {
             (void)stub;
         });
 
-        // Incoming chat from clients. Sender resolution + command parsing happen in the handler;
-        // the mod observes via SetOnChatMessageCallback / SetOnChatCommandCallback.
-        g_chatInstance = this;
-        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>(&OnChatMessageRPC);
+        // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
+        // observes via SetOnChatMessageCallback / SetOnChatCommandCallback.
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *packet) {
+            if (payload.text.empty()) {
+                return;
+            }
+            // Resolve the sender from its connection's viewer entity.
+            auto *engine = GetNetworkingEngine();
+            auto *server = engine ? engine->GetNetworkServer() : nullptr;
+            auto *repl   = server ? server->GetReplicationManager() : nullptr;
+            auto *sender = repl ? repl->GetViewer(packet->guid.g) : nullptr;
+            if (!sender) {
+                return;
+            }
+            HandleIncomingChat(sender->GetNetworkID(), payload.text);
+        });
 
         // Note: Client-to-server events are handled through the JS Events system
         // The client can emit events via Framework.events.emitToServer() which uses

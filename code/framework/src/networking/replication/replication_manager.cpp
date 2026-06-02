@@ -29,17 +29,17 @@ namespace Framework::Networking::Replication {
         // Built-in server->owner ownership grant (see NetworkEntity::SetOwner). Wire: id, ownerGUID.
         constexpr const char *kSetOwnerId = "Framework::SetOwner";
 
-        // The local manager, so the (non-capturing) RPC handler can resolve entities. One per peer.
-        ReplicationManager *g_manager = nullptr;
-
-        void OnForceState(MafiaNet::BitStream *bs, MafiaNet::Packet *) {
-            if (!g_manager) {
+        // RPC4 hands each slot its registration context back; we pass the owning manager so the
+        // handler can resolve entities without a global.
+        void OnForceState(MafiaNet::BitStream *bs, MafiaNet::Packet *, void *context) {
+            auto *manager = static_cast<ReplicationManager *>(context);
+            if (!manager) {
                 return;
             }
             MafiaNet::NetworkID networkId;
             bs->Read(networkId);
 
-            auto *entity = g_manager->GetEntityByNetworkID(networkId);
+            auto *entity = manager->GetEntityByNetworkID(networkId);
             if (!entity) {
                 return;
             }
@@ -47,8 +47,9 @@ namespace Framework::Networking::Replication {
             entity->OnStateForced();
         }
 
-        void OnSetOwner(MafiaNet::BitStream *bs, MafiaNet::Packet *) {
-            if (!g_manager) {
+        void OnSetOwner(MafiaNet::BitStream *bs, MafiaNet::Packet *, void *context) {
+            auto *manager = static_cast<ReplicationManager *>(context);
+            if (!manager) {
                 return;
             }
             MafiaNet::NetworkID networkId;
@@ -56,7 +57,7 @@ namespace Framework::Networking::Replication {
             bs->Read(networkId);
             bs->Read(ownerGUID);
 
-            if (auto *entity = g_manager->GetEntityByNetworkID(networkId)) {
+            if (auto *entity = manager->GetEntityByNetworkID(networkId)) {
                 entity->ownerGUID = ownerGUID;
             }
         }
@@ -79,10 +80,9 @@ namespace Framework::Networking::Replication {
         peer->AttachPlugin(this);
 
         // The owning client applies forced state pushed by the server (teleports, engine, ...).
-        g_manager = this;
         if (_rpc) {
-            _rpc->RegisterSlot(kForceStateId, &OnForceState, 0);
-            _rpc->RegisterSlot(kSetOwnerId, &OnSetOwner, 0);
+            _rpc->RegisterSlot(kForceStateId, &OnForceState, this, 0);
+            _rpc->RegisterSlot(kSetOwnerId, &OnSetOwner, this, 0);
         }
     }
 
