@@ -86,8 +86,8 @@ namespace Framework::Networking {
         }
 
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler is a
-        // plain function; decode the payload inside it with RPC::Read<T>. Registered as an RPC4 slot
-        // because we dispatch via Signal() (RegisterFunction handlers are only reached by Call()).
+        // plain function; decode the payload inside it with RPC::Read<T>. Registered as an RPC4 slot,
+        // matching the Signal() send below.
         template <typename T>
         void RegisterRPC(void (*handler)(MafiaNet::BitStream *, MafiaNet::Packet *)) {
             _rpc.RegisterSlot(T::kIdentifier, handler, 0);

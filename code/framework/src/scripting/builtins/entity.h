@@ -37,8 +37,8 @@ namespace Framework::Scripting::Builtins {
     // authoritative even over an entity a client owns. Mods derive their own handles (player, vehicle)
     // via v8pp inherit<Entity>() and add their game-specific properties.
     //
-    // Header-only (like property.h) so it compiles against whichever V8 the including target links
-    // (libnode on the server, standalone V8 on the client).
+    // Header-only so it compiles against whichever V8 the including target links (libnode on the
+    // server, standalone V8 on the client).
     class Entity {
       public:
         Entity(uint64_t networkId): _id(networkId) {
@@ -136,8 +136,8 @@ namespace Framework::Scripting::Builtins {
                     if (self) info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), self->GetModelName()));
                 });
 
-            // Property: position (Vector3). Accessor pair (not SetNativeDataProperty) so the setter
-            // fires when a script assigns through an instance whose accessor lives on the prototype.
+            // Property: position (Vector3). An accessor pair so the setter fires when a script
+            // assigns to it through the prototype chain.
             {
                 auto positionGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
                     auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());

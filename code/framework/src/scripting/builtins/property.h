@@ -80,10 +80,8 @@ namespace Framework::Scripting::Builtins {
         }
     } // namespace detail
 
-    // Read/write scalar or string property. Uses SetAccessorProperty (a real getter/setter accessor
-    // pair) rather than SetNativeDataProperty: a native-data-property setter installed on a prototype
-    // is NOT invoked when a script assigns to the property on an instance, so the write is silently
-    // dropped. The accessor-property setter fires correctly through the prototype chain.
+    // Read/write scalar or string property. Installed as an accessor pair so the setter fires when a
+    // script assigns to the property through the prototype chain.
     template <typename Class, auto Getter, auto Setter>
     void RegisterProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
         auto getter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -118,8 +116,6 @@ namespace Framework::Scripting::Builtins {
     template <typename Class, auto Getter, auto Setter>
     void RegisterObjectProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
         using Value = std::decay_t<typename detail::MemberReturn<decltype(Getter)>::type>;
-        // SetAccessorProperty for the same reason as RegisterProperty: a prototype-installed
-        // native-data-property setter never fires on instance assignment.
         auto getter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
             if (self) {
