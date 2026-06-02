@@ -90,9 +90,19 @@ namespace Framework::Networking::Replication {
         delete this;
     }
 
-    void NetworkEntity::ForceTransform() {
+    void NetworkEntity::WriteForcedState(MafiaNet::BitStream *bs) const {
+        bs->Write(position);
+        bs->Write(rotation);
+    }
+
+    void NetworkEntity::ReadForcedState(MafiaNet::BitStream *bs) {
+        bs->Read(position);
+        bs->Read(rotation);
+    }
+
+    void NetworkEntity::ForceState() {
         if (auto *manager = static_cast<ReplicationManager *>(replicaManager)) {
-            manager->ForceTransform(this);
+            manager->ForceState(this);
         }
     }
 

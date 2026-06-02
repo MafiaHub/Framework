@@ -34,9 +34,10 @@ namespace Framework::Networking::Replication {
 
         void Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, MafiaNet::RPC4 *rpc, bool isServer);
 
-        // Server: push the entity's current transform to its owner as a teleport (see
-        // NetworkEntity::ForceTransform / OnTransformForced). No-op for unowned entities.
-        void ForceTransform(NetworkEntity *entity);
+        // Server: push the entity's forced state to its owner — the server's authoritative override
+        // of an owned entity (see NetworkEntity::ForceState / OnStateForced). No-op for unowned
+        // entities, which already replicate to everyone.
+        void ForceState(NetworkEntity *entity);
 
         bool IsServer() const {
             return _isServer;
@@ -79,6 +80,9 @@ namespace Framework::Networking::Replication {
       private:
         bool _isServer    = false;
         uint64_t _myGUID  = 0xFFFFFFFFFFFFFFFF;
+        // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
+        // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
+        uint64_t _nextNetworkId = 0;
         bool _gridReady   = false;
         float _gridCellSize = 100.0f;
         float _gridMin      = -10000.0f;

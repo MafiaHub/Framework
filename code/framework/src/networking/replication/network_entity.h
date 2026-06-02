@@ -80,15 +80,20 @@ namespace Framework::Networking::Replication {
         // Called once on the client after construction, e.g. to request the backing game object.
         virtual void OnConstructed() {}
 
-        // Called on the owning client after the server forces a new transform on this entity (its
-        // position/rotation have already been applied). Override to apply it to the game world, e.g.
-        // teleport the backing object and preload the surrounding world.
-        virtual void OnTransformForced() {}
+        // The server-authoritative state pushed to the owner by ForceState (the owner is otherwise
+        // authoritative over its own updates, and the server withholds serialize to it). Default
+        // carries the transform; override to send additional state, e.g. a vehicle's engine/config.
+        // Must read/write symmetrically.
+        virtual void WriteForcedState(MafiaNet::BitStream *bs) const;
+        virtual void ReadForcedState(MafiaNet::BitStream *bs);
 
-        // Server: push this entity's current position/rotation to its owner. The owner is otherwise
-        // authoritative over its own transform, so this is how the server relocates an owned entity
-        // (a teleport). No-op for unowned (server-owned) entities, which replicate normally.
-        void ForceTransform();
+        // Called on the owning client after ReadForcedState has applied the forced fields. Override
+        // to push them into the game (teleport and preload the world, set the engine, ...).
+        virtual void OnStateForced() {}
+
+        // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)
+        // entities, which replicate to everyone normally.
+        void ForceState();
 
         // --- Replica3 implementation ---
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const override;

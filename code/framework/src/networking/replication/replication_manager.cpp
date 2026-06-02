@@ -22,30 +22,26 @@ namespace Framework::Networking::Replication {
         // min < max (it asserts otherwise), so a point is inserted as a tiny box around its position.
         constexpr float kPointEpsilon = 0.01f;
 
-        // Built-in server->owner teleport RPC (see NetworkEntity::ForceTransform). Wire: id/pos/rot.
-        constexpr const char *kForceTransformId = "Framework::ForceTransform";
+        // Built-in server->owner state push (see NetworkEntity::ForceState). Wire: id, then the
+        // entity's WriteForcedState payload.
+        constexpr const char *kForceStateId = "Framework::ForceState";
 
         // The local manager, so the (non-capturing) RPC handler can resolve entities. One per peer.
         ReplicationManager *g_manager = nullptr;
 
-        void OnForceTransform(MafiaNet::BitStream *bs, MafiaNet::Packet *) {
+        void OnForceState(MafiaNet::BitStream *bs, MafiaNet::Packet *) {
             if (!g_manager) {
                 return;
             }
             MafiaNet::NetworkID networkId;
-            glm::vec3 position {};
-            glm::quat rotation {};
             bs->Read(networkId);
-            bs->Read(position);
-            bs->Read(rotation);
 
             auto *entity = g_manager->GetEntityByNetworkID(networkId);
             if (!entity) {
                 return;
             }
-            entity->position = position;
-            entity->rotation = rotation;
-            entity->OnTransformForced();
+            entity->ReadForcedState(bs);
+            entity->OnStateForced();
         }
     } // namespace
 
@@ -65,23 +61,23 @@ namespace Framework::Networking::Replication {
         SetNetworkIDManager(networkIDManager);
         peer->AttachPlugin(this);
 
-        // The owning client applies forced transforms (server-sent teleports).
+        // The owning client applies forced state pushed by the server (teleports, engine, ...).
         g_manager = this;
         if (_rpc) {
-            _rpc->RegisterFunction(kForceTransformId, &OnForceTransform);
+            // Slot, not function: ForceState is delivered with Signal() (see ForceState below).
+            _rpc->RegisterSlot(kForceStateId, &OnForceState, 0);
         }
     }
 
-    void ReplicationManager::ForceTransform(NetworkEntity *entity) {
+    void ReplicationManager::ForceState(NetworkEntity *entity) {
         if (!entity || !_rpc || entity->ownerGUID == 0xFFFFFFFFFFFFFFFF) {
             return;
         }
         MafiaNet::BitStream bs;
         MafiaNet::NetworkID networkId = entity->GetNetworkID();
         bs.Write(networkId);
-        bs.Write(entity->position);
-        bs.Write(entity->rotation);
-        _rpc->Signal(kForceTransformId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
+        entity->WriteForcedState(&bs);
+        _rpc->Signal(kForceStateId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
     }
 
     NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId) {
@@ -89,6 +85,12 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return nullptr;
         }
+        // Assign a small, sequential id BEFORE Reference(): the NetworkIDManager then tracks the
+        // entity under this id instead of minting a random 64-bit one (its peer-to-peer scheme). Those
+        // random ids overflow JavaScript's 2^53 exact-integer range, so a script reading an entity id
+        // gets a rounded value that no longer resolves — the same reason MTA:SA keeps element ids
+        // small. Clients adopt this id via the construction snapshot, so both sides agree.
+        entity->SetNetworkID(++_nextNetworkId);
         Reference(entity);
         return entity;
     }
