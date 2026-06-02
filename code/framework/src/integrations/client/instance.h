@@ -40,6 +40,8 @@ namespace Framework::Integrations::Client {
     using NetworkConnectionFinalizedCallback = fu2::function<void(float) const>;
     using NetworkConnectionClosedCallback    = fu2::function<void() const>;
     using AssetsDownloadFinishedCallback     = fu2::function<void(bool success) const>;
+    // Fired when the server sends a chat line to display.
+    using NetworkChatMessageCallback         = fu2::function<void(const std::string &text) const>;
 
     class Instance;
 
@@ -108,6 +110,7 @@ namespace Framework::Integrations::Client {
         NetworkConnectionFinalizedCallback _onConnectionFinalized;
         NetworkConnectionClosedCallback _onConnectionClosed;
         AssetsDownloadFinishedCallback _onAssetsDownloadFinished;
+        NetworkChatMessageCallback _onChatMessageReceived;
 
         // Entity factories
         std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
@@ -174,6 +177,20 @@ namespace Framework::Integrations::Client {
         void SetOnAssetsDownloadFinishedCallback(AssetsDownloadFinishedCallback cb) {
             _onAssetsDownloadFinished = std::move(cb);
         }
+
+        void SetOnChatMessageReceivedCallback(NetworkChatMessageCallback cb) {
+            _onChatMessageReceived = std::move(cb);
+        }
+
+        // Invoked by the chat RPC handler with a line received from the server.
+        void DispatchReceivedChat(const std::string &text) const {
+            if (_onChatMessageReceived) {
+                _onChatMessageReceived(text);
+            }
+        }
+
+        // Send a chat line to the server (the local player's outgoing text).
+        void SendChatMessage(const std::string &text);
 
         Networking::Engine *GetNetworkingEngine() const {
             return _networkingEngine.get();

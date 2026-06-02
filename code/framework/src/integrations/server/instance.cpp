@@ -10,9 +10,14 @@
 
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 
 #include "core_modules.h"
 #include "world/server.h"
+
+#include "networking/replication/network_entity.h"
+#include "networking/replication/replication_manager.h"
+#include "networking/rpc/chat_message.h"
 
 #include "networking/messages/client_connection_finalized.h"
 #include "networking/messages/client_handshake.h"
@@ -33,6 +38,31 @@
 #include <csignal>
 
 namespace Framework::Integrations::Server {
+    namespace {
+        // RPC4 dispatches to plain functions; the single server Instance is reachable here so the
+        // chat handler can resolve the sender and forward to the instance callbacks.
+        const Instance *g_chatInstance = nullptr;
+
+        void OnChatMessageRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
+            if (!g_chatInstance) {
+                return;
+            }
+            const auto payload = Framework::Networking::RPC::Read<Framework::Networking::RPC::ChatMessage>(bs);
+            if (payload.text.empty()) {
+                return;
+            }
+            // Resolve the sender from its connection's viewer entity.
+            auto *engine = g_chatInstance->GetNetworkingEngine();
+            auto *server = engine ? engine->GetNetworkServer() : nullptr;
+            auto *repl   = server ? server->GetReplicationManager() : nullptr;
+            auto *sender = repl ? repl->GetViewer(packet->guid.g) : nullptr;
+            if (!sender) {
+                return;
+            }
+            g_chatInstance->HandleIncomingChat(sender->GetNetworkID(), payload.text);
+        }
+    } // namespace
+
     Instance::Instance(): _shuttingDown(false) {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
@@ -350,11 +380,47 @@ namespace Framework::Integrations::Server {
             (void)stub;
         });
 
+        // Incoming chat from clients. Sender resolution + command parsing happen in the handler;
+        // the mod observes via SetOnChatMessageCallback / SetOnChatCommandCallback.
+        g_chatInstance = this;
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>(&OnChatMessageRPC);
+
         // Note: Client-to-server events are handled through the JS Events system
         // The client can emit events via Framework.events.emitToServer() which uses
         // the networking messages system to send events to the server
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
+    }
+
+    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const {
+        if (text.empty()) {
+            return;
+        }
+        if (text[0] == '/') {
+            std::string command, argsPart;
+            const auto space = text.find(' ');
+            if (space != std::string::npos) {
+                command  = text.substr(1, space - 1);
+                argsPart = text.substr(space + 1);
+            }
+            else {
+                command = text.substr(1);
+            }
+            std::vector<std::string> args;
+            std::string arg;
+            std::istringstream iss(argsPart);
+            while (iss >> arg) {
+                args.push_back(arg);
+            }
+            if (_onChatCommandCallback) {
+                _onChatCommandCallback(senderNetworkId, text, command, args);
+            }
+        }
+        else {
+            if (_onChatMessageCallback) {
+                _onChatMessageCallback(senderNetworkId, text);
+            }
+        }
     }
 
     void Instance::InitAssetStreamer() {

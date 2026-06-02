@@ -11,6 +11,8 @@
 #include <logging/logger.h>
 
 #include <scripting/builtins/builtins.h>
+#include <scripting/builtins/chat.h>
+#include <scripting/builtins/entity.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/messages.h>
 #include <scripting/builtins/console.h>
@@ -136,6 +138,9 @@ namespace Framework::Integrations::Server::Scripting {
 
         // Register environment info
         Framework::Scripting::Environment::Register(isolate, context, coreObj, false);
+
+        // Register the chat API on the global object (Chat.sendToAll / Chat.sendToPlayer)
+        Framework::Scripting::Builtins::Chat::Register(isolate, global);
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->debug("Registered Framework JS bindings");
     }

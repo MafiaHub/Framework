@@ -19,6 +19,7 @@
 #include "integrations/shared/rpc/emit_lua_event.h"
 
 #include "networking/rpc/rpc.h"
+#include "networking/rpc/chat_message.h"
 
 #include "../shared/modules/mod.hpp"
 
@@ -105,6 +106,18 @@ namespace Framework::Integrations::Client {
             }
 
             resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
+        }
+
+        // The single client Instance, reachable from the plain RPC chat handler.
+        Instance *g_chatClientInstance = nullptr;
+
+        void OnChatMessageRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
+            (void)packet;
+            if (!g_chatClientInstance) {
+                return;
+            }
+            const auto payload = Framework::Networking::RPC::Read<Framework::Networking::RPC::ChatMessage>(bs);
+            g_chatClientInstance->DispatchReceivedChat(payload.text);
         }
     } // namespace
 
@@ -440,7 +453,23 @@ namespace Framework::Integrations::Client {
 
         net->RegisterRPC<Shared::RPC::EmitLuaEvent>(&OnEmitLuaEvent);
 
+        // Chat lines from the server are forwarded to the mod's UI via the received callback.
+        g_chatClientInstance = this;
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>(&OnChatMessageRPC);
+
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");
+    }
+
+    void Instance::SendChatMessage(const std::string &text) {
+        if (text.empty()) {
+            return;
+        }
+        const auto net = GetNetworkingEngine()->GetNetworkClient();
+        if (!net) {
+            return;
+        }
+        Framework::Networking::RPC::ChatMessage payload {text};
+        net->BroadcastRPC(payload);
     }
 
     void Instance::DownloadsAssetsFromConnectedServer() {

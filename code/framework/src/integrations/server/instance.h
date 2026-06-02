@@ -35,6 +35,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
@@ -84,6 +85,11 @@ namespace Framework::Integrations::Server {
     // Invoked with the connecting player's GUID; the game creates and owns the player's entity.
     using OnPlayerConnectionCallback = fu2::function<void(uint64_t) const>;
 
+    // Chat. The sender is resolved to its viewer entity's NetworkID; command lines ("/...") are
+    // pre-parsed into a command name and whitespace-separated arguments.
+    using OnChatMessageCallback = fu2::function<void(uint64_t senderNetworkId, const std::string &text) const>;
+    using OnChatCommandCallback = fu2::function<void(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) const>;
+
     class Instance : public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
@@ -121,6 +127,8 @@ namespace Framework::Integrations::Server {
         // callbacks
         OnPlayerConnectionCallback _onPlayerConnectCallback;
         OnPlayerConnectionCallback _onPlayerDisconnectCallback;
+        OnChatMessageCallback _onChatMessageCallback;
+        OnChatCommandCallback _onChatCommandCallback;
 
       public:
         Instance();
@@ -154,6 +162,17 @@ namespace Framework::Integrations::Server {
         void SetOnPlayerDisconnectCallback(OnPlayerConnectionCallback onPlayerDisconnectCallback) {
             _onPlayerDisconnectCallback = std::move(onPlayerDisconnectCallback);
         }
+
+        void SetOnChatMessageCallback(OnChatMessageCallback cb) {
+            _onChatMessageCallback = std::move(cb);
+        }
+
+        void SetOnChatCommandCallback(OnChatCommandCallback cb) {
+            _onChatCommandCallback = std::move(cb);
+        }
+
+        // Parse a received chat line and dispatch it to the chat callbacks above.
+        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const;
 
         InstanceOptions &GetOptions() {
             return _opts;
