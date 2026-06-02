@@ -95,6 +95,12 @@ namespace Framework::Networking::Replication {
         // entities, which replicate to everyone normally.
         void ForceState();
 
+        // Server: change this entity's owner. The new owner is told directly (the server withholds
+        // serialize to an owner, so it would otherwise never learn it gained authority); other peers
+        // and a revoked previous owner pick up the change through normal serialization. Pass
+        // UNASSIGNED_RAKNET_GUID.g to return ownership to the server.
+        void SetOwner(uint64_t guid);
+
         // --- Replica3 implementation ---
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const override;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) override;

@@ -106,6 +106,15 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    void NetworkEntity::SetOwner(uint64_t guid) {
+        if (auto *manager = static_cast<ReplicationManager *>(replicaManager)) {
+            manager->SetOwner(this, guid);
+        }
+        else {
+            ownerGUID = guid;
+        }
+    }
+
     // --- Per-tick delta serialization (VariableDeltaSerializer) ---
 
     void NetworkEntity::OnUserReplicaPreSerializeTick() {

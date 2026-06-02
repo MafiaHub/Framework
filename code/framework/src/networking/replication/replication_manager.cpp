@@ -26,6 +26,9 @@ namespace Framework::Networking::Replication {
         // entity's WriteForcedState payload.
         constexpr const char *kForceStateId = "Framework::ForceState";
 
+        // Built-in server->owner ownership grant (see NetworkEntity::SetOwner). Wire: id, ownerGUID.
+        constexpr const char *kSetOwnerId = "Framework::SetOwner";
+
         // The local manager, so the (non-capturing) RPC handler can resolve entities. One per peer.
         ReplicationManager *g_manager = nullptr;
 
@@ -42,6 +45,20 @@ namespace Framework::Networking::Replication {
             }
             entity->ReadForcedState(bs);
             entity->OnStateForced();
+        }
+
+        void OnSetOwner(MafiaNet::BitStream *bs, MafiaNet::Packet *) {
+            if (!g_manager) {
+                return;
+            }
+            MafiaNet::NetworkID networkId;
+            uint64_t ownerGUID = 0;
+            bs->Read(networkId);
+            bs->Read(ownerGUID);
+
+            if (auto *entity = g_manager->GetEntityByNetworkID(networkId)) {
+                entity->ownerGUID = ownerGUID;
+            }
         }
     } // namespace
 
@@ -64,8 +81,8 @@ namespace Framework::Networking::Replication {
         // The owning client applies forced state pushed by the server (teleports, engine, ...).
         g_manager = this;
         if (_rpc) {
-            // Slot, not function: ForceState is delivered with Signal() (see ForceState below).
             _rpc->RegisterSlot(kForceStateId, &OnForceState, 0);
+            _rpc->RegisterSlot(kSetOwnerId, &OnSetOwner, 0);
         }
     }
 
@@ -80,16 +97,31 @@ namespace Framework::Networking::Replication {
         _rpc->Signal(kForceStateId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
     }
 
+    void ReplicationManager::SetOwner(NetworkEntity *entity, uint64_t guid) {
+        if (!entity) {
+            return;
+        }
+        entity->ownerGUID = guid;
+        // The new owner is otherwise blind to the change: the server withholds serialize to whoever
+        // owns an entity, so it would never receive the updated ownerGUID. Tell it directly. Other
+        // peers, and any previous owner that just lost authority, learn it through normal serialize.
+        if (_rpc && _isServer && guid != 0xFFFFFFFFFFFFFFFF) {
+            MafiaNet::BitStream bs;
+            MafiaNet::NetworkID networkId = entity->GetNetworkID();
+            bs.Write(networkId);
+            bs.Write(guid);
+            _rpc->Signal(kSetOwnerId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(guid), false, false);
+        }
+    }
+
     NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId) {
         NetworkEntity *entity = EntityFactory::Get().Create(typeId);
         if (!entity) {
             return nullptr;
         }
-        // Assign a small, sequential id BEFORE Reference(): the NetworkIDManager then tracks the
-        // entity under this id instead of minting a random 64-bit one (its peer-to-peer scheme). Those
-        // random ids overflow JavaScript's 2^53 exact-integer range, so a script reading an entity id
-        // gets a rounded value that no longer resolves — the same reason MTA:SA keeps element ids
-        // small. Clients adopt this id via the construction snapshot, so both sides agree.
+        // Assign a small, sequential id before Reference() so the NetworkIDManager tracks the entity
+        // under it. Ids must stay within JavaScript's 2^53 exact-integer range so scripts can hold
+        // them as plain numbers. Clients adopt this id via the construction snapshot.
         entity->SetNetworkID(++_nextNetworkId);
         Reference(entity);
         return entity;

@@ -44,7 +44,9 @@ namespace Framework::World {
 
     void ServerEngine::SetOwner(Replication::NetworkEntity *entity, uint64_t guid) const {
         if (entity) {
-            entity->ownerGUID = guid;
+            // Routes through the entity so the new owner is notified directly (serialize to an owner
+            // is withheld); see NetworkEntity::SetOwner.
+            entity->SetOwner(guid);
         }
     }
 

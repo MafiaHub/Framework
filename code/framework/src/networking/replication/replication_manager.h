@@ -39,6 +39,11 @@ namespace Framework::Networking::Replication {
         // entities, which already replicate to everyone.
         void ForceState(NetworkEntity *entity);
 
+        // Server: change an entity's owner and notify the new owner directly (see
+        // NetworkEntity::SetOwner). Needed because serialize to an owner is withheld, so the grant
+        // can't ride normal replication.
+        void SetOwner(NetworkEntity *entity, uint64_t guid);
+
         bool IsServer() const {
             return _isServer;
         }
