@@ -22,8 +22,6 @@ namespace Framework::Networking::RPC {
         std::string text;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
-            // std::string is a first-class wire type in MafiaNet (length-prefixed, same format as
-            // RakString), so this stays a single symmetric line.
             bs->Serialize(write, text);
         }
     };

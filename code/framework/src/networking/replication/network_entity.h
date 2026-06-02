@@ -45,16 +45,13 @@ namespace Framework::Networking::Replication {
         uint64_t modelHash = 0;
         std::string modelName;
 
-        // --- Authority / streaming metadata (server-authoritative) ---
+        // --- Server-only streaming metadata (not replicated) ---
         uint64_t ownerGUID = 0xFFFFFFFFFFFFFFFF; // UNASSIGNED_RAKNET_GUID.g
         int virtualWorld   = 0;
         bool alwaysVisible = false;
         bool isVisible     = true;
-
-        // A viewer is an entity a connection "looks through" (a player's avatar). Its position and
-        // streamRange drive that connection's interest set.
-        bool isViewer    = false;
-        float streamRange = 100.0f;
+        bool isViewer      = false;
+        float streamRange  = 100.0f;
 
         // Set by the EntityFactory on construction; identifies the concrete type over the wire.
         uint32_t typeId = 0;

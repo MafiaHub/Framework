@@ -36,10 +36,6 @@ namespace Framework::Networking::Replication {
         bs->Write(velocity);
         bs->Write(rotation);
         bs->Write(virtualWorld);
-        bs->Write(alwaysVisible);
-        bs->Write(isVisible);
-        bs->Write(isViewer);
-        bs->Write(streamRange);
         bs->Write(modelHash);
         bs->Write(scale);
         bs->Write(MafiaNet::RakString(modelName.c_str()));
@@ -57,10 +53,6 @@ namespace Framework::Networking::Replication {
         bs->Read(velocity);
         bs->Read(rotation);
         bs->Read(virtualWorld);
-        bs->Read(alwaysVisible);
-        bs->Read(isVisible);
-        bs->Read(isViewer);
-        bs->Read(streamRange);
         bs->Read(modelHash);
         bs->Read(scale);
         MafiaNet::RakString name;
