@@ -44,9 +44,10 @@ namespace Framework::Scripting::Builtins {
             using type = A;
         };
 
-        // Push a scalar/string value onto the V8 return slot.
-        template <typename T>
-        inline void Return(const v8::PropertyCallbackInfo<v8::Value> &info, T &&value) {
+        // Push a scalar/string value onto the V8 return slot. Generic over the callback-info type so
+        // it serves both property accessors and FunctionTemplate-based accessors.
+        template <typename Info, typename T>
+        inline void Return(const Info &info, T &&value) {
             using V = std::decay_t<T>;
             if constexpr (std::is_same_v<V, std::string>) {
                 info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), value));
@@ -79,23 +80,25 @@ namespace Framework::Scripting::Builtins {
         }
     } // namespace detail
 
-    // Read/write scalar or string property.
+    // Read/write scalar or string property. Uses SetAccessorProperty (a real getter/setter accessor
+    // pair) rather than SetNativeDataProperty: a native-data-property setter installed on a prototype
+    // is NOT invoked when a script assigns to the property on an instance, so the write is silently
+    // dropped. The accessor-property setter fires correctly through the prototype chain.
     template <typename Class, auto Getter, auto Setter>
     void RegisterProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
-        proto->SetNativeDataProperty(
-            v8pp::to_v8(isolate, name).As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (self) detail::Return(info, (self->*Getter)());
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (!self) return;
-                using Arg = typename detail::MemberArg<decltype(Setter)>::type;
-                detail::Apply<Arg>(info.GetIsolate(), value, [&](auto &&v) {
-                    (self->*Setter)(std::forward<decltype(v)>(v));
-                });
+        auto getter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
+            if (self) detail::Return(info, (self->*Getter)());
+        });
+        auto setter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
+            if (!self || info.Length() < 1) return;
+            using Arg = typename detail::MemberArg<decltype(Setter)>::type;
+            detail::Apply<Arg>(info.GetIsolate(), info[0], [&](auto &&v) {
+                (self->*Setter)(std::forward<decltype(v)>(v));
             });
+        });
+        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), getter, setter);
     }
 
     // Read-only scalar or string property.
@@ -115,20 +118,22 @@ namespace Framework::Scripting::Builtins {
     template <typename Class, auto Getter, auto Setter>
     void RegisterObjectProperty(v8::Isolate *isolate, v8::Local<v8::ObjectTemplate> proto, const char *name) {
         using Value = std::decay_t<typename detail::MemberReturn<decltype(Getter)>::type>;
-        proto->SetNativeDataProperty(
-            v8pp::to_v8(isolate, name).As<v8::Name>(),
-            [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                if (self) {
-                    auto &cls = Value::GetClass(info.GetIsolate());
-                    info.GetReturnValue().Set(cls.import_external(info.GetIsolate(), new Value((self->*Getter)())));
-                }
-            },
-            [](v8::Local<v8::Name>, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info) {
-                auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
-                auto *val  = v8pp::class_<Value>::unwrap_object(info.GetIsolate(), value);
-                if (self && val) (self->*Setter)(*val);
-            });
+        // SetAccessorProperty for the same reason as RegisterProperty: a prototype-installed
+        // native-data-property setter never fires on instance assignment.
+        auto getter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
+            if (self) {
+                auto &cls = Value::GetClass(info.GetIsolate());
+                info.GetReturnValue().Set(cls.import_external(info.GetIsolate(), new Value((self->*Getter)())));
+            }
+        });
+        auto setter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+            auto *self = v8pp::class_<Class>::unwrap_object(info.GetIsolate(), info.This());
+            if (!self || info.Length() < 1) return;
+            auto *val = v8pp::class_<Value>::unwrap_object(info.GetIsolate(), info[0]);
+            if (val) (self->*Setter)(*val);
+        });
+        proto->SetAccessorProperty(v8pp::to_v8(isolate, name).As<v8::Name>(), getter, setter);
     }
 
     // Read-only wrapped-value property (e.g. Vector3). The value type is deduced from the getter.
