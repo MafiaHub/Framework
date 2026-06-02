@@ -85,17 +85,8 @@ namespace Framework::Networking {
         return _peer->GetAveragePing(guid);
     }
     void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) {
-        auto *replication = GetReplicationManager();
-        if (!replication) {
-            return;
-        }
-        const unsigned count = replication->GetConnectionCount();
-        for (unsigned i = 0; i < count; ++i) {
-            auto *connection = replication->GetConnectionAtIndex(i);
-            if (!connection || connection->GetRakNetGUID().g == excludeGUID.g) {
-                continue;
-            }
-            _rpc.Signal(identifier, &bs, priority, reliability, 0, connection->GetRakNetGUID(), false, false);
-        }
+        // When broadcasting, the system identifier is the peer to exclude, so a single Signal reaches
+        // everyone but the sender.
+        _rpc.Signal(identifier, &bs, priority, reliability, 0, excludeGUID, true, false);
     }
 } // namespace Framework::Networking

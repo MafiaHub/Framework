@@ -150,8 +150,10 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const {
-        const unsigned count = const_cast<ReplicationManager *>(this)->GetReplicaCount();
+        const unsigned count = GetReplicaCount();
         for (unsigned i = 0; i < count; ++i) {
+            // GetReplicaAtIndex is non-const in ReplicaManager3 (unlike GetReplicaCount), so the
+            // const_cast is unavoidable here until that is fixed upstream.
             auto *entity = static_cast<NetworkEntity *>(const_cast<ReplicationManager *>(this)->GetReplicaAtIndex(i));
             if (entity) {
                 fn(entity);
