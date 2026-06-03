@@ -619,6 +619,10 @@ StartupResult RakPeer::Startup( unsigned int maxConnections, SocketDescriptor *s
 			remoteSystemList[ i ].connectMode=RemoteSystemStruct::NO_ACTION;
 			remoteSystemList[ i ].MTUSize = defaultMTUSize;
 			remoteSystemList[ i ].remoteSystemIndex = (SystemIndex) i;
+			// One-time zero-init: the array is OP_NEW_ARRAY allocated with no member init, so prime the
+			// reason-payload fields here before ClearDisconnectReason() can ever free them.
+			remoteSystemList[ i ].disconnectReasonData = 0;
+			remoteSystemList[ i ].disconnectReasonLength = 0;
 #ifdef _DEBUG
 			remoteSystemList[ i ].reliabilityLayer.ApplyNetworkSimulator(_packetloss, _minExtraPing, _extraPingVariance);
 #endif
@@ -1153,6 +1157,7 @@ void RakPeer::Shutdown( unsigned int blockDuration, unsigned char orderingChanne
 		RakAssert(remoteSystemList[ i ].MTUSize <= MAXIMUM_MTU_SIZE);
 		remoteSystemList[ i ].reliabilityLayer.Reset(false, remoteSystemList[ i ].MTUSize, false);
 		remoteSystemList[ i ].rakNetSocket = 0;
+		ClearDisconnectReason(&remoteSystemList[ i ]);
 	}
 
 
@@ -1632,7 +1637,7 @@ unsigned int RakPeer::GetMaximumNumberOfPeers( void ) const
 // sendDisconnectionNotification: True to send ID_DISCONNECTION_NOTIFICATION to the recipient. False to close it silently.
 // channel: If blockDuration > 0, the disconnect packet will be sent on this channel
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority )
+void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData )
 {
 	/*
 	// This only be called from the user thread, for the user shutting down.
@@ -1649,23 +1654,21 @@ void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectio
 
 	const SystemAddress address = (target.systemAddress == UNASSIGNED_SYSTEM_ADDRESS) ? GetSystemAddressFromGuid(target.rakNetGuid) : target.systemAddress;
 	int remoteSystemListIndex = GetIndexFromSystemAddress(address);
-	// fallback to index 0 (i.e. preserve old behavior for now)
-	// #med - review this whole design here
-	if (remoteSystemListIndex == -1) {
-		remoteSystemListIndex = 0;
-	}
 
-	// remoteSystemList[remoteSystemListIndex].rakNetSocket may be null: the socket
-	// can be released between resolving the connection and closing it (e.g. during
-	// rapid connect/disconnect churn), and the index-0 fallback above can land on a
-	// free slot. RakAssert is a no-op in release (NDEBUG), so the bare dereference
-	// would crash there. Guard explicitly and fall back to the primary socket — the
-	// same pattern used by the BCS_CLOSE_CONNECTION path below.
-	RakNetSocket2 *closeSocket = remoteSystemList[remoteSystemListIndex].rakNetSocket;
+	// Resolve the socket to close on WITHOUT assuming a valid slot index.
+	// GetIndexFromSystemAddress returns -1 when the target isn't in the list; never
+	// coerce that to 0 — reading remoteSystemList[0] would crash if the list is
+	// unallocated, or target an unrelated peer's slot. When the index is valid use
+	// that slot's socket (it may itself be null during rapid connect/disconnect
+	// churn). Either way, fall back to the primary socket — the same pattern used by
+	// the BCS_CLOSE_CONNECTION path below. With no socket at all there is nothing to
+	// close, so bail out.
+	RakNetSocket2 *closeSocket = (remoteSystemListIndex != -1) ? remoteSystemList[remoteSystemListIndex].rakNetSocket : nullptr;
 	if (closeSocket == nullptr && socketList.Size() > 0)
 		closeSocket = socketList[0];
-	if (closeSocket != nullptr)
-		CloseConnectionInternal2(target, sendDisconnectionNotification, false, orderingChannel, disconnectionNotificationPriority, *closeSocket);
+	if (closeSocket == nullptr)
+		return;
+	CloseConnectionInternal2(target, sendDisconnectionNotification, false, orderingChannel, disconnectionNotificationPriority, *closeSocket, reasonData);
 
 	// 12/14/09 Return ID_CONNECTION_LOST when calling CloseConnection with sendDisconnectionNotification==false, elsewise it is never returned
 	if (sendDisconnectionNotification==false && GetConnectionState(target)==IS_CONNECTED)
@@ -1674,7 +1677,7 @@ void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectio
 		packet->data[ 0 ] = ID_CONNECTION_LOST; // DeadConnection
 		packet->guid = target.rakNetGuid==UNASSIGNED_RAKNET_GUID ? GetGuidFromSystemAddress(target.systemAddress) : target.rakNetGuid;
 		packet->systemAddress = address;
-		packet->systemAddress.systemIndex = static_cast<SystemIndex>(remoteSystemListIndex);
+		packet->systemAddress.systemIndex = static_cast<SystemIndex>(remoteSystemListIndex == -1 ? 0 : remoteSystemListIndex);
 		packet->guid.systemIndex=packet->systemAddress.systemIndex;
 		packet->wasGeneratedLocally=true; // else processed twice
 		AddPacketToProducer(packet);
@@ -3551,10 +3554,15 @@ void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, Ma
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority )
+void RakPeer::NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData )
 {
 	MafiaNet::BitStream temp( sizeof(unsigned char) );
 	temp.Write( (MessageID)ID_DISCONNECTION_NOTIFICATION );
+	// Optionally append a caller-supplied reason payload right after the 1-byte ID. The ID occupies exactly 8 bits so
+	// the payload stays byte-aligned; the remote reads it from packet->data+1 (length packet->length-1). Wire-backward
+	// compatible: peers that only inspect data[0] ignore the extra bytes.
+	if (reasonData != nullptr && reasonData->GetNumberOfBytesUsed() > 0)
+		temp.Write( (const char*)reasonData->GetData(), reasonData->GetNumberOfBytesUsed() );
 	if (performImmediate)
 	{
 		SendImmediate((char*)temp.GetData(), temp.GetNumberOfBitsUsed(), disconnectionNotificationPriority, RELIABLE_ORDERED, orderingChannel, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
@@ -3565,6 +3573,18 @@ void RakPeer::NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool 
 	{
 		SendBuffered((const char*)temp.GetData(), temp.GetNumberOfBitsUsed(), disconnectionNotificationPriority, RELIABLE_ORDERED, orderingChannel, systemAddress, false, RemoteSystemStruct::DISCONNECT_ASAP, 0);
 	}
+}
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+void RakPeer::ClearDisconnectReason( RemoteSystemStruct *remoteSystem )
+{
+	if (remoteSystem==0)
+		return;
+	if (remoteSystem->disconnectReasonData!=0)
+	{
+		rakFree_Ex(remoteSystem->disconnectReasonData, _FILE_AND_LINE_);
+		remoteSystem->disconnectReasonData=0;
+	}
+	remoteSystem->disconnectReasonLength=0;
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 unsigned int RakPeer::GetNumberOfRemoteInitiatedConnections( void ) const
@@ -3632,6 +3652,8 @@ RakPeer::RemoteSystemStruct * RakPeer::AssignSystemAddressToRemoteSystemList( co
 
 			remoteSystem=remoteSystemList+assignedIndex;
 			ReferenceRemoteSystem(systemAddress, assignedIndex);
+			// Stale reason payload from a prior occupant of this slot must never leak into a new connection.
+			ClearDisconnectReason(remoteSystem);
 			remoteSystem->MTUSize=defaultMTUSize;
 			remoteSystem->guid=guid;
 			remoteSystem->isActive = true; // This one line causes future incoming packets to go through the reliability layer
@@ -4126,7 +4148,7 @@ void RakPeer::CloseConnectionInternal( const AddressOrGUID& systemIdentifier, bo
 }
 
 // #med - better integrate directly in CloseConnectionInternal2()
-void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, RakNetSocket2& socket)
+void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, RakNetSocket2& socket, const MafiaNet::BitStream *reasonData)
 {
 	RakAssert(orderingChannel < 32);
 
@@ -4152,7 +4174,7 @@ void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bo
 
 	if (sendDisconnectionNotification)
 	{
-		NotifyAndFlagForShutdown(target, performImmediate, orderingChannel, disconnectionNotificationPriority);
+		NotifyAndFlagForShutdown(target, performImmediate, orderingChannel, disconnectionNotificationPriority, reasonData);
 	}
 	else
 	{
@@ -4177,6 +4199,9 @@ void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bo
 					// Clear any remaining messages
 					RakAssert(remoteSystemList[index].MTUSize <= MAXIMUM_MTU_SIZE);
 					remoteSystemList[index].reliabilityLayer.Reset(false, remoteSystemList[index].MTUSize, false);
+
+					// Free any stashed disconnect-reason payload (e.g. delivered already, or never consumed)
+					ClearDisconnectReason(&remoteSystemList[index]);
 
 					// Not using this socket
 					remoteSystemList[index].rakNetSocket = 0;
@@ -5909,13 +5934,21 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 //					remoteSystem->reliabilityLayer.GetUndeliveredMessages(&undeliveredMessages,remoteSystem->MTUSize);
 
 //					packet=AllocPacket(sizeof( char ) + undeliveredMessages.GetNumberOfBytesUsed());
-					packet=AllocPacket(sizeof( char ), _FILE_AND_LINE_);
+					// A graceful remote disconnect (DISCONNECT_ON_NO_ACK) may carry a reason payload stashed when the
+					// notification arrived. Only ID_DISCONNECTION_NOTIFICATION carries it; ID_CONNECTION_LOST and
+					// ID_CONNECTION_ATTEMPT_FAILED are locally synthesized and stay payload-less.
+					const bool attachReason = remoteSystem->connectMode==RemoteSystemStruct::DISCONNECT_ON_NO_ACK && remoteSystem->disconnectReasonData!=0;
+					const unsigned int reasonLength = attachReason ? remoteSystem->disconnectReasonLength : 0;
+					packet=AllocPacket(sizeof( char ) + reasonLength, _FILE_AND_LINE_);
 					if (remoteSystem->connectMode==RemoteSystemStruct::REQUESTED_CONNECTION)
 						packet->data[ 0 ] = ID_CONNECTION_ATTEMPT_FAILED; // Attempted a connection and couldn't
 					else if (remoteSystem->connectMode==RemoteSystemStruct::CONNECTED)
 						packet->data[ 0 ] = ID_CONNECTION_LOST; // DeadConnection
 					else
 						packet->data[ 0 ] = ID_DISCONNECTION_NOTIFICATION; // DeadConnection
+
+					if (attachReason)
+						memcpy(packet->data + sizeof(unsigned char), remoteSystem->disconnectReasonData, reasonLength);
 
 //					memcpy(packet->data+1, undeliveredMessages.GetData(), undeliveredMessages.GetNumberOfBytesUsed());
 
@@ -6113,6 +6146,21 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 					}
 					else if ( (unsigned char) data[ 0 ] == ID_DISCONNECTION_NOTIFICATION )
 					{
+						// Stash any reason payload (everything after the 1-byte ID) so it can ride along with the
+						// user-facing notification packet synthesized once outstanding ACKs are flushed. This raw
+						// reliability-layer buffer is freed below, so the bytes have to be copied out now.
+						ClearDisconnectReason(remoteSystem);
+						if (byteSize > sizeof(unsigned char))
+						{
+							const unsigned int reasonLength = byteSize - (unsigned int) sizeof(unsigned char);
+							remoteSystem->disconnectReasonData = (unsigned char*) rakMalloc_Ex(reasonLength, _FILE_AND_LINE_);
+							if (remoteSystem->disconnectReasonData != 0)
+							{
+								memcpy(remoteSystem->disconnectReasonData, data + sizeof(unsigned char), reasonLength);
+								remoteSystem->disconnectReasonLength = reasonLength;
+							}
+						}
+
 						// We shouldn't close the connection immediately because we need to ack the ID_DISCONNECTION_NOTIFICATION
 						remoteSystem->connectMode=RemoteSystemStruct::DISCONNECT_ON_NO_ACK;
 						rakFree_Ex(data, _FILE_AND_LINE_ );

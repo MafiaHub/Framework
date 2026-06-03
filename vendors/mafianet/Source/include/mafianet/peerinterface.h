@@ -264,7 +264,14 @@ public:
 	/// \param[in] sendDisconnectionNotification True to send ID_DISCONNECTION_NOTIFICATION to the recipient.  False to close it silently.
 	/// \param[in] channel Which ordering channel to send the disconnection notification on, if any
 	/// \param[in] disconnectionNotificationPriority Priority to send ID_DISCONNECTION_NOTIFICATION on.
-	virtual void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY )=0;
+	/// \param[in] reasonData Optional payload appended after the ID_DISCONNECTION_NOTIFICATION message ID so the
+	///            remote peer can learn *why* it was dropped (e.g. an enum + custom string). The receiver reads it
+	///            from packet->data+1 (length packet->length-1), exactly like any other message body. Only graceful
+	///            disconnects (sendDisconnectionNotification==true) carry a reason; locally-synthesized notifications
+	///            (ID_CONNECTION_LOST and timeout/dead-connection paths) stay payload-less, so consumers must tolerate
+	///            a zero-length body. Pass nullptr (the default) for no reason. Appending bytes after the 1-byte ID is
+	///            wire-backward-compatible: peers that only read data[0] are unaffected.
+	virtual void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY, const MafiaNet::BitStream *reasonData=nullptr )=0;
 
 	/// Returns if a system is connected, disconnected, connecting in progress, or various other states
 	/// \param[in] systemIdentifier The system we are referring to

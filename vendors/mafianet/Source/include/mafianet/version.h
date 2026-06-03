@@ -15,10 +15,10 @@
 
 // MafiaNet version. This is the current, authoritative version of the library.
 // Keep in sync with the project() VERSION in the root CMakeLists.txt.
-#define MAFIANET_VERSION "0.7.0"
-#define MAFIANET_VERSION_NUMBER_INT 700
+#define MAFIANET_VERSION "0.8.0"
+#define MAFIANET_VERSION_NUMBER_INT 800
 #define MAFIANET_VERSION_MAJOR 0
-#define MAFIANET_VERSION_MINOR 7
+#define MAFIANET_VERSION_MINOR 8
 #define MAFIANET_VERSION_PATCH 0
 
 // Defines kept here for backwards compatibility with RAKNET 4.081/4.082.

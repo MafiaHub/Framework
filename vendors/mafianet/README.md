@@ -271,7 +271,11 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.7.0 (Latest)
+### Version 0.8.0 (Latest)
+- **Optional disconnect reason**: `CloseConnection` gains a final optional `const BitStream *reasonData` argument whose bytes are appended right after the `ID_DISCONNECTION_NOTIFICATION` message ID, so the remote peer can learn *why* it was dropped (e.g. a kick/ban enum plus a custom string). The receiver reads it like any other body — `packet->data + 1` for `packet->length - 1` bytes. Only graceful disconnects carry a reason; locally-synthesized notifications (`ID_CONNECTION_LOST`, timeout/dead-connection) stay payload-less, so always tolerate a zero-length body. Wire-backward-compatible: peers that only inspect `data[0]` are unaffected
+- **Bug fix**: `RakPeer::CloseConnection` no longer coerces an unresolved target index (`-1`) to `0` and reads `remoteSystemList[0]` — which targeted an unrelated peer's slot or crashed on an unallocated list; the close socket is now resolved without assuming a valid slot index
+
+### Version 0.7.0
 - **Virtual worlds (dimensions)**: new per-entity / per-observer `VirtualWorldId` scoping on top of ReplicaManager3 — the SA-MP `SetPlayerVirtualWorld` / routing-bucket model for instanced interiors (e.g. apartments). Players only see entities sharing their virtual world (or `VIRTUAL_WORLD_GLOBAL`), switchable at runtime with no reconnect. Derive entities from `VirtualWorldReplica3`; `Connection_RM3` gets `Get/SetVirtualWorld`; `ReplicaManager3` gets `GetConnectionsInVirtualWorld`/`GetGuidsInVirtualWorld` and `SetPlayerVirtualWorld`. The filter is authority-only, so a downloaded copy never despawns the entity at its owner. See `Samples/VirtualWorld`
 
 ### Version 0.6.1
