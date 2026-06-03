@@ -12,8 +12,6 @@
 
 #include <mafianet/BitStream.h>
 
-#include <flecs/distr/flecs.h>
-
 namespace Framework::Networking::Messages {
     class ClientKick final: public IMessage {
       private:

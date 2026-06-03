@@ -206,7 +206,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} MafiaNet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl flecs_static semver Hash ftl)
+    target_link_libraries(${target_name} MafiaNet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl)
 
     # Required libraries for windows
     if(WIN32)

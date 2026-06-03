@@ -30,7 +30,6 @@
 #include "utils/command_processor.h"
 #include "utils/path.h"
 #include "utils/version.h"
-#include "../shared/modules/mod.hpp"
 
 #include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
@@ -134,9 +133,6 @@ namespace Framework::Integrations::Server {
         // Register the default endpoints
         InitEndpoints();
 
-        // Register built in modules
-        InitModules();
-
         // Initialize default messages
         InitNetworkingMessages();
 
@@ -206,15 +202,6 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
     }
 
-    void Instance::InitModules() const {
-        if (_worldEngine) {
-            const auto world = _worldEngine->GetWorld();
-
-            world->import <Integrations::Shared::Modules::Mod>();
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Core ecs modules have been imported!");
-    }
 
     bool Instance::LoadConfigFromJSON() {
         const auto configHandle = cppfs::fs::open(_opts.modConfigFile);

@@ -11,9 +11,6 @@
 namespace Framework::World {
     WorldError Engine::Init(Networking::NetworkPeer *networkPeer) {
         _networkPeer = networkPeer;
-        // flecs world backing the scripting resource tree.
-        _world = std::make_unique<flecs::world>();
-
         _initialized = true;
         return WorldError::WORLD_NONE;
     }
@@ -22,12 +19,7 @@ namespace Framework::World {
         Lifecycle::Shutdown();
     }
 
-    void Engine::Update() {
-        // Advance the scripting resource tree; entity replication is driven by the network peer.
-        if (_world) {
-            _world->progress();
-        }
-    }
+    void Engine::Update() {}
 
     Replication::NetworkEntity *Engine::GetEntityByNetworkID(MafiaNet::NetworkID networkId) const {
         auto *replication = GetReplication();

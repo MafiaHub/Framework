@@ -21,8 +21,6 @@
 #include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
 
-#include "../shared/modules/mod.hpp"
-
 #include "scripting/resource/resource_manager.h"
 #include "scripting/builtins/events.h"
 
@@ -185,10 +183,6 @@ namespace Framework::Integrations::Client {
                 return ClientError::CLIENT_ENGINES_ERROR;
             }
             CoreModules::SetWorldEngine(_worldEngine.get());
-
-            _worldEngine->GetWorld()->import <Shared::Modules::Mod>();
-
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Core ecs modules have been imported!");
         }
 
         CoreModules::SetWebManager(_webManager.get());

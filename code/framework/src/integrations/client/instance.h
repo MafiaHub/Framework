@@ -33,8 +33,6 @@
 
 #include <input/input.h>
 
-#include <flecs/distr/flecs.h>
-
 namespace Framework::Integrations::Client {
     // Fired once the connection handshake completes, with the server tick rate.
     using NetworkConnectionFinalizedCallback = fu2::function<void(float) const>;

@@ -21,8 +21,6 @@
 #include "utils/command_processor.h"
 #include "world/server.h"
 
-#include <flecs.h>
-
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
 
@@ -107,7 +105,6 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
 
         void InitEndpoints();
-        void InitModules() const;
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
         void InitCommandListener();
@@ -116,9 +113,6 @@ namespace Framework::Integrations::Server {
         
         // Command handlers
         void HandleCommand(std::string_view command);
-
-        // managers
-        flecs::entity _weatherManager;
 
         // entity factories
         std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
