@@ -26,8 +26,9 @@ namespace Framework::Networking::Replication {
     //
     // Per-tick updates go through MafiaNet::VariableDeltaSerializer: each variable is compared
     // against the last value sent to a system and transmitted only when it changes. Construction
-    // sends a full snapshot. Serialize() returns RM3SR_SERIALIZED_UNIQUELY; ReplicaManager3 calls it
-    // per connection while the delta serializer reuses one bitstream within a tick.
+    // sends a full snapshot. Serialize() returns RM3SR_BROADCAST_IDENTICALLY: the delta serializer
+    // builds one bitstream once per tick and ReplicaManager3 reuses those bytes for every
+    // connection (per-connection owner filtering still happens in QuerySerializationWithinWorld).
     //
     // Authority: QuerySerialization is keyed on ownerGUID — the server serializes to everyone except
     // the owner, the owning client serializes upstream, and Deserialize accepts state only from the
