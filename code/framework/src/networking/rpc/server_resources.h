@@ -10,7 +10,11 @@
 
 #include "rpc.h"
 
+#include <logging/logger.h>
+
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -32,6 +36,7 @@ namespace Framework::Networking::RPC {
     // interval (s) the client applies once that barrier completes.
     struct ServerResources {
         static constexpr const char *kIdentifier = "Framework::ServerResources";
+        static constexpr uint16_t kMaxResources  = 1000; // bound untrusted input
 
         int32_t readyEventId = 0;
         float tickRate = 0.0f;
@@ -41,16 +46,23 @@ namespace Framework::Networking::RPC {
             bs->Serialize(write, readyEventId);
             bs->Serialize(write, tickRate);
 
-            uint16_t count = static_cast<uint16_t>(resources.size());
+            if (write && resources.size() > std::numeric_limits<uint16_t>::max()) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("ServerResources holds {} resources, exceeding the wire limit; truncating", resources.size());
+            }
+
+            uint16_t count = static_cast<uint16_t>(std::min<size_t>(resources.size(), std::numeric_limits<uint16_t>::max()));
             bs->Serialize(write, count);
             if (!write) {
                 resources.clear();
-                if (count > 1000) { // bound untrusted input
-                    count = 1000;
-                }
-                resources.resize(count);
+                resources.resize(std::min<uint16_t>(count, kMaxResources));
             }
             for (uint16_t i = 0; i < count; ++i) {
+                // Entries past the sane cap are still consumed so the bitstream stays aligned.
+                if (!write && i >= kMaxResources) {
+                    ResourceInfo discard;
+                    discard.Serialize(bs, write);
+                    continue;
+                }
                 resources[i].Serialize(bs, write);
             }
         }
