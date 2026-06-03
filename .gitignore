@@ -59,3 +59,7 @@ vendors/directxtk/MakeSpriteFont/obj/Debug/MakeSpriteFont.csproj.AssemblyReferen
 vendors/directxtk/MakeSpriteFont/obj/Release/MakeSpriteFont.csproj.AssemblyReference.cache
 /vendors/directxtk/MakeSpriteFont/obj
 /vendors/directxtk/MakeSpriteFont/obj
+
+# MafiaHub Services build outputs
+code/framework/src/services/lib/Debug/
+code/framework/src/services/lib/Release/
