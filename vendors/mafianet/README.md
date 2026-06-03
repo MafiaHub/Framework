@@ -271,7 +271,10 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.6.1 (Latest)
+### Version 0.7.0 (Latest)
+- **Virtual worlds (dimensions)**: new per-entity / per-observer `VirtualWorldId` scoping on top of ReplicaManager3 — the SA-MP `SetPlayerVirtualWorld` / routing-bucket model for instanced interiors (e.g. apartments). Players only see entities sharing their virtual world (or `VIRTUAL_WORLD_GLOBAL`), switchable at runtime with no reconnect. Derive entities from `VirtualWorldReplica3`; `Connection_RM3` gets `Get/SetVirtualWorld`; `ReplicaManager3` gets `GetConnectionsInVirtualWorld`/`GetGuidsInVirtualWorld` and `SetPlayerVirtualWorld`. The filter is authority-only, so a downloaded copy never despawns the entity at its owner. See `Samples/VirtualWorld`
+
+### Version 0.6.1
 - **ReplicaManager3**: `GetReplicaAtIndex` is now `const`, matching the other read accessors (`GetReplicaCount`, `GetConnectionCount`, `GetConnectionAtIndex`) — const methods iterating replicas no longer need a `const_cast`. The returned `Replica3*` stays non-const. Source-compatible (no break for existing non-const call sites)
 
 ### Version 0.6.0

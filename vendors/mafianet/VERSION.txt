@@ -1,2 +1,2 @@
 MafiaNet vendored from https://github.com/MafiaHub/MafiaNet
-Pinned: tag v0.6.1 (commit f5894fbe9a0db5535595940cf66a6d3a3a81fb50)
+Pinned: tag v0.7.0 (commit 0d2a630d54c34361389e258576197ce938c0d48e)

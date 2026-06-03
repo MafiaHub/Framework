@@ -33,6 +33,7 @@
 #include "DS_OrderedList.h"
 #include "DS_Queue.h"
 #include "SimpleMutex.h"
+#include "VirtualWorld.h"
 
 /// \defgroup REPLICA_MANAGER_GROUP3 ReplicaManager3
 /// \brief Third implementation of object replication
@@ -43,6 +44,7 @@ namespace MafiaNet
 {
 class Connection_RM3;
 class Replica3;
+class VirtualWorldReplica3;
 
 /// \ingroup REPLICA_MANAGER_GROUP3
 /// Used for multiple worlds. World 0 is created automatically by default
@@ -224,6 +226,32 @@ public:
 	/// \param[in] worldId Used for multiple worlds. World 0 is created automatically by default. See AddWorld()
 	/// \return A Connection_RM3 pointer, or 0 if not found
 	Connection_RM3* GetConnectionByGUID(RakNetGUID guid, WorldId worldId=0) const;
+
+	/// \brief Return the connections (observers) currently in a given virtual world.
+	/// \details Recipient-filter helper for scoping non-replica traffic (chat, RPC4,
+	/// raw Send) by virtual world. See VirtualWorld.h for the dimension model.
+	/// \param[in] virtualWorld The virtual world to match. See SetPlayerVirtualWorld() and Connection_RM3::SetVirtualWorld()
+	/// \param[out] connectionsOut Populated with the matching connections (cleared first)
+	/// \param[in] includeGlobal If true, also include observers in VIRTUAL_WORLD_GLOBAL
+	/// \param[in] worldId Which RM3 world to look in. World 0 by default. See AddWorld()
+	void GetConnectionsInVirtualWorld(VirtualWorldId virtualWorld, DataStructures::List<Connection_RM3*> &connectionsOut, bool includeGlobal=true, WorldId worldId=0) const;
+
+	/// \brief Return the guids of the connections (observers) currently in a given virtual world.
+	/// \details Same as GetConnectionsInVirtualWorld() but returns guids, convenient for addressing RakPeerInterface::Send().
+	/// \param[in] virtualWorld The virtual world to match
+	/// \param[out] guidsOut Populated with the matching guids (cleared first)
+	/// \param[in] includeGlobal If true, also include observers in VIRTUAL_WORLD_GLOBAL
+	/// \param[in] worldId Which RM3 world to look in. World 0 by default. See AddWorld()
+	void GetGuidsInVirtualWorld(VirtualWorldId virtualWorld, DataStructures::List<RakNetGUID> &guidsOut, bool includeGlobal=true, WorldId worldId=0) const;
+
+	/// \brief Convenience to move a player to a virtual world: sets both the observer's
+	/// virtual world (what they see) and their avatar entity's virtual world (how others see them).
+	/// \details RM3 spawns the new world in and the old world out automatically on the next Update()
+	/// (in the default construction mode). \a avatar may be 0 if the player has no avatar entity yet.
+	/// \param[in] connection The player's connection (observer side)
+	/// \param[in] avatar The player's avatar entity, or 0
+	/// \param[in] virtualWorld The virtual world to move them to
+	void SetPlayerVirtualWorld(Connection_RM3 *connection, VirtualWorldReplica3 *avatar, VirtualWorldId virtualWorld);
 
 	/// \param[in] Default ordering channel to use for object creation, destruction, and serializations
 	void SetDefaultOrderingChannel(char def);
@@ -495,6 +523,15 @@ public:
 	/// \return Returns the RakNetGUID passed to the constructor of this object
 	RakNetGUID GetRakNetGUID(void) const {return guid;}
 
+	/// \brief Set the virtual world (dimension) this observer perceives.
+	/// \details Entities (VirtualWorldReplica3) are only constructed/serialized to this
+	/// connection when they share this virtual world (or either side is VIRTUAL_WORLD_GLOBAL).
+	/// See VirtualWorld.h and ReplicaManager3::SetPlayerVirtualWorld().
+	void SetVirtualWorld(VirtualWorldId vw) {virtualWorld=vw;}
+
+	/// \return The virtual world this observer perceives. Defaults to VIRTUAL_WORLD_DEFAULT.
+	VirtualWorldId GetVirtualWorld(void) const {return virtualWorld;}
+
 	/// \return True if ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE arrived for this connection
 	bool GetDownloadWasCompleted(void) const {return gotDownloadComplete;}
 
@@ -613,6 +650,9 @@ protected:
 
 	SystemAddress systemAddress;
 	RakNetGUID guid;
+
+	// The virtual world (dimension) this observer perceives. See VirtualWorld.h.
+	VirtualWorldId virtualWorld;
 
 	/*
 		Operations:

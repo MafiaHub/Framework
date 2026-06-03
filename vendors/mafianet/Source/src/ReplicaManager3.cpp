@@ -17,6 +17,7 @@
 #if _RAKNET_SUPPORT_ReplicaManager3==1
 
 #include "mafianet/ReplicaManager3.h"
+#include "mafianet/VirtualWorldReplica3.h"
 #include "mafianet/GetTime.h"
 #include "mafianet/MessageIdentifiers.h"
 #include "mafianet/peerinterface.h"
@@ -483,6 +484,60 @@ Connection_RM3* ReplicaManager3::GetConnectionByGUID(RakNetGUID guid, WorldId wo
 		}
 	}
 	return 0;
+}
+
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+void ReplicaManager3::GetConnectionsInVirtualWorld(VirtualWorldId virtualWorld, DataStructures::List<Connection_RM3*> &connectionsOut, bool includeGlobal, WorldId worldId) const
+{
+	connectionsOut.Clear(true, _FILE_AND_LINE_);
+
+	// Two distinct layers: the heavyweight RM3 world (worldId, default 0) is the
+	// container that actually holds the connection list; the virtual world is a
+	// lightweight per-connection tag we filter that list by. We are not switching
+	// RM3 worlds here -- we look up the RM3 world only to get its connections,
+	// then keep the ones whose virtual world matches. (Most setups only ever use
+	// the auto-created RM3 world 0.) See VirtualWorld.h.
+	RakAssert(worldsArray[worldId]!=0 && "World not in use");
+	RM3World *world = worldsArray[worldId];
+
+	unsigned int index;
+	for (index=0; index < world->connectionList.Size(); index++)
+	{
+		Connection_RM3 *connection = world->connectionList[index];
+		VirtualWorldId connVirtualWorld = connection->GetVirtualWorld();
+		// Membership test (not a symmetric visibility check): the connection is in
+		// this virtual world, plus -- when includeGlobal -- any global observer.
+		// Using VirtualWorldsCanSee here would make a GLOBAL *query* match every
+		// connection, which is not what "connections in virtual world N" means.
+		bool matches = (connVirtualWorld==virtualWorld) ||
+			(includeGlobal && connVirtualWorld==VIRTUAL_WORLD_GLOBAL);
+		if (matches)
+			connectionsOut.Push(connection, _FILE_AND_LINE_);
+	}
+}
+
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+void ReplicaManager3::GetGuidsInVirtualWorld(VirtualWorldId virtualWorld, DataStructures::List<RakNetGUID> &guidsOut, bool includeGlobal, WorldId worldId) const
+{
+	guidsOut.Clear(true, _FILE_AND_LINE_);
+	DataStructures::List<Connection_RM3*> connections;
+	GetConnectionsInVirtualWorld(virtualWorld, connections, includeGlobal, worldId);
+
+	unsigned int index;
+	for (index=0; index < connections.Size(); index++)
+		guidsOut.Push(connections[index]->GetRakNetGUID(), _FILE_AND_LINE_);
+}
+
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+void ReplicaManager3::SetPlayerVirtualWorld(Connection_RM3 *connection, VirtualWorldReplica3 *avatar, VirtualWorldId virtualWorld)
+{
+	if (connection)
+		connection->SetVirtualWorld(virtualWorld);
+	if (avatar)
+		avatar->SetVirtualWorld(virtualWorld);
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1475,6 +1530,7 @@ Connection_RM3::Connection_RM3(const SystemAddress &_systemAddress, RakNetGUID _
 	isFirstConstruction=true;
 	groupConstructionAndSerialize=false;
 	gotDownloadComplete=false;
+	virtualWorld=VIRTUAL_WORLD_DEFAULT;
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
