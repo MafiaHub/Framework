@@ -12,7 +12,6 @@
 
 #include <scripting/builtins/builtins.h>
 #include <scripting/builtins/chat.h>
-#include <scripting/builtins/entity.h>
 #include <scripting/builtins/events.h>
 #include <scripting/builtins/messages.h>
 #include <scripting/builtins/console.h>

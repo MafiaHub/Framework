@@ -13,7 +13,6 @@
 #include <sstream>
 
 #include "core_modules.h"
-#include "networking/replication/replication_manager.h"
 
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
