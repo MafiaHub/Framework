@@ -60,6 +60,7 @@ namespace Framework {
         }
 
         static void SetReplication(Networking::Replication::ReplicationManager *replication) {
+            FW_ASSERT_MODULE_REGISTRATION(_replication, replication, "Replication");
             _replication = replication;
         }
 
