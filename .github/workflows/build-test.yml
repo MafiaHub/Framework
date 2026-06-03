@@ -32,8 +32,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          token: ${{ secrets.FW_SERVICES_PAT }}
+          # The private services-adapter submodule is not fetched: fork PRs
+          # have no access to FW_SERVICES_PAT, and the build falls back to the
+          # public prebuilt MafiaHubServices release when it is absent.
+          submodules: false
                               
       - uses: maxim-lobanov/setup-xcode@v1
         with:

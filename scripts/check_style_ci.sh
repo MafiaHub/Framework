@@ -17,10 +17,14 @@ EOF
 
   PAYLOAD="$(gen_data)"
   echo "$PAYLOAD"
-  curl \
-    -H "Accept: application/json" \
-    -H "Content-Type: application/json" \
-    --data-binary "$PAYLOAD" \
-    "$1"
+  # The webhook URL is unavailable on fork PRs (secrets are not exposed); only
+  # notify Discord when it is actually set, but always fail the job.
+  if [ -n "$1" ]; then
+    curl \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      --data-binary "$PAYLOAD" \
+      "$1"
+  fi
   exit 1
 fi

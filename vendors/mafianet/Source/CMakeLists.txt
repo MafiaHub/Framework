@@ -272,6 +272,8 @@ set(MAFIANET_HEADERS
     include/mafianet/VariableListDeltaTracker.h
     include/mafianet/VariadicSQLParser.h
     include/mafianet/version.h
+    include/mafianet/VirtualWorld.h
+    include/mafianet/VirtualWorldReplica3.h
     include/mafianet/VitaIncludes.h
     include/mafianet/WindowsIncludes.h
     include/mafianet/WSAStartupSingleton.h

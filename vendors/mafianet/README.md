@@ -271,7 +271,19 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.5.1 (Latest)
+### Version 0.7.0 (Latest)
+- **Virtual worlds (dimensions)**: new per-entity / per-observer `VirtualWorldId` scoping on top of ReplicaManager3 — the SA-MP `SetPlayerVirtualWorld` / routing-bucket model for instanced interiors (e.g. apartments). Players only see entities sharing their virtual world (or `VIRTUAL_WORLD_GLOBAL`), switchable at runtime with no reconnect. Derive entities from `VirtualWorldReplica3`; `Connection_RM3` gets `Get/SetVirtualWorld`; `ReplicaManager3` gets `GetConnectionsInVirtualWorld`/`GetGuidsInVirtualWorld` and `SetPlayerVirtualWorld`. The filter is authority-only, so a downloaded copy never despawns the entity at its owner. See `Samples/VirtualWorld`
+
+### Version 0.6.1
+- **ReplicaManager3**: `GetReplicaAtIndex` is now `const`, matching the other read accessors (`GetReplicaCount`, `GetConnectionCount`, `GetConnectionAtIndex`) — const methods iterating replicas no longer need a `const_cast`. The returned `Replica3*` stays non-const. Source-compatible (no break for existing non-const call sites)
+
+### Version 0.6.0
+- **RPC4 user context**: `RegisterFunction`, `RegisterSlot`, `RegisterBlockingFunction` and the `RPC4GlobalRegistration` handler constructors now take an opaque `void *context` passed back to the handler on every call — no more file-static global pointers to route an RPC to an object instance (each registration carries its own context)
+- **Bug fix**: `RakPeer::CloseConnection` no longer dereferences a null `rakNetSocket` during teardown (a pre-existing crash in release builds); falls back to the primary socket
+- **Testing**: added `RPC4ContextTest` (slot/nonblocking/blocking context); quarantined the flaky `ManyClientsOneServerDeallocateBlockingTest` in CI pending a teardown-race fix
+- _Breaking_: RPC4 handler signatures gained a trailing `void *context` and the registration calls take a context argument; there are no compatibility overloads (pass `nullptr` when unused)
+
+### Version 0.5.1
 - **Plugins**: Added `DirectoryDeltaTransfer::AddFile(filePath, fileName)` to queue a single file for upload (complements the recursive `AddUploadsFromSubdirectory`)
 
 ### Version 0.5.0
