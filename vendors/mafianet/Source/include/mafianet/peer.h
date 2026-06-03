@@ -293,7 +293,7 @@ public:
 	/// \param[in] sendDisconnectionNotification True to send ID_DISCONNECTION_NOTIFICATION to the recipient.  False to close it silently.
 	/// \param[in] channel Which ordering channel to send the disconnection notification on, if any
 	/// \param[in] disconnectionNotificationPriority Priority to send ID_DISCONNECTION_NOTIFICATION on.
-	void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY );
+	void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY, const MafiaNet::BitStream *reasonData=nullptr );
 
 	/// \brief Cancel a pending connection attempt.
 	/// \details If we are already connected, the connection stays open
@@ -686,6 +686,15 @@ public:
 		RakNetSocket2* rakNetSocket;
 		SystemIndex remoteSystemIndex;
 
+		// Optional disconnect-reason payload received with an incoming ID_DISCONNECTION_NOTIFICATION. The payload is
+		// stashed here when the notification arrives and copied into the user-facing notification packet that is
+		// synthesized after outstanding ACKs are flushed (the raw reliability-layer buffer is freed in between, so it
+		// cannot be delivered directly). null/0 when the remote sent no reason. Owned by this struct; copied out at
+		// delivery and freed via ClearDisconnectReason() on every slot teardown (including the immediate close that
+		// directly follows delivery) and on slot reuse.
+		unsigned char* disconnectReasonData;
+		unsigned int disconnectReasonLength;
+
 #if LIBCAT_SECURITY==1
 		// Cached answer used internally by RakPeer to prevent DoS attacks based on the connexion handshake
 		char answer[cat::EasyHandshake::ANSWER_BYTES];
@@ -729,7 +738,7 @@ protected:
 	void ParseConnectionRequestPacket( RakPeer::RemoteSystemStruct *remoteSystem, const SystemAddress &systemAddress, const char *data, int byteSize);
 	void OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, MafiaNet::Time incomingTimestamp );
 	///Send a reliable disconnect packet to this player and disconnect them when it is delivered
-	void NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority );
+	void NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData=nullptr );
 	///Returns how many remote systems initiated a connection to us
 	unsigned int GetNumberOfRemoteInitiatedConnections( void ) const;
 	///	\brief Get a free remote system from the list and assign our systemAddress to it.
@@ -1031,7 +1040,9 @@ protected:
 
 	private:
 		// internal helpers
-		void CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, RakNetSocket2& socket);
+		void CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, RakNetSocket2& socket, const MafiaNet::BitStream *reasonData=nullptr);
+		// Free and null any stashed disconnect-reason payload for the given remote system (safe on null).
+		void ClearDisconnectReason(RemoteSystemStruct *remoteSystem);
 }
 // #if defined(SN_TARGET_PSP2)
 // __attribute__((aligned(8)))
