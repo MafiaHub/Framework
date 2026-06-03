@@ -155,6 +155,23 @@ namespace Framework::Networking::Replication {
         _vds.DeserializeVariable(&ctx, rotation);
         DeserializeFields(&_vds, &ctx);
         _vds.EndDeserialize(&ctx);
+
+        // Already shifted to our local clock by RakPeer; do not subtract GetClockDifferential.
+        if (deserializeParameters->timeStamp != 0) {
+            lastUpdateTime = deserializeParameters->timeStamp;
+        }
+    }
+
+    MafiaNet::Time NetworkEntity::GetUpdateAge() const {
+        if (lastUpdateTime == 0) {
+            return 0;
+        }
+        const MafiaNet::Time now = MafiaNet::GetTime();
+        return now > lastUpdateTime ? now - lastUpdateTime : 0;
+    }
+
+    glm::vec3 NetworkEntity::GetExtrapolatedPosition() const {
+        return position + velocity * (static_cast<float>(GetUpdateAge()) / 1000.0f);
     }
 
     MafiaNet::RM3ConstructionState NetworkEntity::QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *) {

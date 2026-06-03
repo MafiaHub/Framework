@@ -46,6 +46,9 @@ namespace Framework::Networking::Replication {
         // --- Authority (replicated) ---
         uint64_t ownerGUID = MafiaNet::UNASSIGNED_RAKNET_GUID.g;
 
+        // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
+        MafiaNet::Time lastUpdateTime = 0;
+
         // --- Server-only streaming metadata (not replicated) ---
         // Dimension lives in the VirtualWorldReplica3 base (Get/SetVirtualWorld).
         bool alwaysVisible = false;
@@ -102,6 +105,9 @@ namespace Framework::Networking::Replication {
         // server-owned entities. The game decides what owning means (bind the local avatar, drive
         // updates upstream, ...); this just answers who holds authority.
         bool IsOwner() const;
+
+        MafiaNet::Time GetUpdateAge() const;
+        glm::vec3 GetExtrapolatedPosition() const;
 
         // --- Replica3 implementation ---
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const override;
