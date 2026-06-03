@@ -9,7 +9,6 @@
 #include "resource_manager.h"
 
 #include "../builtins/events.h"
-#include "world/engine.h"
 
 #include <algorithm>
 #include <cctype>

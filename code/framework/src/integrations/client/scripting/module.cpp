@@ -35,8 +35,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
     } // anonymous namespace
 
-    ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
-        : _world(world) {
+    ClientScriptingModule::ClientScriptingModule() {
         // Create standalone V8 engine for client (no Node.js runtime)
         // moduleRootPath is set later in Init() or SetResourceCachePath()
         // when the actual resource cache path is known.

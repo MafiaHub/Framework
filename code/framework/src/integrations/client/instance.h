@@ -22,7 +22,6 @@
 
 #include <memory>
 #include <utility>
-#include <world/client.h>
 
 #include "scripting/module.h"
 
@@ -95,7 +94,6 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<External::Discord::Wrapper> _presence;
         std::unique_ptr<Graphics::Renderer> _renderer;
-        std::shared_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
         std::unique_ptr<Framework::GUI::Manager> _webManager;
@@ -192,10 +190,6 @@ namespace Framework::Integrations::Client {
 
         Networking::Engine *GetNetworkingEngine() const {
             return _networkingEngine.get();
-        }
-
-        World::ClientEngine *GetWorldEngine() const {
-            return _worldEngine.get();
         }
 
         External::Discord::Wrapper *GetPresence() const {

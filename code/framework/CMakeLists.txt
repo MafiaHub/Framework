@@ -19,10 +19,6 @@ set(FRAMEWORK_SRC
 
     src/external/sentry/wrapper.cpp
 
-    src/world/engine.cpp
-    src/world/server.cpp
-    src/world/client.cpp
-
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
@@ -179,7 +175,7 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/json/include
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-        ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in world/modules/base.hpp)
+        ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in network_peer.h)
         ${CMAKE_SOURCE_DIR}/vendors/mafianet/Source/include # Networking / MafiaNet (used in messages.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
         ${CMAKE_SOURCE_DIR}/vendors                        # flecs, etc.

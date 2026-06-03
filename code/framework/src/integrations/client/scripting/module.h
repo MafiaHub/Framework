@@ -18,7 +18,6 @@
 #include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
 #include <utils/lifecycle.h>
-#include <world/client.h>
 
 namespace Framework::Integrations::Client::Scripting {
 
@@ -49,7 +48,7 @@ namespace Framework::Integrations::Client::Scripting {
      */
     class ClientScriptingModule final : public Framework::Lifecycle, public Framework::Scripting::ScriptingModule {
       public:
-        explicit ClientScriptingModule(std::shared_ptr<World::ClientEngine> world);
+        ClientScriptingModule();
         ~ClientScriptingModule();
 
         /**
@@ -89,12 +88,6 @@ namespace Framework::Integrations::Client::Scripting {
             return _engine.get();
         }
 
-        /**
-         * Get the world engine.
-         */
-        std::shared_ptr<World::ClientEngine> GetWorldEngine() const {
-            return _world;
-        }
 
         /**
          * Get the JavaScript resource manager.
@@ -185,7 +178,6 @@ namespace Framework::Integrations::Client::Scripting {
 
       private:
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;
-        std::shared_ptr<World::ClientEngine> _world;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
 
         // Resource synchronization state

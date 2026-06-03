@@ -13,7 +13,7 @@
 
 #include <core_modules.h>
 #include <networking/replication/network_entity.h>
-#include <world/engine.h>
+#include <networking/replication/replication_manager.h>
 
 #include <v8.h>
 #include <v8pp/class.hpp>
@@ -197,8 +197,8 @@ namespace Framework::Scripting::Builtins {
 
       protected:
         Networking::Replication::NetworkEntity *Resolve() const {
-            auto *world = CoreModules::GetWorldEngine();
-            return world ? world->GetEntityByNetworkID(_id) : nullptr;
+            auto *replication = CoreModules::GetReplication();
+            return replication ? replication->GetEntityByNetworkID(_id) : nullptr;
         }
 
         uint64_t _id = 0;

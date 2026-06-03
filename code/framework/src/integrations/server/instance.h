@@ -19,7 +19,6 @@
 #include "utils/config.h"
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
-#include "world/server.h"
 
 #include "world/types/player.hpp"
 #include "world/types/streaming.hpp"
@@ -72,7 +71,9 @@ namespace Framework::Integrations::Server {
         bool enableSignals;
 
         // update intervals
-        Framework::World::ServerEngine::ServerConfig worldConfig;
+        struct WorldConfig {
+            float tickInterval = 0.016667f;
+        } worldConfig;
 
         // args
         int argc;
@@ -99,7 +100,6 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
-        std::shared_ptr<World::ServerEngine> _worldEngine;
         std::unique_ptr<Services::MasterlistConnector> _masterlist;
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
@@ -174,10 +174,6 @@ namespace Framework::Integrations::Server {
 
         Scripting::ServerScriptingModule *GetScriptingModule() const {
             return _scriptingModule.get();
-        }
-
-        std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
-            return _worldEngine;
         }
 
         Networking::Engine *GetNetworkingEngine() const {

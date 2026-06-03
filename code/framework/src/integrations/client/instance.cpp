@@ -25,6 +25,7 @@
 #include "scripting/builtins/events.h"
 
 #include "networking/state.h"
+#include "networking/replication/replication_manager.h"
 
 #include <cppfs/cppfs.h>
 #include <cppfs/FilePath.h>
@@ -139,11 +140,10 @@ namespace Framework::Integrations::Client {
         _presence         = std::make_unique<External::Discord::Wrapper>();
         _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
         _renderer         = std::make_unique<Graphics::Renderer>();
-        _worldEngine      = std::make_shared<World::ClientEngine>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
-        _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
+        _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
     }
 
@@ -175,14 +175,6 @@ namespace Framework::Integrations::Client {
             }
             CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkClient());
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
-        }
-
-        if (_worldEngine) {
-            if (_worldEngine->Init() != World::WorldError::WORLD_NONE) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
-                return ClientError::CLIENT_ENGINES_ERROR;
-            }
-            CoreModules::SetWorldEngine(_worldEngine.get());
         }
 
         CoreModules::SetWebManager(_webManager.get());
@@ -292,14 +284,10 @@ namespace Framework::Integrations::Client {
             _imguiApp->Shutdown();
         }
 
-        if (_worldEngine) {
-            _worldEngine->Shutdown();
-        }
-
         CoreModules::SetScriptingModule(nullptr);
         CoreModules::SetWebManager(nullptr);
         CoreModules::SetNetworkPeer(nullptr);
-        CoreModules::SetWorldEngine(nullptr);
+        CoreModules::SetReplication(nullptr);
         CoreModules::SetInput(nullptr);
         CoreModules::Reset();
 
@@ -317,10 +305,6 @@ namespace Framework::Integrations::Client {
 
         if (_scriptingModule) {
             _scriptingModule->Update();
-        }
-
-        if (_worldEngine) {
-            _worldEngine->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -381,7 +365,12 @@ namespace Framework::Integrations::Client {
         });
         net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](MafiaNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
-            _worldEngine->OnConnect(net, msg->GetServerTickRate());
+            // The replication manager (owned by the peer) is the networked world; serialize owned
+            // entities upstream at the server's tick rate (tickInterval is in seconds).
+            if (auto *replication = net->GetReplicationManager()) {
+                CoreModules::SetReplication(replication);
+                replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(msg->GetServerTickRate() * 1000.0f));
+            }
 
             // The server constructs the local avatar (owned by us); the game recognizes it in
             // NetworkEntity::OnConstructed by ownerGUID. Signal we are ready for it.
@@ -411,8 +400,9 @@ namespace Framework::Integrations::Client {
             _initialDownloadDone = false;
             _downloadStatus      = {};
             
-            // Request the world engine to clean up entities
-            _worldEngine->OnDisconnect();
+            // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
+            // connection drops (QueryActionOnPopConnection_Client).
+            CoreModules::SetReplication(nullptr);
 
             // Notify mod-level that network integration got closed
             if (_onConnectionClosed) {

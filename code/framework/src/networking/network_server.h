@@ -14,7 +14,6 @@
 #include "messages/messages.h"
 #include "network_peer.h"
 #include "rpc/rpc.h"
-#include "world/server.h"
 
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>

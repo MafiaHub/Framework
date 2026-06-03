@@ -13,7 +13,7 @@
 #include <sstream>
 
 #include "core_modules.h"
-#include "world/server.h"
+#include "networking/replication/replication_manager.h"
 
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
@@ -42,8 +42,7 @@ namespace Framework::Integrations::Server {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
-        _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingModule  = std::make_unique<Scripting::ServerScriptingModule>(_worldEngine);
+        _scriptingModule  = std::make_unique<Scripting::ServerScriptingModule>();
         _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
         _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
@@ -112,13 +111,13 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
 
-        // Initialize the world
-        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig) != World::WorldError::WORLD_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
-            return ServerError::SERVER_WORLD_INIT_FAILED;
+        // The networked world is the replication manager owned by the peer. Serialize entity updates
+        // at the configured tick rate (tickInterval is in seconds).
+        auto *replication = _networkingEngine->GetNetworkServer()->GetReplicationManager();
+        CoreModules::SetReplication(replication);
+        if (replication) {
+            replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_opts.worldConfig.tickInterval * 1000.0f));
         }
-
-        CoreModules::SetWorldEngine(_worldEngine.get());
 
         if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
@@ -556,10 +555,6 @@ namespace Framework::Integrations::Server {
             _webServer->Shutdown();
         }
 
-        if (_worldEngine) {
-            _worldEngine->Shutdown();
-        }
-
         if (_commandListener) {
             _commandListener->Shutdown();
         }
@@ -569,7 +564,7 @@ namespace Framework::Integrations::Server {
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
 
         CoreModules::SetNetworkPeer(nullptr);
-        CoreModules::SetWorldEngine(nullptr);
+        CoreModules::SetReplication(nullptr);
         CoreModules::SetScriptingModule(nullptr);
         CoreModules::Reset();
 
@@ -587,10 +582,6 @@ namespace Framework::Integrations::Server {
                 _scriptingModule->Update();
             }
 
-            if (_worldEngine) {
-                _worldEngine->Update();
-            }
-            
             if (_commandListener) {
                 _commandListener->Update();
             }

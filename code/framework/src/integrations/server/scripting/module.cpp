@@ -22,8 +22,7 @@
 
 namespace Framework::Integrations::Server::Scripting {
 
-    ServerScriptingModule::ServerScriptingModule(std::shared_ptr<World::ServerEngine> world)
-        : _world(world) {
+    ServerScriptingModule::ServerScriptingModule() {
         // Create Node.js engine without sandbox for full server capabilities
         Framework::Scripting::NodeEngineOptions options;
         options.sandboxed = false;
