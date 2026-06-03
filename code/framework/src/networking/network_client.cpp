@@ -118,7 +118,7 @@ namespace Framework::Networking {
         };
 
         case ID_NO_FREE_INCOMING_CONNECTIONS: {
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::NO_FREE_SLOT);
             }
             _state = PeerState::DISCONNECTED;
@@ -126,7 +126,7 @@ namespace Framework::Networking {
         };
 
         case ID_DISCONNECTION_NOTIFICATION: {
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
             }
             _state = PeerState::DISCONNECTED;
@@ -134,7 +134,7 @@ namespace Framework::Networking {
         };
 
         case ID_CONNECTION_LOST: {
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::LOST);
             }
             _state = PeerState::DISCONNECTED;
@@ -142,7 +142,7 @@ namespace Framework::Networking {
         };
 
         case ID_CONNECTION_ATTEMPT_FAILED: {
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::FAILED);
             }
             _state = PeerState::DISCONNECTED;
@@ -150,7 +150,7 @@ namespace Framework::Networking {
         };
 
         case ID_INVALID_PASSWORD: {
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::INVALID_PASSWORD);
             }
             _state = PeerState::DISCONNECTED;
@@ -158,7 +158,7 @@ namespace Framework::Networking {
         };
 
         case ID_CONNECTION_BANNED: {
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::BANNED);
             }
             _state = PeerState::DISCONNECTED;
@@ -173,7 +173,7 @@ namespace Framework::Networking {
         case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_FAILURE:
         case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_TIMEOUT: {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Build mismatch with server, disconnecting");
-            if (_onPlayerDisconnectedCallback) {
+            if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
                 _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::WRONG_VERSION);
             }
             _state = PeerState::DISCONNECTED;
