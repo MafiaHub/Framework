@@ -87,6 +87,7 @@ namespace Framework::Networking::Replication {
         uint64_t _myGUID  = 0xFFFFFFFFFFFFFFFF;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
+        // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
         uint64_t _nextNetworkId = 0;
         bool _gridReady   = false;
         float _gridCellSize = 100.0f;

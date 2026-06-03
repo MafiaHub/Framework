@@ -26,7 +26,8 @@ namespace Framework::Networking::Replication {
 
         static EntityFactory &Get();
 
-        // Registers a type. Returns its id. Safe to call once per type at startup.
+        // Registers a type and returns its id. Not thread-safe: register every type at startup,
+        // before networking begins, because Create() is then called from the sim/network path.
         uint32_t Register(const std::string &name, Constructor constructor);
 
         // Constructs an instance and stamps its typeId. Returns nullptr for an unknown id.

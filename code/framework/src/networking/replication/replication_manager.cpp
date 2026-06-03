@@ -218,6 +218,8 @@ namespace Framework::Networking::Replication {
     }
 
     MafiaNet::Connection_RM3 *ReplicationManager::AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const {
+        // ReplicaManager3 declares this const, but the connection needs a mutable manager back-pointer
+        // for its QueryReplicaList interest queries; the const_cast is forced by the upstream API.
         return new ReplicationConnection(systemAddress, rakNetGUID, const_cast<ReplicationManager *>(this), _isServer);
     }
 

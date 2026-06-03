@@ -75,7 +75,8 @@ namespace Framework::Scripting::Builtins {
                 if (value->IsNumber()) apply(static_cast<A>(value->NumberValue(ctx).FromMaybe(0.0)));
             }
             else if constexpr (std::is_integral_v<A>) {
-                if (value->IsInt32()) apply(static_cast<A>(value->Int32Value(ctx).FromMaybe(0)));
+                // Any JS number, not just int32, so values up to 2^53 (e.g. NetworkIDs) round-trip.
+                if (value->IsNumber()) apply(static_cast<A>(value->IntegerValue(ctx).FromMaybe(0)));
             }
         }
     } // namespace detail
