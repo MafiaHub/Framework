@@ -16,7 +16,9 @@
 #include <mafianet/FileListTransfer.h>
 #include <mafianet/DirectoryDeltaTransfer.h>
 #include <mafianet/RPC4Plugin.h>
+#include <mafianet/ReadyEvent.h>
 #include <mafianet/StatisticsHistory.h>
+#include <mafianet/TwoWayAuthentication.h>
 #include <mafianet/NetworkIDManager.h>
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
@@ -47,6 +49,11 @@ namespace Framework::Networking {
         MafiaNet::NetworkIDManager _networkIDManager;
         MafiaNet::StatisticsHistoryPlugin _statisticsHistory;
 
+        // Connection gate: TwoWayAuthentication proves an identical build token without sending it;
+        // ReadyEvent is the per-connection spawn barrier. Flow in network_{server,client}.cpp.
+        MafiaNet::TwoWayAuthentication _twoWayAuth;
+        MafiaNet::ReadyEvent _readyEvent;
+
         // Owns the replicated entity world. The concrete peer's Init() attaches it and sets its role.
         std::unique_ptr<Replication::ReplicationManager> _replicationManager;
 
@@ -63,8 +70,20 @@ namespace Framework::Networking {
         }
 
       public:
+        // TwoWayAuthentication identifier under which the build token is registered/challenged.
+        static constexpr const char *kBuildChallengeId = "Framework::Build";
+
         NetworkPeer();
         ~NetworkPeer();
+
+        // Single source of truth for the gated build identity — must produce the same string on both
+        // peers or the challenge fails.
+        static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion) {
+            return gameName + '|' + gameVersion + '|' + fwVersion + '|' + modVersion;
+        }
+
+        // Register the local build token (see BuildToken). Call before connecting/accepting.
+        void SetBuildToken(const std::string &token);
 
         bool Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) const;
 
@@ -164,6 +183,14 @@ namespace Framework::Networking {
 
         MafiaNet::StatisticsHistoryPlugin *GetStatisticsHistory() noexcept {
             return &_statisticsHistory;
+        }
+
+        MafiaNet::TwoWayAuthentication *GetTwoWayAuth() noexcept {
+            return &_twoWayAuth;
+        }
+
+        MafiaNet::ReadyEvent *GetReadyEvent() noexcept {
+            return &_readyEvent;
         }
 
         Replication::ReplicationManager *GetReplicationManager() const noexcept {

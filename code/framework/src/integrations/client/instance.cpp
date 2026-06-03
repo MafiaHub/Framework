@@ -8,17 +8,13 @@
 
 #include "instance.h"
 
-#include <networking/messages/client_connection_finalized.h>
-#include <networking/messages/client_request_streamer.h>
-#include <networking/messages/client_ready_assets.h>
-#include <networking/messages/client_handshake.h>
-#include <networking/messages/client_kick.h>
-
-
 #include "integrations/shared/rpc/emit_lua_event.h"
 
 #include "networking/rpc/rpc.h"
 #include "networking/rpc/chat_message.h"
+#include "networking/rpc/client_identity.h"
+#include "networking/rpc/kick.h"
+#include "networking/rpc/server_resources.h"
 
 #include "scripting/resource/resource_manager.h"
 #include "scripting/builtins/events.h"
@@ -336,52 +332,53 @@ namespace Framework::Integrations::Client {
     void Instance::InitNetworkingMessages() {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
-        net->SetOnPlayerConnectedCallback([this, net](MafiaNet::Packet *packet) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
+        // Build gate: NetworkClient challenges automatically on connect; a mismatch drops us.
+        net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
 
-            ClientHandshake msg;
-            msg.FromParameters(_opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
-
-            net->Send(msg, MafiaNet::UNASSIGNED_RAKNET_GUID);
+        net->SetOnPlayerConnectedCallback([](MafiaNet::Packet *) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, verifying build");
         });
-        net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](MafiaNet::RakNetGUID _guid, ClientReadyAssets *msg) {
-            // Store resource list on instance (survives scripting module reset)
-            if (msg->GetResourceCount() > 0) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
 
-                _pendingServerResources.clear();
-                _pendingServerResources.reserve(msg->GetResourceCount());
-                for (const auto &resInfo : msg->GetResources()) {
-                    Client::Scripting::ServerResourceInfo info;
-                    info.name = resInfo.name;
-                    info.version = resInfo.version;
-                    info.hash = resInfo.hash;
-                    _pendingServerResources.push_back(info);
-                }
+        // Server's resource list. Store it (survives a scripting module reset) and start the asset
+        // phase; the ready-event id and tick rate are held until the spawn barrier completes.
+        net->RegisterRPC<Framework::Networking::RPC::ServerResources>([this](const Framework::Networking::RPC::ServerResources &payload, MafiaNet::Packet *) {
+            _readyEventId   = payload.readyEventId;
+            _serverTickRate = payload.tickRate;
+
+            _pendingServerResources.clear();
+            _pendingServerResources.reserve(payload.resources.size());
+            for (const auto &resInfo : payload.resources) {
+                Client::Scripting::ServerResourceInfo info;
+                info.name    = resInfo.name;
+                info.version = resInfo.version;
+                info.hash    = resInfo.hash;
+                _pendingServerResources.push_back(info);
             }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
 
             DownloadsAssetsFromConnectedServer();
         });
-        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](MafiaNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
-            // The replication manager (owned by the peer) is the networked world; serialize owned
-            // entities upstream at the server's tick rate (tickInterval is in seconds).
+
+        // Spawn barrier complete: activate replication and report the connection final.
+        net->SetOnConnectionReadyCallback([this, net](int eventId) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection ready (event {}), finalizing", eventId);
+            // tickInterval is in seconds; SetAutoSerializeInterval wants milliseconds.
             if (auto *replication = net->GetReplicationManager()) {
                 CoreModules::SetReplication(replication);
-                replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(msg->GetServerTickRate() * 1000.0f));
+                replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_serverTickRate * 1000.0f));
             }
-
             if (_onConnectionFinalized) {
-                _onConnectionFinalized(msg->GetServerTickRate());
+                _onConnectionFinalized(_serverTickRate);
             }
         });
-        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](MafiaNet::RakNetGUID guid, ClientKick *msg) {
-            std::string reason = "Unknown.";
 
-            switch (msg->GetDisconnectionReason()) {
+        // Explicit kick with a reason (version mismatches fail the build challenge, not this).
+        net->RegisterRPC<Framework::Networking::RPC::Kick>([](const Framework::Networking::RPC::Kick &payload, MafiaNet::Packet *) {
+            std::string reason = "Unknown.";
+            switch (static_cast<Framework::Networking::Messages::DisconnectionReason>(payload.reason)) {
             case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
             case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + msg->GetCustomReason(); break;
+            case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + payload.customReason; break;
             case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
             case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
             case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
@@ -537,14 +534,22 @@ namespace Framework::Integrations::Client {
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
-        // Send the server a request to initialise our client and assign a streamer
-        // but only do so the first time we connect to the server
+        // Announce ourselves (server builds the avatar and opens the replication gate), then arm our
+        // half of the spawn barrier. First connect only.
         if (!_initialDownloadDone) {
             _initialDownloadDone = true;
 
-            Framework::Networking::Messages::ClientRequestStreamer req;
-            req.FromParameters(_currentState.nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
-            net->Send(req, MafiaNet::UNASSIGNED_RAKNET_GUID);
+            const auto serverGuid = net->GetPeer()->GetGUIDFromIndex(0);
+
+            Framework::Networking::RPC::ClientIdentity identity;
+            identity.name       = _currentState.nickname;
+            identity.steamId    = "MY_SUPER_ID_1";
+            identity.discordId  = "MY_SUPER_ID_2";
+            identity.hardwareId = Framework::Utils::GetHardwareId();
+            net->SendRPC(identity, serverGuid);
+
+            net->GetReadyEvent()->AddToWaitList(_readyEventId, serverGuid);
+            net->GetReadyEvent()->SetEvent(_readyEventId, true);
         }
 
         _downloadStatus = {};

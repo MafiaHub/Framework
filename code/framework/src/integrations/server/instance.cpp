@@ -17,12 +17,9 @@
 #include "networking/replication/network_entity.h"
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
+#include "networking/rpc/client_identity.h"
+#include "networking/rpc/server_resources.h"
 
-#include "networking/messages/client_connection_finalized.h"
-#include "networking/messages/client_handshake.h"
-#include "networking/messages/client_kick.h"
-#include "networking/messages/client_ready_assets.h"
-#include "networking/messages/client_request_streamer.h"
 #include "networking/messages/messages.h"
 
 #include "utils/command_processor.h"
@@ -243,67 +240,23 @@ namespace Framework::Integrations::Server {
     void Instance::InitNetworkingMessages() const {
         using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
-        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](MafiaNet::RakNetGUID guid, ClientHandshake *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for incoming player guid {}", guid.g);
+        // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
+        // reaches the asset phase.
+        net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
 
-            // Make sure handshake payload was correctly formatted
-            if (!msg->Valid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
+        // Build verified -> send the resource list (carries the ReadyEvent id and tick rate).
+        net->SetOnClientAuthenticatedCallback([this, net](MafiaNet::RakNetGUID guid) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Build verified for player guid {}, sending resource list", guid.g);
 
-            if (msg->GetGameName() != _opts.gameName) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto fwVersion = msg->GetFWVersion();
-
-            if (!Utils::Version::VersionSatisfies(fwVersion, Utils::Version::rel)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid Framework version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto clientVersion = msg->GetClientVersion();
-
-            if (!Utils::Version::VersionSatisfies(clientVersion, _opts.modVersion)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto mpClientVersion = msg->GetGameVersion();
-
-            if (mpClientVersion != _opts.gameVersion) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            // Let the client know they can ask for client-side assets now.
-            // Include the resource list in the message.
-            ClientReadyAssets readyMsg;
+            Framework::Networking::RPC::ServerResources resources;
+            resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            resources.tickRate     = _opts.worldConfig.tickInterval;
             if (_scriptingModule) {
                 for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    readyMsg.AddResource(resource.name, resource.version, 0); // Hash computed on demand
+                    resources.resources.push_back({resource.name, resource.version, 0}); // Hash computed on demand
                 }
             }
-            net->Send(readyMsg, guid);
+            net->SendRPC(resources, guid);
         });
 
         net->SetOnPlayerDisconnectCallback([net](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
@@ -315,30 +268,40 @@ namespace Framework::Integrations::Server {
             net->GetPeer()->CloseConnection(guid, true);
         });
 
-        
-        net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](MafiaNet::RakNetGUID guid, ClientRequestStreamer *msg) {
-            auto nickname = msg->GetPlayerName();
+        // Client announces itself after assets. Gated on authentication so an unverified peer can't
+        // conjure an avatar by sending this directly.
+        net->RegisterRPC<Framework::Networking::RPC::ClientIdentity>([this, net](const Framework::Networking::RPC::ClientIdentity &payload, MafiaNet::Packet *packet) {
+            const auto guid = packet->guid;
+            if (!net->IsAuthenticated(guid)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring identity from unauthenticated peer {}", guid.g);
+                return;
+            }
+
+            auto nickname = payload.name;
             if (nickname.size() > 64) {
                 nickname = nickname.substr(0, 64);
             }
 
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", msg->GetPlayerName(), guid.g, msg->GetPlayerHardwareID());
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", nickname, guid.g, payload.hardwareId);
 
-            // The game creates the player's avatar entity and registers it as this connection's viewer
-            // inside its onPlayerConnect handler. Hand it the connection metadata so the avatar spawns
-            // with its real nickname/slot instead of the unassigned defaults.
+            // The game builds the avatar and registers it as this connection's viewer; hand it the
+            // metadata so it spawns with the real nickname/slot.
             if (_onPlayerConnectCallback) {
                 PlayerConnectionData data;
                 data.guid        = guid.g;
                 data.playerIndex = guid.systemIndex;
                 data.nickname    = nickname;
-                data.hardwareID  = msg->GetPlayerHardwareID();
+                data.hardwareID  = payload.hardwareId;
                 _onPlayerConnectCallback(data);
             }
 
-            Framework::Networking::Messages::ClientConnectionFinalized answer;
-            answer.FromParameters(_opts.worldConfig.tickInterval);
-            net->Send(answer, guid);
+            // Gate opens: this connection now starts receiving the replicated world.
+            net->PushReplicationConnection(guid);
+
+            // Arm our half of the spawn barrier (the client armed its half before sending identity).
+            const int eventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            net->GetReadyEvent()->AddToWaitList(eventId, guid);
+            net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod

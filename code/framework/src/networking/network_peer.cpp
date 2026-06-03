@@ -21,12 +21,19 @@ namespace Framework::Networking {
         // attached by the concrete peer's Init() once its connection factory exists.
         _peer->AttachPlugin(&_rpc);
         _peer->AttachPlugin(&_statisticsHistory);
+        _peer->AttachPlugin(&_twoWayAuth);
+        _peer->AttachPlugin(&_readyEvent);
         _statisticsHistory.SetTrackConnections(true, 0, true);
 
         _replicationManager = std::make_unique<Replication::ReplicationManager>();
     }
 
     NetworkPeer::~NetworkPeer() = default;
+
+    void NetworkPeer::SetBuildToken(const std::string &token) {
+        // Re-registering the identifier overwrites the previous password; safe to call again.
+        _twoWayAuth.AddPassword(kBuildChallengeId, MafiaNet::RakString(token.c_str()));
+    }
 
     bool NetworkPeer::Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
         if (!_peer) {

@@ -31,17 +31,12 @@ namespace Framework::Networking::Messages {
     using PacketCallback           = fu2::function<void(MafiaNet::Packet *) const>;
     using DisconnectPacketCallback = fu2::function<void(MafiaNet::Packet *, DisconnectionReason reason) const>;
 
-    // Connection-handshake flow messages. (RPCs are dispatched by RPC4 and entity sync by
-    // ReplicaManager3, both of which use their own message IDs.)
+    // Custom message IDs. The connection handshake no longer uses any: build verification is
+    // TwoWayAuthentication, the resource list / client identity / kick are RPC4 payloads, the spawn
+    // barrier is ReadyEvent, and entity sync is ReplicaManager3 — all of which use their own message
+    // IDs. Mods extend their own messages from GAME_NEXT_MESSAGE_ID.
     enum GameMessages : uint8_t {
-        // Game messages handling common client connection flow
-        GAME_CONNECTION_HANDSHAKE = ID_USER_PACKET_ENUM + 1,
-        GAME_CONNECTION_ACKNOWLEDGE_CLIENT,
-        GAME_CONNECTION_READY_ASSETS,
-        GAME_CONNECTION_REQUEST_STREAMER,
-        GAME_CONNECTION_FINALIZED,
-        GAME_CONNECTION_KICKED,
-        GAME_INIT_PLAYER,
+        GAME_INIT_PLAYER = ID_USER_PACKET_ENUM + 1,
 
         // Messages used by the mod
         GAME_NEXT_MESSAGE_ID

@@ -9,6 +9,7 @@
 #include "network_server.h"
 
 #include "replication/replication_manager.h"
+#include "rpc/kick.h"
 
 #include <mafianet/BitStream.h>
 #include <mafianet/MessageIdentifiers.h>
@@ -37,6 +38,10 @@ namespace Framework::Networking {
         // Run replication as the authoritative server.
         _replicationManager->Init(_peer, &_networkIDManager, &_rpc, true);
 
+        // Gate replication behind the handshake: don't auto-create the connection on connect (see
+        // PushReplicationConnection). autoDestroy stays on so dropped peers are torn down.
+        _replicationManager->SetAutoManageConnections(false, true);
+
         _initialized = true;
         return NetworkPeerError::NETWORK_PEER_NONE;
     }
@@ -56,6 +61,7 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
             }
+            ClearClientState(packet->guid);
             return true;
         };
         case ID_CONNECTION_LOST: {
@@ -63,8 +69,35 @@ namespace Framework::Networking {
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::LOST);
             }
+            ClearClientState(packet->guid);
             return true;
         };
+
+        // Build gate: the client challenges us with its build token. Match -> asset phase; mismatch
+        // -> drop (the version-incompatibility path).
+        case ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_SUCCESS: {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified for {}", packet->guid.ToString());
+            _authenticatedClients.insert(packet->guid.g);
+            if (_onClientAuthenticatedCallback) {
+                _onClientAuthenticatedCallback(packet->guid);
+            }
+            return true;
+        };
+        case ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_FAILURE: {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Build mismatch from {}, dropping peer", packet->guid.ToString());
+            _peer->CloseConnection(packet->guid, true);
+            return true;
+        };
+
+        // ReadyEvent: the server arms its half from the integration layer and takes no action on
+        // completion (the avatar already exists); consumed so they don't hit the unknown-packet path.
+        case ID_READY_EVENT_SET:
+        case ID_READY_EVENT_UNSET:
+        case ID_READY_EVENT_ALL_SET:
+        case ID_READY_EVENT_QUERY:
+        case ID_READY_EVENT_FORCE_ALL_SET:
+            return true;
+
         default: break;
         }
         return false;
@@ -88,5 +121,33 @@ namespace Framework::Networking {
         // When broadcasting, the system identifier is the peer to exclude, so a single Signal reaches
         // everyone but the sender.
         _rpc.Signal(identifier, &bs, priority, reliability, 0, excludeGUID, true, false);
+    }
+
+    void NetworkServer::PushReplicationConnection(MafiaNet::RakNetGUID guid) {
+        if (!_replicationManager) {
+            return;
+        }
+        if (_replicationManager->GetConnectionByGUID(guid) != nullptr) {
+            return; // already pushed (a client could send ClientIdentity twice)
+        }
+        const auto address = _peer->GetSystemAddressFromGuid(guid);
+        if (MafiaNet::Connection_RM3 *connection = _replicationManager->AllocConnection(address, guid)) {
+            _replicationManager->PushConnection(connection);
+        }
+    }
+
+    void NetworkServer::KickPlayer(MafiaNet::RakNetGUID guid, Messages::DisconnectionReason reason, const std::string &customReason) {
+        RPC::Kick payload;
+        payload.reason       = static_cast<uint32_t>(reason);
+        payload.customReason = customReason;
+        // RELIABLE_ORDERED so the reason arrives before CloseConnection's notification.
+        SendRPC(payload, guid, HIGH_PRIORITY, RELIABLE_ORDERED);
+        _peer->CloseConnection(guid, true);
+        ClearClientState(guid);
+    }
+
+    void NetworkServer::ClearClientState(MafiaNet::RakNetGUID guid) {
+        _authenticatedClients.erase(guid.g);
+        _readyEvent.DeleteEvent(ReadyEventId(guid)); // recycle the slot for reconnects
     }
 } // namespace Framework::Networking

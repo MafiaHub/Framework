@@ -107,10 +107,13 @@ namespace Framework::Networking {
     bool NetworkClient::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
         case ID_CONNECTION_REQUEST_ACCEPTED: {
+            _state = PeerState::CONNECTED;
             if (_onPlayerConnectedCallback) {
                 _onPlayerConnectedCallback(_packet);
             }
-            _state = PeerState::CONNECTED;
+            // Prove our build matches before anything else; the server sends ServerResources only
+            // after this passes. A mismatch is handled by the auth-failure cases below.
+            _twoWayAuth.Challenge(NetworkPeer::kBuildChallengeId, _packet->guid);
             return true;
         };
 
@@ -161,6 +164,38 @@ namespace Framework::Networking {
             _state = PeerState::DISCONNECTED;
             return true;
         };
+
+        // Build gate: verified -> wait for the server's ServerResources RPC; mismatch -> disconnect.
+        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_SUCCESS: {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified by server");
+            return true;
+        };
+        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_FAILURE:
+        case ID_TWO_WAY_AUTHENTICATION_OUTGOING_CHALLENGE_TIMEOUT: {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Build mismatch with server, disconnecting");
+            if (_onPlayerDisconnectedCallback) {
+                _onPlayerDisconnectedCallback(_packet, Messages::DisconnectionReason::WRONG_VERSION);
+            }
+            _state = PeerState::DISCONNECTED;
+            return true;
+        };
+
+        case ID_READY_EVENT_ALL_SET: {
+            // Payload: message id then int eventId (ReadyEvent::PushCompletionPacket).
+            MafiaNet::BitStream bs(_packet->data + _packetDataOffset, _packet->length - _packetDataOffset, false);
+            bs.IgnoreBytes(sizeof(MafiaNet::MessageID));
+            int eventId = 0;
+            bs.Read(eventId);
+            if (_onConnectionReadyCallback) {
+                _onConnectionReadyCallback(eventId);
+            }
+            return true;
+        };
+        case ID_READY_EVENT_SET:
+        case ID_READY_EVENT_UNSET:
+        case ID_READY_EVENT_QUERY:
+        case ID_READY_EVENT_FORCE_ALL_SET:
+            return true;
         }
         return false;
     }

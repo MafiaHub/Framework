@@ -38,6 +38,7 @@ namespace Framework::Networking {
         Messages::PacketCallback _onPlayerConnectedCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
         OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
+        fu2::function<void(int eventId) const> _onConnectionReadyCallback;
         AssetFileTransfer _fileListTransfer;
       public:
         
@@ -75,6 +76,11 @@ namespace Framework::Networking {
 
         void SetOnAssetsDownloadFailedCallback(OnAssetsDownloadFailedCallback callback) {
             _onAssetsDownloadFailedCallback = std::move(callback);
+        }
+
+        // Fired when the spawn barrier completes — the client activates replication and finalizes.
+        void SetOnConnectionReadyCallback(fu2::function<void(int eventId) const> callback) {
+            _onConnectionReadyCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking

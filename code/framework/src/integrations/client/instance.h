@@ -120,6 +120,10 @@ namespace Framework::Integrations::Client {
         // Pending resources from server (stored here to survive scripting module reset)
         std::vector<Client::Scripting::ServerResourceInfo> _pendingServerResources;
 
+        // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
+        int _readyEventId {};
+        float _serverTickRate {};
+
         void InitNetworkingMessages();
         void InitAssetDownloader();
         void OnAssetsDownloaded(bool success);

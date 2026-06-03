@@ -19,14 +19,23 @@
 #include <mafianet/peerinterface.h>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace Framework::Networking {
+    using ClientGuidCallback = fu2::function<void(MafiaNet::RakNetGUID) const>;
+
     class NetworkServer: public NetworkPeer {
       private:
         Messages::PacketCallback _onPlayerConnectCallback;
         Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
+        ClientGuidCallback _onClientAuthenticatedCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
+
+        // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
+        std::unordered_set<uint64_t> _authenticatedClients;
+
+        void ClearClientState(MafiaNet::RakNetGUID guid);
 
       public:
         NetworkServer(): NetworkPeer() {}
@@ -43,12 +52,33 @@ namespace Framework::Networking {
 
         int GetPing(MafiaNet::RakNetGUID guid) const;
 
+        bool IsAuthenticated(MafiaNet::RakNetGUID guid) const {
+            return _authenticatedClients.contains(guid.g);
+        }
+
+        // Start replicating to an authenticated peer (idempotent). Replication begins for no peer
+        // until this is called — connections are not auto-managed (see Init).
+        void PushReplicationConnection(MafiaNet::RakNetGUID guid);
+
+        // Send a Kick RPC then close the connection.
+        void KickPlayer(MafiaNet::RakNetGUID guid, Messages::DisconnectionReason reason, const std::string &customReason = "");
+
+        // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.
+        static int ReadyEventId(MafiaNet::RakNetGUID guid) {
+            return static_cast<int>(guid.systemIndex);
+        }
+
         void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
             _onPlayerConnectCallback = std::move(callback);
         }
 
         void SetOnPlayerDisconnectCallback(Messages::DisconnectPacketCallback callback) {
             _onPlayerDisconnectCallback = std::move(callback);
+        }
+
+        // Fired when a peer's build challenge succeeds (integration responds with ServerResources).
+        void SetOnClientAuthenticatedCallback(ClientGuidCallback callback) {
+            _onClientAuthenticatedCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking
