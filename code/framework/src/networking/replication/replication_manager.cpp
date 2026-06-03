@@ -36,7 +36,7 @@ namespace Framework::Networking::Replication {
                 return;
             }
             MafiaNet::NetworkID networkId;
-            bs->Read(networkId);
+            bs->ReadCompressed(networkId);
 
             auto *entity = manager->GetEntityByNetworkID(networkId);
             if (!entity) {
@@ -53,7 +53,7 @@ namespace Framework::Networking::Replication {
             }
             MafiaNet::NetworkID networkId;
             uint64_t ownerGUID = 0;
-            bs->Read(networkId);
+            bs->ReadCompressed(networkId);
             bs->Read(ownerGUID);
 
             if (auto *entity = manager->GetEntityByNetworkID(networkId)) {
@@ -91,7 +91,8 @@ namespace Framework::Networking::Replication {
         }
         MafiaNet::BitStream bs;
         MafiaNet::NetworkID networkId = entity->GetNetworkID();
-        bs.Write(networkId);
+        // NetworkIDs are small and monotonic, so WriteCompressed strips the leading zero bytes.
+        bs.WriteCompressed(networkId);
         entity->WriteForcedState(&bs);
         _rpc->Signal(kForceStateId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
     }
@@ -107,7 +108,7 @@ namespace Framework::Networking::Replication {
         if (_rpc && _isServer && guid != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             MafiaNet::BitStream bs;
             MafiaNet::NetworkID networkId = entity->GetNetworkID();
-            bs.Write(networkId);
+            bs.WriteCompressed(networkId);
             bs.Write(guid);
             _rpc->Signal(kSetOwnerId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(guid), false, false);
         }
