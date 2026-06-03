@@ -330,7 +330,6 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::InitNetworkingMessages() {
-        using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
         // Build gate: NetworkClient challenges automatically on connect; a mismatch drops us.
         net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
@@ -375,18 +374,18 @@ namespace Framework::Integrations::Client {
         // Explicit kick with a reason (version mismatches fail the build challenge, not this).
         net->RegisterRPC<Framework::Networking::RPC::Kick>([](const Framework::Networking::RPC::Kick &payload, MafiaNet::Packet *) {
             std::string reason = "Unknown.";
-            switch (static_cast<Framework::Networking::Messages::DisconnectionReason>(payload.reason)) {
-            case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + payload.customReason; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
-            case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
-            case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
+            switch (static_cast<Framework::Networking::DisconnectionReason>(payload.reason)) {
+            case Framework::Networking::DisconnectionReason::BANNED: reason = "You are banned."; break;
+            case Framework::Networking::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
+            case Framework::Networking::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + payload.customReason; break;
+            case Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
+            case Framework::Networking::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
+            case Framework::Networking::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
             default: break;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
         });
-        net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
+        net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reasonId) {
             // Reset initial asset download state
             _initialDownloadDone = false;
             _downloadStatus      = {};

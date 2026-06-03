@@ -11,7 +11,7 @@
 #include <cstdint>
 
 #include "errors.h"
-#include "messages/messages.h"
+#include "connection.h"
 #include "network_peer.h"
 #include "rpc/rpc.h"
 
@@ -27,8 +27,8 @@ namespace Framework::Networking {
 
     class NetworkServer: public NetworkPeer {
       private:
-        Messages::PacketCallback _onPlayerConnectCallback;
-        Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
+        PacketCallback _onPlayerConnectCallback;
+        DisconnectPacketCallback _onPlayerDisconnectCallback;
         ClientGuidCallback _onClientAuthenticatedCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
 
@@ -61,18 +61,18 @@ namespace Framework::Networking {
         void PushReplicationConnection(MafiaNet::RakNetGUID guid);
 
         // Send a Kick RPC then close the connection.
-        void KickPlayer(MafiaNet::RakNetGUID guid, Messages::DisconnectionReason reason, const std::string &customReason = "");
+        void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "");
 
         // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.
         static int ReadyEventId(MafiaNet::RakNetGUID guid) {
             return static_cast<int>(guid.systemIndex);
         }
 
-        void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
+        void SetOnPlayerConnectCallback(PacketCallback callback) {
             _onPlayerConnectCallback = std::move(callback);
         }
 
-        void SetOnPlayerDisconnectCallback(Messages::DisconnectPacketCallback callback) {
+        void SetOnPlayerDisconnectCallback(DisconnectPacketCallback callback) {
             _onPlayerDisconnectCallback = std::move(callback);
         }
 

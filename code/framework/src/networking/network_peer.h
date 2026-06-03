@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "messages/messages.h"
+#include "connection.h"
 #include "rpc/rpc.h"
 
 #include <mafianet/PacketPriority.h>
@@ -37,7 +37,7 @@ namespace Framework::Networking {
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
-        Messages::PacketCallback _onUnknownPacketCallback;
+        PacketCallback _onUnknownPacketCallback;
         mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
         // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
@@ -116,7 +116,7 @@ namespace Framework::Networking {
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
-        void SetUnknownPacketHandler(Messages::PacketCallback callback) {
+        void SetUnknownPacketHandler(PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
         }
 

@@ -20,7 +20,7 @@
 #include "networking/rpc/client_identity.h"
 #include "networking/rpc/server_resources.h"
 
-#include "networking/messages/messages.h"
+#include "networking/connection.h"
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
@@ -249,7 +249,6 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitNetworkingMessages() const {
-        using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
@@ -270,7 +269,7 @@ namespace Framework::Integrations::Server {
             net->SendRPC(resources, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([net](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
+        net->SetOnPlayerDisconnectCallback([net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 

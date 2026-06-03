@@ -9,7 +9,7 @@
 #pragma once
 
 #include "errors.h"
-#include "messages/messages.h"
+#include "connection.h"
 #include "network_peer.h"
 #include "state.h"
 
@@ -35,8 +35,8 @@ namespace Framework::Networking {
 
         PeerState _state;
 
-        Messages::PacketCallback _onPlayerConnectedCallback;
-        Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
+        PacketCallback _onPlayerConnectedCallback;
+        DisconnectPacketCallback _onPlayerDisconnectedCallback;
         OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
         fu2::function<void(int eventId) const> _onConnectionReadyCallback;
         AssetFileTransfer _fileListTransfer;
@@ -66,11 +66,11 @@ namespace Framework::Networking {
             return &_fileListTransfer;
         }
 
-        void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
+        void SetOnPlayerConnectedCallback(PacketCallback callback) {
             _onPlayerConnectedCallback = std::move(callback);
         }
 
-        void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
+        void SetOnPlayerDisconnectedCallback(DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = std::move(callback);
         }
 

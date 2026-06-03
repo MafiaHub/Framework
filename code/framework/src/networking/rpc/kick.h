@@ -16,7 +16,7 @@
 namespace Framework::Networking::RPC {
     // Server -> client explicit kick with a reason, sent just before CloseConnection. Version
     // mismatches don't use this (they fail the build challenge). reason is a
-    // Framework::Networking::Messages::DisconnectionReason.
+    // Framework::Networking::DisconnectionReason.
     struct Kick {
         static constexpr const char *kIdentifier = "Framework::Kick";
 

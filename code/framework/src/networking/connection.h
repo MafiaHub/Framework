@@ -11,7 +11,7 @@
 #include <mafianet/types.h>
 #include <function2.hpp>
 
-namespace Framework::Networking::Messages {
+namespace Framework::Networking {
     enum class DisconnectionReason : uint32_t {
         NO_FREE_SLOT,
         GRACEFUL_SHUTDOWN,
@@ -28,4 +28,4 @@ namespace Framework::Networking::Messages {
 
     using PacketCallback           = fu2::function<void(MafiaNet::Packet *) const>;
     using DisconnectPacketCallback = fu2::function<void(MafiaNet::Packet *, DisconnectionReason reason) const>;
-} // namespace Framework::Networking::Messages
+} // namespace Framework::Networking

@@ -59,7 +59,7 @@ namespace Framework::Networking {
         case ID_DISCONNECTION_NOTIFICATION: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
-                _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::GRACEFUL_SHUTDOWN);
+                _onPlayerDisconnectCallback(_packet, DisconnectionReason::GRACEFUL_SHUTDOWN);
             }
             ClearClientState(packet->guid);
             return true;
@@ -67,7 +67,7 @@ namespace Framework::Networking {
         case ID_CONNECTION_LOST: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
-                _onPlayerDisconnectCallback(_packet, Messages::DisconnectionReason::LOST);
+                _onPlayerDisconnectCallback(_packet, DisconnectionReason::LOST);
             }
             ClearClientState(packet->guid);
             return true;
@@ -136,7 +136,7 @@ namespace Framework::Networking {
         }
     }
 
-    void NetworkServer::KickPlayer(MafiaNet::RakNetGUID guid, Messages::DisconnectionReason reason, const std::string &customReason) {
+    void NetworkServer::KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason) {
         RPC::Kick payload;
         payload.reason       = static_cast<uint32_t>(reason);
         payload.customReason = customReason;
