@@ -11,7 +11,6 @@
 #include "replication_manager.h"
 
 #include <mafianet/GetTime.h>
-#include <mafianet/string.h>
 
 namespace Framework::Networking::Replication {
     bool NetworkEntity::IsServerPeer() const {
@@ -35,9 +34,6 @@ namespace Framework::Networking::Replication {
         bs->Write(position);
         bs->Write(velocity);
         bs->Write(rotation);
-        bs->Write(modelHash);
-        bs->Write(scale);
-        bs->Write(MafiaNet::RakString(modelName.c_str()));
     }
 
     void NetworkEntity::ReadConstruction(MafiaNet::BitStream *bs) {
@@ -51,11 +47,6 @@ namespace Framework::Networking::Replication {
         bs->Read(position);
         bs->Read(velocity);
         bs->Read(rotation);
-        bs->Read(modelHash);
-        bs->Read(scale);
-        MafiaNet::RakString name;
-        bs->Read(name);
-        modelName = name.C_String();
     }
 
     void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {

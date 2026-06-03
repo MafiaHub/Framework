@@ -93,13 +93,6 @@ namespace Framework::Scripting::Builtins {
             }
         }
 
-        std::string GetModelName() const {
-            if (auto *e = Resolve()) {
-                return e->modelName;
-            }
-            return "";
-        }
-
         virtual std::string ToString() const {
             std::ostringstream ss;
             ss << "Entity{ id: " << _id << " }";
@@ -126,14 +119,6 @@ namespace Framework::Scripting::Builtins {
                 [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
                     auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
                     if (self) info.GetReturnValue().Set(static_cast<double>(self->GetId()));
-                });
-
-            // Read-only property: modelName
-            protoTemplate->SetNativeDataProperty(
-                v8pp::to_v8(isolate, "modelName").As<v8::Name>(),
-                [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (self) info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), self->GetModelName()));
                 });
 
             // Property: position (Vector3). An accessor pair so the setter fires when a script

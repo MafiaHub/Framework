@@ -16,7 +16,6 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <cstdint>
-#include <string>
 
 namespace Framework::Networking::Replication {
     // A replicated game object: it owns its state as plain members, and ReplicaManager3 +
@@ -42,9 +41,6 @@ namespace Framework::Networking::Replication {
         glm::vec3 position = glm::vec3(0.0f);
         glm::vec3 velocity = glm::vec3(0.0f);
         glm::quat rotation = glm::identity<glm::quat>();
-        glm::vec3 scale    = glm::vec3(1.0f);
-        uint64_t modelHash = 0;
-        std::string modelName;
 
         // --- Authority (replicated) ---
         uint64_t ownerGUID = 0xFFFFFFFFFFFFFFFF; // UNASSIGNED_RAKNET_GUID.g
