@@ -48,11 +48,15 @@ namespace Framework::Networking::Replication {
         std::unordered_set<NetworkEntity *> inRange;
         _manager->QueryRadius(viewer->position, viewer->streamRange, inRange);
 
+        const uint64_t myGUID = GetRakNetGUID().g;
         _manager->ForEachEntity([&](NetworkEntity *entity) {
-            // The owner DOES receive its own entity (so it has the replica to serialize upstream and
-            // to recognize it as the local player). The server simply withholds serialize *updates*
-            // to the owner via NetworkEntity::QuerySerializationWithinWorld — construction still flows.
-            const bool visible = entity->isVisible && (entity->alwaysVisible || entity == viewer || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
+            // A connection always sees the entities it owns — its avatar and anything it currently has
+            // authority over, e.g. the vehicle it is driving — so they are never culled out from under
+            // it as it moves (interest is centred on the avatar, which freezes while the player is
+            // seated). The server still withholds serialize *updates* to the owner via
+            // NetworkEntity::QuerySerializationWithinWorld; only construction/destruction is gated here.
+            const bool ownedByUs = entity->ownerGUID == myGUID;
+            const bool visible   = entity->isVisible && (entity->alwaysVisible || entity == viewer || ownedByUs || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
 
             const bool constructed = HasReplicaConstructed(entity);
             if (visible && !constructed) {
