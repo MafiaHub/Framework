@@ -185,5 +185,9 @@ namespace Framework::GUI {
         inline void SetOnWindowObjectReadyCallback(OnWindowObjectReadyCallback proc) {
             _onWindowObjectReadyCallback = std::move(proc);
         }
+
+        inline void SetOnBeforeBrowseCallback(CEF::OnBeforeBrowseCallback cb) {
+            _lifeSpanHandler->SetOnBeforeBrowseCallback(std::move(cb));
+        }
     };
 } // namespace Framework::GUI
