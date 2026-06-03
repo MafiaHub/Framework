@@ -117,6 +117,13 @@ namespace Framework::Integrations::Server {
         CoreModules::SetReplication(replication);
         if (replication) {
             replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_opts.worldConfig.tickInterval * 1000.0f));
+            // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
+            // still resolvable) just before destroying and broadcasting the destruction of the avatar.
+            replication->SetOnClientDisconnect([this](uint64_t guid) {
+                if (_onPlayerDisconnectCallback) {
+                    _onPlayerDisconnectCallback(guid);
+                }
+            });
         }
 
         if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
@@ -301,18 +308,12 @@ namespace Framework::Integrations::Server {
             net->Send(readyMsg, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
+        net->SetOnPlayerDisconnectCallback([net](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 
-            // ReplicaManager3 tears down the player's entities on drop (QueryActionOnPopConnection);
-            // here we notify the game and clear its viewer mapping.
-            if (_onPlayerDisconnectCallback)
-                _onPlayerDisconnectCallback(guid.g);
-
-            if (auto *replication = net->GetReplicationManager())
-                replication->ClearViewer(guid.g);
-
+            // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
+            // which RakNet fires before this packet is delivered; here we just finalise the connection.
             net->GetPeer()->CloseConnection(guid, true);
         });
 
@@ -325,10 +326,17 @@ namespace Framework::Integrations::Server {
 
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", msg->GetPlayerName(), guid.g, msg->GetPlayerHardwareID());
 
-            // The game creates the player's avatar entity and registers it as this connection's
-            // viewer inside its onPlayerConnect handler.
-            if (_onPlayerConnectCallback)
-                _onPlayerConnectCallback(guid.g);
+            // The game creates the player's avatar entity and registers it as this connection's viewer
+            // inside its onPlayerConnect handler. Hand it the connection metadata so the avatar spawns
+            // with its real nickname/slot instead of the unassigned defaults.
+            if (_onPlayerConnectCallback) {
+                PlayerConnectionData data;
+                data.guid        = guid.g;
+                data.playerIndex = guid.systemIndex;
+                data.nickname    = nickname;
+                data.hardwareID  = msg->GetPlayerHardwareID();
+                _onPlayerConnectCallback(data);
+            }
 
             Framework::Networking::Messages::ClientConnectionFinalized answer;
             answer.FromParameters(_opts.worldConfig.tickInterval);

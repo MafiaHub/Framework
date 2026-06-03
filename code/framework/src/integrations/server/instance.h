@@ -15,6 +15,8 @@
 #include "logging/logger.h"
 #include "networking/engine.h"
 #include "scripting/module.h"
+
+#include <mafianet/types.h>
 #include "services/masterlist.h"
 #include "utils/config.h"
 #include "utils/command_listener.h"
@@ -81,8 +83,20 @@ namespace Framework::Integrations::Server {
 
     };
 
-    // Invoked with the connecting player's GUID; the game creates and owns the player's entity.
-    using OnPlayerConnectionCallback = fu2::function<void(uint64_t) const>;
+    // Connection metadata handed to the player-connect callback so the game can create and fully
+    // populate the player's avatar (nickname, slot index, hardware id) instead of leaving spawn-time
+    // fields at their defaults.
+    struct PlayerConnectionData {
+        uint64_t guid        = 0;
+        uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
+        std::string nickname;
+        std::string hardwareID;
+    };
+
+    // Invoked when a player joins (with its connection metadata) or leaves (with its GUID); the game
+    // creates and owns the player's entity.
+    using OnPlayerConnectCallback    = fu2::function<void(const PlayerConnectionData &) const>;
+    using OnPlayerDisconnectCallback = fu2::function<void(uint64_t) const>;
 
     // Chat. The sender is resolved to its viewer entity's NetworkID; command lines ("/...") are
     // pre-parsed into a command name and whitespace-separated arguments.
@@ -119,8 +133,8 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
         // callbacks
-        OnPlayerConnectionCallback _onPlayerConnectCallback;
-        OnPlayerConnectionCallback _onPlayerDisconnectCallback;
+        OnPlayerConnectCallback _onPlayerConnectCallback;
+        OnPlayerDisconnectCallback _onPlayerDisconnectCallback;
         OnChatMessageCallback _onChatMessageCallback;
         OnChatCommandCallback _onChatCommandCallback;
 
@@ -149,11 +163,11 @@ namespace Framework::Integrations::Server {
 
         void OnSignal(sig_signal_t);
 
-        void SetOnPlayerConnectCallback(OnPlayerConnectionCallback onPlayerConnectCallback) {
+        void SetOnPlayerConnectCallback(OnPlayerConnectCallback onPlayerConnectCallback) {
             _onPlayerConnectCallback = std::move(onPlayerConnectCallback);
         }
 
-        void SetOnPlayerDisconnectCallback(OnPlayerConnectionCallback onPlayerDisconnectCallback) {
+        void SetOnPlayerDisconnectCallback(OnPlayerDisconnectCallback onPlayerDisconnectCallback) {
             _onPlayerDisconnectCallback = std::move(onPlayerDisconnectCallback);
         }
 
