@@ -20,7 +20,7 @@ namespace Framework::Networking::Replication {
 
     uint64_t NetworkEntity::MyGUID() const {
         const auto *manager = static_cast<const ReplicationManager *>(replicaManager);
-        return manager ? manager->GetMyGUID() : 0xFFFFFFFFFFFFFFFF;
+        return manager ? manager->GetMyGUID() : MafiaNet::UNASSIGNED_RAKNET_GUID.g;
     }
 
     void NetworkEntity::WriteAllocationID(MafiaNet::Connection_RM3 *, MafiaNet::BitStream *allocationIdBitstream) const {
@@ -118,9 +118,12 @@ namespace Framework::Networking::Replication {
         SerializeFields(&_vds, &ctx);
         _vds.EndSerialize(&ctx);
 
-        // Per-connection delta path: ReplicaManager3 compares against the last bytes sent to each
-        // system and suppresses the send when nothing changed.
-        return MafiaNet::RM3SR_SERIALIZED_UNIQUELY;
+        // BeginIdenticalSerialize already produces one delta bitstream shared across all recipients
+        // (the state is identical for every viewer), so pair it with the broadcast-identical result:
+        // ReplicaManager3 serializes once per tick and reuses those bytes for every connection,
+        // suppressing the send when nothing changed. Per-connection filtering (owner exclusion) still
+        // happens upstream in QuerySerializationWithinWorld.
+        return MafiaNet::RM3SR_BROADCAST_IDENTICALLY;
     }
 
     void NetworkEntity::Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) {

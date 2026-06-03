@@ -13,7 +13,6 @@
 
 #include <mafianet/DS_List.h>
 
-#include <algorithm>
 #include <cmath>
 
 namespace Framework::Networking::Replication {
@@ -87,7 +86,7 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::ForceState(NetworkEntity *entity) {
-        if (!entity || !_rpc || entity->ownerGUID == 0xFFFFFFFFFFFFFFFF) {
+        if (!entity || !_rpc || entity->ownerGUID == MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             return;
         }
         MafiaNet::BitStream bs;
@@ -105,7 +104,7 @@ namespace Framework::Networking::Replication {
         // The new owner is otherwise blind to the change: the server withholds serialize to whoever
         // owns an entity, so it would never receive the updated ownerGUID. Tell it directly. Other
         // peers, and any previous owner that just lost authority, learn it through normal serialize.
-        if (_rpc && _isServer && guid != 0xFFFFFFFFFFFFFFFF) {
+        if (_rpc && _isServer && guid != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             MafiaNet::BitStream bs;
             MafiaNet::NetworkID networkId = entity->GetNetworkID();
             bs.Write(networkId);
@@ -133,7 +132,7 @@ namespace Framework::Networking::Replication {
         }
         // Only a viewer entity owns a viewer mapping. Owned non-viewer entities (e.g. a vehicle owned
         // by a player) share the player's GUID, so we must NOT clear the mapping for those.
-        if (entity->isViewer && entity->ownerGUID != 0xFFFFFFFFFFFFFFFF) {
+        if (entity->isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             ClearViewer(entity->ownerGUID);
         }
         // BroadcastDestruction must precede deletion; ~Replica3 dereferences automatically.
@@ -193,7 +192,7 @@ namespace Framework::Networking::Replication {
         });
     }
 
-    void ReplicationManager::QueryRadius(const glm::vec3 &center, float radius, std::vector<NetworkEntity *> &out) {
+    void ReplicationManager::QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out) {
         if (!_gridReady) {
             return;
         }
@@ -207,14 +206,29 @@ namespace Framework::Networking::Replication {
                 continue;
             }
             const glm::vec3 delta = entity->position - center;
-            // 2D (XZ) distance check; entries spanning multiple cells can repeat, so skip dupes.
+            // 2D (XZ) distance check; entries spanning multiple cells can repeat — the set dedupes.
             if (delta.x * delta.x + delta.z * delta.z > radiusSq) {
                 continue;
             }
-            if (std::find(out.begin(), out.end(), entity) == out.end()) {
-                out.push_back(entity);
+            out.insert(entity);
+        }
+    }
+
+    void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
+        // The player's avatar is server-created, so the base PopConnection (which only tears down
+        // replicas a dropped peer itself created) leaves it behind. Notify the game while the avatar
+        // is still resolvable, then destroy it — DestroyEntity broadcasts the destruction to the
+        // remaining clients and clears the viewer mapping. Clients keep the base behaviour: their
+        // replicas all originate from the server, so PopConnection cleans them up on its own.
+        if (_isServer) {
+            if (_onClientDisconnect) {
+                _onClientDisconnect(rakNetGUID.g);
+            }
+            if (auto *viewer = GetViewer(rakNetGUID.g)) {
+                DestroyEntity(viewer);
             }
         }
+        ReplicaManager3::OnClosedConnection(systemAddress, rakNetGUID, lostConnectionReason);
     }
 
     MafiaNet::Connection_RM3 *ReplicationManager::AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const {

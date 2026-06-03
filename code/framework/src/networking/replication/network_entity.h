@@ -43,7 +43,7 @@ namespace Framework::Networking::Replication {
         glm::quat rotation = glm::identity<glm::quat>();
 
         // --- Authority (replicated) ---
-        uint64_t ownerGUID = 0xFFFFFFFFFFFFFFFF; // UNASSIGNED_RAKNET_GUID.g
+        uint64_t ownerGUID = MafiaNet::UNASSIGNED_RAKNET_GUID.g;
 
         // --- Server-only streaming metadata (not replicated) ---
         // Dimension lives in the VirtualWorldReplica3 base (Get/SetVirtualWorld).

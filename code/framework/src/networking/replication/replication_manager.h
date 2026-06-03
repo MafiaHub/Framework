@@ -21,6 +21,8 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace Framework::Networking::Replication {
@@ -73,18 +75,32 @@ namespace Framework::Networking::Replication {
         // Rebuilds the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
         void Tick();
-        // Appends entities within `radius` of `center` to `out`, de-duplicated. Interest is computed
+        // Inserts entities within `radius` of `center` into `out`. The set both de-duplicates the
+        // grid's per-cell hits and gives QueryReplicaList O(1) membership tests. Interest is computed
         // on the XZ ground plane only (vertical separation does not cull) — adjust if your game's
         // ground plane differs.
-        void QueryRadius(const glm::vec3 &center, float radius, std::vector<NetworkEntity *> &out);
+        void QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
 
-        // --- ReplicaManager3 factory hooks ---
+        // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
+        // while it is still resolvable. The integration layer wires its player-disconnect notification
+        // here.
+        void SetOnClientDisconnect(fu2::function<void(uint64_t) const> callback) {
+            _onClientDisconnect = std::move(callback);
+        }
+
+        // --- ReplicaManager3 hooks ---
+        // Connection-drop teardown. The base only removes replicas a dropped peer itself created;
+        // player avatars are server-created, so on the server we additionally notify the game and
+        // destroy the dropped peer's viewer (DestroyEntity broadcasts the destruction to remaining
+        // clients), which is the missing half that otherwise leaks avatars across reconnects.
+        void OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) override;
+
         MafiaNet::Connection_RM3 *AllocConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID) const override;
         void DeallocConnection(MafiaNet::Connection_RM3 *connection) const override;
 
       private:
         bool _isServer    = false;
-        uint64_t _myGUID  = 0xFFFFFFFFFFFFFFFF;
+        uint64_t _myGUID  = MafiaNet::UNASSIGNED_RAKNET_GUID.g;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
@@ -96,5 +112,6 @@ namespace Framework::Networking::Replication {
         MafiaNet::RPC4 *_rpc = nullptr;
         GridSectorizer _grid;
         std::unordered_map<uint64_t, NetworkEntity *> _viewers;
+        fu2::function<void(uint64_t) const> _onClientDisconnect;
     };
 } // namespace Framework::Networking::Replication

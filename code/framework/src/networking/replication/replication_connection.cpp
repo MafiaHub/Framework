@@ -12,8 +12,7 @@
 #include "network_entity.h"
 #include "replication_manager.h"
 
-#include <algorithm>
-#include <vector>
+#include <unordered_set>
 
 namespace Framework::Networking::Replication {
     ReplicationConnection::ReplicationConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID guid, ReplicationManager *manager, bool isServer)
@@ -43,15 +42,17 @@ namespace Framework::Networking::Replication {
         // QuerySerialization filter and the construction check below agree.
         SetVirtualWorld(viewer->GetVirtualWorld());
 
-        // Spatial interest set around the viewer.
-        std::vector<NetworkEntity *> inRange;
+        // Spatial interest set around the viewer. A hash set so the per-entity membership test below
+        // is O(1): QueryReplicaList already walks every entity, so a linear scan here would make the
+        // whole pass O(entities × in-range) per connection, per network update.
+        std::unordered_set<NetworkEntity *> inRange;
         _manager->QueryRadius(viewer->position, viewer->streamRange, inRange);
 
         _manager->ForEachEntity([&](NetworkEntity *entity) {
             // The owner DOES receive its own entity (so it has the replica to serialize upstream and
             // to recognize it as the local player). The server simply withholds serialize *updates*
             // to the owner via NetworkEntity::QuerySerializationWithinWorld — construction still flows.
-            const bool visible = entity->isVisible && (entity->alwaysVisible || entity == viewer || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && std::find(inRange.begin(), inRange.end(), entity) != inRange.end()));
+            const bool visible = entity->isVisible && (entity->alwaysVisible || entity == viewer || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
 
             const bool constructed = HasReplicaConstructed(entity);
             if (visible && !constructed) {
