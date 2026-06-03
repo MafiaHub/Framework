@@ -117,6 +117,9 @@ namespace Framework::Networking {
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
+        // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
+        virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
+
         void SetUnknownPacketHandler(PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
         }

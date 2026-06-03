@@ -61,7 +61,7 @@ namespace Framework::Networking {
         void PushReplicationConnection(MafiaNet::RakNetGUID guid);
 
         // Send a Kick RPC then close the connection.
-        void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "");
+        void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "") override;
 
         // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.
         static int ReadyEventId(MafiaNet::RakNetGUID guid) {

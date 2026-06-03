@@ -370,8 +370,7 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        // The kick reason now rides on the disconnect notification itself (no separate RPC). Version
-        // mismatches don't reach here — they fail the build challenge and surface as WRONG_VERSION.
+        // Version mismatches don't reach here — they fail the build challenge (WRONG_VERSION).
         net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reasonId, const std::string &customReason) {
             std::string reason = "Unknown.";
             switch (reasonId) {

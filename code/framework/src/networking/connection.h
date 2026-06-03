@@ -28,8 +28,7 @@ namespace Framework::Networking {
         UNKNOWN
     };
 
-    // Reason a graceful kick carries to the client, rode along on ID_DISCONNECTION_NOTIFICATION via
-    // CloseConnection's reasonData. Serialized symmetrically so the server write and client read agree.
+    // Optional reason carried on a graceful disconnect (CloseConnection's reasonData).
     struct DisconnectPayload {
         uint32_t reason = static_cast<uint32_t>(DisconnectionReason::UNKNOWN);
         std::string customReason;

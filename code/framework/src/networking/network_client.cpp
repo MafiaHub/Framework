@@ -126,8 +126,7 @@ namespace Framework::Networking {
 
         case ID_DISCONNECTION_NOTIFICATION: {
             if (_state != PeerState::DISCONNECTED && _onPlayerDisconnectedCallback) {
-                // A graceful kick carries a DisconnectPayload after the message id (CloseConnection's
-                // reasonData); a plain disconnect has no body, so default to GRACEFUL_SHUTDOWN.
+                // A kick carries a reason payload after the id; a plain disconnect has none.
                 DisconnectionReason reason = DisconnectionReason::GRACEFUL_SHUTDOWN;
                 std::string customReason;
                 if (_packet->length - _packetDataOffset > sizeof(MafiaNet::MessageID)) {

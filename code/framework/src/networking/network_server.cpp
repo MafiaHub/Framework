@@ -140,8 +140,7 @@ namespace Framework::Networking {
         payload.reason       = static_cast<uint32_t>(reason);
         payload.customReason = customReason;
 
-        // The reason rides along on ID_DISCONNECTION_NOTIFICATION (CloseConnection's reasonData), so the
-        // client learns why it was dropped without a separate, racing message.
+        // Reason rides the disconnect notification, so no separate message races the close.
         MafiaNet::BitStream reasonData;
         payload.Serialize(&reasonData, true);
         _peer->CloseConnection(guid, true, 0, LOW_PRIORITY, &reasonData);
