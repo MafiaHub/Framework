@@ -88,6 +88,14 @@ namespace Framework::Networking::Replication {
             _onClientDisconnect = std::move(callback);
         }
 
+        // Fired with the NetworkID at the end of CreateEntity / start of DestroyEntity.
+        void SetOnEntityCreated(fu2::function<void(uint64_t) const> callback) {
+            _onEntityCreated = std::move(callback);
+        }
+        void SetOnEntityDestroyed(fu2::function<void(uint64_t) const> callback) {
+            _onEntityDestroyed = std::move(callback);
+        }
+
         // --- ReplicaManager3 hooks ---
         // Connection-drop teardown. The base only removes replicas a dropped peer itself created;
         // player avatars are server-created, so on the server we additionally notify the game and
@@ -113,5 +121,7 @@ namespace Framework::Networking::Replication {
         GridSectorizer _grid;
         std::unordered_map<uint64_t, NetworkEntity *> _viewers;
         fu2::function<void(uint64_t) const> _onClientDisconnect;
+        fu2::function<void(uint64_t) const> _onEntityCreated;
+        fu2::function<void(uint64_t) const> _onEntityDestroyed;
     };
 } // namespace Framework::Networking::Replication

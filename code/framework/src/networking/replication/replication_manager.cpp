@@ -124,6 +124,9 @@ namespace Framework::Networking::Replication {
         // them as plain numbers. Clients adopt this id via the construction snapshot.
         entity->SetNetworkID(++_nextNetworkId);
         Reference(entity);
+        if (_onEntityCreated) {
+            _onEntityCreated(entity->GetNetworkID());
+        }
         return entity;
     }
 
@@ -135,6 +138,9 @@ namespace Framework::Networking::Replication {
         // by a player) share the player's GUID, so we must NOT clear the mapping for those.
         if (entity->isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             ClearViewer(entity->ownerGUID);
+        }
+        if (_onEntityDestroyed) {
+            _onEntityDestroyed(entity->GetNetworkID());
         }
         // BroadcastDestruction must precede deletion; ~Replica3 dereferences automatically.
         entity->BroadcastDestruction();

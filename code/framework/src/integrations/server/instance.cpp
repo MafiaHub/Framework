@@ -156,6 +156,17 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
 
+        // A resource owns the entities it spawns; they are destroyed when it stops.
+        if (replication) {
+            auto *resourceManager = _scriptingModule->GetResourceManager();
+            replication->SetOnEntityCreated([resourceManager](uint64_t networkId) {
+                resourceManager->OnEntityCreated(networkId);
+            });
+            replication->SetOnEntityDestroyed([resourceManager](uint64_t networkId) {
+                resourceManager->OnEntityDestroyed(networkId);
+            });
+        }
+
         PostScriptInit();
 
         // Discover resources

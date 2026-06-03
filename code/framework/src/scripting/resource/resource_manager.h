@@ -280,6 +280,10 @@ namespace Framework::Scripting {
          */
         Resource *GetCurrentResourceWithStackFallback(v8::Isolate *isolate);
 
+        // Wired to ReplicationManager::SetOnEntityCreated/Destroyed.
+        void OnEntityCreated(uint64_t networkId);
+        void OnEntityDestroyed(uint64_t networkId);
+
         // Statistics
 
         /**

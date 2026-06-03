@@ -716,6 +716,22 @@ namespace Framework::Scripting {
         return count;
     }
 
+    void ResourceManager::OnEntityCreated(uint64_t networkId) {
+        // The stack fallback touches V8; CreateEntity also fires for avatars outside a JS context.
+        v8::Isolate *isolate = _jsEngine ? _jsEngine->GetIsolate() : nullptr;
+        Resource *resource = (isolate && isolate->InContext()) ? GetCurrentResourceWithStackFallback(isolate) : GetCurrentResource();
+        if (resource) {
+            resource->TrackEntity(networkId);
+        }
+    }
+
+    void ResourceManager::OnEntityDestroyed(uint64_t networkId) {
+        std::scoped_lock lock(_resourcesMutex);
+        for (auto &[name, resource] : _resources) {
+            resource->UntrackEntity(networkId);
+        }
+    }
+
     void ResourceManager::HandleResourceRuntimeError(const std::string &resourceName, const std::string &error) {
         Resource *resource = GetResourceMutable(resourceName);
         if (!resource) {

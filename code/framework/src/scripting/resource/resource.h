@@ -13,11 +13,13 @@
 #include <v8.h>
 
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -201,6 +203,10 @@ namespace Framework::Scripting {
         v8::Isolate *GetIsolate() const { return _isolate; }
         void SetIsolate(v8::Isolate *isolate) { _isolate = isolate; }
 
+        // Replicated entities spawned while this resource was executing; destroyed on stop/error.
+        void TrackEntity(uint64_t networkId);
+        void UntrackEntity(uint64_t networkId);
+
         // State transitions (called by ResourceManager)
         friend class ResourceManager;
 
@@ -216,6 +222,8 @@ namespace Framework::Scripting {
 
         // Get restart attempt count without locking
         int GetRestartAttemptCountUnlocked() const;
+
+        void DestroyOwnedEntities();
 
         // Path to resource directory
         std::string _path;
@@ -239,6 +247,9 @@ namespace Framework::Scripting {
 
         std::vector<std::chrono::system_clock::time_point> _restartAttempts;
         mutable std::mutex _restartAttemptsMutex;
+
+        std::unordered_set<uint64_t> _ownedEntities;
+        mutable std::mutex _ownedEntitiesMutex;
     };
 
 } // namespace Framework::Scripting

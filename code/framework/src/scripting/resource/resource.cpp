@@ -7,6 +7,10 @@
  */
 
 #include "resource.h"
+
+#include <core_modules.h>
+#include <networking/replication/replication_manager.h>
+
 #include <filesystem>
 
 namespace Framework::Scripting {
@@ -50,7 +54,8 @@ namespace Framework::Scripting {
         , _loadTimestamp(other._loadTimestamp)
         , _isolate(other._isolate)
         , _exports(std::move(other._exports))
-        , _restartAttempts(std::move(other._restartAttempts)) {
+        , _restartAttempts(std::move(other._restartAttempts))
+        , _ownedEntities(std::move(other._ownedEntities)) {
         other._isolate = nullptr;
     }
 
@@ -68,6 +73,7 @@ namespace Framework::Scripting {
             _isolate = other._isolate;
             _exports = std::move(other._exports);
             _restartAttempts = std::move(other._restartAttempts);
+            _ownedEntities = std::move(other._ownedEntities);
 
             other._isolate = nullptr;
         }
@@ -280,11 +286,44 @@ namespace Framework::Scripting {
         _state = newState;
         _stateTimestamp = std::chrono::system_clock::now();
 
+        if (newState == ResourceState::Stopped || newState == ResourceState::Error) {
+            DestroyOwnedEntities();
+        }
+
         if (newState != ResourceState::Error) {
             ClearError();
         }
 
         return true;
+    }
+
+    void Resource::TrackEntity(uint64_t networkId) {
+        std::scoped_lock lock(_ownedEntitiesMutex);
+        _ownedEntities.insert(networkId);
+    }
+
+    void Resource::UntrackEntity(uint64_t networkId) {
+        std::scoped_lock lock(_ownedEntitiesMutex);
+        _ownedEntities.erase(networkId);
+    }
+
+    void Resource::DestroyOwnedEntities() {
+        // Swap out first: DestroyEntity re-enters UntrackEntity via the destroy hook.
+        std::unordered_set<uint64_t> owned;
+        {
+            std::scoped_lock lock(_ownedEntitiesMutex);
+            owned.swap(_ownedEntities);
+        }
+
+        auto *replication = CoreModules::GetReplication();
+        if (!replication) {
+            return;
+        }
+        for (uint64_t networkId : owned) {
+            if (auto *entity = replication->GetEntityByNetworkID(networkId)) {
+                replication->DestroyEntity(entity);
+            }
+        }
     }
 
     void Resource::SetError(const std::string &error) {
