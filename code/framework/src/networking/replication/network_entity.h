@@ -97,6 +97,11 @@ namespace Framework::Networking::Replication {
         // UNASSIGNED_RAKNET_GUID.g to return ownership to the server.
         void SetOwner(uint64_t guid);
 
+        // True on the peer with authority over this entity: the owning client, or the server for
+        // server-owned entities. The game decides what owning means (bind the local avatar, drive
+        // updates upstream, ...); this just answers who holds authority.
+        bool IsOwner() const;
+
         // --- Replica3 implementation ---
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const override;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) override;

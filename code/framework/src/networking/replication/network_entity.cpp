@@ -96,6 +96,10 @@ namespace Framework::Networking::Replication {
         }
     }
 
+    bool NetworkEntity::IsOwner() const {
+        return ownerGUID == MyGUID();
+    }
+
     // --- Per-tick delta serialization (VariableDeltaSerializer) ---
 
     void NetworkEntity::OnUserReplicaPreSerializeTick() {
