@@ -21,7 +21,6 @@
 
 #include "networking/messages/client_connection_finalized.h"
 #include "networking/messages/client_handshake.h"
-#include "networking/messages/client_initialise_player.h"
 #include "networking/messages/client_kick.h"
 #include "networking/messages/client_ready_assets.h"
 #include "networking/messages/client_request_streamer.h"
@@ -341,13 +340,6 @@ namespace Framework::Integrations::Server {
             Framework::Networking::Messages::ClientConnectionFinalized answer;
             answer.FromParameters(_opts.worldConfig.tickInterval);
             net->Send(answer, guid);
-        });
-
-        // The client signals it is ready for player data; the player entity is already created in the
-        // connect handler above, so there is nothing to do here.
-        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](MafiaNet::RakNetGUID guid, ClientInitPlayer *stub) {
-            (void)guid;
-            (void)stub;
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod

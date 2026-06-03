@@ -22,7 +22,6 @@ set(FRAMEWORK_SRC
     src/networking/network_peer.cpp
     src/networking/errors.cpp
 
-    # Native MafiaNet entity replication (ReplicaManager3-based; entities own their state, no ECS)
     src/networking/replication/network_entity.cpp
     src/networking/replication/entity_factory.cpp
     src/networking/replication/replication_manager.cpp

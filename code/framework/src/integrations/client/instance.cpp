@@ -12,7 +12,6 @@
 #include <networking/messages/client_request_streamer.h>
 #include <networking/messages/client_ready_assets.h>
 #include <networking/messages/client_handshake.h>
-#include <networking/messages/client_initialise_player.h>
 #include <networking/messages/client_kick.h>
 
 
@@ -371,11 +370,6 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(msg->GetServerTickRate() * 1000.0f));
             }
-
-            // The server constructs the local avatar (owned by us); the game recognizes it in
-            // NetworkEntity::OnConstructed by ownerGUID. Signal we are ready for it.
-            Framework::Networking::Messages::ClientInitPlayer initPlayer {};
-            net->Send(initPlayer, MafiaNet::UNASSIGNED_RAKNET_GUID);
 
             if (_onConnectionFinalized) {
                 _onConnectionFinalized(msg->GetServerTickRate());
