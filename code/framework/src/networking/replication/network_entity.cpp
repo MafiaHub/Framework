@@ -97,7 +97,11 @@ namespace Framework::Networking::Replication {
     }
 
     bool NetworkEntity::IsOwner() const {
-        return ownerGUID == MyGUID();
+        if (ownerGUID == MyGUID()) {
+            return true;
+        }
+        // The server holds authority over entities left unowned (server-owned).
+        return IsServerPeer() && ownerGUID == MafiaNet::UNASSIGNED_RAKNET_GUID.g;
     }
 
     // --- Per-tick delta serialization (VariableDeltaSerializer) ---
