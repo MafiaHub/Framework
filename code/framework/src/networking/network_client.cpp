@@ -42,7 +42,6 @@ namespace Framework::Networking {
         if (!_peer) {
             return;
         }
-        _registeredMessageCallbacks.clear();
         MafiaNet::RakPeerInterface::DestroyInstance(_peer);
         _peer = nullptr;
 

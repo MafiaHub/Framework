@@ -23,7 +23,6 @@
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
 #include <memory>
-#include <unordered_map>
 #include <utility>
 #include <utils/hashing.h>
 #include <vector>
@@ -38,7 +37,6 @@ namespace Framework::Networking {
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
-        std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
         Messages::PacketCallback _onUnknownPacketCallback;
         mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
@@ -84,38 +82,6 @@ namespace Framework::Networking {
 
         // Register the local build token (see BuildToken). Call before connecting/accepting.
         void SetBuildToken(const std::string &token);
-
-        bool Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) const;
-
-        bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
-
-        void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
-
-        template <typename T>
-        void RegisterMessage(uint8_t message, fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
-            if (callback == nullptr) {
-                return;
-            }
-
-            _registeredMessageCallbacks[message] = [this, callback, message](MafiaNet::Packet *p) {
-                MafiaNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
-                T msg = {};
-                msg.SetPacket(p);
-                msg.Serialize(&bs, false);
-                msg.Serialize2(&bs, false);
-                if (msg.Valid2()) {
-                    if (msg.Valid()) {
-                        callback(p->guid, &msg);
-                    }
-                    else {
-                        Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid() check, skipping!", message);
-                    }
-                }
-                else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid2() check, skipping!", message);
-                }
-            };
-        }
 
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).

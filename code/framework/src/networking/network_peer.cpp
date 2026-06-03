@@ -35,35 +35,6 @@ namespace Framework::Networking {
         _twoWayAuth.AddPassword(kBuildChallengeId, MafiaNet::RakString(token.c_str()));
     }
 
-    bool NetworkPeer::Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
-        if (!_peer) {
-            return false;
-        }
-
-        MafiaNet::BitStream bsOut;
-        bsOut.Write(msg.GetMessageID());
-        msg.Serialize(&bsOut, true);
-        msg.Serialize2(&bsOut, true);
-
-        if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool NetworkPeer::Send(Messages::IMessage &msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
-        return Send(msg, MafiaNet::RakNetGUID(guid), priority, reliability);
-    }
-
-    void NetworkPeer::RegisterMessage(uint8_t message, Messages::PacketCallback callback) {
-        if (callback == nullptr) {
-            return;
-        }
-
-        _registeredMessageCallbacks[message] = callback;
-    }
-
     void NetworkPeer::Update() {
         if (!_peer) {
             return;
@@ -92,14 +63,9 @@ namespace Framework::Networking {
             uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
-                if (_registeredMessageCallbacks.contains(packetID)) {
-                    _registeredMessageCallbacks[packetID](_packet);
-                }
-                else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
-                    if (_onUnknownPacketCallback) {
-                        _onUnknownPacketCallback(_packet);
-                    }
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
+                if (_onUnknownPacketCallback) {
+                    _onUnknownPacketCallback(_packet);
                 }
             }
         }
