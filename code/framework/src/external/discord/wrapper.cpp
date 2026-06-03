@@ -85,6 +85,11 @@ namespace Framework::External::Discord {
         });
     }
 
+    std::string Wrapper::GetUserId() const {
+        const auto id = _user.GetId();
+        return id ? std::to_string(id) : std::string {};
+    }
+
     discord::UserManager &Wrapper::GetUserManager() const {
         return _instance->UserManager();
     }

@@ -35,6 +35,9 @@ namespace Framework::External::Discord {
 
         void SignInWithDiscord(const DiscordLoginProc &proc) const;
 
+        // Snowflake of the signed-in user once OnCurrentUserUpdate has fired, empty otherwise.
+        std::string GetUserId() const;
+
         discord::ActivityManager &GetActivityManager() const;
         discord::UserManager &GetUserManager() const;
         discord::ImageManager &GetImageManager() const;

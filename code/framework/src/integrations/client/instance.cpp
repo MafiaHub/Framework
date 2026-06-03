@@ -543,8 +543,8 @@ namespace Framework::Integrations::Client {
 
             Framework::Networking::RPC::ClientIdentity identity;
             identity.name       = _currentState.nickname;
-            identity.steamId    = "MY_SUPER_ID_1";
-            identity.discordId  = "MY_SUPER_ID_2";
+            identity.steamId    = ""; // no Steam integration wired into the client yet
+            identity.discordId  = _presence ? _presence->GetUserId() : "";
             identity.hardwareId = Framework::Utils::GetHardwareId();
             net->SendRPC(identity, serverGuid);
 
