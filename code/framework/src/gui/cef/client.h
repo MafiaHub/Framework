@@ -49,6 +49,10 @@ namespace Framework::GUI::CEF {
             return _displayHandler;
         }
 
+        CefRefPtr<CefRequestHandler> GetRequestHandler() override {
+            return _lifeSpanHandler;
+        }
+
         bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId sourceProcess, CefRefPtr<CefProcessMessage> message) override;
 
         IMPLEMENT_REFCOUNTING(Client);

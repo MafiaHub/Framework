@@ -7,6 +7,7 @@
  */
 
 #include "life_span_handler.h"
+#include "include/cef_parser.h"
 
 namespace Framework::GUI::CEF {
     void LifeSpanHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
@@ -20,5 +21,17 @@ namespace Framework::GUI::CEF {
 
     void LifeSpanHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
         _browser = nullptr;
+    }
+
+    bool LifeSpanHandler::OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool userGesture, bool isRedirect) {
+        CefURLParts urlParts;
+        if (!CefParseURL(request->GetURL(), urlParts))
+            return true; // Cancel if invalid URL
+
+        if (_onBeforeBrowse) {
+            return _onBeforeBrowse(urlParts, browser, frame, request, userGesture, isRedirect);
+        }
+        return false;
+
     }
 } // namespace Framework::GUI::CEF

@@ -257,4 +257,9 @@ namespace Framework::GUI {
         }
         return nullptr;
     }
+
+    void Manager::RegisterSchemeHandlerFactory(const std::string &schema, const std::string &domain, Framework::GUI::CEF::SchemaHandlerFactoryCallback callback) {
+        _cefApp->RegisterSchemeHandlerFactory(schema, domain, callback);
+        CefRegisterSchemeHandlerFactory(schema, domain, _cefApp);
+    }
 } // namespace Framework::GUI
