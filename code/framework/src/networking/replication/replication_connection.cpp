@@ -39,6 +39,10 @@ namespace Framework::Networking::Replication {
             return;
         }
 
+        // The observer perceives its avatar's dimension; keep them in sync so the base
+        // QuerySerialization filter and the construction check below agree.
+        SetVirtualWorld(viewer->GetVirtualWorld());
+
         // Spatial interest set around the viewer.
         std::vector<NetworkEntity *> inRange;
         _manager->QueryRadius(viewer->position, viewer->streamRange, inRange);
@@ -46,8 +50,8 @@ namespace Framework::Networking::Replication {
         _manager->ForEachEntity([&](NetworkEntity *entity) {
             // The owner DOES receive its own entity (so it has the replica to serialize upstream and
             // to recognize it as the local player). The server simply withholds serialize *updates*
-            // to the owner via NetworkEntity::QuerySerialization — construction still flows.
-            const bool visible = entity->isVisible && (entity->alwaysVisible || entity == viewer || (entity->virtualWorld == viewer->virtualWorld && std::find(inRange.begin(), inRange.end(), entity) != inRange.end()));
+            // to the owner via NetworkEntity::QuerySerializationWithinWorld — construction still flows.
+            const bool visible = entity->isVisible && (entity->alwaysVisible || entity == viewer || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && std::find(inRange.begin(), inRange.end(), entity) != inRange.end()));
 
             const bool constructed = HasReplicaConstructed(entity);
             if (visible && !constructed) {

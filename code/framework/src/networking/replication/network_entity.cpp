@@ -35,7 +35,6 @@ namespace Framework::Networking::Replication {
         bs->Write(position);
         bs->Write(velocity);
         bs->Write(rotation);
-        bs->Write(virtualWorld);
         bs->Write(modelHash);
         bs->Write(scale);
         bs->Write(MafiaNet::RakString(modelName.c_str()));
@@ -52,7 +51,6 @@ namespace Framework::Networking::Replication {
         bs->Read(position);
         bs->Read(velocity);
         bs->Read(rotation);
-        bs->Read(virtualWorld);
         bs->Read(modelHash);
         bs->Read(scale);
         MafiaNet::RakString name;
@@ -157,8 +155,7 @@ namespace Framework::Networking::Replication {
         _vds.EndDeserialize(&ctx);
     }
 
-    MafiaNet::RM3ConstructionState NetworkEntity::QueryConstruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *) {
-        // Unused under QUERY_CONNECTION_FOR_REPLICA_LIST; required by the interface.
+    MafiaNet::RM3ConstructionState NetworkEntity::QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *) {
         return QueryConstruction_ServerConstruction(destinationConnection, IsServerPeer());
     }
 
@@ -166,7 +163,7 @@ namespace Framework::Networking::Replication {
         return QueryRemoteConstruction_ServerConstruction(sourceConnection, IsServerPeer());
     }
 
-    MafiaNet::RM3QuerySerializationResult NetworkEntity::QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) {
+    MafiaNet::RM3QuerySerializationResult NetworkEntity::QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) {
         if (IsServerPeer()) {
             // Relay to everyone except the authoritative owner (no echo back to it).
             if (destinationConnection->GetRakNetGUID().g == ownerGUID) {

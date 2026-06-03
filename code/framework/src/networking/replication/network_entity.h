@@ -10,6 +10,7 @@
 
 #include <mafianet/ReplicaManager3.h>
 #include <mafianet/VariableDeltaSerializer.h>
+#include <mafianet/VirtualWorldReplica3.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -32,7 +33,7 @@ namespace Framework::Networking::Replication {
     // Authority: QuerySerialization is keyed on ownerGUID — the server serializes to everyone except
     // the owner, the owning client serializes upstream, and Deserialize accepts state only from the
     // current owner so a stale owner cannot write during a handover.
-    class NetworkEntity : public MafiaNet::Replica3 {
+    class NetworkEntity : public MafiaNet::VirtualWorldReplica3 {
       public:
         NetworkEntity()           = default;
         ~NetworkEntity() override = default;
@@ -45,9 +46,11 @@ namespace Framework::Networking::Replication {
         uint64_t modelHash = 0;
         std::string modelName;
 
-        // --- Server-only streaming metadata (not replicated) ---
+        // --- Authority (replicated) ---
         uint64_t ownerGUID = 0xFFFFFFFFFFFFFFFF; // UNASSIGNED_RAKNET_GUID.g
-        int virtualWorld   = 0;
+
+        // --- Server-only streaming metadata (not replicated) ---
+        // Dimension lives in the VirtualWorldReplica3 base (Get/SetVirtualWorld).
         bool alwaysVisible = false;
         bool isVisible     = true;
         bool isViewer      = false;
@@ -110,10 +113,12 @@ namespace Framework::Networking::Replication {
         MafiaNet::RM3SerializationResult Serialize(MafiaNet::SerializeParameters *serializeParameters) override;
         void Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) override;
 
-        MafiaNet::RM3ConstructionState QueryConstruction(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) override;
         bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) override;
-        MafiaNet::RM3QuerySerializationResult QuerySerialization(MafiaNet::Connection_RM3 *destinationConnection) override;
         MafiaNet::RM3ActionOnPopConnection QueryActionOnPopConnection(MafiaNet::Connection_RM3 *droppedConnection) const override;
+
+        // VirtualWorldReplica3 filters by dimension, then delegates the topology decision to these.
+        MafiaNet::RM3ConstructionState QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) override;
+        MafiaNet::RM3QuerySerializationResult QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) override;
 
       private:
         // True if we are the server peer (read from the owning ReplicationManager).
