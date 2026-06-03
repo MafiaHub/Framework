@@ -11,6 +11,7 @@
 #include "connection.h"
 #include "rpc/rpc.h"
 
+#include <mafianet/MessageIdentifiers.h>
 #include <mafianet/PacketPriority.h>
 #include <mafianet/peerinterface.h>
 #include <mafianet/FileListTransfer.h>

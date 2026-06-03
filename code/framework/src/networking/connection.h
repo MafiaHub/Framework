@@ -8,8 +8,10 @@
 
 #pragma once
 
+#include <mafianet/BitStream.h>
 #include <mafianet/types.h>
 #include <function2.hpp>
+#include <string>
 
 namespace Framework::Networking {
     enum class DisconnectionReason : uint32_t {
@@ -26,6 +28,18 @@ namespace Framework::Networking {
         UNKNOWN
     };
 
+    // Reason a graceful kick carries to the client, rode along on ID_DISCONNECTION_NOTIFICATION via
+    // CloseConnection's reasonData. Serialized symmetrically so the server write and client read agree.
+    struct DisconnectPayload {
+        uint32_t reason = static_cast<uint32_t>(DisconnectionReason::UNKNOWN);
+        std::string customReason;
+
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
+            bs->Serialize(write, reason);
+            bs->Serialize(write, customReason);
+        }
+    };
+
     using PacketCallback           = fu2::function<void(MafiaNet::Packet *) const>;
-    using DisconnectPacketCallback = fu2::function<void(MafiaNet::Packet *, DisconnectionReason reason) const>;
+    using DisconnectPacketCallback = fu2::function<void(MafiaNet::Packet *, DisconnectionReason reason, const std::string &customReason) const>;
 } // namespace Framework::Networking

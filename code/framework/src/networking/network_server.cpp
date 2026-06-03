@@ -9,7 +9,6 @@
 #include "network_server.h"
 
 #include "replication/replication_manager.h"
-#include "rpc/kick.h"
 
 #include <mafianet/BitStream.h>
 #include <mafianet/MessageIdentifiers.h>
@@ -59,7 +58,7 @@ namespace Framework::Networking {
         case ID_DISCONNECTION_NOTIFICATION: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
-                _onPlayerDisconnectCallback(_packet, DisconnectionReason::GRACEFUL_SHUTDOWN);
+                _onPlayerDisconnectCallback(_packet, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
             }
             ClearClientState(packet->guid);
             return true;
@@ -67,7 +66,7 @@ namespace Framework::Networking {
         case ID_CONNECTION_LOST: {
             Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
             if (_onPlayerDisconnectCallback) {
-                _onPlayerDisconnectCallback(_packet, DisconnectionReason::LOST);
+                _onPlayerDisconnectCallback(_packet, DisconnectionReason::LOST, "");
             }
             ClearClientState(packet->guid);
             return true;
@@ -137,12 +136,15 @@ namespace Framework::Networking {
     }
 
     void NetworkServer::KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason) {
-        RPC::Kick payload;
+        DisconnectPayload payload;
         payload.reason       = static_cast<uint32_t>(reason);
         payload.customReason = customReason;
-        // RELIABLE_ORDERED so the reason arrives before CloseConnection's notification.
-        SendRPC(payload, guid, HIGH_PRIORITY, RELIABLE_ORDERED);
-        _peer->CloseConnection(guid, true);
+
+        // The reason rides along on ID_DISCONNECTION_NOTIFICATION (CloseConnection's reasonData), so the
+        // client learns why it was dropped without a separate, racing message.
+        MafiaNet::BitStream reasonData;
+        payload.Serialize(&reasonData, true);
+        _peer->CloseConnection(guid, true, 0, LOW_PRIORITY, &reasonData);
         ClearClientState(guid);
     }
 
