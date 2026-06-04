@@ -88,7 +88,8 @@ namespace Framework::Networking {
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
 
         if (_onPlayerDisconnectedCallback) {
-            _onPlayerDisconnectedCallback(_packet, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
+            // Locally initiated: there is no inbound packet, so pass null rather than a stale _packet.
+            _onPlayerDisconnectedCallback(nullptr, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
         }
         _state = PeerState::DISCONNECTED;
 

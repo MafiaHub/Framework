@@ -38,33 +38,49 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        // The observer perceives its avatar's dimension; keep them in sync so the base
-        // QuerySerialization filter and the construction check below agree.
+        // Keep the observer's dimension in sync with its avatar so the base filter and visible() agree.
         SetVirtualWorld(viewer->GetVirtualWorld());
 
-        // Spatial interest set around the viewer. A hash set so the per-entity membership test below
-        // is O(1): QueryReplicaList already walks every entity, so a linear scan here would make the
-        // whole pass O(entities × in-range) per connection, per network update.
+        const uint64_t myGUID = GetRakNetGUID().g;
+
         std::unordered_set<NetworkEntity *> inRange;
         _manager->QueryRadius(viewer->position, viewer->streamRange, inRange);
 
-        const uint64_t myGUID = GetRakNetGUID().g;
-        _manager->ForEachEntity([&](NetworkEntity *entity) {
-            // A connection always sees the entities it owns — its avatar and anything it currently has
-            // authority over, e.g. the vehicle it is driving — so they are never culled out from under
-            // it as it moves (interest is centred on the avatar, which freezes while the player is
-            // seated). The server still withholds serialize *updates* to the owner via
-            // NetworkEntity::QuerySerializationWithinWorld; only construction/destruction is gated here.
-            const bool ownedByUs = entity->ownerGUID == myGUID;
-            const bool visible   = entity->isVisible && (entity->alwaysVisible || entity == viewer || ownedByUs || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
+        // Owned entities (avatar + e.g. the vehicle being driven) are never culled, so they don't drop
+        // out as the frozen avatar's range leaves them behind.
+        const auto visible = [&](NetworkEntity *entity) {
+            return entity->isVisible && (entity->alwaysVisible || entity == viewer || entity->ownerGUID == myGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
+        };
 
-            const bool constructed = HasReplicaConstructed(entity);
-            if (visible && !constructed) {
+        // Construct candidates come only from the working set (in-range + owned + always-visible +
+        // avatar), never an O(entities) scan; visible() can be satisfied only by one of these sources.
+        std::unordered_set<NetworkEntity *> queued;
+        const auto consider = [&](NetworkEntity *entity) {
+            if (entity && visible(entity) && !HasReplicaConstructed(entity) && queued.insert(entity).second) {
                 newReplicasToCreate.Push(entity, _FILE_AND_LINE_);
             }
-            else if (!visible && constructed) {
+        };
+        for (NetworkEntity *entity : inRange) {
+            consider(entity);
+        }
+        if (const auto *owned = _manager->EntitiesOwnedBy(myGUID)) {
+            for (NetworkEntity *entity : *owned) {
+                consider(entity);
+            }
+        }
+        for (NetworkEntity *entity : _manager->AlwaysVisibleEntities()) {
+            consider(entity);
+        }
+        consider(viewer);
+
+        // Destroy side: only what this connection already has, dropping whatever turned invisible.
+        DataStructures::List<MafiaNet::Replica3 *> constructed;
+        GetConstructedReplicas(constructed);
+        for (unsigned i = 0; i < constructed.Size(); ++i) {
+            auto *entity = static_cast<NetworkEntity *>(constructed[i]);
+            if (entity && !visible(entity)) {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
-        });
+        }
     }
 } // namespace Framework::Networking::Replication

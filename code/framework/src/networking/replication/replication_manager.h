@@ -33,6 +33,7 @@ namespace Framework::Networking::Replication {
     class ReplicationManager final : public MafiaNet::ReplicaManager3 {
       public:
         ReplicationManager();
+        ~ReplicationManager();
 
         void Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, MafiaNet::RPC4 *rpc, bool isServer);
 
@@ -66,6 +67,12 @@ namespace Framework::Networking::Replication {
         void SetViewer(uint64_t guid, NetworkEntity *entity);
         NetworkEntity *GetViewer(uint64_t guid) const;
         void ClearViewer(uint64_t guid);
+
+        // Interest candidate indices, rebuilt each Tick() from live entities (see QueryReplicaList).
+        const std::unordered_set<NetworkEntity *> *EntitiesOwnedBy(uint64_t guid) const;
+        const std::unordered_set<NetworkEntity *> &AlwaysVisibleEntities() const {
+            return _alwaysVisible;
+        }
 
         // --- Interest management ---
         // Configure the spatial index extent. Defaults cover a 20km² map at 100m cells (~40k cells).
@@ -120,6 +127,10 @@ namespace Framework::Networking::Replication {
         MafiaNet::RPC4 *_rpc = nullptr;
         GridSectorizer _grid;
         std::unordered_map<uint64_t, NetworkEntity *> _viewers;
+        // Rebuilt from live entities each Tick(); DestroyEntity scrubs them so an intra-tick delete
+        // can't dangle.
+        std::unordered_map<uint64_t, std::unordered_set<NetworkEntity *>> _ownedByGuid;
+        std::unordered_set<NetworkEntity *> _alwaysVisible;
         fu2::function<void(uint64_t) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;

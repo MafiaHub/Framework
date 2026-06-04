@@ -64,6 +64,15 @@ namespace Framework::Networking::Replication {
 
     ReplicationManager::ReplicationManager() = default;
 
+    ReplicationManager::~ReplicationManager() {
+        // _rpc outlives this manager (peer member order); drop the client slots so a late
+        // ForceState/SetOwner can't dispatch into a freed `this`.
+        if (_rpc && !_isServer) {
+            _rpc->UnregisterSlot(kForceStateId);
+            _rpc->UnregisterSlot(kSetOwnerId);
+        }
+    }
+
     void ReplicationManager::ConfigureGrid(float cellSize, float worldMin, float worldMax) {
         _gridCellSize = cellSize;
         _gridMin      = worldMin;
@@ -78,8 +87,10 @@ namespace Framework::Networking::Replication {
         SetNetworkIDManager(networkIDManager);
         peer->AttachPlugin(this);
 
-        // The owning client applies forced state pushed by the server (teleports, engine, ...).
-        if (_rpc) {
+        // ForceState/SetOwner are strictly server->owner pushes: the server is always the sender and
+        // never a legitimate receiver. Register the handlers on the client only, so a peer cannot
+        // Signal them back at the server to teleport entities or reassign ownership it doesn't hold.
+        if (_rpc && !_isServer) {
             _rpc->RegisterSlot(kForceStateId, &OnForceState, this, 0);
             _rpc->RegisterSlot(kSetOwnerId, &OnSetOwner, this, 0);
         }
@@ -97,14 +108,18 @@ namespace Framework::Networking::Replication {
         _rpc->Signal(kForceStateId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
     }
 
+    const std::unordered_set<NetworkEntity *> *ReplicationManager::EntitiesOwnedBy(uint64_t guid) const {
+        const auto it = _ownedByGuid.find(guid);
+        return it != _ownedByGuid.end() ? &it->second : nullptr;
+    }
+
     void ReplicationManager::SetOwner(NetworkEntity *entity, uint64_t guid) {
         if (!entity) {
             return;
         }
         entity->ownerGUID = guid;
-        // The new owner is otherwise blind to the change: the server withholds serialize to whoever
-        // owns an entity, so it would never receive the updated ownerGUID. Tell it directly. Other
-        // peers, and any previous owner that just lost authority, learn it through normal serialize.
+        // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
+        // owner directly. Other peers (and any prior owner) pick it up through serialize.
         if (_rpc && _isServer && guid != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             MafiaNet::BitStream bs;
             MafiaNet::NetworkID networkId = entity->GetNetworkID();
@@ -134,11 +149,21 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return;
         }
-        // Only a viewer entity owns a viewer mapping. Owned non-viewer entities (e.g. a vehicle owned
-        // by a player) share the player's GUID, so we must NOT clear the mapping for those.
+        // Only a viewer entity owns a viewer mapping; owned non-viewer entities share the owner GUID.
         if (entity->isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             ClearViewer(entity->ownerGUID);
         }
+        // Scrub the interest indices so this delete can't dangle before the next Tick() rebuild.
+        for (auto it = _ownedByGuid.begin(); it != _ownedByGuid.end();) {
+            it->second.erase(entity);
+            if (it->second.empty()) {
+                it = _ownedByGuid.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+        _alwaysVisible.erase(entity);
         if (_onEntityDestroyed) {
             _onEntityDestroyed(entity->GetNetworkID());
         }
@@ -190,12 +215,20 @@ namespace Framework::Networking::Replication {
             _gridReady = true;
         }
 
-        // GridSectorizer has no incremental removal in the default build, so we rebuild every tick.
-        // Entities are inserted as a tiny box around their XZ position (GridSectorizer asserts on a
-        // zero-area entry).
+        // Rebuilt from scratch each tick: the grid (no incremental removal) and the interest indices
+        // (kept authoritative against direct ownerGUID/alwaysVisible writes). Entities go in as a tiny
+        // box around their XZ position — GridSectorizer asserts on a zero-area entry.
         _grid.Clear();
+        _ownedByGuid.clear();
+        _alwaysVisible.clear();
         ForEachEntity([this](NetworkEntity *entity) {
             _grid.AddEntry(entity, entity->position.x - kPointEpsilon, entity->position.z - kPointEpsilon, entity->position.x + kPointEpsilon, entity->position.z + kPointEpsilon);
+            if (entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
+                _ownedByGuid[entity->ownerGUID].insert(entity);
+            }
+            if (entity->alwaysVisible) {
+                _alwaysVisible.insert(entity);
+            }
         });
     }
 
