@@ -8,9 +8,9 @@
 
 #pragma once
 
+#include "interest_grid.h"
 #include "network_entity.h"
 
-#include <mafianet/GridSectorizer.h>
 #include <mafianet/NetworkIDManager.h>
 #include <mafianet/RPC4Plugin.h>
 #include <mafianet/ReplicaManager3.h>
@@ -28,7 +28,7 @@
 namespace Framework::Networking::Replication {
     // The replicated world: a ReplicaManager3 that owns the set of NetworkEntity objects. It
     // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
-    // entity, and maintains a GridSectorizer used by ReplicationConnection::QueryReplicaList for
+    // entity, and drives an InterestGrid that ReplicationConnection::QueryReplicaList reads for
     // interest management.
     class ReplicationManager final : public MafiaNet::ReplicaManager3 {
       public:
@@ -68,24 +68,23 @@ namespace Framework::Networking::Replication {
         NetworkEntity *GetViewer(uint64_t guid) const;
         void ClearViewer(uint64_t guid);
 
-        // Interest candidate indices, rebuilt each Tick() from live entities (see QueryReplicaList).
-        const std::unordered_set<NetworkEntity *> *EntitiesOwnedBy(uint64_t guid) const;
+        // Interest candidate indices, rebuilt each RebuildInterest() from live entities and read by
+        // QueryReplicaList. Delegated to the InterestGrid.
+        const std::unordered_set<NetworkEntity *> *EntitiesOwnedBy(uint64_t guid) const {
+            return _interest.OwnedBy(guid);
+        }
         const std::unordered_set<NetworkEntity *> &AlwaysVisibleEntities() const {
-            return _alwaysVisible;
+            return _interest.AlwaysVisible();
         }
 
         // --- Interest management ---
-        // Configure the spatial index extent. Defaults cover a 20km² map at 100m cells (~40k cells).
-        // Pick bounds that enclose the playable area; entities outside clamp to edge cells (still
-        // found by radius queries, just less precisely). Call before the first Tick().
+        // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
+        // RebuildInterest().
         void ConfigureGrid(float cellSize, float worldMin, float worldMax);
-        // Rebuilds the spatial index from current entity positions. Server only; call once per tick
+        // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
-        void Tick();
-        // Inserts entities within `radius` of `center` into `out`. The set both de-duplicates the
-        // grid's per-cell hits and gives QueryReplicaList O(1) membership tests. Interest is computed
-        // on the XZ ground plane only (vertical separation does not cull) — adjust if your game's
-        // ground plane differs.
+        void RebuildInterest();
+        // Insert entities within `radius` of `center` into `out` (see InterestGrid::QueryRadius).
         void QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
 
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
@@ -120,17 +119,9 @@ namespace Framework::Networking::Replication {
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
         uint64_t _nextNetworkId = 0;
-        bool _gridReady   = false;
-        float _gridCellSize = 100.0f;
-        float _gridMin      = -10000.0f;
-        float _gridMax      = 10000.0f;
         MafiaNet::RPC4 *_rpc = nullptr;
-        GridSectorizer _grid;
+        InterestGrid _interest;
         std::unordered_map<uint64_t, NetworkEntity *> _viewers;
-        // Rebuilt from live entities each Tick(); DestroyEntity scrubs them so an intra-tick delete
-        // can't dangle.
-        std::unordered_map<uint64_t, std::unordered_set<NetworkEntity *>> _ownedByGuid;
-        std::unordered_set<NetworkEntity *> _alwaysVisible;
         fu2::function<void(uint64_t) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;

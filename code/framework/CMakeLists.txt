@@ -24,6 +24,7 @@ set(FRAMEWORK_SRC
 
     src/networking/replication/network_entity.cpp
     src/networking/replication/entity_factory.cpp
+    src/networking/replication/interest_grid.cpp
     src/networking/replication/replication_manager.cpp
     src/networking/replication/replication_connection.cpp
 

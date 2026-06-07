@@ -42,7 +42,7 @@ namespace Framework::Networking {
 
         // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance.
         if (_replicationManager) {
-            _replicationManager->Tick();
+            _replicationManager->RebuildInterest();
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {

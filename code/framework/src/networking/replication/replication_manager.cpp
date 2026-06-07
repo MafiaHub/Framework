@@ -11,16 +11,8 @@
 #include "entity_factory.h"
 #include "replication_connection.h"
 
-#include <mafianet/DS_List.h>
-
-#include <cmath>
-
 namespace Framework::Networking::Replication {
     namespace {
-        // Half-extent of a point entity's bounding box in the spatial index. GridSectorizer requires
-        // min < max (it asserts otherwise), so a point is inserted as a tiny box around its position.
-        constexpr float kPointEpsilon = 0.01f;
-
         // Built-in server->owner state push (see NetworkEntity::ForceState). Wire: id, then the
         // entity's WriteForcedState payload.
         constexpr const char *kForceStateId = "Framework::ForceState";
@@ -74,10 +66,7 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::ConfigureGrid(float cellSize, float worldMin, float worldMax) {
-        _gridCellSize = cellSize;
-        _gridMin      = worldMin;
-        _gridMax      = worldMax;
-        _gridReady    = false; // re-initialised on next Tick()
+        _interest.Configure(cellSize, worldMin, worldMax);
     }
 
     void ReplicationManager::Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, MafiaNet::RPC4 *rpc, bool isServer) {
@@ -106,11 +95,6 @@ namespace Framework::Networking::Replication {
         bs.WriteCompressed(networkId);
         entity->WriteForcedState(&bs);
         _rpc->Signal(kForceStateId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
-    }
-
-    const std::unordered_set<NetworkEntity *> *ReplicationManager::EntitiesOwnedBy(uint64_t guid) const {
-        const auto it = _ownedByGuid.find(guid);
-        return it != _ownedByGuid.end() ? &it->second : nullptr;
     }
 
     void ReplicationManager::SetOwner(NetworkEntity *entity, uint64_t guid) {
@@ -153,17 +137,8 @@ namespace Framework::Networking::Replication {
         if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             ClearViewer(entity->ownerGUID);
         }
-        // Scrub the interest indices so this delete can't dangle before the next Tick() rebuild.
-        for (auto it = _ownedByGuid.begin(); it != _ownedByGuid.end();) {
-            it->second.erase(entity);
-            if (it->second.empty()) {
-                it = _ownedByGuid.erase(it);
-            }
-            else {
-                ++it;
-            }
-        }
-        _alwaysVisible.erase(entity);
+        // Scrub the interest indices so this delete can't dangle before the next rebuild.
+        _interest.Remove(entity);
         if (_onEntityDestroyed) {
             _onEntityDestroyed(entity->GetNetworkID());
         }
@@ -206,52 +181,18 @@ namespace Framework::Networking::Replication {
         _viewers.erase(guid);
     }
 
-    void ReplicationManager::Tick() {
+    void ReplicationManager::RebuildInterest() {
         if (!_isServer) {
             return;
         }
-        if (!_gridReady) {
-            _grid.Init(_gridCellSize, _gridCellSize, _gridMin, _gridMin, _gridMax, _gridMax);
-            _gridReady = true;
-        }
-
-        // Rebuilt from scratch each tick: the grid (no incremental removal) and the interest indices
-        // (kept authoritative against direct ownerGUID/alwaysVisible writes). Entities go in as a tiny
-        // box around their XZ position — GridSectorizer asserts on a zero-area entry.
-        _grid.Clear();
-        _ownedByGuid.clear();
-        _alwaysVisible.clear();
+        _interest.BeginRebuild();
         ForEachEntity([this](NetworkEntity *entity) {
-            _grid.AddEntry(entity, entity->position.x - kPointEpsilon, entity->position.z - kPointEpsilon, entity->position.x + kPointEpsilon, entity->position.z + kPointEpsilon);
-            if (entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
-                _ownedByGuid[entity->ownerGUID].insert(entity);
-            }
-            if (entity->streaming.alwaysVisible) {
-                _alwaysVisible.insert(entity);
-            }
+            _interest.Insert(entity);
         });
     }
 
     void ReplicationManager::QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out) {
-        if (!_gridReady) {
-            return;
-        }
-        DataStructures::List<void *> hits;
-        _grid.GetEntries(hits, center.x - radius, center.z - radius, center.x + radius, center.z + radius);
-
-        const float radiusSq = radius * radius;
-        for (unsigned i = 0; i < hits.Size(); ++i) {
-            auto *entity = static_cast<NetworkEntity *>(hits[i]);
-            if (!entity) {
-                continue;
-            }
-            const glm::vec3 delta = entity->position - center;
-            // 2D (XZ) distance check; entries spanning multiple cells can repeat — the set dedupes.
-            if (delta.x * delta.x + delta.z * delta.z > radiusSq) {
-                continue;
-            }
-            out.insert(entity);
-        }
+        _interest.QueryRadius(center, radius, out);
     }
 
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
