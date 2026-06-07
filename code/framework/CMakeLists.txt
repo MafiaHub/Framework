@@ -92,6 +92,7 @@ list(APPEND FRAMEWORK_CLIENT_SRC
     src/gui/sdk.cpp
     src/gui/backend/view_d3d11.cpp
     src/gui/cef/app.cpp
+    src/gui/cef/renderer_app.cpp
     src/gui/cef/client.cpp
     src/gui/cef/render_handler.cpp
     src/gui/cef/life_span_handler.cpp
