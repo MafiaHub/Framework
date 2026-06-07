@@ -263,7 +263,7 @@ namespace Framework::Integrations::Server {
             resources.tickRate     = _opts.worldConfig.tickInterval;
             if (_scriptingModule) {
                 for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    resources.resources.push_back({resource.name, resource.version, 0}); // Hash computed on demand
+                    resources.resources.push_back({resource.name, resource.version});
                 }
             }
             net->SendRPC(resources, guid);

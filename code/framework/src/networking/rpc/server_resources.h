@@ -22,12 +22,10 @@ namespace Framework::Networking::RPC {
     struct ResourceInfo {
         std::string name;
         std::string version;
-        uint32_t hash = 0;
 
         void Serialize(MafiaNet::BitStream *bs, bool write) {
             bs->Serialize(write, name);
             bs->Serialize(write, version);
-            bs->Serialize(write, hash);
         }
     };
 

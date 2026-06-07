@@ -349,7 +349,6 @@ namespace Framework::Integrations::Client {
                 Client::Scripting::ServerResourceInfo info;
                 info.name    = resInfo.name;
                 info.version = resInfo.version;
-                info.hash    = resInfo.hash;
                 _pendingServerResources.push_back(info);
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
