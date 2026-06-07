@@ -68,15 +68,6 @@ namespace Framework::Networking::Replication {
         NetworkEntity *GetViewer(uint64_t guid) const;
         void ClearViewer(uint64_t guid);
 
-        // Interest candidate indices, rebuilt each RebuildInterest() from live entities and read by
-        // QueryReplicaList. Delegated to the InterestGrid.
-        const std::unordered_set<NetworkEntity *> *EntitiesOwnedBy(uint64_t guid) const {
-            return _interest.OwnedBy(guid);
-        }
-        const std::unordered_set<NetworkEntity *> &AlwaysVisibleEntities() const {
-            return _interest.AlwaysVisible();
-        }
-
         // --- Interest management ---
         // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
         // RebuildInterest().
@@ -84,8 +75,9 @@ namespace Framework::Networking::Replication {
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
         void RebuildInterest();
-        // Insert entities within `radius` of `center` into `out` (see InterestGrid::QueryRadius).
-        void QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
+        // Fill `out` with the entities relevant to `viewer` for the connection owning `viewerGUID`
+        // (see InterestGrid::CollectVisible). The relevance rule lives in the grid; this just forwards.
+        void CollectInterest(NetworkEntity *viewer, uint64_t viewerGUID, std::unordered_set<NetworkEntity *> &out);
 
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
         // while it is still resolvable. The integration layer wires its player-disconnect notification

@@ -87,4 +87,44 @@ namespace Framework::Networking::Replication {
         const auto it = _ownedByGuid.find(guid);
         return it != _ownedByGuid.end() ? &it->second : nullptr;
     }
+
+    void InterestGrid::CollectVisible(NetworkEntity *viewer, uint64_t viewerGUID, std::unordered_set<NetworkEntity *> &out) {
+        if (!viewer) {
+            return;
+        }
+        const auto observerWorld = viewer->GetVirtualWorld();
+
+        std::unordered_set<NetworkEntity *> inRange;
+        QueryRadius(viewer->position, viewer->streaming.range, inRange);
+
+        const auto visible = [&](NetworkEntity *entity) {
+            if (!entity || !entity->streaming.visible) {
+                return false;
+            }
+            // Owned and always-visible entities bypass range/dimension culling so they never drop out
+            // (the avatar itself, or e.g. a vehicle being driven past the viewer's own range).
+            return entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == viewerGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld) && inRange.contains(entity));
+        };
+
+        const auto consider = [&](NetworkEntity *entity) {
+            if (visible(entity)) {
+                out.insert(entity);
+            }
+        };
+
+        // Candidates come only from the working sets (in-range + owned + always-visible + the viewer),
+        // never an O(entities) scan; the predicate can be satisfied only by one of these sources.
+        for (NetworkEntity *entity : inRange) {
+            consider(entity);
+        }
+        if (const auto *owned = OwnedBy(viewerGUID)) {
+            for (NetworkEntity *entity : *owned) {
+                consider(entity);
+            }
+        }
+        for (NetworkEntity *entity : AlwaysVisible()) {
+            consider(entity);
+        }
+        consider(viewer);
+    }
 } // namespace Framework::Networking::Replication

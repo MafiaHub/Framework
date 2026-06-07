@@ -38,6 +38,13 @@ namespace Framework::Networking::Replication {
         // Drop an entity from the indices so an intra-tick delete can't dangle before the next rebuild.
         void Remove(NetworkEntity *entity);
 
+        // Fill `out` with every entity relevant to `viewer` (a connection's avatar): in interest
+        // radius and a visible dimension, plus everything the viewer owns and everything flagged
+        // always-visible. This is the single home of the server's relevance rule — the connection
+        // only diffs the result against what it has already constructed.
+        void CollectVisible(NetworkEntity *viewer, uint64_t viewerGUID, std::unordered_set<NetworkEntity *> &out);
+
+      private:
         // Insert entities within `radius` of `center` into `out`. Interest is computed on the XZ
         // ground plane only (vertical separation does not cull). The set dedupes the grid's per-cell
         // hits and gives callers O(1) membership tests.
@@ -48,7 +55,6 @@ namespace Framework::Networking::Replication {
             return _alwaysVisible;
         }
 
-      private:
         bool _ready     = false;
         float _cellSize = 100.0f;
         float _min      = -10000.0f;

@@ -38,47 +38,27 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        // Keep the observer's dimension in sync with its avatar so the base filter and visible() agree.
+        // Keep the observer's dimension in sync with its avatar so the base filter and the grid's
+        // relevance rule agree.
         SetVirtualWorld(viewer->GetVirtualWorld());
 
-        const uint64_t myGUID = GetRakNetGUID().g;
+        // The relevance rule itself lives in InterestGrid::CollectVisible; here we only reconcile the
+        // resulting set against what this connection has already constructed.
+        std::unordered_set<NetworkEntity *> relevant;
+        _manager->CollectInterest(viewer, GetRakNetGUID().g, relevant);
 
-        std::unordered_set<NetworkEntity *> inRange;
-        _manager->QueryRadius(viewer->position, viewer->streaming.range, inRange);
-
-        // Owned entities (avatar + e.g. the vehicle being driven) are never culled, so they don't drop
-        // out as the frozen avatar's range leaves them behind.
-        const auto visible = [&](NetworkEntity *entity) {
-            return entity->streaming.visible && (entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == myGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
-        };
-
-        // Construct candidates come only from the working set (in-range + owned + always-visible +
-        // avatar), never an O(entities) scan; visible() can be satisfied only by one of these sources.
-        std::unordered_set<NetworkEntity *> queued;
-        const auto consider = [&](NetworkEntity *entity) {
-            if (entity && visible(entity) && !HasReplicaConstructed(entity) && queued.insert(entity).second) {
+        for (NetworkEntity *entity : relevant) {
+            if (!HasReplicaConstructed(entity)) {
                 newReplicasToCreate.Push(entity, _FILE_AND_LINE_);
             }
-        };
-        for (NetworkEntity *entity : inRange) {
-            consider(entity);
         }
-        if (const auto *owned = _manager->EntitiesOwnedBy(myGUID)) {
-            for (NetworkEntity *entity : *owned) {
-                consider(entity);
-            }
-        }
-        for (NetworkEntity *entity : _manager->AlwaysVisibleEntities()) {
-            consider(entity);
-        }
-        consider(viewer);
 
-        // Destroy side: only what this connection already has, dropping whatever turned invisible.
+        // Destroy side: only what this connection already has, dropping whatever is no longer relevant.
         DataStructures::List<MafiaNet::Replica3 *> constructed;
         GetConstructedReplicas(constructed);
         for (unsigned i = 0; i < constructed.Size(); ++i) {
             auto *entity = static_cast<NetworkEntity *>(constructed[i]);
-            if (entity && !visible(entity)) {
+            if (entity && !relevant.contains(entity)) {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }

@@ -191,8 +191,8 @@ namespace Framework::Networking::Replication {
         });
     }
 
-    void ReplicationManager::QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out) {
-        _interest.QueryRadius(center, radius, out);
+    void ReplicationManager::CollectInterest(NetworkEntity *viewer, uint64_t viewerGUID, std::unordered_set<NetworkEntity *> &out) {
+        _interest.CollectVisible(viewer, viewerGUID, out);
     }
 
     void ReplicationManager::OnClosedConnection(const MafiaNet::SystemAddress &systemAddress, MafiaNet::RakNetGUID rakNetGUID, MafiaNet::PI2_LostConnectionReason lostConnectionReason) {
