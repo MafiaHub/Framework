@@ -14,7 +14,7 @@
 namespace Framework::Networking::Replication {
     namespace {
         // Built-in server->owner state push (see NetworkEntity::ForceState). Wire: id, then the
-        // entity's WriteForcedState payload.
+        // entity's SerializeForcedState payload.
         constexpr const char *kForceStateId = "Framework::ForceState";
 
         // Built-in server->owner ownership grant (see NetworkEntity::SetOwner). Wire: id, ownerGUID.
@@ -34,7 +34,7 @@ namespace Framework::Networking::Replication {
             if (!entity) {
                 return;
             }
-            entity->ReadForcedState(bs);
+            entity->SerializeForcedState(bs, false);
             entity->OnStateForced();
         }
 
@@ -93,7 +93,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::NetworkID networkId = entity->GetNetworkID();
         // NetworkIDs are small and monotonic, so WriteCompressed strips the leading zero bytes.
         bs.WriteCompressed(networkId);
-        entity->WriteForcedState(&bs);
+        entity->SerializeForcedState(&bs, true);
         _rpc->Signal(kForceStateId, &bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, MafiaNet::RakNetGUID(entity->ownerGUID), false, false);
     }
 

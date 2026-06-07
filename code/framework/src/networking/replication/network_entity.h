@@ -21,11 +21,41 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityFactory;
 
+    // Bidirectional adapter over MafiaNet::VariableDeltaSerializer: the same Field(member) call
+    // serializes on the sender and deserializes on the receiver, so a replica's per-tick field list
+    // is declared once and the read/write order cannot diverge between peers. NetworkEntity builds
+    // one per Serialize()/Deserialize() and passes it to SerializeFields().
+    class FieldSerializer final {
+      public:
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx) : _vds(vds), _serialize(ctx) {}
+        FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx) : _vds(vds), _deserialize(ctx) {}
+
+        bool Writing() const {
+            return _serialize != nullptr;
+        }
+
+        template <typename T>
+        void Field(T &value) {
+            if (_serialize) {
+                _vds->SerializeVariable(_serialize, value);
+            }
+            else {
+                _vds->DeserializeVariable(_deserialize, value);
+            }
+        }
+
+      private:
+        MafiaNet::VariableDeltaSerializer *_vds                                = nullptr;
+        MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize    = nullptr;
+        MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
+    };
+
     // A replicated game object: it owns its state as plain members, and ReplicaManager3 +
     // NetworkIDManager track it while GridSectorizer scopes it. Game-specific entities (player,
-    // vehicle, ...) derive from this, add their own fields, and override SerializeFields /
-    // DeserializeFields (per-tick state) and/or OnSerializeConstruction / OnDeserializeConstruction
-    // (one-shot spawn state).
+    // vehicle, ...) derive from this, add their own fields, and override SerializeFields (per-tick
+    // state) and/or OnSerializeConstruction (one-shot spawn state). Every (de)serialization hook is
+    // a single bidirectional function taking a `write` flag, so the read and write paths cannot
+    // drift out of sync.
     //
     // Per-tick updates go through MafiaNet::VariableDeltaSerializer: each variable is compared
     // against the last value sent to a system and transmitted only when it changes. Construction
@@ -64,22 +94,16 @@ namespace Framework::Networking::Replication {
         Streaming streaming;
 
         // --- Game extension points ---
-        // One-shot spawn state, written/read alongside the common construction snapshot.
-        virtual void OnSerializeConstruction(MafiaNet::BitStream *bs) {
+        // One-shot spawn state, (de)serialized alongside the common construction snapshot. Append
+        // your fields with bs->Serialize(write, field); one definition serves both directions.
+        virtual void OnSerializeConstruction(MafiaNet::BitStream *bs, bool write) {
             (void)bs;
+            (void)write;
         }
-        virtual void OnDeserializeConstruction(MafiaNet::BitStream *bs) {
-            (void)bs;
-        }
-        // Per-tick delta state. Append your fields with vds->SerializeVariable(ctx, field) /
-        // vds->DeserializeVariable(ctx, field), in the same order on both sides.
-        virtual void SerializeFields(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx) {
-            (void)vds;
-            (void)ctx;
-        }
-        virtual void DeserializeFields(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx) {
-            (void)vds;
-            (void)ctx;
+        // Per-tick delta state. Append your fields with fields.Field(member); the same call writes on
+        // the sender and reads on the receiver, so the field order can never diverge between peers.
+        virtual void SerializeFields(FieldSerializer &fields) {
+            (void)fields;
         }
         // Called once on the client after construction, e.g. to request the backing game object.
         virtual void OnConstructed() {}
@@ -87,9 +111,8 @@ namespace Framework::Networking::Replication {
         // The server-authoritative state pushed to the owner by ForceState (the owner is otherwise
         // authoritative over its own updates, and the server withholds serialize to it). Default
         // carries the transform; override to send additional state, e.g. a vehicle's engine/config.
-        // Must read/write symmetrically.
-        virtual void WriteForcedState(MafiaNet::BitStream *bs) const;
-        virtual void ReadForcedState(MafiaNet::BitStream *bs);
+        // Single bidirectional definition: append fields with bs->Serialize(write, field).
+        virtual void SerializeForcedState(MafiaNet::BitStream *bs, bool write);
 
         // Called on the owning client after ReadForcedState has applied the forced fields. Override
         // to push them into the game (teleport and preload the world, set the engine, ...).
@@ -146,9 +169,8 @@ namespace Framework::Networking::Replication {
         // clients adopt it. Single source of truth for the rule shared by construction and deltas.
         void AdoptIncomingOwner(uint64_t incomingOwner);
 
-        // Full one-shot construction snapshot of the common state.
-        void WriteConstruction(MafiaNet::BitStream *bs) const;
-        void ReadConstruction(MafiaNet::BitStream *bs);
+        // Full one-shot construction snapshot of the common state (transform + owner), bidirectional.
+        void SerializeBaseState(MafiaNet::BitStream *bs, bool write);
 
         // Concrete type id over the wire (CRC32 of the registered name). Stamped by EntityFactory at
         // construction and written by WriteAllocationID; not game-settable.

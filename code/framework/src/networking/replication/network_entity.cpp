@@ -45,30 +45,30 @@ namespace Framework::Networking::Replication {
 
     // --- One-shot construction snapshot (full state, no delta) ---
 
-    void NetworkEntity::WriteConstruction(MafiaNet::BitStream *bs) const {
-        bs->Write(ownerGUID);
-        bs->Write(position);
-        bs->Write(velocity);
-        bs->Write(rotation);
-    }
-
-    void NetworkEntity::ReadConstruction(MafiaNet::BitStream *bs) {
-        uint64_t incomingOwner = ownerGUID;
-        bs->Read(incomingOwner);
-        AdoptIncomingOwner(incomingOwner);
-        bs->Read(position);
-        bs->Read(velocity);
-        bs->Read(rotation);
+    void NetworkEntity::SerializeBaseState(MafiaNet::BitStream *bs, bool write) {
+        if (write) {
+            bs->Write(ownerGUID);
+        }
+        else {
+            // Read into a temporary so the server can ignore a client-supplied owner (see
+            // AdoptIncomingOwner); clients adopt the owner the server sends.
+            uint64_t incomingOwner = ownerGUID;
+            bs->Read(incomingOwner);
+            AdoptIncomingOwner(incomingOwner);
+        }
+        bs->Serialize(write, position);
+        bs->Serialize(write, velocity);
+        bs->Serialize(write, rotation);
     }
 
     void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
-        WriteConstruction(constructionBitstream);
-        OnSerializeConstruction(constructionBitstream);
+        SerializeBaseState(constructionBitstream, true);
+        OnSerializeConstruction(constructionBitstream, true);
     }
 
     bool NetworkEntity::DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
-        ReadConstruction(constructionBitstream);
-        OnDeserializeConstruction(constructionBitstream);
+        SerializeBaseState(constructionBitstream, false);
+        OnSerializeConstruction(constructionBitstream, false);
         OnConstructed();
         return true;
     }
@@ -83,14 +83,9 @@ namespace Framework::Networking::Replication {
         delete this;
     }
 
-    void NetworkEntity::WriteForcedState(MafiaNet::BitStream *bs) const {
-        bs->Write(position);
-        bs->Write(rotation);
-    }
-
-    void NetworkEntity::ReadForcedState(MafiaNet::BitStream *bs) {
-        bs->Read(position);
-        bs->Read(rotation);
+    void NetworkEntity::SerializeForcedState(MafiaNet::BitStream *bs, bool write) {
+        bs->Serialize(write, position);
+        bs->Serialize(write, rotation);
     }
 
     void NetworkEntity::ForceState() {
@@ -131,11 +126,14 @@ namespace Framework::Networking::Replication {
         // whenLastSerialized == 0 means this is the first send to a fresh system: write every
         // variable in full; otherwise only changed variables are written.
         _vds.BeginIdenticalSerialize(&ctx, serializeParameters->whenLastSerialized == 0, &serializeParameters->outputBitstream[0]);
+        // ownerGUID is kept explicit (the receiver side filters it via AdoptIncomingOwner); the
+        // transform and any subclass fields flow through the shared bidirectional FieldSerializer.
         _vds.SerializeVariable(&ctx, ownerGUID);
-        _vds.SerializeVariable(&ctx, position);
-        _vds.SerializeVariable(&ctx, velocity);
-        _vds.SerializeVariable(&ctx, rotation);
-        SerializeFields(&_vds, &ctx);
+        FieldSerializer fields(&_vds, &ctx);
+        fields.Field(position);
+        fields.Field(velocity);
+        fields.Field(rotation);
+        SerializeFields(fields);
         _vds.EndSerialize(&ctx);
 
         // BeginIdenticalSerialize already produces one delta bitstream shared across all recipients
@@ -160,10 +158,11 @@ namespace Framework::Networking::Replication {
         uint64_t incomingOwner = ownerGUID;
         _vds.DeserializeVariable(&ctx, incomingOwner);
         AdoptIncomingOwner(incomingOwner);
-        _vds.DeserializeVariable(&ctx, position);
-        _vds.DeserializeVariable(&ctx, velocity);
-        _vds.DeserializeVariable(&ctx, rotation);
-        DeserializeFields(&_vds, &ctx);
+        FieldSerializer fields(&_vds, &ctx);
+        fields.Field(position);
+        fields.Field(velocity);
+        fields.Field(rotation);
+        SerializeFields(fields);
         _vds.EndDeserialize(&ctx);
 
         // Already shifted to our local clock by RakPeer; do not subtract GetClockDifferential.
