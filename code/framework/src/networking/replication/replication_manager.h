@@ -25,6 +25,10 @@
 #include <utility>
 #include <vector>
 
+namespace Framework::Networking {
+    class NetworkPeer;
+} // namespace Framework::Networking
+
 namespace Framework::Networking::Replication {
     // The replicated world: a ReplicaManager3 that owns the set of NetworkEntity objects. It
     // creates/destroys entities, resolves them by NetworkID, tracks each connection's "viewer"
@@ -35,7 +39,9 @@ namespace Framework::Networking::Replication {
         ReplicationManager();
         ~ReplicationManager();
 
-        void Init(MafiaNet::RakPeerInterface *peer, MafiaNet::NetworkIDManager *networkIDManager, MafiaNet::RPC4 *rpc, bool isServer);
+        // `owner` is the peer this manager belongs to; it supplies the RakPeer, NetworkIDManager and
+        // the typed RPC used for the ForceState/SetOwner pushes.
+        void Init(NetworkPeer *owner, bool isServer);
 
         // Server: push the entity's forced state to its owner — the server's authoritative override
         // of an owned entity (see NetworkEntity::ForceState / OnStateForced). No-op for unowned
@@ -111,7 +117,7 @@ namespace Framework::Networking::Replication {
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
         uint64_t _nextNetworkId = 0;
-        MafiaNet::RPC4 *_rpc = nullptr;
+        NetworkPeer *_owner = nullptr;
         InterestGrid _interest;
         std::unordered_map<uint64_t, NetworkEntity *> _viewers;
         fu2::function<void(uint64_t) const> _onClientDisconnect;

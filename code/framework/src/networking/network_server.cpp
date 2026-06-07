@@ -35,7 +35,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_assetStreamer);
 
         // Run replication as the authoritative server.
-        _replicationManager->Init(_peer, &_networkIDManager, &_rpc, true);
+        _replicationManager->Init(this, true);
 
         // Gate replication behind the handshake: don't auto-create the connection on connect (see
         // PushReplicationConnection). autoDestroy stays on so dropped peers are torn down.

@@ -32,7 +32,7 @@ namespace Framework::Networking {
         _peer->AttachPlugin(&_assetStreamer);
 
         // Run replication as a client: receive constructions and serialize owned entities upstream.
-        _replicationManager->Init(_peer, &_networkIDManager, &_rpc, false);
+        _replicationManager->Init(this, false);
 
         _initialized = true;
         return NetworkPeerError::NETWORK_PEER_NONE;

@@ -114,6 +114,23 @@ namespace Framework::Networking {
             _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, guid, false, false);
         }
 
+        // Lower-level escape hatch for handlers that must decode the bitstream themselves — e.g. a
+        // payload whose tail is polymorphic (read an id, resolve the object, let it deserialize the
+        // rest). Prefer the typed RegisterRPC<T> for fixed-shape payloads. The handler is kept alive
+        // for the peer's lifetime, like the typed slots.
+        void RegisterRawRPC(const char *identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
+            auto slot     = std::make_unique<RPCSlot>(std::move(handler));
+            void *context = slot.get();
+            _rpcHandlers.push_back(std::move(slot));
+            _rpc.RegisterSlot(identifier, &NetworkPeer::DispatchRPC, context, 0);
+        }
+
+        // Send a pre-encoded bitstream to a single system under a raw identifier (pairs with
+        // RegisterRawRPC). The caller owns the bitstream layout.
+        void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            _rpc.Signal(identifier, &bs, priority, reliability, 0, guid, false, false);
+        }
+
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
