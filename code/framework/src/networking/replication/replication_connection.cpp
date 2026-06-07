@@ -44,12 +44,12 @@ namespace Framework::Networking::Replication {
         const uint64_t myGUID = GetRakNetGUID().g;
 
         std::unordered_set<NetworkEntity *> inRange;
-        _manager->QueryRadius(viewer->position, viewer->streamRange, inRange);
+        _manager->QueryRadius(viewer->position, viewer->streaming.range, inRange);
 
         // Owned entities (avatar + e.g. the vehicle being driven) are never culled, so they don't drop
         // out as the frozen avatar's range leaves them behind.
         const auto visible = [&](NetworkEntity *entity) {
-            return entity->isVisible && (entity->alwaysVisible || entity == viewer || entity->ownerGUID == myGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
+            return entity->streaming.visible && (entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == myGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), GetVirtualWorld()) && inRange.contains(entity)));
         };
 
         // Construct candidates come only from the working set (in-range + owned + always-visible +

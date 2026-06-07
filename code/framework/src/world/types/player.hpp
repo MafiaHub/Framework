@@ -29,8 +29,8 @@ namespace Framework::World::Archetypes {
 
         void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {
             if (entity) {
-                entity->ownerGUID = guid;
-                entity->isViewer  = true;
+                entity->ownerGUID          = guid;
+                entity->streaming.isViewer = true;
             }
         }
     };

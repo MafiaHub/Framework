@@ -150,7 +150,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         // Only a viewer entity owns a viewer mapping; owned non-viewer entities share the owner GUID.
-        if (entity->isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
+        if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
             ClearViewer(entity->ownerGUID);
         }
         // Scrub the interest indices so this delete can't dangle before the next Tick() rebuild.
@@ -192,7 +192,7 @@ namespace Framework::Networking::Replication {
 
     void ReplicationManager::SetViewer(uint64_t guid, NetworkEntity *entity) {
         if (entity) {
-            entity->isViewer = true;
+            entity->streaming.isViewer = true;
         }
         _viewers[guid] = entity;
     }
@@ -226,7 +226,7 @@ namespace Framework::Networking::Replication {
             if (entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
                 _ownedByGuid[entity->ownerGUID].insert(entity);
             }
-            if (entity->alwaysVisible) {
+            if (entity->streaming.alwaysVisible) {
                 _alwaysVisible.insert(entity);
             }
         });
