@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace Framework::Networking::Replication {
     // Process-wide registry mapping a stable type id (CRC32 of a name) to a constructor for the
@@ -58,4 +59,23 @@ namespace Framework::Networking::Replication {
             return new T();
         });
     }
+
+    // Registers a NetworkEntity subclass with the global EntityFactory at static-init time — the same
+    // self-registration pattern as MafiaNet::RPC4GlobalRegistration. Use the FW_REGISTER_NETWORK_ENTITY
+    // macro rather than instantiating this directly.
+    template <typename T>
+    struct EntityRegistration final {
+        explicit EntityRegistration(const std::string &name) {
+            EntityFactory::Get().Register<T>(name);
+        }
+    };
 } // namespace Framework::Networking::Replication
+
+// Register a NetworkEntity subclass under a stable wire name (CRC32'd into its type id). Put it at
+// file scope in the subclass's .cpp; the identical name must be registered on both client and
+// server. TYPE must be a simple class identifier. Example:
+//   FW_REGISTER_NETWORK_ENTITY(Player, "Player");
+#define FW_REGISTER_NETWORK_ENTITY(TYPE, NAME)                                                       \
+    namespace {                                                                                       \
+        const ::Framework::Networking::Replication::EntityRegistration<TYPE> TYPE##_fwEntityRegistration {(NAME)}; \
+    }
