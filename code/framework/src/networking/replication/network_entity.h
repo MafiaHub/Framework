@@ -19,7 +19,7 @@
 
 namespace Framework::Networking::Replication {
     class ReplicationManager;
-    class EntityFactory;
+    class EntityRegistry;
 
     // Bidirectional adapter over MafiaNet::VariableDeltaSerializer: the same Field(member) call
     // serializes on the sender and deserializes on the receiver, so a replica's per-tick field list
@@ -172,10 +172,10 @@ namespace Framework::Networking::Replication {
         // Full one-shot construction snapshot of the common state (transform + owner), bidirectional.
         void SerializeBaseState(MafiaNet::BitStream *bs, bool write);
 
-        // Concrete type id over the wire (CRC32 of the registered name). Stamped by EntityFactory at
+        // Concrete type id over the wire (CRC32 of the registered name). Stamped by EntityRegistry at
         // construction and written by WriteAllocationID; not game-settable.
         uint32_t typeId = 0;
-        friend class EntityFactory;
+        friend class EntityRegistry;
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).

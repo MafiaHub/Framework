@@ -9,7 +9,7 @@
 #include "replication_manager.h"
 
 #include "../network_peer.h"
-#include "entity_factory.h"
+#include "entity_registry.h"
 #include "replication_connection.h"
 
 namespace Framework::Networking::Replication {
@@ -99,7 +99,7 @@ namespace Framework::Networking::Replication {
     }
 
     NetworkEntity *ReplicationManager::CreateEntity(uint32_t typeId) {
-        NetworkEntity *entity = EntityFactory::Get().Create(typeId);
+        NetworkEntity *entity = EntityRegistry::Get().Create(typeId);
         if (!entity) {
             return nullptr;
         }

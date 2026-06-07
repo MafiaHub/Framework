@@ -62,7 +62,9 @@ namespace Framework::Networking::Replication {
 
         // --- Entity lifecycle ---
         // Server: construct an entity of the given registered type and start replicating it. The
-        // caller fills in its state afterwards. Returns nullptr for an unknown type.
+        // caller fills in its state afterwards. Returns nullptr for an unknown type. The returned
+        // pointer is non-owning: the manager owns the entity (Reference()), and ReplicaManager3
+        // deletes it via DeallocReplica/DestroyEntity — do not wrap it in a smart pointer.
         NetworkEntity *CreateEntity(uint32_t typeId);
         // Broadcast destruction and delete the entity.
         void DestroyEntity(NetworkEntity *entity);

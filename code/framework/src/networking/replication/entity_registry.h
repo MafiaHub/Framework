@@ -21,13 +21,13 @@ namespace Framework::Networking::Replication {
     // Process-wide registry mapping a stable type id (CRC32 of a name) to a constructor for the
     // concrete NetworkEntity subclass. The server creates entities by type id and the client's
     // AllocReplica reconstructs them from the same id, so both sides must register identical types.
-    class EntityFactory final {
+    class EntityRegistry final {
       public:
         // The trailing `const` is required, not cosmetic: Create() is a const method and invokes the
         // stored constructor through the const _types map, so the callable must be const-invocable.
         using Constructor = fu2::function<NetworkEntity *() const>;
 
-        static EntityFactory &Get();
+        static EntityRegistry &Get();
 
         // Registers a type and returns its id. Logs if two distinct names collide on the same CRC32
         // (the later one would otherwise silently shadow the former). Not thread-safe: register every
@@ -54,19 +54,19 @@ namespace Framework::Networking::Replication {
     };
 
     template <typename T>
-    inline uint32_t EntityFactory::Register(const std::string &name) {
+    inline uint32_t EntityRegistry::Register(const std::string &name) {
         return Register(name, [] {
             return new T();
         });
     }
 
-    // Registers a NetworkEntity subclass with the global EntityFactory at static-init time — the same
+    // Registers a NetworkEntity subclass with the global EntityRegistry at static-init time — the same
     // self-registration pattern as MafiaNet::RPC4GlobalRegistration. Use the FW_REGISTER_NETWORK_ENTITY
     // macro rather than instantiating this directly.
     template <typename T>
     struct EntityRegistration final {
         explicit EntityRegistration(const std::string &name) {
-            EntityFactory::Get().Register<T>(name);
+            EntityRegistry::Get().Register<T>(name);
         }
     };
 } // namespace Framework::Networking::Replication

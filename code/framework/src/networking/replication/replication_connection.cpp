@@ -8,7 +8,7 @@
 
 #include "replication_connection.h"
 
-#include "entity_factory.h"
+#include "entity_registry.h"
 #include "network_entity.h"
 #include "replication_manager.h"
 
@@ -23,7 +23,7 @@ namespace Framework::Networking::Replication {
         allocationIdBitstream->Read(typeId);
         // The instance's state is populated by DeserializeConstruction (called immediately after);
         // any backing game object is requested from NetworkEntity::OnConstructed.
-        return EntityFactory::Get().Create(typeId);
+        return EntityRegistry::Get().Create(typeId);
     }
 
     void ReplicationConnection::QueryReplicaList(DataStructures::List<MafiaNet::Replica3 *> &newReplicasToCreate, DataStructures::List<MafiaNet::Replica3 *> &existingReplicasToDestroy) {
