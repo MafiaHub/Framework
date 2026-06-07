@@ -14,13 +14,9 @@
 
 namespace Framework::Networking::Replication {
     namespace {
-        // Built-in server->owner state push (see NetworkEntity::ForceState). The tail is the entity's
-        // SerializeForcedState payload, which is polymorphic, so this rides the raw RPC path: the
-        // handler reads the id, resolves the entity, then lets it deserialize the rest.
+        // Raw RPC: the tail is the entity's polymorphic SerializeForcedState payload.
         constexpr const char *kForceStateId = "Framework::ForceState";
 
-        // Built-in server->owner ownership grant (see NetworkEntity::SetOwner). Fixed shape, so it
-        // uses the typed RPC path.
         struct SetOwnerRPC {
             static constexpr const char *kIdentifier = "Framework::SetOwner";
 
@@ -35,9 +31,6 @@ namespace Framework::Networking::Replication {
     } // namespace
 
     ReplicationManager::ReplicationManager() = default;
-
-    // The ForceState/SetOwner handlers are owned by the peer (RegisterRawRPC / RegisterRPC) and torn
-    // down with it; the manager shares the peer's lifetime, so no manual unregister is needed.
     ReplicationManager::~ReplicationManager() = default;
 
     void ReplicationManager::ConfigureGrid(float cellSize, float worldMin, float worldMax) {
@@ -51,9 +44,7 @@ namespace Framework::Networking::Replication {
         SetNetworkIDManager(owner->GetNetworkIDManager());
         owner->GetPeer()->AttachPlugin(this);
 
-        // ForceState/SetOwner are strictly server->owner pushes: the server is always the sender and
-        // never a legitimate receiver. Register the handlers on the client only, so a peer cannot
-        // signal them back at the server to teleport entities or reassign ownership it doesn't hold.
+        // Client-only: these are server->owner pushes, so the server must never accept them inbound.
         if (!_isServer) {
             owner->RegisterRawRPC(kForceStateId, [this](MafiaNet::BitStream *bs, MafiaNet::Packet *) {
                 MafiaNet::NetworkID networkId;

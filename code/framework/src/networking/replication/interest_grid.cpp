@@ -97,12 +97,11 @@ namespace Framework::Networking::Replication {
         std::unordered_set<NetworkEntity *> inRange;
         QueryRadius(viewer->position, viewer->streaming.range, inRange);
 
+        // Owned and always-visible entities bypass range/dimension culling so they never drop out.
         const auto visible = [&](NetworkEntity *entity) {
             if (!entity || !entity->streaming.visible) {
                 return false;
             }
-            // Owned and always-visible entities bypass range/dimension culling so they never drop out
-            // (the avatar itself, or e.g. a vehicle being driven past the viewer's own range).
             return entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == viewerGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld) && inRange.contains(entity));
         };
 
@@ -112,8 +111,6 @@ namespace Framework::Networking::Replication {
             }
         };
 
-        // Candidates come only from the working sets (in-range + owned + always-visible + the viewer),
-        // never an O(entities) scan; the predicate can be satisfied only by one of these sources.
         for (NetworkEntity *entity : inRange) {
             consider(entity);
         }

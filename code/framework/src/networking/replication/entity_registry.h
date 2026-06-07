@@ -60,9 +60,7 @@ namespace Framework::Networking::Replication {
         });
     }
 
-    // Registers a NetworkEntity subclass with the global EntityRegistry at static-init time — the same
-    // self-registration pattern as MafiaNet::RPC4GlobalRegistration. Use the FW_REGISTER_NETWORK_ENTITY
-    // macro rather than instantiating this directly.
+    // Self-registers T at static-init time; use the FW_REGISTER_NETWORK_ENTITY macro.
     template <typename T>
     struct EntityRegistration final {
         explicit EntityRegistration(const std::string &name) {
@@ -71,9 +69,7 @@ namespace Framework::Networking::Replication {
     };
 } // namespace Framework::Networking::Replication
 
-// Register a NetworkEntity subclass under a stable wire name (CRC32'd into its type id). Put it at
-// file scope in the subclass's .cpp; the identical name must be registered on both client and
-// server. TYPE must be a simple class identifier. Example:
+// Register a NetworkEntity subclass at file scope under a wire name that must match on both peers:
 //   FW_REGISTER_NETWORK_ENTITY(Player, "Player");
 #define FW_REGISTER_NETWORK_ENTITY(TYPE, NAME)                                                       \
     namespace {                                                                                       \

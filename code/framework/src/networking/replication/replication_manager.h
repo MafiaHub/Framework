@@ -39,8 +39,6 @@ namespace Framework::Networking::Replication {
         ReplicationManager();
         ~ReplicationManager();
 
-        // `owner` is the peer this manager belongs to; it supplies the RakPeer, NetworkIDManager and
-        // the typed RPC used for the ForceState/SetOwner pushes.
         void Init(NetworkPeer *owner, bool isServer);
 
         // Server: push the entity's forced state to its owner — the server's authoritative override
@@ -61,10 +59,8 @@ namespace Framework::Networking::Replication {
         }
 
         // --- Entity lifecycle ---
-        // Server: construct an entity of the given registered type and start replicating it. The
-        // caller fills in its state afterwards. Returns nullptr for an unknown type. The returned
-        // pointer is non-owning: the manager owns the entity (Reference()), and ReplicaManager3
-        // deletes it via DeallocReplica/DestroyEntity — do not wrap it in a smart pointer.
+        // Server: construct and start replicating an entity of the given type, nullptr if unknown.
+        // Non-owning: the manager owns it; destroy via DestroyEntity.
         NetworkEntity *CreateEntity(uint32_t typeId);
         // Broadcast destruction and delete the entity.
         void DestroyEntity(NetworkEntity *entity);
@@ -83,8 +79,6 @@ namespace Framework::Networking::Replication {
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
         void RebuildInterest();
-        // Fill `out` with the entities relevant to `viewer` for the connection owning `viewerGUID`
-        // (see InterestGrid::CollectVisible). The relevance rule lives in the grid; this just forwards.
         void CollectInterest(NetworkEntity *viewer, uint64_t viewerGUID, std::unordered_set<NetworkEntity *> &out);
 
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,

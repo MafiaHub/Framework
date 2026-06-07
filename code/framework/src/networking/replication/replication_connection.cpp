@@ -38,12 +38,9 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        // Keep the observer's dimension in sync with its avatar so the base filter and the grid's
-        // relevance rule agree.
+        // Keep the observer's dimension in sync with its avatar.
         SetVirtualWorld(viewer->GetVirtualWorld());
 
-        // The relevance rule itself lives in InterestGrid::CollectVisible; here we only reconcile the
-        // resulting set against what this connection has already constructed.
         std::unordered_set<NetworkEntity *> relevant;
         _manager->CollectInterest(viewer, GetRakNetGUID().g, relevant);
 
@@ -53,7 +50,6 @@ namespace Framework::Networking::Replication {
             }
         }
 
-        // Destroy side: only what this connection already has, dropping whatever is no longer relevant.
         DataStructures::List<MafiaNet::Replica3 *> constructed;
         GetConstructedReplicas(constructed);
         for (unsigned i = 0; i < constructed.Size(); ++i) {

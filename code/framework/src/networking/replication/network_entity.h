@@ -21,10 +21,7 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
 
-    // Bidirectional adapter over MafiaNet::VariableDeltaSerializer: the same Field(member) call
-    // serializes on the sender and deserializes on the receiver, so a replica's per-tick field list
-    // is declared once and the read/write order cannot diverge between peers. NetworkEntity builds
-    // one per Serialize()/Deserialize() and passes it to SerializeFields().
+    // Field() writes on the sender and reads on the receiver, so a replica's field list stays in sync.
     class FieldSerializer final {
       public:
         FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx) : _vds(vds), _serialize(ctx) {}
@@ -50,22 +47,11 @@ namespace Framework::Networking::Replication {
         MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
     };
 
-    // A replicated game object: it owns its state as plain members, and ReplicaManager3 +
-    // NetworkIDManager track it while GridSectorizer scopes it. Game-specific entities (player,
-    // vehicle, ...) derive from this, add their own fields, and override SerializeFields (per-tick
-    // state) and/or OnSerializeConstruction (one-shot spawn state). Every (de)serialization hook is
-    // a single bidirectional function taking a `write` flag, so the read and write paths cannot
-    // drift out of sync.
+    // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
+    // delta state) and/or OnSerializeConstruction (one-shot spawn state).
     //
-    // Per-tick updates go through MafiaNet::VariableDeltaSerializer: each variable is compared
-    // against the last value sent to a system and transmitted only when it changes. Construction
-    // sends a full snapshot. Serialize() returns RM3SR_BROADCAST_IDENTICALLY: the delta serializer
-    // builds one bitstream once per tick and ReplicaManager3 reuses those bytes for every
-    // connection (per-connection owner filtering still happens in QuerySerializationWithinWorld).
-    //
-    // Authority: QuerySerialization is keyed on ownerGUID — the server serializes to everyone except
-    // the owner, the owning client serializes upstream, and Deserialize accepts state only from the
-    // current owner so a stale owner cannot write during a handover.
+    // Authority is keyed on ownerGUID: the server serializes to everyone except the owner, the owning
+    // client serializes upstream, and Deserialize accepts state only from the current owner.
     class NetworkEntity : public MafiaNet::VirtualWorldReplica3 {
       public:
         NetworkEntity()           = default;
@@ -94,28 +80,20 @@ namespace Framework::Networking::Replication {
         Streaming streaming;
 
         // --- Game extension points ---
-        // One-shot spawn state, (de)serialized alongside the common construction snapshot. Append
-        // your fields with bs->Serialize(write, field); one definition serves both directions.
         virtual void OnSerializeConstruction(MafiaNet::BitStream *bs, bool write) {
             (void)bs;
             (void)write;
         }
-        // Per-tick delta state. Append your fields with fields.Field(member); the same call writes on
-        // the sender and reads on the receiver, so the field order can never diverge between peers.
         virtual void SerializeFields(FieldSerializer &fields) {
             (void)fields;
         }
-        // Called once on the client after construction, e.g. to request the backing game object.
         virtual void OnConstructed() {}
 
-        // The server-authoritative state pushed to the owner by ForceState (the owner is otherwise
-        // authoritative over its own updates, and the server withholds serialize to it). Default
-        // carries the transform; override to send additional state, e.g. a vehicle's engine/config.
-        // Single bidirectional definition: append fields with bs->Serialize(write, field).
+        // Server -> owner override of an owned entity (the owner is otherwise authoritative). Default
+        // carries the transform; override to add state, e.g. a vehicle's engine/config.
         virtual void SerializeForcedState(MafiaNet::BitStream *bs, bool write);
 
-        // Called on the owning client after ReadForcedState has applied the forced fields. Override
-        // to push them into the game (teleport and preload the world, set the engine, ...).
+        // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}
 
         // Server: push this entity's forced state to its owner. No-op for unowned (server-owned)
@@ -169,11 +147,9 @@ namespace Framework::Networking::Replication {
         // clients adopt it. Single source of truth for the rule shared by construction and deltas.
         void AdoptIncomingOwner(uint64_t incomingOwner);
 
-        // Full one-shot construction snapshot of the common state (transform + owner), bidirectional.
         void SerializeBaseState(MafiaNet::BitStream *bs, bool write);
 
-        // Concrete type id over the wire (CRC32 of the registered name). Stamped by EntityRegistry at
-        // construction and written by WriteAllocationID; not game-settable.
+        // CRC32 of the registered name; stamped by EntityRegistry, not game-settable.
         uint32_t typeId = 0;
         friend class EntityRegistry;
 

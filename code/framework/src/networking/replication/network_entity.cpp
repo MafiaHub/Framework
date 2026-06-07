@@ -43,15 +43,11 @@ namespace Framework::Networking::Replication {
         allocationIdBitstream->Write(typeId);
     }
 
-    // --- One-shot construction snapshot (full state, no delta) ---
-
     void NetworkEntity::SerializeBaseState(MafiaNet::BitStream *bs, bool write) {
         if (write) {
             bs->Write(ownerGUID);
         }
         else {
-            // Read into a temporary so the server can ignore a client-supplied owner (see
-            // AdoptIncomingOwner); clients adopt the owner the server sends.
             uint64_t incomingOwner = ownerGUID;
             bs->Read(incomingOwner);
             AdoptIncomingOwner(incomingOwner);
@@ -126,8 +122,7 @@ namespace Framework::Networking::Replication {
         // whenLastSerialized == 0 means this is the first send to a fresh system: write every
         // variable in full; otherwise only changed variables are written.
         _vds.BeginIdenticalSerialize(&ctx, serializeParameters->whenLastSerialized == 0, &serializeParameters->outputBitstream[0]);
-        // ownerGUID is kept explicit (the receiver side filters it via AdoptIncomingOwner); the
-        // transform and any subclass fields flow through the shared bidirectional FieldSerializer.
+        // ownerGUID stays explicit; the receiver filters it via AdoptIncomingOwner.
         _vds.SerializeVariable(&ctx, ownerGUID);
         FieldSerializer fields(&_vds, &ctx);
         fields.Field(position);
