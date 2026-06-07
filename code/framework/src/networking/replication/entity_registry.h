@@ -59,19 +59,4 @@ namespace Framework::Networking::Replication {
             return new T();
         });
     }
-
-    // Self-registers T at static-init time; use the FW_REGISTER_NETWORK_ENTITY macro.
-    template <typename T>
-    struct EntityRegistration final {
-        explicit EntityRegistration(const std::string &name) {
-            EntityRegistry::Get().Register<T>(name);
-        }
-    };
 } // namespace Framework::Networking::Replication
-
-// Register a NetworkEntity subclass at file scope under a wire name that must match on both peers:
-//   FW_REGISTER_NETWORK_ENTITY(Player, "Player");
-#define FW_REGISTER_NETWORK_ENTITY(TYPE, NAME)                                                       \
-    namespace {                                                                                       \
-        const ::Framework::Networking::Replication::EntityRegistration<TYPE> TYPE##_fwEntityRegistration {(NAME)}; \
-    }
