@@ -22,13 +22,21 @@ namespace Framework::Networking::Replication {
     // AllocReplica reconstructs them from the same id, so both sides must register identical types.
     class EntityFactory final {
       public:
+        // The trailing `const` is required, not cosmetic: Create() is a const method and invokes the
+        // stored constructor through the const _types map, so the callable must be const-invocable.
         using Constructor = fu2::function<NetworkEntity *() const>;
 
         static EntityFactory &Get();
 
-        // Registers a type and returns its id. Not thread-safe: register every type at startup,
-        // before networking begins, because Create() is then called from the sim/network path.
+        // Registers a type and returns its id. Logs if two distinct names collide on the same CRC32
+        // (the later one would otherwise silently shadow the former). Not thread-safe: register every
+        // type at startup, before networking begins, because Create() runs on the sim/network path.
         uint32_t Register(const std::string &name, Constructor constructor);
+
+        // Convenience overload: default-constructs T. Prefer this — it removes the `[]{ return new T; }`
+        // boilerplate at every registration site. Defined out-of-class below.
+        template <typename T>
+        uint32_t Register(const std::string &name);
 
         // Constructs an instance and stamps its typeId. Returns nullptr for an unknown id.
         NetworkEntity *Create(uint32_t typeId) const;
@@ -38,8 +46,16 @@ namespace Framework::Networking::Replication {
       private:
         struct Entry {
             uint32_t id = 0;
+            std::string name; // kept for collision diagnostics
             Constructor constructor;
         };
         std::unordered_map<uint32_t, Entry> _types;
     };
+
+    template <typename T>
+    inline uint32_t EntityFactory::Register(const std::string &name) {
+        return Register(name, [] {
+            return new T();
+        });
+    }
 } // namespace Framework::Networking::Replication
