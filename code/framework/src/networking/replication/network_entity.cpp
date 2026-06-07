@@ -13,14 +13,30 @@
 #include <mafianet/GetTime.h>
 
 namespace Framework::Networking::Replication {
+    ReplicationManager *NetworkEntity::Manager() {
+        return static_cast<ReplicationManager *>(replicaManager);
+    }
+
+    const ReplicationManager *NetworkEntity::Manager() const {
+        return static_cast<const ReplicationManager *>(replicaManager);
+    }
+
     bool NetworkEntity::IsServerPeer() const {
-        const auto *manager = static_cast<const ReplicationManager *>(replicaManager);
+        const auto *manager = Manager();
         return manager && manager->IsServer();
     }
 
     uint64_t NetworkEntity::MyGUID() const {
-        const auto *manager = static_cast<const ReplicationManager *>(replicaManager);
+        const auto *manager = Manager();
         return manager ? manager->GetMyGUID() : MafiaNet::UNASSIGNED_RAKNET_GUID.g;
+    }
+
+    void NetworkEntity::AdoptIncomingOwner(uint64_t incomingOwner) {
+        // The server keeps its own authoritative owner assignment and must not let an owning client
+        // dictate it back; clients adopt whatever the server sends.
+        if (!IsServerPeer()) {
+            ownerGUID = incomingOwner;
+        }
     }
 
     void NetworkEntity::WriteAllocationID(MafiaNet::Connection_RM3 *, MafiaNet::BitStream *allocationIdBitstream) const {
@@ -37,13 +53,9 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::ReadConstruction(MafiaNet::BitStream *bs) {
-        // The server keeps its own authoritative owner assignment and must not let an owning client
-        // dictate it back; clients adopt whatever the server sends.
         uint64_t incomingOwner = ownerGUID;
         bs->Read(incomingOwner);
-        if (!IsServerPeer()) {
-            ownerGUID = incomingOwner;
-        }
+        AdoptIncomingOwner(incomingOwner);
         bs->Read(position);
         bs->Read(velocity);
         bs->Read(rotation);
@@ -82,13 +94,13 @@ namespace Framework::Networking::Replication {
     }
 
     void NetworkEntity::ForceState() {
-        if (auto *manager = static_cast<ReplicationManager *>(replicaManager)) {
+        if (auto *manager = Manager()) {
             manager->ForceState(this);
         }
     }
 
     void NetworkEntity::SetOwner(uint64_t guid) {
-        if (auto *manager = static_cast<ReplicationManager *>(replicaManager)) {
+        if (auto *manager = Manager()) {
             manager->SetOwner(this, guid);
         }
         else {
@@ -143,13 +155,11 @@ namespace Framework::Networking::Replication {
 
         MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
         _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[0]);
-        // Read into a temporary so the server can ignore a client-supplied owner (it is
-        // authoritative); clients adopt the owner the server sends.
+        // Read into a temporary so the server can ignore a client-supplied owner (see
+        // AdoptIncomingOwner); clients adopt the owner the server sends.
         uint64_t incomingOwner = ownerGUID;
         _vds.DeserializeVariable(&ctx, incomingOwner);
-        if (!IsServerPeer()) {
-            ownerGUID = incomingOwner;
-        }
+        AdoptIncomingOwner(incomingOwner);
         _vds.DeserializeVariable(&ctx, position);
         _vds.DeserializeVariable(&ctx, velocity);
         _vds.DeserializeVariable(&ctx, rotation);

@@ -18,6 +18,9 @@
 #include <cstdint>
 
 namespace Framework::Networking::Replication {
+    class ReplicationManager;
+    class EntityFactory;
+
     // A replicated game object: it owns its state as plain members, and ReplicaManager3 +
     // NetworkIDManager track it while GridSectorizer scopes it. Game-specific entities (player,
     // vehicle, ...) derive from this, add their own fields, and override SerializeFields /
@@ -59,9 +62,6 @@ namespace Framework::Networking::Replication {
             float range        = 100.0f; // interest radius (world units) when acting as a viewer
         };
         Streaming streaming;
-
-        // Set by the EntityFactory on construction; identifies the concrete type over the wire.
-        uint32_t typeId = 0;
 
         // --- Game extension points ---
         // One-shot spawn state, written/read alongside the common construction snapshot.
@@ -133,12 +133,27 @@ namespace Framework::Networking::Replication {
         MafiaNet::RM3QuerySerializationResult QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) override;
 
       private:
+        // The owning manager, typed. The base Replica3::replicaManager is a raw ReplicaManager3*;
+        // every entity belongs to one of ours, so this downcast is the single sanctioned place for it.
+        ReplicationManager *Manager();
+        const ReplicationManager *Manager() const;
+
         // True if we are the server peer (read from the owning ReplicationManager).
         bool IsServerPeer() const;
         uint64_t MyGUID() const;
+
+        // Apply an owner value received over the wire: the server is authoritative and ignores it;
+        // clients adopt it. Single source of truth for the rule shared by construction and deltas.
+        void AdoptIncomingOwner(uint64_t incomingOwner);
+
         // Full one-shot construction snapshot of the common state.
         void WriteConstruction(MafiaNet::BitStream *bs) const;
         void ReadConstruction(MafiaNet::BitStream *bs);
+
+        // Concrete type id over the wire (CRC32 of the registered name). Stamped by EntityFactory at
+        // construction and written by WriteAllocationID; not game-settable.
+        uint32_t typeId = 0;
+        friend class EntityFactory;
 
         // Tracks the last value of each serialized variable per connection so updates carry only
         // what changed (the documented ReplicaManager3 delta path).
