@@ -14,6 +14,4 @@ namespace Framework::Utils::Version {
     extern const char *gitLong;
     extern const char *git;
     extern const char *rel;
-
-    extern bool VersionSatisfies(const std::string &a, const std::string &b);
 } // namespace Framework::Utils::Version
