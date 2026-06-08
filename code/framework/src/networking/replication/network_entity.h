@@ -114,24 +114,28 @@ namespace Framework::Networking::Replication {
         MafiaNet::Time GetUpdateAge() const;
         glm::vec3 GetExtrapolatedPosition() const;
 
-        // --- Replica3 implementation ---
-        void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const override;
-        void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) override;
-        bool DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) override;
-        void SerializeDestruction(MafiaNet::BitStream *destructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) override;
-        bool DeserializeDestruction(MafiaNet::BitStream *destructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) override;
-        void DeallocReplica(MafiaNet::Connection_RM3 *sourceConnection) override;
+        // --- Replica3 implementation (framework-owned; marked final so games extend through the
+        // virtual hooks above, never by overriding the wire/authority plumbing) ---
+        void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const final;
+        void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
+        bool DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) final;
+        void SerializeDestruction(MafiaNet::BitStream *destructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
+        bool DeserializeDestruction(MafiaNet::BitStream *destructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) final;
+        void DeallocReplica(MafiaNet::Connection_RM3 *sourceConnection) final;
 
-        void OnUserReplicaPreSerializeTick() override;
-        MafiaNet::RM3SerializationResult Serialize(MafiaNet::SerializeParameters *serializeParameters) override;
-        void Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) override;
+        void OnUserReplicaPreSerializeTick() final;
+        MafiaNet::RM3SerializationResult Serialize(MafiaNet::SerializeParameters *serializeParameters) final;
+        void Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) final;
 
-        bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) override;
-        MafiaNet::RM3ActionOnPopConnection QueryActionOnPopConnection(MafiaNet::Connection_RM3 *droppedConnection) const override;
+        bool QueryRemoteConstruction(MafiaNet::Connection_RM3 *sourceConnection) final;
+        MafiaNet::RM3ActionOnPopConnection QueryActionOnPopConnection(MafiaNet::Connection_RM3 *droppedConnection) const final;
 
+      protected:
         // VirtualWorldReplica3 filters by dimension, then delegates the topology decision to these.
-        MafiaNet::RM3ConstructionState QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) override;
-        MafiaNet::RM3QuerySerializationResult QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) override;
+        // Protected (matching the base) and final: part of the framework's authority model, not a
+        // game extension point.
+        MafiaNet::RM3ConstructionState QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) final;
+        MafiaNet::RM3QuerySerializationResult QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) final;
 
       private:
         // The owning manager, typed. The base Replica3::replicaManager is a raw ReplicaManager3*;
