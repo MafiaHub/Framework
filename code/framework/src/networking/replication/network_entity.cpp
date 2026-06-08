@@ -60,11 +60,15 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
         SerializeBaseState(constructionBitstream, true);
         OnSerializeConstruction(constructionBitstream, true);
+        FieldSerializer seed(constructionBitstream, true);
+        SerializeFields(seed);
     }
 
     bool NetworkEntity::DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
         SerializeBaseState(constructionBitstream, false);
         OnSerializeConstruction(constructionBitstream, false);
+        FieldSerializer seed(constructionBitstream, false);
+        SerializeFields(seed);
         OnConstructed();
         return true;
     }

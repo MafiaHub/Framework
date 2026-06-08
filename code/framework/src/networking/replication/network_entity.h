@@ -21,19 +21,22 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
 
-    // Field() writes on the sender and reads on the receiver, so a replica's field list stays in sync.
     class FieldSerializer final {
       public:
         FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::SerializationContext *ctx) : _vds(vds), _serialize(ctx) {}
         FieldSerializer(MafiaNet::VariableDeltaSerializer *vds, MafiaNet::VariableDeltaSerializer::DeserializationContext *ctx) : _vds(vds), _deserialize(ctx) {}
+        FieldSerializer(MafiaNet::BitStream *bs, bool write) : _plain(bs), _writePlain(write) {}
 
         bool Writing() const {
-            return _serialize != nullptr;
+            return _serialize != nullptr || (_plain != nullptr && _writePlain);
         }
 
         template <typename T>
         void Field(T &value) {
-            if (_serialize) {
+            if (_plain) {
+                _plain->Serialize(_writePlain, value);
+            }
+            else if (_serialize) {
                 _vds->SerializeVariable(_serialize, value);
             }
             else {
@@ -42,9 +45,11 @@ namespace Framework::Networking::Replication {
         }
 
       private:
-        MafiaNet::VariableDeltaSerializer *_vds                                = nullptr;
-        MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize    = nullptr;
+        MafiaNet::VariableDeltaSerializer *_vds                                 = nullptr;
+        MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize     = nullptr;
         MafiaNet::VariableDeltaSerializer::DeserializationContext *_deserialize = nullptr;
+        MafiaNet::BitStream *_plain                                             = nullptr;
+        bool _writePlain                                                        = false;
     };
 
     // A replicated game object. Game entities derive from this and override SerializeFields (per-tick
