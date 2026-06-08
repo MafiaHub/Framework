@@ -178,10 +178,19 @@ namespace Framework::Networking::Replication {
         // remaining clients and clears the viewer mapping. Clients keep the base behaviour: their
         // replicas all originate from the server, so PopConnection cleans them up on its own.
         if (_isServer) {
+            const auto guid = MafiaNet::ToPeerGuid(rakNetGUID);
             if (_onClientDisconnect) {
-                _onClientDisconnect(MafiaNet::ToPeerGuid(rakNetGUID));
+                _onClientDisconnect(guid);
             }
-            if (auto *viewer = GetViewer(MafiaNet::ToPeerGuid(rakNetGUID))) {
+            NetworkEntity *viewer = GetViewer(guid);
+            // Return any other entity the dropped peer owned (e.g. a vehicle it was driving) to the
+            // server, or its authority gate would freeze it against an owner that no longer exists.
+            ForEachEntity([&](NetworkEntity *entity) {
+                if (entity != viewer && entity->ownerGUID == guid) {
+                    SetOwner(entity, MafiaNet::UNASSIGNED_PEER_GUID);
+                }
+            });
+            if (viewer) {
                 DestroyEntity(viewer);
             }
         }
