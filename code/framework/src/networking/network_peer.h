@@ -24,6 +24,7 @@
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
 #include <memory>
+#include <string>
 #include <utility>
 #include <utils/hashing.h>
 #include <vector>
@@ -52,6 +53,7 @@ namespace Framework::Networking {
         // ReadyEvent is the per-connection spawn barrier. Flow in network_{server,client}.cpp.
         MafiaNet::TwoWayAuthentication _twoWayAuth;
         MafiaNet::ReadyEvent _readyEvent;
+        std::string _buildToken;
 
         // Owns the replicated entity world. The concrete peer's Init() attaches it and sets its role.
         std::unique_ptr<Replication::ReplicationManager> _replicationManager;
@@ -67,6 +69,8 @@ namespace Framework::Networking {
                 (*slot)(bs, packet);
             }
         }
+
+        bool RegisterBuildToken();
 
       public:
         // TwoWayAuthentication identifier under which the build token is registered/challenged.

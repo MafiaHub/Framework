@@ -287,6 +287,13 @@ namespace Framework::Integrations::Server {
                 return;
             }
 
+            auto *replication = net->GetReplicationManager();
+            const auto peerGuid = MafiaNet::ToPeerGuid(guid);
+            if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate identity from {}", guid.g);
+                return;
+            }
+
             auto nickname = payload.name;
             if (nickname.size() > 64) {
                 nickname = nickname.substr(0, 64);
@@ -298,7 +305,7 @@ namespace Framework::Integrations::Server {
             // metadata so it spawns with the real nickname/slot.
             if (_onPlayerConnectCallback) {
                 PlayerConnectionData data;
-                data.guid        = MafiaNet::ToPeerGuid(guid);
+                data.guid        = peerGuid;
                 data.playerIndex = guid.systemIndex;
                 data.nickname    = nickname;
                 data.hardwareID  = payload.hardwareId;

@@ -45,7 +45,7 @@ namespace Framework::Networking::Replication {
         owner->GetPeer()->AttachPlugin(this);
 
         // Client-only: these are server->owner pushes, so the server must never accept them inbound.
-        if (!_isServer) {
+        if (!_isServer && !_clientRPCsRegistered) {
             owner->RegisterRawRPC(kForceStateId, [this](MafiaNet::BitStream *bs, MafiaNet::Packet *) {
                 MafiaNet::NetworkID networkId;
                 bs->ReadCompressed(networkId);
@@ -59,6 +59,7 @@ namespace Framework::Networking::Replication {
                     entity->ownerGUID = payload.ownerGUID;
                 }
             });
+            _clientRPCsRegistered = true;
         }
     }
 

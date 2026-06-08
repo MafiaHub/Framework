@@ -30,6 +30,7 @@ namespace Framework::Networking {
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
+        RegisterBuildToken();
 
         // Run replication as a client: receive constructions and serialize owned entities upstream.
         _replicationManager->Init(this, false);
@@ -59,7 +60,10 @@ namespace Framework::Networking {
         }
 
         if (!_peer->IsActive()) {
-            Init();
+            const NetworkPeerError initResult = Init();
+            if (initResult != NetworkPeerError::NETWORK_PEER_NONE) {
+                return ConnectionError::CONNECTION_PEER_FAILED;
+            }
         }
 
         _state = PeerState::CONNECTING;
@@ -113,7 +117,14 @@ namespace Framework::Networking {
             }
             // Prove our build matches before anything else; the server sends ServerResources only
             // after this passes. A mismatch is handled by the auth-failure cases below.
-            _twoWayAuth.Challenge(NetworkPeer::kBuildChallengeId, _packet->guid);
+            if (!_twoWayAuth.Challenge(NetworkPeer::kBuildChallengeId, _packet->guid)) {
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Cannot verify server build: local build token is not registered");
+                if (_onPlayerDisconnectedCallback) {
+                    _onPlayerDisconnectedCallback(_packet, DisconnectionReason::WRONG_VERSION, "");
+                }
+                _peer->CloseConnection(_packet->guid, true);
+                _state = PeerState::DISCONNECTED;
+            }
             return true;
         };
 

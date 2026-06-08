@@ -114,6 +114,7 @@ namespace Framework::Networking::Replication {
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
         uint64_t _nextNetworkId = 0;
         NetworkPeer *_owner = nullptr;
+        bool _clientRPCsRegistered = false;
         InterestGrid _interest;
         std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
         fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;

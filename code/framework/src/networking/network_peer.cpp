@@ -31,8 +31,26 @@ namespace Framework::Networking {
     NetworkPeer::~NetworkPeer() = default;
 
     void NetworkPeer::SetBuildToken(const std::string &token) {
-        // Re-registering the identifier overwrites the previous password; safe to call again.
-        _twoWayAuth.AddPassword(kBuildChallengeId, MafiaNet::RakString(token.c_str()));
+        _buildToken = token;
+        if (!RegisterBuildToken()) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Failed to register networking build token");
+        }
+    }
+
+    bool NetworkPeer::RegisterBuildToken() {
+        if (_buildToken.empty()) {
+            return false;
+        }
+
+        const MafiaNet::RakString token(_buildToken.c_str());
+        if (_twoWayAuth.AddPassword(kBuildChallengeId, token)) {
+            return true;
+        }
+
+        // TwoWayAuthentication cannot overwrite an identifier. Clear and re-add so reconnects or
+        // option reloads keep the stored token and the plugin table in sync.
+        _twoWayAuth.Clear();
+        return _twoWayAuth.AddPassword(kBuildChallengeId, token);
     }
 
     void NetworkPeer::Update() {

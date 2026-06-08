@@ -33,6 +33,7 @@ namespace Framework::Networking {
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_fileListTransfer);
         _peer->AttachPlugin(&_assetStreamer);
+        RegisterBuildToken();
 
         // Run replication as the authoritative server.
         _replicationManager->Init(this, true);

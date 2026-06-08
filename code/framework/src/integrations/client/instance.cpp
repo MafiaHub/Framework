@@ -527,6 +527,8 @@ namespace Framework::Integrations::Client {
         else {
             net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+            return;
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
