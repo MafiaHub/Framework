@@ -21,6 +21,23 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
 
+    // A peer guid, kept distinct from NetworkID (a bare typedef uint64_t) so the two can't be
+    // passed for one another. Trivially copyable -> identical 8 bytes on the wire.
+    enum class PeerGuid : uint64_t {};
+
+    inline PeerGuid ToPeerGuid(MafiaNet::RakNetGUID guid) {
+        return PeerGuid {guid.g};
+    }
+    inline MafiaNet::RakNetGUID ToGuid(PeerGuid guid) {
+        return MafiaNet::RakNetGUID {static_cast<uint64_t>(guid)};
+    }
+    inline PeerGuid UnassignedPeer() {
+        return PeerGuid {MafiaNet::UNASSIGNED_RAKNET_GUID.g};
+    }
+    inline bool IsAssigned(PeerGuid guid) {
+        return guid != UnassignedPeer();
+    }
+
     // Field() writes on the sender and reads on the receiver, so a replica's field list stays in sync.
     class FieldSerializer final {
       public:
@@ -63,7 +80,7 @@ namespace Framework::Networking::Replication {
         glm::quat rotation = glm::identity<glm::quat>();
 
         // --- Authority (replicated) ---
-        uint64_t ownerGUID = MafiaNet::UNASSIGNED_RAKNET_GUID.g;
+        PeerGuid ownerGUID = UnassignedPeer();
 
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
         MafiaNet::Time lastUpdateTime = 0;
@@ -103,8 +120,8 @@ namespace Framework::Networking::Replication {
         // Server: change this entity's owner. The new owner is told directly (the server withholds
         // serialize to an owner, so it would otherwise never learn it gained authority); other peers
         // and a revoked previous owner pick up the change through normal serialization. Pass
-        // UNASSIGNED_RAKNET_GUID.g to return ownership to the server.
-        void SetOwner(uint64_t guid);
+        // UnassignedPeer() to return ownership to the server.
+        void SetOwner(PeerGuid guid);
 
         // True on the peer with authority over this entity: the owning client, or the server for
         // server-owned entities. The game decides what owning means (bind the local avatar, drive
@@ -114,8 +131,7 @@ namespace Framework::Networking::Replication {
         MafiaNet::Time GetUpdateAge() const;
         glm::vec3 GetExtrapolatedPosition() const;
 
-        // --- Replica3 implementation (framework-owned; marked final so games extend through the
-        // virtual hooks above, never by overriding the wire/authority plumbing) ---
+        // --- Replica3 implementation (final: extend via the virtual hooks above, not these) ---
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const final;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
         bool DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) final;
@@ -132,8 +148,6 @@ namespace Framework::Networking::Replication {
 
       protected:
         // VirtualWorldReplica3 filters by dimension, then delegates the topology decision to these.
-        // Protected (matching the base) and final: part of the framework's authority model, not a
-        // game extension point.
         MafiaNet::RM3ConstructionState QueryConstructionWithinWorld(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::ReplicaManager3 *replicaManager3) final;
         MafiaNet::RM3QuerySerializationResult QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) final;
 
@@ -145,11 +159,11 @@ namespace Framework::Networking::Replication {
 
         // True if we are the server peer (read from the owning ReplicationManager).
         bool IsServerPeer() const;
-        uint64_t MyGUID() const;
+        PeerGuid MyGUID() const;
 
         // Apply an owner value received over the wire: the server is authoritative and ignores it;
         // clients adopt it. Single source of truth for the rule shared by construction and deltas.
-        void AdoptIncomingOwner(uint64_t incomingOwner);
+        void AdoptIncomingOwner(PeerGuid incomingOwner);
 
         void SerializeBaseState(MafiaNet::BitStream *bs, bool write);
 

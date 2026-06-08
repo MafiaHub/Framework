@@ -43,7 +43,7 @@ namespace Framework::Scripting::Builtins {
             if (!handle) {
                 return;
             }
-            Send(message, MafiaNet::RakNetGUID(handle->ownerGUID), false);
+            Send(message, Framework::Networking::Replication::ToGuid(handle->ownerGUID), false);
         }
 
         static void Register(v8::Isolate *isolate, v8::Local<v8::Object> global) {

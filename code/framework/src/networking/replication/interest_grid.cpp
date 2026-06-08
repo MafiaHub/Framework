@@ -40,7 +40,7 @@ namespace Framework::Networking::Replication {
         }
         // GridSectorizer asserts on a zero-area entry, so insert a tiny box around the XZ position.
         _grid.AddEntry(entity, entity->position.x - kPointEpsilon, entity->position.z - kPointEpsilon, entity->position.x + kPointEpsilon, entity->position.z + kPointEpsilon);
-        if (entity->ownerGUID != MafiaNet::UNASSIGNED_RAKNET_GUID.g) {
+        if (IsAssigned(entity->ownerGUID)) {
             _ownedByGuid[entity->ownerGUID].insert(entity);
         }
         if (entity->streaming.alwaysVisible) {
@@ -83,12 +83,12 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    const std::unordered_set<NetworkEntity *> *InterestGrid::OwnedBy(uint64_t guid) const {
+    const std::unordered_set<NetworkEntity *> *InterestGrid::OwnedBy(PeerGuid guid) const {
         const auto it = _ownedByGuid.find(guid);
         return it != _ownedByGuid.end() ? &it->second : nullptr;
     }
 
-    void InterestGrid::CollectVisible(NetworkEntity *viewer, uint64_t viewerGUID, std::unordered_set<NetworkEntity *> &out) {
+    void InterestGrid::CollectVisible(NetworkEntity *viewer, PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
         if (!viewer) {
             return;
         }

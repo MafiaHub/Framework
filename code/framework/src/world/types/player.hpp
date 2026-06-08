@@ -23,13 +23,13 @@ namespace Framework::World::Archetypes {
       public:
         void SetupClient(Replication::NetworkEntity *entity, uint64_t guid) {
             if (entity) {
-                entity->ownerGUID = guid;
+                entity->ownerGUID = Replication::PeerGuid {guid};
             }
         }
 
         void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {
             if (entity) {
-                entity->ownerGUID          = guid;
+                entity->ownerGUID          = Replication::PeerGuid {guid};
                 entity->streaming.isViewer = true;
             }
         }

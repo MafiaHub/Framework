@@ -114,9 +114,9 @@ namespace Framework::Integrations::Server {
             replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_opts.worldConfig.tickInterval * 1000.0f));
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
-            replication->SetOnClientDisconnect([this](uint64_t guid) {
+            replication->SetOnClientDisconnect([this](Framework::Networking::Replication::PeerGuid guid) {
                 if (_onPlayerDisconnectCallback) {
-                    _onPlayerDisconnectCallback(guid);
+                    _onPlayerDisconnectCallback(static_cast<uint64_t>(guid));
                 }
             });
         }
@@ -324,7 +324,7 @@ namespace Framework::Integrations::Server {
             auto *engine = GetNetworkingEngine();
             auto *server = engine ? engine->GetNetworkServer() : nullptr;
             auto *repl   = server ? server->GetReplicationManager() : nullptr;
-            auto *sender = repl ? repl->GetViewer(packet->guid.g) : nullptr;
+            auto *sender = repl ? repl->GetViewer(Framework::Networking::Replication::ToPeerGuid(packet->guid)) : nullptr;
             if (!sender) {
                 return;
             }

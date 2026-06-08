@@ -20,12 +20,12 @@ namespace Framework::World::Archetypes {
       public:
         void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {
             if (entity) {
-                entity->ownerGUID = guid;
+                entity->ownerGUID = Replication::PeerGuid {guid};
             }
         }
         void SetupClient(Replication::NetworkEntity *entity, uint64_t guid) {
             if (entity) {
-                entity->ownerGUID = guid;
+                entity->ownerGUID = Replication::PeerGuid {guid};
             }
         }
     };
