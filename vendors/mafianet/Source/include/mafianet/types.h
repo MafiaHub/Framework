@@ -332,6 +332,16 @@ struct RAK_DLL_EXPORT RakNetGUID
 	bool operator < ( const RakNetGUID& right ) const;
 };
 
+/// Strong type for a peer's RakNetGUID value, distinct from NetworkID so the two
+/// can't be passed interchangeably. Trivially copyable and 8 bytes, so it is
+/// wire-compatible with the raw uint64_t it replaces. Convert with ToPeerGuid()/ToGuid().
+enum class PeerGuid : uint64_t {};
+
+inline PeerGuid ToPeerGuid( const RakNetGUID& guid ) { return static_cast<PeerGuid>(guid.g); }
+inline RakNetGUID ToGuid( PeerGuid guid ) { return RakNetGUID(static_cast<uint64_t>(guid)); }
+
+constexpr PeerGuid UNASSIGNED_PEER_GUID = static_cast<PeerGuid>((uint64_t)-1);
+
 /// Index of an invalid SystemAddress
 //const SystemAddress UNASSIGNED_SYSTEM_ADDRESS =
 //{

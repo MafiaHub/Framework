@@ -271,7 +271,10 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.8.0 (Latest)
+### Version 0.9.0 (Latest)
+- **Strong-typed `PeerGuid`**: a new `enum class PeerGuid : uint64_t` names a peer's `RakNetGUID` value distinctly from `NetworkID` (an object id), so the two can no longer be passed interchangeably in a `uint64_t`-typed signature — removing a class of silent "passed the wrong id" bugs in ReplicaManager3 glue and `void(uint64_t)` callbacks. Convert with `ToPeerGuid()` / `ToGuid()` and compare against `UNASSIGNED_PEER_GUID`. As a trivially-copyable 8-byte scoped enum it serializes byte-identically through `BitStream` (and therefore `VariableDeltaSerializer`) to the raw `uint64_t` it replaces — fully wire-compatible, no netcode bump. Purely additive, no behavioural change
+
+### Version 0.8.0
 - **Optional disconnect reason**: `CloseConnection` gains a final optional `const BitStream *reasonData` argument whose bytes are appended right after the `ID_DISCONNECTION_NOTIFICATION` message ID, so the remote peer can learn *why* it was dropped (e.g. a kick/ban enum plus a custom string). The receiver reads it like any other body — `packet->data + 1` for `packet->length - 1` bytes. Only graceful disconnects carry a reason; locally-synthesized notifications (`ID_CONNECTION_LOST`, timeout/dead-connection) stay payload-less, so always tolerate a zero-length body. Wire-backward-compatible: peers that only inspect `data[0]` are unaffected
 - **Bug fix**: `RakPeer::CloseConnection` no longer coerces an unresolved target index (`-1`) to `0` and reads `remoteSystemList[0]` — which targeted an unrelated peer's slot or crashed on an unallocated list; the close socket is now resolved without assuming a valid slot index
 
