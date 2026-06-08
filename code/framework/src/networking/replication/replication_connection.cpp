@@ -32,7 +32,7 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        NetworkEntity *viewer = _manager->GetViewer(ToPeerGuid(GetRakNetGUID()));
+        NetworkEntity *viewer = _manager->GetViewer(MafiaNet::ToPeerGuid(GetRakNetGUID()));
         if (!viewer) {
             // Connection not yet associated with a controlled entity (still handshaking).
             return;
@@ -42,7 +42,7 @@ namespace Framework::Networking::Replication {
         SetVirtualWorld(viewer->GetVirtualWorld());
 
         std::unordered_set<NetworkEntity *> relevant;
-        _manager->CollectInterest(viewer, ToPeerGuid(GetRakNetGUID()), relevant);
+        _manager->CollectInterest(viewer, MafiaNet::ToPeerGuid(GetRakNetGUID()), relevant);
 
         for (NetworkEntity *entity : relevant) {
             if (!HasReplicaConstructed(entity)) {

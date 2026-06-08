@@ -21,15 +21,15 @@ namespace Framework::World::Archetypes {
     // metadata (nickname, hardware id) belongs on the game's player NetworkEntity subclass.
     class PlayerFactory {
       public:
-        void SetupClient(Replication::NetworkEntity *entity, uint64_t guid) {
+        void SetupClient(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
             if (entity) {
-                entity->ownerGUID = Replication::PeerGuid {guid};
+                entity->ownerGUID = guid;
             }
         }
 
-        void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {
+        void SetupServer(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
             if (entity) {
-                entity->ownerGUID          = Replication::PeerGuid {guid};
+                entity->ownerGUID          = guid;
                 entity->streaming.isViewer = true;
             }
         }

@@ -26,12 +26,12 @@ namespace Framework::Networking::Replication {
         return manager && manager->IsServer();
     }
 
-    PeerGuid NetworkEntity::MyGUID() const {
+    MafiaNet::PeerGuid NetworkEntity::MyGUID() const {
         const auto *manager = Manager();
-        return manager ? manager->GetMyGUID() : UnassignedPeer();
+        return manager ? manager->GetMyGUID() : MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
-    void NetworkEntity::AdoptIncomingOwner(PeerGuid incomingOwner) {
+    void NetworkEntity::AdoptIncomingOwner(MafiaNet::PeerGuid incomingOwner) {
         // The server keeps its own authoritative owner assignment and must not let an owning client
         // dictate it back; clients adopt whatever the server sends.
         if (!IsServerPeer()) {
@@ -48,7 +48,7 @@ namespace Framework::Networking::Replication {
             bs->Write(ownerGUID);
         }
         else {
-            PeerGuid incomingOwner = ownerGUID;
+            MafiaNet::PeerGuid incomingOwner = ownerGUID;
             bs->Read(incomingOwner);
             AdoptIncomingOwner(incomingOwner);
         }
@@ -90,7 +90,7 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    void NetworkEntity::SetOwner(PeerGuid guid) {
+    void NetworkEntity::SetOwner(MafiaNet::PeerGuid guid) {
         if (auto *manager = Manager()) {
             manager->SetOwner(this, guid);
         }
@@ -104,7 +104,7 @@ namespace Framework::Networking::Replication {
             return true;
         }
         // The server holds authority over entities left unowned (server-owned).
-        return IsServerPeer() && !IsAssigned(ownerGUID);
+        return IsServerPeer() && ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID;
     }
 
     // --- Per-tick delta serialization (VariableDeltaSerializer) ---
@@ -142,7 +142,7 @@ namespace Framework::Networking::Replication {
     void NetworkEntity::Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) {
         // Server authority gate: only accept state from the entity's current owner, rejecting a
         // stale owner whose in-flight packets land after an ownership handover.
-        if (IsServerPeer() && deserializeParameters->sourceConnection && ToPeerGuid(deserializeParameters->sourceConnection->GetRakNetGUID()) != ownerGUID) {
+        if (IsServerPeer() && deserializeParameters->sourceConnection && MafiaNet::ToPeerGuid(deserializeParameters->sourceConnection->GetRakNetGUID()) != ownerGUID) {
             return;
         }
 
@@ -150,7 +150,7 @@ namespace Framework::Networking::Replication {
         _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[0]);
         // Read into a temporary so the server can ignore a client-supplied owner (see
         // AdoptIncomingOwner); clients adopt the owner the server sends.
-        PeerGuid incomingOwner = ownerGUID;
+        MafiaNet::PeerGuid incomingOwner = ownerGUID;
         _vds.DeserializeVariable(&ctx, incomingOwner);
         AdoptIncomingOwner(incomingOwner);
         FieldSerializer fields(&_vds, &ctx);
@@ -189,7 +189,7 @@ namespace Framework::Networking::Replication {
     MafiaNet::RM3QuerySerializationResult NetworkEntity::QuerySerializationWithinWorld(MafiaNet::Connection_RM3 *destinationConnection) {
         if (IsServerPeer()) {
             // Relay to everyone except the authoritative owner (no echo back to it).
-            if (ToPeerGuid(destinationConnection->GetRakNetGUID()) == ownerGUID) {
+            if (MafiaNet::ToPeerGuid(destinationConnection->GetRakNetGUID()) == ownerGUID) {
                 return MafiaNet::RM3QSR_DO_NOT_CALL_SERIALIZE;
             }
             return MafiaNet::RM3QSR_CALL_SERIALIZE;

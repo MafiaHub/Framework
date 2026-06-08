@@ -87,7 +87,7 @@ namespace Framework::Integrations::Server {
     // populate the player's avatar (nickname, slot index, hardware id) instead of leaving spawn-time
     // fields at their defaults.
     struct PlayerConnectionData {
-        uint64_t guid        = 0;
+        MafiaNet::PeerGuid guid {};
         uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
         std::string nickname;
         std::string hardwareID;
@@ -96,7 +96,7 @@ namespace Framework::Integrations::Server {
     // Invoked when a player joins (with its connection metadata) or leaves (with its GUID); the game
     // creates and owns the player's entity.
     using OnPlayerConnectCallback    = fu2::function<void(const PlayerConnectionData &) const>;
-    using OnPlayerDisconnectCallback = fu2::function<void(uint64_t) const>;
+    using OnPlayerDisconnectCallback = fu2::function<void(MafiaNet::PeerGuid) const>;
 
     // Chat. The sender is resolved to its viewer entity's NetworkID; command lines ("/...") are
     // pre-parsed into a command name and whitespace-separated arguments.

@@ -18,14 +18,14 @@ namespace Framework::World::Archetypes {
     // Stamps ownership on a streamed entity.
     class StreamingFactory {
       public:
-        void SetupServer(Replication::NetworkEntity *entity, uint64_t guid) {
+        void SetupServer(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
             if (entity) {
-                entity->ownerGUID = Replication::PeerGuid {guid};
+                entity->ownerGUID = guid;
             }
         }
-        void SetupClient(Replication::NetworkEntity *entity, uint64_t guid) {
+        void SetupClient(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
             if (entity) {
-                entity->ownerGUID = Replication::PeerGuid {guid};
+                entity->ownerGUID = guid;
             }
         }
     };

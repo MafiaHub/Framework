@@ -40,7 +40,7 @@ namespace Framework::Scripting::Builtins {
             if (!peer) {
                 return;
             }
-            peer->KickPlayer(Framework::Networking::Replication::ToGuid(entity->ownerGUID),
+            peer->KickPlayer(MafiaNet::ToGuid(entity->ownerGUID),
                 reason.empty() ? Networking::DisconnectionReason::KICKED : Networking::DisconnectionReason::KICKED_CUSTOM,
                 reason);
         }

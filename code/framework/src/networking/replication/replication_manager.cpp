@@ -21,7 +21,7 @@ namespace Framework::Networking::Replication {
             static constexpr const char *kIdentifier = "Framework::SetOwner";
 
             MafiaNet::NetworkID networkId;
-            uint64_t ownerGUID = 0;
+            MafiaNet::PeerGuid ownerGUID {};
 
             void Serialize(MafiaNet::BitStream *bs, bool write) {
                 bs->SerializeCompressed(write, networkId);
@@ -40,7 +40,7 @@ namespace Framework::Networking::Replication {
     void ReplicationManager::Init(NetworkPeer *owner, bool isServer) {
         _owner    = owner;
         _isServer = isServer;
-        _myGUID   = ToPeerGuid(owner->GetPeer()->GetMyGUID());
+        _myGUID   = MafiaNet::ToPeerGuid(owner->GetPeer()->GetMyGUID());
         SetNetworkIDManager(owner->GetNetworkIDManager());
         owner->GetPeer()->AttachPlugin(this);
 
@@ -56,14 +56,14 @@ namespace Framework::Networking::Replication {
             });
             owner->RegisterRPC<SetOwnerRPC>([this](const SetOwnerRPC &payload, MafiaNet::Packet *) {
                 if (auto *entity = GetEntityByNetworkID(payload.networkId)) {
-                    entity->ownerGUID = PeerGuid {payload.ownerGUID};
+                    entity->ownerGUID = payload.ownerGUID;
                 }
             });
         }
     }
 
     void ReplicationManager::ForceState(NetworkEntity *entity) {
-        if (!entity || !_owner || !IsAssigned(entity->ownerGUID)) {
+        if (!entity || !_owner || entity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
             return;
         }
         MafiaNet::BitStream bs;
@@ -71,21 +71,21 @@ namespace Framework::Networking::Replication {
         // NetworkIDs are small and monotonic, so WriteCompressed strips the leading zero bytes.
         bs.WriteCompressed(networkId);
         entity->SerializeForcedState(&bs, true);
-        _owner->SendRawRPC(kForceStateId, bs, ToGuid(entity->ownerGUID));
+        _owner->SendRawRPC(kForceStateId, bs, MafiaNet::ToGuid(entity->ownerGUID));
     }
 
-    void ReplicationManager::SetOwner(NetworkEntity *entity, PeerGuid guid) {
+    void ReplicationManager::SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid) {
         if (!entity) {
             return;
         }
         entity->ownerGUID = guid;
         // Serialize to an owner is withheld, so the grant can't ride normal replication: tell the new
         // owner directly. Other peers (and any prior owner) pick it up through serialize.
-        if (_owner && _isServer && IsAssigned(guid)) {
+        if (_owner && _isServer && guid != MafiaNet::UNASSIGNED_PEER_GUID) {
             SetOwnerRPC payload;
             payload.networkId = entity->GetNetworkID();
-            payload.ownerGUID = static_cast<uint64_t>(guid);
-            _owner->SendRPC(payload, ToGuid(guid));
+            payload.ownerGUID = guid;
+            _owner->SendRPC(payload, MafiaNet::ToGuid(guid));
         }
     }
 
@@ -110,7 +110,7 @@ namespace Framework::Networking::Replication {
             return;
         }
         // Only a viewer entity owns a viewer mapping; owned non-viewer entities share the owner GUID.
-        if (entity->streaming.isViewer && IsAssigned(entity->ownerGUID)) {
+        if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
             ClearViewer(entity->ownerGUID);
         }
         // Scrub the interest indices so this delete can't dangle before the next rebuild.
@@ -141,19 +141,19 @@ namespace Framework::Networking::Replication {
         }
     }
 
-    void ReplicationManager::SetViewer(PeerGuid guid, NetworkEntity *entity) {
+    void ReplicationManager::SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity) {
         if (entity) {
             entity->streaming.isViewer = true;
         }
         _viewers[guid] = entity;
     }
 
-    NetworkEntity *ReplicationManager::GetViewer(PeerGuid guid) const {
+    NetworkEntity *ReplicationManager::GetViewer(MafiaNet::PeerGuid guid) const {
         const auto it = _viewers.find(guid);
         return it != _viewers.end() ? it->second : nullptr;
     }
 
-    void ReplicationManager::ClearViewer(PeerGuid guid) {
+    void ReplicationManager::ClearViewer(MafiaNet::PeerGuid guid) {
         _viewers.erase(guid);
     }
 
@@ -167,7 +167,7 @@ namespace Framework::Networking::Replication {
         });
     }
 
-    void ReplicationManager::CollectInterest(NetworkEntity *viewer, PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
+    void ReplicationManager::CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
         _interest.CollectVisible(viewer, viewerGUID, out);
     }
 
@@ -179,9 +179,9 @@ namespace Framework::Networking::Replication {
         // replicas all originate from the server, so PopConnection cleans them up on its own.
         if (_isServer) {
             if (_onClientDisconnect) {
-                _onClientDisconnect(ToPeerGuid(rakNetGUID));
+                _onClientDisconnect(MafiaNet::ToPeerGuid(rakNetGUID));
             }
-            if (auto *viewer = GetViewer(ToPeerGuid(rakNetGUID))) {
+            if (auto *viewer = GetViewer(MafiaNet::ToPeerGuid(rakNetGUID))) {
                 DestroyEntity(viewer);
             }
         }

@@ -40,13 +40,13 @@ namespace Framework::Networking::Replication {
 
         // Fill `out` with the entities relevant to `viewer`: in range and dimension, owned, or
         // always-visible. The home of the server's relevance rule.
-        void CollectVisible(NetworkEntity *viewer, PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
+        void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
 
       private:
         // Range query on the XZ plane; the set dedupes per-cell hits.
         void QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
 
-        const std::unordered_set<NetworkEntity *> *OwnedBy(PeerGuid guid) const;
+        const std::unordered_set<NetworkEntity *> *OwnedBy(MafiaNet::PeerGuid guid) const;
         const std::unordered_set<NetworkEntity *> &AlwaysVisible() const {
             return _alwaysVisible;
         }
@@ -56,7 +56,7 @@ namespace Framework::Networking::Replication {
         float _min      = -10000.0f;
         float _max      = 10000.0f;
         GridSectorizer _grid;
-        std::unordered_map<PeerGuid, std::unordered_set<NetworkEntity *>> _ownedByGuid;
+        std::unordered_map<MafiaNet::PeerGuid, std::unordered_set<NetworkEntity *>> _ownedByGuid;
         std::unordered_set<NetworkEntity *> _alwaysVisible;
     };
 } // namespace Framework::Networking::Replication

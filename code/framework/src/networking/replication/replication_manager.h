@@ -49,12 +49,12 @@ namespace Framework::Networking::Replication {
         // Server: change an entity's owner and notify the new owner directly (see
         // NetworkEntity::SetOwner). Needed because serialize to an owner is withheld, so the grant
         // can't ride normal replication.
-        void SetOwner(NetworkEntity *entity, PeerGuid guid);
+        void SetOwner(NetworkEntity *entity, MafiaNet::PeerGuid guid);
 
         bool IsServer() const {
             return _isServer;
         }
-        PeerGuid GetMyGUID() const {
+        MafiaNet::PeerGuid GetMyGUID() const {
             return _myGUID;
         }
 
@@ -68,9 +68,9 @@ namespace Framework::Networking::Replication {
         void ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const;
 
         // --- Viewers (a connection's controlled entity, e.g. a player's avatar) ---
-        void SetViewer(PeerGuid guid, NetworkEntity *entity);
-        NetworkEntity *GetViewer(PeerGuid guid) const;
-        void ClearViewer(PeerGuid guid);
+        void SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity);
+        NetworkEntity *GetViewer(MafiaNet::PeerGuid guid) const;
+        void ClearViewer(MafiaNet::PeerGuid guid);
 
         // --- Interest management ---
         // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
@@ -79,12 +79,12 @@ namespace Framework::Networking::Replication {
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
         void RebuildInterest();
-        void CollectInterest(NetworkEntity *viewer, PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
+        void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
 
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
         // while it is still resolvable. The integration layer wires its player-disconnect notification
         // here.
-        void SetOnClientDisconnect(fu2::function<void(PeerGuid) const> callback) {
+        void SetOnClientDisconnect(fu2::function<void(MafiaNet::PeerGuid) const> callback) {
             _onClientDisconnect = std::move(callback);
         }
 
@@ -108,15 +108,15 @@ namespace Framework::Networking::Replication {
 
       private:
         bool _isServer    = false;
-        PeerGuid _myGUID  = UnassignedPeer();
+        MafiaNet::PeerGuid _myGUID  = MafiaNet::UNASSIGNED_PEER_GUID;
         // Server-side monotonic NetworkID allocator. Starts at 1 (0 reads as "none" in game code) and
         // stays well within JavaScript's safe-integer range so scripting can hold ids as plain numbers.
         // Bumped only from CreateEntity on the sim thread, so it needs no synchronization.
         uint64_t _nextNetworkId = 0;
         NetworkPeer *_owner = nullptr;
         InterestGrid _interest;
-        std::unordered_map<PeerGuid, NetworkEntity *> _viewers;
-        fu2::function<void(PeerGuid) const> _onClientDisconnect;
+        std::unordered_map<MafiaNet::PeerGuid, NetworkEntity *> _viewers;
+        fu2::function<void(MafiaNet::PeerGuid) const> _onClientDisconnect;
         fu2::function<void(uint64_t) const> _onEntityCreated;
         fu2::function<void(uint64_t) const> _onEntityDestroyed;
     };
