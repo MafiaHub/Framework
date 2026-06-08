@@ -21,8 +21,6 @@ namespace Framework::Networking::Replication {
     class ReplicationManager;
     class EntityRegistry;
 
-    // A peer guid, kept distinct from NetworkID (a bare typedef uint64_t) so the two can't be
-    // passed for one another. Trivially copyable -> identical 8 bytes on the wire.
     enum class PeerGuid : uint64_t {};
 
     inline PeerGuid ToPeerGuid(MafiaNet::RakNetGUID guid) {
@@ -131,13 +129,12 @@ namespace Framework::Networking::Replication {
         MafiaNet::Time GetUpdateAge() const;
         glm::vec3 GetExtrapolatedPosition() const;
 
-        // --- Replica3 implementation (final: extend via the virtual hooks above, not these) ---
         void WriteAllocationID(MafiaNet::Connection_RM3 *destinationConnection, MafiaNet::BitStream *allocationIdBitstream) const final;
         void SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
         bool DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) final;
         void SerializeDestruction(MafiaNet::BitStream *destructionBitstream, MafiaNet::Connection_RM3 *destinationConnection) final;
         bool DeserializeDestruction(MafiaNet::BitStream *destructionBitstream, MafiaNet::Connection_RM3 *sourceConnection) final;
-        void DeallocReplica(MafiaNet::Connection_RM3 *sourceConnection) final;
+        void DeallocReplica(MafiaNet::Connection_RM3 *sourceConnection) override;
 
         void OnUserReplicaPreSerializeTick() final;
         MafiaNet::RM3SerializationResult Serialize(MafiaNet::SerializeParameters *serializeParameters) final;
