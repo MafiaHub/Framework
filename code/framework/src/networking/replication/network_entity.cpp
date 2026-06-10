@@ -43,31 +43,47 @@ namespace Framework::Networking::Replication {
         allocationIdBitstream->Write(typeId);
     }
 
-    void NetworkEntity::SerializeBaseState(MafiaNet::BitStream *bs, bool write) {
-        if (write) {
-            bs->Write(ownerGUID);
+    bool NetworkEntity::ApplyIncomingEpoch(uint8_t incomingEpoch) {
+        if (IsServerPeer()) {
+            // The server's epoch is authoritative: a mismatch is an owner update sent before the
+            // owner saw the last ForceState — stale, so it must not revert the forced state.
+            return incomingEpoch == stateEpoch;
+        }
+        stateEpoch = incomingEpoch;
+        return true;
+    }
+
+    void NetworkEntity::SerializeBaseFields(FieldSerializer &fields) {
+        if (fields.Writing()) {
+            fields.Field(ownerGUID);
         }
         else {
+            // Read into a temporary so the server can ignore a client-supplied owner (see
+            // AdoptIncomingOwner); clients adopt the owner the server sends.
             MafiaNet::PeerGuid incomingOwner = ownerGUID;
-            bs->Read(incomingOwner);
+            fields.Field(incomingOwner);
             AdoptIncomingOwner(incomingOwner);
         }
-        bs->Serialize(write, position);
-        bs->Serialize(write, velocity);
-        bs->Serialize(write, rotation);
+        fields.Field(position);
+        fields.Field(velocity);
+        fields.Field(rotation);
     }
 
     void NetworkEntity::SerializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
-        SerializeBaseState(constructionBitstream, true);
-        OnSerializeConstruction(constructionBitstream, true);
+        constructionBitstream->Write(stateEpoch);
         FieldSerializer seed(constructionBitstream, true);
+        SerializeBaseFields(seed);
+        OnSerializeConstruction(constructionBitstream, true);
         SerializeFields(seed);
     }
 
     bool NetworkEntity::DeserializeConstruction(MafiaNet::BitStream *constructionBitstream, MafiaNet::Connection_RM3 *) {
-        SerializeBaseState(constructionBitstream, false);
-        OnSerializeConstruction(constructionBitstream, false);
+        uint8_t incomingEpoch = stateEpoch;
+        constructionBitstream->Read(incomingEpoch);
+        ApplyIncomingEpoch(incomingEpoch);
         FieldSerializer seed(constructionBitstream, false);
+        SerializeBaseFields(seed);
+        OnSerializeConstruction(constructionBitstream, false);
         SerializeFields(seed);
         OnConstructed();
         return true;
@@ -122,16 +138,17 @@ namespace Framework::Networking::Replication {
     MafiaNet::RM3SerializationResult NetworkEntity::Serialize(MafiaNet::SerializeParameters *serializeParameters) {
         serializeParameters->messageTimestamp = MafiaNet::GetTime();
 
+        // The epoch rides raw ahead of the delta block: it must be present in every update, and a VDS
+        // variable is omitted when unchanged, which would let a pre-override packet pass the
+        // staleness check by absence.
+        serializeParameters->outputBitstream[0].Write(stateEpoch);
+
         MafiaNet::VariableDeltaSerializer::SerializationContext ctx;
         // whenLastSerialized == 0 means this is the first send to a fresh system: write every
         // variable in full; otherwise only changed variables are written.
         _vds.BeginIdenticalSerialize(&ctx, serializeParameters->whenLastSerialized == 0, &serializeParameters->outputBitstream[0]);
-        // ownerGUID stays explicit; the receiver filters it via AdoptIncomingOwner.
-        _vds.SerializeVariable(&ctx, ownerGUID);
         FieldSerializer fields(&_vds, &ctx);
-        fields.Field(position);
-        fields.Field(velocity);
-        fields.Field(rotation);
+        SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
 
@@ -150,17 +167,17 @@ namespace Framework::Networking::Replication {
             return;
         }
 
+        uint8_t incomingEpoch = stateEpoch;
+        deserializeParameters->serializationBitstream[0].Read(incomingEpoch);
+        if (!ApplyIncomingEpoch(incomingEpoch)) {
+            // Stale epoch: discard this update without applying it.
+            return;
+        }
+
         MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
         _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[0]);
-        // Read into a temporary so the server can ignore a client-supplied owner (see
-        // AdoptIncomingOwner); clients adopt the owner the server sends.
-        MafiaNet::PeerGuid incomingOwner = ownerGUID;
-        _vds.DeserializeVariable(&ctx, incomingOwner);
-        AdoptIncomingOwner(incomingOwner);
         FieldSerializer fields(&_vds, &ctx);
-        fields.Field(position);
-        fields.Field(velocity);
-        fields.Field(rotation);
+        SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndDeserialize(&ctx);
 

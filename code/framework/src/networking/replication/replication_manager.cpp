@@ -22,10 +22,14 @@ namespace Framework::Networking::Replication {
 
             MafiaNet::NetworkID networkId;
             MafiaNet::PeerGuid ownerGUID {};
+            // The new owner adopts the server's current epoch, or every update it sends would be
+            // rejected as stale (see NetworkEntity::stateEpoch).
+            uint8_t stateEpoch = 0;
 
             void Serialize(MafiaNet::BitStream *bs, bool write) {
                 bs->SerializeCompressed(write, networkId);
                 bs->Serialize(write, ownerGUID);
+                bs->Serialize(write, stateEpoch);
             }
         };
     } // namespace
@@ -49,14 +53,20 @@ namespace Framework::Networking::Replication {
             owner->RegisterRawRPC(kForceStateId, [this](MafiaNet::BitStream *bs, MafiaNet::Packet *) {
                 MafiaNet::NetworkID networkId;
                 bs->ReadCompressed(networkId);
+                uint8_t epoch = 0;
+                bs->Read(epoch);
                 if (auto *entity = GetEntityByNetworkID(networkId)) {
+                    // Adopting the epoch is what acknowledges the override: updates we send from here
+                    // on carry it, so the server stops dropping them.
+                    entity->stateEpoch = epoch;
                     entity->SerializeForcedState(bs, false);
                     entity->OnStateForced();
                 }
             });
             owner->RegisterRPC<SetOwnerRPC>([this](const SetOwnerRPC &payload, MafiaNet::Packet *) {
                 if (auto *entity = GetEntityByNetworkID(payload.networkId)) {
-                    entity->ownerGUID = payload.ownerGUID;
+                    entity->ownerGUID  = payload.ownerGUID;
+                    entity->stateEpoch = payload.stateEpoch;
                 }
             });
             _clientRPCsRegistered = true;
@@ -64,13 +74,20 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::ForceState(NetworkEntity *entity) {
-        if (!entity || !_owner || entity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
+        // Server-only, like SetOwner: on a client this must be a no-op, not an RPC misaddressed to a
+        // peer we aren't connected to (the shared scripting builtins call it on both sides).
+        if (!entity || !_owner || !_isServer || entity->ownerGUID == MafiaNet::UNASSIGNED_PEER_GUID) {
             return;
         }
+        // The epoch fences the override: the owner echoes the new value back in its updates, and
+        // Deserialize drops owner state still carrying the old one — in-flight packets sent before
+        // the owner saw this override can no longer revert it.
+        ++entity->stateEpoch;
         MafiaNet::BitStream bs;
         MafiaNet::NetworkID networkId = entity->GetNetworkID();
         // NetworkIDs are small and monotonic, so WriteCompressed strips the leading zero bytes.
         bs.WriteCompressed(networkId);
+        bs.Write(entity->stateEpoch);
         entity->SerializeForcedState(&bs, true);
         _owner->SendRawRPC(kForceStateId, bs, MafiaNet::ToGuid(entity->ownerGUID));
     }
@@ -84,8 +101,9 @@ namespace Framework::Networking::Replication {
         // owner directly. Other peers (and any prior owner) pick it up through serialize.
         if (_owner && _isServer && guid != MafiaNet::UNASSIGNED_PEER_GUID) {
             SetOwnerRPC payload;
-            payload.networkId = entity->GetNetworkID();
-            payload.ownerGUID = guid;
+            payload.networkId  = entity->GetNetworkID();
+            payload.ownerGUID  = guid;
+            payload.stateEpoch = entity->stateEpoch;
             _owner->SendRPC(payload, MafiaNet::ToGuid(guid));
         }
     }

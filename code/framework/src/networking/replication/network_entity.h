@@ -70,6 +70,13 @@ namespace Framework::Networking::Replication {
         // --- Authority (replicated) ---
         MafiaNet::PeerGuid ownerGUID = MafiaNet::UNASSIGNED_PEER_GUID;
 
+        // Fences server overrides against in-flight owner updates: bumped by the server on
+        // ForceState, adopted by the owner from the ForceState/SetOwner RPCs and echoed back in its
+        // updates; the server drops owner state carrying a stale value (sent before the owner saw the
+        // override) instead of letting it revert the forced state. Equality-checked, so uint8 wrap is
+        // harmless. Managed by ReplicationManager — game code never touches it.
+        uint8_t stateEpoch = 0;
+
         // Local-clock send time of the last applied update (MafiaNet shifts it on receipt). Not replicated.
         MafiaNet::Time lastUpdateTime = 0;
 
@@ -152,7 +159,15 @@ namespace Framework::Networking::Replication {
         // clients adopt it. Single source of truth for the rule shared by construction and deltas.
         void AdoptIncomingOwner(MafiaNet::PeerGuid incomingOwner);
 
-        void SerializeBaseState(MafiaNet::BitStream *bs, bool write);
+        // The base replicated field set (owner, transform) in its single wire order, shared by
+        // construction, Serialize, and Deserialize so the three paths cannot drift apart. The state
+        // epoch travels separately as a raw prefix — see the comment in Serialize().
+        void SerializeBaseFields(FieldSerializer &fields);
+
+        // Apply an epoch received over the wire: clients adopt it; the server compares it and
+        // returns false when the update is stale (sent before the last ForceState) and must not be
+        // applied.
+        bool ApplyIncomingEpoch(uint8_t incomingEpoch);
 
         // CRC32 of the registered name; stamped by EntityRegistry, not game-settable.
         uint32_t typeId = 0;
