@@ -199,7 +199,12 @@ namespace Framework::Networking::Replication {
         // replicas all originate from the server, so PopConnection cleans them up on its own.
         if (_isServer) {
             const auto guid = MafiaNet::ToPeerGuid(rakNetGUID);
-            if (_onClientDisconnect) {
+            // This plugin callback fires for every closed connection, including peers dropped before
+            // they completed identity (build mismatch, quit during the asset phase). Those never
+            // produced a player-connect notification, so gate the disconnect notification on the
+            // replication connection that PushReplicationConnection creates alongside it — keeping
+            // the connect/disconnect callbacks paired for the game.
+            if (_onClientDisconnect && GetConnectionByGUID(rakNetGUID) != nullptr) {
                 _onClientDisconnect(guid);
             }
             NetworkEntity *viewer = GetViewer(guid);
