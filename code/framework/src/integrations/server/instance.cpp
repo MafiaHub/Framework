@@ -38,8 +38,6 @@ namespace Framework::Integrations::Server {
         _webServer        = std::make_unique<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
         _scriptingModule  = std::make_unique<Scripting::ServerScriptingModule>();
-        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
         _commandListener  = std::make_unique<Utils::CommandListener>();
         _commandProcessor = std::make_unique<Utils::CommandProcessor>();

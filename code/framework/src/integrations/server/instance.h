@@ -22,9 +22,6 @@
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
 
-#include "world/types/player.hpp"
-#include "world/types/streaming.hpp"
-
 #include <utils/lifecycle.h>
 
 #include <atomic>
@@ -135,10 +132,6 @@ namespace Framework::Integrations::Server {
         // Command handlers
         void HandleCommand(std::string_view command);
 
-        // entity factories
-        std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
-        std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
-
         // callbacks
         OnPlayerConnectCallback _onPlayerConnectCallback;
         OnPlayerDisconnectCallback _onPlayerDisconnectCallback;
@@ -205,14 +198,6 @@ namespace Framework::Integrations::Server {
             return _webServer.get();
         }
 
-        World::Archetypes::PlayerFactory *GetPlayerFactory() const {
-            return _playerFactory.get();
-        }
-
-        World::Archetypes::StreamingFactory *GetStreamingFactory() const {
-            return _streamingFactory.get();
-        }
-        
         // Register a custom command with the command processor
         Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(std::string_view name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
             return _commandProcessor->RegisterCommand(name, options, proc, desc);

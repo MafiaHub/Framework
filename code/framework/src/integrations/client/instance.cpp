@@ -135,8 +135,6 @@ namespace Framework::Integrations::Client {
         _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
         _renderer         = std::make_unique<Graphics::Renderer>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
-        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
     }

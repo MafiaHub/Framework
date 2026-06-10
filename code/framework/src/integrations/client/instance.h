@@ -25,9 +25,6 @@
 
 #include "scripting/module.h"
 
-#include "world/types/player.hpp"
-#include "world/types/streaming.hpp"
-
 #include <gui/manager.h>
 
 #include <input/input.h>
@@ -107,10 +104,6 @@ namespace Framework::Integrations::Client {
         NetworkConnectionClosedCallback _onConnectionClosed;
         AssetsDownloadFinishedCallback _onAssetsDownloadFinished;
         NetworkChatMessageCallback _onChatMessageReceived;
-
-        // Entity factories
-        std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
-        std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
 
         // assets
         AssetDownloadStatus _downloadStatus {};
@@ -214,14 +207,6 @@ namespace Framework::Integrations::Client {
 
         Graphics::RenderIO *GetRenderIO() const {
             return _renderIO.get();
-        }
-
-        World::Archetypes::PlayerFactory *GetPlayerFactory() const {
-            return _playerFactory.get();
-        }
-
-        World::Archetypes::StreamingFactory *GetStreamingFactory() const {
-            return _streamingFactory.get();
         }
 
         virtual Input::IInput *GetBaseInput() const {
