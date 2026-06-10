@@ -54,6 +54,9 @@ namespace Framework::Networking {
         MafiaNet::TwoWayAuthentication _twoWayAuth;
         MafiaNet::ReadyEvent _readyEvent;
         std::string _buildToken;
+        // Token currently registered with TwoWayAuthentication, so an unchanged re-registration can
+        // be skipped instead of clearing the plugin (which drops in-flight challenges).
+        std::string _registeredToken;
 
         // Owns the replicated entity world. The concrete peer's Init() attaches it and sets its role.
         std::unique_ptr<Replication::ReplicationManager> _replicationManager;
@@ -90,16 +93,13 @@ namespace Framework::Networking {
 
         // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
-        // The callable is stored for the peer's lifetime and reached through RPC4's per-slot context,
-        // so no file-static handler pointers are needed. Matches the Signal() send below.
+        // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
+        // Signal() send below.
         template <typename T>
         void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
-            auto slot = std::make_unique<RPCSlot>([cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
+            RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
                 cb(RPC::Read<T>(bs), packet);
             });
-            void *context = slot.get();
-            _rpcHandlers.push_back(std::move(slot));
-            _rpc.RegisterSlot(T::kIdentifier, &NetworkPeer::DispatchRPC, context, 0);
         }
 
         // Send an RPC payload to every connected system.
@@ -119,7 +119,9 @@ namespace Framework::Networking {
         }
 
         // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
-        // polymorphic tail). Prefer the typed RegisterRPC<T> for fixed-shape payloads.
+        // polymorphic tail). Prefer the typed RegisterRPC<T> for fixed-shape payloads. The callable
+        // is stored for the peer's lifetime and reached through RPC4's per-slot context, so no
+        // file-static handler pointers are needed.
         void RegisterRawRPC(const char *identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
             auto slot     = std::make_unique<RPCSlot>(std::move(handler));
             void *context = slot.get();
