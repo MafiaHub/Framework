@@ -29,7 +29,7 @@ namespace Framework::Networking::Replication {
         if (existing != _types.end() && existing->second.name != name) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("EntityRegistry: CRC32 collision — '{}' and '{}' both hash to {}; the latter shadows the former", existing->second.name, name, id);
         }
-        _types[id] = Entry {id, name, std::move(constructor)};
+        _types[id] = Entry {name, std::move(constructor)};
         return id;
     }
 

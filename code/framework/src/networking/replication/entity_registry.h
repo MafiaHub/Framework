@@ -46,7 +46,6 @@ namespace Framework::Networking::Replication {
 
       private:
         struct Entry {
-            uint32_t id = 0;
             std::string name; // kept for collision diagnostics
             Constructor constructor;
         };
