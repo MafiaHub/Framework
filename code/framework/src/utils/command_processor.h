@@ -64,6 +64,11 @@ namespace Framework::Utils {
             }
         }
 
+        // Split a command line into whitespace-separated tokens, collapsing runs of whitespace. The
+        // single tokenizer for every command surface (console, chat), so the same line parses
+        // identically wherever it arrives.
+        static std::vector<std::string> Tokenize(std::string_view input);
+
         Result<std::string, CommandProcessorError> ProcessCommand(std::string_view input);
         Result<std::string, CommandProcessorError> RegisterCommand(std::string_view name, std::initializer_list<cxxopts::Option> options, const CommandProc &proc, const std::string &desc = "");
         Result<std::string, CommandProcessorError> RegisterCommand(std::string_view name, const std::vector<cxxopts::Option> &options, const CommandProc &proc, const std::string &desc = "");

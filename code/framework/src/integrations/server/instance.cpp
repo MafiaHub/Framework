@@ -348,31 +348,23 @@ namespace Framework::Integrations::Server {
         if (text.empty()) {
             return;
         }
-        if (text[0] == '/') {
-            std::string command, argsPart;
-            const auto space = text.find(' ');
-            if (space != std::string::npos) {
-                command  = text.substr(1, space - 1);
-                argsPart = text.substr(space + 1);
-            }
-            else {
-                command = text.substr(1);
-            }
-            std::vector<std::string> args;
-            std::string arg;
-            std::istringstream iss(argsPart);
-            while (iss >> arg) {
-                args.push_back(arg);
-            }
-            if (_onChatCommandCallback) {
-                _onChatCommandCallback(senderNetworkId, text, command, args);
-            }
-        }
-        else {
+        if (text[0] != '/') {
             if (_onChatMessageCallback) {
                 _onChatMessageCallback(senderNetworkId, text);
             }
+            return;
         }
+        if (!_onChatCommandCallback) {
+            return;
+        }
+        // Same tokenizer as console commands, so a line parses identically on both surfaces.
+        std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(std::string_view(text).substr(1));
+        if (tokens.empty()) {
+            return;
+        }
+        const std::string command = std::move(tokens.front());
+        tokens.erase(tokens.begin());
+        _onChatCommandCallback(senderNetworkId, text, command, tokens);
     }
 
     void Instance::InitAssetStreamer() {
