@@ -341,14 +341,7 @@ namespace Framework::Integrations::Client {
             _readyEventId   = payload.readyEventId;
             _serverTickRate = payload.tickRate;
 
-            _pendingServerResources.clear();
-            _pendingServerResources.reserve(payload.resources.size());
-            for (const auto &resInfo : payload.resources) {
-                Client::Scripting::ServerResourceInfo info;
-                info.name    = resInfo.name;
-                info.version = resInfo.version;
-                _pendingServerResources.push_back(info);
-            }
+            _pendingServerResources = payload.resources;
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
 
             DownloadsAssetsFromConnectedServer();

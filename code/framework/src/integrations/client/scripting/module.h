@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include <networking/rpc/server_resources.h>
 #include <scripting/module.h>
 #include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
@@ -22,12 +23,10 @@
 namespace Framework::Integrations::Client::Scripting {
 
     /**
-     * Information about a resource received from the server.
+     * Information about a resource received from the server — the RPC wire type used directly, so
+     * the scripting layer cannot drift from what the server actually sends.
      */
-    struct ServerResourceInfo {
-        std::string name;
-        std::string version;
-    };
+    using ServerResourceInfo = Framework::Networking::RPC::ResourceInfo;
 
     /**
      * Callback type for resource download requests.
