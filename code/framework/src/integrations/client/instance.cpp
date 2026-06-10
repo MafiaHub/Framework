@@ -356,6 +356,13 @@ namespace Framework::Integrations::Client {
 
         // Spawn barrier complete: activate replication and report the connection final.
         net->SetOnConnectionReadyCallback([this, net](int eventId) {
+            // Only the event the server assigned in ServerResources finalizes this connection, and
+            // only once — a stray or repeated completion must not re-run the mod's spawn logic.
+            if (eventId != _readyEventId || _connectionFinalized) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Ignoring ready event {} (expected {}, finalized: {})", eventId, _readyEventId, _connectionFinalized);
+                return;
+            }
+            _connectionFinalized = true;
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection ready (event {}), finalizing", eventId);
             // tickInterval is in seconds; SetAutoSerializeInterval wants milliseconds.
             if (auto *replication = net->GetReplicationManager()) {
@@ -384,6 +391,7 @@ namespace Framework::Integrations::Client {
             // Reset initial asset download state
             _initialDownloadDone = false;
             _downloadStatus      = {};
+            _connectionFinalized = false;
             
             // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
             // connection drops (QueryActionOnPopConnection_Client).

@@ -116,6 +116,8 @@ namespace Framework::Integrations::Client {
         // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
         int _readyEventId {};
         float _serverTickRate {};
+        // One-shot latch so a stray ready-event completion can't re-run the mod's finalization.
+        bool _connectionFinalized {};
 
         void InitNetworkingMessages();
         void InitAssetDownloader();
