@@ -110,9 +110,16 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return;
         }
-        // Only a viewer entity owns a viewer mapping; owned non-viewer entities share the owner GUID.
-        if (entity->streaming.isViewer && entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
-            ClearViewer(entity->ownerGUID);
+        // Erase by value, not by ownerGUID: the owner key may have been reassigned since SetViewer,
+        // and on a respawn flow (SetViewer(newAvatar) then DestroyEntity(oldAvatar)) an erase by key
+        // would take out the replacement's mapping and silence that connection's streaming.
+        for (auto it = _viewers.begin(); it != _viewers.end();) {
+            if (it->second == entity) {
+                it = _viewers.erase(it);
+            }
+            else {
+                ++it;
+            }
         }
         // Scrub the interest indices so this delete can't dangle before the next rebuild.
         _interest.Remove(entity);
@@ -143,6 +150,11 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity) {
+        // A replaced avatar stops being a viewer, or the flag would outlive the mapping and confuse
+        // later lifecycle decisions keyed on it.
+        if (auto *previous = GetViewer(guid); previous && previous != entity) {
+            previous->streaming.isViewer = false;
+        }
         if (entity) {
             entity->streaming.isViewer = true;
         }
@@ -155,7 +167,14 @@ namespace Framework::Networking::Replication {
     }
 
     void ReplicationManager::ClearViewer(MafiaNet::PeerGuid guid) {
-        _viewers.erase(guid);
+        const auto it = _viewers.find(guid);
+        if (it == _viewers.end()) {
+            return;
+        }
+        if (it->second) {
+            it->second->streaming.isViewer = false;
+        }
+        _viewers.erase(it);
     }
 
     void ReplicationManager::RebuildInterest() {
