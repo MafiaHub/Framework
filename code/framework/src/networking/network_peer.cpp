@@ -41,16 +41,23 @@ namespace Framework::Networking {
         if (_buildToken.empty()) {
             return false;
         }
-
-        const MafiaNet::RakString token(_buildToken.c_str());
-        if (_twoWayAuth.AddPassword(kBuildChallengeId, token)) {
+        // Re-registering the same token must be a no-op: the Clear() fallback below wipes the
+        // plugin's in-flight challenge state, which would fail peers mid-handshake for nothing.
+        if (_buildToken == _registeredToken) {
             return true;
         }
 
-        // TwoWayAuthentication cannot overwrite an identifier. Clear and re-add so reconnects or
-        // option reloads keep the stored token and the plugin table in sync.
-        _twoWayAuth.Clear();
-        return _twoWayAuth.AddPassword(kBuildChallengeId, token);
+        const MafiaNet::RakString token(_buildToken.c_str());
+        if (!_twoWayAuth.AddPassword(kBuildChallengeId, token)) {
+            // TwoWayAuthentication cannot overwrite an identifier. A genuine token change pays the
+            // Clear() — unavoidable, since the old token must stop validating.
+            _twoWayAuth.Clear();
+            if (!_twoWayAuth.AddPassword(kBuildChallengeId, token)) {
+                return false;
+            }
+        }
+        _registeredToken = _buildToken;
+        return true;
     }
 
     void NetworkPeer::Update() {
