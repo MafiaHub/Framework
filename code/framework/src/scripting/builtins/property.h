@@ -52,6 +52,11 @@ namespace Framework::Scripting::Builtins {
             if constexpr (std::is_same_v<V, std::string>) {
                 info.GetReturnValue().Set(v8pp::to_v8(info.GetIsolate(), value));
             }
+            else if constexpr (std::is_integral_v<V> && sizeof(V) > 4) {
+                // V8's ReturnValue has no 64-bit overload; values up to 2^53 (e.g. NetworkIDs) are
+                // exact as JS numbers.
+                info.GetReturnValue().Set(static_cast<double>(value));
+            }
             else {
                 info.GetReturnValue().Set(value);
             }

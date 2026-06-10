@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "property.h"
 #include "quaternion.h"
 #include "vector3.h"
 
@@ -72,16 +73,15 @@ namespace Framework::Scripting::Builtins {
 
         Vector3 GetRotation() const {
             if (auto *e = Resolve()) {
-                glm::vec3 euler = glm::eulerAngles(e->rotation);
-                return Vector3(glm::degrees(euler.x), glm::degrees(euler.y), glm::degrees(euler.z));
+                const glm::vec3 euler = glm::degrees(glm::eulerAngles(e->rotation));
+                return Vector3(euler.x, euler.y, euler.z);
             }
             return Vector3(0, 0, 0);
         }
 
         void SetRotationFromEuler(const Vector3 &rot) {
             if (auto *e = Resolve()) {
-                glm::vec3 radians(glm::radians(rot.vec().x), glm::radians(rot.vec().y), glm::radians(rot.vec().z));
-                e->rotation = glm::quat(radians);
+                e->rotation = glm::quat(glm::radians(rot.vec()));
                 e->ForceState();
             }
         }
@@ -113,33 +113,8 @@ namespace Framework::Scripting::Builtins {
 
             auto protoTemplate = cls->class_function_template()->PrototypeTemplate();
 
-            // Read-only property: id
-            protoTemplate->SetNativeDataProperty(
-                v8pp::to_v8(isolate, "id").As<v8::Name>(),
-                [](v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (self) info.GetReturnValue().Set(static_cast<double>(self->GetId()));
-                });
-
-            // Property: position (Vector3). An accessor pair so the setter fires when a script
-            // assigns to it through the prototype chain.
-            {
-                auto positionGetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (self) {
-                        auto pos     = self->GetPosition();
-                        auto &vecCls = Vector3::GetClass(info.GetIsolate());
-                        info.GetReturnValue().Set(vecCls.import_external(info.GetIsolate(), new Vector3(pos)));
-                    }
-                });
-                auto positionSetter = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-                    auto *self = v8pp::class_<Entity>::unwrap_object(info.GetIsolate(), info.This());
-                    if (!self || info.Length() < 1) return;
-                    auto *vec = v8pp::class_<Vector3>::unwrap_object(info.GetIsolate(), info[0]);
-                    if (vec) self->SetPosition(*vec);
-                });
-                protoTemplate->SetAccessorProperty(v8pp::to_v8(isolate, "position").As<v8::Name>(), positionGetter, positionSetter);
-            }
+            RegisterReadonlyProperty<Entity, &Entity::GetId>(isolate, protoTemplate, "id");
+            RegisterObjectProperty<Entity, &Entity::GetPosition, &Entity::SetPosition>(isolate, protoTemplate, "position");
 
             // Property: rotation (accepts both Vector3 euler degrees and Quaternion).
             {
