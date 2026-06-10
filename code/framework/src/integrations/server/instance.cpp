@@ -112,6 +112,7 @@ namespace Framework::Integrations::Server {
         CoreModules::SetReplication(replication);
         if (replication) {
             replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_opts.worldConfig.tickInterval * 1000.0f));
+            replication->ConfigureGrid(_opts.worldConfig.streamCellSize, _opts.worldConfig.streamWorldMin, _opts.worldConfig.streamWorldMax);
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
             replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {

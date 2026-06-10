@@ -72,9 +72,16 @@ namespace Framework::Integrations::Server {
 
         bool enableSignals;
 
-        // update intervals
+        // update intervals and streaming
         struct WorldConfig {
             float tickInterval = 0.016667f;
+            // Interest-grid extent (see Networking::Replication::InterestGrid::Configure): square
+            // world bounds and cell size in world units. Defaults match the grid's own — size them to
+            // the playable area, or entities beyond the bounds clamp into edge cells and degrade
+            // border interest queries.
+            float streamCellSize = 100.0f;
+            float streamWorldMin = -10000.0f;
+            float streamWorldMax = 10000.0f;
         } worldConfig;
 
         // args
