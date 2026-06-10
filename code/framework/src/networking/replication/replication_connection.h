@@ -10,7 +10,11 @@
 
 #include <mafianet/ReplicaManager3.h>
 
+#include <cstdint>
+#include <unordered_set>
+
 namespace Framework::Networking::Replication {
+    class NetworkEntity;
     class ReplicationManager;
 
     // Per-remote-system state. On the client it constructs incoming replicas (AllocReplica); on the
@@ -32,5 +36,14 @@ namespace Framework::Networking::Replication {
       private:
         ReplicationManager *_manager = nullptr;
         bool _isServer               = false;
+
+        // Interest result cached against the grid generation: ReplicaManager3 calls QueryReplicaList
+        // on every RakPeer::Receive(), but the grid only changes once per tick (plus removals), so
+        // the query is recomputed only when the generation or the viewer changed. A removal bumps the
+        // generation, which is what keeps destroyed entities out of this cache.
+        std::unordered_set<NetworkEntity *> _relevant;
+        NetworkEntity *_relevantViewer = nullptr;
+        uint32_t _relevantGeneration   = 0;
+        bool _relevantValid            = false;
     };
 } // namespace Framework::Networking::Replication

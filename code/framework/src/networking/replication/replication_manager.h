@@ -80,6 +80,10 @@ namespace Framework::Networking::Replication {
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
         void RebuildInterest();
         void CollectInterest(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
+        // Change counter for the interest index (see InterestGrid::Generation).
+        uint32_t InterestGeneration() const {
+            return _interest.Generation();
+        }
 
         // Server: invoked from OnClosedConnection just before the dropped peer's avatar is destroyed,
         // while it is still resolvable. The integration layer wires its player-disconnect notification

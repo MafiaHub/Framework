@@ -32,19 +32,30 @@ namespace Framework::Networking::Replication {
             return;
         }
 
-        NetworkEntity *viewer = _manager->GetViewer(MafiaNet::ToPeerGuid(GetRakNetGUID()));
+        const auto viewerGUID = MafiaNet::ToPeerGuid(GetRakNetGUID());
+        NetworkEntity *viewer = _manager->GetViewer(viewerGUID);
         if (!viewer) {
             // Connection not yet associated with a controlled entity (still handshaking).
+            _relevantValid = false;
             return;
         }
 
         // Keep the observer's dimension in sync with its avatar.
         SetVirtualWorld(viewer->GetVirtualWorld());
 
-        std::unordered_set<NetworkEntity *> relevant;
-        _manager->CollectInterest(viewer, MafiaNet::ToPeerGuid(GetRakNetGUID()), relevant);
+        // Recompute the interest set only when the grid contents or the viewer changed (see the
+        // member comment); otherwise reuse the cached set — ReplicaManager3 re-queries far more often
+        // than the grid changes.
+        const uint32_t generation = _manager->InterestGeneration();
+        if (!_relevantValid || _relevantGeneration != generation || _relevantViewer != viewer) {
+            _relevant.clear();
+            _manager->CollectInterest(viewer, viewerGUID, _relevant);
+            _relevantGeneration = generation;
+            _relevantViewer     = viewer;
+            _relevantValid      = true;
+        }
 
-        for (NetworkEntity *entity : relevant) {
+        for (NetworkEntity *entity : _relevant) {
             if (!HasReplicaConstructed(entity)) {
                 newReplicasToCreate.Push(entity, _FILE_AND_LINE_);
             }
@@ -54,7 +65,7 @@ namespace Framework::Networking::Replication {
         GetConstructedReplicas(constructed);
         for (unsigned i = 0; i < constructed.Size(); ++i) {
             auto *entity = static_cast<NetworkEntity *>(constructed[i]);
-            if (entity && !relevant.contains(entity)) {
+            if (entity && !_relevant.contains(entity)) {
                 existingReplicasToDestroy.Push(entity, _FILE_AND_LINE_);
             }
         }

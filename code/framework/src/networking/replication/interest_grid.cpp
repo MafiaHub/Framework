@@ -32,6 +32,8 @@ namespace Framework::Networking::Replication {
         _grid.Clear();
         _ownedByGuid.clear();
         _alwaysVisible.clear();
+        _live.clear();
+        ++_generation;
     }
 
     void InterestGrid::Insert(NetworkEntity *entity) {
@@ -40,6 +42,7 @@ namespace Framework::Networking::Replication {
         }
         // GridSectorizer asserts on a zero-area entry, so insert a tiny box around the XZ position.
         _grid.AddEntry(entity, entity->position.x - kPointEpsilon, entity->position.z - kPointEpsilon, entity->position.x + kPointEpsilon, entity->position.z + kPointEpsilon);
+        _live.insert(entity);
         if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
             _ownedByGuid[entity->ownerGUID].insert(entity);
         }
@@ -49,13 +52,27 @@ namespace Framework::Networking::Replication {
     }
 
     void InterestGrid::Remove(NetworkEntity *entity) {
-        for (auto it = _ownedByGuid.begin(); it != _ownedByGuid.end();) {
-            it->second.erase(entity);
-            if (it->second.empty()) {
-                it = _ownedByGuid.erase(it);
+        // The stale grid entry stays until the next rebuild; dropping the entity from _live is what
+        // makes the queries skip it (see class comment).
+        _live.erase(entity);
+        ++_generation;
+        // Fast path: the index was keyed on ownerGUID at the last rebuild, so the bucket is directly
+        // addressable — unless game code rewrote ownerGUID since then, in which case sweep them all.
+        const auto bucket = _ownedByGuid.find(entity->ownerGUID);
+        if (bucket != _ownedByGuid.end() && bucket->second.erase(entity) != 0) {
+            if (bucket->second.empty()) {
+                _ownedByGuid.erase(bucket);
             }
-            else {
-                ++it;
+        }
+        else {
+            for (auto it = _ownedByGuid.begin(); it != _ownedByGuid.end();) {
+                it->second.erase(entity);
+                if (it->second.empty()) {
+                    it = _ownedByGuid.erase(it);
+                }
+                else {
+                    ++it;
+                }
             }
         }
         _alwaysVisible.erase(entity);
@@ -65,13 +82,15 @@ namespace Framework::Networking::Replication {
         if (!_ready) {
             return;
         }
-        DataStructures::List<void *> hits;
-        _grid.GetEntries(hits, center.x - radius, center.z - radius, center.x + radius, center.z + radius);
+        _queryHits.Clear(true, _FILE_AND_LINE_);
+        _grid.GetEntries(_queryHits, center.x - radius, center.z - radius, center.x + radius, center.z + radius);
 
         const float radiusSq = radius * radius;
-        for (unsigned i = 0; i < hits.Size(); ++i) {
-            auto *entity = static_cast<NetworkEntity *>(hits[i]);
-            if (!entity) {
+        for (unsigned i = 0; i < _queryHits.Size(); ++i) {
+            auto *entity = static_cast<NetworkEntity *>(_queryHits[i]);
+            // The grid can hold entries for entities destroyed since the last rebuild; only _live
+            // pointers are safe to dereference.
+            if (!entity || !_live.contains(entity)) {
                 continue;
             }
             const glm::vec3 delta = entity->position - center;
@@ -94,34 +113,30 @@ namespace Framework::Networking::Replication {
         }
         const auto observerWorld = viewer->GetVirtualWorld();
 
-        std::unordered_set<NetworkEntity *> inRange;
-        QueryRadius(viewer->position, viewer->streaming.range, inRange);
+        _inRange.clear();
+        QueryRadius(viewer->position, viewer->streaming.range, _inRange);
 
-        // Owned and always-visible entities bypass range/dimension culling so they never drop out.
-        const auto visible = [&](NetworkEntity *entity) {
-            if (!entity || !entity->streaming.visible) {
-                return false;
-            }
-            return entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == viewerGUID || (MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld) && inRange.contains(entity));
-        };
-
-        const auto consider = [&](NetworkEntity *entity) {
-            if (visible(entity)) {
+        // In-range entities still face the dimension check; owned, always-visible, and the viewer
+        // itself bypass range and dimension culling entirely so they never drop out.
+        for (NetworkEntity *entity : _inRange) {
+            if (entity->streaming.visible && (entity->streaming.alwaysVisible || entity == viewer || entity->ownerGUID == viewerGUID || MafiaNet::VirtualWorldsCanSee(entity->GetVirtualWorld(), observerWorld))) {
                 out.insert(entity);
             }
-        };
-
-        for (NetworkEntity *entity : inRange) {
-            consider(entity);
         }
         if (const auto *owned = OwnedBy(viewerGUID)) {
             for (NetworkEntity *entity : *owned) {
-                consider(entity);
+                if (entity->streaming.visible) {
+                    out.insert(entity);
+                }
             }
         }
         for (NetworkEntity *entity : AlwaysVisible()) {
-            consider(entity);
+            if (entity->streaming.visible) {
+                out.insert(entity);
+            }
         }
-        consider(viewer);
+        if (viewer->streaming.visible) {
+            out.insert(viewer);
+        }
     }
 } // namespace Framework::Networking::Replication
