@@ -192,4 +192,31 @@ namespace Framework::Utils {
 
         return std::string(path.substr(pos)); // Include the dot in the extension
     }
+
+    std::filesystem::path ResolvePathUnderRoot(const std::filesystem::path &root, std::string urlPath) {
+        if (urlPath.empty() || urlPath == "/") {
+            urlPath = "/index.html";
+        }
+        if (urlPath.front() == '/') {
+            urlPath.erase(0, 1);
+        }
+
+        std::error_code ec;
+        const auto file = std::filesystem::weakly_canonical(root / urlPath, ec);
+        if (ec) {
+            return {};
+        }
+        const auto rootCanonical = std::filesystem::weakly_canonical(root, ec);
+        if (ec) {
+            return {};
+        }
+
+        // lexically_relative is empty when the paths have different roots
+        // (drive injection) and ".."-prefixed when the input escaped upward
+        const auto relative = file.lexically_relative(rootCanonical);
+        if (relative.empty() || *relative.begin() == "..") {
+            return {};
+        }
+        return file;
+    }
 } // namespace Framework::Utils

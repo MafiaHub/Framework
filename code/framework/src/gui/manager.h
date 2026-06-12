@@ -36,13 +36,26 @@ namespace Framework::GUI {
         CefRefPtr<CEF::App> _cefApp;
         bool _cefInitialized = false;
 
-        std::recursive_mutex _renderMutex;
+        // Guards _views/_dyingViews across the game thread, the render thread
+        // and reentrant message dispatch; mutable so const readers can lock
+        mutable std::recursive_mutex _renderMutex;
 
         std::vector<std::unique_ptr<View>> _views;
+
+        // Destroyed views are parked here for a few ticks before their GPU
+        // resources are actually freed: draw data built on the game thread can
+        // reference a view's texture for a couple of frames after removal
+        std::vector<std::pair<std::unique_ptr<View>, int>> _dyingViews;
+
         std::unique_ptr<SystemClipboard> _clipboard;
+        std::string _rootDir;
         Graphics::Renderer *_graphicsRenderer {};
         bool _gpuAccelerated = false;
         int _id              = 0;
+
+        // Callers must hold _renderMutex
+        std::vector<GUI::View *> GetViewsByZIndex() const;
+        void RetireView(std::unique_ptr<View> view);
 
       public:
         Manager();
@@ -61,8 +74,16 @@ namespace Framework::GUI {
         std::vector<GUI::View *> GetAllViews() const;
         std::vector<GUI::View *> GetGCViews() const;
 
+        size_t GetDyingViewCount() const {
+            return _dyingViews.size();
+        }
+
         void Update() override;
         void Render();
+
+        // Game-thread companion to Render(): must be called inside an active
+        // ImGui frame so D3D12 views can blit through the background draw list
+        void SubmitImGuiDraws();
 
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;

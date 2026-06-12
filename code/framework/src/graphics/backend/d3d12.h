@@ -15,6 +15,11 @@
 
 namespace Framework::Graphics {
     class D3D12Backend: public Backend<ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *> {
+      public:
+        // Extra shader-visible SRV slots reserved after the ImGui font slot(s),
+        // handed out to web views via AllocateSRVSlot
+        static constexpr UINT kExtraSrvSlots = 64;
+
       private:
         IDXGISwapChain3 *_swapChain             = nullptr;
         UINT _frameBufferCount                  = 0;
@@ -22,6 +27,9 @@ namespace Framework::Graphics {
         ID3D12DescriptorHeap *_srvHeap          = nullptr;
         ID3D12GraphicsCommandList *_commandList = nullptr;
         ID3D12CommandQueue *_commandQueue       = nullptr;
+
+        UINT _srvDescriptorSize = 0;
+        std::vector<UINT> _freeSrvSlots;
 
         struct FrameContext {
             ID3D12CommandAllocator *_commandAllocator = nullptr;
@@ -65,6 +73,30 @@ namespace Framework::Graphics {
 
         ID3D12GraphicsCommandList *GetGraphicsCommandList() const {
             return _commandList;
+        }
+
+        UINT GetCurrentFrameIndex() const {
+            return _swapChain ? _swapChain->GetCurrentBackBufferIndex() : 0;
+        }
+
+        // Allocates a shader-visible SRV slot from the backend heap (the one ImGui
+        // is initialized against, so handles are usable as ImTextureID). Returns -1
+        // when exhausted.
+        int AllocateSRVSlot();
+        void FreeSRVSlot(int slot);
+        D3D12_CPU_DESCRIPTOR_HANDLE GetSRVSlotCPUHandle(int slot) const;
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSRVSlotGPUHandle(int slot) const;
+
+        // Blocks until the GPU has drained the queue. Used before destroying
+        // resources that in-flight command lists may still reference. Returns
+        // false when the drain could not be confirmed (fence timeout/failure)
+        // so callers can refuse to free still-referenced resources; returns
+        // true during process teardown, where waiting is impossible and
+        // freeing is safe (the queue's threads are already gone).
+        [[nodiscard]] bool WaitForGpu();
+
+        size_t GetFreeSRVSlotCount() const {
+            return _freeSrvSlots.size();
         }
     };
 } // namespace Framework::Graphics

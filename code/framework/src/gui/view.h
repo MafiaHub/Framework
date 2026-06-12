@@ -85,6 +85,15 @@ namespace Framework::GUI {
         virtual void Update();
         virtual void Render() = 0;
 
+        // Called on the game thread inside an active ImGui frame; backends that
+        // draw through ImGui (D3D12) submit their textured quad here
+        virtual void SubmitImGuiDraw() {}
+
+        // One-line backend state dump for debug overlays
+        virtual std::string GetDebugString() const {
+            return "";
+        }
+
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 

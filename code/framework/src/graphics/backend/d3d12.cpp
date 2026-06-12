@@ -9,18 +9,25 @@
 #include "d3d12.h"
 
 #include <logging/logger.h>
+#include <utils/process_shutdown.h>
+
+#include <wrl/client.h>
 
 namespace Framework::Graphics {
     bool D3D12Backend::Init(const Framework::Graphics::RendererConfiguration &opts) {
         const auto swapChain = opts.d3d12.swapchain;
         const auto commandQueue = opts.d3d12.commandQueue;
-        _device  = opts.d3d12.device;
         _context = opts.d3d12.deviceContext;
-        // #1 get device from swapchain (maybe different device)
+        // #1 get device from swapchain — and use it as THE device everywhere:
+        // descriptor heaps/RTVs below are created from it, so SRVs, textures
+        // and fences created later through GetDevice() must match or D3D12
+        // rejects the mixed-device usage. opts.d3d12.device is ignored if it
+        // differs.
         ID3D12Device *pD3DDevice;
         if (FAILED(swapChain->GetDevice(__uuidof(ID3D12Device), (void **)&pD3DDevice))) {
             return false;
         }
+        _device = pD3DDevice;
 
         _swapChain    = swapChain;
         _commandQueue = commandQueue;
@@ -39,11 +46,20 @@ namespace Framework::Graphics {
         {
             D3D12_DESCRIPTOR_HEAP_DESC desc {};
             desc.Type           = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-            desc.NumDescriptors = _frameBufferCount;
+            desc.NumDescriptors = _frameBufferCount + kExtraSrvSlots;
             desc.Flags          = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
             if (pD3DDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&_srvHeap)) != S_OK) {
                 return false;
+            }
+
+            _srvDescriptorSize = pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+            // Slots [0, _frameBufferCount) stay reserved for ImGui (its font SRV
+            // sits at the heap start); the rest are up for allocation
+            _freeSrvSlots.clear();
+            for (UINT i = 0; i < kExtraSrvSlots; i++) {
+                _freeSrvSlots.push_back(_frameBufferCount + i);
             }
         }
 
@@ -131,5 +147,96 @@ namespace Framework::Graphics {
 
     int D3D12Backend::NumFramesInFlight() const {
         return _frameBufferCount;
+    }
+
+    int D3D12Backend::AllocateSRVSlot() {
+        if (!_srvHeap) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::AllocateSRVSlot, no descriptor heap");
+            return -1;
+        }
+        if (_freeSrvSlots.empty()) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::AllocateSRVSlot, heap exhausted");
+            return -1;
+        }
+        const auto slot = _freeSrvSlots.back();
+        _freeSrvSlots.pop_back();
+        return static_cast<int>(slot);
+    }
+
+    void D3D12Backend::FreeSRVSlot(int slot) {
+        if (slot < 0) {
+            return;
+        }
+        _freeSrvSlots.push_back(static_cast<UINT>(slot));
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE D3D12Backend::GetSRVSlotCPUHandle(int slot) const {
+        if (!_srvHeap) {
+            return {};
+        }
+        auto handle = _srvHeap->GetCPUDescriptorHandleForHeapStart();
+        handle.ptr += static_cast<SIZE_T>(slot) * _srvDescriptorSize;
+        return handle;
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12Backend::GetSRVSlotGPUHandle(int slot) const {
+        if (!_srvHeap) {
+            return {};
+        }
+        auto handle = _srvHeap->GetGPUDescriptorHandleForHeapStart();
+        handle.ptr += static_cast<UINT64>(slot) * _srvDescriptorSize;
+        return handle;
+    }
+
+    bool D3D12Backend::WaitForGpu() {
+        if (!_commandQueue || !_device) {
+            return true; // nothing to drain
+        }
+
+        // During process teardown the game has already destroyed its device and
+        // queue; touching them is UB and the fence would never signal anyway.
+        // Freeing without the drain is safe here - in-flight work died with
+        // the queue's threads
+        if (Framework::Utils::IsProcessShutdownInProgress()) {
+            return true;
+        }
+
+        Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+        if (FAILED(_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, CreateFence failed");
+            return false;
+        }
+
+        const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!event) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, CreateEvent failed");
+            return false;
+        }
+
+        bool drained = false;
+        if (FAILED(_commandQueue->Signal(fence.Get(), 1))) {
+            // Generally means the device was removed; in-flight work is dead,
+            // but we can't prove it, so report failure and let callers decide
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, queue Signal failed (device removed?)");
+        }
+        else if (fence->GetCompletedValue() >= 1) {
+            drained = true;
+        }
+        else if (SUCCEEDED(fence->SetEventOnCompletion(1, event))) {
+            // A live GPU signals in single-digit ms; the timeout only bites
+            // when the queue is wedged - which is precisely when freeing
+            // GPU-referenced resources is unsafe, hence the failure return
+            if (WaitForSingleObject(event, 500) == WAIT_OBJECT_0 || fence->GetCompletedValue() >= 1) {
+                drained = true;
+            }
+            else {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, fence wait timed out");
+            }
+        }
+        else {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, SetEventOnCompletion failed");
+        }
+        CloseHandle(event);
+        return drained;
     }
 } // namespace Framework::Graphics

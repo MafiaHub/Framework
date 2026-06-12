@@ -21,7 +21,8 @@ namespace Framework::Graphics {
             return RendererError::RENDERER_ALREADY_INITIALIZED;
         }
 
-        _config = config;
+        _config  = config;
+        _backend = config.backend;
 
         if (_config.backend == RendererBackend::BACKEND_D3D_11) {
             _d3d11Backend = std::make_unique<D3D11Backend>();
