@@ -49,10 +49,6 @@ add_subdirectory(sentry)
 # Build curl
 add_subdirectory(curl)
 
-# Build flecs
-set(FLECS_SHARED_LIBS CACHE BOOL "" OFF)
-add_subdirectory(flecs)
-
 # Build FMT
 add_subdirectory(fmt)
 

@@ -179,7 +179,7 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in network_peer.h)
         ${CMAKE_SOURCE_DIR}/vendors/mafianet/Source/include # Networking / MafiaNet (used in connection.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
-        ${CMAKE_SOURCE_DIR}/vendors                        # flecs, etc.
+        ${CMAKE_SOURCE_DIR}/vendors                        # sentry, etc.
     )
 
     # Implementation-only vendor headers (PRIVATE - not part of public API)
