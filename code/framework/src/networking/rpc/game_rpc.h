@@ -12,9 +12,8 @@
 #include <mafianet/MessageIdentifiers.h>
 #include <mafianet/types.h>
 #include <string>
-#include <utils/hashing.h>
 
-#include <typeinfo>
+#include "rpc_identity.h"
 
 #include "world/modules/base.hpp"
 
@@ -24,13 +23,15 @@ namespace Framework::Networking::RPC {
       private:
         MafiaNet::Packet *packet {};
         uint32_t _hashName = 0;
-        std::string _rpcName;
 
       protected:
         flecs::entity_t _serverID = 0;
 
       public:
-        IGameRPC(): _rpcName(typeid(T).name()), _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
+        // Identity comes from a compiler-independent type name (NOT typeid().name(),
+        // which differs MSVC vs GCC and breaks cross-platform RPC routing); cached
+        // per type in RPCHash/RPCName.
+        IGameRPC(): _hashName(RPCHash<T>()) {};
         void SetServerID(flecs::entity_t serverID) {
             _serverID = serverID;
         }
@@ -40,7 +41,7 @@ namespace Framework::Networking::RPC {
         }
 
         const std::string& GetName() const {
-            return _rpcName;
+            return RPCName<T>();
         }
 
         virtual void Serialize(MafiaNet::BitStream *bs, bool write) = 0;
