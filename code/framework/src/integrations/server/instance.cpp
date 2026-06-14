@@ -479,15 +479,15 @@ namespace Framework::Integrations::Server {
             if (result.GetError() != Utils::CommandProcessorError::COMMAND_NONE) {
                 switch (result.GetError()) {
                     case Utils::CommandProcessorError::COMMAND_PRINT_HELP:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
                         break;
                     case Utils::CommandProcessorError::COMMAND_UNKNOWN:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.GetValue());
                         break;
                     case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT:
                         break;
                     case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.GetValue());
                         break;
                     default:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError()));
