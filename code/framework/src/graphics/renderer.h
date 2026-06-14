@@ -12,7 +12,9 @@
 
 #include "utils/safe_win32.h"
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include "types.h"
 
 #include <memory>
@@ -76,7 +78,7 @@ namespace Framework::Graphics {
         Renderer();
         ~Renderer();
 
-        [[nodiscard]] RendererError Init(RendererConfiguration);
+        [[nodiscard]] Utils::Result<void, Error> Init(RendererConfiguration);
         void Shutdown() override;
 
         void Update() override;

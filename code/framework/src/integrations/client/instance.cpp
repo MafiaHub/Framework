@@ -212,8 +212,8 @@ namespace Framework::Integrations::Client {
         // Init the render device
         if (_opts.useRenderer) {
             if (_renderer) {
-                if (_renderer->Init(_opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE) {
-                    return Error("Renderer failed to initialize");
+                if (auto renderResult = _renderer->Init(_opts.rendererOptions); !renderResult) {
+                    return renderResult;
                 }
 
                 _renderer->SetWindow(_opts.rendererOptions.windowHandle);
