@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "entity_registry.h"
 #include "interest_grid.h"
 #include "network_entity.h"
 
@@ -68,6 +69,29 @@ namespace Framework::Networking::Replication {
         void DestroyEntity(NetworkEntity *entity);
         NetworkEntity *GetEntityByNetworkID(MafiaNet::NetworkID networkId) const;
         void ForEachEntity(const fu2::function<void(NetworkEntity *) const> &fn) const;
+
+        // Typed wrappers over the base-pointer entity API (cast once inside). CreateEntity<T> resolves
+        // the type id from T::kTypeName.
+        template <typename T>
+        T *CreateEntity() {
+            return dynamic_cast<T *>(CreateEntity(EntityRegistry::Get().TypeId(T::kTypeName)));
+        }
+        template <typename T>
+        T *GetEntity(MafiaNet::NetworkID networkId) const {
+            return dynamic_cast<T *>(GetEntityByNetworkID(networkId));
+        }
+        template <typename T>
+        T *GetViewerAs(MafiaNet::PeerGuid guid) const {
+            return dynamic_cast<T *>(GetViewer(guid));
+        }
+        template <typename T>
+        void ForEach(const fu2::function<void(T *) const> &fn) const {
+            ForEachEntity([&fn](NetworkEntity *entity) {
+                if (auto *typed = dynamic_cast<T *>(entity)) {
+                    fn(typed);
+                }
+            });
+        }
 
         // --- Viewers (a connection's controlled entity, e.g. a player's avatar) ---
         void SetViewer(MafiaNet::PeerGuid guid, NetworkEntity *entity);
