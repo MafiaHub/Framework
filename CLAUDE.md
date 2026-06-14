@@ -39,7 +39,7 @@ Or use Visual Studio 2022 with CMake tools installed and open the repository fol
 ### Core Systems
 
 1. **CoreModules** (`core_modules.h`) - Central singleton registry coupling all modules together
-2. **World Engine** (`world/engine.h`) - ECS-based world management using Flecs with streaming support
+2. **Replication** (`networking/replication/`) - Native MafiaNet entity replication (ReplicaManager3 + RPC4) with an interest grid for streaming
 3. **Networking** (`networking/network_peer.h`) - Client-server communication via MafiaNet
 4. **Scripting** (`scripting/`) - JavaScript/TypeScript scripting for game logic (Server: libnode, Client: V8)
 5. **GUI Manager** (`gui/manager.h`) - UI using CEF and Dear ImGui
@@ -83,7 +83,6 @@ Format: `Module: Brief commit description`
 
 ## Key Dependencies
 
-- **Flecs** - Entity Component System
 - **FTL** - Fiber Tasking Library for job system (v2.1.0)
 - **libnode/V8** - JavaScript scripting (Server uses libnode for full Node.js APIs, Client uses V8 for sandboxed execution)
 - **MafiaNet** - Networking (MafiaHub's fork of RakNet/SLikeNet)
