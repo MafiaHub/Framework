@@ -14,6 +14,7 @@
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
+#include "plugins/manager.h"
 #include "scripting/module.h"
 #include "services/masterlist.h"
 #include "utils/config.h"
@@ -70,6 +71,13 @@ namespace Framework::Integrations::Server {
         int32_t maxPlayers;
         std::string httpServeDir;
 
+        // Native plugins. modulesDir is searched for each name in modulesList;
+        // a plugin called "foo" lives at <modulesDir>/foo/foo.module.json plus
+        // its compiled library. Both fields are populated from server.json
+        // ("modules_dir" and "modules") and overridable at code level.
+        std::string              modulesDir = "modules";
+        std::vector<std::string> modulesList;
+
         bool enableSignals;
 
         // update intervals
@@ -98,6 +106,7 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Services::MasterlistConnector> _masterlist;
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
+        std::unique_ptr<Plugins::PluginManager> _pluginManager;
 
         void InitEndpoints();
         void InitModules() const;
@@ -180,6 +189,10 @@ namespace Framework::Integrations::Server {
 
         World::Archetypes::StreamingFactory *GetStreamingFactory() const {
             return _streamingFactory.get();
+        }
+
+        Plugins::PluginManager *GetPluginManager() const {
+            return _pluginManager.get();
         }
         
         // Register a custom command with the command processor

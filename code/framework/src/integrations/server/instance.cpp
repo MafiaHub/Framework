@@ -44,6 +44,7 @@ namespace Framework::Integrations::Server {
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
         _commandListener  = std::make_unique<Utils::CommandListener>();
         _commandProcessor = std::make_unique<Utils::CommandProcessor>();
+        _pluginManager    = std::make_unique<Plugins::PluginManager>();
     }
 
     Instance::~Instance() {
@@ -139,7 +140,14 @@ namespace Framework::Integrations::Server {
 
         // Initialize mod subsystems
         PostInit();
-    
+
+        // Native plugins load after PostInit so the mod has had a chance to
+        // register subsystems plugins may depend on, but before the scripting
+        // engine comes up so plugins can register scripting builtins from
+        // their PostScriptInit hook.
+        _pluginManager->Init(_webServer.get(), _commandProcessor.get(), _worldEngine.get());
+        _pluginManager->LoadAll(_opts.modulesDir, _opts.modulesList);
+
         const auto sdkCallback = [this](Framework::Scripting::Engine *engine) {
             this->RegisterScriptingBuiltins(engine);
         };
@@ -154,6 +162,7 @@ namespace Framework::Integrations::Server {
         CoreModules::SetScriptingModule(_scriptingModule.get());
 
         PostScriptInit();
+        _pluginManager->PostScriptInit();
 
         // Discover resources
         _scriptingModule->GetResourceManager()->DiscoverResources();
@@ -235,6 +244,22 @@ namespace Framework::Integrations::Server {
             _opts.bindMapName   = _fileConfig->Get<std::string>("map");
             _opts.maxPlayers    = _fileConfig->Get<int>("maxplayers");
             _opts.bindSecretKey = _fileConfig->Get<std::string>("server-token");
+
+            // Plugin loading: optional. modules_dir defaults to "modules"
+            // relative to the server's working directory; modules is the
+            // ordered list of plugin names to load.
+            _opts.modulesDir = _fileConfig->GetDefault<std::string>("modules_dir", _opts.modulesDir);
+            if (auto *doc = _fileConfig->GetDocument(); doc && doc->contains("modules")) {
+                if ((*doc)["modules"].is_array()) {
+                    _opts.modulesList.clear();
+                    for (const auto &m : (*doc)["modules"]) {
+                        if (m.is_string()) _opts.modulesList.push_back(m.get<std::string>());
+                    }
+                }
+                else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("server.json 'modules' field exists but is not an array; ignoring");
+                }
+            }
         }
         catch (const std::exception &ex) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("JSON config has missing fields: {}", ex.what());
@@ -318,6 +343,9 @@ namespace Framework::Integrations::Server {
                 if (_onPlayerDisconnectCallback)
                     _onPlayerDisconnectCallback(e, guid.g);
 
+                if (_pluginManager)
+                    _pluginManager->DispatchPlayerDisconnect(e.id(), guid.g);
+
                 _worldEngine->RemoveEntity(e);
             }
 
@@ -349,8 +377,12 @@ namespace Framework::Integrations::Server {
 
         net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](MafiaNet::RakNetGUID guid, ClientInitPlayer *stub) {
             const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
-                _onPlayerConnectCallback(e, guid.g);
+            if (e.is_valid() && e.is_alive()) {
+                if (_onPlayerConnectCallback)
+                    _onPlayerConnectCallback(e, guid.g);
+                if (_pluginManager)
+                    _pluginManager->DispatchPlayerConnect(e.id(), guid.g);
+            }
         });
 
         // Note: Client-to-server events are handled through the JS Events system
@@ -504,6 +536,10 @@ namespace Framework::Integrations::Server {
 
         PreShutdown();
 
+        if (_pluginManager) {
+            _pluginManager->PreShutdown();
+        }
+
         if (_scriptingModule) {
             _scriptingModule->PreShutdown();
         }
@@ -518,6 +554,13 @@ namespace Framework::Integrations::Server {
 
         if (_webServer) {
             _webServer->Shutdown();
+        }
+
+        // Plugin libraries are unloaded last so any in-flight HTTP requests
+        // handled by plugin trampolines have already finished with the
+        // webserver stopped above.
+        if (_pluginManager) {
+            _pluginManager->Shutdown();
         }
 
         if (_worldEngine) {
@@ -557,6 +600,10 @@ namespace Framework::Integrations::Server {
             
             if (_commandListener) {
                 _commandListener->Update();
+            }
+
+            if (_pluginManager) {
+                _pluginManager->Update(_opts.worldConfig.tickInterval);
             }
 
             if (_masterlist->IsInitialized()) {

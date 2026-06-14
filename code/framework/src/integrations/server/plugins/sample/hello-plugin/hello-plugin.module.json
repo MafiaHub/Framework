@@ -1,0 +1,8 @@
+{
+    "name": "hello-plugin",
+    "version": "0.1.0",
+    "abi_version": 1,
+    "entry": "hello-plugin",
+    "depends_on": [],
+    "capabilities": ["commands", "http_endpoints", "player_events"]
+}

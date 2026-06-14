@@ -57,6 +57,11 @@ set(FRAMEWORK_SERVER_SRC
     src/integrations/server/instance.cpp
     src/integrations/server/networking/engine.cpp
 
+    # Native plugin system (server-side)
+    src/integrations/server/plugins/loader.cpp
+    src/integrations/server/plugins/host_impl.cpp
+    src/integrations/server/plugins/manager.cpp
+
     # JavaScript scripting (server module)
     src/integrations/server/scripting/module.cpp
 )
