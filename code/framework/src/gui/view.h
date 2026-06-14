@@ -155,6 +155,8 @@ namespace Framework::GUI {
             _browser->GetMainFrame()->ExecuteJavaScript(script, "", 0);
         }
 
+        // Escape hatch: the raw CEF browser. Prefer EvaluateScript / AddEventListener / the SDK above;
+        // reach for this only for CEF features the View doesn't surface.
         CefRefPtr<CefBrowser> GetBrowser() const {
             return _browser;
         }

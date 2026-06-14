@@ -43,6 +43,27 @@ namespace Framework::External::Steam {
         Lifecycle::Shutdown();
     }
 
+    bool Wrapper::IsAppInstalled(uint32_t appId) const {
+        if (!_ctx) {
+            return false;
+        }
+        ISteamApps *apps = _ctx->SteamApps();
+        return apps && apps->BIsAppInstalled(appId);
+    }
+
+    std::string Wrapper::GetAppInstallDir(uint32_t appId) const {
+        if (!_ctx) {
+            return {};
+        }
+        ISteamApps *apps = _ctx->SteamApps();
+        if (!apps) {
+            return {};
+        }
+        char path[1024] = {0};
+        apps->GetAppInstallDir(appId, path, sizeof(path));
+        return path;
+    }
+
     CSteamID Wrapper::GetSteamID() const {
         if (!_ctx) {
             return CSteamID();

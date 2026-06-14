@@ -152,6 +152,10 @@ namespace Framework::Networking {
             return _packetDataOffset;
         }
 
+        // --- Escape hatches ---
+        // The accessors below hand out the raw MafiaNet objects for features the framework doesn't
+        // wrap. Prefer the typed RPC API above (RegisterRPC<T>/BroadcastRPC<T>/SendRPC<T>) and
+        // ReplicationManager's typed entity accessors; reach for these only when those don't cover it.
         MafiaNet::RakPeerInterface *GetPeer() const noexcept {
             return _peer;
         }

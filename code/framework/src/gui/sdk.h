@@ -29,6 +29,7 @@ namespace Framework::GUI {
         [[nodiscard]] GUIError Init(CefRefPtr<CefBrowser> browser);
         void Shutdown();
 
+        // Escape hatch: the raw CEF browser. Prefer the event API (AddEventListener/BroadcastEvent).
         CefRefPtr<CefBrowser> GetBrowser() const {
             return _browser;
         }

@@ -39,6 +39,8 @@ namespace Framework::Graphics {
     class D3D11Backend;
     class D3D12Backend;
 
+    // Native graphics handles below are supplied by the caller (the game owns the device/swapchain);
+    // the framework borrows, never owns them.
     struct RendererConfiguration {
         RendererBackend backend {};
         PlatformBackend platform {};
@@ -89,6 +91,8 @@ namespace Framework::Graphics {
             return _state;
         }
 
+        // Escape hatches: the concrete D3D backends, for direct device/swapchain access the Renderer
+        // doesn't wrap. Only one is non-null, matching the configured backend.
         D3D9Backend *GetD3D9Backend() const {
             return _d3d9Backend.get();
         }

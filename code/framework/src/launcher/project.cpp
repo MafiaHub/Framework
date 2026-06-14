@@ -374,17 +374,13 @@ namespace Framework::Launcher {
         }
 
         // Make sure steam has the game inside the library
-        ISteamApps *steamApps = _steamWrapper->GetContext()->SteamApps();
-        if (!steamApps->BIsAppInstalled(_config.steamAppId)) {
+        if (!_steamWrapper->IsAppInstalled(_config.steamAppId)) {
             MessageBox(nullptr, "The destination game is not installed", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // Ask the game path from steam
-        char gamePath[_MAX_PATH] = {0};
-        steamApps->GetAppInstallDir(_config.steamAppId, gamePath, _MAX_PATH);
-
-        _gamePath = Utils::StringUtils::NormalToWide(gamePath);
+        _gamePath = Utils::StringUtils::NormalToWide(_steamWrapper->GetAppInstallDir(_config.steamAppId));
         std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
 
         // Set classic game path to the one found by Steam just for sake of having that information stored in the config

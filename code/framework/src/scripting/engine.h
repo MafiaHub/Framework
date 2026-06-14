@@ -85,14 +85,10 @@ namespace Framework::Scripting {
             return _lastError;
         }
 
-        /**
-         * Get the V8 isolate.
-         */
+        // Escape hatch: raw V8 handles. The caller owns the v8::Locker / Isolate::Scope / HandleScope /
+        // Context::Scope setup before touching these — prefer Execute() and the SDK-register callback,
+        // which establish the scopes for you.
         virtual v8::Isolate *GetIsolate() const = 0;
-
-        /**
-         * Get the main context.
-         */
         virtual v8::Local<v8::Context> GetContext() const = 0;
 
         /**
