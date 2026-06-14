@@ -10,7 +10,9 @@
 
 #include <utils/safe_win32.h>
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
@@ -142,7 +144,7 @@ namespace Framework::Integrations::Server {
         Instance();
         ~Instance();
 
-        [[nodiscard]] ServerError Init(InstanceOptions &);
+        [[nodiscard]] Utils::Result<void, Error> Init(InstanceOptions &);
         void Shutdown() override;
 
         virtual void PostInit() {}

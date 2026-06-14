@@ -47,12 +47,11 @@ namespace Framework::Integrations::Server {
         sig_detach(this);
     }
 
-    ServerError Instance::Init(InstanceOptions &opts) {
+    Utils::Result<void, Error> Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
         if (opts.gameName.empty() || opts.gameVersion.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Game name and version are required");
-            return ServerError::SERVER_INVALID_OPTIONS;
+            return Error("Game name and version are required");
         }
 
         CoreModules::SetTickRate(opts.worldConfig.tickInterval);
@@ -79,8 +78,7 @@ namespace Framework::Integrations::Server {
 
         // Load JSON config if present
         if (!LoadConfigFromJSON()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to parse JSON config file");
-            return ServerError::SERVER_CONFIG_PARSE_ERROR;
+            return Error("Failed to parse JSON config file '" + _opts.modConfigFile + "'");
         }
 
         // Finally apply back to the structure that is used everywhere the settings from the parser
@@ -92,14 +90,12 @@ namespace Framework::Integrations::Server {
 
         // Initialize the web server
         if (_opts.webServerEnabled && _webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
-            return ServerError::SERVER_WEBSERVER_INIT_FAILED;
+            return Error("Failed to initialize the webserver on " + _opts.webBindHost + ":" + std::to_string(_opts.webBindPort));
         }
 
         // Initialize our networking engine
         if (_networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword) != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
-            return ServerError::SERVER_NETWORKING_INIT_FAILED;
+            return Error("Failed to initialize networking on " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
         }
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
@@ -149,8 +145,7 @@ namespace Framework::Integrations::Server {
         // Initialize the scripting engine
         _scriptingModule->SetResourcesPath(_opts.resourcesPath);
         if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
-            return ServerError::SERVER_SCRIPTING_INIT_FAILED;
+            return Error("Failed to initialize the scripting engine");
         }
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
@@ -193,7 +188,7 @@ namespace Framework::Integrations::Server {
 
         _initialized  = true;
         _shuttingDown = false;
-        return ServerError::SERVER_NONE;
+        return {};
     }
 
     void Instance::InitEndpoints() {

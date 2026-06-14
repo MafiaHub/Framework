@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "errors.h"
-
+#include <utils/error.h>
 #include <utils/lifecycle.h>
+#include <utils/result.h>
 #include <external/discord/wrapper.h>
 #include <external/imgui/wrapper.h>
 #include <function2.hpp>
@@ -129,7 +129,7 @@ namespace Framework::Integrations::Client {
         Instance();
         virtual ~Instance();
 
-        [[nodiscard]] ClientError Init(InstanceOptions &);
+        [[nodiscard]] Utils::Result<void, Error> Init(InstanceOptions &);
         void Shutdown() override;
 
         void Render();
@@ -144,7 +144,7 @@ namespace Framework::Integrations::Client {
             (void)engine;
         }
 
-        [[nodiscard]] ClientError RenderInit();
+        [[nodiscard]] Utils::Result<void, Error> RenderInit();
 
         void DownloadsAssetsFromConnectedServer();
 
