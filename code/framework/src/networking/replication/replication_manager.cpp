@@ -59,7 +59,8 @@ namespace Framework::Networking::Replication {
                     // Adopting the epoch is what acknowledges the override: updates we send from here
                     // on carry it, so the server stops dropping them.
                     entity->stateEpoch = epoch;
-                    entity->SerializeForcedState(bs, false);
+                    FieldSerializer fields(bs, false);
+                    entity->SerializeForcedState(fields);
                     entity->OnStateForced();
                 }
             });
@@ -88,7 +89,8 @@ namespace Framework::Networking::Replication {
         // NetworkIDs are small and monotonic, so WriteCompressed strips the leading zero bytes.
         bs.WriteCompressed(networkId);
         bs.Write(entity->stateEpoch);
-        entity->SerializeForcedState(&bs, true);
+        FieldSerializer fields(&bs, true);
+        entity->SerializeForcedState(fields);
         _owner->SendRawRPC(kForceStateId, bs, MafiaNet::ToGuid(entity->ownerGUID));
     }
 
