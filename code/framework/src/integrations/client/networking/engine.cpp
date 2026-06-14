@@ -15,25 +15,20 @@ namespace Framework::Integrations::Client::Networking {
         _networkClient = std::make_unique<Framework::Networking::NetworkClient>();
     }
 
-    Framework::Networking::NetworkPeerError Engine::Init() {
-        const auto result = _networkClient->Init();
-        if (result != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
+    Utils::Result<void, Error> Engine::Init() {
+        if (auto result = _networkClient->Init(); !result) {
             return result;
         }
         _initialized = true;
-        return Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE;
+        return {};
     }
 
-    bool Engine::Connect(const std::string &host, const int32_t port, const std::string password) const {
+    Utils::Result<void, Error> Engine::Connect(const std::string &host, const int32_t port, const std::string password) const {
         if (!_networkClient) {
-            return false;
+            return Error("Network client is not available");
         }
 
-        if (_networkClient->Connect(host, port, password) != Framework::Networking::ConnectionError::CONNECTION_NONE) {
-            return false;
-        }
-
-        return true;
+        return _networkClient->Connect(host, port, password);
     }
 
     void Engine::Shutdown() {

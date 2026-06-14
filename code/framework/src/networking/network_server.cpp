@@ -15,12 +15,11 @@
 #include <logging/logger.h>
 
 namespace Framework::Networking {
-    NetworkPeerError NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
+    Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
         auto newSocketSd                  = MafiaNet::SocketDescriptor((uint16_t)port, host.c_str());
         const MafiaNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != MafiaNet::RAKNET_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString((uint8_t)result));
-            return NetworkPeerError::NETWORK_PEER_INIT_FAILED;
+            return Error(std::string("Failed to start networking peer: ") + GetStartupResultString((uint8_t)result));
         }
 
         if (!password.empty()) {
@@ -43,7 +42,7 @@ namespace Framework::Networking {
         _replicationManager->SetAutoManageConnections(false, true);
 
         _initialized = true;
-        return NetworkPeerError::NETWORK_PEER_NONE;
+        return {};
     }
 
     bool NetworkServer::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {

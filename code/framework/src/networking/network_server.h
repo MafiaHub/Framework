@@ -15,6 +15,9 @@
 #include "network_peer.h"
 #include "rpc/rpc.h"
 
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
 #include <string>
@@ -40,7 +43,7 @@ namespace Framework::Networking {
       public:
         NetworkServer(): NetworkPeer() {}
 
-        [[nodiscard]] NetworkPeerError Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password = "");
+        [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password = "");
         void Shutdown() override;
 
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;

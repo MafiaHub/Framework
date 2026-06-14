@@ -160,8 +160,8 @@ namespace Framework::Integrations::Client {
         }
 
         if (_networkingEngine) {
-            if (_networkingEngine->Init() != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
-                return Error("Networking client failed to initialize");
+            if (auto netResult = _networkingEngine->Init(); !netResult) {
+                return netResult;
             }
             CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkClient());
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");

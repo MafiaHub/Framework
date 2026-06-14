@@ -8,7 +8,9 @@
 
 #pragma once
 
+#include <utils/error.h>
 #include <utils/lifecycle.h>
+#include <utils/result.h>
 
 #include <networking/network_client.h>
 
@@ -20,10 +22,10 @@ namespace Framework::Integrations::Client::Networking {
       public:
         Engine();
 
-        [[nodiscard]] Framework::Networking::NetworkPeerError Init();
+        [[nodiscard]] Utils::Result<void, Error> Init();
         void Shutdown() override;
 
-        bool Connect(const std::string &, const int32_t, const std::string password = "") const;
+        [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &, const int32_t, const std::string password = "") const;
 
         void Update() override;
 

@@ -94,8 +94,8 @@ namespace Framework::Integrations::Server {
         }
 
         // Initialize our networking engine
-        if (_networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword) != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
-            return Error("Failed to initialize networking on " + _opts.bindHost + ":" + std::to_string(_opts.bindPort));
+        if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword); !netResult) {
+            return netResult;
         }
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
