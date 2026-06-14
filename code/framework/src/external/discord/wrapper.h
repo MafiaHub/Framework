@@ -13,6 +13,9 @@
 
 #include "errors.h"
 
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include <discord.h>
 #include <function2.hpp>
 #include <string>
@@ -26,7 +29,7 @@ namespace Framework::External::Discord {
       public:
         using DiscordLoginProc = fu2::function<void(const std::string &token) const>;
         Wrapper()              = default;
-        [[nodiscard]] DiscordError Init(int64_t id);
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init(int64_t id);
         void Shutdown() override;
 
         void Update() override;

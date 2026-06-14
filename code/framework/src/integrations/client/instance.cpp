@@ -150,8 +150,8 @@ namespace Framework::Integrations::Client {
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
-                if (_presence->Init(opts.discordAppId) != External::DiscordError::DISCORD_NONE) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
+                if (auto discordResult = _presence->Init(opts.discordAppId); !discordResult) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize: {}", discordResult.GetError().message);
                 }
                 else {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
@@ -238,8 +238,8 @@ namespace Framework::Integrations::Client {
                 imguiConfig.windowBackend = _opts.rendererOptions.platform;
                 imguiConfig.renderer      = _renderer.get();
                 imguiConfig.windowHandle  = _renderer->GetWindow();
-                if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
-                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init");
+                if (auto imguiResult = _imguiApp->Init(imguiConfig); !imguiResult) {
+                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init: {}", imguiResult.GetError().message);
                 }
             }
         }

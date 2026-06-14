@@ -12,7 +12,8 @@
 
 #define VERSION_SAFE_STEAM_API_INTERFACES
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
 
 #include <steam_api.h>
 #include <string>
@@ -48,7 +49,7 @@ namespace Framework::External::Steam {
 
         ~Wrapper() = default;
 
-        [[nodiscard]] SteamError Init();
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init();
         void Shutdown() override;
 
         CSteamID GetSteamID() const;

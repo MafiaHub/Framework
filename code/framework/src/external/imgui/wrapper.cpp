@@ -22,19 +22,19 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace Framework::External::ImGUI {
-    Error Wrapper::Init(Config &config) {
+    Utils::Result<void, Framework::Error> Wrapper::Init(Config &config) {
         if (isContextInitialized) {
-            return Error::IMGUI_NONE;
+            return {};
         }
 
         _config = config;
 
         if (!_config.renderer) {
-            return Error::IMGUI_RENDERER_NOT_SET;
+            return Framework::Error("ImGui renderer is not set");
         }
 
         if (!_config.windowHandle && _config.windowBackend == Graphics::PlatformBackend::PLATFORM_WIN32) {
-            return Error::IMGUI_WINDOW_NOT_SET;
+            return Framework::Error("ImGui window handle is not set");
         }
 
         IMGUI_CHECKVERSION();
@@ -67,7 +67,7 @@ namespace Framework::External::ImGUI {
         }
 
         _initialized = isContextInitialized = true;
-        return Error::IMGUI_NONE;
+        return {};
     }
 
     void Wrapper::Shutdown() {

@@ -14,7 +14,7 @@
 #include <logging/logger.h>
 
 namespace Framework::External::Sentry {
-    SentryError Wrapper::Init(const std::string &key, const std::string &path) {
+    Utils::Result<void, Framework::Error> Wrapper::Init(const std::string &key, const std::string &path) {
         // Build the options payload
         sentry_options_t *opts = sentry_options_new();
         sentry_options_set_dsn(opts, key.c_str());
@@ -27,22 +27,21 @@ namespace Framework::External::Sentry {
         // Setup the breakpad path
         const cppfs::FileHandle breakpadFile = cppfs::fs::open(path + "/" + handlerName);
         if (!breakpadFile.exists()) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to locate the crashpad handler");
-            return SentryError::SENTRY_BREAKPAD_NOT_FOUND;
+            return Framework::Error("Failed to locate the crashpad handler at " + breakpadFile.path());
         }
 
         cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
         const auto result                = cacheDirectory.createDirectory();
         if (!result) {
-            return SentryError::SENTRY_CACHE_DIRECTORY_CREATION_FAILED;
+            return Framework::Error("Failed to create the Sentry cache directory");
         }
 
         sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
         if (sentry_init(opts) > 0) {
-            return SentryError::SENTRY_INIT_FAILED;
+            return Framework::Error("Failed to initialize Sentry");
         }
         _initialized = true;
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
     void Wrapper::Shutdown() {

@@ -12,6 +12,9 @@
 
 #include "errors.h"
 
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include <sentry.h>
 #include <string>
 
@@ -45,7 +48,7 @@ namespace Framework::External::Sentry {
 
     class Wrapper final : public Framework::Lifecycle {
       public:
-        [[nodiscard]] SentryError Init(const std::string &, const std::string &);
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init(const std::string &, const std::string &);
         void Shutdown() override;
 
         SentryError CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
