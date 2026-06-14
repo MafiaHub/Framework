@@ -12,6 +12,7 @@
 
 /* TEST CATEGORIES */
 #include "modules/interpolator_ut.h"
+#include "modules/result_ut.h"
 #include "modules/state_machine_ut.h"
 
 // Scripting tests
@@ -27,6 +28,7 @@ int main() {
     Framework::Logging::GetInstance()->PauseLogging(true);
 
     UNIT_MODULE(interpolator);
+    UNIT_MODULE(result);
     UNIT_MODULE(state_machine);
 
     // Scripting tests
