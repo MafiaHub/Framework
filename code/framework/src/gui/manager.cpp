@@ -246,6 +246,10 @@ namespace Framework::GUI {
             return -1;
         }
 
+        // A 0x0 request means "fill the viewport" — such views follow the
+        // viewport across resizes (see Manager::Resize)
+        const bool autoResize = (width == 0 && height == 0);
+
         if (width == 0) {
             width = _viewportConfiguration.width;
         }
@@ -277,6 +281,8 @@ namespace Framework::GUI {
             return -1;
         }
 
+        view->SetAutoResize(autoResize);
+
         {
             std::scoped_lock lock(_renderMutex);
             _views.push_back(std::move(view));
@@ -284,6 +290,22 @@ namespace Framework::GUI {
 
         Framework::Logging::GetLogger("Web")->debug("Created view with id {}", _id);
         return _id;
+    }
+
+    void Manager::Resize(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        std::scoped_lock lock(_renderMutex);
+        _viewportConfiguration.width  = width;
+        _viewportConfiguration.height = height;
+
+        for (auto &view : _views) {
+            if (view && view->IsAutoResize()) {
+                view->Resize(width, height);
+            }
+        }
     }
 
     void Manager::RetireView(std::unique_ptr<View> view) {

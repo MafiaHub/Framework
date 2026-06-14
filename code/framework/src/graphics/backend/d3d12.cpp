@@ -78,10 +78,11 @@ namespace Framework::Graphics {
             const auto rtvDescriptorSize          = pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
             D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
 
+            // Reserve one RTV descriptor slot per frame index; the back-buffer
+            // resource (and its RTV) is bound fresh each frame in Begin(), so we
+            // don't grab the buffers here.
             for (UINT i = 0; i < _frameBufferCount; i++) {
                 _frameContext[i]._mainRenderTargetDescriptor = rtvHandle;
-                swapChain->GetBuffer(i, IID_PPV_ARGS(&_frameContext[i]._mainRenderTargetResource));
-                pD3DDevice->CreateRenderTargetView(_frameContext[i]._mainRenderTargetResource, nullptr, rtvHandle);
                 rtvHandle.ptr += rtvDescriptorSize;
             }
         }
@@ -109,22 +110,37 @@ namespace Framework::Graphics {
 
     void D3D12Backend::Shutdown() {
         // release objects
+        if (_currentBackBuffer) {
+            _currentBackBuffer->Release();
+            _currentBackBuffer = nullptr;
+        }
         _rtvHeap->Release();
         _srvHeap->Release();
         _commandList->Release();
         for (const auto &frameContext : _frameContext) {
             frameContext._commandAllocator->Release();
-            frameContext._mainRenderTargetResource->Release();
         }
     }
 
     void D3D12Backend::Begin() {
-        const auto &currentFrameContext = _frameContext[_swapChain->GetCurrentBackBufferIndex()];
+        const UINT idx                  = _swapChain->GetCurrentBackBufferIndex();
+        const auto &currentFrameContext = _frameContext[idx];
         currentFrameContext._commandAllocator->Reset();
+
+        // Acquire the current back buffer fresh (AddRef'd) and bind its RTV. It is
+        // released in End() — we never hold it across frames. The swapchain owns
+        // the buffer, so dropping our reference doesn't free it; the GPU keeps
+        // reading it for this frame via the swapchain's own hold.
+        _currentBackBuffer = nullptr;
+        if (FAILED(_swapChain->GetBuffer(idx, IID_PPV_ARGS(&_currentBackBuffer)))) {
+            _currentBackBuffer = nullptr;
+            return;
+        }
+        _device->CreateRenderTargetView(_currentBackBuffer, nullptr, currentFrameContext._mainRenderTargetDescriptor);
 
         _barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         _barrier.Flags                  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        _barrier.Transition.pResource   = currentFrameContext._mainRenderTargetResource;
+        _barrier.Transition.pResource   = _currentBackBuffer;
         _barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
         _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -136,11 +152,20 @@ namespace Framework::Graphics {
     }
 
     void D3D12Backend::End() {
+        if (!_currentBackBuffer) {
+            return;  // Begin() failed to acquire this frame
+        }
+
         _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
         _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
         _commandList->ResourceBarrier(1, &_barrier);
         _commandList->Close();
         _commandQueue->ExecuteCommandLists(1, (ID3D12CommandList **)&_commandList);
+
+        // Drop our per-frame reference now that the work is submitted. Safe: the
+        // swapchain still owns the buffer, so it stays alive for the GPU.
+        _currentBackBuffer->Release();
+        _currentBackBuffer = nullptr;
     }
 
     void D3D12Backend::Update() {}

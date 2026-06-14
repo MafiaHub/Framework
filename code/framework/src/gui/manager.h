@@ -81,6 +81,10 @@ namespace Framework::GUI {
         void Update() override;
         void Render();
 
+        // Match the viewport (and every fullscreen view) to a new client size,
+        // e.g. after a swapchain resize / fullscreen toggle.
+        void Resize(int width, int height);
+
         // Game-thread companion to Render(): must be called inside an active
         // ImGui frame so D3D12 views can blit through the background draw list
         void SubmitImGuiDraws();

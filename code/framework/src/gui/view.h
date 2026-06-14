@@ -71,6 +71,10 @@ namespace Framework::GUI {
         bool _shouldDisplay   = false;
         bool _garbageCollected = false;
 
+        // Fullscreen overlays (created at 0x0 = viewport size) track the
+        // viewport across swapchain resizes; explicitly-sized views don't.
+        bool _autoResize = false;
+
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
@@ -123,6 +127,18 @@ namespace Framework::GUI {
         void SetPosition(int x, int y) {
             _x = x;
             _y = y;
+        }
+
+        // Resize the view (and the underlying CEF surface) to new dimensions.
+        // The backend recreates its GPU texture lazily on the next Render.
+        void Resize(int width, int height);
+
+        void SetAutoResize(bool enable) {
+            _autoResize = enable;
+        }
+
+        bool IsAutoResize() const {
+            return _autoResize;
         }
 
         glm::vec2 GetPosition() const {

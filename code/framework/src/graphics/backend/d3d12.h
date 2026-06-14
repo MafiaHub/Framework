@@ -33,12 +33,17 @@ namespace Framework::Graphics {
 
         struct FrameContext {
             ID3D12CommandAllocator *_commandAllocator = nullptr;
-            ID3D12Resource *_mainRenderTargetResource = nullptr;
             D3D12_CPU_DESCRIPTOR_HANDLE _mainRenderTargetDescriptor;
         };
 
         std::vector<FrameContext> _frameContext;
         D3D12_RESOURCE_BARRIER _barrier {};
+
+        // The current frame's back buffer, acquired fresh in Begin() and released
+        // in End(). We deliberately never hold a swapchain reference across
+        // frames so the game can resize/recreate the swapchain (which happens
+        // between presents) without our reference blocking DXGI's ResizeBuffers.
+        ID3D12Resource *_currentBackBuffer = nullptr;
 
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
@@ -47,6 +52,16 @@ namespace Framework::Graphics {
         void Begin();
         void End();
         int NumFramesInFlight() const;
+
+        // Since we no longer cache the back buffers, a swapchain resize or even a
+        // full swapchain recreation needs nothing from us beyond pointing at the
+        // current swapchain — Begin() re-acquires the back buffer each frame.
+        IDXGISwapChain3 *GetSwapChain() const {
+            return _swapChain;
+        }
+        void SetSwapChain(IDXGISwapChain3 *swapChain) {
+            _swapChain = swapChain;
+        }
 
         // TODO: Backend not implemented yet
         void BeginDrawing() {}

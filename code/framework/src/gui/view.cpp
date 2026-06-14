@@ -109,6 +109,27 @@ namespace Framework::GUI {
         // Nothing to update at the base level for CEF; message loop is driven by Manager
     }
 
+    void View::Resize(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        // Synchronize with the render thread (ViewD3D12::Render reads _width to
+        // decide whether to recreate its texture, also under _renderMutex)
+        std::scoped_lock lock(_renderMutex);
+        _width  = width;
+        _height = height;
+        if (_renderHandler) {
+            _renderHandler->SetDimensions(width, height);
+        }
+        if (_browser) {
+            // Make CEF re-query GetViewRect and repaint at the new size; the
+            // next OnPaint delivers a full-size buffer and the backend recreates
+            // its texture (ViewD3D12 detects _texWidth/_texHeight != _width)
+            _browser->GetHost()->WasResized();
+        }
+    }
+
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (!_browser || !_shouldDisplay || !_hasFocus) {
             return;
