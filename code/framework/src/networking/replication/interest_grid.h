@@ -66,6 +66,8 @@ namespace Framework::Networking::Replication {
         }
 
         bool _ready          = false;
+        // One-shot guard so the "queried before a rebuild" diagnostic is logged once, not per query.
+        bool _warnedNotReady = false;
         float _cellSize      = 100.0f;
         float _min           = -10000.0f;
         float _max           = 10000.0f;

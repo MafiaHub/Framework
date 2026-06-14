@@ -11,6 +11,8 @@
 #include <logging/logger.h>
 #include <utils/hashing.h>
 
+#include <cassert>
+
 namespace Framework::Networking::Replication {
     EntityRegistry &EntityRegistry::Get() {
         static EntityRegistry instance;
@@ -27,7 +29,8 @@ namespace Framework::Networking::Replication {
         // Re-registering the same name is benign (e.g. a second init); a different name on the same id
         // is a CRC32 collision that would silently shadow the first type — surface it loudly.
         if (existing != _types.end() && existing->second.name != name) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("EntityRegistry: CRC32 collision — '{}' and '{}' both hash to {}; the latter shadows the former", existing->second.name, name, id);
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("EntityRegistry: CRC32 collision — '{}' and '{}' both hash to {}; rename one of the entity types", existing->second.name, name, id);
+            assert(false && "EntityRegistry: CRC32 type-id collision between two distinct entity names");
         }
         _types[id] = Entry {name, std::move(constructor)};
         return id;

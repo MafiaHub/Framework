@@ -85,6 +85,16 @@ namespace Framework::Integrations::Server {
         _opts.bindHost = result["host"].as<std::string>();
         _opts.bindPort = result["port"].as<int32_t>();
 
+        if (_opts.bindHost.empty()) {
+            return Error("bindHost is required");
+        }
+        if (_opts.bindPort <= 0 || _opts.bindPort > 65535) {
+            return Error("bindPort must be in the range 1-65535 (got " + std::to_string(_opts.bindPort) + ")");
+        }
+        if (_opts.maxPlayers <= 0) {
+            return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
+        }
+
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 

@@ -8,6 +8,7 @@
 
 #include "interest_grid.h"
 
+#include <logging/logger.h>
 #include <mafianet/DS_List.h>
 
 namespace Framework::Networking::Replication {
@@ -110,6 +111,10 @@ namespace Framework::Networking::Replication {
     void InterestGrid::CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out) {
         if (!viewer) {
             return;
+        }
+        if (!_ready && !_warnedNotReady) {
+            _warnedNotReady = true;
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("InterestGrid queried before its first RebuildInterest(); no entities will replicate. Call ReplicationManager::RebuildInterest() once per server tick.");
         }
         const auto observerWorld = viewer->GetVirtualWorld();
 
