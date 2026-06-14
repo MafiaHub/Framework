@@ -10,22 +10,21 @@
 
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 
 #include "core_modules.h"
-#include "world/server.h"
 
-#include "networking/messages/client_connection_finalized.h"
-#include "networking/messages/client_handshake.h"
-#include "networking/messages/client_initialise_player.h"
-#include "networking/messages/client_kick.h"
-#include "networking/messages/client_ready_assets.h"
-#include "networking/messages/client_request_streamer.h"
-#include "networking/messages/messages.h"
+#include "networking/replication/network_entity.h"
+#include "networking/replication/replication_manager.h"
+#include "networking/rpc/chat_message.h"
+#include "networking/rpc/client_identity.h"
+#include "networking/rpc/server_resources.h"
+
+#include "networking/connection.h"
 
 #include "utils/command_processor.h"
 #include "utils/path.h"
 #include "utils/version.h"
-#include "../shared/modules/mod.hpp"
 
 #include "cxxopts.hpp"
 #include <cppfs/FileHandle.h>
@@ -33,14 +32,12 @@
 #include <csignal>
 
 namespace Framework::Integrations::Server {
+
     Instance::Instance(): _shuttingDown(false) {
         _networkingEngine = std::make_unique<Networking::Engine>();
         _webServer        = std::make_unique<HTTP::Webserver>();
         _fileConfig       = std::make_unique<Utils::Config>();
-        _worldEngine      = std::make_shared<World::ServerEngine>();
-        _scriptingModule  = std::make_unique<Scripting::ServerScriptingModule>(_worldEngine);
-        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
+        _scriptingModule  = std::make_unique<Scripting::ServerScriptingModule>();
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
         _commandListener  = std::make_unique<Utils::CommandListener>();
         _commandProcessor = std::make_unique<Utils::CommandProcessor>();
@@ -107,13 +104,21 @@ namespace Framework::Integrations::Server {
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
 
-        // Initialize the world
-        if (_worldEngine->Init(_networkingEngine->GetNetworkServer(), _opts.worldConfig) != World::WorldError::WORLD_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the world engine");
-            return ServerError::SERVER_WORLD_INIT_FAILED;
+        // The networked world is the replication manager owned by the peer. Serialize entity updates
+        // at the configured tick rate (tickInterval is in seconds).
+        auto *replication = _networkingEngine->GetNetworkServer()->GetReplicationManager();
+        CoreModules::SetReplication(replication);
+        if (replication) {
+            replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_opts.worldConfig.tickInterval * 1000.0f));
+            replication->ConfigureGrid(_opts.worldConfig.streamCellSize, _opts.worldConfig.streamWorldMin, _opts.worldConfig.streamWorldMax);
+            // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
+            // still resolvable) just before destroying and broadcasting the destruction of the avatar.
+            replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
+                if (_onPlayerDisconnectCallback) {
+                    _onPlayerDisconnectCallback(guid);
+                }
+            });
         }
-
-        CoreModules::SetWorldEngine(_worldEngine.get());
 
         if (!_opts.bindPublicServer || !_masterlist->Init(_opts.services.apiUrl, _opts.services.masterlistUrl, _opts.bindSecretKey)) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Server will not be announced to masterlist");
@@ -127,9 +132,6 @@ namespace Framework::Integrations::Server {
 
         // Register the default endpoints
         InitEndpoints();
-
-        // Register built in modules
-        InitModules();
 
         // Initialize default messages
         InitNetworkingMessages();
@@ -152,6 +154,17 @@ namespace Framework::Integrations::Server {
         }
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
+
+        // A resource owns the entities it spawns; they are destroyed when it stops.
+        if (replication) {
+            auto *resourceManager = _scriptingModule->GetResourceManager();
+            replication->SetOnEntityCreated([resourceManager](uint64_t networkId) {
+                resourceManager->OnEntityCreated(networkId);
+            });
+            replication->SetOnEntityDestroyed([resourceManager](uint64_t networkId) {
+                resourceManager->OnEntityDestroyed(networkId);
+            });
+        }
 
         PostScriptInit();
 
@@ -200,15 +213,6 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_HTTP)->debug("All core endpoints have been registered!");
     }
 
-    void Instance::InitModules() const {
-        if (_worldEngine) {
-            const auto world = _worldEngine->GetWorld();
-
-            world->import <Integrations::Shared::Modules::Mod>();
-        }
-
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Core ecs modules have been imported!");
-    }
 
     bool Instance::LoadConfigFromJSON() {
         const auto configHandle = cppfs::fs::open(_opts.modConfigFile);
@@ -244,122 +248,123 @@ namespace Framework::Integrations::Server {
     }
 
     void Instance::InitNetworkingMessages() const {
-        using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkServer();
-        net->RegisterMessage<ClientHandshake>(Framework::Networking::Messages::GameMessages::GAME_CONNECTION_HANDSHAKE, [this, net](MafiaNet::RakNetGUID guid, ClientHandshake *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Received handshake message for incoming player guid {}", guid.g);
+        // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
+        // reaches the asset phase.
+        net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
 
-            // Make sure handshake payload was correctly formatted
-            if (!msg->Valid()) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Handshake payload was invalid, force-disconnecting peer");
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
+        // Build verified -> send the resource list (carries the ReadyEvent id and tick rate).
+        net->SetOnClientAuthenticatedCallback([this, net](MafiaNet::RakNetGUID guid) {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Build verified for player guid {}, sending resource list", guid.g);
 
-            if (msg->GetGameName() != _opts.gameName) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto fwVersion = msg->GetFWVersion();
-
-            if (!Utils::Version::VersionSatisfies(fwVersion, Utils::Version::rel)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid Framework version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto clientVersion = msg->GetClientVersion();
-
-            if (!Utils::Version::VersionSatisfies(clientVersion, _opts.modVersion)) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            const auto mpClientVersion = msg->GetGameVersion();
-
-            if (mpClientVersion != _opts.gameVersion) {
-                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Client has invalid game version, force-disconnecting peer");
-                Framework::Networking::Messages::ClientKick kick;
-                kick.FromParameters(Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION);
-                net->Send(kick, guid);
-                net->GetPeer()->CloseConnection(guid, true);
-                return;
-            }
-
-            // Let the client know they can ask for client-side assets now.
-            // Include the resource list in the message.
-            ClientReadyAssets readyMsg;
+            Framework::Networking::RPC::ServerResources resources;
+            resources.readyEventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            resources.tickRate     = _opts.worldConfig.tickInterval;
             if (_scriptingModule) {
                 for (const auto &resource : _scriptingModule->GetClientResourceList()) {
-                    readyMsg.AddResource(resource.name, resource.version, 0); // Hash computed on demand
+                    resources.resources.push_back({resource.name, resource.version});
                 }
             }
-            net->Send(readyMsg, guid);
+            net->SendRPC(resources, guid);
         });
 
-        net->SetOnPlayerDisconnectCallback([this, net](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reason) {
+        net->SetOnPlayerDisconnectCallback([net](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reason, const std::string &) {
             const auto guid = packet->guid;
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Disconnecting peer {}, reason: {}", guid.g, static_cast<uint32_t>(reason));
 
-            const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (e.is_valid()) {
-                if (_onPlayerDisconnectCallback)
-                    _onPlayerDisconnectCallback(e, guid.g);
-
-                _worldEngine->RemoveEntity(e);
-            }
-
+            // Player notification and avatar teardown run in ReplicationManager::OnClosedConnection,
+            // which RakNet fires before this packet is delivered; here we just finalise the connection.
             net->GetPeer()->CloseConnection(guid, true);
         });
 
-        
-        net->RegisterMessage<ClientRequestStreamer>(GameMessages::GAME_CONNECTION_REQUEST_STREAMER, [this, net](MafiaNet::RakNetGUID guid, ClientRequestStreamer *msg) {
-            // Create player entity and add on world
-            const auto newPlayer = _worldEngine->CreateEntity();
-            _streamingFactory->SetupServer(newPlayer, guid.g);
+        // Client announces itself after assets. Gated on authentication so an unverified peer can't
+        // conjure an avatar by sending this directly.
+        net->RegisterRPC<Framework::Networking::RPC::ClientIdentity>([this, net](const Framework::Networking::RPC::ClientIdentity &payload, MafiaNet::Packet *packet) {
+            const auto guid = packet->guid;
+            if (!net->IsAuthenticated(guid)) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring identity from unauthenticated peer {}", guid.g);
+                return;
+            }
 
-            auto nickname = msg->GetPlayerName();
+            auto *replication = net->GetReplicationManager();
+            const auto peerGuid = MafiaNet::ToPeerGuid(guid);
+            if (replication && (replication->GetConnectionByGUID(guid) || replication->GetViewer(peerGuid))) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Ignoring duplicate identity from {}", guid.g);
+                return;
+            }
+
+            auto nickname = payload.name;
             if (nickname.size() > 64) {
                 nickname = nickname.substr(0, 64);
             }
 
-            auto hardwareId = msg->GetPlayerHardwareID();
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} hwid {}", nickname, guid.g, payload.hardwareId);
 
-            _playerFactory->SetupServer(newPlayer, guid.g, guid.systemIndex, nickname, hardwareId);
+            // The game builds the avatar and registers it as this connection's viewer; hand it the
+            // metadata so it spawns with the real nickname/slot.
+            if (_onPlayerConnectCallback) {
+                PlayerConnectionData data;
+                data.guid        = peerGuid;
+                data.playerIndex = guid.systemIndex;
+                data.nickname    = nickname;
+                data.hardwareID  = payload.hardwareId;
+                _onPlayerConnectCallback(data);
+            }
 
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Player {} guid {} entity id {} hwid {}", msg->GetPlayerName(), guid.g, newPlayer.id(), hardwareId);
+            // Gate opens: this connection now starts receiving the replicated world.
+            net->PushReplicationConnection(guid);
 
-            // Send the connection finalized packet
-            Framework::Networking::Messages::ClientConnectionFinalized answer;
-            answer.FromParameters(_opts.worldConfig.tickInterval, newPlayer.id());
-            net->Send(answer, guid);
+            // Arm our half of the spawn barrier (the client armed its half before sending identity).
+            const int eventId = Framework::Networking::NetworkServer::ReadyEventId(guid);
+            net->GetReadyEvent()->AddToWaitList(eventId, guid);
+            net->GetReadyEvent()->SetEvent(eventId, true);
         });
 
-        net->RegisterMessage<ClientInitPlayer>(Framework::Networking::Messages::GameMessages::GAME_INIT_PLAYER, [this, net](MafiaNet::RakNetGUID guid, ClientInitPlayer *stub) {
-            const auto e = _worldEngine->GetEntityByGUID(guid.g);
-            if (_onPlayerConnectCallback && e.is_valid() && e.is_alive())
-                _onPlayerConnectCallback(e, guid.g);
+        // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
+        // observes via SetOnChatMessageCallback / SetOnChatCommandCallback.
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *packet) {
+            if (payload.text.empty()) {
+                return;
+            }
+            // Resolve the sender from its connection's viewer entity.
+            auto *engine = GetNetworkingEngine();
+            auto *server = engine ? engine->GetNetworkServer() : nullptr;
+            auto *repl   = server ? server->GetReplicationManager() : nullptr;
+            auto *sender = repl ? repl->GetViewer(MafiaNet::ToPeerGuid(packet->guid)) : nullptr;
+            if (!sender) {
+                return;
+            }
+            HandleIncomingChat(sender->GetNetworkID(), payload.text);
         });
 
         // Note: Client-to-server events are handled through the JS Events system
         // The client can emit events via Framework.events.emitToServer() which uses
         // the networking messages system to send events to the server
 
-        Framework::World::Modules::Base::SetupServerReceivers(net, _worldEngine.get());
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
+    }
 
-        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Game sync networking messages registered");
+    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const {
+        if (text.empty()) {
+            return;
+        }
+        if (text[0] != '/') {
+            if (_onChatMessageCallback) {
+                _onChatMessageCallback(senderNetworkId, text);
+            }
+            return;
+        }
+        if (!_onChatCommandCallback) {
+            return;
+        }
+        // Same tokenizer as console commands, so a line parses identically on both surfaces.
+        std::vector<std::string> tokens = Utils::CommandProcessor::Tokenize(std::string_view(text).substr(1));
+        if (tokens.empty()) {
+            return;
+        }
+        const std::string command = std::move(tokens.front());
+        tokens.erase(tokens.begin());
+        _onChatCommandCallback(senderNetworkId, text, command, tokens);
     }
 
     void Instance::InitAssetStreamer() {
@@ -520,10 +525,6 @@ namespace Framework::Integrations::Server {
             _webServer->Shutdown();
         }
 
-        if (_worldEngine) {
-            _worldEngine->Shutdown();
-        }
-
         if (_commandListener) {
             _commandListener->Shutdown();
         }
@@ -533,7 +534,7 @@ namespace Framework::Integrations::Server {
         sig_detach(SIGTERM, sig_slot(this, &Instance::OnSignal));
 
         CoreModules::SetNetworkPeer(nullptr);
-        CoreModules::SetWorldEngine(nullptr);
+        CoreModules::SetReplication(nullptr);
         CoreModules::SetScriptingModule(nullptr);
         CoreModules::Reset();
 
@@ -551,10 +552,6 @@ namespace Framework::Integrations::Server {
                 _scriptingModule->Update();
             }
 
-            if (_worldEngine) {
-                _worldEngine->Update();
-            }
-            
             if (_commandListener) {
                 _commandListener->Update();
             }

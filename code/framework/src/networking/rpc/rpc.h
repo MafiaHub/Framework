@@ -9,46 +9,21 @@
 #pragma once
 
 #include <mafianet/BitStream.h>
-#include <mafianet/MessageIdentifiers.h>
-#include <mafianet/types.h>
-#include <string>
-#include <utils/hashing.h>
-
-#include <typeinfo>
 
 namespace Framework::Networking::RPC {
-    template <class T>
-    class IRPC {
-      private:
-        MafiaNet::Packet *packet {};
-        uint32_t _hashName = 0;
-        std::string _rpcName;
-
-      public:
-        virtual ~IRPC() = default;
-        IRPC(): _rpcName(typeid(T).name()), _hashName(Utils::Hashing::CalculateCRC32(typeid(T).name())) {};
-
-        virtual void Serialize(MafiaNet::BitStream *bs, bool write) = 0;
-        virtual bool Valid() const                               = 0;
-
-        uint32_t GetHashName() const {
-            return _hashName;
-        }
-
-        const std::string &GetName() const {
-            return _rpcName;
-        }
-
-        void SetPacket(MafiaNet::Packet *p) {
-            packet = p;
-        }
-
-        MafiaNet::Packet *GetPacket() const {
-            return packet;
-        }
-
-        bool IsGameRPC() const {
-            return false;
-        }
-    };
+    // An RPC is a payload struct that provides:
+    //   static constexpr const char *kIdentifier;            // unique, identical on both peers
+    //   void Serialize(MafiaNet::BitStream *bs, bool write); // symmetric read/write
+    //
+    // Register a handler with NetworkPeer::RegisterRPC<T> and send with NetworkPeer::BroadcastRPC /
+    // SendRPC (and NetworkServer::BroadcastRPCExcept). A handler is a function of shape
+    // void(MafiaNet::BitStream *, MafiaNet::Packet *); decode its payload with Read<T>. To target a
+    // specific entity, give the payload a MafiaNet::NetworkID field and resolve it through the
+    // ReplicationManager in the handler.
+    template <typename T>
+    inline T Read(MafiaNet::BitStream *bs) {
+        T payload {};
+        payload.Serialize(bs, false);
+        return payload;
+    }
 } // namespace Framework::Networking::RPC

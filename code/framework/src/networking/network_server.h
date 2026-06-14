@@ -11,25 +11,31 @@
 #include <cstdint>
 
 #include "errors.h"
-#include "messages/messages.h"
+#include "connection.h"
 #include "network_peer.h"
-#include "world/server.h"
+#include "rpc/rpc.h"
 
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace Framework::Networking {
+    using ClientGuidCallback = fu2::function<void(MafiaNet::RakNetGUID) const>;
+
     class NetworkServer: public NetworkPeer {
       private:
-        Messages::PacketCallback _onPlayerConnectCallback;
-        Messages::DisconnectPacketCallback _onPlayerDisconnectCallback;
+        PacketCallback _onPlayerConnectCallback;
+        DisconnectPacketCallback _onPlayerDisconnectCallback;
+        ClientGuidCallback _onClientAuthenticatedCallback;
         MafiaNet::FileListTransfer _fileListTransfer;
 
-        bool SendGameRPCInternal(MafiaNet::BitStream &bs, Framework::World::ServerEngine *world, flecs::entity_t ent, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, MafiaNet::RakNetGUID excludeGUID = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED) const;
+        // Guids whose build challenge passed — the gate keeping unverified peers out of replication.
+        std::unordered_set<uint64_t> _authenticatedClients;
+
+        void ClearClientState(MafiaNet::RakNetGUID guid);
 
       public:
         NetworkServer(): NetworkPeer() {}
@@ -39,27 +45,40 @@ namespace Framework::Networking {
 
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
-        template <typename T>
-        bool SendGameRPC(Framework::World::ServerEngine *world, T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, MafiaNet::RakNetGUID excludeGUID = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY,
-            PacketReliability reliability = RELIABLE_ORDERED) {
-            MafiaNet::BitStream bs;
-            bs.Write(Messages::INTERNAL_RPC);
-            bs.Write(rpc.GetHashName());
-            rpc.Serialize(&bs, true);
-            rpc.Serialize2(&bs, true);
-            assert(rpc.IsGameRPC() && "Regular RPCs cannot be sent via SendGameRPC()");
-
-            return SendGameRPCInternal(bs, world, rpc.GetServerID(), guid, excludeGUID, priority, reliability);
-        }
+        // Signal an RPC to every connected system except one (typically the originator) — the
+        // server-authoritative relay primitive, since RPC4::Signal has no exclusion parameter. The
+        // bitstream holds the already-written RPC arguments.
+        void SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
 
         int GetPing(MafiaNet::RakNetGUID guid) const;
 
-        void SetOnPlayerConnectCallback(Messages::PacketCallback callback) {
+        bool IsAuthenticated(MafiaNet::RakNetGUID guid) const {
+            return _authenticatedClients.contains(guid.g);
+        }
+
+        // Start replicating to an authenticated peer (idempotent). Replication begins for no peer
+        // until this is called — connections are not auto-managed (see Init).
+        void PushReplicationConnection(MafiaNet::RakNetGUID guid);
+
+        // Send a Kick RPC then close the connection.
+        void KickPlayer(MafiaNet::RakNetGUID guid, DisconnectionReason reason, const std::string &customReason = "") override;
+
+        // Per-connection ReadyEvent id, derived from the slot so both ends agree without coordination.
+        static int ReadyEventId(MafiaNet::RakNetGUID guid) {
+            return static_cast<int>(guid.systemIndex);
+        }
+
+        void SetOnPlayerConnectCallback(PacketCallback callback) {
             _onPlayerConnectCallback = std::move(callback);
         }
 
-        void SetOnPlayerDisconnectCallback(Messages::DisconnectPacketCallback callback) {
+        void SetOnPlayerDisconnectCallback(DisconnectPacketCallback callback) {
             _onPlayerDisconnectCallback = std::move(callback);
+        }
+
+        // Fired when a peer's build challenge succeeds (integration responds with ServerResources).
+        void SetOnClientAuthenticatedCallback(ClientGuidCallback callback) {
+            _onClientAuthenticatedCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking

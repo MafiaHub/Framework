@@ -8,38 +8,30 @@
 
 #pragma once
 
-#include <flecs/distr/flecs.h>
+#include "networking/replication/network_entity.h"
 
-#include "world/modules/base.hpp"
-
-#include <string>
+#include <cstdint>
 
 namespace Framework::World::Archetypes {
+    namespace Replication = Framework::Networking::Replication;
+
+    // Configures an entity as a player's avatar: it owns itself and (on the server) acts as the
+    // connection's viewer — its position/streamRange drive that client's interest set. The caller
+    // registers it as the viewer for the player's GUID via ReplicationManager::SetViewer. Player
+    // metadata (nickname, hardware id) belongs on the game's player NetworkEntity subclass.
     class PlayerFactory {
-      private:
-        inline void SetupDefaults(flecs::entity e, uint64_t guid) {
-            auto &streamer = e.ensure<World::Modules::Base::Streamer>();
-            streamer.guid      = guid;
-        }
-
       public:
-        inline void SetupClient(flecs::entity e, uint64_t guid) {
-            SetupDefaults(e, guid);
+        void SetupClient(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
+            if (entity) {
+                entity->ownerGUID = guid;
+            }
         }
 
-        inline void SetupServer(flecs::entity e, uint64_t guid, uint16_t playerIndex, const std::string &nickname, const std::string &hardwareId = "") {
-            SetupDefaults(e, guid);
-
-            auto &streamable           = e.ensure<World::Modules::Base::Streamable>();
-            streamable.assignOwnerProc = [](flecs::entity, World::Modules::Base::Streamable &) {
-                return true; /* always keep current owner */
-            };
-
-            auto &streamer       = e.ensure<World::Modules::Base::Streamer>();
-            streamer.nickname    = nickname;
-            streamer.playerIndex = playerIndex;
-            streamer.guid        = guid;
-            streamer.hardwareId  = hardwareId;
+        void SetupServer(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
+            if (entity) {
+                entity->ownerGUID          = guid;
+                entity->streaming.isViewer = true;
+            }
         }
     };
 } // namespace Framework::World::Archetypes

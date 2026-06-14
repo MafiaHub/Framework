@@ -11,14 +11,15 @@
 #include "package_manifest.h"
 
 #include <v8.h>
-#include <flecs/distr/flecs.h>
 
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace Framework::Scripting {
@@ -57,10 +58,6 @@ namespace Framework::Scripting {
 
     class Resource;
 
-    struct OwnedResource {
-        Resource *value;
-    };
-
     /**
      * Convert ResourceState to string representation.
      */
@@ -78,7 +75,7 @@ namespace Framework::Scripting {
          * Create a resource from a directory path.
          * @param path Path to the resource directory (containing package.json)
          */
-        explicit Resource(const std::string &path, flecs::world* world);
+        explicit Resource(const std::string &path);
 
         ~Resource();
 
@@ -206,8 +203,9 @@ namespace Framework::Scripting {
         v8::Isolate *GetIsolate() const { return _isolate; }
         void SetIsolate(v8::Isolate *isolate) { _isolate = isolate; }
 
-        // Flecs world integration
-        flecs::entity GetRootEntity() const { return _rootEntity; }
+        // Replicated entities spawned while this resource was executing; destroyed on stop/error.
+        void TrackEntity(uint64_t networkId);
+        void UntrackEntity(uint64_t networkId);
 
         // State transitions (called by ResourceManager)
         friend class ResourceManager;
@@ -225,8 +223,7 @@ namespace Framework::Scripting {
         // Get restart attempt count without locking
         int GetRestartAttemptCountUnlocked() const;
 
-        // Remove all child entities of the flecs root entity
-        void DestroyChildEntities();
+        void DestroyOwnedEntities();
 
         // Path to resource directory
         std::string _path;
@@ -244,15 +241,15 @@ namespace Framework::Scripting {
         // V8 isolate for this resource (set by manager)
         v8::Isolate *_isolate = nullptr;
 
-        // Flecs root entity
-        flecs::entity _rootEntity;
-
         // Exports registered by this resource
         std::map<std::string, v8::Global<v8::Value>, std::less<>> _exports;
         mutable std::mutex _exportsMutex;
 
         std::vector<std::chrono::system_clock::time_point> _restartAttempts;
         mutable std::mutex _restartAttemptsMutex;
+
+        std::unordered_set<uint64_t> _ownedEntities;
+        mutable std::mutex _ownedEntitiesMutex;
     };
 
 } // namespace Framework::Scripting

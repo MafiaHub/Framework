@@ -19,13 +19,14 @@ set(FRAMEWORK_SRC
 
     src/external/sentry/wrapper.cpp
 
-    src/world/engine.cpp
-    src/world/server.cpp
-    src/world/client.cpp
-    src/world/modules/modules_impl.cpp
-
     src/networking/network_peer.cpp
     src/networking/errors.cpp
+
+    src/networking/replication/network_entity.cpp
+    src/networking/replication/entity_registry.cpp
+    src/networking/replication/interest_grid.cpp
+    src/networking/replication/replication_manager.cpp
+    src/networking/replication/replication_connection.cpp
 
     # JavaScript scripting engine base and builtins (used by both client and server)
     # Note: node_engine.cpp and v8_engine.cpp are in OBJECT libraries due to special compile flags
@@ -175,8 +176,8 @@ macro(link_shared_deps target_name)
         ${CMAKE_SOURCE_DIR}/vendors/json/include
         ${CMAKE_SOURCE_DIR}/vendors/spdlog/include
         ${CMAKE_SOURCE_DIR}/vendors/fmt/include
-        ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in world/modules/base.hpp)
-        ${CMAKE_SOURCE_DIR}/vendors/mafianet/Source/include # Networking / MafiaNet (used in messages.h)
+        ${CMAKE_SOURCE_DIR}/vendors/fu2                    # function2 (used in network_peer.h)
+        ${CMAKE_SOURCE_DIR}/vendors/mafianet/Source/include # Networking / MafiaNet (used in connection.h)
         ${CMAKE_SOURCE_DIR}/vendors/cxxopts                # Command-line parsing (used in integrations)
         ${CMAKE_SOURCE_DIR}/vendors                        # flecs, etc.
     )
@@ -202,7 +203,7 @@ macro(link_shared_deps target_name)
     endif()
 
     # Global libraries (v8/v8pp excluded - linked explicitly to scripting targets only)
-    target_link_libraries(${target_name} MafiaNet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl flecs_static semver Hash ftl)
+    target_link_libraries(${target_name} MafiaNet glm spdlog cppfs nlohmann_json Sentry httplib OpenSSL::SSL OpenSSL::Crypto Curl semver Hash ftl)
 
     # Required libraries for windows
     if(WIN32)

@@ -22,23 +22,20 @@
 
 #include <memory>
 #include <utility>
-#include <world/client.h>
 
 #include "scripting/module.h"
-
-#include "world/types/player.hpp"
-#include "world/types/streaming.hpp"
 
 #include <gui/manager.h>
 
 #include <input/input.h>
 
-#include <flecs/distr/flecs.h>
-
 namespace Framework::Integrations::Client {
-    using NetworkConnectionFinalizedCallback = fu2::function<void(flecs::entity, float) const>;
+    // Fired once the connection handshake completes, with the server tick rate.
+    using NetworkConnectionFinalizedCallback = fu2::function<void(float) const>;
     using NetworkConnectionClosedCallback    = fu2::function<void() const>;
     using AssetsDownloadFinishedCallback     = fu2::function<void(bool success) const>;
+    // Fired when the server sends a chat line to display.
+    using NetworkChatMessageCallback         = fu2::function<void(const std::string &text) const>;
 
     class Instance;
 
@@ -94,7 +91,6 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<External::Discord::Wrapper> _presence;
         std::unique_ptr<Graphics::Renderer> _renderer;
-        std::shared_ptr<World::ClientEngine> _worldEngine;
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
         std::unique_ptr<Framework::GUI::Manager> _webManager;
@@ -107,10 +103,7 @@ namespace Framework::Integrations::Client {
         NetworkConnectionFinalizedCallback _onConnectionFinalized;
         NetworkConnectionClosedCallback _onConnectionClosed;
         AssetsDownloadFinishedCallback _onAssetsDownloadFinished;
-
-        // Entity factories
-        std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
-        std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
+        NetworkChatMessageCallback _onChatMessageReceived;
 
         // assets
         AssetDownloadStatus _downloadStatus {};
@@ -119,6 +112,12 @@ namespace Framework::Integrations::Client {
 
         // Pending resources from server (stored here to survive scripting module reset)
         std::vector<Client::Scripting::ServerResourceInfo> _pendingServerResources;
+
+        // Handshake state carried from ServerResources until the ReadyEvent spawn barrier completes.
+        int _readyEventId {};
+        float _serverTickRate {};
+        // One-shot latch so a stray ready-event completion can't re-run the mod's finalization.
+        bool _connectionFinalized {};
 
         void InitNetworkingMessages();
         void InitAssetDownloader();
@@ -174,12 +173,22 @@ namespace Framework::Integrations::Client {
             _onAssetsDownloadFinished = std::move(cb);
         }
 
-        Networking::Engine *GetNetworkingEngine() const {
-            return _networkingEngine.get();
+        void SetOnChatMessageReceivedCallback(NetworkChatMessageCallback cb) {
+            _onChatMessageReceived = std::move(cb);
         }
 
-        World::ClientEngine *GetWorldEngine() const {
-            return _worldEngine.get();
+        // Invoked by the chat RPC handler with a line received from the server.
+        void DispatchReceivedChat(const std::string &text) const {
+            if (_onChatMessageReceived) {
+                _onChatMessageReceived(text);
+            }
+        }
+
+        // Send a chat line to the server (the local player's outgoing text).
+        void SendChatMessage(const std::string &text);
+
+        Networking::Engine *GetNetworkingEngine() const {
+            return _networkingEngine.get();
         }
 
         External::Discord::Wrapper *GetPresence() const {
@@ -200,14 +209,6 @@ namespace Framework::Integrations::Client {
 
         Graphics::RenderIO *GetRenderIO() const {
             return _renderIO.get();
-        }
-
-        World::Archetypes::PlayerFactory *GetPlayerFactory() const {
-            return _playerFactory.get();
-        }
-
-        World::Archetypes::StreamingFactory *GetStreamingFactory() const {
-            return _streamingFactory.get();
         }
 
         virtual Input::IInput *GetBaseInput() const {

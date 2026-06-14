@@ -10,14 +10,19 @@
 #include "logging/logger.h"
 
 namespace Framework::Utils {
+    std::vector<std::string> CommandProcessor::Tokenize(std::string_view input) {
+        std::vector<std::string> tokens;
+        std::istringstream parts{std::string(input)};
+        std::string item;
+        while (parts >> item) {
+            tokens.push_back(item);
+        }
+        return tokens;
+    }
+
     Result<std::string, CommandProcessorError> CommandProcessor::ProcessCommand(std::string_view input) {
         std::string command;
-        std::vector<std::string> args;
-        std::stringstream parts{std::string(input)};
-        std::string item;
-        while (std::getline(parts, item, ' ')) {
-            args.push_back(item);
-        }
+        std::vector<std::string> args = Tokenize(input);
 
         if (args.empty()) {
             return CommandProcessorError::COMMAND_EMPTY_INPUT;

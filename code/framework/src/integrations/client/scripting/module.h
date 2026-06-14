@@ -14,22 +14,19 @@
 #include <string>
 #include <vector>
 
+#include <networking/rpc/server_resources.h>
 #include <scripting/module.h>
 #include <scripting/v8_engine.h>
 #include <scripting/resource/resource_manager.h>
 #include <utils/lifecycle.h>
-#include <world/client.h>
 
 namespace Framework::Integrations::Client::Scripting {
 
     /**
-     * Information about a resource received from the server.
+     * Information about a resource received from the server — the RPC wire type used directly, so
+     * the scripting layer cannot drift from what the server actually sends.
      */
-    struct ServerResourceInfo {
-        std::string name;
-        std::string version;
-        uint32_t hash = 0;
-    };
+    using ServerResourceInfo = Framework::Networking::RPC::ResourceInfo;
 
     /**
      * Callback type for resource download requests.
@@ -49,7 +46,7 @@ namespace Framework::Integrations::Client::Scripting {
      */
     class ClientScriptingModule final : public Framework::Lifecycle, public Framework::Scripting::ScriptingModule {
       public:
-        explicit ClientScriptingModule(std::shared_ptr<World::ClientEngine> world);
+        ClientScriptingModule();
         ~ClientScriptingModule();
 
         /**
@@ -89,12 +86,6 @@ namespace Framework::Integrations::Client::Scripting {
             return _engine.get();
         }
 
-        /**
-         * Get the world engine.
-         */
-        std::shared_ptr<World::ClientEngine> GetWorldEngine() const {
-            return _world;
-        }
 
         /**
          * Get the JavaScript resource manager.
@@ -185,7 +176,6 @@ namespace Framework::Integrations::Client::Scripting {
 
       private:
         std::unique_ptr<Framework::Scripting::V8Engine> _engine;
-        std::shared_ptr<World::ClientEngine> _world;
         std::unique_ptr<Framework::Scripting::ResourceManager> _resourceManager;
 
         // Resource synchronization state

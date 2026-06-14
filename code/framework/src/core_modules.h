@@ -16,9 +16,9 @@ namespace Framework::Networking {
     class NetworkPeer;
 } // namespace Framework::Networking
 
-namespace Framework::World {
-    class Engine;
-} // namespace Framework::World
+namespace Framework::Networking::Replication {
+    class ReplicationManager;
+} // namespace Framework::Networking::Replication
 
 
 namespace Framework::GUI {
@@ -47,7 +47,7 @@ namespace Framework {
       public:
         static void Reset() noexcept {
             _networkPeer      = nullptr;
-            _engine           = nullptr;
+            _replication      = nullptr;
             _scriptingModule  = nullptr;
             _webManager       = nullptr;
             _input            = nullptr;
@@ -59,9 +59,9 @@ namespace Framework {
             _networkPeer = peer;
         }
 
-        static void SetWorldEngine(World::Engine *engine) {
-            FW_ASSERT_MODULE_REGISTRATION(_engine, engine, "WorldEngine");
-            _engine = engine;
+        static void SetReplication(Networking::Replication::ReplicationManager *replication) {
+            FW_ASSERT_MODULE_REGISTRATION(_replication, replication, "Replication");
+            _replication = replication;
         }
 
         static void SetScriptingModule(Scripting::ScriptingModule *module) {
@@ -88,8 +88,8 @@ namespace Framework {
             return _networkPeer;
         }
 
-        static World::Engine *GetWorldEngine() noexcept {
-            return _engine;
+        static Networking::Replication::ReplicationManager *GetReplication() noexcept {
+            return _replication;
         }
 
         static Scripting::ScriptingModule *GetScriptingModule() noexcept {
@@ -110,7 +110,7 @@ namespace Framework {
 
       private:
         static inline Networking::NetworkPeer *_networkPeer {};
-        static inline World::Engine *_engine {};
+        static inline Networking::Replication::ReplicationManager *_replication {};
         static inline Scripting::ScriptingModule *_scriptingModule {};
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};

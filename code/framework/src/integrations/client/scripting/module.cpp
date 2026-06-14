@@ -35,8 +35,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
     } // anonymous namespace
 
-    ClientScriptingModule::ClientScriptingModule(std::shared_ptr<World::ClientEngine> world)
-        : _world(world) {
+    ClientScriptingModule::ClientScriptingModule() {
         // Create standalone V8 engine for client (no Node.js runtime)
         // moduleRootPath is set later in Init() or SetResourceCachePath()
         // when the actual resource cache path is known.
@@ -89,7 +88,7 @@ namespace Framework::Integrations::Client::Scripting {
         config.cascadeStopDependents = true;
         
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
-            _engine.get(), _world->GetWorld(), config);
+            _engine.get(), config);
 
         // Register Framework SDK bindings for the new ResourceManager
         RegisterFrameworkBindings();

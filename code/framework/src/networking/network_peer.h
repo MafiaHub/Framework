@@ -8,18 +8,30 @@
 
 #pragma once
 
-#include "messages/messages.h"
+#include "connection.h"
+#include "rpc/rpc.h"
 
+#include <mafianet/MessageIdentifiers.h>
 #include <mafianet/PacketPriority.h>
 #include <mafianet/peerinterface.h>
 #include <mafianet/FileListTransfer.h>
 #include <mafianet/DirectoryDeltaTransfer.h>
+#include <mafianet/RPC4Plugin.h>
+#include <mafianet/ReadyEvent.h>
+#include <mafianet/StatisticsHistory.h>
+#include <mafianet/TwoWayAuthentication.h>
+#include <mafianet/NetworkIDManager.h>
 #include <logging/logger.h>
 #include <utils/lifecycle.h>
-#include <unordered_map>
+#include <memory>
+#include <string>
 #include <utility>
 #include <utils/hashing.h>
 #include <vector>
+
+namespace Framework::Networking::Replication {
+    class ReplicationManager;
+} // namespace Framework::Networking::Replication
 
 namespace Framework::Networking {
     class NetworkPeer : public Lifecycle {
@@ -27,115 +39,108 @@ namespace Framework::Networking {
         MafiaNet::RakPeerInterface *_peer = nullptr;
         MafiaNet::Packet *_packet         = nullptr;
         int _packetDataOffset          = 0; // Offset to skip timestamp prefix if present
-        std::unordered_map<uint32_t, std::vector<Messages::PacketCallback>> _registeredRPCs;
-        std::unordered_map<uint8_t, Messages::PacketCallback> _registeredMessageCallbacks;
-        Messages::PacketCallback _onUnknownPacketCallback;
+        PacketCallback _onUnknownPacketCallback;
         mutable MafiaNet::DirectoryDeltaTransfer _assetStreamer;
 
+        // RPC4 dispatches remote-procedure calls by identifier to C handlers. NetworkIDManager hands
+        // out the cross-network object handles used by replicas. StatisticsHistoryPlugin tracks
+        // per-connection bandwidth/RTT/loss.
+        MafiaNet::RPC4 _rpc;
+        MafiaNet::NetworkIDManager _networkIDManager;
+        MafiaNet::StatisticsHistoryPlugin _statisticsHistory;
+
+        // Connection gate: TwoWayAuthentication proves an identical build token without sending it;
+        // ReadyEvent is the per-connection spawn barrier. Flow in network_{server,client}.cpp.
+        MafiaNet::TwoWayAuthentication _twoWayAuth;
+        MafiaNet::ReadyEvent _readyEvent;
+        std::string _buildToken;
+        // Token currently registered with TwoWayAuthentication, so an unchanged re-registration can
+        // be skipped instead of clearing the plugin (which drops in-flight challenges).
+        std::string _registeredToken;
+
+        // Owns the replicated entity world. The concrete peer's Init() attaches it and sets its role.
+        std::unique_ptr<Replication::ReplicationManager> _replicationManager;
+
+        // Decoded RPC handlers registered via RegisterRPC<T>. Each is kept alive here for the peer's
+        // lifetime; its address is the context RPC4 hands back to DispatchRPC, so handlers can capture.
+        using RPCSlot = fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)>;
+        std::vector<std::unique_ptr<RPCSlot>> _rpcHandlers;
+
+        static void DispatchRPC(MafiaNet::BitStream *bs, MafiaNet::Packet *packet, void *context) {
+            auto *slot = static_cast<RPCSlot *>(context);
+            if (slot && *slot) {
+                (*slot)(bs, packet);
+            }
+        }
+
+        bool RegisterBuildToken();
+
       public:
+        // TwoWayAuthentication identifier under which the build token is registered/challenged.
+        static constexpr const char *kBuildChallengeId = "Framework::Build";
+
         NetworkPeer();
         ~NetworkPeer();
 
-        bool Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) const;
-
-        bool Send(Messages::IMessage &msg, uint64_t guid = (uint64_t)-1, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED);
-
-        void RegisterMessage(uint8_t message, Messages::PacketCallback callback);
-
-        template <typename T>
-        void RegisterMessage(uint8_t message, fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
-            if (callback == nullptr) {
-                return;
-            }
-
-            _registeredMessageCallbacks[message] = [this, callback, message](MafiaNet::Packet *p) {
-                MafiaNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
-                T msg = {};
-                msg.SetPacket(p);
-                msg.Serialize(&bs, false);
-                msg.Serialize2(&bs, false);
-                if (msg.Valid2()) {
-                    if (msg.Valid()) {
-                        callback(p->guid, &msg);
-                    }
-                    else {
-                        Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid() check, skipping!", message);
-                    }
-                }
-                else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Message {} has failed to pass Valid2() check, skipping!", message);
-                }
-            };
+        // Single source of truth for the gated build identity — must produce the same string on both
+        // peers or the challenge fails.
+        static std::string BuildToken(const std::string &gameName, const std::string &gameVersion, const std::string &fwVersion, const std::string &modVersion) {
+            return gameName + '|' + gameVersion + '|' + fwVersion + '|' + modVersion;
         }
 
+        // Register the local build token (see BuildToken). Call before connecting/accepting.
+        void SetBuildToken(const std::string &token);
+
+        // Register a handler for RPC payload type T (see networking/rpc/rpc.h). The handler receives
+        // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
+        // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
+        // Signal() send below.
         template <typename T>
-        void RegisterRPC(fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
-            T _rpc = {};
-
-            if (callback == nullptr) {
-                return;
-            }
-
-            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](MafiaNet::Packet *p) {
-                MafiaNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
-                T rpc = {};
-                rpc.SetPacket(p);
-                rpc.Serialize(&bs, false);
-                if (rpc.Valid()) {
-                    callback(p->guid, &rpc);
-                }
-                else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} ({}) has failed to pass Valid() check, skipping!", _rpc.GetName(), _rpc.GetHashName());
-                }
+        void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
+            RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
+                cb(RPC::Read<T>(bs), packet);
             });
         }
 
+        // Send an RPC payload to every connected system.
         template <typename T>
-        void RegisterGameRPC(fu2::function<void(MafiaNet::RakNetGUID, T *) const> callback) {
-            T _rpc = {};
-
-            if (callback == nullptr) {
-                return;
-            }
-
-            _registeredRPCs[_rpc.GetHashName()].push_back([this, callback, _rpc](MafiaNet::Packet *p) {
-                MafiaNet::BitStream bs(p->data + _packetDataOffset + 5, p->length - _packetDataOffset - 5, false);
-                T rpc = {};
-                rpc.SetPacket(p);
-                rpc.Serialize(&bs, false);
-                rpc.Serialize2(&bs, false);
-                if (rpc.Valid2()) {
-                    if (rpc.Valid()) {
-                        callback(p->guid, &rpc);
-                    }
-                    else {
-                        Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid() check, skipping!", _rpc.GetHashName());
-                    }
-                }
-                else {
-                    Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("RPC {} has failed to pass Valid2() check, skipping!", _rpc.GetHashName());
-                }
-            });
-        }
-
-        template <typename T>
-        bool SendRPC(T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        void BroadcastRPC(T &payload, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             MafiaNet::BitStream bs;
-            bs.Write(Messages::INTERNAL_RPC);
-            bs.Write(rpc.GetHashName());
-            rpc.Serialize(&bs, true);
-            assert(!rpc.IsGameRPC() && "Game RPCs cannot be sent via SendRPC()");
+            payload.Serialize(&bs, true);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, MafiaNet::UNASSIGNED_RAKNET_GUID, true, false);
+        }
 
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
-                return false;
-            }
-            return true;
+        // Send an RPC payload to a single system.
+        template <typename T>
+        void SendRPC(T &payload, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            MafiaNet::BitStream bs;
+            payload.Serialize(&bs, true);
+            _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, guid, false, false);
+        }
+
+        // Raw variant of RegisterRPC for handlers that decode the bitstream themselves (e.g. a
+        // polymorphic tail). Prefer the typed RegisterRPC<T> for fixed-shape payloads. The callable
+        // is stored for the peer's lifetime and reached through RPC4's per-slot context, so no
+        // file-static handler pointers are needed.
+        void RegisterRawRPC(const char *identifier, fu2::function<void(MafiaNet::BitStream *, MafiaNet::Packet *)> handler) {
+            auto slot     = std::make_unique<RPCSlot>(std::move(handler));
+            void *context = slot.get();
+            _rpcHandlers.push_back(std::move(slot));
+            _rpc.RegisterSlot(identifier, &NetworkPeer::DispatchRPC, context, 0);
+        }
+
+        // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
+        void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+            _rpc.Signal(identifier, &bs, priority, reliability, 0, guid, false, false);
         }
 
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
-        void SetUnknownPacketHandler(Messages::PacketCallback callback) {
+        // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
+        virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
+
+        void SetUnknownPacketHandler(PacketCallback callback) {
             _onUnknownPacketCallback = std::move(callback);
         }
 
@@ -156,6 +161,30 @@ namespace Framework::Networking {
 
         MafiaNet::DirectoryDeltaTransfer* GetAssetStreamer() const noexcept {
             return &_assetStreamer;
+        }
+
+        MafiaNet::RPC4 *GetRPC() noexcept {
+            return &_rpc;
+        }
+
+        MafiaNet::NetworkIDManager *GetNetworkIDManager() noexcept {
+            return &_networkIDManager;
+        }
+
+        MafiaNet::StatisticsHistoryPlugin *GetStatisticsHistory() noexcept {
+            return &_statisticsHistory;
+        }
+
+        MafiaNet::TwoWayAuthentication *GetTwoWayAuth() noexcept {
+            return &_twoWayAuth;
+        }
+
+        MafiaNet::ReadyEvent *GetReadyEvent() noexcept {
+            return &_readyEvent;
+        }
+
+        Replication::ReplicationManager *GetReplicationManager() const noexcept {
+            return _replicationManager.get();
         }
     };
 } // namespace Framework::Networking

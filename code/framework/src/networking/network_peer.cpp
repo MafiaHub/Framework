@@ -9,6 +9,7 @@
 #include "network_peer.h"
 
 #include "errors.h"
+#include "replication/replication_manager.h"
 
 #include <logging/logger.h>
 
@@ -16,53 +17,57 @@ namespace Framework::Networking {
     NetworkPeer::NetworkPeer() {
         _peer = MafiaNet::RakPeerInterface::GetInstance();
 
-        RegisterMessage(Messages::INTERNAL_RPC, [this](MafiaNet::Packet *p) {
-            MafiaNet::BitStream bs(p->data + _packetDataOffset + 1, p->length - _packetDataOffset - 1, false);
-            uint32_t hashName;
-            bs.Read(hashName);
+        // RPC4 and StatisticsHistory can be attached before Startup(); the ReplicationManager is
+        // attached by the concrete peer's Init() once its connection factory exists.
+        _peer->AttachPlugin(&_rpc);
+        _peer->AttachPlugin(&_statisticsHistory);
+        _peer->AttachPlugin(&_twoWayAuth);
+        _peer->AttachPlugin(&_readyEvent);
+        _statisticsHistory.SetTrackConnections(true, 0, true);
 
-            if (_registeredRPCs.contains(hashName)) {
-                for (const auto &cb : _registeredRPCs[hashName]) {
-                    cb(p);
-                }
-            }
-        });
+        _replicationManager = std::make_unique<Replication::ReplicationManager>();
     }
 
     NetworkPeer::~NetworkPeer() = default;
 
-    bool NetworkPeer::Send(Messages::IMessage &msg, MafiaNet::RakNetGUID guid, PacketPriority priority, PacketReliability reliability) const {
-        if (!_peer) {
+    void NetworkPeer::SetBuildToken(const std::string &token) {
+        _buildToken = token;
+        if (!RegisterBuildToken()) {
+            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("Failed to register networking build token");
+        }
+    }
+
+    bool NetworkPeer::RegisterBuildToken() {
+        if (_buildToken.empty()) {
             return false;
         }
-
-        MafiaNet::BitStream bsOut;
-        bsOut.Write(msg.GetMessageID());
-        msg.Serialize(&bsOut, true);
-        msg.Serialize2(&bsOut, true);
-
-        if (_peer->Send(&bsOut, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
-            return false;
+        // Re-registering the same token must be a no-op: the Clear() fallback below wipes the
+        // plugin's in-flight challenge state, which would fail peers mid-handshake for nothing.
+        if (_buildToken == _registeredToken) {
+            return true;
         }
 
+        const MafiaNet::RakString token(_buildToken.c_str());
+        if (!_twoWayAuth.AddPassword(kBuildChallengeId, token)) {
+            // TwoWayAuthentication cannot overwrite an identifier. A genuine token change pays the
+            // Clear() — unavoidable, since the old token must stop validating.
+            _twoWayAuth.Clear();
+            if (!_twoWayAuth.AddPassword(kBuildChallengeId, token)) {
+                return false;
+            }
+        }
+        _registeredToken = _buildToken;
         return true;
-    }
-
-    bool NetworkPeer::Send(Messages::IMessage &msg, uint64_t guid, PacketPriority priority, PacketReliability reliability) {
-        return Send(msg, MafiaNet::RakNetGUID(guid), priority, reliability);
-    }
-
-    void NetworkPeer::RegisterMessage(uint8_t message, Messages::PacketCallback callback) {
-        if (callback == nullptr) {
-            return;
-        }
-
-        _registeredMessageCallbacks[message] = callback;
     }
 
     void NetworkPeer::Update() {
         if (!_peer) {
             return;
+        }
+
+        // Rebuild the spatial index before ReplicaManager3 computes per-connection relevance.
+        if (_replicationManager) {
+            _replicationManager->RebuildInterest();
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
@@ -83,14 +88,9 @@ namespace Framework::Networking {
             uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
-                if (_registeredMessageCallbacks.contains(packetID)) {
-                    _registeredMessageCallbacks[packetID](_packet);
-                }
-                else {
-                    Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
-                    if (_onUnknownPacketCallback) {
-                        _onUnknownPacketCallback(_packet);
-                    }
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->trace("Received unknown packet {}", packetID);
+                if (_onUnknownPacketCallback) {
+                    _onUnknownPacketCallback(_packet);
                 }
             }
         }

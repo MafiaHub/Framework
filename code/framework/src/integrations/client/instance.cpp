@@ -8,23 +8,18 @@
 
 #include "instance.h"
 
-#include <networking/messages/client_connection_finalized.h>
-#include <networking/messages/client_request_streamer.h>
-#include <networking/messages/client_ready_assets.h>
-#include <networking/messages/client_handshake.h>
-#include <networking/messages/client_initialise_player.h>
-#include <networking/messages/client_kick.h>
-
-#include <world/game_rpc/set_transform.h>
-
 #include "integrations/shared/rpc/emit_lua_event.h"
 
-#include "../shared/modules/mod.hpp"
+#include "networking/rpc/rpc.h"
+#include "networking/rpc/chat_message.h"
+#include "networking/rpc/client_identity.h"
+#include "networking/rpc/server_resources.h"
 
 #include "scripting/resource/resource_manager.h"
 #include "scripting/builtins/events.h"
 
 #include "networking/state.h"
+#include "networking/replication/replication_manager.h"
 
 #include <cppfs/cppfs.h>
 #include <cppfs/FilePath.h>
@@ -44,6 +39,68 @@
 #include "graphics/backend/d3d9.h"
 
 namespace Framework::Integrations::Client {
+    namespace {
+        // Handler for server-emitted scripting events; reaches the scripting engine through the
+        // CoreModules singleton.
+        void OnEmitLuaEvent(const Shared::RPC::EmitLuaEvent &rpc, MafiaNet::Packet *packet) {
+            (void)packet;
+            const auto eventName = rpc.GetEventName();
+            if (eventName.empty()) {
+                return;
+            }
+            const auto payloadStr = rpc.GetPayload();
+
+            auto *scriptingModule = static_cast<Client::Scripting::ClientScriptingModule *>(Framework::CoreModules::GetScriptingModule());
+            if (!scriptingModule) {
+                return;
+            }
+
+            // Emit to JavaScript resources via the Events system
+            auto resourceManager = scriptingModule->GetResourceManager();
+            if (!resourceManager) {
+                return;
+            }
+
+            auto *engine = scriptingModule->GetEngine();
+            if (!engine || !engine->IsInitialized()) {
+                return;
+            }
+
+            v8::Isolate *isolate = engine->GetIsolate();
+            v8::Locker locker(isolate);
+            v8::Isolate::Scope isolateScope(isolate);
+            v8::HandleScope handleScope(isolate);
+            v8::Local<v8::Context> context = engine->GetContext();
+            v8::Context::Scope contextScope(context);
+
+            // Parse JSON payload and emit event
+            std::vector<v8::Local<v8::Value>> args;
+            if (!payloadStr.empty()) {
+                v8::Local<v8::String> jsonStr;
+                if (!v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocal(&jsonStr)) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to create V8 string from event payload: {}", payloadStr);
+                    return;
+                }
+
+                v8::TryCatch tryCatch(isolate);
+                v8::Local<v8::Value> parsed;
+                if (!v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
+                    if (tryCatch.HasCaught()) {
+                        v8::String::Utf8Value errorMsg(isolate, tryCatch.Exception());
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", *errorMsg ? *errorMsg : "unknown error");
+                    }
+                    else {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", payloadStr);
+                    }
+                    return;
+                }
+                args.push_back(parsed);
+            }
+
+            resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
+        }
+    } // namespace
+
     bool AssetDownloadFileProgress::OnFile(MafiaNet::FileListTransferCBInterface::OnFileStruct *onFileStruct) {
         if (onFileStruct->numberOfFilesInThisSet > 0) {
             auto &downloadStatus    = _instance->GetAssetDownloadStatus();
@@ -77,11 +134,8 @@ namespace Framework::Integrations::Client {
         _presence         = std::make_unique<External::Discord::Wrapper>();
         _imguiApp         = std::make_unique<External::ImGUI::Wrapper>();
         _renderer         = std::make_unique<Graphics::Renderer>();
-        _worldEngine      = std::make_shared<World::ClientEngine>();
         _renderIO         = std::make_unique<Graphics::RenderIO>();
-        _playerFactory    = std::make_unique<World::Archetypes::PlayerFactory>();
-        _streamingFactory = std::make_unique<World::Archetypes::StreamingFactory>();
-        _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>(_worldEngine);
+        _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
     }
 
@@ -113,18 +167,6 @@ namespace Framework::Integrations::Client {
             }
             CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkClient());
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
-        }
-
-        if (_worldEngine) {
-            if (_worldEngine->Init() != World::WorldError::WORLD_NONE) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("World engine failed to initialize");
-                return ClientError::CLIENT_ENGINES_ERROR;
-            }
-            CoreModules::SetWorldEngine(_worldEngine.get());
-
-            _worldEngine->GetWorld()->import <Shared::Modules::Mod>();
-
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Core ecs modules have been imported!");
         }
 
         CoreModules::SetWebManager(_webManager.get());
@@ -234,14 +276,10 @@ namespace Framework::Integrations::Client {
             _imguiApp->Shutdown();
         }
 
-        if (_worldEngine) {
-            _worldEngine->Shutdown();
-        }
-
         CoreModules::SetScriptingModule(nullptr);
         CoreModules::SetWebManager(nullptr);
         CoreModules::SetNetworkPeer(nullptr);
-        CoreModules::SetWorldEngine(nullptr);
+        CoreModules::SetReplication(nullptr);
         CoreModules::SetInput(nullptr);
         CoreModules::Reset();
 
@@ -259,10 +297,6 @@ namespace Framework::Integrations::Client {
 
         if (_scriptingModule) {
             _scriptingModule->Update();
-        }
-
-        if (_worldEngine) {
-            _worldEngine->Update();
         }
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
@@ -293,85 +327,68 @@ namespace Framework::Integrations::Client {
     }
 
     void Instance::InitNetworkingMessages() {
-        using namespace Framework::Networking::Messages;
         const auto net = _networkingEngine->GetNetworkClient();
-        net->SetOnPlayerConnectedCallback([this, net](MafiaNet::Packet *packet) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, sending handshake");
+        // Build gate: NetworkClient challenges automatically on connect; a mismatch drops us.
+        net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
 
-            ClientHandshake msg;
-            msg.FromParameters(_opts.modVersion, Utils::Version::rel, _opts.gameVersion, _opts.gameName);
-
-            net->Send(msg, MafiaNet::UNASSIGNED_RAKNET_GUID);
+        net->SetOnPlayerConnectedCallback([](MafiaNet::Packet *) {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, verifying build");
         });
-        net->RegisterMessage<ClientReadyAssets>(GameMessages::GAME_CONNECTION_READY_ASSETS, [this, net](MafiaNet::RakNetGUID _guid, ClientReadyAssets *msg) {
-            // Store resource list on instance (survives scripting module reset)
-            if (msg->GetResourceCount() > 0) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", msg->GetResourceCount());
 
-                _pendingServerResources.clear();
-                _pendingServerResources.reserve(msg->GetResourceCount());
-                for (const auto &resInfo : msg->GetResources()) {
-                    Client::Scripting::ServerResourceInfo info;
-                    info.name = resInfo.name;
-                    info.version = resInfo.version;
-                    info.hash = resInfo.hash;
-                    _pendingServerResources.push_back(info);
-                }
-            }
+        // Server's resource list. Store it (survives a scripting module reset) and start the asset
+        // phase; the ready-event id and tick rate are held until the spawn barrier completes.
+        net->RegisterRPC<Framework::Networking::RPC::ServerResources>([this](const Framework::Networking::RPC::ServerResources &payload, MafiaNet::Packet *) {
+            _readyEventId   = payload.readyEventId;
+            _serverTickRate = payload.tickRate;
+
+            _pendingServerResources = payload.resources;
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Received resource list from server with {} resources", _pendingServerResources.size());
 
             DownloadsAssetsFromConnectedServer();
         });
-        net->RegisterMessage<ClientConnectionFinalized>(GameMessages::GAME_CONNECTION_FINALIZED, [this, net](MafiaNet::RakNetGUID _guid, ClientConnectionFinalized *msg) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection request finalized");
-            _worldEngine->OnConnect(net, msg->GetServerTickRate());
-            const auto guid = GetNetworkingEngine()->GetNetworkClient()->GetPeer()->GetMyGUID();
 
-            const auto newPlayer = GetWorldEngine()->CreateEntity(msg->GetEntityID());
-            GetStreamingFactory()->SetupClient(newPlayer, guid.g);
-            GetPlayerFactory()->SetupClient(newPlayer, guid.g);
-
-            // Notify server we are ready to obtain player data
-            Framework::Networking::Messages::ClientInitPlayer initPlayer {};
-            net->Send(initPlayer, MafiaNet::UNASSIGNED_RAKNET_GUID);
-
-            // Notify mod-level that network integration whole process succeeded
+        // Spawn barrier complete: activate replication and report the connection final.
+        net->SetOnConnectionReadyCallback([this, net](int eventId) {
+            // Only the event the server assigned in ServerResources finalizes this connection, and
+            // only once — a stray or repeated completion must not re-run the mod's spawn logic.
+            if (eventId != _readyEventId || _connectionFinalized) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Ignoring ready event {} (expected {}, finalized: {})", eventId, _readyEventId, _connectionFinalized);
+                return;
+            }
+            _connectionFinalized = true;
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection ready (event {}), finalizing", eventId);
+            // tickInterval is in seconds; SetAutoSerializeInterval wants milliseconds.
+            if (auto *replication = net->GetReplicationManager()) {
+                CoreModules::SetReplication(replication);
+                replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_serverTickRate * 1000.0f));
+            }
             if (_onConnectionFinalized) {
-                _onConnectionFinalized(newPlayer, msg->GetServerTickRate());
+                _onConnectionFinalized(_serverTickRate);
             }
         });
-        net->RegisterMessage<ClientKick>(GameMessages::GAME_CONNECTION_KICKED, [](MafiaNet::RakNetGUID guid, ClientKick *msg) {
-            std::string reason = "Unknown.";
 
-            switch (msg->GetDisconnectionReason()) {
-            case Framework::Networking::Messages::DisconnectionReason::BANNED: reason = "You are banned."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + msg->GetCustomReason(); break;
-            case Framework::Networking::Messages::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
-            case Framework::Networking::Messages::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
-            case Framework::Networking::Messages::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
+        // Version mismatches don't reach here — they fail the build challenge (WRONG_VERSION).
+        net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::DisconnectionReason reasonId, const std::string &customReason) {
+            std::string reason = "Unknown.";
+            switch (reasonId) {
+            case Framework::Networking::DisconnectionReason::BANNED: reason = "You are banned."; break;
+            case Framework::Networking::DisconnectionReason::KICKED: reason = "You have been kicked."; break;
+            case Framework::Networking::DisconnectionReason::KICKED_CUSTOM: reason = "You have been kicked. Reason: " + customReason; break;
+            case Framework::Networking::DisconnectionReason::KICKED_INVALID_PACKET: reason = "You have been kicked (invalid packet)."; break;
+            case Framework::Networking::DisconnectionReason::WRONG_VERSION: reason = "You have been kicked (wrong client version)."; break;
+            case Framework::Networking::DisconnectionReason::INVALID_PASSWORD: reason = "You have been kicked (wrong password)."; break;
             default: break;
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection dropped: {}", reason);
-        });
-        net->RegisterGameRPC<Framework::World::RPC::SetTransform>([this](MafiaNet::RakNetGUID guid, Framework::World::RPC::SetTransform *msg) {
-            if (!msg->Valid()) {
-                return;
-            }
-            const auto e = GetWorldEngine()->GetEntityByServerID(msg->GetServerID());
-            if (!e.is_alive()) {
-                return;
-            }
 
-            const auto tr = e.try_get_mut<Framework::World::Modules::Base::Transform>();
-            *tr           = msg->GetTransform();
-        });
-        net->SetOnPlayerDisconnectedCallback([this](MafiaNet::Packet *packet, Framework::Networking::Messages::DisconnectionReason reasonId) {
             // Reset initial asset download state
             _initialDownloadDone = false;
             _downloadStatus      = {};
+            _connectionFinalized = false;
             
-            // Request the world engine to clean up entities
-            _worldEngine->OnDisconnect();
+            // Entity teardown is native: ReplicaManager3 deletes server-created replicas when the
+            // connection drops (QueryActionOnPopConnection_Client).
+            CoreModules::SetReplication(nullptr);
 
             // Notify mod-level that network integration got closed
             if (_onConnectionClosed) {
@@ -391,59 +408,26 @@ namespace Framework::Integrations::Client {
             }
         });
 
-        net->RegisterRPC<Shared::RPC::EmitLuaEvent>([this](MafiaNet::RakNetGUID guid, Shared::RPC::EmitLuaEvent *rpc) {
-            if (!rpc->Valid())
-                return;
-            const auto eventName  = rpc->GetEventName();
-            const auto payloadStr = rpc->GetPayload();
+        net->RegisterRPC<Shared::RPC::EmitLuaEvent>(&OnEmitLuaEvent);
 
-            // Emit to JavaScript resources via the Events system
-            auto resourceManager = _scriptingModule->GetResourceManager();
-            if (!resourceManager) {
-                return;
-            }
-
-            auto *engine = _scriptingModule->GetEngine();
-            if (!engine || !engine->IsInitialized()) {
-                return;
-            }
-
-            v8::Isolate *isolate = engine->GetIsolate();
-            v8::Locker locker(isolate);
-            v8::Isolate::Scope isolateScope(isolate);
-            v8::HandleScope handleScope(isolate);
-            v8::Local<v8::Context> context = engine->GetContext();
-            v8::Context::Scope contextScope(context);
-
-            // Parse JSON payload and emit event
-            std::vector<v8::Local<v8::Value>> args;
-            if (!payloadStr.empty()) {
-                v8::Local<v8::String> jsonStr;
-                if (!v8::String::NewFromUtf8(isolate, payloadStr.c_str()).ToLocal(&jsonStr)) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to create V8 string from event payload: {}", payloadStr);
-                    return;
-                }
-
-                v8::TryCatch tryCatch(isolate);
-                v8::Local<v8::Value> parsed;
-                if (!v8::JSON::Parse(context, jsonStr).ToLocal(&parsed)) {
-                    if (tryCatch.HasCaught()) {
-                        v8::String::Utf8Value errorMsg(isolate, tryCatch.Exception());
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", *errorMsg ? *errorMsg : "unknown error");
-                    } else {
-                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Failed to parse event payload JSON: {}", payloadStr);
-                    }
-                    return;
-                }
-                args.push_back(parsed);
-            }
-
-            resourceManager->GetEvents().EmitReserved(isolate, context, eventName, args);
+        // Chat lines from the server are forwarded to the mod's UI via the received callback.
+        net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *) {
+            DispatchReceivedChat(payload.text);
         });
 
-        Framework::World::Modules::Base::SetupClientReceivers(net, _worldEngine.get(), _streamingFactory.get());
+        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Networking messages registered");
+    }
 
-        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Game sync networking messages registered");
+    void Instance::SendChatMessage(const std::string &text) {
+        if (text.empty()) {
+            return;
+        }
+        const auto net = GetNetworkingEngine()->GetNetworkClient();
+        if (!net) {
+            return;
+        }
+        Framework::Networking::RPC::ChatMessage payload {text};
+        net->BroadcastRPC(payload);
     }
 
     void Instance::DownloadsAssetsFromConnectedServer() {
@@ -542,17 +526,27 @@ namespace Framework::Integrations::Client {
         else {
             net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+            return;
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
-        // Send the server a request to initialise our client and assign a streamer
-        // but only do so the first time we connect to the server
+        // Announce ourselves (server builds the avatar and opens the replication gate), then arm our
+        // half of the spawn barrier. First connect only.
         if (!_initialDownloadDone) {
             _initialDownloadDone = true;
 
-            Framework::Networking::Messages::ClientRequestStreamer req;
-            req.FromParameters(_currentState.nickname, "MY_SUPER_ID_1", "MY_SUPER_ID_2", Framework::Utils::GetHardwareId());
-            net->Send(req, MafiaNet::UNASSIGNED_RAKNET_GUID);
+            const auto serverGuid = net->GetPeer()->GetGUIDFromIndex(0);
+
+            Framework::Networking::RPC::ClientIdentity identity;
+            identity.name       = _currentState.nickname;
+            identity.steamId    = ""; // no Steam integration wired into the client yet
+            identity.discordId  = _presence ? _presence->GetUserId() : "";
+            identity.hardwareId = Framework::Utils::GetHardwareId();
+            net->SendRPC(identity, serverGuid);
+
+            net->GetReadyEvent()->AddToWaitList(_readyEventId, serverGuid);
+            net->GetReadyEvent()->SetEvent(_readyEventId, true);
         }
 
         _downloadStatus = {};

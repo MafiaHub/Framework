@@ -9,7 +9,7 @@
 #pragma once
 
 #include "errors.h"
-#include "messages/messages.h"
+#include "connection.h"
 #include "network_peer.h"
 #include "state.h"
 
@@ -35,9 +35,10 @@ namespace Framework::Networking {
 
         PeerState _state;
 
-        Messages::PacketCallback _onPlayerConnectedCallback;
-        Messages::DisconnectPacketCallback _onPlayerDisconnectedCallback;
+        PacketCallback _onPlayerConnectedCallback;
+        DisconnectPacketCallback _onPlayerDisconnectedCallback;
         OnAssetsDownloadFailedCallback _onAssetsDownloadFailedCallback;
+        fu2::function<void(int eventId) const> _onConnectionReadyCallback;
         AssetFileTransfer _fileListTransfer;
       public:
         
@@ -65,11 +66,11 @@ namespace Framework::Networking {
             return &_fileListTransfer;
         }
 
-        void SetOnPlayerConnectedCallback(Messages::PacketCallback callback) {
+        void SetOnPlayerConnectedCallback(PacketCallback callback) {
             _onPlayerConnectedCallback = std::move(callback);
         }
 
-        void SetOnPlayerDisconnectedCallback(Messages::DisconnectPacketCallback callback) {
+        void SetOnPlayerDisconnectedCallback(DisconnectPacketCallback callback) {
             _onPlayerDisconnectedCallback = std::move(callback);
         }
 
@@ -77,18 +78,9 @@ namespace Framework::Networking {
             _onAssetsDownloadFailedCallback = std::move(callback);
         }
 
-        template <typename T>
-        bool SendGameRPC(T &rpc, MafiaNet::RakNetGUID guid = MafiaNet::UNASSIGNED_RAKNET_GUID, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
-            MafiaNet::BitStream bs;
-            bs.Write(Messages::INTERNAL_RPC);
-            bs.Write(rpc.GetHashName());
-            rpc.Serialize(&bs, true);
-            rpc.Serialize2(&bs, true);
-
-            if (_peer->Send(&bs, priority, reliability, 0, guid, guid == MafiaNet::UNASSIGNED_RAKNET_GUID) <= 0) {
-                return false;
-            }
-            return true;
+        // Fired when the spawn barrier completes — the client activates replication and finalizes.
+        void SetOnConnectionReadyCallback(fu2::function<void(int eventId) const> callback) {
+            _onConnectionReadyCallback = std::move(callback);
         }
     };
 } // namespace Framework::Networking

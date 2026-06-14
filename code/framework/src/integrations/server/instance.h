@@ -15,16 +15,12 @@
 #include "logging/logger.h"
 #include "networking/engine.h"
 #include "scripting/module.h"
+
+#include <mafianet/types.h>
 #include "services/masterlist.h"
 #include "utils/config.h"
 #include "utils/command_listener.h"
 #include "utils/command_processor.h"
-#include "world/server.h"
-
-#include <flecs.h>
-
-#include "world/types/player.hpp"
-#include "world/types/streaming.hpp"
 
 #include <utils/lifecycle.h>
 
@@ -35,6 +31,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace Framework::Integrations::Server {
     struct InstanceOptions {
@@ -72,8 +69,17 @@ namespace Framework::Integrations::Server {
 
         bool enableSignals;
 
-        // update intervals
-        Framework::World::ServerEngine::ServerConfig worldConfig;
+        // update intervals and streaming
+        struct WorldConfig {
+            float tickInterval = 0.016667f;
+            // Interest-grid extent (see Networking::Replication::InterestGrid::Configure): square
+            // world bounds and cell size in world units. Defaults match the grid's own — size them to
+            // the playable area, or entities beyond the bounds clamp into edge cells and degrade
+            // border interest queries.
+            float streamCellSize = 100.0f;
+            float streamWorldMin = -10000.0f;
+            float streamWorldMax = 10000.0f;
+        } worldConfig;
 
         // args
         int argc;
@@ -81,7 +87,25 @@ namespace Framework::Integrations::Server {
 
     };
 
-    using OnPlayerConnectionCallback = fu2::function<void(flecs::entity, uint64_t) const>;
+    // Connection metadata handed to the player-connect callback so the game can create and fully
+    // populate the player's avatar (nickname, slot index, hardware id) instead of leaving spawn-time
+    // fields at their defaults.
+    struct PlayerConnectionData {
+        MafiaNet::PeerGuid guid {};
+        uint16_t playerIndex = MafiaNet::UNASSIGNED_PLAYER_INDEX; // the connection's dense slot
+        std::string nickname;
+        std::string hardwareID;
+    };
+
+    // Invoked when a player joins (with its connection metadata) or leaves (with its GUID); the game
+    // creates and owns the player's entity.
+    using OnPlayerConnectCallback    = fu2::function<void(const PlayerConnectionData &) const>;
+    using OnPlayerDisconnectCallback = fu2::function<void(MafiaNet::PeerGuid) const>;
+
+    // Chat. The sender is resolved to its viewer entity's NetworkID; command lines ("/...") are
+    // pre-parsed into a command name and whitespace-separated arguments.
+    using OnChatMessageCallback = fu2::function<void(uint64_t senderNetworkId, const std::string &text) const>;
+    using OnChatCommandCallback = fu2::function<void(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) const>;
 
     class Instance : public Framework::Lifecycle {
       private:
@@ -94,13 +118,11 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Networking::Engine> _networkingEngine;
         std::unique_ptr<HTTP::Webserver> _webServer;
         std::unique_ptr<Utils::Config> _fileConfig;
-        std::shared_ptr<World::ServerEngine> _worldEngine;
         std::unique_ptr<Services::MasterlistConnector> _masterlist;
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
 
         void InitEndpoints();
-        void InitModules() const;
         void InitNetworkingMessages() const;
         void InitAssetStreamer();
         void InitCommandListener();
@@ -110,16 +132,11 @@ namespace Framework::Integrations::Server {
         // Command handlers
         void HandleCommand(std::string_view command);
 
-        // managers
-        flecs::entity _weatherManager;
-
-        // entity factories
-        std::unique_ptr<World::Archetypes::PlayerFactory> _playerFactory;
-        std::unique_ptr<World::Archetypes::StreamingFactory> _streamingFactory;
-
         // callbacks
-        OnPlayerConnectionCallback _onPlayerConnectCallback;
-        OnPlayerConnectionCallback _onPlayerDisconnectCallback;
+        OnPlayerConnectCallback _onPlayerConnectCallback;
+        OnPlayerDisconnectCallback _onPlayerDisconnectCallback;
+        OnChatMessageCallback _onChatMessageCallback;
+        OnChatCommandCallback _onChatCommandCallback;
 
       public:
         Instance();
@@ -146,13 +163,24 @@ namespace Framework::Integrations::Server {
 
         void OnSignal(sig_signal_t);
 
-        void SetOnPlayerConnectCallback(OnPlayerConnectionCallback onPlayerConnectCallback) {
+        void SetOnPlayerConnectCallback(OnPlayerConnectCallback onPlayerConnectCallback) {
             _onPlayerConnectCallback = std::move(onPlayerConnectCallback);
         }
 
-        void SetOnPlayerDisconnectCallback(OnPlayerConnectionCallback onPlayerDisconnectCallback) {
+        void SetOnPlayerDisconnectCallback(OnPlayerDisconnectCallback onPlayerDisconnectCallback) {
             _onPlayerDisconnectCallback = std::move(onPlayerDisconnectCallback);
         }
+
+        void SetOnChatMessageCallback(OnChatMessageCallback cb) {
+            _onChatMessageCallback = std::move(cb);
+        }
+
+        void SetOnChatCommandCallback(OnChatCommandCallback cb) {
+            _onChatCommandCallback = std::move(cb);
+        }
+
+        // Parse a received chat line and dispatch it to the chat callbacks above.
+        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const;
 
         InstanceOptions &GetOptions() {
             return _opts;
@@ -160,10 +188,6 @@ namespace Framework::Integrations::Server {
 
         Scripting::ServerScriptingModule *GetScriptingModule() const {
             return _scriptingModule.get();
-        }
-
-        std::shared_ptr<World::ServerEngine> GetWorldEngine() const {
-            return _worldEngine;
         }
 
         Networking::Engine *GetNetworkingEngine() const {
@@ -174,14 +198,6 @@ namespace Framework::Integrations::Server {
             return _webServer.get();
         }
 
-        World::Archetypes::PlayerFactory *GetPlayerFactory() const {
-            return _playerFactory.get();
-        }
-
-        World::Archetypes::StreamingFactory *GetStreamingFactory() const {
-            return _streamingFactory.get();
-        }
-        
         // Register a custom command with the command processor
         Utils::Result<std::string, Utils::CommandProcessorError> RegisterCommand(std::string_view name, std::initializer_list<cxxopts::Option> options, const Utils::CommandProc &proc, const std::string &desc) {
             return _commandProcessor->RegisterCommand(name, options, proc, desc);
