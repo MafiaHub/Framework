@@ -95,7 +95,7 @@ namespace Framework::Networking {
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
         // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
         // Signal() send below.
-        template <typename T>
+        template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
             RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
                 cb(RPC::Read<T>(bs), packet);
@@ -103,7 +103,7 @@ namespace Framework::Networking {
         }
 
         // Send an RPC payload to every connected system.
-        template <typename T>
+        template <RPC::Payload T>
         void BroadcastRPC(T &payload, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
@@ -111,7 +111,7 @@ namespace Framework::Networking {
         }
 
         // Send an RPC payload to a single system.
-        template <typename T>
+        template <RPC::Payload T>
         void SendRPC(T &payload, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);

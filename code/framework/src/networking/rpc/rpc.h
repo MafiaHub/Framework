@@ -10,7 +10,16 @@
 
 #include <mafianet/BitStream.h>
 
+#include <concepts>
+
 namespace Framework::Networking::RPC {
+    // A well-formed RPC payload: identifier + symmetric serializer.
+    template <typename T>
+    concept Payload = requires(T payload, MafiaNet::BitStream *bs) {
+        { T::kIdentifier } -> std::convertible_to<const char *>;
+        payload.Serialize(bs, true);
+    };
+
     // An RPC is a payload struct that provides:
     //   static constexpr const char *kIdentifier;            // unique, identical on both peers
     //   void Serialize(MafiaNet::BitStream *bs, bool write); // symmetric read/write
