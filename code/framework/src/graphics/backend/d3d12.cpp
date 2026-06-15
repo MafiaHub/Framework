@@ -10,17 +10,19 @@
 
 #include <logging/logger.h>
 
+#include <wrl/client.h>
+
 namespace Framework::Graphics {
     bool D3D12Backend::Init(const Framework::Graphics::RendererConfiguration &opts) {
         const auto swapChain = opts.d3d12.swapchain;
         const auto commandQueue = opts.d3d12.commandQueue;
-        _device  = opts.d3d12.device;
         _context = opts.d3d12.deviceContext;
         // #1 get device from swapchain (maybe different device)
-        ID3D12Device *pD3DDevice;
-        if (FAILED(swapChain->GetDevice(__uuidof(ID3D12Device), (void **)&pD3DDevice))) {
+        Microsoft::WRL::ComPtr<ID3D12Device> deviceGuard;
+        if (FAILED(swapChain->GetDevice(IID_PPV_ARGS(&deviceGuard)))) {
             return false;
         }
+        ID3D12Device *pD3DDevice = deviceGuard.Get();
 
         _swapChain    = swapChain;
         _commandQueue = commandQueue;
@@ -87,6 +89,8 @@ namespace Framework::Graphics {
             }
         }
 
+        _device = deviceGuard.Detach();
+
         Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("D3D12 device {}", fmt::ptr(_device));
         return true;
     }
@@ -99,6 +103,10 @@ namespace Framework::Graphics {
         for (const auto &frameContext : _frameContext) {
             frameContext._commandAllocator->Release();
             frameContext._mainRenderTargetResource->Release();
+        }
+        if (_device) {
+            _device->Release();
+            _device = nullptr;
         }
     }
 
