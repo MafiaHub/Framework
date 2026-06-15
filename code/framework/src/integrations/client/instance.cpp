@@ -473,7 +473,7 @@ namespace Framework::Integrations::Client {
         }
         Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
 
-        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), HIGH_PRIORITY, 2, nullptr);
+        _downloadStatus.setID = streamer->DownloadFromSubdirectory(nullptr, nullptr, true, net->GetPeer()->GetSystemAddressFromIndex(0), new AssetDownloadFileProgress(this), MafiaNet::Priority::High, 2, nullptr);
     }
 
     void Instance::OnAssetsDownloaded(bool success) {

@@ -12,6 +12,7 @@
 
 #include <mafianet/BitStream.h>
 #include <mafianet/MessageIdentifiers.h>
+#include <mafianet/guid_util.h>
 #include <logging/logger.h>
 
 namespace Framework::Networking {
@@ -54,7 +55,7 @@ namespace Framework::Networking {
     bool NetworkServer::HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) {
         switch (packetID) {
         case ID_NEW_INCOMING_CONNECTION: {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Incoming connection request {}", MafiaNet::to_string(packet->guid));
             if (_onPlayerConnectCallback) {
                 _onPlayerConnectCallback(packet);
             }
@@ -62,7 +63,7 @@ namespace Framework::Networking {
         };
 
         case ID_DISCONNECTION_NOTIFICATION: {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnection from {}", MafiaNet::to_string(packet->guid));
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, DisconnectionReason::GRACEFUL_SHUTDOWN, "");
             }
@@ -70,7 +71,7 @@ namespace Framework::Networking {
             return true;
         };
         case ID_CONNECTION_LOST: {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Connection lost for {}", MafiaNet::to_string(packet->guid));
             if (_onPlayerDisconnectCallback) {
                 _onPlayerDisconnectCallback(_packet, DisconnectionReason::LOST, "");
             }
@@ -81,7 +82,7 @@ namespace Framework::Networking {
         // Build gate: the client challenges us with its build token. Match -> asset phase; mismatch
         // -> drop (the version-incompatibility path).
         case ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_SUCCESS: {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified for {}", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Build verified for {}", MafiaNet::to_string(packet->guid));
             _authenticatedClients.insert(packet->guid.g);
             if (_onClientAuthenticatedCallback) {
                 _onClientAuthenticatedCallback(packet->guid);
@@ -89,7 +90,7 @@ namespace Framework::Networking {
             return true;
         };
         case ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_FAILURE: {
-            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Build mismatch from {}, dropping peer", packet->guid.ToString());
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Build mismatch from {}, dropping peer", MafiaNet::to_string(packet->guid));
             _peer->CloseConnection(packet->guid, true);
             return true;
         };
@@ -122,7 +123,7 @@ namespace Framework::Networking {
     int NetworkServer::GetPing(MafiaNet::RakNetGUID guid) const {
         return _peer->GetAveragePing(guid);
     }
-    void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, PacketPriority priority, PacketReliability reliability) {
+    void NetworkServer::SignalExcept(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID excludeGUID, MafiaNet::Priority priority, MafiaNet::Reliability reliability) {
         // When broadcasting, the system identifier is the peer to exclude, so a single Signal reaches
         // everyone but the sender.
         _rpc.Signal(identifier, &bs, priority, reliability, 0, excludeGUID, true, false);
@@ -149,7 +150,7 @@ namespace Framework::Networking {
         // Reason rides the disconnect notification, so no separate message races the close.
         MafiaNet::BitStream reasonData;
         payload.Serialize(&reasonData, true);
-        _peer->CloseConnection(guid, true, 0, LOW_PRIORITY, &reasonData);
+        _peer->CloseConnection(guid, true, 0, MafiaNet::Priority::Low, &reasonData);
         ClearClientState(guid);
     }
 
