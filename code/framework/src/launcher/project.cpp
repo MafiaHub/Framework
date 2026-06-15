@@ -380,7 +380,12 @@ namespace Framework::Launcher {
         }
 
         // Ask the game path from steam
-        _gamePath = Utils::StringUtils::NormalToWide(_steamWrapper->GetAppInstallDir(_config.steamAppId));
+        const auto installDir = _steamWrapper->GetAppInstallDir(_config.steamAppId);
+        if (installDir.empty()) {
+            MessageBox(nullptr, "Steam returned an empty install directory for the destination game", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+        _gamePath = Utils::StringUtils::NormalToWide(installDir);
         std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
 
         // Set classic game path to the one found by Steam just for sake of having that information stored in the config

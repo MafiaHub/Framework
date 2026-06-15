@@ -57,7 +57,7 @@ namespace Framework::Networking {
 
         [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &host, int32_t port, const std::string &password = "");
 
-        Utils::Result<void, Error> Disconnect();
+        [[nodiscard]] Utils::Result<void, Error> Disconnect();
 
         int GetPing() const;
 

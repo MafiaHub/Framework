@@ -21,19 +21,17 @@ namespace Framework::External::Steam {
         }
 
         if (!SteamUser()->BLoggedOn()) {
+            SteamAPI_Shutdown();
             return Framework::Error("Steam user is not logged on");
         }
 
-        _ctx = std::make_unique<CSteamAPIContext>();
-
-        if (!_ctx) {
-            return Framework::Error("Failed to create the Steam API context");
-        }
-
-        if (!_ctx->Init()) {
+        auto ctx = std::make_unique<CSteamAPIContext>();
+        if (!ctx->Init()) {
+            SteamAPI_Shutdown();
             return Framework::Error("Failed to initialize the Steam API context");
         }
 
+        _ctx         = std::move(ctx);
         _initialized = true;
         return {};
     }
@@ -60,7 +58,10 @@ namespace Framework::External::Steam {
             return {};
         }
         char path[1024] = {0};
-        apps->GetAppInstallDir(appId, path, sizeof(path));
+        const auto length = apps->GetAppInstallDir(appId, path, sizeof(path));
+        if (length == 0 || length >= sizeof(path)) {
+            return {};
+        }
         return path;
     }
 

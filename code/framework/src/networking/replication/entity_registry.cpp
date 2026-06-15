@@ -31,6 +31,8 @@ namespace Framework::Networking::Replication {
         if (existing != _types.end() && existing->second.name != name) {
             Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("EntityRegistry: CRC32 collision — '{}' and '{}' both hash to {}; rename one of the entity types", existing->second.name, name, id);
             assert(false && "EntityRegistry: CRC32 type-id collision between two distinct entity names");
+            // release builds (assert compiled out): keep the first registration, don't shadow it.
+            return id;
         }
         _types[id] = Entry {name, std::move(constructor)};
         return id;

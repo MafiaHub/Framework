@@ -493,7 +493,7 @@ namespace Framework::Integrations::Client {
 
                 if (scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
-                    net->Disconnect();
+                    (void)net->Disconnect();
                     return;
                 }
                 CoreModules::SetScriptingModule(scriptingModule);
@@ -517,7 +517,7 @@ namespace Framework::Integrations::Client {
             }
         }
         else {
-            net->Disconnect();
+            (void)net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
             return;

@@ -76,7 +76,7 @@ namespace Framework {
         }
 
         static void SetTickInterval(double seconds) noexcept {
-            _tickInterval = seconds;
+            _tickInterval = (seconds > 0.0) ? seconds : (1.0 / 60.0);
         }
 
         // Singleton getters

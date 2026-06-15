@@ -40,6 +40,9 @@ namespace Framework::GUI {
     }
 
     Utils::Result<void, Error> Manager::Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated) {
+        if (_cefInitialized) {
+            return {};
+        }
         _graphicsRenderer = renderer;
         _gpuAccelerated   = gpuAccelerated;
 

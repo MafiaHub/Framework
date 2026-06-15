@@ -112,9 +112,12 @@ namespace Framework::Networking::Replication {
         if (!viewer) {
             return;
         }
-        if (!_ready && !_warnedNotReady) {
-            _warnedNotReady = true;
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("InterestGrid queried before its first RebuildInterest(); no entities will replicate. Call ReplicationManager::RebuildInterest() once per server tick.");
+        if (!_ready) {
+            if (!_warnedNotReady) {
+                _warnedNotReady = true;
+                Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->error("InterestGrid queried before its first RebuildInterest(); no entities will replicate. Call ReplicationManager::RebuildInterest() once per server tick.");
+            }
+            return;
         }
         const auto observerWorld = viewer->GetVirtualWorld();
 

@@ -16,6 +16,12 @@
 
 namespace Framework::Networking {
     Utils::Result<void, Error> NetworkServer::Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password) {
+        if (port <= 0 || port > 65535) {
+            return Error("Invalid server port: " + std::to_string(port));
+        }
+        if (maxPlayers <= 0 || maxPlayers > 65535) {
+            return Error("Invalid maxPlayers: " + std::to_string(maxPlayers));
+        }
         auto newSocketSd                  = MafiaNet::SocketDescriptor((uint16_t)port, host.c_str());
         const MafiaNet::StartupResult result = _peer->Startup(maxPlayers, &newSocketSd, 1);
         if (result != MafiaNet::RAKNET_STARTED) {

@@ -22,7 +22,7 @@ namespace Framework::Utils {
         ErrorType _errorCode {};
 
       public:
-        Result(ErrorType error, const ResultType &value = {}): _value(value), _errorCode(std::move(error)) {} // NOLINT(google-explicit-constructor)
+        Result(ErrorType error, ResultType value = {}): _value(std::move(value)), _errorCode(std::move(error)) {} // NOLINT(google-explicit-constructor)
 
         inline const ErrorType &GetError() const noexcept {
             return _errorCode;
@@ -64,8 +64,8 @@ namespace Framework::Utils {
             return fn(_value);
         }
 
-        static Result Ok(const ResultType &value = {}) {
-            return Result(ErrorType {}, value);
+        static Result Ok(ResultType value = {}) {
+            return Result(ErrorType {}, std::move(value));
         }
 
         static Result Err(ErrorType error) {
