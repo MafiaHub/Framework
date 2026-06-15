@@ -73,7 +73,7 @@ namespace Framework::Networking::Replication {
         constructionBitstream->Write(stateEpoch);
         FieldSerializer seed(constructionBitstream, true);
         SerializeBaseFields(seed);
-        OnSerializeConstruction(constructionBitstream, true);
+        OnSerializeConstruction(seed);
         SerializeFields(seed);
     }
 
@@ -83,7 +83,7 @@ namespace Framework::Networking::Replication {
         ApplyIncomingEpoch(incomingEpoch);
         FieldSerializer seed(constructionBitstream, false);
         SerializeBaseFields(seed);
-        OnSerializeConstruction(constructionBitstream, false);
+        OnSerializeConstruction(seed);
         SerializeFields(seed);
         OnConstructed();
         return true;
@@ -99,9 +99,9 @@ namespace Framework::Networking::Replication {
         delete this;
     }
 
-    void NetworkEntity::SerializeForcedState(MafiaNet::BitStream *bs, bool write) {
-        bs->Serialize(write, position);
-        bs->Serialize(write, rotation);
+    void NetworkEntity::SerializeForcedState(FieldSerializer &fields) {
+        fields.Field(position);
+        fields.Field(rotation);
     }
 
     void NetworkEntity::ForceState() {

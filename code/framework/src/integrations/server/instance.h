@@ -10,7 +10,9 @@
 
 #include <utils/safe_win32.h>
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include "http/webserver.h"
 #include "logging/logger.h"
 #include "networking/engine.h"
@@ -97,16 +99,6 @@ namespace Framework::Integrations::Server {
         std::string hardwareID;
     };
 
-    // Invoked when a player joins (with its connection metadata) or leaves (with its GUID); the game
-    // creates and owns the player's entity.
-    using OnPlayerConnectCallback    = fu2::function<void(const PlayerConnectionData &) const>;
-    using OnPlayerDisconnectCallback = fu2::function<void(MafiaNet::PeerGuid) const>;
-
-    // Chat. The sender is resolved to its viewer entity's NetworkID; command lines ("/...") are
-    // pre-parsed into a command name and whitespace-separated arguments.
-    using OnChatMessageCallback = fu2::function<void(uint64_t senderNetworkId, const std::string &text) const>;
-    using OnChatCommandCallback = fu2::function<void(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) const>;
-
     class Instance : public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
@@ -123,7 +115,7 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
 
         void InitEndpoints();
-        void InitNetworkingMessages() const;
+        void InitNetworkingMessages();
         void InitAssetStreamer();
         void InitCommandListener();
         bool LoadConfigFromJSON();
@@ -132,29 +124,35 @@ namespace Framework::Integrations::Server {
         // Command handlers
         void HandleCommand(std::string_view command);
 
-        // callbacks
-        OnPlayerConnectCallback _onPlayerConnectCallback;
-        OnPlayerDisconnectCallback _onPlayerDisconnectCallback;
-        OnChatMessageCallback _onChatMessageCallback;
-        OnChatCommandCallback _onChatCommandCallback;
-
       public:
         Instance();
         ~Instance();
 
-        [[nodiscard]] ServerError Init(InstanceOptions &);
+        [[nodiscard]] Utils::Result<void, Error> Init(InstanceOptions &);
         void Shutdown() override;
 
+        // Override what you need; this is the whole extension surface (no Set*Callback setters).
+        // Order: Init -> PostInit -> PostScriptInit; tick: Update -> PostUpdate; Shutdown -> PreShutdown.
         virtual void PostInit() {}
-        
         virtual void PostScriptInit() {}
-        
         virtual void PostUpdate() {}
-
         virtual void PreShutdown() {}
-
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
+        }
+
+        virtual void OnPlayerConnect(const PlayerConnectionData &data) {
+            (void)data;
+        }
+        virtual void OnPlayerDisconnect(MafiaNet::PeerGuid guid) {
+            (void)guid;
+        }
+        // Plain lines -> OnChatMessage; '/' lines -> OnChatCommand (command + whitespace-split args).
+        virtual void OnChatMessage(uint64_t senderNetworkId, const std::string &text) {
+            (void)senderNetworkId, (void)text;
+        }
+        virtual void OnChatCommand(uint64_t senderNetworkId, const std::string &text, const std::string &command, const std::vector<std::string> &args) {
+            (void)senderNetworkId, (void)text, (void)command, (void)args;
         }
 
         void Update() override;
@@ -163,24 +161,8 @@ namespace Framework::Integrations::Server {
 
         void OnSignal(sig_signal_t);
 
-        void SetOnPlayerConnectCallback(OnPlayerConnectCallback onPlayerConnectCallback) {
-            _onPlayerConnectCallback = std::move(onPlayerConnectCallback);
-        }
-
-        void SetOnPlayerDisconnectCallback(OnPlayerDisconnectCallback onPlayerDisconnectCallback) {
-            _onPlayerDisconnectCallback = std::move(onPlayerDisconnectCallback);
-        }
-
-        void SetOnChatMessageCallback(OnChatMessageCallback cb) {
-            _onChatMessageCallback = std::move(cb);
-        }
-
-        void SetOnChatCommandCallback(OnChatCommandCallback cb) {
-            _onChatCommandCallback = std::move(cb);
-        }
-
-        // Parse a received chat line and dispatch it to the chat callbacks above.
-        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const;
+        // Parse a received chat line and dispatch it to OnChatMessage / OnChatCommand.
+        void HandleIncomingChat(uint64_t senderNetworkId, const std::string &text);
 
         InstanceOptions &GetOptions() {
             return _opts;

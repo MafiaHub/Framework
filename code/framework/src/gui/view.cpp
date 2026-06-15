@@ -39,7 +39,7 @@ namespace Framework::GUI {
         }
     }
 
-    GUIError View::Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
+    Utils::Result<void, Framework::Error> View::Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated) {
         _gpuAccelerated = gpuAccelerated;
         _width          = width;
         _height         = height;
@@ -99,10 +99,10 @@ namespace Framework::GUI {
         _browser = CefBrowserHost::CreateBrowserSync(windowInfo, _cefClient, url, browserSettings, nullptr, nullptr);
         if (!_browser) {
             Framework::Logging::GetLogger("Web")->error("Failed to create CEF browser");
-            return GUIError::GUI_VIEW_INIT_FAILED;
+            return Framework::Error {"Failed to create CEF browser"};
         }
 
-        return GUIError::GUI_NONE;
+        return {};
     }
 
     void View::Update() {

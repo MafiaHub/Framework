@@ -297,7 +297,7 @@ namespace hook {
 
       public:
         // return value type container
-        typedef int ReturnType;
+        using ReturnType = int;
 
       private:
         // set context and run

@@ -98,7 +98,7 @@ namespace Framework::Graphics {
             Microsoft::WRL::ComPtr<ID3D11Buffer> vertexBuffer;
             Microsoft::WRL::ComPtr<ID3D11Buffer> indexBuffer;
         };
-        typedef std::map<uint32_t, GeometryEntry> GeometryMap;
+        using GeometryMap = std::map<uint32_t, GeometryEntry>;
         GeometryMap _geometry;
 
         struct TextureEntry {
@@ -112,7 +112,7 @@ namespace Framework::Graphics {
             Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> resolve_texture_srv;
         };
 
-        typedef std::map<uint32_t, TextureEntry> TextureMap;
+        using TextureMap = std::map<uint32_t, TextureEntry>;
         TextureMap _textures;
 
         struct RenderTargetEntry {
@@ -120,10 +120,10 @@ namespace Framework::Graphics {
             uint32_t render_target_texture_id;
         };
 
-        typedef std::map<uint32_t, RenderTargetEntry> RenderTargetMap;
+        using RenderTargetMap = std::map<uint32_t, RenderTargetEntry>;
         RenderTargetMap _renderTargets;
 
-        typedef std::map<ShaderType, std::pair<Microsoft::WRL::ComPtr<ID3D11VertexShader>, Microsoft::WRL::ComPtr<ID3D11PixelShader>>> ShaderMap;
+        using ShaderMap = std::map<ShaderType, std::pair<Microsoft::WRL::ComPtr<ID3D11VertexShader>, Microsoft::WRL::ComPtr<ID3D11PixelShader>>>;
         ShaderMap _shaders;
 
     public:

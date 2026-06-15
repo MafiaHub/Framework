@@ -19,12 +19,11 @@ namespace Framework::Networking {
         Shutdown();
     }
 
-    NetworkPeerError NetworkClient::Init() {
+    Utils::Result<void, Error> NetworkClient::Init() {
         MafiaNet::SocketDescriptor sd {};
         const MafiaNet::StartupResult result = _peer->Startup(1, &sd, 1);
         if (result != MafiaNet::RAKNET_STARTED && result != MafiaNet::RAKNET_ALREADY_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to init the networking peer. Reason: {}", GetStartupResultString(result));
-            return NetworkPeerError::NETWORK_PEER_INIT_FAILED;
+            return Error(std::string("Failed to start networking peer: ") + GetStartupResultString(result));
         }
 
         _assetStreamer.SetFileListTransferPlugin(&_fileListTransfer);
@@ -36,7 +35,7 @@ namespace Framework::Networking {
         _replicationManager->Init(this, false);
 
         _initialized = true;
-        return NetworkPeerError::NETWORK_PEER_NONE;
+        return {};
     }
 
     void NetworkClient::Shutdown() {
@@ -49,20 +48,18 @@ namespace Framework::Networking {
         Lifecycle::Shutdown();
     }
 
-    ConnectionError NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
+    Utils::Result<void, Error> NetworkClient::Connect(const std::string &host, int32_t port, const std::string &password) {
         if (_state != PeerState::DISCONNECTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Cannot connect an already connected instance");
-            return ConnectionError::CONNECTION_ALREADY_CONNECTED;
+            return Error("Cannot connect: the client is already connected");
         }
 
         if (!_peer) {
-            return ConnectionError::CONNECTION_PEER_NULL;
+            return Error("Cannot connect: network peer is null");
         }
 
         if (!_peer->IsActive()) {
-            const NetworkPeerError initResult = Init();
-            if (initResult != NetworkPeerError::NETWORK_PEER_NONE) {
-                return ConnectionError::CONNECTION_PEER_FAILED;
+            if (auto initResult = Init(); !initResult) {
+                return initResult;
             }
         }
 
@@ -70,22 +67,20 @@ namespace Framework::Networking {
 
         const MafiaNet::ConnectionAttemptResult result = _peer->Connect(host.c_str(), port, password.c_str(), password.length());
         if (result != MafiaNet::CONNECTION_ATTEMPT_STARTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->critical("Failed to connect to the remote host. Reason: {}", GetConnectionAttemptString(result));
             _state = PeerState::DISCONNECTED;
-            return ConnectionError::CONNECTION_CONNECT_FAILED;
+            return Error(std::string("Failed to connect to ") + host + ":" + std::to_string(port) + ": " + GetConnectionAttemptString(result));
         }
 
-        return ConnectionError::CONNECTION_NONE;
+        return {};
     }
 
-    ConnectionError NetworkClient::Disconnect() {
+    Utils::Result<void, Error> NetworkClient::Disconnect() {
         if (!_peer) {
-            return ConnectionError::CONNECTION_PEER_NULL;
+            return Error("Cannot disconnect: network peer is null");
         }
 
         if (_state == PeerState::DISCONNECTED) {
-            Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->warn("Cannot disconnect, we are already disconnected.");
-            return ConnectionError::CONNECTION_NONE;
+            return {};
         }
 
         _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
@@ -97,7 +92,7 @@ namespace Framework::Networking {
         }
         _state = PeerState::DISCONNECTED;
 
-        return ConnectionError::CONNECTION_NONE;
+        return {};
     }
 
     void NetworkClient::Update() {

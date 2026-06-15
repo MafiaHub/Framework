@@ -11,10 +11,10 @@
 #include <logging/logger.h>
 
 namespace Framework::External::Discord {
-    DiscordError Wrapper::Init(int64_t id) {
+    Utils::Result<void, Framework::Error> Wrapper::Init(int64_t id) {
         const auto result = discord::Core::Create(id, DiscordCreateFlags_NoRequireDiscord, &_instance);
         if (result != discord::Result::Ok) {
-            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
+            return Framework::Error("Failed to create the Discord core instance");
         }
 
         _instance->UserManager().OnCurrentUserUpdate.Connect([this]() {
@@ -23,7 +23,7 @@ namespace Framework::External::Discord {
         });
 
         _initialized = true;
-        return DiscordError::DISCORD_NONE;
+        return {};
     }
 
     void Wrapper::Shutdown() {
@@ -47,9 +47,9 @@ namespace Framework::External::Discord {
         _instance->RunCallbacks();
     }
 
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const {
         if (!_instance) {
-            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
+            return Framework::Error {"Discord core instance is null"};
         }
 
         discord::Activity act {};
@@ -68,10 +68,10 @@ namespace Framework::External::Discord {
             }
         });
 
-        return DiscordError::DISCORD_NONE;
+        return {};
     }
 
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 

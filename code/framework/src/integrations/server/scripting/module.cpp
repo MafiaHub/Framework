@@ -254,7 +254,7 @@ namespace Framework::Integrations::Server::Scripting {
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Started {} JS resource(s)", result.Unwrap().size());
+            "Started {} JS resource(s)", result.GetValue().size());
         return true;
     }
 

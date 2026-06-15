@@ -24,6 +24,10 @@ namespace Framework::Utils {
         std::unique_ptr<nlohmann::json> _document;
         std::string _lastError;
 
+        // Logs (once-per-call) that a field was read while the config failed to parse, so the
+        // default-on-failure path below is observable instead of silent.
+        void LogUnparsedAccess(std::string_view field) const;
+
       public:
         Config();
 
@@ -49,8 +53,10 @@ namespace Framework::Utils {
 
         template <typename T>
         T Get(std::string_view field) const {
-            if (!_lastError.empty())
+            if (!_lastError.empty()) {
+                LogUnparsedAccess(field);
                 return {};
+            }
             std::string key(field);
             if constexpr (std::is_same_v<T, std::wstring>) {
                 return Utils::StringUtils::NormalToWide((*_document)[key]);
@@ -60,8 +66,10 @@ namespace Framework::Utils {
 
         template <typename T>
         T GetDefault(std::string_view field, T defaultValue) const {
-            if (!_lastError.empty())
-                return {};
+            if (!_lastError.empty()) {
+                LogUnparsedAccess(field);
+                return defaultValue;
+            }
 
             try {
                 std::string key(field);

@@ -10,7 +10,8 @@
 
 #include <utils/lifecycle.h>
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
 
 #include <sentry.h>
 #include <string>
@@ -45,16 +46,16 @@ namespace Framework::External::Sentry {
 
     class Wrapper final : public Framework::Lifecycle {
       public:
-        [[nodiscard]] SentryError Init(const std::string &, const std::string &);
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init(const std::string &, const std::string &);
         void Shutdown() override;
 
-        SentryError CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
-        SentryError CaptureEventException(const std::string &type, const std::string &message) const;
+        Utils::Result<void, Framework::Error> CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const;
+        Utils::Result<void, Framework::Error> CaptureEventException(const std::string &type, const std::string &message) const;
 
-        SentryError SetSystemInformation(const SystemInformation &) const;
-        SentryError SetScreenInformation(const ScreenInformation &) const;
-        SentryError SetUserInformation(const UserInformation &) const;
-        SentryError SetGameInformation(const GameInformation &) const;
+        Utils::Result<void, Framework::Error> SetSystemInformation(const SystemInformation &) const;
+        Utils::Result<void, Framework::Error> SetScreenInformation(const ScreenInformation &) const;
+        Utils::Result<void, Framework::Error> SetUserInformation(const UserInformation &) const;
+        Utils::Result<void, Framework::Error> SetGameInformation(const GameInformation &) const;
 
         bool IsValid() const {
             return IsInitialized();

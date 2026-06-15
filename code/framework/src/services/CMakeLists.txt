@@ -1,5 +1,7 @@
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
     message(STATUS "MafiaHub Services source module is present, loading the project...")
+    file(GLOB _mh_service_headers "${CMAKE_CURRENT_SOURCE_DIR}/src/src/*.h")
+    file(COPY ${_mh_service_headers} DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/services")
     add_subdirectory(src)
 else()
     message(STATUS "MafiaHub Services source module is not present, checking for a new version...")

@@ -368,23 +368,24 @@ namespace Framework::Launcher {
 
         // Initialize the steam wrapper
         const auto initResult = _steamWrapper->Init();
-        if (initResult != External::Steam::SteamError::STEAM_NONE) {
-            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? Error Code #{}", initResult).c_str(), _config.name.c_str(), MB_ICONERROR);
+        if (!initResult) {
+            MessageBox(nullptr, fmt::format("Failed to init the bridge with steam, are you sure the Steam Client is running? {}", initResult.GetError().message).c_str(), _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // Make sure steam has the game inside the library
-        ISteamApps *steamApps = _steamWrapper->GetContext()->SteamApps();
-        if (!steamApps->BIsAppInstalled(_config.steamAppId)) {
+        if (!_steamWrapper->IsAppInstalled(_config.steamAppId)) {
             MessageBox(nullptr, "The destination game is not installed", _config.name.c_str(), MB_ICONERROR);
             return false;
         }
 
         // Ask the game path from steam
-        char gamePath[_MAX_PATH] = {0};
-        steamApps->GetAppInstallDir(_config.steamAppId, gamePath, _MAX_PATH);
-
-        _gamePath = Utils::StringUtils::NormalToWide(gamePath);
+        const auto installDir = _steamWrapper->GetAppInstallDir(_config.steamAppId);
+        if (installDir.empty()) {
+            MessageBox(nullptr, "Steam returned an empty install directory for the destination game", _config.name.c_str(), MB_ICONERROR);
+            return false;
+        }
+        _gamePath = Utils::StringUtils::NormalToWide(installDir);
         std::replace(_gamePath.begin(), _gamePath.end(), '\\', '/');
 
         // Set classic game path to the one found by Steam just for sake of having that information stored in the config

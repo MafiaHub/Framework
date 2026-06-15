@@ -51,7 +51,7 @@ namespace Framework::Graphics {
         uint8_t *data;
     };
 
-    typedef uint32_t IndexType;
+    using IndexType = uint32_t;
 
     struct IndexBuffer {
         uint32_t size;

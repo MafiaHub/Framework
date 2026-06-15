@@ -7,10 +7,12 @@
 
 #include "fmt/args.h"
 
+#include <memory>
+
 #include "gtest/gtest.h"
 
 TEST(args_test, basic) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   store.push_back(42);
   store.push_back("abc1");
   store.push_back(1.5f);
@@ -19,7 +21,7 @@ TEST(args_test, basic) {
 
 TEST(args_test, strings_and_refs) {
   // Unfortunately the tests are compiled with old ABI so strings use COW.
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   char str[] = "1234567890";
   store.push_back(str);
   store.push_back(std::cref(str));
@@ -36,19 +38,20 @@ struct custom_type {
 
 FMT_BEGIN_NAMESPACE
 template <> struct formatter<custom_type> {
-  auto parse(format_parse_context& ctx) const -> decltype(ctx.begin()) {
+  auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
     return ctx.begin();
   }
 
   template <typename FormatContext>
-  auto format(const custom_type& p, FormatContext& ctx) -> decltype(ctx.out()) {
-    return format_to(ctx.out(), "cust={}", p.i);
+  auto format(const custom_type& p, FormatContext& ctx) const
+      -> decltype(ctx.out()) {
+    return fmt::format_to(ctx.out(), "cust={}", p.i);
   }
 };
 FMT_END_NAMESPACE
 
 TEST(args_test, custom_format) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   auto c = custom_type();
   store.push_back(c);
   ++c.i;
@@ -61,23 +64,23 @@ TEST(args_test, custom_format) {
 }
 
 struct to_stringable {
-  friend fmt::string_view to_string_view(to_stringable) { return {}; }
+  friend auto to_string_view(to_stringable) -> fmt::string_view { return {}; }
 };
 
 FMT_BEGIN_NAMESPACE
 template <> struct formatter<to_stringable> {
-  auto parse(format_parse_context& ctx) const -> decltype(ctx.begin()) {
+  auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
     return ctx.begin();
   }
 
-  auto format(to_stringable, format_context& ctx) -> decltype(ctx.out()) {
+  auto format(to_stringable, format_context& ctx) const -> decltype(ctx.out()) {
     return ctx.out();
   }
 };
 FMT_END_NAMESPACE
 
 TEST(args_test, to_string_and_formatter) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   auto s = to_stringable();
   store.push_back(s);
   store.push_back(std::cref(s));
@@ -85,13 +88,13 @@ TEST(args_test, to_string_and_formatter) {
 }
 
 TEST(args_test, named_int) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   store.push_back(fmt::arg("a1", 42));
   EXPECT_EQ("42", fmt::vformat("{a1}", store));
 }
 
 TEST(args_test, named_strings) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   char str[] = "1234567890";
   store.push_back(fmt::arg("a1", str));
   store.push_back(fmt::arg("a2", std::cref(str)));
@@ -100,7 +103,7 @@ TEST(args_test, named_strings) {
 }
 
 TEST(args_test, named_arg_by_ref) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   char band[] = "Rolling Stones";
   store.push_back(fmt::arg("band", std::cref(band)));
   band[9] = 'c';  // Changing band affects the output.
@@ -108,7 +111,7 @@ TEST(args_test, named_arg_by_ref) {
 }
 
 TEST(args_test, named_custom_format) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   auto c = custom_type();
   store.push_back(fmt::arg("c1", c));
   ++c.i;
@@ -121,7 +124,7 @@ TEST(args_test, named_custom_format) {
 }
 
 TEST(args_test, clear) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   store.push_back(42);
 
   auto result = fmt::vformat("{}", store);
@@ -138,12 +141,12 @@ TEST(args_test, clear) {
 }
 
 TEST(args_test, reserve) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   store.reserve(2, 1);
   store.push_back(1.5f);
-  store.push_back(fmt::arg("a1", 42));
-  auto result = fmt::vformat("{a1} and {}", store);
-  EXPECT_EQ("42 and 1.5", result);
+  store.push_back(fmt::arg("a", 42));
+  auto result = fmt::vformat("{} and {a}", store);
+  EXPECT_EQ("1.5 and 42", result);
 }
 
 struct copy_throwable {
@@ -153,21 +156,47 @@ struct copy_throwable {
 
 FMT_BEGIN_NAMESPACE
 template <> struct formatter<copy_throwable> {
-  auto parse(format_parse_context& ctx) const -> decltype(ctx.begin()) {
+  auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
     return ctx.begin();
   }
-  auto format(copy_throwable, format_context& ctx) -> decltype(ctx.out()) {
+  auto format(copy_throwable, format_context& ctx) const
+      -> decltype(ctx.out()) {
     return ctx.out();
   }
 };
 FMT_END_NAMESPACE
 
 TEST(args_test, throw_on_copy) {
-  auto store = fmt::dynamic_format_arg_store<fmt::format_context>();
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
   store.push_back(std::string("foo"));
   try {
     store.push_back(copy_throwable());
   } catch (...) {
   }
   EXPECT_EQ(fmt::vformat("{}", store), "foo");
+}
+
+TEST(args_test, move_constructor) {
+  using store_type = fmt::dynamic_format_arg_store<fmt::format_context>;
+  auto store = std::unique_ptr<store_type>(new store_type());
+  store->push_back(42);
+  store->push_back(std::string("foo"));
+  store->push_back(fmt::arg("a1", "foo"));
+  auto moved_store = std::move(*store);
+  store.reset();
+  EXPECT_EQ(fmt::vformat("{} {} {a1}", moved_store), "42 foo foo");
+}
+
+TEST(args_test, size) {
+  fmt::dynamic_format_arg_store<fmt::format_context> store;
+  EXPECT_EQ(store.size(), 0);
+
+  store.push_back(42);
+  EXPECT_EQ(store.size(), 1);
+
+  store.push_back("Molybdenum");
+  EXPECT_EQ(store.size(), 2);
+
+  store.clear();
+  EXPECT_EQ(store.size(), 0);
 }

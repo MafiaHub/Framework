@@ -8,7 +8,9 @@
 
 #pragma once
 
+#include <utils/error.h>
 #include <utils/lifecycle.h>
+#include <utils/result.h>
 
 #include <networking/network_server.h>
 
@@ -20,7 +22,7 @@ namespace Framework::Integrations::Server::Networking {
       public:
         Engine();
 
-        [[nodiscard]] Framework::Networking::NetworkPeerError Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password);
+        [[nodiscard]] Utils::Result<void, Error> Init(const std::string &host, int32_t port, int32_t maxPlayers, const std::string &password);
         void Shutdown() override;
 
         void Update() override;

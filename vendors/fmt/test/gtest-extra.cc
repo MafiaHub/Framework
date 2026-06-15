@@ -11,19 +11,19 @@
 
 using fmt::file;
 
-output_redirect::output_redirect(FILE* f) : file_(f) {
-  flush();
+output_redirect::output_redirect(FILE* f, bool flush) : file_(f) {
+  if (flush) this->flush();
   int fd = FMT_POSIX(fileno(f));
   // Create a file object referring to the original file.
   original_ = file::dup(fd);
   // Create a pipe.
-  file write_end;
-  file::pipe(read_end_, write_end);
+  auto pipe = fmt::pipe();
+  read_end_ = std::move(pipe.read_end);
   // Connect the passed FILE object to the write end of the pipe.
-  write_end.dup2(fd);
+  pipe.write_end.dup2(fd);
 }
 
-output_redirect::~output_redirect() FMT_NOEXCEPT {
+output_redirect::~output_redirect() noexcept {
   try {
     restore();
   } catch (const std::exception& e) {
@@ -32,11 +32,10 @@ output_redirect::~output_redirect() FMT_NOEXCEPT {
 }
 
 void output_redirect::flush() {
-#  if EOF != -1
-#    error "FMT_RETRY assumes return value of -1 indicating failure"
-#  endif
   int result = 0;
-  FMT_RETRY(result, fflush(file_));
+  do {
+    result = fflush(file_);
+  } while (result == EOF && errno == EINTR);
   if (result != 0) throw fmt::system_error(errno, "cannot flush stream");
 }
 

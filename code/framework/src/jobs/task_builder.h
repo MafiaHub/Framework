@@ -79,6 +79,7 @@ namespace Framework::Jobs {
      * graph.Execute(init);  // Runs loadConfig and loadAssets in parallel, then init
      * @endcode
      */
+    // Not thread-safe (build/Execute from one thread); can deadlock if fan-out exceeds worker threads.
     class TaskGraph final {
       public:
         explicit TaskGraph(JobSystem *jobSystem) : _jobSystem(jobSystem) {

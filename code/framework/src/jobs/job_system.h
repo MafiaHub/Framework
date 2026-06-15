@@ -181,6 +181,8 @@ namespace Framework::Jobs {
          * @tparam Func Function type
          * @param func The blocking function to execute
          * @return The return value of func
+         *
+         * FOOTGUN: detached thread, no timeout; capture owned types by value, not refs to locals.
          */
         template <typename Func, typename ReturnType = decltype(std::declval<Func>()())>
             requires (!std::is_void_v<ReturnType>)

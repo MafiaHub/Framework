@@ -95,7 +95,7 @@ namespace Framework::Networking {
         // the already-decoded payload and the raw packet, and may capture (e.g. the owning instance).
         // A decode wrapper around RegisterRawRPC below, which owns the slot mechanics. Matches the
         // Signal() send below.
-        template <typename T>
+        template <RPC::Payload T>
         void RegisterRPC(fu2::function<void(const T &payload, MafiaNet::Packet *packet) const> handler) {
             RegisterRawRPC(T::kIdentifier, [cb = std::move(handler)](MafiaNet::BitStream *bs, MafiaNet::Packet *packet) {
                 cb(RPC::Read<T>(bs), packet);
@@ -103,7 +103,7 @@ namespace Framework::Networking {
         }
 
         // Send an RPC payload to every connected system.
-        template <typename T>
+        template <RPC::Payload T>
         void BroadcastRPC(T &payload, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
@@ -111,7 +111,7 @@ namespace Framework::Networking {
         }
 
         // Send an RPC payload to a single system.
-        template <typename T>
+        template <RPC::Payload T>
         void SendRPC(T &payload, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
@@ -137,6 +137,11 @@ namespace Framework::Networking {
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
+        // Byte offset of the packet id in a datagram, skipping an optional ID_TIMESTAMP + 8-byte
+        // MafiaNet::Time prefix. Returns -1 if too short. Pure + tested so the skip width can't drift
+        // from what RakNet writes (a wrong width reads the id mid-timestamp — phantom control packets).
+        static int ResolvePacketDataOffset(const uint8_t *data, uint32_t length);
+
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
 
@@ -152,6 +157,10 @@ namespace Framework::Networking {
             return _packetDataOffset;
         }
 
+        // --- Escape hatches ---
+        // The accessors below hand out the raw MafiaNet objects for features the framework doesn't
+        // wrap. Prefer the typed RPC API above (RegisterRPC<T>/BroadcastRPC<T>/SendRPC<T>) and
+        // ReplicationManager's typed entity accessors; reach for these only when those don't cover it.
         MafiaNet::RakPeerInterface *GetPeer() const noexcept {
             return _peer;
         }

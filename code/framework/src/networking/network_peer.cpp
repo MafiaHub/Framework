@@ -71,20 +71,14 @@ namespace Framework::Networking {
         }
 
         for (_packet = _peer->Receive(); _packet; _peer->DeallocatePacket(_packet), _packet = _peer->Receive()) {
-            _packetDataOffset = 0;
             if (_packet->length == 0) {
                 continue;
             }
-            MafiaNet::TimeMS TS  = 0;
-            if (_packet->length > 1 + sizeof(MafiaNet::TimeMS) && _packet->data[0] == ID_TIMESTAMP) {
-                MafiaNet::BitStream timestamp(_packet->data + 1, sizeof(MafiaNet::TimeMS) + 1, false);
-                timestamp.Read(TS);
-                _packetDataOffset = 1 + sizeof(MafiaNet::TimeMS);
-            }
-
-            if (static_cast<uint32_t>(_packetDataOffset) >= _packet->length) {
+            const int offset = ResolvePacketDataOffset(_packet->data, _packet->length);
+            if (offset < 0) {
                 continue;
             }
+            _packetDataOffset = offset;
             uint8_t packetID = _packet->data[_packetDataOffset];
 
             if (!HandlePacket(packetID, _packet)) {
@@ -94,6 +88,21 @@ namespace Framework::Networking {
                 }
             }
         }
+    }
+
+    int NetworkPeer::ResolvePacketDataOffset(const uint8_t *data, uint32_t length) {
+        if (length == 0) {
+            return -1;
+        }
+        if (data[0] != ID_TIMESTAMP) {
+            return 0;
+        }
+        // ID_TIMESTAMP is followed by a MafiaNet::Time (8 bytes); a frame too short to also hold a
+        // real id is malformed — drop it rather than dispatching ID_TIMESTAMP as the id.
+        if (length <= 1 + sizeof(MafiaNet::Time)) {
+            return -1;
+        }
+        return 1 + static_cast<int>(sizeof(MafiaNet::Time));
     }
 
     const char *NetworkPeer::GetStartupResultString(uint8_t id) {

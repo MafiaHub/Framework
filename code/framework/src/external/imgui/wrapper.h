@@ -10,8 +10,10 @@
 
 #include <utils/lifecycle.h>
 
-#include "errors.h"
 #include "utils/safe_win32.h"
+
+#include <utils/error.h>
+#include <utils/result.h>
 
 #include "graphics/types.h"
 
@@ -54,14 +56,14 @@ namespace Framework::External::ImGUI {
         bool _processEventEnabled = true;
 
       public:
-        [[nodiscard]] Error Init(Config &config);
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init(Config &config);
         void Shutdown() override;
 
         InputState ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         static void ShowCursor(bool show);
 
         void Update() override;
-        Error Render();
+        Utils::Result<void, Framework::Error> Render();
 
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);

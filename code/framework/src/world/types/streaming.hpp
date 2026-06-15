@@ -16,7 +16,7 @@ namespace Framework::World::Archetypes {
     namespace Replication = Framework::Networking::Replication;
 
     // Stamps ownership on a streamed entity.
-    class StreamingFactory {
+    class StreamingArchetype {
       public:
         void SetupServer(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
             if (entity) {

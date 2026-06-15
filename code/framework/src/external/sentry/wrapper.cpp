@@ -14,7 +14,7 @@
 #include <logging/logger.h>
 
 namespace Framework::External::Sentry {
-    SentryError Wrapper::Init(const std::string &key, const std::string &path) {
+    Utils::Result<void, Framework::Error> Wrapper::Init(const std::string &key, const std::string &path) {
         // Build the options payload
         sentry_options_t *opts = sentry_options_new();
         sentry_options_set_dsn(opts, key.c_str());
@@ -27,22 +27,21 @@ namespace Framework::External::Sentry {
         // Setup the breakpad path
         const cppfs::FileHandle breakpadFile = cppfs::fs::open(path + "/" + handlerName);
         if (!breakpadFile.exists()) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to locate the crashpad handler");
-            return SentryError::SENTRY_BREAKPAD_NOT_FOUND;
+            return Framework::Error("Failed to locate the crashpad handler at " + breakpadFile.path());
         }
 
         cppfs::FileHandle cacheDirectory = cppfs::fs::open(path + "/cache/sentry");
         const auto result                = cacheDirectory.createDirectory();
         if (!result) {
-            return SentryError::SENTRY_CACHE_DIRECTORY_CREATION_FAILED;
+            return Framework::Error("Failed to create the Sentry cache directory");
         }
 
         sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
         if (sentry_init(opts) > 0) {
-            return SentryError::SENTRY_INIT_FAILED;
+            return Framework::Error("Failed to initialize Sentry");
         }
         _initialized = true;
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
     void Wrapper::Shutdown() {
@@ -53,32 +52,32 @@ namespace Framework::External::Sentry {
         Lifecycle::Shutdown();
     }
 
-    SentryError Wrapper::SetGameInformation(const GameInformation &infos) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetGameInformation(const GameInformation &infos) const {
         if (!_initialized) {
-            return SentryError::SENTRY_INVALID_INSTANCE;
+            return Framework::Error {"Sentry is not initialized"};
         }
         const sentry_value_t game = sentry_value_new_object();
         sentry_value_set_by_key(game, "title", sentry_value_new_string(infos._title.c_str()));
         sentry_value_set_by_key(game, "version", sentry_value_new_string(infos._version.c_str()));
         sentry_set_extra("game", game);
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
-    SentryError Wrapper::SetScreenInformation(const ScreenInformation &infos) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetScreenInformation(const ScreenInformation &infos) const {
         if (!_initialized) {
-            return SentryError::SENTRY_INVALID_INSTANCE;
+            return Framework::Error {"Sentry is not initialized"};
         }
         const sentry_value_t screen = sentry_value_new_object();
         sentry_value_set_by_key(screen, "width", sentry_value_new_int32(infos._width));
         sentry_value_set_by_key(screen, "height", sentry_value_new_int32(infos._height));
         sentry_value_set_by_key(screen, "fullscreen", sentry_value_new_bool(infos._fullscreen));
         sentry_set_extra("screen", screen);
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
-    SentryError Wrapper::SetSystemInformation(const SystemInformation &infos) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetSystemInformation(const SystemInformation &infos) const {
         if (!_initialized) {
-            return SentryError::SENTRY_INVALID_INSTANCE;
+            return Framework::Error {"Sentry is not initialized"};
         }
         const sentry_value_t system = sentry_value_new_object();
         sentry_value_set_by_key(system, "cpuBrandString", sentry_value_new_string(infos._cpuBrand.c_str()));
@@ -93,12 +92,12 @@ namespace Framework::External::Sentry {
         }
 
         sentry_set_extra("system", system);
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
-    SentryError Wrapper::SetUserInformation(const UserInformation &infos) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetUserInformation(const UserInformation &infos) const {
         if (!_initialized) {
-            return SentryError::SENTRY_INVALID_INSTANCE;
+            return Framework::Error {"Sentry is not initialized"};
         }
         const sentry_value_t user = sentry_value_new_object();
         if (!infos._userId.empty()) {
@@ -111,12 +110,12 @@ namespace Framework::External::Sentry {
             sentry_value_set_by_key(user, "name", sentry_value_new_string(infos._name.c_str()));
         }
         sentry_set_user(user);
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
-    SentryError Wrapper::CaptureEventException(const std::string &type, const std::string &message) const {
+    Utils::Result<void, Framework::Error> Wrapper::CaptureEventException(const std::string &type, const std::string &message) const {
         if (!_initialized) {
-            return SentryError::SENTRY_INVALID_INSTANCE;
+            return Framework::Error {"Sentry is not initialized"};
         }
         const sentry_value_t exc = sentry_value_new_object();
         sentry_value_set_by_key(exc, "type", sentry_value_new_string(type.c_str()));
@@ -124,14 +123,14 @@ namespace Framework::External::Sentry {
         const sentry_value_t event = sentry_value_new_event();
         sentry_value_set_by_key(event, "exception", exc);
         sentry_capture_event(event);
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 
-    SentryError Wrapper::CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const {
+    Utils::Result<void, Framework::Error> Wrapper::CaptureEventMessage(int32_t level, const std::string &logger, const std::string &payload) const {
         if (!_initialized) {
-            return SentryError::SENTRY_INVALID_INSTANCE;
+            return Framework::Error {"Sentry is not initialized"};
         }
         sentry_capture_event(sentry_value_new_message_event(static_cast<sentry_level_e>(level), logger.c_str(), payload.c_str()));
-        return SentryError::SENTRY_NONE;
+        return {};
     }
 } // namespace Framework::External::Sentry

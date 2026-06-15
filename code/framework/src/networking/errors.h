@@ -12,19 +12,6 @@
 #include <unordered_map>
 
 namespace Framework::Networking {
-    enum class ConnectionError {
-        CONNECTION_NONE,
-        CONNECTION_PEER_FAILED,
-        CONNECTION_PEER_NULL,
-        CONNECTION_ALREADY_CONNECTED,
-        CONNECTION_CONNECT_FAILED
-    };
-
-    enum class NetworkPeerError {
-        NETWORK_PEER_NONE,
-        NETWORK_PEER_INIT_FAILED
-    };
-
     extern std::unordered_map<uint8_t, const char *> StartupResultString;
     extern std::unordered_map<uint8_t, const char *> ConnectionAttemptString;
 } // namespace Framework::Networking

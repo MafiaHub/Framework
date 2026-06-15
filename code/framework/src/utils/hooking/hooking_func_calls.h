@@ -85,9 +85,9 @@ namespace hook {
 
     template <typename TRet, typename TClass, typename... Args>
     struct thiscall {
-        typedef fu2::function<TRet(Args...)> TOrigFunc;
-        typedef TRet(__thiscall *TOrigCB)(void *, Args...);
-        typedef fu2::function<TRet(TClass *, Args...)> THookFunc;
+        using TOrigFunc = fu2::function<TRet(Args...)>;
+        using TOrigCB   = TRet(__thiscall *)(void *, Args...);
+        using THookFunc = fu2::function<TRet(TClass *, Args...)>;
 
       private:
         struct hookdata {
@@ -126,9 +126,9 @@ namespace hook {
 
     template <typename TRet, typename TClass>
     struct thiscall<TRet, TClass, void> {
-        typedef fu2::function<TRet()> TOrigFunc;
-        typedef TRet(__thiscall *TOrigCB)(void *);
-        typedef fu2::function<TRet(TClass *)> THookFunc;
+        using TOrigFunc = fu2::function<TRet()>;
+        using TOrigCB   = TRet(__thiscall *)(void *);
+        using THookFunc = fu2::function<TRet(TClass *)>;
 
       private:
         struct hookdata {

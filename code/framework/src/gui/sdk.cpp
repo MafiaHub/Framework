@@ -9,9 +9,9 @@
 #include "sdk.h"
 
 namespace Framework::GUI {
-    GUIError SDK::Init(CefRefPtr<CefBrowser> browser) {
+    Utils::Result<void, Framework::Error> SDK::Init(CefRefPtr<CefBrowser> browser) {
         _browser = browser;
-        return GUIError::GUI_NONE;
+        return {};
     }
 
     void SDK::Shutdown() {

@@ -20,7 +20,9 @@
 
 #include <glm/glm.hpp>
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include "graphics/renderer.h"
 #include "sdk.h"
 
@@ -80,7 +82,7 @@ namespace Framework::GUI {
         View(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
         virtual ~View();
 
-        [[nodiscard]] virtual GUIError Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false);
+        [[nodiscard]] virtual Utils::Result<void, Framework::Error> Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false);
 
         virtual void Update();
         virtual void Render() = 0;
@@ -155,6 +157,8 @@ namespace Framework::GUI {
             _browser->GetMainFrame()->ExecuteJavaScript(script, "", 0);
         }
 
+        // Escape hatch: the raw CEF browser. Prefer EvaluateScript / AddEventListener / the SDK above;
+        // reach for this only for CEF features the View doesn't surface.
         CefRefPtr<CefBrowser> GetBrowser() const {
             return _browser;
         }

@@ -92,9 +92,8 @@ namespace Framework::Networking::Replication {
         Streaming streaming;
 
         // --- Game extension points ---
-        virtual void OnSerializeConstruction(MafiaNet::BitStream *bs, bool write) {
-            (void)bs;
-            (void)write;
+        virtual void OnSerializeConstruction(FieldSerializer &fields) {
+            (void)fields;
         }
         virtual void SerializeFields(FieldSerializer &fields) {
             (void)fields;
@@ -103,7 +102,7 @@ namespace Framework::Networking::Replication {
 
         // Server -> owner override of an owned entity (the owner is otherwise authoritative). Default
         // carries the transform; override to add state, e.g. a vehicle's engine/config.
-        virtual void SerializeForcedState(MafiaNet::BitStream *bs, bool write);
+        virtual void SerializeForcedState(FieldSerializer &fields);
 
         // Called on the owning client after SerializeForcedState has applied the forced fields.
         virtual void OnStateForced() {}

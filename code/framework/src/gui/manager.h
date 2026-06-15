@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "errors.h"
-
+#include <utils/error.h>
 #include <utils/lifecycle.h>
+#include <utils/result.h>
 #include <utils/safe_win32.h>
 
 #include <memory>
@@ -48,7 +48,7 @@ namespace Framework::GUI {
         Manager();
         ~Manager();
 
-        [[nodiscard]] GUIError Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
+        [[nodiscard]] Utils::Result<void, Error> Init(const std::string &rootDir, ViewportConfiguration initialViewport, Graphics::Renderer *renderer, bool gpuAccelerated = false);
         void Shutdown() override;
 
         int CreateView(const std::string &url, int width, int height, int offsetX = 0, int offsetY = 0);
