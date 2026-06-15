@@ -7,14 +7,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(FW_STANDALONE true)
 
-# fmt 8.0.1 (vendored standalone and bundled inside spdlog) enables a `consteval`
-# constructor for FMT_STRING on Clang >= 11.1 in C++20. Newer Clang (e.g. Apple
-# clang 21 / LLVM 20+) correctly rejects fmt's own internal runtime format_to()
-# calls that pass FMT_STRING(...), breaking the build (fmtlib/fmt#4740, #4501).
-# Both fmt copies gate on `#ifndef FMT_CONSTEVAL`, so predefine it empty to use
-# fmt's supported non-consteval fallback. Drop this once fmt/spdlog are upgraded.
-add_compile_definitions(FMT_CONSTEVAL=)
-
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
 if(FW_STANDALONE)

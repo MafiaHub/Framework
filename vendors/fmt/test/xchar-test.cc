@@ -7,133 +7,94 @@
 
 #include "fmt/xchar.h"
 
+#include <algorithm>
 #include <complex>
+#include <cwchar>
+#include <vector>
 
 #include "fmt/chrono.h"
 #include "fmt/color.h"
 #include "fmt/ostream.h"
 #include "fmt/ranges.h"
-#include "gtest/gtest.h"
+#include "fmt/std.h"
+#include "gtest-extra.h"  // Contains
+#include "util.h"         // get_locale
 
 using fmt::detail::max_value;
+using testing::Contains;
 
-namespace test_ns {
-template <typename Char> class test_string {
- private:
-  std::basic_string<Char> s_;
-
- public:
-  test_string(const Char* s) : s_(s) {}
-  const Char* data() const { return s_.data(); }
-  size_t length() const { return s_.size(); }
-  operator const Char*() const { return s_.c_str(); }
-};
-
-template <typename Char>
-fmt::basic_string_view<Char> to_string_view(const test_string<Char>& s) {
-  return {s.data(), s.length()};
-}
+#if defined(__MINGW32__) && !defined(_UCRT)
+// Only C89 conversion specifiers when using MSVCRT instead of UCRT
+#  define FMT_HAS_C99_STRFTIME 0
+#else
+#  define FMT_HAS_C99_STRFTIME 1
+#endif
 
 struct non_string {};
-}  // namespace test_ns
 
-template <typename T> class is_string_test : public testing::Test {};
+template <typename T> class has_to_string_view_test : public testing::Test {};
 
 using string_char_types = testing::Types<char, wchar_t, char16_t, char32_t>;
-TYPED_TEST_SUITE(is_string_test, string_char_types);
+TYPED_TEST_SUITE(has_to_string_view_test, string_char_types);
 
 template <typename Char>
 struct derived_from_string_view : fmt::basic_string_view<Char> {};
 
-TYPED_TEST(is_string_test, is_string) {
-  EXPECT_TRUE(fmt::detail::is_string<TypeParam*>::value);
-  EXPECT_TRUE(fmt::detail::is_string<const TypeParam*>::value);
-  EXPECT_TRUE(fmt::detail::is_string<TypeParam[2]>::value);
-  EXPECT_TRUE(fmt::detail::is_string<const TypeParam[2]>::value);
-  EXPECT_TRUE(fmt::detail::is_string<std::basic_string<TypeParam>>::value);
-  EXPECT_TRUE(fmt::detail::is_string<fmt::basic_string_view<TypeParam>>::value);
+TYPED_TEST(has_to_string_view_test, has_to_string_view) {
+  EXPECT_TRUE(fmt::detail::has_to_string_view<TypeParam*>::value);
+  EXPECT_TRUE(fmt::detail::has_to_string_view<const TypeParam*>::value);
+  EXPECT_TRUE(fmt::detail::has_to_string_view<TypeParam[2]>::value);
+  EXPECT_TRUE(fmt::detail::has_to_string_view<const TypeParam[2]>::value);
   EXPECT_TRUE(
-      fmt::detail::is_string<derived_from_string_view<TypeParam>>::value);
+      fmt::detail::has_to_string_view<std::basic_string<TypeParam>>::value);
+  EXPECT_TRUE(fmt::detail::has_to_string_view<
+              fmt::basic_string_view<TypeParam>>::value);
+  EXPECT_TRUE(fmt::detail::has_to_string_view<
+              derived_from_string_view<TypeParam>>::value);
   using fmt_string_view = fmt::detail::std_string_view<TypeParam>;
   EXPECT_TRUE(std::is_empty<fmt_string_view>::value !=
-              fmt::detail::is_string<fmt_string_view>::value);
-  EXPECT_TRUE(fmt::detail::is_string<test_ns::test_string<TypeParam>>::value);
-  EXPECT_FALSE(fmt::detail::is_string<test_ns::non_string>::value);
+              fmt::detail::has_to_string_view<fmt_string_view>::value);
+  EXPECT_FALSE(fmt::detail::has_to_string_view<non_string>::value);
 }
 
 // std::is_constructible is broken in MSVC until version 2015.
-#if !FMT_MSC_VER || FMT_MSC_VER >= 1900
+#if !FMT_MSC_VERSION || FMT_MSC_VERSION >= 1900
 struct explicitly_convertible_to_wstring_view {
   explicit operator fmt::wstring_view() const { return L"foo"; }
 };
 
 TEST(xchar_test, format_explicitly_convertible_to_wstring_view) {
-  EXPECT_EQ(L"foo",
-            fmt::format(L"{}", explicitly_convertible_to_wstring_view()));
+  // Types explicitly convertible to wstring_view are not formattable by
+  // default because it may introduce ODR violations.
+  static_assert(
+      !fmt::is_formattable<explicitly_convertible_to_wstring_view>::value, "");
 }
 #endif
 
 TEST(xchar_test, format) {
-  EXPECT_EQ(L"42", fmt::format(L"{}", 42));
-  EXPECT_EQ(L"4.2", fmt::format(L"{}", 4.2));
-  EXPECT_EQ(L"abc", fmt::format(L"{}", L"abc"));
-  EXPECT_EQ(L"z", fmt::format(L"{}", L'z'));
-  EXPECT_THROW(fmt::format(L"{:*\x343E}", 42), fmt::format_error);
-  EXPECT_EQ(L"true", fmt::format(L"{}", true));
-  EXPECT_EQ(L"a", fmt::format(L"{0}", 'a'));
-  EXPECT_EQ(L"a", fmt::format(L"{0}", L'a'));
-  EXPECT_EQ(L"Cyrillic letter \x42e",
-            fmt::format(L"Cyrillic letter {}", L'\x42e'));
-  EXPECT_EQ(L"abc1", fmt::format(L"{}c{}", L"ab", 1));
+  EXPECT_EQ(fmt::format(L"{}", 42), L"42");
+  EXPECT_EQ(fmt::format(L"{}", 4.2), L"4.2");
+  EXPECT_EQ(fmt::format(L"{}", 1e100), L"1e+100");
+  EXPECT_EQ(fmt::format(L"{}", L"abc"), L"abc");
+  EXPECT_EQ(fmt::format(L"{}", L'z'), L"z");
+  EXPECT_THROW(fmt::format(fmt::runtime(L"{:*\x343E}"), 42), fmt::format_error);
+  EXPECT_EQ(fmt::format(L"{}", true), L"true");
+  EXPECT_EQ(fmt::format(L"{0}", L'a'), L"a");
+  EXPECT_EQ(fmt::format(L"Letter {}", L'\x40e'), L"Letter \x40e");  // Ў
+  if (sizeof(wchar_t) == 4)
+    EXPECT_EQ(fmt::format(fmt::runtime(L"{:𓀨>3}"), 42), L"𓀨42");
+  EXPECT_EQ(fmt::format(L"{}c{}", L"ab", 1), L"abc1");
+}
+
+TEST(xchar_test, is_formattable) {
+  static_assert(!fmt::is_formattable<const wchar_t*>::value, "");
 }
 
 TEST(xchar_test, compile_time_string) {
-#if defined(FMT_USE_STRING_VIEW) && __cplusplus >= 201703L
-  EXPECT_EQ(L"42", fmt::format(FMT_STRING(std::wstring_view(L"{}")), 42));
+  EXPECT_EQ(fmt::format(fmt::wformat_string<int>(L"{}"), 42), L"42");
+#if defined(FMT_USE_STRING_VIEW) && FMT_CPLUSPLUS >= 201703L
+  EXPECT_EQ(fmt::format(FMT_STRING(std::wstring_view(L"{}")), 42), L"42");
 #endif
-}
-
-#if __cplusplus > 201103L
-struct custom_char {
-  int value;
-  custom_char() = default;
-
-  template <typename T>
-  constexpr custom_char(T val) : value(static_cast<int>(val)) {}
-
-  operator int() const { return value; }
-};
-
-int to_ascii(custom_char c) { return c; }
-
-FMT_BEGIN_NAMESPACE
-template <> struct is_char<custom_char> : std::true_type {};
-FMT_END_NAMESPACE
-
-TEST(xchar_test, format_custom_char) {
-  const custom_char format[] = {'{', '}', 0};
-  auto result = fmt::format(format, custom_char('x'));
-  EXPECT_EQ(result.size(), 1);
-  EXPECT_EQ(result[0], custom_char('x'));
-}
-#endif
-
-// Convert a char8_t string to std::string. Otherwise GTest will insist on
-// inserting `char8_t` NTBS into a `char` stream which is disabled by P1423.
-template <typename S> std::string from_u8str(const S& str) {
-  return std::string(str.begin(), str.end());
-}
-
-TEST(xchar_test, format_utf8_precision) {
-  using str_type = std::basic_string<fmt::detail::char8_type>;
-  auto format =
-      str_type(reinterpret_cast<const fmt::detail::char8_type*>(u8"{:.4}"));
-  auto str = str_type(reinterpret_cast<const fmt::detail::char8_type*>(
-      u8"caf\u00e9s"));  // cafés
-  auto result = fmt::format(format, str);
-  EXPECT_EQ(fmt::detail::compute_width(result), 4);
-  EXPECT_EQ(result.size(), 5);
-  EXPECT_EQ(from_u8str(result), from_u8str(str.substr(0, 5)));
 }
 
 TEST(xchar_test, format_to) {
@@ -142,16 +103,27 @@ TEST(xchar_test, format_to) {
   EXPECT_STREQ(buf.data(), L"42");
 }
 
+TEST(xchar_test, compile_time_string_format_to) {
+  std::wstring ws;
+  fmt::format_to(std::back_inserter(ws), FMT_STRING(L"{}"), 42);
+  EXPECT_EQ(L"42", ws);
+}
+
 TEST(xchar_test, vformat_to) {
-  using wcontext = fmt::wformat_context;
-  fmt::basic_format_arg<wcontext> warg = fmt::detail::make_arg<wcontext>(42);
-  auto wargs = fmt::basic_format_args<wcontext>(&warg, 1);
+  int n = 42;
+  auto args = fmt::make_wformat_args(n);
   auto w = std::wstring();
-  fmt::vformat_to(std::back_inserter(w), L"{}", wargs);
+  fmt::vformat_to(std::back_inserter(w), L"{}", args);
   EXPECT_EQ(L"42", w);
-  w.clear();
-  fmt::vformat_to(std::back_inserter(w), FMT_STRING(L"{}"), wargs);
-  EXPECT_EQ(L"42", w);
+}
+
+namespace test {
+struct struct_as_wstring_view {};
+auto format_as(struct_as_wstring_view) -> fmt::wstring_view { return L"foo"; }
+}  // namespace test
+
+TEST(xchar_test, format_as) {
+  EXPECT_EQ(fmt::format(L"{}", test::struct_as_wstring_view()), L"foo");
 }
 
 TEST(format_test, wide_format_to_n) {
@@ -174,12 +146,6 @@ TEST(format_test, wide_format_to_n) {
   EXPECT_EQ(L"BC x", fmt::wstring_view(buffer, 4));
 }
 
-#if FMT_USE_USER_DEFINED_LITERALS
-TEST(xchar_test, format_udl) {
-  using namespace fmt::literals;
-  EXPECT_EQ(L"{}c{}"_format(L"ab", 1), fmt::format(L"{}c{}", L"ab", 1));
-}
-
 TEST(xchar_test, named_arg_udl) {
   using namespace fmt::literals;
   auto udl_a =
@@ -190,11 +156,13 @@ TEST(xchar_test, named_arg_udl) {
                   fmt::arg(L"second", L"cad"), fmt::arg(L"third", 99)),
       udl_a);
 }
-#endif  // FMT_USE_USER_DEFINED_LITERALS
 
 TEST(xchar_test, print) {
   // Check that the wide print overload compiles.
-  if (fmt::detail::const_check(false)) fmt::print(L"test");
+  if (fmt::detail::const_check(false)) {
+    fmt::print(L"test");
+    fmt::println(L"test");
+  }
 }
 
 TEST(xchar_test, join) {
@@ -204,46 +172,51 @@ TEST(xchar_test, join) {
   EXPECT_EQ(fmt::format(L"({})", fmt::join(t, L", ")), L"(a, 1, 2)");
 }
 
+#ifdef __cpp_lib_byte
+TEST(xchar_test, join_bytes) {
+  auto v = std::vector<std::byte>{std::byte(1), std::byte(2), std::byte(3)};
+  EXPECT_EQ(fmt::format(L"{}", fmt::join(v, L", ")), L"1, 2, 3");
+}
+#endif
+
 enum streamable_enum {};
 
 std::wostream& operator<<(std::wostream& os, streamable_enum) {
   return os << L"streamable_enum";
 }
 
+namespace fmt {
+template <>
+struct formatter<streamable_enum, wchar_t> : basic_ostream_formatter<wchar_t> {
+};
+}  // namespace fmt
+
 enum unstreamable_enum {};
+auto format_as(unstreamable_enum e) -> int { return e; }
 
 TEST(xchar_test, enum) {
   EXPECT_EQ(L"streamable_enum", fmt::format(L"{}", streamable_enum()));
   EXPECT_EQ(L"0", fmt::format(L"{}", unstreamable_enum()));
 }
 
+struct streamable_and_unformattable {};
+
+auto operator<<(std::wostream& os, streamable_and_unformattable)
+    -> std::wostream& {
+  return os << L"foo";
+}
+
+TEST(xchar_test, streamed) {
+  EXPECT_FALSE(fmt::is_formattable<streamable_and_unformattable>());
+  EXPECT_EQ(fmt::format(L"{}", fmt::streamed(streamable_and_unformattable())),
+            L"foo");
+}
+
 TEST(xchar_test, sign_not_truncated) {
   wchar_t format_str[] = {
       L'{', L':',
       '+' | static_cast<wchar_t>(1 << fmt::detail::num_bits<char>()), L'}', 0};
-  EXPECT_THROW(fmt::format(format_str, 42), fmt::format_error);
-}
-
-namespace fake_qt {
-class QString {
- public:
-  QString(const wchar_t* s) : s_(s) {}
-  const wchar_t* utf16() const FMT_NOEXCEPT { return s_.data(); }
-  int size() const FMT_NOEXCEPT { return static_cast<int>(s_.size()); }
-
- private:
-  std::wstring s_;
-};
-
-fmt::basic_string_view<wchar_t> to_string_view(const QString& s) FMT_NOEXCEPT {
-  return {s.utf16(), static_cast<size_t>(s.size())};
-}
-}  // namespace fake_qt
-
-TEST(format_test, format_foreign_strings) {
-  using fake_qt::QString;
-  EXPECT_EQ(fmt::format(QString(L"{}"), 42), L"42");
-  EXPECT_EQ(fmt::format(QString(L"{}"), QString(L"42")), L"42");
+  EXPECT_THROW(fmt::format(fmt::runtime(format_str), 42), fmt::format_error);
 }
 
 TEST(xchar_test, chrono) {
@@ -257,6 +230,11 @@ TEST(xchar_test, chrono) {
   EXPECT_EQ(fmt::format("The date is {:%Y-%m-%d %H:%M:%S}.", tm),
             "The date is 2016-04-25 11:22:33.");
   EXPECT_EQ(L"42s", fmt::format(L"{}", std::chrono::seconds(42)));
+  EXPECT_EQ(fmt::format(L"{:%F}", tm), L"2016-04-25");
+  EXPECT_EQ(fmt::format(L"{:%T}", tm), L"11:22:33");
+
+  auto t = fmt::sys_time<std::chrono::seconds>(std::chrono::seconds(290088000));
+  EXPECT_EQ(fmt::format("{:%Y-%m-%d %H:%M:%S}", t), "1979-03-12 12:00:00");
 }
 
 TEST(xchar_test, color) {
@@ -265,14 +243,36 @@ TEST(xchar_test, color) {
 }
 
 TEST(xchar_test, ostream) {
-  std::wostringstream wos;
-  fmt::print(wos, L"Don't {}!", L"panic");
-  EXPECT_EQ(L"Don't panic!", wos.str());
+#if !FMT_GCC_VERSION || FMT_GCC_VERSION >= 409
+  {
+    std::wostringstream wos;
+    fmt::print(wos, L"Don't {}!", L"panic");
+    EXPECT_EQ(wos.str(), L"Don't panic!");
+  }
+
+  {
+    std::wostringstream wos;
+    fmt::println(wos, L"Don't {}!", L"panic");
+    EXPECT_EQ(wos.str(), L"Don't panic!\n");
+  }
+#endif
+}
+
+TEST(xchar_test, format_map) {
+  auto m = std::map<std::wstring, int>{{L"one", 1}, {L"t\"wo", 2}};
+  EXPECT_EQ(fmt::format(L"{}", m), L"{\"one\": 1, \"t\\\"wo\": 2}");
+}
+
+TEST(xchar_test, escape_string) {
+  using vec = std::vector<std::wstring>;
+  EXPECT_EQ(fmt::format(L"{}", vec{L"\n\r\t\"\\"}), L"[\"\\n\\r\\t\\\"\\\\\"]");
+  EXPECT_EQ(fmt::format(L"{}", vec{L"понедельник"}), L"[\"понедельник\"]");
 }
 
 TEST(xchar_test, to_wstring) { EXPECT_EQ(L"42", fmt::to_wstring(42)); }
 
 #ifndef FMT_STATIC_THOUSANDS_SEPARATOR
+
 template <typename Char> struct numpunct : std::numpunct<Char> {
  protected:
   Char do_decimal_point() const override { return '?'; }
@@ -301,10 +301,16 @@ template <typename Char> struct small_grouping : std::numpunct<Char> {
   Char do_thousands_sep() const override { return ','; }
 };
 
-TEST(locale_test, double_decimal_point) {
+TEST(locale_test, localized_double) {
   auto loc = std::locale(std::locale(), new numpunct<char>());
-  EXPECT_EQ("1?23", fmt::format(loc, "{:L}", 1.23));
-  EXPECT_EQ("1?230000", fmt::format(loc, "{:Lf}", 1.23));
+  EXPECT_EQ(fmt::format(loc, "{:L}", 1.23), "1?23");
+  EXPECT_EQ(fmt::format(loc, "{:Lf}", 1.23), "1?230000");
+  EXPECT_EQ(fmt::format(loc, "{:L}", 1234.5), "1~234?5");
+  EXPECT_EQ(fmt::format(loc, "{:L}", 12000.0), "12~000");
+  EXPECT_EQ(fmt::format(loc, "{:8L}", 1230.0), "   1~230");
+  EXPECT_EQ(fmt::format(loc, "{:15.6Lf}", 0.1), "       0?100000");
+  EXPECT_EQ(fmt::format(loc, "{:15.6Lf}", 1.0), "       1?000000");
+  EXPECT_EQ(fmt::format(loc, "{:15.6Lf}", 1e3), "   1~000?000000");
 }
 
 TEST(locale_test, format) {
@@ -313,8 +319,8 @@ TEST(locale_test, format) {
   EXPECT_EQ("1~234~567", fmt::format(loc, "{:L}", 1234567));
   EXPECT_EQ("-1~234~567", fmt::format(loc, "{:L}", -1234567));
   EXPECT_EQ("-256", fmt::format(loc, "{:L}", -256));
-  fmt::format_arg_store<fmt::format_context, int> as{1234567};
-  EXPECT_EQ("1~234~567", fmt::vformat(loc, "{:L}", fmt::format_args(as)));
+  auto n = 1234567;
+  EXPECT_EQ("1~234~567", fmt::vformat(loc, "{:L}", fmt::make_format_args(n)));
   auto s = std::string();
   fmt::format_to(std::back_inserter(s), loc, "{:L}", 1234567);
   EXPECT_EQ("1~234~567", s);
@@ -333,7 +339,7 @@ TEST(locale_test, format) {
             fmt::format(small_grouping_loc, "{:L}", max_value<uint32_t>()));
 }
 
-TEST(locale_test, format_detault_align) {
+TEST(locale_test, format_default_align) {
   auto loc = std::locale({}, new special_grouping<char>());
   EXPECT_EQ("  12,345", fmt::format(loc, "{:8L}", 12345));
 }
@@ -347,10 +353,9 @@ TEST(locale_test, wformat) {
   auto loc = std::locale(std::locale(), new numpunct<wchar_t>());
   EXPECT_EQ(L"1234567", fmt::format(std::locale(), L"{:L}", 1234567));
   EXPECT_EQ(L"1~234~567", fmt::format(loc, L"{:L}", 1234567));
-  using wcontext = fmt::buffer_context<wchar_t>;
-  fmt::format_arg_store<wcontext, int> as{1234567};
+  int n = 1234567;
   EXPECT_EQ(L"1~234~567",
-            fmt::vformat(loc, L"{:L}", fmt::basic_format_args<wcontext>(as)));
+            fmt::vformat(loc, L"{:L}", fmt::make_wformat_args(n)));
   EXPECT_EQ(L"1234567", fmt::format(std::locale("C"), L"{:L}", 1234567));
 
   auto no_grouping_loc = std::locale(std::locale(), new no_grouping<wchar_t>());
@@ -367,61 +372,58 @@ TEST(locale_test, wformat) {
             fmt::format(small_grouping_loc, L"{:L}", max_value<uint32_t>()));
 }
 
-TEST(locale_test, double_formatter) {
+TEST(locale_test, int_formatter) {
   auto loc = std::locale(std::locale(), new special_grouping<char>());
   auto f = fmt::formatter<int>();
   auto parse_ctx = fmt::format_parse_context("L");
   f.parse(parse_ctx);
-  char buf[10] = {};
-  fmt::basic_format_context<char*, char> format_ctx(
-      buf, {}, fmt::detail::locale_ref(loc));
-  *f.format(12345, format_ctx) = 0;
-  EXPECT_STREQ("12,345", buf);
+  auto buf = fmt::memory_buffer();
+  fmt::basic_format_context<fmt::appender, char> format_ctx(
+      fmt::appender(buf), {}, fmt::locale_ref(loc));
+  f.format(12345, format_ctx);
+  EXPECT_EQ(fmt::to_string(buf), "12,345");
 }
 
-FMT_BEGIN_NAMESPACE
-template <class charT> struct formatter<std::complex<double>, charT> {
- private:
-  detail::dynamic_format_specs<char> specs_;
-
- public:
-  FMT_CONSTEXPR typename basic_format_parse_context<charT>::iterator parse(
-      basic_format_parse_context<charT>& ctx) {
-    using handler_type =
-        detail::dynamic_specs_handler<basic_format_parse_context<charT>>;
-    detail::specs_checker<handler_type> handler(handler_type(specs_, ctx),
-                                                detail::type::string_type);
-    auto it = parse_format_specs(ctx.begin(), ctx.end(), handler);
-    detail::parse_float_type_spec(specs_, ctx.error_handler());
-    return it;
+TEST(locale_test, chrono_weekday) {
+  auto loc = get_locale("es_ES.UTF-8", "Spanish_Spain.1252");
+  auto loc_old = std::locale::global(loc);
+  auto sat = fmt::weekday(6);
+  EXPECT_EQ(fmt::format(L"{}", sat), L"Sat");
+  if (loc != std::locale::classic()) {
+    // L'\341' is 'á'.
+    auto saturdays =
+        std::vector<std::wstring>{L"s\341b", L"s\341.", L"s\341b."};
+    EXPECT_THAT(saturdays, Contains(fmt::format(loc, L"{:L}", sat)));
   }
+  std::locale::global(loc_old);
+}
 
-  template <class FormatContext>
-  typename FormatContext::iterator format(const std::complex<double>& c,
-                                          FormatContext& ctx) {
-    detail::handle_dynamic_spec<detail::precision_checker>(
-        specs_.precision, specs_.precision_ref, ctx);
-    auto specs = std::string();
-    if (specs_.precision > 0) specs = fmt::format(".{}", specs_.precision);
-    if (specs_.type) specs += specs_.type;
-    auto real = fmt::format(ctx.locale().template get<std::locale>(),
-                            fmt::runtime("{:" + specs + "}"), c.real());
-    auto imag = fmt::format(ctx.locale().template get<std::locale>(),
-                            fmt::runtime("{:" + specs + "}"), c.imag());
-    auto fill_align_width = std::string();
-    if (specs_.width > 0) fill_align_width = fmt::format(">{}", specs_.width);
-    return format_to(ctx.out(), runtime("{:" + fill_align_width + "}"),
-                     c.real() != 0 ? fmt::format("({}+{}i)", real, imag)
-                                   : fmt::format("{}i", imag));
-  }
-};
-FMT_END_NAMESPACE
+TEST(locale_test, sign) {
+  EXPECT_EQ(fmt::format(std::locale(), L"{:L}", -50), L"-50");
+}
 
-TEST(locale_test, complex) {
-  std::string s = fmt::format("{}", std::complex<double>(1, 2));
-  EXPECT_EQ(s, "(1+2i)");
-  EXPECT_EQ(fmt::format("{:.2f}", std::complex<double>(1, 2)), "(1.00+2.00i)");
-  EXPECT_EQ(fmt::format("{:8}", std::complex<double>(1, 2)), "  (1+2i)");
+TEST(std_test_xchar, format_bitset) {
+  auto bs = std::bitset<6>(42);
+  EXPECT_EQ(fmt::format(L"{}", bs), L"101010");
+  EXPECT_EQ(fmt::format(L"{:0>8}", bs), L"00101010");
+  EXPECT_EQ(fmt::format(L"{:-^12}", bs), L"---101010---");
+}
+
+TEST(std_test_xchar, complex) {
+  auto s = fmt::format(L"{}", std::complex<double>(1, 2));
+  EXPECT_EQ(s, L"(1+2i)");
+  EXPECT_EQ(fmt::format(L"{:.2f}", std::complex<double>(1, 2)),
+            L"(1.00+2.00i)");
+  EXPECT_EQ(fmt::format(L"{:8}", std::complex<double>(1, 2)), L"(1+2i)  ");
+  EXPECT_EQ(fmt::format(L"{:-<8}", std::complex<double>(1, 2)), L"(1+2i)--");
+}
+
+TEST(std_test_xchar, optional) {
+#  ifdef __cpp_lib_optional
+  EXPECT_EQ(fmt::format(L"{}", std::optional{L'C'}), L"optional(\'C\')");
+  EXPECT_EQ(fmt::format(L"{}", std::optional{std::wstring{L"wide string"}}),
+            L"optional(\"wide string\")");
+#  endif
 }
 
 #endif  // FMT_STATIC_THOUSANDS_SEPARATOR
