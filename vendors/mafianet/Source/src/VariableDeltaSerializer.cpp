@@ -45,7 +45,7 @@ void VariableDeltaSerializer::BeginUnreliableAckedSerialize(SerializationContext
 	context->sendReceipt=_sendReceipt;
 	context->changedVariables = AllocChangedVariablesList();
 	context->newSystemSend=false;
-	context->serializationMode=UNRELIABLE_WITH_ACK_RECEIPT;
+	context->serializationMode=MafiaNet::Reliability::UnreliableWithAckReceipt;
 }
 
 void VariableDeltaSerializer::BeginUniqueSerialize(SerializationContext *context, RakNetGUID _guid, BitStream *_bitStream)
@@ -59,7 +59,7 @@ void VariableDeltaSerializer::BeginUniqueSerialize(SerializationContext *context
 	context->variableHistory=context->variableHistoryUnique;
 	context->newSystemSend=false;
 
-	context->serializationMode=RELIABLE;
+	context->serializationMode=MafiaNet::Reliability::Reliable;
 }
 
 
@@ -68,7 +68,7 @@ void VariableDeltaSerializer::BeginIdenticalSerialize(SerializationContext *cont
 	context->anyVariablesWritten=false;
 	context->guid=UNASSIGNED_RAKNET_GUID;
 	context->bitStream=_bitStream;
-	context->serializationMode=RELIABLE;
+	context->serializationMode=MafiaNet::Reliability::Reliable;
 	if (context->variableHistoryIdentical==0)
 		context->variableHistoryIdentical=StartVariableHistoryWrite(UNASSIGNED_RAKNET_GUID);
 	context->variableHistory=context->variableHistoryIdentical;
@@ -77,7 +77,7 @@ void VariableDeltaSerializer::BeginIdenticalSerialize(SerializationContext *cont
 
 void VariableDeltaSerializer::EndSerialize(SerializationContext *context)
 {
-	if (context->serializationMode==UNRELIABLE_WITH_ACK_RECEIPT)
+	if (context->serializationMode==MafiaNet::Reliability::UnreliableWithAckReceipt)
 	{
 		if (context->anyVariablesWritten==false)
 		{

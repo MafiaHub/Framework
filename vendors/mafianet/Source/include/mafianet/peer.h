@@ -189,9 +189,8 @@ public:
 	/// \brief Stops the network threads and closes all connections.
 	/// \param[in] blockDuration Wait time(milli seconds) for all remaining messages to go out, including ID_DISCONNECTION_NOTIFICATION.  If 0, it doesn't wait at all.
 	/// \param[in] orderingChannel Channel on which ID_DISCONNECTION_NOTIFICATION will be sent, if blockDuration > 0.
-	/// \param[in] disconnectionNotificationPriority Priority of sending ID_DISCONNECTION_NOTIFICATION.
-	/// If set to 0, the disconnection notification won't be sent.
-	void Shutdown( unsigned int blockDuration, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY );
+	/// \param[in] disconnectionNotificationPriority Priority at which ID_DISCONNECTION_NOTIFICATION is sent. Note that a blockDuration of 0 means the threads stop without waiting for it to flush.
+	void Shutdown( unsigned int blockDuration, unsigned char orderingChannel=0, MafiaNet::Priority disconnectionNotificationPriority=MafiaNet::Priority::Low );
 
 	/// \brief Returns true if the network thread is running.
 	/// \return True if the network thread is running, False otherwise
@@ -224,7 +223,7 @@ public:
 	/// \param[in] broadcast True to send this packet to all connected systems. If true, then systemAddress specifies who not to send the packet to.
 	/// \param[in] forceReceipt If 0, will automatically determine the receipt number to return. If non-zero, will return what you give it.
 	/// \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
-	uint32_t Send( const char *data, const int length, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 );
+	uint32_t Send( const char *data, const int length, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 );
 
 	/// \brief "Send" to yourself rather than a remote system.
 	/// \details The message will be processed through the plugins and returned to the game as usual.
@@ -246,7 +245,7 @@ public:
 	/// \param[in] forceReceipt If 0, will automatically determine the receipt number to return. If non-zero, will return what you give it.
 	/// \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
 	/// \note COMMON MISTAKE: When writing the first byte, bitStream->Write((unsigned char) ID_MY_TYPE) be sure it is casted to a byte, and you are not writing a 4 byte enumeration.
-	uint32_t Send( const MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 );
+	uint32_t Send( const MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 );
 
 	/// \brief Sends multiple blocks of data, concatenating them automatically.
 	///
@@ -268,7 +267,7 @@ public:
 	/// \param[in] broadcast True to send this packet to all connected systems. If true, then systemAddress specifies who not to send the packet to.
 	/// \param[in] forceReceipt If 0, will automatically determine the receipt number to return. If non-zero, will return what you give it.
 	/// \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
-	uint32_t SendList( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 );
+	uint32_t SendList( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 );
 
 	/// \brief Gets a message from the incoming message queue.
 	/// \details Use DeallocatePacket() to deallocate the message after you are done with it.
@@ -293,7 +292,7 @@ public:
 	/// \param[in] sendDisconnectionNotification True to send ID_DISCONNECTION_NOTIFICATION to the recipient.  False to close it silently.
 	/// \param[in] channel Which ordering channel to send the disconnection notification on, if any
 	/// \param[in] disconnectionNotificationPriority Priority to send ID_DISCONNECTION_NOTIFICATION on.
-	void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY, const MafiaNet::BitStream *reasonData=nullptr );
+	void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, MafiaNet::Priority disconnectionNotificationPriority=MafiaNet::Priority::Low, const MafiaNet::BitStream *reasonData=nullptr );
 
 	/// \brief Cancel a pending connection attempt.
 	/// \details If we are already connected, the connection stays open
@@ -738,7 +737,7 @@ protected:
 	void ParseConnectionRequestPacket( RakPeer::RemoteSystemStruct *remoteSystem, const SystemAddress &systemAddress, const char *data, int byteSize);
 	void OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, MafiaNet::Time incomingTimestamp );
 	///Send a reliable disconnect packet to this player and disconnect them when it is delivered
-	void NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData=nullptr );
+	void NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData=nullptr );
 	///Returns how many remote systems initiated a connection to us
 	unsigned int GetNumberOfRemoteInitiatedConnections( void ) const;
 	///	\brief Get a free remote system from the list and assign our systemAddress to it.
@@ -885,8 +884,8 @@ protected:
 	struct BufferedCommandStruct
 	{
 		BitSize_t numberOfBitsToSend;
-		PacketPriority priority;
-		PacketReliability reliability;
+		MafiaNet::Priority priority;
+		MafiaNet::Reliability reliability;
 		char orderingChannel;
 		AddressOrGUID systemIdentifier;
 		bool broadcast;
@@ -935,12 +934,12 @@ protected:
 
 	bool AllowIncomingConnections(void) const;
 
-	void PingInternal( const SystemAddress target, bool performImmediate, PacketReliability reliability );
+	void PingInternal( const SystemAddress target, bool performImmediate, MafiaNet::Reliability reliability );
 	// This stores the user send calls to be handled by the update thread.  This way we don't have thread contention over systemAddresss
-	void CloseConnectionInternal( const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority );
-	void SendBuffered( const char *data, BitSize_t numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt );
-	void SendBufferedList( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt );
-	bool SendImmediate( char *data, BitSize_t numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool useCallerDataAllocation, MafiaNet::TimeUS currentTime, uint32_t receipt );
+	void CloseConnectionInternal( const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority );
+	void SendBuffered( const char *data, BitSize_t numberOfBitsToSend, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt );
+	void SendBufferedList( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt );
+	bool SendImmediate( char *data, BitSize_t numberOfBitsToSend, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool useCallerDataAllocation, MafiaNet::TimeUS currentTime, uint32_t receipt );
 	//bool HandleBufferedRPC(BufferedCommandStruct *bcs, MafiaNet::TimeMS time);
 	void ClearBufferedCommands(void);
 	void ClearBufferedPackets(void);
@@ -1040,7 +1039,7 @@ protected:
 
 	private:
 		// internal helpers
-		void CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, RakNetSocket2& socket, const MafiaNet::BitStream *reasonData=nullptr);
+		void CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority, RakNetSocket2& socket, const MafiaNet::BitStream *reasonData=nullptr);
 		// Free and null any stashed disconnect-reason payload for the given remote system (safe on null).
 		void ClearDisconnectReason(RemoteSystemStruct *remoteSystem);
 }

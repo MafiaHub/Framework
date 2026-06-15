@@ -511,7 +511,7 @@ void ReadyEvent::SendReadyUpdate(unsigned eventIndex, unsigned systemIndex, bool
 	{
 		bs.Write(ren->eventStatus);
 		bs.Write(ren->eventId);
-		SendUnified(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, channel, ren->systemList[systemIndex].rakNetGuid, false);
+		SendUnified(&bs, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, channel, ren->systemList[systemIndex].rakNetGuid, false);
 
 		ren->systemList[systemIndex].lastSentStatus=ren->eventStatus;
 	}
@@ -531,7 +531,7 @@ void ReadyEvent::SendReadyStateQuery(unsigned eventId, RakNetGUID guid)
 	MafiaNet::BitStream bs;
 	bs.Write((MessageID)ID_READY_EVENT_QUERY);
 	bs.Write(eventId);
-	SendUnified(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, channel, guid, false);
+	SendUnified(&bs, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, channel, guid, false);
 }
 void ReadyEvent::RemoveFromAllLists(RakNetGUID guid)
 {

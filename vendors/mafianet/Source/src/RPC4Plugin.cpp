@@ -332,7 +332,7 @@ void RPC4::CallLoopback( const char* uniqueID, MafiaNet::BitStream * bitStream )
 	PushBackPacketUnified(p,false);
 	return;
 }
-void RPC4::Call( const char* uniqueID, MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
+void RPC4::Call( const char* uniqueID, MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
 {
 	MafiaNet::BitStream out;
 	out.Write((MessageID) ID_RPC_PLUGIN);
@@ -347,7 +347,7 @@ void RPC4::Call( const char* uniqueID, MafiaNet::BitStream * bitStream, PacketPr
 	}
 	SendUnified(&out,priority,reliability,orderingChannel,systemIdentifier,broadcast);
 }
-bool RPC4::CallBlocking( const char* uniqueID, MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, MafiaNet::BitStream *returnData )
+bool RPC4::CallBlocking( const char* uniqueID, MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, MafiaNet::BitStream *returnData )
 {
 	MafiaNet::BitStream out;
 	out.Write((MessageID) ID_RPC_PLUGIN);
@@ -425,7 +425,7 @@ bool RPC4::CallBlocking( const char* uniqueID, MafiaNet::BitStream * bitStream, 
 	returnData->ResetReadPointer();
 	return true;
 }
-void RPC4::Signal(const char *sharedIdentifier, MafiaNet::BitStream *bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool invokeLocal)
+void RPC4::Signal(const char *sharedIdentifier, MafiaNet::BitStream *bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool invokeLocal)
 {
 	MafiaNet::BitStream out;
 	out.Write((MessageID) ID_RPC_PLUGIN);
@@ -556,7 +556,7 @@ PluginReceiveResult RPC4::OnReceive(Packet *packet)
 					bsOut.Write((unsigned char) ID_RPC_REMOTE_ERROR);
 					bsOut.Write((unsigned char) RPC_ERROR_FUNCTION_NOT_REGISTERED);
 					bsOut.Write(functionName.C_String(),(unsigned int) functionName.GetLength()+1);
-					SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+					SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 					return RR_STOP_PROCESSING_AND_DEALLOCATE;
 				}
 
@@ -574,7 +574,7 @@ PluginReceiveResult RPC4::OnReceive(Packet *packet)
 					bsOut.Write((unsigned char) ID_RPC_REMOTE_ERROR);
 					bsOut.Write((unsigned char) RPC_ERROR_FUNCTION_NOT_REGISTERED);
 					bsOut.Write(functionName.C_String(),(unsigned int) functionName.GetLength()+1);
-					SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+					SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 					return RR_STOP_PROCESSING_AND_DEALLOCATE;
 				}
 
@@ -590,7 +590,7 @@ PluginReceiveResult RPC4::OnReceive(Packet *packet)
 				returnData.ResetReadPointer();
 				out.AlignWriteToByteBoundary();
 				out.Write(returnData);
-				SendUnified(&out,IMMEDIATE_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+				SendUnified(&out,MafiaNet::Priority::Immediate,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 			}
 		}
 		else if (packet->data[1]==ID_RPC4_SIGNAL)

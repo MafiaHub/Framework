@@ -154,7 +154,7 @@ class NetworkIDManager;
 		/// \param[in] orderingChannel See RakPeerInterface::Send()
 		/// \param[in] systemIdentifier See RakPeerInterface::Send()
 		/// \param[in] broadcast See RakPeerInterface::Send()
-		void Call( const char* uniqueID, MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
+		void Call( const char* uniqueID, MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
 
 		/// \brief Same as call, but don't return until the remote system replies.
 		/// Broadcasting parameter does not exist, this can only call one remote system
@@ -167,7 +167,7 @@ class NetworkIDManager;
 		/// \param[in] systemIdentifier See RakPeerInterface::Send()
 		/// \param[out] returnData Written to by the function registered with RegisterBlockingFunction.
 		/// \return true if successfully called. False on disconnect, function not registered, or not connected to begin with
-		bool CallBlocking( const char* uniqueID, MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, MafiaNet::BitStream *returnData );
+		bool CallBlocking( const char* uniqueID, MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, MafiaNet::BitStream *returnData );
 
 		/// Calls zero or more functions identified by sharedIdentifier registered with RegisterSlot()
 		/// \param[in] sharedIdentifier parameter of the same name passed to RegisterSlot() on the remote system
@@ -178,7 +178,7 @@ class NetworkIDManager;
 		/// \param[in] systemIdentifier See RakPeerInterface::Send()
 		/// \param[in] broadcast See RakPeerInterface::Send()
 		/// \param[in] invokeLocal If true, also sends to self.
-		void Signal(const char *sharedIdentifier, MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool invokeLocal);
+		void Signal(const char *sharedIdentifier, MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool invokeLocal);
 
 		/// If called while processing a slot, no further slots for the currently executing signal will be executed
 		void InterruptSignal(void);

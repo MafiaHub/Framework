@@ -175,7 +175,7 @@ void NatTypeDetectionServer::Update(void)
 						bs.Write((unsigned char) NAT_TYPE_PORT_RESTRICTED);
 					}
 
-					rakPeerInterface->Send(&bs,HIGH_PRIORITY,RELIABLE,0,natDetectionAttempts[j].systemAddress,false);
+					rakPeerInterface->Send(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::Reliable,0,natDetectionAttempts[j].systemAddress,false);
 
 					// Done
 					natDetectionAttempts.RemoveAtIndexFast(j);
@@ -241,7 +241,7 @@ void NatTypeDetectionServer::Update(void)
 					bs.Write((unsigned char) NAT_TYPE_PORT_RESTRICTED);
 				}
 
-				rakPeerInterface->Send(&bs,HIGH_PRIORITY,RELIABLE,0,natDetectionAttempts[i].systemAddress,false);
+				rakPeerInterface->Send(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::Reliable,0,natDetectionAttempts[i].systemAddress,false);
 
 				// Done
 				natDetectionAttempts.RemoveAtIndexFast(i);
@@ -335,7 +335,7 @@ void NatTypeDetectionServer::Update(void)
 				bs.Write((unsigned char) ID_NAT_TYPE_DETECTION_REQUEST);
 				bs.Write(RakString::NonVariadic(s3p4Address));
 				bs.Write(s3p4->GetBoundAddress().GetPort());
-				rakPeerInterface->Send(&bs,HIGH_PRIORITY,RELIABLE,0,natDetectionAttempts[i].systemAddress,false);
+				rakPeerInterface->Send(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::Reliable,0,natDetectionAttempts[i].systemAddress,false);
 				break;
 			default:
 
@@ -344,7 +344,7 @@ void NatTypeDetectionServer::Update(void)
 #endif
 				bs.Write((unsigned char) ID_NAT_TYPE_DETECTION_RESULT);
 				bs.Write((unsigned char) NAT_TYPE_SYMMETRIC);
-				rakPeerInterface->Send(&bs,HIGH_PRIORITY,RELIABLE,0,natDetectionAttempts[i].systemAddress,false);
+				rakPeerInterface->Send(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::Reliable,0,natDetectionAttempts[i].systemAddress,false);
 				natDetectionAttempts.RemoveAtIndexFast(i);
 				i--;
 				break;

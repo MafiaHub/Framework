@@ -83,7 +83,7 @@ namespace Framework::Networking {
             return {};
         }
 
-        _peer->Shutdown(100, 0, IMMEDIATE_PRIORITY);
+        _peer->Shutdown(100, 0, MafiaNet::Priority::Immediate);
         Logging::GetLogger(FRAMEWORK_INNER_NETWORKING)->debug("Disconnecting from the server...");
 
         if (_onPlayerDisconnectedCallback) {

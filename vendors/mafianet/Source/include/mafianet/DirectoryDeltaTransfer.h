@@ -90,7 +90,7 @@ public:
 	/// \brief What parameters to use for the RakPeerInterface::Send() call when uploading files.
 	/// \param[in] _priority See RakPeerInterface::Send()
 	/// \param[in] _orderingChannel See RakPeerInterface::Send()
-	void SetUploadSendParameters(PacketPriority _priority, char _orderingChannel);
+	void SetUploadSendParameters(MafiaNet::Priority _priority, char _orderingChannel);
 
 	/// \brief Add all files in the specified subdirectory recursively.
 	/// \details \a subdir is appended to \a pathToApplication in SetApplicationDirectory().
@@ -122,7 +122,7 @@ public:
 	/// \param[in] _orderingChannel See RakPeerInterface::Send()
 	/// \param[in] cb Callback to get progress updates. Pass 0 to not use.
 	/// \return A set ID, identifying this download set.  Returns 65535 on host unreachable.
-	unsigned short DownloadFromSubdirectory(const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, PacketPriority _priority, char _orderingChannel, FileListProgress *cb);
+	unsigned short DownloadFromSubdirectory(const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, MafiaNet::Priority _priority, char _orderingChannel, FileListProgress *cb);
 
 	/// \brief Downloads files from the matching parameter \a subdir in AddUploadsFromSubdirectory.
 	/// \details \a subdir must contain all starting characters in \a subdir in AddUploadsFromSubdirectory
@@ -141,7 +141,7 @@ public:
 	/// \param[in] _orderingChannel See RakPeerInterface::Send()
 	/// \param[in] cb Callback to get progress updates. Pass 0 to not use.
 	/// \return A set ID, identifying this download set.  Returns 65535 on host unreachable.
-	unsigned short DownloadFromSubdirectory(FileList &localFiles, const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, PacketPriority _priority, char _orderingChannel, FileListProgress *cb);
+	unsigned short DownloadFromSubdirectory(FileList &localFiles, const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, MafiaNet::Priority _priority, char _orderingChannel, FileListProgress *cb);
 
 	/// Hash files already on the harddrive, in preparation for a call to DownloadFromSubdirectory(). Passed to second version of DownloadFromSubdirectory()
 	/// This is slow, and it is exposed so you can call it from a thread before calling DownloadFromSubdirectory()
@@ -171,7 +171,7 @@ protected:
 	char applicationDirectory[512];
 	FileListTransfer *fileListTransfer;
 	FileList *availableUploads;
-	PacketPriority priority;
+	MafiaNet::Priority priority;
 	char orderingChannel;
 	IncrementalReadInterface *incrementalReadInterface;
 	unsigned int chunkSize;

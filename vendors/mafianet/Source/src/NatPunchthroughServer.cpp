@@ -184,7 +184,7 @@ void NatPunchthroughServer::Update(void)
 						outgoingBs.Write((MessageID)ID_NAT_TARGET_UNRESPONSIVE);
 						outgoingBs.Write(connectionAttempt->recipient->guid);
 						outgoingBs.Write(connectionAttempt->sessionId);
-						rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,connectionAttempt->sender->systemAddress,false);
+						rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,connectionAttempt->sender->systemAddress,false);
 
 						// 05/28/09 Previously only told sender about ID_NAT_CONNECTION_TO_TARGET_LOST
 						// However, recipient may be expecting it due to external code
@@ -193,7 +193,7 @@ void NatPunchthroughServer::Update(void)
 						outgoingBs.Write((MessageID)ID_NAT_TARGET_UNRESPONSIVE);
 						outgoingBs.Write(connectionAttempt->sender->guid);
 						outgoingBs.Write(connectionAttempt->sessionId);
-						rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,connectionAttempt->recipient->systemAddress,false);
+						rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,connectionAttempt->recipient->systemAddress,false);
 
 						connectionAttempt->sender->isReady=true;
 						connectionAttempt->recipient->isReady=true;
@@ -263,7 +263,7 @@ PluginReceiveResult NatPunchthroughServer::OnReceive(Packet *packet)
 				outgoingBs.Write(boundAddresses[i]);
 			}
 
-			rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+			rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 		}
 		return RR_STOP_PROCESSING_AND_DEALLOCATE;
 	case ID_NAT_PING:
@@ -325,7 +325,7 @@ void NatPunchthroughServer::OnClosedConnection(const SystemAddress &systemAddres
 			outgoingBs.Write((MessageID)ID_NAT_CONNECTION_TO_TARGET_LOST);
 			outgoingBs.Write(rakNetGUID);
 			outgoingBs.Write(connectionAttempt->sessionId);
-			rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,otherUser->systemAddress,false);
+			rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,otherUser->systemAddress,false);
 
 			// 4/22/09 - Bug: was checking inProgress, legacy variable not used elsewhere
 			if (connectionAttempt->attemptPhase==ConnectionAttempt::NAT_ATTEMPT_PHASE_GETTING_RECENT_PORTS)
@@ -360,7 +360,7 @@ void NatPunchthroughServer::OnClosedConnection(const SystemAddress &systemAddres
 			MafiaNet::BitStream outgoingBs;
 			outgoingBs.Write((MessageID)ID_NAT_TARGET_NOT_CONNECTED);
 			outgoingBs.Write(rakNetGUID);
-			rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,users[i]->systemAddress,false);
+			rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,users[i]->systemAddress,false);
 
 			users[i]->groupPunchthroughRequests.RemoveAtIndex(gprIndex);
 		}
@@ -408,7 +408,7 @@ void NatPunchthroughServer::OnNATPunchthroughRequest(Packet *packet)
 
 		outgoingBs.Write((MessageID)ID_NAT_TARGET_NOT_CONNECTED);
 		outgoingBs.Write(recipientGuid);
-		rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+		rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 		MafiaNet::OP_DELETE(ca,_FILE_AND_LINE_);
 		return;
 	}
@@ -417,7 +417,7 @@ void NatPunchthroughServer::OnNATPunchthroughRequest(Packet *packet)
 	{
 		outgoingBs.Write((MessageID)ID_NAT_ALREADY_IN_PROGRESS);
 		outgoingBs.Write(recipientGuid);
-		rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+		rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 		MafiaNet::OP_DELETE(ca,_FILE_AND_LINE_);
 		return;
 	}
@@ -521,7 +521,7 @@ void NatPunchthroughServer::OnGetMostRecentPort(Packet *packet)
 					bsOut.Write(rakPeerInterface->GetInternalID(senderSystemAddress,j));
 				bsOut.Write(connectionAttempt->sender->guid);
 				bsOut.Write(false);
-				rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,recipientSystemAddress,false);
+				rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,recipientSystemAddress,false);
 
 
 				if (natPunchthroughServerDebugInterface)
@@ -546,7 +546,7 @@ void NatPunchthroughServer::OnGetMostRecentPort(Packet *packet)
 					bsOut.Write(rakPeerInterface->GetInternalID(recipientSystemAddress,j));						
 				bsOut.Write(connectionAttempt->recipient->guid);
 				bsOut.Write(true);
-				rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,senderSystemAddress,false);
+				rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,senderSystemAddress,false);
 
 				connectionAttempt->recipient->DerefConnectionAttempt(connectionAttempt);
 				connectionAttempt->sender->DeleteConnectionAttempt(connectionAttempt);
@@ -619,8 +619,8 @@ void NatPunchthroughServer::StartPunchthroughForUser(User *user)
 			outgoingBs.Write((MessageID)ID_NAT_GET_MOST_RECENT_PORT);
 			// 4/29/09 Write sessionID so we don't use returned port for a system we don't want
 			outgoingBs.Write(connectionAttempt->sessionId);
-			rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,sender->systemAddress,false);
-			rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,recipient->systemAddress,false);
+			rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,sender->systemAddress,false);
+			rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,recipient->systemAddress,false);
 
 			// 4/22/09 - BUG: missing break statement here
 			break;

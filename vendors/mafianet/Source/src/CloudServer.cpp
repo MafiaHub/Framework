@@ -589,7 +589,7 @@ void CloudServer::OnGetRequest(Packet *packet)
 			bufferedGetResponseFromServer->gotResult=false;
 			getRequest->remoteServerResponses.Insert(remoteServersWithData[remoteServerIndex]->serverAddress, bufferedGetResponseFromServer, true, _FILE_AND_LINE_);
 
-			SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, remoteServersWithData[remoteServerIndex]->serverAddress, false);
+			SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, remoteServersWithData[remoteServerIndex]->serverAddress, false);
 		}
 
 		// Record that this system made this request
@@ -812,7 +812,7 @@ void CloudServer::OnServerToServerGetRequest(Packet *packet)
 	bsOut.Write((MessageID)STSC_PROCESS_GET_RESPONSE);
 	bsOut.Write(requestId);
 	WriteCloudQueryRowFromResultList(cloudDataResultList, cloudKeyResultList, &bsOut);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 }
 void CloudServer::OnServerToServerGetResponse(Packet *packet)
 {
@@ -1084,7 +1084,7 @@ void CloudServer::NotifyClientSubscribersOfDataChange( CloudData *cloudData, Clo
 	unsigned int i;
 	for (i=0; i < subscribers.Size(); i++)
 	{
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, subscribers[i], false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, subscribers[i], false);
 	}
 }
 void CloudServer::NotifyClientSubscribersOfDataChange( CloudQueryRow *row, DataStructures::OrderedList<RakNetGUID, RakNetGUID> &subscribers, bool wasUpdated )
@@ -1097,7 +1097,7 @@ void CloudServer::NotifyClientSubscribersOfDataChange( CloudQueryRow *row, DataS
 	unsigned int i;
 	for (i=0; i < subscribers.Size(); i++)
 	{
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, subscribers[i], false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, subscribers[i], false);
 	}
 }
 void CloudServer::NotifyServerSubscribersOfDataChange( CloudData *cloudData, CloudKey &key, bool wasUpdated )
@@ -1123,7 +1123,7 @@ void CloudServer::NotifyServerSubscribersOfDataChange( CloudData *cloudData, Clo
 	{
 		if (remoteServers[i]->gotSubscribedAndUploadedKeys==false || remoteServers[i]->subscribedKeys.HasData(key))
 		{
-			SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, remoteServers[i]->serverAddress, false);
+			SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, remoteServers[i]->serverAddress, false);
 		}
 	}
 }
@@ -1246,7 +1246,7 @@ void CloudServer::ProcessAndTransmitGetRequest(GetRequest *getRequest)
 		}
 	}
 
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, getRequest->requestingClient, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, getRequest->requestingClient, false);
 }
 void CloudServer::ProcessCloudQueryWithAddresses( CloudServer::CloudQueryWithAddresses &cloudQueryWithAddresses, DataStructures::List<CloudData*> &cloudDataResultList, DataStructures::List<CloudKey> &cloudKeyResultList )
 {
@@ -1326,7 +1326,7 @@ void CloudServer::SendUploadedAndSubscribedKeysToServer( RakNetGUID systemAddres
 	bsOut.SetWriteOffset(endOffset);
 
 	if (dataRepository.Size()>0 || subscribedKeyCount>0)
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemAddress, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemAddress, false);
 }
 void CloudServer::SendUploadedKeyToServers( CloudKey &cloudKey )
 {
@@ -1335,7 +1335,7 @@ void CloudServer::SendUploadedKeyToServers( CloudKey &cloudKey )
 	bsOut.Write((MessageID)STSC_ADD_UPLOADED_KEY);
 	cloudKey.Serialize(true, &bsOut);
 	for (unsigned int i=0; i < remoteServers.Size(); i++)
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, remoteServers[i]->serverAddress, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, remoteServers[i]->serverAddress, false);
 }
 void CloudServer::SendSubscribedKeyToServers( CloudKey &cloudKey )
 {
@@ -1344,7 +1344,7 @@ void CloudServer::SendSubscribedKeyToServers( CloudKey &cloudKey )
 	bsOut.Write((MessageID)STSC_ADD_SUBSCRIBED_KEY);
 	cloudKey.Serialize(true, &bsOut);
 	for (unsigned int i=0; i < remoteServers.Size(); i++)
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, remoteServers[i]->serverAddress, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, remoteServers[i]->serverAddress, false);
 }
 void CloudServer::RemoveUploadedKeyFromServers( CloudKey &cloudKey )
 {
@@ -1353,7 +1353,7 @@ void CloudServer::RemoveUploadedKeyFromServers( CloudKey &cloudKey )
 	bsOut.Write((MessageID)STSC_REMOVE_UPLOADED_KEY);
 	cloudKey.Serialize(true, &bsOut);
 	for (unsigned int i=0; i < remoteServers.Size(); i++)
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, remoteServers[i]->serverAddress, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, remoteServers[i]->serverAddress, false);
 }
 void CloudServer::RemoveSubscribedKeyFromServers( CloudKey &cloudKey )
 {
@@ -1362,7 +1362,7 @@ void CloudServer::RemoveSubscribedKeyFromServers( CloudKey &cloudKey )
 	bsOut.Write((MessageID)STSC_REMOVE_SUBSCRIBED_KEY);
 	cloudKey.Serialize(true, &bsOut);
 	for (unsigned int i=0; i < remoteServers.Size(); i++)
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, remoteServers[i]->serverAddress, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, remoteServers[i]->serverAddress, false);
 }
 void CloudServer::OnSendUploadedAndSubscribedKeysToServer( Packet *packet )
 {

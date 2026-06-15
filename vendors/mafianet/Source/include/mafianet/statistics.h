@@ -86,10 +86,10 @@ struct RAK_DLL_EXPORT RakNetStatistics
 	uint64_t BPSLimitByOutgoingBandwidthLimit;
 
 	/// For each priority level, how many messages are waiting to be sent out?
-	unsigned int messageInSendBuffer[NUMBER_OF_PRIORITIES];
+	unsigned int messageInSendBuffer[MafiaNet::NUMBER_OF_PRIORITIES];
 
 	/// For each priority level, how many bytes are waiting to be sent out?
-	double bytesInSendBuffer[NUMBER_OF_PRIORITIES];
+	double bytesInSendBuffer[MafiaNet::NUMBER_OF_PRIORITIES];
 
 	/// How many messages are waiting in the resend buffer? This includes messages waiting for an ack, so should normally be a small value
 	/// If the value is rising over time, you are exceeding the bandwidth capacity. See BPSLimitByCongestionControl 
@@ -107,7 +107,7 @@ struct RAK_DLL_EXPORT RakNetStatistics
 	RakNetStatistics& operator +=(const RakNetStatistics& other)
 	{
 		unsigned i;
-		for (i=0; i < NUMBER_OF_PRIORITIES; i++)
+		for (i=0; i < MafiaNet::NUMBER_OF_PRIORITIES; i++)
 		{
 			messageInSendBuffer[i]+=other.messageInSendBuffer[i];
 			bytesInSendBuffer[i]+=other.bytesInSendBuffer[i];

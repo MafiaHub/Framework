@@ -146,7 +146,7 @@ unsigned short FileListTransfer::SetupReceive(FileListTransferCBInterface *handl
 	return oldId;
 }
 
-void FileListTransfer::Send(FileList *fileList, MafiaNet::RakPeerInterface *rakPeer, SystemAddress recipient, unsigned short setID, PacketPriority priority, char orderingChannel, IncrementalReadInterface *_incrementalReadInterface, unsigned int _chunkSize)
+void FileListTransfer::Send(FileList *fileList, MafiaNet::RakPeerInterface *rakPeer, SystemAddress recipient, unsigned short setID, MafiaNet::Priority priority, char orderingChannel, IncrementalReadInterface *_incrementalReadInterface, unsigned int _chunkSize)
 {
 	for (unsigned int flpcIndex=0; flpcIndex < fileListProgressCallbacks.Size(); flpcIndex++)
 		fileList->AddCallback(fileListProgressCallbacks[flpcIndex]);
@@ -175,9 +175,9 @@ void FileListTransfer::Send(FileList *fileList, MafiaNet::RakPeerInterface *rakP
 		outBitstream.WriteCompressed(totalLength);
 
 		if (rakPeer)
-			rakPeer->Send(&outBitstream, priority, RELIABLE_ORDERED, orderingChannel, recipient, false);
+			rakPeer->Send(&outBitstream, priority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, recipient, false);
 		else
-			SendUnified(&outBitstream, priority, RELIABLE_ORDERED, orderingChannel, recipient, false);
+			SendUnified(&outBitstream, priority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, recipient, false);
 
 		DataStructures::Queue<FileToPush*> filesToPush;
 	
@@ -220,7 +220,7 @@ void FileListTransfer::Send(FileList *fileList, MafiaNet::RakPeerInterface *rakP
 				lengths[0]=outBitstream.GetNumberOfBytesUsed();
 				dataBlocks[1]=fileList->fileList[i].data;
 				lengths[1]=fileList->fileList[i].dataLengthBytes;
-				SendListUnified(dataBlocks,lengths,2,priority, RELIABLE_ORDERED, orderingChannel, recipient, false);
+				SendListUnified(dataBlocks,lengths,2,priority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, recipient, false);
 			}
 		}
 
@@ -272,9 +272,9 @@ void FileListTransfer::Send(FileList *fileList, MafiaNet::RakPeerInterface *rakP
 			fileListProgressCallbacks[flpcIndex]->OnFilePushesComplete(recipient, setID);
 
 		if (rakPeer)
-			rakPeer->Send(&outBitstream, priority, RELIABLE_ORDERED, orderingChannel, recipient, false);
+			rakPeer->Send(&outBitstream, priority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, recipient, false);
 		else
-			SendUnified(&outBitstream, priority, RELIABLE_ORDERED, orderingChannel, recipient, false);
+			SendUnified(&outBitstream, priority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, recipient, false);
 	}
 }
 
@@ -713,7 +713,7 @@ void FileListTransfer::OnReferencePush(Packet *packet, bool isTheFullFile)
 	{
 		refPushAck.Write((MessageID)ID_FILE_LIST_REFERENCE_PUSH_ACK);
 		refPushAck.Write(onFileStruct.setID);
-		SendUnified(&refPushAck,HIGH_PRIORITY, RELIABLE, 0, packet->systemAddress, false);
+		SendUnified(&refPushAck,MafiaNet::Priority::High, MafiaNet::Reliability::Reliable, 0, packet->systemAddress, false);
 	}
 
 	// inBitStream.Read(onFileStruct.context);
@@ -1011,7 +1011,7 @@ int SendIRIToAddressCB(FileListTransfer::ThreadData threadData, bool *returnOutp
 				dataBlocks[1]=(const char*) buff;
 				lengths[1]=bytesRead;
 
-				fileListTransfer->SendListUnified(dataBlocks,lengths,2,ftp->packetPriority, RELIABLE_ORDERED, ftp->orderingChannel, systemAddress, false);
+				fileListTransfer->SendListUnified(dataBlocks,lengths,2,ftp->packetPriority, MafiaNet::Reliability::ReliableOrdered, ftp->orderingChannel, systemAddress, false);
 
 				// LWS : fixed freed pointer reference
 //				unsigned int chunkSize = ftp->chunkSize;
@@ -1047,9 +1047,9 @@ int SendIRIToAddressCB(FileListTransfer::ThreadData threadData, bool *returnOutp
 			lengths[0]=outBitstream.GetNumberOfBytesUsed();
 			dataBlocks[1]=(char*) buff;
 			lengths[1]=bytesRead;
-			//rakPeerInterface->SendList(dataBlocks,lengths,2,ftp->packetPriority, RELIABLE_ORDERED, ftp->orderingChannel, ftp->systemAddress, false);
+			//rakPeerInterface->SendList(dataBlocks,lengths,2,ftp->packetPriority, MafiaNet::Reliability::ReliableOrdered, ftp->orderingChannel, ftp->systemAddress, false);
 			char orderingChannel = ftp->orderingChannel;
-			PacketPriority packetPriority = ftp->packetPriority;
+			MafiaNet::Priority packetPriority = ftp->packetPriority;
 
 			// Mutex state: FileToPushRecipient (ftpr) has AddRef. fileToPushRecipientListMutex not locked.
 			if (done)
@@ -1085,7 +1085,7 @@ int SendIRIToAddressCB(FileListTransfer::ThreadData threadData, bool *returnOutp
 
 			// 2/12/2012 Moved this line at after the if (done) block above.
 			// See http://www.jenkinssoftware.com/forum/index.php?topic=4768.msg19738#msg19738
-			fileListTransfer->SendListUnified(dataBlocks,lengths,2, packetPriority, RELIABLE_ORDERED, orderingChannel, systemAddress, false);
+			fileListTransfer->SendListUnified(dataBlocks,lengths,2, packetPriority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, systemAddress, false);
 
 			rakFree_Ex(buff, _FILE_AND_LINE_ );
 			return 0;

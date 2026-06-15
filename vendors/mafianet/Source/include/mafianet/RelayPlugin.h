@@ -106,9 +106,9 @@ public:
 	/// \param[in] priority See the parameter of the same name in RakPeerInterface::Send()
 	/// \param[in] reliability See the parameter of the same name in RakPeerInterface::Send()
 	/// \param[in] orderingChannel See the parameter of the same name in RakPeerInterface::Send()
-	void SendToParticipant(const RakNetGUID &relayPluginServerGuid, const RakString &destinationGuid, BitStream *bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel);
+	void SendToParticipant(const RakNetGUID &relayPluginServerGuid, const RakString &destinationGuid, BitStream *bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel);
 
-	void SendGroupMessage(const RakNetGUID &relayPluginServerGuid, BitStream *bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel);
+	void SendGroupMessage(const RakNetGUID &relayPluginServerGuid, BitStream *bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel);
 	void JoinGroupRequest(const RakNetGUID &relayPluginServerGuid, RakString groupName);
 	void LeaveGroup(const RakNetGUID &relayPluginServerGuid);
 	void GetGroupList(const RakNetGUID &relayPluginServerGuid);

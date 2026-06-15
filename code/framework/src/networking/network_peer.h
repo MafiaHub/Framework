@@ -104,7 +104,7 @@ namespace Framework::Networking {
 
         // Send an RPC payload to every connected system.
         template <RPC::Payload T>
-        void BroadcastRPC(T &payload, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        void BroadcastRPC(T &payload, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
             _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, MafiaNet::UNASSIGNED_RAKNET_GUID, true, false);
@@ -112,7 +112,7 @@ namespace Framework::Networking {
 
         // Send an RPC payload to a single system.
         template <RPC::Payload T>
-        void SendRPC(T &payload, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        void SendRPC(T &payload, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             MafiaNet::BitStream bs;
             payload.Serialize(&bs, true);
             _rpc.Signal(T::kIdentifier, &bs, priority, reliability, 0, guid, false, false);
@@ -130,7 +130,7 @@ namespace Framework::Networking {
         }
 
         // Send a pre-encoded bitstream under a raw identifier (pairs with RegisterRawRPC).
-        void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, PacketPriority priority = HIGH_PRIORITY, PacketReliability reliability = RELIABLE_ORDERED) {
+        void SendRawRPC(const char *identifier, MafiaNet::BitStream &bs, MafiaNet::RakNetGUID guid, MafiaNet::Priority priority = MafiaNet::Priority::High, MafiaNet::Reliability reliability = MafiaNet::Reliability::ReliableOrdered) {
             _rpc.Signal(identifier, &bs, priority, reliability, 0, guid, false, false);
         }
 
