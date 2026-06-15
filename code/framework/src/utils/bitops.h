@@ -8,34 +8,47 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdint>
+#include <type_traits>
 
 namespace Framework::Utils {
-    constexpr uint64_t BitFlag(uint32_t pos) {
-        return 1ULL << pos;
+    // Accepts any integer or enum flag field, mirroring the old macros that cast through uint64_t.
+    template <typename T>
+    concept BitField = std::integral<T> || std::is_enum_v<T>;
+
+    template <BitField T = uint64_t>
+    constexpr T BitFlag(uint32_t pos) {
+        return static_cast<T>(uint64_t {1} << pos);
     }
 
-    constexpr void BitSet(uint64_t &var, uint64_t val) {
-        var |= val;
+    template <BitField T>
+    constexpr void BitSet(T &var, T val) {
+        var = static_cast<T>(static_cast<uint64_t>(var) | static_cast<uint64_t>(val));
     }
 
-    constexpr void BitClear(uint64_t &var, uint64_t val) {
-        var &= ~val;
+    template <BitField T>
+    constexpr void BitClear(T &var, T val) {
+        var = static_cast<T>(static_cast<uint64_t>(var) & ~static_cast<uint64_t>(val));
     }
 
-    constexpr bool BitHas(uint64_t var, uint64_t val) {
-        return (var & val) != 0;
+    template <BitField T>
+    constexpr bool BitHas(T var, T val) {
+        return (static_cast<uint64_t>(var) & static_cast<uint64_t>(val)) != 0;
     }
 
-    constexpr uint64_t BitNot(uint64_t var) {
-        return ~var;
+    template <BitField T>
+    constexpr T BitNot(T var) {
+        return static_cast<T>(~static_cast<uint64_t>(var));
     }
 
-    constexpr void BitXor(uint64_t &var, uint64_t mask) {
-        var ^= mask;
+    template <BitField T>
+    constexpr void BitXor(T &var, T val) {
+        var = static_cast<T>(static_cast<uint64_t>(var) ^ static_cast<uint64_t>(val));
     }
 
-    constexpr void BitAnd(uint64_t &var, uint64_t mask) {
-        var &= mask;
+    template <BitField T>
+    constexpr void BitAnd(T &var, T val) {
+        var = static_cast<T>(static_cast<uint64_t>(var) & static_cast<uint64_t>(val));
     }
 } // namespace Framework::Utils

@@ -76,4 +76,19 @@ MODULE(bitops, {
         BitAnd(v, 0ULL);
         UEQUALS(v, 0ULL);
     });
+
+    IT("operates on narrow integers and enum flag fields", {
+        uint32_t flags = 0;
+        BitSet(flags, 1u << 2);
+        UEQUALS(flags, 0b0100u);
+        BitClear(flags, 1u << 2);
+        UEQUALS(flags, 0u);
+
+        enum class Perm : uint32_t { Read = 1u << 0, Write = 1u << 1 };
+        Perm p = Perm::Read;
+        EQUALS(BitHas(p, Perm::Read), true);
+        EQUALS(BitHas(p, Perm::Write), false);
+        BitSet(p, Perm::Write);
+        EQUALS(BitHas(p, Perm::Write), true);
+    });
 });
