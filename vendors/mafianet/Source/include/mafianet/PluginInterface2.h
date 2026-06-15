@@ -195,9 +195,9 @@ public:
 
 protected:
 	// Send through either rakPeerInterface or tcpInterface, whichever is available
-	void SendUnified( const MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
-	void SendUnified( const char * data, const int length, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
-	bool SendListUnified( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
+	void SendUnified( const MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
+	void SendUnified( const char * data, const int length, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
+	bool SendListUnified( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast );
 
 	Packet *AllocatePacketUnified(unsigned dataSize);
 	void PushBackPacketUnified(Packet *packet, bool pushAtHead);

@@ -22,6 +22,7 @@
 
 #include "mafianet/FullyConnectedMesh2.h"
 #include "mafianet/peerinterface.h"
+#include "mafianet/guid_util.h"
 #include "mafianet/MessageIdentifiers.h"
 #include "mafianet/assert.h"
 #include "mafianet/GetTime.h"
@@ -165,7 +166,7 @@ void FullyConnectedMesh2::AddParticipant( RakNetGUID rakNetGuid )
 	if (rakPeerInterface->GetConnectionState(rakPeerInterface->GetSystemAddressFromGuid(rakNetGuid))!=IS_CONNECTED)
 	{
 #ifdef DEBUG_FCM2
-		printf("AddParticipant to %s failed (not connected)\n", rakNetGuid.ToString());
+		printf("AddParticipant to %s failed (not connected)\n", to_string(rakNetGuid).c_str());
 #endif
 		return;
 	}
@@ -233,7 +234,7 @@ void FullyConnectedMesh2::SetMyContext(BitStream *userContext)
 	unsigned int idx;
 	for (idx=0; idx < fcm2ParticipantList.Size(); idx++)
 	{
-		rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,fcm2ParticipantList[idx]->rakNetGuid,false);
+		rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,fcm2ParticipantList[idx]->rakNetGuid,false);
 	}
 }
 */
@@ -361,7 +362,7 @@ void FullyConnectedMesh2::OnClosedConnection(const SystemAddress &systemAddress,
 		{
 			fcm2ParticipantList[idx]=fcm2ParticipantList[fcm2ParticipantList.Size()-1];
 #ifdef DEBUG_FCM2
-			printf("Popping participant %s\n", fcm2ParticipantList[fcm2ParticipantList.Size()-1].rakNetGuid.ToString());
+			printf("Popping participant %s\n", to_string(fcm2ParticipantList[fcm2ParticipantList.Size()-1]->rakNetGuid).c_str());
 #endif
 
 			fcm2ParticipantList.Pop();
@@ -474,7 +475,7 @@ void FullyConnectedMesh2::SendFCMGuidRequest(RakNetGUID rakNetGuid)
 	}
 	bsOut.Write(myContext);
 	myContext.ResetReadPointer();
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,rakNetGuid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,rakNetGuid,false);
 }
 void FullyConnectedMesh2::SendOurFCMGuid(SystemAddress addr)
 {
@@ -485,7 +486,7 @@ void FullyConnectedMesh2::SendOurFCMGuid(SystemAddress addr)
 	bsOut.Write(totalConnectionCount);
 	bsOut.Write(myContext);
 	myContext.ResetReadPointer();
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,addr,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,addr,false);
 }
 void FullyConnectedMesh2::SendConnectionCountResponse(SystemAddress addr, unsigned int responseTotalConnectionCount)
 {
@@ -494,7 +495,7 @@ void FullyConnectedMesh2::SendConnectionCountResponse(SystemAddress addr, unsign
 	bsOut.Write(responseTotalConnectionCount);
 	//bsOut.Write(myContext);
 	//myContext.ResetReadPointer();
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,addr,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,addr,false);
 }
 void FullyConnectedMesh2::AssignOurFCMGuid(void)
 {
@@ -690,7 +691,7 @@ void FullyConnectedMesh2::OnInformFCMGuid(Packet *packet)
 		for (idx=0; idx < fcm2ParticipantList.Size(); idx++)
 		{
 			if (packet->guid!=fcm2ParticipantList[idx]->rakNetGuid)
-				rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,fcm2ParticipantList[idx]->rakNetGuid,false);
+				rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,fcm2ParticipantList[idx]->rakNetGuid,false);
 		}
 	}
 
@@ -802,7 +803,7 @@ void FullyConnectedMesh2::StartVerifiedJoin(RakNetGUID client)
 		bsOut.Write(&vjsOut);
 		bsOut.AlignWriteToByteBoundary();
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, client, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, client, false);
 }
 void FullyConnectedMesh2::RespondOnVerifiedJoinCapable(Packet *packet, bool accept, BitStream *additionalData)
 {
@@ -850,7 +851,7 @@ void FullyConnectedMesh2::RespondOnVerifiedJoinCapable(Packet *packet, bool acce
 			}
 			RakAssert(written==true);
 		}
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 		return;
 	}
 
@@ -877,7 +878,7 @@ void FullyConnectedMesh2::RespondOnVerifiedJoinCapable(Packet *packet, bool acce
 			bsOut.Write(additionalData);
 
 		for (unsigned int i=0; i < fcm2ParticipantList.Size(); i++)
-			SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, fcm2ParticipantList[i]->rakNetGuid, false);
+			SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, fcm2ParticipantList[i]->rakNetGuid, false);
 
 		// Process immediately
 		// This is so if another ID_FCM2_VERIFIED_JOIN_CAPABLE is buffered, it responds with ID_FCM2_VERIFIED_JOIN_START
@@ -899,7 +900,7 @@ void FullyConnectedMesh2::RespondOnVerifiedJoinCapable(Packet *packet, bool acce
 			bsOut.Write(additionalData);
 	}
 
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 }
 void FullyConnectedMesh2::GetVerifiedJoinRequiredProcessingList(RakNetGUID host, DataStructures::List<SystemAddress> &addresses, DataStructures::List<RakNetGUID> &guids, DataStructures::List<BitStream*> &userData)
 {
@@ -1049,7 +1050,7 @@ PluginReceiveResult FullyConnectedMesh2::OnVerifiedJoinStart(Packet *packet)
 		bsOut.Write((MessageID)ID_FCM2_VERIFIED_JOIN_CAPABLE);
 		bsOut.WriteCasted<unsigned short>(0);
 		WriteVJCUserData(&bsOut);
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 		//vjip->sentResults=true;
 		joinsInProgress.Push(vjip, _FILE_AND_LINE_);
 		return RR_STOP_PROCESSING_AND_DEALLOCATE;
@@ -1132,7 +1133,7 @@ PluginReceiveResult FullyConnectedMesh2::OnVerifiedJoinCapable(Packet *packet)
 		// Send ID_FCM2_VERIFIED_JOIN_FAILED with GUIDs to disconnect
 		BitStream bsOut;
 		bsOut.Write((MessageID) ID_FCM2_VERIFIED_JOIN_FAILED);
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 		return RR_STOP_PROCESSING_AND_DEALLOCATE;
 	}
 
@@ -1165,7 +1166,7 @@ PluginReceiveResult FullyConnectedMesh2::OnVerifiedJoinCapable(Packet *packet)
 			}
 			RakAssert(written);
 		}
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 		return RR_STOP_PROCESSING_AND_DEALLOCATE;
 	}
 
@@ -1330,7 +1331,7 @@ bool FullyConnectedMesh2::ProcessVerifiedJoinInProgressIfCompleted(VerifiedJoinI
 	BitStream bsOut;
 	WriteVerifiedJoinCapable(&bsOut, vjip);
 	WriteVJCUserData(&bsOut);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, vjip->requester, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, vjip->requester, false);
 
 	//vjip->sentResults=true;
 	return true;

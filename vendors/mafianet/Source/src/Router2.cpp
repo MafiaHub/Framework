@@ -179,7 +179,7 @@ bool Router2::ConnectInternal(RakNetGUID endpointGuid, bool returnConnectionLost
 			bsOut.Write((MessageID)ID_ROUTER_2_INTERNAL);
 			bsOut.Write((unsigned char) ID_ROUTER_2_QUERY_FORWARDING);
 			bsOut.Write(endpointGuid);
-			uint32_t pack_id = rakPeerInterface->Send(&bsOut,MEDIUM_PRIORITY,RELIABLE_ORDERED,0,crs.guid,false);
+			uint32_t pack_id = rakPeerInterface->Send(&bsOut,MafiaNet::Priority::Medium,MafiaNet::Reliability::ReliableOrdered,0,crs.guid,false);
 
         	if (debugInterface)
         	{
@@ -368,7 +368,7 @@ PluginReceiveResult Router2::OnReceive(Packet *packet)
 			MafiaNet::BitStream bsOut;
 			bsOut.Write((MessageID)ID_ROUTER_2_INTERNAL);
 			bsOut.Write((unsigned char) ID_ROUTER_2_INCREASE_TIMEOUT);
-			rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE,0,packet->guid,false);
+			rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::Reliable,0,packet->guid,false);
 
 			if (debugInterface)
 			{
@@ -739,7 +739,7 @@ void Router2::RequestForwarding(ConnnectRequest* connectionRequest)
 	bsOut.Write((MessageID)ID_ROUTER_2_INTERNAL);
 	bsOut.Write((unsigned char) ID_ROUTER_2_REQUEST_FORWARDING);
 	bsOut.Write(connectionRequest->endpointGuid);
-	rakPeerInterface->Send(&bsOut,MEDIUM_PRIORITY,RELIABLE_ORDERED,0,connectionRequest->lastRequestedForwardingSystem,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::Medium,MafiaNet::Reliability::ReliableOrdered,0,connectionRequest->lastRequestedForwardingSystem,false);
 
 	if (debugInterface)
 	{
@@ -756,7 +756,7 @@ void Router2::SendFailureOnCannotForward(RakNetGUID sourceGuid, RakNetGUID endpo
 	bsOut.Write((unsigned char) ID_ROUTER_2_REPLY_FORWARDING);
 	bsOut.Write(endpointGuid);
 	bsOut.Write(false);
-	rakPeerInterface->Send(&bsOut,MEDIUM_PRIORITY,RELIABLE_ORDERED,0,sourceGuid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::Medium,MafiaNet::Reliability::ReliableOrdered,0,sourceGuid,false);
 }
 int Router2::ReturnFailureOnCannotForward(RakNetGUID sourceGuid, RakNetGUID endpointGuid)
 {
@@ -824,7 +824,7 @@ void Router2::OnQueryForwarding(Packet *packet)
 	bsOut.Write(true);
 	bsOut.Write((unsigned short) pingToEndpoint);
 	bsOut.Write((unsigned short) udpForwarder->GetUsedForwardEntries()/2);
-	rakPeerInterface->Send(&bsOut,MEDIUM_PRIORITY,RELIABLE_ORDERED,0,packet->guid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::Medium,MafiaNet::Reliability::ReliableOrdered,0,packet->guid,false);
 
 	if (debugInterface)
 	{
@@ -900,7 +900,7 @@ void Router2::SendForwardingSuccess(MessageID messageId, RakNetGUID sourceGuid, 
 	bsOut.Write(messageId);
 	bsOut.Write(endpointGuid);
 	bsOut.Write(sourceToDstPort);
-	rakPeerInterface->Send(&bsOut,MEDIUM_PRIORITY,RELIABLE_ORDERED,0,sourceGuid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::Medium,MafiaNet::Reliability::ReliableOrdered,0,sourceGuid,false);
 
 	if (debugInterface)
 	{

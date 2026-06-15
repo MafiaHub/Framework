@@ -57,7 +57,7 @@ bool UDPProxyServer::LoginToCoordinator(MafiaNet::RakString password, SystemAddr
 	outgoingBs.Write((MessageID)ID_UDP_PROXY_GENERAL);
 	outgoingBs.Write((MessageID)ID_UDP_PROXY_LOGIN_REQUEST_FROM_SERVER_TO_COORDINATOR);
 	outgoingBs.Write(password);
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, coordinatorAddress, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, coordinatorAddress, false);
 	loggingInCoordinators.InsertAtIndex(coordinatorAddress, insertionIndex, _FILE_AND_LINE_ );
 	return true;
 }
@@ -177,7 +177,7 @@ void UDPProxyServer::OnForwardingRequestFromCoordinatorToServer(Packet *packet)
 	outgoingBs.Write(serverPublicIp);
 	outgoingBs.Write((unsigned char) success);
 	outgoingBs.Write(forwardingPort);
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 }
 
 #endif // _RAKNET_SUPPORT_*

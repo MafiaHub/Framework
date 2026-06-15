@@ -32,7 +32,7 @@ PluginInterface2::~PluginInterface2()
 {
 
 }
-void PluginInterface2::SendUnified( const MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
+void PluginInterface2::SendUnified( const MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
 {
 	if (rakPeerInterface)
 	{
@@ -66,7 +66,7 @@ void PluginInterface2::SendUnified( const MafiaNet::BitStream * bitStream, Packe
 		Update();
 	}
 }
-void PluginInterface2::SendUnified( const char * data, const int length, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
+void PluginInterface2::SendUnified( const char * data, const int length, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
 {
 	if (rakPeerInterface)
 	{
@@ -158,7 +158,7 @@ void PluginInterface2::DeallocPacketUnified(Packet *packet)
 	rakFree_Ex(packet->data, _FILE_AND_LINE_);
 	MafiaNet::OP_DELETE(packet, _FILE_AND_LINE_);
 }
-bool PluginInterface2::SendListUnified( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
+bool PluginInterface2::SendListUnified( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast )
 {
 	if (rakPeerInterface)
 	{

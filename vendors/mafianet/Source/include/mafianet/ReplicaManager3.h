@@ -56,10 +56,10 @@ typedef uint8_t WorldId;
 struct PRO
 {
 	/// Passed to RakPeerInterface::Send(). Defaults to ReplicaManager3::SetDefaultPacketPriority().
-	PacketPriority priority;
+	MafiaNet::Priority priority;
 
 	/// Passed to RakPeerInterface::Send(). Defaults to ReplicaManager3::SetDefaultPacketReliability().
-	PacketReliability reliability;
+	MafiaNet::Reliability reliability;
 
 	/// Passed to RakPeerInterface::Send(). Defaults to ReplicaManager3::SetDefaultOrderingChannel().
 	char orderingChannel;
@@ -257,10 +257,10 @@ public:
 	void SetDefaultOrderingChannel(char def);
 
 	/// \param[in] Default packet priority to use for object creation, destruction, and serializations
-	void SetDefaultPacketPriority(PacketPriority def);
+	void SetDefaultPacketPriority(MafiaNet::Priority def);
 
 	/// \param[in] Default packet reliability to use for object creation, destruction, and serializations
-	void SetDefaultPacketReliability(PacketReliability def);
+	void SetDefaultPacketReliability(MafiaNet::Reliability def);
 
 	/// \details Every \a intervalMS milliseconds, Connection_RM3::OnAutoserializeInterval() will be called.<BR>
 	/// Defaults to 30.<BR>

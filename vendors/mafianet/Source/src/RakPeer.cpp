@@ -1031,7 +1031,7 @@ ConnectionAttemptResult RakPeer::ConnectWithSocket(const char* host, unsigned sh
 // Description:
 // Stops the network threads and close all connections.  Multiple calls are ok.
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::Shutdown( unsigned int blockDuration, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority )
+void RakPeer::Shutdown( unsigned int blockDuration, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority )
 {
 	unsigned i,j;
 	bool anyActive;
@@ -1298,13 +1298,13 @@ uint32_t RakPeer::IncrementNextSendReceipt(void)
 // Returns:
 // \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-uint32_t RakPeer::Send( const char *data, const int length, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber )
+uint32_t RakPeer::Send( const char *data, const int length, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber )
 {
 #ifdef _DEBUG
 	RakAssert( data && length > 0 );
 #endif
-	RakAssert( !( reliability >= NUMBER_OF_RELIABILITIES || reliability < 0 ) );
-	RakAssert( !( priority > NUMBER_OF_PRIORITIES || priority < 0 ) );
+	RakAssert( !( (unsigned int)reliability >= MafiaNet::NUMBER_OF_RELIABILITIES || (int)reliability < 0 ) );
+	RakAssert( !( (int)priority > (int)MafiaNet::NUMBER_OF_PRIORITIES || (int)priority < 0 ) );
 	RakAssert( !( orderingChannel >= NUMBER_OF_ORDERED_STREAMS ) );
 
 	if ( data == 0 || length < 0 )
@@ -1326,7 +1326,7 @@ uint32_t RakPeer::Send( const char *data, const int length, PacketPriority prior
 	{
 		SendLoopback(data,length);
 
-		if (reliability>=UNRELIABLE_WITH_ACK_RECEIPT)
+		if (reliability>=MafiaNet::Reliability::UnreliableWithAckReceipt)
 		{
 			char buff[5];
 			buff[0]=ID_SND_RECEIPT_ACKED;
@@ -1356,14 +1356,14 @@ void RakPeer::SendLoopback( const char *data, const int length )
 	PushBackPacket(packet, false);
 }
 
-uint32_t RakPeer::Send( const MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber )
+uint32_t RakPeer::Send( const MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber )
 {
 #ifdef _DEBUG
 	RakAssert( bitStream->GetNumberOfBytesUsed() > 0 );
 #endif
 
-	RakAssert( !( reliability >= NUMBER_OF_RELIABILITIES || reliability < 0 ) );
-	RakAssert( !( priority > NUMBER_OF_PRIORITIES || priority < 0 ) );
+	RakAssert( !( (unsigned int)reliability >= MafiaNet::NUMBER_OF_RELIABILITIES || (int)reliability < 0 ) );
+	RakAssert( !( (int)priority > (int)MafiaNet::NUMBER_OF_PRIORITIES || (int)priority < 0 ) );
 	RakAssert( !( orderingChannel >= NUMBER_OF_ORDERED_STREAMS ) );
 
 	if ( bitStream->GetNumberOfBytesUsed() == 0 )
@@ -1384,7 +1384,7 @@ uint32_t RakPeer::Send( const MafiaNet::BitStream * bitStream, PacketPriority pr
 	if (broadcast==false && IsLoopbackAddress(systemIdentifier,true))
 	{
 		SendLoopback((const char*) bitStream->GetData(),bitStream->GetNumberOfBytesUsed());
-		if (reliability>=UNRELIABLE_WITH_ACK_RECEIPT)
+		if (reliability>=MafiaNet::Reliability::UnreliableWithAckReceipt)
 		{
 			char buff[5];
 			buff[0]=ID_SND_RECEIPT_ACKED;
@@ -1424,7 +1424,7 @@ uint32_t RakPeer::Send( const MafiaNet::BitStream * bitStream, PacketPriority pr
 // \param[in] broadcast True to send this packet to all connected systems. If true, then systemAddress specifies who not to send the packet to.
 // \return False if we are not connected to the specified recipient.  True otherwise
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-uint32_t RakPeer::SendList( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber )
+uint32_t RakPeer::SendList( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber )
 {
 #ifdef _DEBUG
 	RakAssert( data );
@@ -1637,7 +1637,7 @@ unsigned int RakPeer::GetMaximumNumberOfPeers( void ) const
 // sendDisconnectionNotification: True to send ID_DISCONNECTION_NOTIFICATION to the recipient. False to close it silently.
 // channel: If blockDuration > 0, the disconnect packet will be sent on this channel
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData )
+void RakPeer::CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData )
 {
 	/*
 	// This only be called from the user thread, for the user shutting down.
@@ -2070,7 +2070,7 @@ bool RakPeer::IsBanned( const char *IP )
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 void RakPeer::Ping( const SystemAddress target )
 {
-	PingInternal(target, false, UNRELIABLE);
+	PingInternal(target, false, MafiaNet::Reliability::Unreliable);
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3492,7 +3492,7 @@ void RakPeer::ParseConnectionRequestPacket( RakPeer::RemoteSystemStruct *remoteS
 					MafiaNet::BitStream bitStream;
 					bitStream.Write((MessageID)ID_REMOTE_SYSTEM_REQUIRES_PUBLIC_KEY); // Report an error since the client is not providing an identity when it is necessary to connect
 					bitStream.Write((unsigned char)2); // Indicate client identity is invalid
-					SendImmediate((char*) bitStream.GetData(), bitStream.GetNumberOfBytesUsed(), IMMEDIATE_PRIORITY, RELIABLE, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
+					SendImmediate((char*) bitStream.GetData(), bitStream.GetNumberOfBytesUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::Reliable, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
 					remoteSystem->connectMode = RemoteSystemStruct::DISCONNECT_ASAP_SILENTLY;
 					return;
 				}
@@ -3508,7 +3508,7 @@ void RakPeer::ParseConnectionRequestPacket( RakPeer::RemoteSystemStruct *remoteS
 				MafiaNet::BitStream bitStream;
 				bitStream.Write((MessageID)ID_REMOTE_SYSTEM_REQUIRES_PUBLIC_KEY); // Report an error since the client is not providing an identity when it is necessary to connect
 				bitStream.Write((unsigned char)1); // Indicate client identity is missing
-				SendImmediate((char*) bitStream.GetData(), bitStream.GetNumberOfBytesUsed(), IMMEDIATE_PRIORITY, RELIABLE, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
+				SendImmediate((char*) bitStream.GetData(), bitStream.GetNumberOfBytesUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::Reliable, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
 				remoteSystem->connectMode = RemoteSystemStruct::DISCONNECT_ASAP_SILENTLY;
 				return;
 			}
@@ -3526,7 +3526,7 @@ void RakPeer::ParseConnectionRequestPacket( RakPeer::RemoteSystemStruct *remoteS
 		MafiaNet::BitStream bitStream;
 		bitStream.Write((MessageID)ID_INVALID_PASSWORD);
 		bitStream.Write(GetGuidFromSystemAddress(UNASSIGNED_SYSTEM_ADDRESS));
-		SendImmediate((char*) bitStream.GetData(), bitStream.GetNumberOfBytesUsed(), IMMEDIATE_PRIORITY, RELIABLE, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
+		SendImmediate((char*) bitStream.GetData(), bitStream.GetNumberOfBytesUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::Reliable, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
 		remoteSystem->connectMode=RemoteSystemStruct::DISCONNECT_ASAP_SILENTLY;
 		return;
 	}
@@ -3550,11 +3550,11 @@ void RakPeer::OnConnectionRequest( RakPeer::RemoteSystemStruct *remoteSystem, Ma
 	bitStream.Write(incomingTimestamp);
 	bitStream.Write(MafiaNet::GetTime());
 
-	SendImmediate((char*)bitStream.GetData(), bitStream.GetNumberOfBitsUsed(), IMMEDIATE_PRIORITY, RELIABLE_ORDERED, 0, remoteSystem->systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
+	SendImmediate((char*)bitStream.GetData(), bitStream.GetNumberOfBitsUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::ReliableOrdered, 0, remoteSystem->systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData )
+void RakPeer::NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool performImmediate, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority, const MafiaNet::BitStream *reasonData )
 {
 	MafiaNet::BitStream temp( sizeof(unsigned char) );
 	temp.Write( (MessageID)ID_DISCONNECTION_NOTIFICATION );
@@ -3565,13 +3565,13 @@ void RakPeer::NotifyAndFlagForShutdown( const SystemAddress systemAddress, bool 
 		temp.Write( (const char*)reasonData->GetData(), reasonData->GetNumberOfBytesUsed() );
 	if (performImmediate)
 	{
-		SendImmediate((char*)temp.GetData(), temp.GetNumberOfBitsUsed(), disconnectionNotificationPriority, RELIABLE_ORDERED, orderingChannel, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
+		SendImmediate((char*)temp.GetData(), temp.GetNumberOfBitsUsed(), disconnectionNotificationPriority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, systemAddress, false, false, MafiaNet::GetTimeUS(), 0);
 		RemoteSystemStruct *rss=GetRemoteSystemFromSystemAddress(systemAddress, true, true);
 		rss->connectMode=RemoteSystemStruct::DISCONNECT_ASAP;
 	}
 	else
 	{
-		SendBuffered((const char*)temp.GetData(), temp.GetNumberOfBitsUsed(), disconnectionNotificationPriority, RELIABLE_ORDERED, orderingChannel, systemAddress, false, RemoteSystemStruct::DISCONNECT_ASAP, 0);
+		SendBuffered((const char*)temp.GetData(), temp.GetNumberOfBitsUsed(), disconnectionNotificationPriority, MafiaNet::Reliability::ReliableOrdered, orderingChannel, systemAddress, false, RemoteSystemStruct::DISCONNECT_ASAP, 0);
 	}
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4119,7 +4119,7 @@ RNS2RecvStruct *RakPeer::PopBufferedPacket(void)
 	return 0;
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::PingInternal( const SystemAddress target, bool performImmediate, PacketReliability reliability )
+void RakPeer::PingInternal( const SystemAddress target, bool performImmediate, MafiaNet::Reliability reliability )
 {
 	if ( IsActive() == false )
 		return ;
@@ -4128,12 +4128,12 @@ void RakPeer::PingInternal( const SystemAddress target, bool performImmediate, P
 	bitStream.Write((MessageID)ID_CONNECTED_PING);
 	bitStream.Write(MafiaNet::GetTime());
 	if (performImmediate)
-		SendImmediate( (char*)bitStream.GetData(), bitStream.GetNumberOfBitsUsed(), IMMEDIATE_PRIORITY, reliability, 0, target, false, false, MafiaNet::GetTimeUS(), 0 );
+		SendImmediate( (char*)bitStream.GetData(), bitStream.GetNumberOfBitsUsed(), MafiaNet::Priority::Immediate, reliability, 0, target, false, false, MafiaNet::GetTimeUS(), 0 );
 	else
-		Send( &bitStream, IMMEDIATE_PRIORITY, reliability, 0, target, false );
+		Send( &bitStream, MafiaNet::Priority::Immediate, reliability, 0, target, false );
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::CloseConnectionInternal( const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority )
+void RakPeer::CloseConnectionInternal( const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority )
 {
 	RakAssert(orderingChannel < 32);
 
@@ -4148,7 +4148,7 @@ void RakPeer::CloseConnectionInternal( const AddressOrGUID& systemIdentifier, bo
 }
 
 // #med - better integrate directly in CloseConnectionInternal2()
-void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, PacketPriority disconnectionNotificationPriority, RakNetSocket2& socket, const MafiaNet::BitStream *reasonData)
+void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bool sendDisconnectionNotification, bool performImmediate, unsigned char orderingChannel, MafiaNet::Priority disconnectionNotificationPriority, RakNetSocket2& socket, const MafiaNet::BitStream *reasonData)
 {
 	RakAssert(orderingChannel < 32);
 
@@ -4224,7 +4224,7 @@ void RakPeer::CloseConnectionInternal2(const AddressOrGUID& systemIdentifier, bo
 	}
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::SendBuffered( const char *data, BitSize_t numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt )
+void RakPeer::SendBuffered( const char *data, BitSize_t numberOfBitsToSend, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt )
 {
 	BufferedCommandStruct *bcs;
 
@@ -4237,8 +4237,8 @@ void RakPeer::SendBuffered( const char *data, BitSize_t numberOfBitsToSend, Pack
 		return;
 	}
 	
-	RakAssert( !( reliability >= NUMBER_OF_RELIABILITIES || reliability < 0 ) );
-	RakAssert( !( priority > NUMBER_OF_PRIORITIES || priority < 0 ) );
+	RakAssert( !( (unsigned int)reliability >= MafiaNet::NUMBER_OF_RELIABILITIES || (int)reliability < 0 ) );
+	RakAssert( !( (int)priority > (int)MafiaNet::NUMBER_OF_PRIORITIES || (int)priority < 0 ) );
 	RakAssert( !( orderingChannel >= NUMBER_OF_ORDERED_STREAMS ) );
 
 	memcpy(bcs->data, data, (size_t) BITS_TO_BYTES(numberOfBitsToSend));
@@ -4253,14 +4253,14 @@ void RakPeer::SendBuffered( const char *data, BitSize_t numberOfBitsToSend, Pack
 	bcs->command=BufferedCommandStruct::BCS_SEND;
 	bufferedCommands.Push(bcs);
 
-	if (priority==IMMEDIATE_PRIORITY)
+	if (priority==MafiaNet::Priority::Immediate)
 	{
 		// Forces pending sends to go out now, rather than waiting to the next update interval
 		quitAndDataEvents.SetEvent();
 	}
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-void RakPeer::SendBufferedList( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt )
+void RakPeer::SendBufferedList( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, RemoteSystemStruct::ConnectMode connectionMode, uint32_t receipt )
 {
 	BufferedCommandStruct *bcs;
 	unsigned int totalLength=0;
@@ -4297,8 +4297,8 @@ void RakPeer::SendBufferedList( const char **data, const int *lengths, const int
 		return;
 	}
 
-	RakAssert( !( reliability >= NUMBER_OF_RELIABILITIES || reliability < 0 ) );
-	RakAssert( !( priority > NUMBER_OF_PRIORITIES || priority < 0 ) );
+	RakAssert( !( (unsigned int)reliability >= MafiaNet::NUMBER_OF_RELIABILITIES || (int)reliability < 0 ) );
+	RakAssert( !( (int)priority > (int)MafiaNet::NUMBER_OF_PRIORITIES || (int)priority < 0 ) );
 	RakAssert( !( orderingChannel >= NUMBER_OF_ORDERED_STREAMS ) );
 
 	bcs=bufferedCommands.Allocate( _FILE_AND_LINE_ );
@@ -4314,14 +4314,14 @@ void RakPeer::SendBufferedList( const char **data, const int *lengths, const int
 	bcs->command=BufferedCommandStruct::BCS_SEND;
 	bufferedCommands.Push(bcs);
 
-	if (priority==IMMEDIATE_PRIORITY)
+	if (priority==MafiaNet::Priority::Immediate)
 	{
 		// Forces pending sends to go out now, rather than waiting to the next update interval
 		quitAndDataEvents.SetEvent();
 	}
 }
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-bool RakPeer::SendImmediate( char *data, BitSize_t numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool useCallerDataAllocation, MafiaNet::TimeUS currentTime, uint32_t receipt )
+bool RakPeer::SendImmediate( char *data, BitSize_t numberOfBitsToSend, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, bool useCallerDataAllocation, MafiaNet::TimeUS currentTime, uint32_t receipt )
 {
 	unsigned *sendList;
 	unsigned sendListSize;
@@ -4402,11 +4402,11 @@ bool RakPeer::SendImmediate( char *data, BitSize_t numberOfBitsToSend, PacketPri
 		if (useData)
 			callerDataAllocationUsed=true;
 
-		if (reliability==RELIABLE ||
-			reliability==RELIABLE_ORDERED ||
-			reliability==RELIABLE_SEQUENCED ||
-			reliability==RELIABLE_WITH_ACK_RECEIPT ||
-			reliability==RELIABLE_ORDERED_WITH_ACK_RECEIPT
+		if (reliability==MafiaNet::Reliability::Reliable ||
+			reliability==MafiaNet::Reliability::ReliableOrdered ||
+			reliability==MafiaNet::Reliability::ReliableSequenced ||
+			reliability==MafiaNet::Reliability::ReliableWithAckReceipt ||
+			reliability==MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 //			||
 //			reliability==RELIABLE_SEQUENCED_WITH_ACK_RECEIPT
 			)
@@ -5062,7 +5062,7 @@ bool ProcessOfflineNetworkPacket( SystemAddress systemAddress, const char *data,
 							if ( rcs->outgoingPasswordLength > 0 )
 								temp.Write( ( char* ) rcs->outgoingPassword,  rcs->outgoingPasswordLength );
 
-							rakPeer->SendImmediate((char*)temp.GetData(), temp.GetNumberOfBitsUsed(), IMMEDIATE_PRIORITY, RELIABLE, 0, systemAddress, false, false, timeRead, 0 );
+							rakPeer->SendImmediate((char*)temp.GetData(), temp.GetNumberOfBitsUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::Reliable, 0, systemAddress, false, false, timeRead, 0 );
 						}
 						else
 						{
@@ -5897,7 +5897,7 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 				rnss=remoteSystem->reliabilityLayer.GetStatistics(&rakNetStatistics);
 				if (rnss->messagesInResendBuffer==0)
 				{
-					PingInternal( systemAddress, true, RELIABLE );
+					PingInternal( systemAddress, true, MafiaNet::Reliability::Reliable );
 
 					//remoteSystem->lastReliableSend=timeMS+remoteSystem->reliabilityLayer.GetTimeoutTime();
 					remoteSystem->lastReliableSend=timeMS;
@@ -5968,7 +5968,7 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 				// (and trying to resend them unnecessarily)
 				remoteSystem->reliabilityLayer.UpdateAndForceACKs(remoteSystem->rakNetSocket, systemAddress, remoteSystem->MTUSize, timeNS, maxOutgoingBPS, pluginListNTS, &rnr, updateBitStream);
 
-				CloseConnectionInternal2(systemAddress, false, true, 0, LOW_PRIORITY, *(remoteSystem->rakNetSocket));
+				CloseConnectionInternal2(systemAddress, false, true, 0, MafiaNet::Priority::Low, *(remoteSystem->rakNetSocket));
 				continue;
 			}
 
@@ -5976,7 +5976,7 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 			if ( remoteSystem->connectMode==RemoteSystemStruct::CONNECTED && timeMS > remoteSystem->nextPingTime && ( occasionalPing || remoteSystem->lowestPing == (unsigned short)-1 ) )
 			{
 				remoteSystem->nextPingTime = timeMS + 5000;
-				PingInternal( systemAddress, true, UNRELIABLE );
+				PingInternal( systemAddress, true, MafiaNet::Reliability::Unreliable );
 
 				// Update again immediately after this tick so the ping goes out right away
 				quitAndDataEvents.SetEvent();
@@ -6013,7 +6013,7 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 					}
 					else
 					{
-						CloseConnectionInternal2(systemAddress, false, true, 0, LOW_PRIORITY, *(remoteSystem->rakNetSocket));
+						CloseConnectionInternal2(systemAddress, false, true, 0, MafiaNet::Priority::Low, *(remoteSystem->rakNetSocket));
 #ifdef _DO_PRINTF
 						RAKNET_DEBUG_PRINTF("Temporarily banning %i:%i for sending nonsense data\n", systemAddress);
 #endif
@@ -6059,7 +6059,7 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 						if (remoteSystem->connectMode==RemoteSystemStruct::HANDLING_CONNECTION_REQUEST)
 						{
 							remoteSystem->connectMode=RemoteSystemStruct::CONNECTED;
-							PingInternal( systemAddress, true, UNRELIABLE );
+							PingInternal( systemAddress, true, MafiaNet::Reliability::Unreliable );
 
 							// Update again immediately after this tick so the ping goes out right away
 							quitAndDataEvents.SetEvent();
@@ -6137,7 +6137,7 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 						outBitStream.Write((MessageID)ID_CONNECTED_PONG);
 						outBitStream.Write(sendPingTime);
 						outBitStream.Write(MafiaNet::GetTime());
-						SendImmediate( (char*)outBitStream.GetData(), outBitStream.GetNumberOfBitsUsed(), IMMEDIATE_PRIORITY, UNRELIABLE, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0 );
+						SendImmediate( (char*)outBitStream.GetData(), outBitStream.GetNumberOfBitsUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::Unreliable, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0 );
 
 						// Update again immediately after this tick so the ping goes out right away
 						quitAndDataEvents.SetEvent();
@@ -6265,11 +6265,11 @@ bool RakPeer::RunUpdateCycle(BitStream &updateBitStream )
 								outBitStream.Write(sendPongTime);
 								outBitStream.Write(MafiaNet::GetTime());
 
-								SendImmediate( (char*)outBitStream.GetData(), outBitStream.GetNumberOfBitsUsed(), IMMEDIATE_PRIORITY, RELIABLE_ORDERED, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0 );
+								SendImmediate( (char*)outBitStream.GetData(), outBitStream.GetNumberOfBitsUsed(), MafiaNet::Priority::Immediate, MafiaNet::Reliability::ReliableOrdered, 0, systemAddress, false, false, MafiaNet::GetTimeUS(), 0 );
 
 								if (alreadyConnected==false)
 								{
-									PingInternal( systemAddress, true, UNRELIABLE );
+									PingInternal( systemAddress, true, MafiaNet::Reliability::Unreliable );
 								}
 							}
 							else

@@ -279,7 +279,7 @@ void PacketLogger::OnInternalPacket(InternalPacket *internalPacket, unsigned fra
 	SystemAddress localSystemAddress = rakPeerInterface->GetExternalID(remoteSystemAddress);
 
 	unsigned int reliableMessageNumber;
-	if (internalPacket->reliability==UNRELIABLE || internalPacket->reliability==UNRELIABLE_SEQUENCED || internalPacket->reliability==UNRELIABLE_WITH_ACK_RECEIPT)
+	if (internalPacket->reliability==MafiaNet::Reliability::Unreliable || internalPacket->reliability==MafiaNet::Reliability::UnreliableSequenced || internalPacket->reliability==MafiaNet::Reliability::UnreliableWithAckReceipt)
 		reliableMessageNumber=(unsigned int)-1;
 	else
 		reliableMessageNumber=internalPacket->reliableMessageNumber;

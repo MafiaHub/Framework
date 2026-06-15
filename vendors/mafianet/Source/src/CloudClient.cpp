@@ -51,7 +51,7 @@ void CloudClient::Post(CloudKey *cloudKey, const unsigned char *data, uint32_t d
 	bsOut.Write(dataLengthBytes);
 	if (dataLengthBytes>0)
 		bsOut.WriteAlignedBytes((const unsigned char*) data, dataLengthBytes);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 }
 void CloudClient::Release(DataStructures::List<CloudKey> &keys, RakNetGUID systemIdentifier)
 {
@@ -63,7 +63,7 @@ void CloudClient::Release(DataStructures::List<CloudKey> &keys, RakNetGUID syste
 	{
 		keys[i].Serialize(true,&bsOut);
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 }
 bool CloudClient::Get(CloudQuery *keyQuery, RakNetGUID systemIdentifier)
 {
@@ -71,7 +71,7 @@ bool CloudClient::Get(CloudQuery *keyQuery, RakNetGUID systemIdentifier)
 	bsOut.Write((MessageID)ID_CLOUD_GET_REQUEST);
 	keyQuery->Serialize(true, &bsOut);
 	bsOut.WriteCasted<uint16_t>(0); // Specific systems
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 	return true;
 }
 bool CloudClient::Get(CloudQuery *keyQuery, DataStructures::List<RakNetGUID> &specificSystems, RakNetGUID systemIdentifier)
@@ -85,7 +85,7 @@ bool CloudClient::Get(CloudQuery *keyQuery, DataStructures::List<RakNetGUID> &sp
 	{
 		bsOut.Write(specificSystems[i]);
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 	return true;
 }
 bool CloudClient::Get(CloudQuery *keyQuery, DataStructures::List<CloudQueryRow*> &specificSystems, RakNetGUID systemIdentifier)
@@ -108,7 +108,7 @@ bool CloudClient::Get(CloudQuery *keyQuery, DataStructures::List<CloudQueryRow*>
 			bsOut.Write(specificSystems[i]->clientSystemAddress);
 		}
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 	return true;
 }
 void CloudClient::Unsubscribe(DataStructures::List<CloudKey> &keys, RakNetGUID systemIdentifier)
@@ -122,7 +122,7 @@ void CloudClient::Unsubscribe(DataStructures::List<CloudKey> &keys, RakNetGUID s
 		keys[i].Serialize(true,&bsOut);
 	}
 	bsOut.WriteCasted<uint16_t>(0);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 }
 void CloudClient::Unsubscribe(DataStructures::List<CloudKey> &keys, DataStructures::List<RakNetGUID> &specificSystems, RakNetGUID systemIdentifier)
 {
@@ -140,7 +140,7 @@ void CloudClient::Unsubscribe(DataStructures::List<CloudKey> &keys, DataStructur
 	{
 		bsOut.Write(specificSystems[i]);
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 }
 void CloudClient::Unsubscribe(DataStructures::List<CloudKey> &keys, DataStructures::List<CloudQueryRow*> &specificSystems, RakNetGUID systemIdentifier)
 {
@@ -167,7 +167,7 @@ void CloudClient::Unsubscribe(DataStructures::List<CloudKey> &keys, DataStructur
 			bsOut.Write(specificSystems[i]->clientSystemAddress);
 		}
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, false);
 }
 PluginReceiveResult CloudClient::OnReceive(Packet *packet)
 {

@@ -84,8 +84,8 @@ void LastSerializationResult::AllocBS(void)
 ReplicaManager3::ReplicaManager3()
 {
 	defaultSendParameters.orderingChannel=0;
-	defaultSendParameters.priority=HIGH_PRIORITY;
-	defaultSendParameters.reliability=RELIABLE_ORDERED;
+	defaultSendParameters.priority=MafiaNet::Priority::High;
+	defaultSendParameters.reliability=MafiaNet::Reliability::ReliableOrdered;
 	defaultSendParameters.sendReceipt=0;
 	autoSerializeInterval=30;
 	lastAutoSerializeOccurance=0;
@@ -549,14 +549,14 @@ void ReplicaManager3::SetDefaultOrderingChannel(char def)
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-void ReplicaManager3::SetDefaultPacketPriority(PacketPriority def)
+void ReplicaManager3::SetDefaultPacketPriority(MafiaNet::Priority def)
 {
 	defaultSendParameters.priority=def;
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-void ReplicaManager3::SetDefaultPacketReliability(PacketReliability def)
+void ReplicaManager3::SetDefaultPacketReliability(MafiaNet::Reliability def)
 {
 	defaultSendParameters.reliability=def;
 }
@@ -826,7 +826,7 @@ void Connection_RM3::AutoConstructByQuery(ReplicaManager3 *replicaManager3, Worl
 					BitSize_t bitsWritten = bsOut.GetNumberOfBitsUsed();
 					lsr->replica->SerializeConstructionExisting(&bsOut, this);
 					if (bsOut.GetNumberOfBitsUsed()!=bitsWritten)
-						replicaManager3->SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,GetSystemAddress(), false);
+						replicaManager3->SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,GetSystemAddress(), false);
 				}
 
 				// Serialize first serialization to this connection.
@@ -2273,7 +2273,7 @@ void Connection_RM3::SendConstruction(DataStructures::List<Replica3*> &newObject
 		bsOut.Write((MessageID)ID_REPLICA_MANAGER_DOWNLOAD_STARTED);
 		bsOut.Write(worldId);
 		SerializeOnDownloadStarted(&bsOut);
-		rakPeer->Send(&bsOut,sendParameters.priority,RELIABLE_ORDERED,sendParameters.orderingChannel,systemAddress,false,sendParameters.sendReceipt);
+		rakPeer->Send(&bsOut,sendParameters.priority,MafiaNet::Reliability::ReliableOrdered,sendParameters.orderingChannel,systemAddress,false,sendParameters.sendReceipt);
 	}
 
 	//	LastSerializationResult* lsr;
@@ -2376,7 +2376,7 @@ void Connection_RM3::SendConstruction(DataStructures::List<Replica3*> &newObject
 		bsOut.Write(offsetEnd);
 		bsOut.SetWriteOffset(offsetEnd);
 	}
-	rakPeer->Send(&bsOut,sendParameters.priority,RELIABLE_ORDERED,sendParameters.orderingChannel,systemAddress,false,sendParameters.sendReceipt);
+	rakPeer->Send(&bsOut,sendParameters.priority,MafiaNet::Reliability::ReliableOrdered,sendParameters.orderingChannel,systemAddress,false,sendParameters.sendReceipt);
 
 	// TODO - shouldn't this be part of construction?
 
@@ -2390,7 +2390,7 @@ void Connection_RM3::SendConstruction(DataStructures::List<Replica3*> &newObject
 	{
 		sp.lastSentBitstream[index]=&emptyBs;
 		sp.pro[index]=sendParameters;
-		sp.pro[index].reliability=RELIABLE_ORDERED;
+		sp.pro[index].reliability=MafiaNet::Reliability::ReliableOrdered;
 	}
 
 	sp.bitsWrittenSoFar=0;
@@ -2430,7 +2430,7 @@ void Connection_RM3::SendConstruction(DataStructures::List<Replica3*> &newObject
 		bsOut.Write((MessageID)ID_REPLICA_MANAGER_DOWNLOAD_COMPLETE);
 		bsOut.Write(worldId);
 		SerializeOnDownloadComplete(&bsOut);
-		rakPeer->Send(&bsOut,sendParameters.priority,RELIABLE_ORDERED,sendParameters.orderingChannel,systemAddress,false,sendParameters.sendReceipt);
+		rakPeer->Send(&bsOut,sendParameters.priority,MafiaNet::Reliability::ReliableOrdered,sendParameters.orderingChannel,systemAddress,false,sendParameters.sendReceipt);
 	}
 
 	isFirstConstruction=false;
@@ -2445,7 +2445,7 @@ void Connection_RM3::SendValidation(MafiaNet::RakPeerInterface *rakPeer, WorldId
 	MafiaNet::BitStream bsOut;
 	bsOut.Write((MessageID)ID_REPLICA_MANAGER_SCOPE_CHANGE);
 	bsOut.Write(worldId);
-	rakPeer->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,systemAddress,false);
+	rakPeer->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,systemAddress,false);
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

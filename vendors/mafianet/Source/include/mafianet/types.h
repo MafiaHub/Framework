@@ -300,12 +300,9 @@ struct RAK_DLL_EXPORT RakNetGUID
 //	uint32_t g[6];
 	uint64_t g;
 
-	// Return the GUID as a string
-	// Returns a static string
-	// NOT THREADSAFE
-	const char *ToString(void) const;
-
-	// Return the GUID as a string
+	// Return the GUID as a string.
+	// For an owning, thread-safe std::string use MafiaNet::to_string(guid)
+	// from "mafianet/guid_util.h".
 	// dest must be large enough to hold the output
 	// THREADSAFE
 	void ToString(char *dest) const;

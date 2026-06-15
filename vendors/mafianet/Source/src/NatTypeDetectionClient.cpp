@@ -75,7 +75,7 @@ void NatTypeDetectionClient::DetectNATType(SystemAddress _serverAddress)
 	bs.Write((unsigned char)ID_NAT_TYPE_DETECTION_REQUEST);
 	bs.Write(true); // IsRequest
 	bs.Write(c2->GetBoundAddress().GetPort());
-	rakPeerInterface->Send(&bs,MEDIUM_PRIORITY,RELIABLE,0,serverAddress,false);
+	rakPeerInterface->Send(&bs,MafiaNet::Priority::Medium,MafiaNet::Reliability::Reliable,0,serverAddress,false);
 }
 void NatTypeDetectionClient::OnCompletion(NATTypeDetectionResult result)
 {
@@ -96,7 +96,7 @@ void NatTypeDetectionClient::OnCompletion(NATTypeDetectionResult result)
 		MafiaNet::BitStream bs;
 		bs.Write((unsigned char)ID_NAT_TYPE_DETECTION_REQUEST);
 		bs.Write(false); // Done
-		rakPeerInterface->Send(&bs,HIGH_PRIORITY,RELIABLE,0,serverAddress,false);
+		rakPeerInterface->Send(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::Reliable,0,serverAddress,false);
 	}
 
 	Shutdown();

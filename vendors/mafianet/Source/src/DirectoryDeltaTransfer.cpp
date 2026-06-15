@@ -84,7 +84,7 @@ DirectoryDeltaTransfer::DirectoryDeltaTransfer()
 	applicationDirectory[0]=0;
 	fileListTransfer=0;
 	availableUploads = MafiaNet::OP_NEW<FileList>( _FILE_AND_LINE_ );
-	priority=HIGH_PRIORITY;
+	priority=MafiaNet::Priority::High;
 	orderingChannel=0;
 	incrementalReadInterface=0;
 }
@@ -130,7 +130,7 @@ void DirectoryDeltaTransfer::SetApplicationDirectory(const char *pathToApplicati
 		applicationDirectory[511]=0;
 	}
 }
-void DirectoryDeltaTransfer::SetUploadSendParameters(PacketPriority _priority, char _orderingChannel)
+void DirectoryDeltaTransfer::SetUploadSendParameters(MafiaNet::Priority _priority, char _orderingChannel)
 {
 	priority=_priority;
 	orderingChannel=_orderingChannel;
@@ -143,7 +143,7 @@ void DirectoryDeltaTransfer::AddUploadsFromSubdirectory(const char *subdir)
 {
 	availableUploads->AddFilesFromDirectory(applicationDirectory, subdir, true, false, true, FileListNodeContext(0,0,0,0));
 }
-unsigned short DirectoryDeltaTransfer::DownloadFromSubdirectory(FileList &localFiles, const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, PacketPriority _priority, char _orderingChannel, FileListProgress *cb)
+unsigned short DirectoryDeltaTransfer::DownloadFromSubdirectory(FileList &localFiles, const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, MafiaNet::Priority _priority, char _orderingChannel, FileListProgress *cb)
 {
 	RakAssert(host!=UNASSIGNED_SYSTEM_ADDRESS);
 
@@ -181,11 +181,11 @@ unsigned short DirectoryDeltaTransfer::DownloadFromSubdirectory(FileList &localF
 	StringCompressor::Instance()->EncodeString(subdir, 256, &outBitstream);
 	StringCompressor::Instance()->EncodeString(outputSubdir, 256, &outBitstream);
 	localFiles.Serialize(&outBitstream);
-	SendUnified(&outBitstream, _priority, RELIABLE_ORDERED, _orderingChannel, host, false);
+	SendUnified(&outBitstream, _priority, MafiaNet::Reliability::ReliableOrdered, _orderingChannel, host, false);
 
 	return setId;
 }
-unsigned short DirectoryDeltaTransfer::DownloadFromSubdirectory(const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, PacketPriority _priority, char _orderingChannel, FileListProgress *cb)
+unsigned short DirectoryDeltaTransfer::DownloadFromSubdirectory(const char *subdir, const char *outputSubdir, bool prependAppDirToOutputSubdir, SystemAddress host, FileListTransferCBInterface *onFileCallback, MafiaNet::Priority _priority, char _orderingChannel, FileListProgress *cb)
 {
 	FileList localFiles;
 	// Get a hash of all the files that we already have (if any)
