@@ -8,7 +8,8 @@
 
 #pragma once
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
 
 #include <string>
 #include <unordered_map>
@@ -26,7 +27,7 @@ namespace Framework::GUI {
         std::unordered_map<std::string, EventCallback> _eventListeners;
 
       public:
-        [[nodiscard]] GUIError Init(CefRefPtr<CefBrowser> browser);
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init(CefRefPtr<CefBrowser> browser);
         void Shutdown();
 
         // Escape hatch: the raw CEF browser. Prefer the event API (AddEventListener/BroadcastEvent).

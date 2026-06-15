@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include "errors.h"
-
 #include <utils/error.h>
 #include <utils/lifecycle.h>
 #include <utils/result.h>

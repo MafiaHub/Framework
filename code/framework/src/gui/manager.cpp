@@ -165,8 +165,8 @@ namespace Framework::GUI {
             return -1;
         }
 
-        if (view->Init(url, width, height, offsetX, offsetY, _gpuAccelerated) != GUIError::GUI_NONE) {
-            Framework::Logging::GetLogger("Web")->error("Failed to create view: initialization failed");
+        if (auto result = view->Init(url, width, height, offsetX, offsetY, _gpuAccelerated); !result) {
+            Framework::Logging::GetLogger("Web")->error("Failed to create view: {}", result.GetError().message);
             return -1;
         }
 

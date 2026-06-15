@@ -11,8 +11,6 @@
 #include <utils/safe_win32.h>
 #include <utils/lifecycle.h>
 
-#include "errors.h"
-
 #include <utils/error.h>
 #include <utils/result.h>
 
@@ -33,8 +31,8 @@ namespace Framework::External::Discord {
         void Shutdown() override;
 
         void Update() override;
-        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const;
-        DiscordError SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const;
+        Utils::Result<void, Framework::Error> SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const;
+        Utils::Result<void, Framework::Error> SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const;
 
         void SignInWithDiscord(const DiscordLoginProc &proc) const;
 

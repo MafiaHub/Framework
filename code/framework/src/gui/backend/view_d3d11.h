@@ -31,7 +31,7 @@ namespace Framework::GUI {
       public:
         ViewD3D11(int id, Graphics::Renderer *graphicsRenderer, Manager *manager);
 
-        [[nodiscard]] GUIError Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false) override;
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init(const std::string &url, int width, int height, int offsetX, int offsetY, bool gpuAccelerated = false) override;
 
         void Update() override;
         void Render() override;

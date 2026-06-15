@@ -47,9 +47,9 @@ namespace Framework::External::Discord {
         _instance->RunCallbacks();
     }
 
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity, const std::string &largeImage, const std::string &largeText, const std::string &smallImage, const std::string &smallText) const {
         if (!_instance) {
-            return DiscordError::DISCORD_CORE_NULL_INSTANCE;
+            return Framework::Error {"Discord core instance is null"};
         }
 
         discord::Activity act {};
@@ -68,10 +68,10 @@ namespace Framework::External::Discord {
             }
         });
 
-        return DiscordError::DISCORD_NONE;
+        return {};
     }
 
-    DiscordError Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const {
+    Utils::Result<void, Framework::Error> Wrapper::SetPresence(const std::string &state, const std::string &details, discord::ActivityType activity) const {
         return SetPresence(state, details, activity, "logo-large", "MafiaHub", "logo-small", "MafiaHub");
     }
 

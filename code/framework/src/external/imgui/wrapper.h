@@ -10,7 +10,6 @@
 
 #include <utils/lifecycle.h>
 
-#include "errors.h"
 #include "utils/safe_win32.h"
 
 #include <utils/error.h>
@@ -64,7 +63,7 @@ namespace Framework::External::ImGUI {
         static void ShowCursor(bool show);
 
         void Update() override;
-        Error Render();
+        Utils::Result<void, Framework::Error> Render();
 
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);

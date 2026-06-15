@@ -132,16 +132,16 @@ namespace Framework::External::ImGUI {
         ImGui::Render();
     }
 
-    Error Wrapper::Render() {
+    Utils::Result<void, Framework::Error> Wrapper::Render() {
         std::scoped_lock _lock(_renderMtx);
 
         if (!isContextInitialized) {
-            return Error::IMGUI_NOT_INITIALIZED;
+            return Framework::Error {"ImGui context is not initialized"};
         }
 
         const auto drawData = ImGui::GetDrawData();
         if (!drawData)
-            return Error::IMGUI_NONE;
+            return {};
 
         switch (_config.renderBackend) {
         case Graphics::RendererBackend::BACKEND_D3D_9: {
@@ -157,7 +157,7 @@ namespace Framework::External::ImGUI {
         } break;
         }
 
-        return Error::IMGUI_NONE;
+        return {};
     }
 
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
