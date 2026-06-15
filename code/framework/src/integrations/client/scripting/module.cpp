@@ -318,7 +318,7 @@ namespace Framework::Integrations::Client::Scripting {
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)->info(
-            "Started {} resource(s) on client", result.Unwrap().size());
+            "Started {} resource(s) on client", result.GetValue().size());
         return true;
     }
 

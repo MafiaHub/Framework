@@ -64,14 +64,18 @@ namespace Framework::Jobs::IO {
                 }
             },
             [onError = std::move(onError), path](std::exception_ptr ex) mutable {
+                std::string message;
+                try {
+                    std::rethrow_exception(ex);
+                } catch (const std::exception &e) {
+                    message = e.what();
+                } catch (...) {
+                    message = "Unknown error reading file: " + path;
+                }
                 if (onError) {
-                    try {
-                        std::rethrow_exception(ex);
-                    } catch (const std::exception &e) {
-                        onError(e.what());
-                    } catch (...) {
-                        onError("Unknown error reading file: " + path);
-                    }
+                    onError(message);
+                } else {
+                    spdlog::error("ReadFileAsync failed ({}) with no error handler: {}", path, message);
                 }
             },
             priority);
@@ -90,14 +94,18 @@ namespace Framework::Jobs::IO {
                 }
             },
             [onError = std::move(onError), path](std::exception_ptr ex) mutable {
+                std::string message;
+                try {
+                    std::rethrow_exception(ex);
+                } catch (const std::exception &e) {
+                    message = e.what();
+                } catch (...) {
+                    message = "Unknown error writing file: " + path;
+                }
                 if (onError) {
-                    try {
-                        std::rethrow_exception(ex);
-                    } catch (const std::exception &e) {
-                        onError(e.what());
-                    } catch (...) {
-                        onError("Unknown error writing file: " + path);
-                    }
+                    onError(message);
+                } else {
+                    spdlog::error("WriteFileAsync failed ({}) with no error handler: {}", path, message);
                 }
             },
             priority);

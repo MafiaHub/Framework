@@ -254,19 +254,19 @@ namespace Framework::External::ImGUI::Widgets {
 
         switch (result.GetError()) {
         case Utils::CommandProcessorError::COMMAND_PRINT_HELP: {
-            _logger->info("{}", result.Unwrap());
+            _logger->info("{}", result.GetValue());
         } break;
         case Utils::CommandProcessorError::COMMAND_ALREADY_EXISTS: {
-            _logger->warn("Command already exists: {}", result.Unwrap());
+            _logger->warn("Command already exists: {}", result.GetValue());
         } break;
         case Utils::CommandProcessorError::COMMAND_UNSPECIFIED_NAME: {
             _logger->warn("Command name was unspecified");
         } break;
         case Utils::CommandProcessorError::COMMAND_UNKNOWN: {
-            _logger->warn("Command not found: {}", result.Unwrap());
+            _logger->warn("Command not found: {}", result.GetValue());
         } break;
         case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR: {
-            _logger->warn("Input error: {}", result.Unwrap());
+            _logger->warn("Input error: {}", result.GetValue());
         } break;
 
         default: break;

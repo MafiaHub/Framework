@@ -333,7 +333,7 @@ namespace Framework::Scripting {
                 if (IsResourceRunning(depName)) {
                     auto result = StopResource(depName);
                     if (result) {
-                        const auto &affected = result.Unwrap();
+                        const auto &affected = result.GetValue();
                         stopped.insert(stopped.end(), affected.begin(), affected.end());
                     }
                 }

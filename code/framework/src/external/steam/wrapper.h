@@ -12,7 +12,8 @@
 
 #define VERSION_SAFE_STEAM_API_INTERFACES
 
-#include "errors.h"
+#include <utils/error.h>
+#include <utils/result.h>
 
 #include <steam_api.h>
 #include <string>
@@ -48,7 +49,7 @@ namespace Framework::External::Steam {
 
         ~Wrapper() = default;
 
-        [[nodiscard]] SteamError Init();
+        [[nodiscard]] Utils::Result<void, Framework::Error> Init();
         void Shutdown() override;
 
         CSteamID GetSteamID() const;
@@ -59,6 +60,14 @@ namespace Framework::External::Steam {
             return _authTicket;
         }
 
+        // Whether the given Steam app is installed locally (typed wrapper over SteamApps so the common
+        // path doesn't need GetContext()).
+        [[nodiscard]] bool IsAppInstalled(uint32_t appId) const;
+
+        // Local install directory of the given Steam app, or empty if unavailable.
+        [[nodiscard]] std::string GetAppInstallDir(uint32_t appId) const;
+
+        // Escape hatch: the raw Steam API context, for SDK features the wrapper doesn't surface.
         const CSteamAPIContext *GetContext() const {
             return _ctx.get();
         };

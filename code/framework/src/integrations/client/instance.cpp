@@ -141,18 +141,17 @@ namespace Framework::Integrations::Client {
 
     Instance::~Instance() = default;
 
-    ClientError Instance::Init(InstanceOptions &opts) {
+    Utils::Result<void, Error> Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
         if (opts.gameName.empty() || opts.gameVersion.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Game name and version are required");
-            return ClientError::CLIENT_INVALID_OPTIONS;
+            return Error("Game name and version are required");
         }
 
         if (opts.usePresence) {
             if (_presence && opts.discordAppId > 0) {
-                if (_presence->Init(opts.discordAppId) != External::DiscordError::DISCORD_NONE) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize");
+                if (auto discordResult = _presence->Init(opts.discordAppId); !discordResult) {
+                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Discord Presence failed to initialize: {}", discordResult.GetError().message);
                 }
                 else {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Discord presence initialized");
@@ -161,9 +160,8 @@ namespace Framework::Integrations::Client {
         }
 
         if (_networkingEngine) {
-            if (_networkingEngine->Init() != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Networking engine failed to initialize");
-                return ClientError::CLIENT_ENGINES_ERROR;
+            if (auto netResult = _networkingEngine->Init(); !netResult) {
+                return netResult;
             }
             CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkClient());
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Networking engine initialized");
@@ -175,9 +173,8 @@ namespace Framework::Integrations::Client {
         InitAssetDownloader();
         
         if (!opts.initRendererManually) {
-            if (RenderInit() != ClientError::CLIENT_NONE) {
-                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Rendering subsystems failed to initialize");
-                return ClientError::CLIENT_ENGINES_ERROR;
+            if (auto renderResult = RenderInit(); !renderResult) {
+                return renderResult;
             }
         }
 
@@ -190,7 +187,7 @@ namespace Framework::Integrations::Client {
 
         Framework::Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Client has been initialized");
         _initialized = true;
-        return ClientError::CLIENT_NONE;
+        return {};
     }
 
     void Instance::InitAssetDownloader() {
@@ -207,17 +204,16 @@ namespace Framework::Integrations::Client {
         cppfs::fs::open(fmt::format("{}\\MafiaHubIntegration\\servers", appDataPath)).createDirectory();
     }
 
-    ClientError Instance::RenderInit() {
+    Utils::Result<void, Error> Instance::RenderInit() {
         if (_renderInitialized) {
-            return ClientError::CLIENT_NONE;
+            return {};
         }
 
         // Init the render device
         if (_opts.useRenderer) {
             if (_renderer) {
-                if (_renderer->Init(_opts.rendererOptions) != Framework::Graphics::RendererError::RENDERER_NONE) {
-                    Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Renderer failed to initialize");
-                    return ClientError::CLIENT_ENGINES_ERROR;
+                if (auto renderResult = _renderer->Init(_opts.rendererOptions); !renderResult) {
+                    return renderResult;
                 }
 
                 _renderer->SetWindow(_opts.rendererOptions.windowHandle);
@@ -230,8 +226,7 @@ namespace Framework::Integrations::Client {
                 default: Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("[renderDevice] Device not implemented"); break;
                 }
                 if (!backendInitOk) {
-                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("Failed to initialize graphics backend");
-                    return ClientError::CLIENT_ENGINES_ERROR;
+                    return Error("Failed to initialize graphics backend");
                 }
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Rendering systems initialized");
             }
@@ -243,14 +238,14 @@ namespace Framework::Integrations::Client {
                 imguiConfig.windowBackend = _opts.rendererOptions.platform;
                 imguiConfig.renderer      = _renderer.get();
                 imguiConfig.windowHandle  = _renderer->GetWindow();
-                if (_imguiApp->Init(imguiConfig) != External::ImGUI::Error::IMGUI_NONE) {
-                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init");
+                if (auto imguiResult = _imguiApp->Init(imguiConfig); !imguiResult) {
+                    Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->info("ImGUI has failed to init: {}", imguiResult.GetError().message);
                 }
             }
         }
 
         _renderInitialized = true;
-        return ClientError::CLIENT_NONE;
+        return {};
     }
 
     void Instance::Shutdown() {
@@ -362,9 +357,7 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_serverTickRate * 1000.0f));
             }
-            if (_onConnectionFinalized) {
-                _onConnectionFinalized(_serverTickRate);
-            }
+            OnConnectionFinalized(_serverTickRate);
         });
 
         // Version mismatches don't reach here — they fail the build challenge (WRONG_VERSION).
@@ -391,9 +384,7 @@ namespace Framework::Integrations::Client {
             CoreModules::SetReplication(nullptr);
 
             // Notify mod-level that network integration got closed
-            if (_onConnectionClosed) {
-                _onConnectionClosed();
-            }
+            OnConnectionClosed();
 
             // Reset the scripting engine (keeps engine alive, just stops resources)
             _scriptingModule->Reset();
@@ -502,12 +493,14 @@ namespace Framework::Integrations::Client {
 
                 if (scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
                     Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("Client scripting engine failed to initialize");
-                    net->Disconnect();
+                    (void)net->Disconnect();
                     return;
                 }
                 CoreModules::SetScriptingModule(scriptingModule);
 
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
+
+                PostScriptInit();
 
                 // Pass the pending resource list to the scripting module (without triggering download logic)
                 if (!_pendingServerResources.empty()) {
@@ -524,7 +517,7 @@ namespace Framework::Integrations::Client {
             }
         }
         else {
-            net->Disconnect();
+            (void)net->Disconnect();
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->error("There has been an issue downloading assets!");
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
             return;
@@ -552,9 +545,7 @@ namespace Framework::Integrations::Client {
         _downloadStatus = {};
 
         // Let the mod-level know assets have just been finished processing
-        if (_onAssetsDownloadFinished) {
-            _onAssetsDownloadFinished(success);
-        }
+        OnAssetsDownloadFinished(success);
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {

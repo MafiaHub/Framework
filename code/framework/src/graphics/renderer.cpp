@@ -16,9 +16,9 @@ namespace Framework::Graphics {
     Renderer::Renderer()  = default;
     Renderer::~Renderer() = default;
 
-    RendererError Renderer::Init(RendererConfiguration config) {
+    Utils::Result<void, Error> Renderer::Init(RendererConfiguration config) {
         if (_initialized) {
-            return RendererError::RENDERER_ALREADY_INITIALIZED;
+            return Error("Renderer is already initialized");
         }
 
         _config = config;
@@ -27,26 +27,26 @@ namespace Framework::Graphics {
             _d3d11Backend = std::make_unique<D3D11Backend>();
             if (!_d3d11Backend->Init(_config)) {
                 _d3d11Backend.reset();
-                return RendererError::RENDERER_BACKEND_INIT_FAILED;
+                return Error("Failed to initialize the D3D11 graphics backend");
             }
         }
         else if (_config.backend == RendererBackend::BACKEND_D3D_9) {
             _d3d9Backend = std::make_unique<D3D9Backend>();
             if (!_d3d9Backend->Init(_config)) {
                 _d3d9Backend.reset();
-                return RendererError::RENDERER_BACKEND_INIT_FAILED;
+                return Error("Failed to initialize the D3D9 graphics backend");
             }
         }
         else if (_config.backend == RendererBackend::BACKEND_D3D_12) {
             _d3d12Backend = std::make_unique<D3D12Backend>();
             if (!_d3d12Backend->Init(_config)) {
                 _d3d12Backend.reset();
-                return RendererError::RENDERER_BACKEND_INIT_FAILED;
+                return Error("Failed to initialize the D3D12 graphics backend");
             }
         }
 
         _initialized = true;
-        return RendererError::RENDERER_NONE;
+        return {};
     }
 
     void Renderer::Shutdown() {

@@ -13,6 +13,9 @@
 #include "network_peer.h"
 #include "state.h"
 
+#include <utils/error.h>
+#include <utils/result.h>
+
 #include <mafianet/types.h>
 #include <mafianet/peerinterface.h>
 #include <string>
@@ -46,15 +49,15 @@ namespace Framework::Networking {
 
         ~NetworkClient();
 
-        [[nodiscard]] NetworkPeerError Init();
+        [[nodiscard]] Utils::Result<void, Error> Init();
         void Shutdown() override;
 
         void Update() override;
         bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) override;
 
-        ConnectionError Connect(const std::string &host, int32_t port, const std::string &password = "");
+        [[nodiscard]] Utils::Result<void, Error> Connect(const std::string &host, int32_t port, const std::string &password = "");
 
-        ConnectionError Disconnect();
+        [[nodiscard]] Utils::Result<void, Error> Disconnect();
 
         int GetPing() const;
 

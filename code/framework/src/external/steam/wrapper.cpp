@@ -11,41 +11,58 @@
 #include <logging/logger.h>
 
 namespace Framework::External::Steam {
-    SteamError Wrapper::Init() {
+    Utils::Result<void, Framework::Error> Wrapper::Init() {
         if (!SteamAPI_IsSteamRunning()) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Steam API is not running");
-            return SteamError::STEAM_CLIENT_NOT_RUNNING;
+            return Framework::Error("Steam client is not running");
         }
 
         if (!SteamAPI_Init()) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam API");
-            return SteamError::STEAM_INIT_FAILED;
+            return Framework::Error("Failed to initialize the Steam API");
         }
 
         if (!SteamUser()->BLoggedOn()) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("User is not logged on");
-            return SteamError::STEAM_USER_NOT_LOGGED_ON;
+            SteamAPI_Shutdown();
+            return Framework::Error("Steam user is not logged on");
         }
 
-        _ctx = std::make_unique<CSteamAPIContext>();
-
-        if (!_ctx) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to create steam api context");
-            return SteamError::STEAM_CONTEXT_CREATION_FAILED;
+        auto ctx = std::make_unique<CSteamAPIContext>();
+        if (!ctx->Init()) {
+            SteamAPI_Shutdown();
+            return Framework::Error("Failed to initialize the Steam API context");
         }
 
-        if (!_ctx->Init()) {
-            Logging::GetLogger(FRAMEWORK_INNER_INTEGRATIONS)->debug("Failed to init steam context");
-            return SteamError::STEAM_CONTEXT_INIT_FAILED;
-        }
-
+        _ctx         = std::move(ctx);
         _initialized = true;
-        return SteamError::STEAM_NONE;
+        return {};
     }
 
     void Wrapper::Shutdown() {
         SteamAPI_Shutdown();
         Lifecycle::Shutdown();
+    }
+
+    bool Wrapper::IsAppInstalled(uint32_t appId) const {
+        if (!_ctx) {
+            return false;
+        }
+        ISteamApps *apps = _ctx->SteamApps();
+        return apps && apps->BIsAppInstalled(appId);
+    }
+
+    std::string Wrapper::GetAppInstallDir(uint32_t appId) const {
+        if (!_ctx) {
+            return {};
+        }
+        ISteamApps *apps = _ctx->SteamApps();
+        if (!apps) {
+            return {};
+        }
+        char path[1024] = {0};
+        const auto length = apps->GetAppInstallDir(appId, path, sizeof(path));
+        if (length == 0 || length >= sizeof(path)) {
+            return {};
+        }
+        return path;
     }
 
     CSteamID Wrapper::GetSteamID() const {

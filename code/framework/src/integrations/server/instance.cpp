@@ -47,15 +47,14 @@ namespace Framework::Integrations::Server {
         sig_detach(this);
     }
 
-    ServerError Instance::Init(InstanceOptions &opts) {
+    Utils::Result<void, Error> Instance::Init(InstanceOptions &opts) {
         _opts = opts;
 
         if (opts.gameName.empty() || opts.gameVersion.empty()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Game name and version are required");
-            return ServerError::SERVER_INVALID_OPTIONS;
+            return Error("Game name and version are required");
         }
 
-        CoreModules::SetTickRate(opts.worldConfig.tickInterval);
+        CoreModules::SetTickInterval(opts.worldConfig.tickInterval);
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);
@@ -79,27 +78,34 @@ namespace Framework::Integrations::Server {
 
         // Load JSON config if present
         if (!LoadConfigFromJSON()) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to parse JSON config file");
-            return ServerError::SERVER_CONFIG_PARSE_ERROR;
+            return Error("Failed to parse JSON config file '" + _opts.modConfigFile + "'");
         }
 
         // Finally apply back to the structure that is used everywhere the settings from the parser
         _opts.bindHost = result["host"].as<std::string>();
         _opts.bindPort = result["port"].as<int32_t>();
 
+        if (_opts.bindHost.empty()) {
+            return Error("bindHost is required");
+        }
+        if (_opts.bindPort <= 0 || _opts.bindPort > 65535) {
+            return Error("bindPort must be in the range 1-65535 (got " + std::to_string(_opts.bindPort) + ")");
+        }
+        if (_opts.maxPlayers <= 0) {
+            return Error("maxPlayers must be greater than 0 (got " + std::to_string(_opts.maxPlayers) + ")");
+        }
+
         // Initialize the logging instance with the mod slug name
         Logging::GetInstance()->SetLogName(_opts.modSlug);
 
         // Initialize the web server
         if (_opts.webServerEnabled && _webServer->Init(_opts.webBindHost, _opts.webBindPort, _opts.httpServeDir) != HTTP::WebserverError::WEBSERVER_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the webserver engine");
-            return ServerError::SERVER_WEBSERVER_INIT_FAILED;
+            return Error("Failed to initialize the webserver on " + _opts.webBindHost + ":" + std::to_string(_opts.webBindPort));
         }
 
         // Initialize our networking engine
-        if (_networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword) != Framework::Networking::NetworkPeerError::NETWORK_PEER_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the networking engine");
-            return ServerError::SERVER_NETWORKING_INIT_FAILED;
+        if (auto netResult = _networkingEngine->Init(_opts.bindHost, _opts.bindPort, _opts.maxPlayers, _opts.bindPassword); !netResult) {
+            return netResult;
         }
 
         CoreModules::SetNetworkPeer(_networkingEngine->GetNetworkServer());
@@ -114,9 +120,7 @@ namespace Framework::Integrations::Server {
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
             replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
-                if (_onPlayerDisconnectCallback) {
-                    _onPlayerDisconnectCallback(guid);
-                }
+                OnPlayerDisconnect(guid);
             });
         }
 
@@ -149,8 +153,7 @@ namespace Framework::Integrations::Server {
         // Initialize the scripting engine
         _scriptingModule->SetResourcesPath(_opts.resourcesPath);
         if (_scriptingModule->Init(sdkCallback) != Framework::Scripting::ScriptingError::SCRIPTING_NONE) {
-            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->critical("Failed to initialize the scripting engine");
-            return ServerError::SERVER_SCRIPTING_INIT_FAILED;
+            return Error("Failed to initialize the scripting engine");
         }
 
         CoreModules::SetScriptingModule(_scriptingModule.get());
@@ -193,7 +196,7 @@ namespace Framework::Integrations::Server {
 
         _initialized  = true;
         _shuttingDown = false;
-        return ServerError::SERVER_NONE;
+        return {};
     }
 
     void Instance::InitEndpoints() {
@@ -247,7 +250,7 @@ namespace Framework::Integrations::Server {
         return true;
     }
 
-    void Instance::InitNetworkingMessages() const {
+    void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkServer();
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
@@ -302,14 +305,12 @@ namespace Framework::Integrations::Server {
 
             // The game builds the avatar and registers it as this connection's viewer; hand it the
             // metadata so it spawns with the real nickname/slot.
-            if (_onPlayerConnectCallback) {
-                PlayerConnectionData data;
-                data.guid        = peerGuid;
-                data.playerIndex = guid.systemIndex;
-                data.nickname    = nickname;
-                data.hardwareID  = payload.hardwareId;
-                _onPlayerConnectCallback(data);
-            }
+            PlayerConnectionData data;
+            data.guid        = peerGuid;
+            data.playerIndex = guid.systemIndex;
+            data.nickname    = nickname;
+            data.hardwareID  = payload.hardwareId;
+            OnPlayerConnect(data);
 
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);
@@ -321,7 +322,7 @@ namespace Framework::Integrations::Server {
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
-        // observes via SetOnChatMessageCallback / SetOnChatCommandCallback.
+        // observes via the OnChatMessage / OnChatCommand overrides.
         net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *packet) {
             if (payload.text.empty()) {
                 return;
@@ -344,17 +345,12 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
     }
 
-    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const {
+    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) {
         if (text.empty()) {
             return;
         }
         if (text[0] != '/') {
-            if (_onChatMessageCallback) {
-                _onChatMessageCallback(senderNetworkId, text);
-            }
-            return;
-        }
-        if (!_onChatCommandCallback) {
+            OnChatMessage(senderNetworkId, text);
             return;
         }
         // Same tokenizer as console commands, so a line parses identically on both surfaces.
@@ -364,7 +360,7 @@ namespace Framework::Integrations::Server {
         }
         const std::string command = std::move(tokens.front());
         tokens.erase(tokens.begin());
-        _onChatCommandCallback(senderNetworkId, text, command, tokens);
+        OnChatCommand(senderNetworkId, text, command, tokens);
     }
 
     void Instance::InitAssetStreamer() {
@@ -479,15 +475,15 @@ namespace Framework::Integrations::Server {
             if (result.GetError() != Utils::CommandProcessorError::COMMAND_NONE) {
                 switch (result.GetError()) {
                     case Utils::CommandProcessorError::COMMAND_PRINT_HELP:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}", result.GetValue());
                         break;
                     case Utils::CommandProcessorError::COMMAND_UNKNOWN:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Unknown command ({}): {}", command, result.GetValue());
                         break;
                     case Utils::CommandProcessorError::COMMAND_EMPTY_INPUT:
                         break;
                     case Utils::CommandProcessorError::COMMAND_INTERNAL_ERROR:
-                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.Unwrap());
+                        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, result.GetValue());
                         break;
                     default:
                         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Error processing command ({}): {}", command, static_cast<int>(result.GetError()));

@@ -8,8 +8,14 @@
 
 #include "config.h"
 
+#include <logging/logger.h>
+
 namespace Framework::Utils {
     Config::Config(): _document(std::make_unique<nlohmann::json>()) {
+    }
+
+    void Config::LogUnparsedAccess(std::string_view field) const {
+        Logging::GetLogger("Config")->error("Read of '{}' on an unparsed config (returning default): {}", field, _lastError);
     }
     Config::~Config() = default;
     bool Config::Parse(const std::string &content) {
