@@ -32,11 +32,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Fetch the private services-adapter submodule when FW_SERVICES_PAT is
-          # available (internal branches/PRs) so MafiaHubServices is built from
-          # source against the current vendored fmt/spdlog. Fork PRs have no PAT,
-          # so the submodule is skipped and the build falls back to the public
-          # prebuilt MafiaHubServices release.
           submodules: ${{ secrets.FW_SERVICES_PAT != '' && 'recursive' || 'false' }}
           token: ${{ secrets.FW_SERVICES_PAT || github.token }}
                               
