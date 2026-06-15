@@ -37,7 +37,7 @@ namespace Framework::External::ImGUI::Widgets {
         window_flags |= ImGuiWindowFlags_NoMove;
         ImGui::SetNextWindowBgAlpha(0.35f);
 
-        const auto windowName = fmt::format("Overlay #{}", corner);
+        const auto windowName = fmt::format("Overlay #{}", static_cast<int>(corner));
 
         if (ImGui::Begin(windowName.c_str(), nullptr, window_flags)) {
             ImGui::Text("%s", text.c_str());
