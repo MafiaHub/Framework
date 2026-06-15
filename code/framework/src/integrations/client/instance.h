@@ -30,13 +30,6 @@
 #include <input/input.h>
 
 namespace Framework::Integrations::Client {
-    // Fired once the connection handshake completes, with the server tick rate.
-    using NetworkConnectionFinalizedCallback = fu2::function<void(float) const>;
-    using NetworkConnectionClosedCallback    = fu2::function<void() const>;
-    using AssetsDownloadFinishedCallback     = fu2::function<void(bool success) const>;
-    // Fired when the server sends a chat line to display.
-    using NetworkChatMessageCallback         = fu2::function<void(const std::string &text) const>;
-
     class Instance;
 
     class AssetDownloadFileProgress final: public MafiaNet::FileListTransferCBInterface {
@@ -100,10 +93,6 @@ namespace Framework::Integrations::Client {
 
         // Local state tracking
         CurrentState _currentState;
-        NetworkConnectionFinalizedCallback _onConnectionFinalized;
-        NetworkConnectionClosedCallback _onConnectionClosed;
-        AssetsDownloadFinishedCallback _onAssetsDownloadFinished;
-        NetworkChatMessageCallback _onChatMessageReceived;
 
         // assets
         AssetDownloadStatus _downloadStatus {};
@@ -135,13 +124,28 @@ namespace Framework::Integrations::Client {
         void Render();
         void Update() override;
 
+        // Override what you need; this is the whole extension surface (no Set*Callback setters).
+        // Order: Init -> PostInit; tick: Update -> PostUpdate, Render -> PostRender; Shutdown -> PreShutdown.
+        // On connect: assets -> scripting init (ModuleRegister) -> PostScriptInit -> OnConnectionFinalized.
         virtual void PostInit() {}
         virtual void PostUpdate() {}
         virtual void PostRender() {}
         virtual void PreShutdown() {}
-
+        // Client scripting comes up only after a connection; unavailable before this.
+        virtual void PostScriptInit() {}
         virtual void ModuleRegister(Framework::Scripting::Engine *engine) {
             (void)engine;
+        }
+
+        virtual void OnConnectionFinalized(float serverTickRate) {
+            (void)serverTickRate;
+        }
+        virtual void OnConnectionClosed() {}
+        virtual void OnAssetsDownloadFinished(bool success) {
+            (void)success;
+        }
+        virtual void OnChatMessageReceived(const std::string &text) {
+            (void)text;
         }
 
         [[nodiscard]] Utils::Result<void, Error> RenderInit();
@@ -161,27 +165,9 @@ namespace Framework::Integrations::Client {
             _currentState.serverIDHash = Framework::Utils::Hashing::CalculateCRC32(_currentState.host + ":" + std::to_string(_currentState.port));
         }
 
-        void SetOnConnectionFinalizedCallback(NetworkConnectionFinalizedCallback cb) {
-            _onConnectionFinalized = std::move(cb);
-        }
-
-        void SetOnConnectionClosedCallback(NetworkConnectionClosedCallback cb) {
-            _onConnectionClosed = std::move(cb);
-        }
-
-        void SetOnAssetsDownloadFinishedCallback(AssetsDownloadFinishedCallback cb) {
-            _onAssetsDownloadFinished = std::move(cb);
-        }
-
-        void SetOnChatMessageReceivedCallback(NetworkChatMessageCallback cb) {
-            _onChatMessageReceived = std::move(cb);
-        }
-
         // Invoked by the chat RPC handler with a line received from the server.
-        void DispatchReceivedChat(const std::string &text) const {
-            if (_onChatMessageReceived) {
-                _onChatMessageReceived(text);
-            }
+        void DispatchReceivedChat(const std::string &text) {
+            OnChatMessageReceived(text);
         }
 
         // Send a chat line to the server (the local player's outgoing text).

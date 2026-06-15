@@ -357,9 +357,7 @@ namespace Framework::Integrations::Client {
                 CoreModules::SetReplication(replication);
                 replication->SetAutoSerializeInterval(static_cast<MafiaNet::Time>(_serverTickRate * 1000.0f));
             }
-            if (_onConnectionFinalized) {
-                _onConnectionFinalized(_serverTickRate);
-            }
+            OnConnectionFinalized(_serverTickRate);
         });
 
         // Version mismatches don't reach here — they fail the build challenge (WRONG_VERSION).
@@ -386,9 +384,7 @@ namespace Framework::Integrations::Client {
             CoreModules::SetReplication(nullptr);
 
             // Notify mod-level that network integration got closed
-            if (_onConnectionClosed) {
-                _onConnectionClosed();
-            }
+            OnConnectionClosed();
 
             // Reset the scripting engine (keeps engine alive, just stops resources)
             _scriptingModule->Reset();
@@ -504,6 +500,8 @@ namespace Framework::Integrations::Client {
 
                 Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Client scripting engine initialized");
 
+                PostScriptInit();
+
                 // Pass the pending resource list to the scripting module (without triggering download logic)
                 if (!_pendingServerResources.empty()) {
                     scriptingModule->SetServerResourceList(_pendingServerResources);
@@ -547,9 +545,7 @@ namespace Framework::Integrations::Client {
         _downloadStatus = {};
 
         // Let the mod-level know assets have just been finished processing
-        if (_onAssetsDownloadFinished) {
-            _onAssetsDownloadFinished(success);
-        }
+        OnAssetsDownloadFinished(success);
     }
 
     void Instance::RegisterScriptingBuiltins(Framework::Scripting::Engine *engine) {

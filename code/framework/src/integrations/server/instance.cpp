@@ -120,9 +120,7 @@ namespace Framework::Integrations::Server {
             // Replication owns connection teardown: when a peer drops, it notifies the game (avatar
             // still resolvable) just before destroying and broadcasting the destruction of the avatar.
             replication->SetOnClientDisconnect([this](MafiaNet::PeerGuid guid) {
-                if (_onPlayerDisconnectCallback) {
-                    _onPlayerDisconnectCallback(guid);
-                }
+                OnPlayerDisconnect(guid);
             });
         }
 
@@ -252,7 +250,7 @@ namespace Framework::Integrations::Server {
         return true;
     }
 
-    void Instance::InitNetworkingMessages() const {
+    void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkServer();
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
@@ -307,14 +305,12 @@ namespace Framework::Integrations::Server {
 
             // The game builds the avatar and registers it as this connection's viewer; hand it the
             // metadata so it spawns with the real nickname/slot.
-            if (_onPlayerConnectCallback) {
-                PlayerConnectionData data;
-                data.guid        = peerGuid;
-                data.playerIndex = guid.systemIndex;
-                data.nickname    = nickname;
-                data.hardwareID  = payload.hardwareId;
-                _onPlayerConnectCallback(data);
-            }
+            PlayerConnectionData data;
+            data.guid        = peerGuid;
+            data.playerIndex = guid.systemIndex;
+            data.nickname    = nickname;
+            data.hardwareID  = payload.hardwareId;
+            OnPlayerConnect(data);
 
             // Gate opens: this connection now starts receiving the replicated world.
             net->PushReplicationConnection(guid);
@@ -326,7 +322,7 @@ namespace Framework::Integrations::Server {
         });
 
         // Incoming chat from clients. Sender resolution + command parsing happen here; the mod
-        // observes via SetOnChatMessageCallback / SetOnChatCommandCallback.
+        // observes via the OnChatMessage / OnChatCommand overrides.
         net->RegisterRPC<Framework::Networking::RPC::ChatMessage>([this](const Framework::Networking::RPC::ChatMessage &payload, MafiaNet::Packet *packet) {
             if (payload.text.empty()) {
                 return;
@@ -349,17 +345,12 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Networking messages registered");
     }
 
-    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) const {
+    void Instance::HandleIncomingChat(uint64_t senderNetworkId, const std::string &text) {
         if (text.empty()) {
             return;
         }
         if (text[0] != '/') {
-            if (_onChatMessageCallback) {
-                _onChatMessageCallback(senderNetworkId, text);
-            }
-            return;
-        }
-        if (!_onChatCommandCallback) {
+            OnChatMessage(senderNetworkId, text);
             return;
         }
         // Same tokenizer as console commands, so a line parses identically on both surfaces.
@@ -369,7 +360,7 @@ namespace Framework::Integrations::Server {
         }
         const std::string command = std::move(tokens.front());
         tokens.erase(tokens.begin());
-        _onChatCommandCallback(senderNetworkId, text, command, tokens);
+        OnChatCommand(senderNetworkId, text, command, tokens);
     }
 
     void Instance::InitAssetStreamer() {
