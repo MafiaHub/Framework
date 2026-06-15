@@ -14,6 +14,7 @@
 #include "modules/bitops_ut.h"
 #include "modules/interpolator_ut.h"
 #include "modules/result_ut.h"
+#include "modules/network_packets_ut.h"
 #include "modules/state_machine_ut.h"
 
 // Scripting tests
@@ -31,6 +32,7 @@ int main() {
     UNIT_MODULE(bitops);
     UNIT_MODULE(interpolator);
     UNIT_MODULE(result);
+    UNIT_MODULE(network_packets);
     UNIT_MODULE(state_machine);
 
     // Scripting tests

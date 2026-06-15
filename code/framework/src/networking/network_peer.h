@@ -137,6 +137,11 @@ namespace Framework::Networking {
         void Update() override;
         virtual bool HandlePacket(uint8_t packetID, MafiaNet::Packet *packet) = 0;
 
+        // Byte offset of the packet id in a datagram, skipping an optional ID_TIMESTAMP + 8-byte
+        // MafiaNet::Time prefix. Returns -1 if too short. Pure + tested so the skip width can't drift
+        // from what RakNet writes (a wrong width reads the id mid-timestamp — phantom control packets).
+        static int ResolvePacketDataOffset(const uint8_t *data, uint32_t length);
+
         // Server-only; base no-op lets shared code kick through a NetworkPeer* without a cast.
         virtual void KickPlayer(MafiaNet::RakNetGUID, DisconnectionReason, const std::string & = "") {}
 
