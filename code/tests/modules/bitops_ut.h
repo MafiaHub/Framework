@@ -22,6 +22,14 @@ MODULE(bitops, {
     static_assert(!BitHas(0b1010ULL, 0b0001ULL));
     static_assert(BitNot(0ULL) == ~0ULL);
 
+    // Variable and mask types are deduced independently: these mixed pairs must
+    // compile on every toolchain. A single shared template parameter rejected
+    // them on LP64 GCC/Clang, where uint64_t (unsigned long) and unsigned long
+    // long are distinct types despite sharing a width.
+    static_assert(BitHas(uint64_t {0b1010}, 0b0010));     // uint64_t var, int mask
+    static_assert(BitHas(uint32_t {0b1010}, 0b0010ULL));  // narrow var, ULL mask
+    static_assert(!BitHas(uint16_t {0b1010}, 0b0001ULL));
+
     IT("BitFlag builds a single-bit mask at the given position", {
         UEQUALS(BitFlag(0), 1ULL);
         UEQUALS(BitFlag(3), 8ULL);
@@ -90,5 +98,32 @@ MODULE(bitops, {
         EQUALS(BitHas(p, Perm::Write), false);
         BitSet(p, Perm::Write);
         EQUALS(BitHas(p, Perm::Write), true);
+    });
+
+    IT("deduces variable and mask types independently across widths and literals", {
+        // Exactly the shape that broke under a single shared template parameter:
+        // a uint64_t variable combined with int and ULL literals.
+        uint64_t wide = 0b1010ULL;
+        BitSet(wide, 0b0100);    // int mask
+        UEQUALS(wide, 0b1110ULL);
+        BitClear(wide, 0b0010ULL); // ULL mask
+        UEQUALS(wide, 0b1100ULL);
+        EQUALS(BitHas(wide, 0b0100), true);
+        BitXor(wide, 0b1100ULL);
+        UEQUALS(wide, 0ULL);
+
+        // A narrow variable driven by a wider mask keeps the variable's type.
+        uint32_t narrow = 0;
+        BitSet(narrow, 0b0101ULL);
+        UEQUALS(narrow, 0b0101u);
+        BitAnd(narrow, 0b0100ULL);
+        UEQUALS(narrow, 0b0100u);
+
+        // An enum variable accepts a plain integer mask (and the reverse).
+        enum class Flag : uint32_t { A = 1u << 0, B = 1u << 1, C = 1u << 2 };
+        Flag f = Flag::A;
+        BitSet(f, 0b0100u); // integer mask onto an enum variable
+        EQUALS(BitHas(f, Flag::C), true);
+        EQUALS(BitHas(f, 0b0010u), false);
     });
 });
