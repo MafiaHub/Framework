@@ -54,7 +54,7 @@ namespace Framework::Integrations::Server {
             return Error("Game name and version are required");
         }
 
-        CoreModules::SetTickRate(opts.worldConfig.tickInterval);
+        CoreModules::SetTickInterval(opts.worldConfig.tickInterval);
 
         // First level is argument parser, because we might want to overwrite stuffs
         cxxopts::Options options(_opts.modSlug, _opts.modHelpText);

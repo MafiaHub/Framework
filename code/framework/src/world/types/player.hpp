@@ -19,7 +19,7 @@ namespace Framework::World::Archetypes {
     // connection's viewer — its position/streamRange drive that client's interest set. The caller
     // registers it as the viewer for the player's GUID via ReplicationManager::SetViewer. Player
     // metadata (nickname, hardware id) belongs on the game's player NetworkEntity subclass.
-    class PlayerFactory {
+    class PlayerArchetype {
       public:
         void SetupClient(Replication::NetworkEntity *entity, MafiaNet::PeerGuid guid) {
             if (entity) {

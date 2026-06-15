@@ -38,11 +38,7 @@ namespace Framework {
         }                                                                      \
     } while (0)
 
-    /**
-     * @brief Class that couples modules together
-     *
-     * It registers and provides an easy way to access modules from each other.
-     */
+    // Process-global module registry; not thread-safe (set at init, read on the main loop).
     class CoreModules final {
       public:
         static void Reset() noexcept {
@@ -79,8 +75,8 @@ namespace Framework {
             _input = input;
         }
 
-        static void SetTickRate(double tickRate) noexcept {
-            _tickRate = tickRate;
+        static void SetTickInterval(double seconds) noexcept {
+            _tickInterval = seconds;
         }
 
         // Singleton getters
@@ -104,8 +100,8 @@ namespace Framework {
             return _input;
         }
 
-        static double GetTickRate() noexcept {
-            return _tickRate;
+        static double GetTickInterval() noexcept {
+            return _tickInterval;
         }
 
       private:
@@ -114,6 +110,6 @@ namespace Framework {
         static inline Scripting::ScriptingModule *_scriptingModule {};
         static inline GUI::Manager *_webManager {};
         static inline Input::IInput *_input {};
-        static inline double _tickRate {1000 / 60.0f};
+        static inline double _tickInterval {1.0 / 60.0};
     };
 } // namespace Framework
