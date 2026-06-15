@@ -8,23 +8,34 @@
 
 #pragma once
 
-// Define a flag at given position 'pos' in enum
-#define BIT_FLD(pos) (1U << (pos))
+#include <cstdint>
 
-// Set the bit specified by 'val' in 'var'
-#define BIT_SET(var, val) (((uint64_t)var) |= ((uint64_t)val))
+namespace Framework::Utils {
+    constexpr uint64_t BitFlag(uint32_t pos) {
+        return 1ULL << pos;
+    }
 
-// Clear the bit specified by 'val' in 'var'
-#define BIT_CLR(var, val) (((uint64_t)var) &= ~((uint64_t)val))
+    constexpr void BitSet(uint64_t &var, uint64_t val) {
+        var |= val;
+    }
 
-// Check if the bit specified by 'val' in 'var' is set
-#define BIT_HAS(var, val) (((uint64_t)var) & ((uint64_t)val))
+    constexpr void BitClear(uint64_t &var, uint64_t val) {
+        var &= ~val;
+    }
 
-// Perform bitwise NOT on 'var'
-#define BIT_NOT(var) (~((uint64_t)var))
+    constexpr bool BitHas(uint64_t var, uint64_t val) {
+        return (var & val) != 0;
+    }
 
-// Perform bitwise XOR between 'var' and 'mask'
-#define BIT_XOR(var, mask) (((uint64_t)var) ^= ((uint64_t)mask))
+    constexpr uint64_t BitNot(uint64_t var) {
+        return ~var;
+    }
 
-// Perform bitwise AND between 'var' and 'mask'
-#define BIT_AND(var, mask) (((uint64_t)var) &= ((uint64_t)mask))
+    constexpr void BitXor(uint64_t &var, uint64_t mask) {
+        var ^= mask;
+    }
+
+    constexpr void BitAnd(uint64_t &var, uint64_t mask) {
+        var &= mask;
+    }
+} // namespace Framework::Utils
