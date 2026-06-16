@@ -41,8 +41,10 @@ namespace Framework::Networking::Replication {
         if (!entity) {
             return;
         }
-        // GridSectorizer asserts on a zero-area entry, so insert a tiny box around the XZ position.
-        _grid.AddEntry(entity, entity->position.x - kPointEpsilon, entity->position.z - kPointEpsilon, entity->position.x + kPointEpsilon, entity->position.z + kPointEpsilon);
+        // GridSectorizer asserts on a zero-area entry, so insert a tiny box around the ground-plane
+        // position (X and the configured second axis).
+        const float v = GroundV(entity->position);
+        _grid.AddEntry(entity, entity->position.x - kPointEpsilon, v - kPointEpsilon, entity->position.x + kPointEpsilon, v + kPointEpsilon);
         _live.insert(entity);
         if (entity->ownerGUID != MafiaNet::UNASSIGNED_PEER_GUID) {
             _ownedByGuid[entity->ownerGUID].insert(entity);
@@ -83,8 +85,9 @@ namespace Framework::Networking::Replication {
         if (!_ready) {
             return;
         }
+        const float centerV = GroundV(center);
         _queryHits.Clear(true, _FILE_AND_LINE_);
-        _grid.GetEntries(_queryHits, center.x - radius, center.z - radius, center.x + radius, center.z + radius);
+        _grid.GetEntries(_queryHits, center.x - radius, centerV - radius, center.x + radius, centerV + radius);
 
         const float radiusSq = radius * radius;
         for (unsigned i = 0; i < _queryHits.Size(); ++i) {
@@ -94,9 +97,10 @@ namespace Framework::Networking::Replication {
             if (!entity || !_live.contains(entity)) {
                 continue;
             }
-            const glm::vec3 delta = entity->position - center;
-            // 2D (XZ) distance check; entries spanning multiple cells can repeat — the set dedupes.
-            if (delta.x * delta.x + delta.z * delta.z > radiusSq) {
+            const float dx = entity->position.x - center.x;
+            const float dv = GroundV(entity->position) - centerV;
+            // 2D ground-plane distance; entries spanning multiple cells can repeat — the set dedupes.
+            if (dx * dx + dv * dv > radiusSq) {
                 continue;
             }
             out.insert(entity);
