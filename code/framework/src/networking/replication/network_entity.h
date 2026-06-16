@@ -44,6 +44,27 @@ namespace Framework::Networking::Replication {
             }
         }
 
+        // Quantized writers — meaningful only on the plain-bitstream (transform-channel) path; on the
+        // VDS delta path they fall back to full precision so a single Serialize body can serve both.
+        void Float16(float &value, float min, float max) {
+            if (_plain) {
+                _plain->SerializeFloat16(_writePlain, value, min, max);
+            }
+            else {
+                Field(value);
+            }
+        }
+
+        template <typename T>
+        void BitsRange(T &value, T min, T max) {
+            if (_plain) {
+                _plain->SerializeBitsFromIntegerRange(_writePlain, value, min, max);
+            }
+            else {
+                Field(value);
+            }
+        }
+
       private:
         MafiaNet::VariableDeltaSerializer *_vds                                 = nullptr;
         MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize     = nullptr;
@@ -99,6 +120,17 @@ namespace Framework::Networking::Replication {
             (void)fields;
         }
         virtual void OnConstructed() {}
+
+        // Transform tier: the high-frequency pose, written raw to the unreliable serialize channel
+        // every tick (ReplicaManager3 memcmp-dedupes it, so a motionless entity stops sending).
+        // Override to quantize or extend; the default carries position/velocity/rotation.
+        virtual void SerializeTransform(FieldSerializer &fields);
+
+        // Called at the end of every per-tick Deserialize. transformUpdated is true when the update
+        // carried the transform channel — the seam an interpolating receiver uses to push a snapshot.
+        virtual void OnDeserialized(bool transformUpdated) {
+            (void)transformUpdated;
+        }
 
         // Server -> owner override of an owned entity (the owner is otherwise authoritative). Default
         // carries the transform; override to add state, e.g. a vehicle's engine/config.
@@ -158,9 +190,10 @@ namespace Framework::Networking::Replication {
         // clients adopt it. Single source of truth for the rule shared by construction and deltas.
         void AdoptIncomingOwner(MafiaNet::PeerGuid incomingOwner);
 
-        // The base replicated field set (owner, transform) in its single wire order, shared by
-        // construction, Serialize, and Deserialize so the three paths cannot drift apart. The state
-        // epoch travels separately as a raw prefix — see the comment in Serialize().
+        // The base reliable field set (owner authority) in its single wire order, shared by
+        // construction, Serialize, and Deserialize so the three paths cannot drift apart. The
+        // transform travels on its own unreliable channel (SerializeTransform); the state epoch
+        // travels as a raw prefix on each channel — see the comments in Serialize().
         void SerializeBaseFields(FieldSerializer &fields);
 
         // Apply an epoch received over the wire: clients adopt it; the server compares it and
