@@ -161,7 +161,8 @@ namespace Framework::Networking::Replication {
         serializeParameters->outputBitstream[kTransformChannel].Write(stateEpoch);
         FieldSerializer transform(&serializeParameters->outputBitstream[kTransformChannel], true);
         SerializeTransform(transform);
-        serializeParameters->pro[kTransformChannel].reliability = MafiaNet::Reliability::UnreliableSequenced;
+        serializeParameters->pro[kTransformChannel].reliability     = MafiaNet::Reliability::UnreliableSequenced;
+        serializeParameters->pro[kTransformChannel].orderingChannel = kTransformChannel;
 
         // Channel 1 — state: owner + game fields, VDS delta, reliable-ordered. whenLastSerialized == 0
         // means first send to a fresh system: write every variable in full; else only changed ones.
@@ -172,7 +173,8 @@ namespace Framework::Networking::Replication {
         SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
-        serializeParameters->pro[kStateChannel].reliability = MafiaNet::Reliability::ReliableOrdered;
+        serializeParameters->pro[kStateChannel].reliability    = MafiaNet::Reliability::ReliableOrdered;
+        serializeParameters->pro[kStateChannel].orderingChannel = kStateChannel;
 
         // Both channels carry recipient-identical bytes, so broadcast-identically: ReplicaManager3
         // serializes once per tick, reuses the bytes for every connection, and suppresses each channel
