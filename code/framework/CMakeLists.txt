@@ -289,6 +289,14 @@ if(LIBNODE_AVAILABLE)
     target_link_libraries(Framework libnode)
 endif()
 
+# The prebuilt MafiaHubServices (IMPORTED archive, created in src/services) references Framework
+# symbols (Utils::Time) but can't declare that dependency there since Framework isn't defined yet.
+# One-directional ordering only (Framework never links MafiaHubServices back): declare it here so
+# order-dependent GNU ld places Framework after it.
+if(TARGET MafiaHubServices)
+    target_link_libraries(MafiaHubServices INTERFACE Framework)
+endif()
+
 # Include scripting engine objects in Framework
 if(LIBNODE_AVAILABLE)
     target_sources(Framework PRIVATE $<TARGET_OBJECTS:FrameworkNodeEngine>)
