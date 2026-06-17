@@ -22,18 +22,22 @@ namespace Framework::Utils {
         return static_cast<T>(uint64_t {1} << pos);
     }
 
-    template <BitField T>
-    constexpr void BitSet(T &var, T val) {
+    // The variable's type T drives the result; the mask's type U is deduced
+    // independently so a literal (e.g. ULL) need not match T. Without this, a
+    // single shared T fails deduction wherever uint64_t and unsigned long long
+    // are distinct types (LP64 GCC/Clang), even though they share a width.
+    template <BitField T, BitField U>
+    constexpr void BitSet(T &var, U val) {
         var = static_cast<T>(static_cast<uint64_t>(var) | static_cast<uint64_t>(val));
     }
 
-    template <BitField T>
-    constexpr void BitClear(T &var, T val) {
+    template <BitField T, BitField U>
+    constexpr void BitClear(T &var, U val) {
         var = static_cast<T>(static_cast<uint64_t>(var) & ~static_cast<uint64_t>(val));
     }
 
-    template <BitField T>
-    constexpr bool BitHas(T var, T val) {
+    template <BitField T, BitField U>
+    constexpr bool BitHas(T var, U val) {
         return (static_cast<uint64_t>(var) & static_cast<uint64_t>(val)) != 0;
     }
 
@@ -42,13 +46,13 @@ namespace Framework::Utils {
         return static_cast<T>(~static_cast<uint64_t>(var));
     }
 
-    template <BitField T>
-    constexpr void BitXor(T &var, T val) {
+    template <BitField T, BitField U>
+    constexpr void BitXor(T &var, U val) {
         var = static_cast<T>(static_cast<uint64_t>(var) ^ static_cast<uint64_t>(val));
     }
 
-    template <BitField T>
-    constexpr void BitAnd(T &var, T val) {
+    template <BitField T, BitField U>
+    constexpr void BitAnd(T &var, U val) {
         var = static_cast<T>(static_cast<uint64_t>(var) & static_cast<uint64_t>(val));
     }
 } // namespace Framework::Utils

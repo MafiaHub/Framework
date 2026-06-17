@@ -66,7 +66,7 @@ struct InternalPacketFixedSizeTransmissionHeader
 	///How many bits long the data is
 	BitSize_t dataBitLength;
 	///What type of reliability algorithm to use with this packet
-	PacketReliability reliability;
+	MafiaNet::Reliability reliability;
 	// Not endian safe
 	// unsigned char priority : 3;
 	// unsigned char reliability : 5;
@@ -118,7 +118,7 @@ struct InternalPacket : public InternalPacketFixedSizeTransmissionHeader
 	/// How many attempts we made at sending this message
 	unsigned char timesSent;
 	/// The priority level of this packet
-	PacketPriority priority;
+	MafiaNet::Priority priority;
 	/// If the reliability type requires a receipt, then return this number with it
 	uint32_t sendReceiptSerial;
 

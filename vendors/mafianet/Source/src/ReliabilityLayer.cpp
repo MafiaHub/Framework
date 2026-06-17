@@ -507,7 +507,7 @@ void ReliabilityLayer::InitializeVariables()
 	datagramHistoryPopCount=0;
 
 	InitHeapWeights();
-	for (int i=0; i < NUMBER_OF_PRIORITIES; i++)
+	for (int i=0; i < MafiaNet::NUMBER_OF_PRIORITIES; i++)
 	{
 		statistics.messageInSendBuffer[i]=0;
 		statistics.bytesInSendBuffer[i]=0.0;
@@ -984,9 +984,9 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 
 				// Check for corrupt orderingChannel
 				if ( 
-					internalPacket->reliability == RELIABLE_SEQUENCED ||
-					internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-					internalPacket->reliability == RELIABLE_ORDERED
+					internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+					internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+					internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered
 					)
 				{
 					if (internalPacket->orderingChannel >= NUMBER_OF_ORDERED_STREAMS) {
@@ -1004,7 +1004,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 
 				// 8/12/09 was previously not checking if the message was reliable. However, on packetloss this would mean you'd eventually exceed the
 				// hole count because unreliable messages were never resent, and you'd stop getting messages
-				if (internalPacket->reliability == RELIABLE || internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == RELIABLE_ORDERED) {
+				if (internalPacket->reliability == MafiaNet::Reliability::Reliable || internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced || internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered) {
 					// If the following conditional is true then this either a duplicate packet
 					// or an older out of order packet
 					// The subtraction unsigned overflow is intentional
@@ -1110,7 +1110,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 
 
 				/*
-				if (internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == UNRELIABLE_SEQUENCED) {
+				if (internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced || internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced) {
 #ifdef _DEBUG
 					RakAssert(internalPacket->orderingChannel < NUMBER_OF_ORDERED_STREAMS);
 #endif
@@ -1177,7 +1177,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 				if ( internalPacket->splitPacketCount > 0 )
 				{
 					// Check for a rebuilt packet
-					if ( internalPacket->reliability != RELIABLE_ORDERED )
+					if ( internalPacket->reliability != MafiaNet::Reliability::ReliableOrdered )
 						internalPacket->orderingChannel = 255; // Use 255 to designate not sequenced and not ordered
 
 					InsertIntoSplitPacketList( internalPacket, timeRead );
@@ -1195,7 +1195,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 				*/
 
 				/*
-				if ( internalPacket->reliability == RELIABLE_ORDERED )
+				if ( internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered )
 				{
 #ifdef _DEBUG
 					RakAssert( internalPacket->orderingChannel < NUMBER_OF_ORDERED_STREAMS );
@@ -1272,7 +1272,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 				if ( internalPacket->splitPacketCount > 0 )
 				{
 					// Check for a rebuilt packet
-					if ( internalPacket->reliability != RELIABLE_ORDERED && internalPacket->reliability!=RELIABLE_SEQUENCED && internalPacket->reliability!=UNRELIABLE_SEQUENCED)
+					if ( internalPacket->reliability != MafiaNet::Reliability::ReliableOrdered && internalPacket->reliability!=MafiaNet::Reliability::ReliableSequenced && internalPacket->reliability!=MafiaNet::Reliability::UnreliableSequenced)
 						internalPacket->orderingChannel = 255; // Use 255 to designate not sequenced and not ordered
 
 					InsertIntoSplitPacketList( internalPacket, timeRead );
@@ -1296,9 +1296,9 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 				unsigned char packetId;
 				char *type="UNDEFINED";
 #endif
-				if (internalPacket->reliability == RELIABLE_SEQUENCED ||
-					internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-					internalPacket->reliability == RELIABLE_ORDERED)
+				if (internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+					internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+					internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered)
 				{
 #ifdef PRINT_TO_FILE_RELIABLE_ORDERED_TEST
 
@@ -1307,7 +1307,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 					unsigned int receivedPacketNumber;
 					MafiaNet::Time receivedTime;
 					unsigned char streamNumber;
-					PacketReliability reliability;
+					MafiaNet::Reliability reliability;
 					// ___________________
 
 
@@ -1320,12 +1320,12 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 					if (packetId==ID_USER_PACKET_ENUM+1)
 					{
 
-						if (reliability==UNRELIABLE_SEQUENCED)
-							type="UNRELIABLE_SEQUENCED";
-						else if (reliability==RELIABLE_ORDERED)
-							type="RELIABLE_ORDERED";
+						if (reliability==MafiaNet::Reliability::UnreliableSequenced)
+							type="UnreliableSequenced";
+						else if (reliability==MafiaNet::Reliability::ReliableOrdered)
+							type="ReliableOrdered";
 						else
-							type="RELIABLE_SEQUENCED";
+							type="ReliableSequenced";
 					}
 					// ___________________
 #endif
@@ -1334,8 +1334,8 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 					if (internalPacket->orderingIndex==orderedReadIndex[internalPacket->orderingChannel])
 					{
 						// Has current ordering index
-						if (internalPacket->reliability == RELIABLE_SEQUENCED ||
-							internalPacket->reliability == UNRELIABLE_SEQUENCED)
+						if (internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+							internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced)
 						{
 							// Is sequenced
 							if (IsOlderOrderedPacket(internalPacket->sequencingIndex,highestSequencedReadIndex[internalPacket->orderingChannel])==false)
@@ -1364,7 +1364,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 #endif
 								// Update highest sequence
 								// 6/26/2012 - Did not have the +1 in the next statement
-								// Means a duplicated RELIABLE_SEQUENCED or UNRELIABLE_SEQUENCED packet would be returned to the user
+								// Means a duplicated MafiaNet::Reliability::ReliableSequenced or MafiaNet::Reliability::UnreliableSequenced packet would be returned to the user
 								highestSequencedReadIndex[internalPacket->orderingChannel] = internalPacket->sequencingIndex+(OrderingIndexType)1;
 
 								// Fallthrough, returned to user below
@@ -1438,10 +1438,10 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 								bitStream2.Read(streamNumber);
 								bitStream2.Read(reliability);
 								char *type="UNDEFINED";
-								if (reliability==UNRELIABLE_SEQUENCED)
-									type="UNRELIABLE_SEQUENCED";
-								else if (reliability==RELIABLE_ORDERED)
-									type="RELIABLE_ORDERED";
+								if (reliability==MafiaNet::Reliability::UnreliableSequenced)
+									type="UnreliableSequenced";
+								else if (reliability==MafiaNet::Reliability::ReliableOrdered)
+									type="ReliableOrdered";
 
 								if (packetId==ID_USER_PACKET_ENUM+1 && fp)
 								{
@@ -1463,7 +1463,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 								bpsMetrics[(int) USER_MESSAGE_BYTES_RECEIVED_PROCESSED].Push1(timeRead,BITS_TO_BYTES(internalPacket->dataBitLength));
 								outputQueue.Push( internalPacket, _FILE_AND_LINE_  );
 
-								if (internalPacket->reliability == RELIABLE_ORDERED)
+								if (internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered)
 								{
 									orderedReadIndex[internalPacket->orderingChannel]++;
 								}
@@ -1489,8 +1489,8 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer(
 
 						reliabilityHeapWeightType orderedHoleCount = internalPacket->orderingIndex-heapIndexOffsets[internalPacket->orderingChannel];
 						reliabilityHeapWeightType weight = orderedHoleCount*1048576;
-						if (internalPacket->reliability == RELIABLE_SEQUENCED ||
-							internalPacket->reliability == UNRELIABLE_SEQUENCED)
+						if (internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+							internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced)
 							weight+=internalPacket->sequencingIndex;
 						else
 							weight+=(1048576-1);
@@ -1587,11 +1587,11 @@ BitSize_t ReliabilityLayer::Receive( unsigned char **data )
 // reliability is what reliability to use
 // ordering channel is from 0 to 255 and specifies what stream to use
 //-------------------------------------------------------------------------------------------------------
-bool ReliabilityLayer::Send( char *data, BitSize_t numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, unsigned char orderingChannel, bool makeDataCopy, int MTUSize, CCTimeType currentTime, uint32_t receipt )
+bool ReliabilityLayer::Send( char *data, BitSize_t numberOfBitsToSend, MafiaNet::Priority priority, MafiaNet::Reliability reliability, unsigned char orderingChannel, bool makeDataCopy, int MTUSize, CCTimeType currentTime, uint32_t receipt )
 {
 #ifdef _DEBUG
-	RakAssert( !( reliability >= NUMBER_OF_RELIABILITIES || reliability < 0 ) );
-	RakAssert( !( priority > NUMBER_OF_PRIORITIES || priority < 0 ) );
+	RakAssert( !( (unsigned int)reliability >= MafiaNet::NUMBER_OF_RELIABILITIES || (int)reliability < 0 ) );
+	RakAssert( !( (int)priority > (int)MafiaNet::NUMBER_OF_PRIORITIES || (int)priority < 0 ) );
 	RakAssert( !( orderingChannel >= NUMBER_OF_ORDERED_STREAMS ) );
 	RakAssert( numberOfBitsToSend > 0 );
 #endif
@@ -1605,11 +1605,11 @@ bool ReliabilityLayer::Send( char *data, BitSize_t numberOfBitsToSend, PacketPri
 	//	int a = BITS_TO_BYTES(numberOfBitsToSend);
 
 	// Fix any bad parameters
-	if ( reliability > RELIABLE_ORDERED_WITH_ACK_RECEIPT || reliability < 0 )
-		reliability = RELIABLE;
+	if ( reliability > MafiaNet::Reliability::ReliableOrderedWithAckReceipt || (int)reliability < 0 )
+		reliability = MafiaNet::Reliability::Reliable;
 
-	if ( priority > NUMBER_OF_PRIORITIES || priority < 0 )
-		priority = HIGH_PRIORITY;
+	if ( (int)priority > (int)MafiaNet::NUMBER_OF_PRIORITIES || (int)priority < 0 )
+		priority = MafiaNet::Priority::High;
 
 	if ( orderingChannel >= NUMBER_OF_ORDERED_STREAMS )
 		orderingChannel = 0;
@@ -1661,20 +1661,20 @@ bool ReliabilityLayer::Send( char *data, BitSize_t numberOfBitsToSend, PacketPri
 	{
 		// Split packets cannot be unreliable, in case that one part doesn't arrive and the whole cannot be reassembled.
 		// One part could not arrive either due to packetloss or due to unreliable discard
-		if (internalPacket->reliability==UNRELIABLE)
-			internalPacket->reliability=RELIABLE;
-		else if (internalPacket->reliability==UNRELIABLE_WITH_ACK_RECEIPT)
-			internalPacket->reliability=RELIABLE_WITH_ACK_RECEIPT;
-		else if (internalPacket->reliability==UNRELIABLE_SEQUENCED)
-			internalPacket->reliability=RELIABLE_SEQUENCED;
+		if (internalPacket->reliability==MafiaNet::Reliability::Unreliable)
+			internalPacket->reliability=MafiaNet::Reliability::Reliable;
+		else if (internalPacket->reliability==MafiaNet::Reliability::UnreliableWithAckReceipt)
+			internalPacket->reliability=MafiaNet::Reliability::ReliableWithAckReceipt;
+		else if (internalPacket->reliability==MafiaNet::Reliability::UnreliableSequenced)
+			internalPacket->reliability=MafiaNet::Reliability::ReliableSequenced;
 //		else if (internalPacket->reliability==UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT)
 //			internalPacket->reliability=RELIABLE_SEQUENCED_WITH_ACK_RECEIPT;
 	}
 
 	//	++sendMessageNumberIndex;
 
-	if ( internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == UNRELIABLE_SEQUENCED
+	if ( internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced
 //		||
 //		internalPacket->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT ||
 //		internalPacket->reliability == UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT
@@ -1693,13 +1693,13 @@ bool ReliabilityLayer::Send( char *data, BitSize_t numberOfBitsToSend, PacketPri
 		// For example, with sequenced unreliable sound packets just because you send a newer one doesn't mean you
 		// don't need the older ones because the odds are they will still arrive in order
 		/*
-		for (int i=0; i < NUMBER_OF_PRIORITIES; i++)
+		for (int i=0; i < MafiaNet::NUMBER_OF_PRIORITIES; i++)
 		{
 		DeleteSequencedPacketsInList(orderingChannel, sendQueue[i]);
 		}
 		*/
 	}
-	else if ( internalPacket->reliability == RELIABLE_ORDERED || internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT )
+	else if ( internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered || internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt )
 	{
 		// Assign the ordering channel and index
 		internalPacket->orderingChannel = orderingChannel;
@@ -1724,7 +1724,7 @@ bool ReliabilityLayer::Send( char *data, BitSize_t numberOfBitsToSend, PacketPri
 
 	RakAssert(internalPacket->dataBitLength<BYTES_TO_BITS(MAXIMUM_MTU_SIZE));
 	RakAssert(internalPacket->messageNumberAssigned==false);
-	outgoingPacketBuffer.Push( GetNextWeight(internalPacket->priority), internalPacket, _FILE_AND_LINE_  );
+	outgoingPacketBuffer.Push( GetNextWeight((int)internalPacket->priority), internalPacket, _FILE_AND_LINE_  );
 	RakAssert(outgoingPacketBuffer.Size()==0 || outgoingPacketBuffer.Peek()->dataBitLength<BYTES_TO_BITS(MAXIMUM_MTU_SIZE));
 	statistics.messageInSendBuffer[(int)internalPacket->priority]++;
 	statistics.bytesInSendBuffer[(int)internalPacket->priority]+=(double) BITS_TO_BYTES(internalPacket->dataBitLength);
@@ -1899,7 +1899,7 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 	bandwidthExceededStatistic=outgoingPacketBuffer.Size()>0;
 
 	const bool hasDataToSendOrResend = IsResendQueueEmpty()==false || bandwidthExceededStatistic;
-	RakAssert(NUMBER_OF_PRIORITIES==4);
+	RakAssert(MafiaNet::NUMBER_OF_PRIORITIES==4);
 	congestionManager.Update(time, hasDataToSendOrResend);
 
 	statistics.BPSLimitByOutgoingBandwidthLimit = BITS_TO_BYTES(bitsPerSecondLimit);
@@ -1993,7 +1993,7 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 						bpsMetrics[(int) USER_MESSAGE_BYTES_RESENT].Push1(time,BITS_TO_BYTES(internalPacket->dataBitLength));
 
 						// Testing1
-// 						if (internalPacket->reliability==RELIABLE_ORDERED || internalPacket->reliability==RELIABLE_ORDERED_WITH_ACK_RECEIPT)
+// 						if (internalPacket->reliability==MafiaNet::Reliability::ReliableOrdered || internalPacket->reliability==MafiaNet::Reliability::ReliableOrderedWithAckReceipt)
 // 							printf("RESEND reliableMessageNumber %i with datagram %i\n", internalPacket->reliableMessageNumber.val, congestionManager.GetNextDatagramSequenceNumber().val);
 
 						PushPacket(time,internalPacket,true); // Affects GetNewTransmissionBandwidth()
@@ -2053,7 +2053,7 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 				)
 			{
 				// Fill with packets until MTU is reached
-				//	for ( i = 0; i < NUMBER_OF_PRIORITIES; i++ )
+				//	for ( i = 0; i < MafiaNet::NUMBER_OF_PRIORITIES; i++ )
 				//	{
 				pushedAnything=false;
 
@@ -2091,12 +2091,12 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 					}
 
 					bool isReliable;
-					if ( internalPacket->reliability == RELIABLE ||
-						internalPacket->reliability == RELIABLE_SEQUENCED ||
-						internalPacket->reliability == RELIABLE_ORDERED ||
-						internalPacket->reliability == RELIABLE_WITH_ACK_RECEIPT  ||
+					if ( internalPacket->reliability == MafiaNet::Reliability::Reliable ||
+						internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+						internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+						internalPacket->reliability == MafiaNet::Reliability::ReliableWithAckReceipt  ||
 //						internalPacket->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT  ||
-						internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+						internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 						)
 						isReliable = true;
 					else
@@ -2118,7 +2118,7 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 */
 //						||
 						// If needs an ack receipt, keep the internal packet around in the list
-//						internalPacket->reliability == UNRELIABLE_WITH_ACK_RECEIPT ||
+//						internalPacket->reliability == MafiaNet::Reliability::UnreliableWithAckReceipt ||
 //						internalPacket->reliability == UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT
 						)
 					{
@@ -2154,7 +2154,7 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 						//		printf("post:%i ", unacknowledgedBytes);
 						sendReliableMessageNumberIndex++;
 					}
-					else if (internalPacket->reliability == UNRELIABLE_WITH_ACK_RECEIPT)
+					else if (internalPacket->reliability == MafiaNet::Reliability::UnreliableWithAckReceipt)
 					{
 						unreliableWithAckReceiptHistory.Push(UnreliableWithAckReceiptNode(
 							congestionManager.GetNextDatagramSequenceNumber() + packetsToSendThisUpdateDatagramBoundaries.Size(),
@@ -2168,7 +2168,7 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 					bpsMetrics[(int) USER_MESSAGE_BYTES_SENT].Push1(time,BITS_TO_BYTES(internalPacket->dataBitLength));
 
 					// Testing1
-// 					if (internalPacket->reliability==RELIABLE_ORDERED || internalPacket->reliability==RELIABLE_ORDERED_WITH_ACK_RECEIPT)
+// 					if (internalPacket->reliability==MafiaNet::Reliability::ReliableOrdered || internalPacket->reliability==MafiaNet::Reliability::ReliableOrderedWithAckReceipt)
 // 						printf("SEND reliableMessageNumber %i in datagram %i\n", internalPacket->reliableMessageNumber.val, congestionManager.GetNextDatagramSequenceNumber().val);
 
 					PushPacket(time,internalPacket, isReliable);
@@ -2236,8 +2236,8 @@ void ReliabilityLayer::UpdateInternal( RakNetSocket2 *s, SystemAddress &systemAd
 			while (msgIndex < msgTerm)
 			{
 				// If reliable or needs receipt
-				if ( packetsToSendThisUpdate[msgIndex]->reliability != UNRELIABLE &&
-					packetsToSendThisUpdate[msgIndex]->reliability != UNRELIABLE_SEQUENCED
+				if ( packetsToSendThisUpdate[msgIndex]->reliability != MafiaNet::Reliability::Unreliable &&
+					packetsToSendThisUpdate[msgIndex]->reliability != MafiaNet::Reliability::UnreliableSequenced
 					)
 				{
 					if (messageNumberNode==0)
@@ -2412,7 +2412,7 @@ bool ReliabilityLayer::IsOutgoingDataWaiting(void)
 		return true;
 
 	// 	unsigned i;
-	// 	for ( i = 0; i < NUMBER_OF_PRIORITIES; i++ )
+	// 	for ( i = 0; i < MafiaNet::NUMBER_OF_PRIORITIES; i++ )
 	// 	{
 	// 		if (sendPacketSet[ i ].Size() > 0)
 	// 			return true;
@@ -2511,7 +2511,7 @@ unsigned ReliabilityLayer::RemovePacketFromResendListAndDeleteOlderReliableSeque
 	(void) messageNumber;
 	InternalPacket * internalPacket;
 	//InternalPacket *temp;
-//	PacketReliability reliability; // What type of reliability algorithm to use with this packet
+//	MafiaNet::Reliability reliability; // What type of reliability algorithm to use with this packet
 //	unsigned char orderingChannel; // What ordering channel this packet is on, if the reliability type uses ordering channels
 //	OrderingIndexType orderingIndex; // The ID used as identification for ordering channels
 	//	unsigned j;
@@ -2554,7 +2554,7 @@ unsigned ReliabilityLayer::RemovePacketFromResendListAndDeleteOlderReliableSeque
 		totalUserDataBytesAcked+=(double) BITS_TO_BYTES(internalPacket->headerLength+internalPacket->dataBitLength);
 
 		// Return receipt if asked for
-		if (internalPacket->reliability>=RELIABLE_WITH_ACK_RECEIPT && 
+		if (internalPacket->reliability>=MafiaNet::Reliability::ReliableWithAckReceipt && 
 			(internalPacket->splitPacketCount==0 || internalPacket->splitPacketIndex+1==internalPacket->splitPacketCount)
 			)
 		{
@@ -2567,12 +2567,12 @@ unsigned ReliabilityLayer::RemovePacketFromResendListAndDeleteOlderReliableSeque
 		}
 
 		bool isReliable;
-		if ( internalPacket->reliability == RELIABLE ||
-			internalPacket->reliability == RELIABLE_SEQUENCED ||
-			internalPacket->reliability == RELIABLE_ORDERED ||
-			internalPacket->reliability == RELIABLE_WITH_ACK_RECEIPT  ||
+		if ( internalPacket->reliability == MafiaNet::Reliability::Reliable ||
+			internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+			internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+			internalPacket->reliability == MafiaNet::Reliability::ReliableWithAckReceipt  ||
 //			internalPacket->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT  ||
-			internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+			internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 			)
 			isReliable = true;
 		else
@@ -2618,7 +2618,7 @@ void ReliabilityLayer::SendAcknowledgementPacket( const DatagramSequenceNumberTy
 BitSize_t ReliabilityLayer::GetMaxMessageHeaderLengthBits( void )
 {
 	InternalPacket ip;
-	ip.reliability=RELIABLE_SEQUENCED;
+	ip.reliability=MafiaNet::Reliability::ReliableSequenced;
 	ip.splitPacketCount=1;
 	return GetMessageHeaderLengthBits(&ip);
 }
@@ -2637,33 +2637,33 @@ BitSize_t ReliabilityLayer::GetMessageHeaderLengthBits( const InternalPacket *co
 	//	unsigned short s; s = (unsigned short) internalPacket->dataBitLength; bitStream->WriteAlignedVar16((const char*)& s);
 	bitLength += 8*2;
 
-	if ( internalPacket->reliability == RELIABLE ||
-		internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_ORDERED ||
-		internalPacket->reliability == RELIABLE_WITH_ACK_RECEIPT ||
+	if ( internalPacket->reliability == MafiaNet::Reliability::Reliable ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableWithAckReceipt ||
 //		internalPacket->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT ||
-		internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 		)
 		bitLength += 8*3; // bitStream->Write(internalPacket->reliableMessageNumber); // Message sequence number
 	// bitStream->AlignWriteToByteBoundary(); // Potentially nothing else to write
 
 
 
-	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_SEQUENCED
+	if ( internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced
 		)
 	{
-		bitLength += 8*3;; // bitStream->Write(internalPacket->_sequencingIndex); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED.
+		bitLength += 8*3;; // bitStream->Write(internalPacket->_sequencingIndex); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered.
 	}
 
-	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_ORDERED ||
-		internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+	if ( internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 		)
 	{
-		bitLength += 8*3; // bitStream->Write(internalPacket->orderingIndex); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED.
-		bitLength += 8*1; // tempChar=internalPacket->orderingChannel; bitStream->WriteAlignedVar8((const char*)& tempChar); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED. 5 bits needed, write one byte
+		bitLength += 8*3; // bitStream->Write(internalPacket->orderingIndex); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered.
+		bitLength += 8*1; // tempChar=internalPacket->orderingChannel; bitStream->WriteAlignedVar8((const char*)& tempChar); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered. 5 bits needed, write one byte
 	}
 	if (internalPacket->splitPacketCount>0)
 	{
@@ -2687,12 +2687,12 @@ BitSize_t ReliabilityLayer::WriteToBitStreamFromInternalPacket(MafiaNet::BitStre
 
 	// (Incoming data may be all zeros due to padding)
 	bitStream->AlignWriteToByteBoundary(); // Potentially unaligned
-	if (internalPacket->reliability==UNRELIABLE_WITH_ACK_RECEIPT)
-		tempChar=UNRELIABLE;
-	else if (internalPacket->reliability==RELIABLE_WITH_ACK_RECEIPT)
-		tempChar=RELIABLE;
-	else if (internalPacket->reliability==RELIABLE_ORDERED_WITH_ACK_RECEIPT)
-		tempChar=RELIABLE_ORDERED;
+	if (internalPacket->reliability==MafiaNet::Reliability::UnreliableWithAckReceipt)
+		tempChar=(unsigned char)MafiaNet::Reliability::Unreliable;
+	else if (internalPacket->reliability==MafiaNet::Reliability::ReliableWithAckReceipt)
+		tempChar=(unsigned char)MafiaNet::Reliability::Reliable;
+	else if (internalPacket->reliability==MafiaNet::Reliability::ReliableOrderedWithAckReceipt)
+		tempChar=(unsigned char)MafiaNet::Reliability::ReliableOrdered;
 	else
 		tempChar=(unsigned char)internalPacket->reliability;
 
@@ -2702,30 +2702,30 @@ BitSize_t ReliabilityLayer::WriteToBitStreamFromInternalPacket(MafiaNet::BitStre
 	bitStream->AlignWriteToByteBoundary();
 	RakAssert(internalPacket->dataBitLength < 65535);
 	unsigned short s; s = (unsigned short) internalPacket->dataBitLength; bitStream->WriteAlignedVar16((const char*)& s);
-	if ( internalPacket->reliability == RELIABLE ||
-		internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_ORDERED ||
-		internalPacket->reliability == RELIABLE_WITH_ACK_RECEIPT ||
-		internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+	if ( internalPacket->reliability == MafiaNet::Reliability::Reliable ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableWithAckReceipt ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 		)
 		bitStream->Write(internalPacket->reliableMessageNumber); // Used for all reliable types
 	bitStream->AlignWriteToByteBoundary(); // Potentially nothing else to write
 
-	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_SEQUENCED
+	if ( internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced
 		)
 	{
-		bitStream->Write(internalPacket->sequencingIndex); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED.
+		bitStream->Write(internalPacket->sequencingIndex); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered.
 	}
 
-	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_ORDERED ||
-		internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+	if ( internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 		)
 	{
-		bitStream->Write(internalPacket->orderingIndex); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED.
-		tempChar=internalPacket->orderingChannel; bitStream->WriteAlignedVar8((const char*)& tempChar); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED. 5 bits needed, write one byte
+		bitStream->Write(internalPacket->orderingIndex); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered.
+		tempChar=internalPacket->orderingChannel; bitStream->WriteAlignedVar8((const char*)& tempChar); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered. 5 bits needed, write one byte
 	}
 
 	if (internalPacket->splitPacketCount>0)
@@ -2773,39 +2773,39 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream(MafiaNet::Bi
 	// (Incoming data may be all zeros due to padding)
 	bitStream->AlignReadToByteBoundary(); // Potentially unaligned
 	bitStream->ReadBits( ( unsigned char* ) ( &( tempChar ) ), 3 );
-	internalPacket->reliability = ( const PacketReliability ) tempChar;
+	internalPacket->reliability = ( const MafiaNet::Reliability ) tempChar;
 	readSuccess=bitStream->Read(hasSplitPacket); // Read 1 bit to indicate if splitPacketCount>0
 	bitStream->AlignReadToByteBoundary();
 	unsigned short s; bitStream->ReadAlignedVar16((char*)&s); internalPacket->dataBitLength=s; // Length of message (2 bytes)
-	if ( internalPacket->reliability == RELIABLE ||
-		internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_ORDERED
+	if ( internalPacket->reliability == MafiaNet::Reliability::Reliable ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered
 		// I don't write ACK_RECEIPT to the remote system
 // 		||
-// 		internalPacket->reliability == RELIABLE_WITH_ACK_RECEIPT ||
+// 		internalPacket->reliability == MafiaNet::Reliability::ReliableWithAckReceipt ||
 // 		internalPacket->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT ||
-// 		internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+// 		internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 		)
 		bitStream->Read(internalPacket->reliableMessageNumber); // Message sequence number
 	else
 		internalPacket->reliableMessageNumber=(MessageNumberType)(const uint32_t)-1;
 	bitStream->AlignReadToByteBoundary(); // Potentially nothing else to Read
 
-	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_SEQUENCED
+	if ( internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced
 		)
 	{
-		bitStream->Read(internalPacket->sequencingIndex); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED.
+		bitStream->Read(internalPacket->sequencingIndex); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered.
 	}
 
-	if ( internalPacket->reliability == UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_SEQUENCED ||
-		internalPacket->reliability == RELIABLE_ORDERED ||
-		internalPacket->reliability == RELIABLE_ORDERED_WITH_ACK_RECEIPT
+	if ( internalPacket->reliability == MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableSequenced ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrdered ||
+		internalPacket->reliability == MafiaNet::Reliability::ReliableOrderedWithAckReceipt
 		)
 	{
-		bitStream->Read(internalPacket->orderingIndex); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED. 4 bytes.
-		readSuccess=bitStream->ReadAlignedVar8((char*)& internalPacket->orderingChannel); // Used for UNRELIABLE_SEQUENCED, RELIABLE_SEQUENCED, RELIABLE_ORDERED. 5 bits needed, Read one byte
+		bitStream->Read(internalPacket->orderingIndex); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered. 4 bytes.
+		readSuccess=bitStream->ReadAlignedVar8((char*)& internalPacket->orderingChannel); // Used for MafiaNet::Reliability::UnreliableSequenced, MafiaNet::Reliability::ReliableSequenced, MafiaNet::Reliability::ReliableOrdered. 5 bits needed, Read one byte
 	}
 	else
 		internalPacket->orderingChannel=0;
@@ -2830,7 +2830,7 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream(MafiaNet::Bi
 
 	if (readSuccess==false ||
 		internalPacket->dataBitLength==0 ||
-		internalPacket->reliability>=NUMBER_OF_RELIABILITIES ||
+		(unsigned int)internalPacket->reliability>=MafiaNet::NUMBER_OF_RELIABILITIES ||
 		internalPacket->orderingChannel>=32 || 
 		(hasSplitPacket && (internalPacket->splitPacketIndex >= internalPacket->splitPacketCount)))
 	{
@@ -2914,8 +2914,8 @@ void ReliabilityLayer::DeleteSequencedPacketsInList( unsigned char orderingChann
 	while ( i < theList.Size() )
 	{
 		if ( ( 
-			theList[ i ]->reliability == RELIABLE_SEQUENCED ||
-			theList[ i ]->reliability == UNRELIABLE_SEQUENCED 
+			theList[ i ]->reliability == MafiaNet::Reliability::ReliableSequenced ||
+			theList[ i ]->reliability == MafiaNet::Reliability::UnreliableSequenced 
 //			||
 //			theList[ i ]->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT ||
 //			theList[ i ]->reliability == UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT
@@ -2946,8 +2946,8 @@ void ReliabilityLayer::DeleteSequencedPacketsInList( unsigned char orderingChann
 	while ( i < listSize )
 	{
 		if ( (
-			theList[ i ]->reliability == RELIABLE_SEQUENCED ||
-			theList[ i ]->reliability == UNRELIABLE_SEQUENCED
+			theList[ i ]->reliability == MafiaNet::Reliability::ReliableSequenced ||
+			theList[ i ]->reliability == MafiaNet::Reliability::UnreliableSequenced
 //			||
 //			theList[ i ]->reliability == RELIABLE_SEQUENCED_WITH_ACK_RECEIPT ||
 //			theList[ i ]->reliability == UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT
@@ -3086,7 +3086,7 @@ void ReliabilityLayer::SplitPacket( InternalPacket *internalPacket )
 		//		sendPacketSet[ internalPacket->priority ].Push( internalPacketArray[ i ], _FILE_AND_LINE_  );
 		RakAssert(internalPacketArray[ i ]->dataBitLength<BYTES_TO_BITS(MAXIMUM_MTU_SIZE));
 		RakAssert(internalPacketArray[ i ]->messageNumberAssigned==false);
-		outgoingPacketBuffer.PushSeries(GetNextWeight(internalPacketArray[ i ]->priority), internalPacketArray[ i ], _FILE_AND_LINE_);
+		outgoingPacketBuffer.PushSeries(GetNextWeight((int)internalPacketArray[ i ]->priority), internalPacketArray[ i ], _FILE_AND_LINE_);
 		RakAssert(outgoingPacketBuffer.Size()==0 || outgoingPacketBuffer.Peek()->dataBitLength<BYTES_TO_BITS(MAXIMUM_MTU_SIZE));
 		statistics.messageInSendBuffer[(int)internalPacketArray[ i ]->priority]++;
 		statistics.bytesInSendBuffer[(int)(int)internalPacketArray[ i ]->priority]+=(double) BITS_TO_BYTES(internalPacketArray[ i ]->dataBitLength);
@@ -3342,7 +3342,7 @@ if (time > splitPacketChannelList[i]->lastUpdateTime + timeoutTime &&
 #else
 if (time > splitPacketChannelList[i]->lastUpdateTime + (CCTimeType)timeoutTime*(CCTimeType)1000 &&
 #endif
-(splitPacketChannelList[i]->splitPacketList[0]->reliability==UNRELIABLE || splitPacketChannelList[i]->splitPacketList[0]->reliability==UNRELIABLE_SEQUENCED))
+(splitPacketChannelList[i]->splitPacketList[0]->reliability==MafiaNet::Reliability::Unreliable || splitPacketChannelList[i]->splitPacketList[0]->reliability==MafiaNet::Reliability::UnreliableSequenced))
 {
 for (j=0; j < splitPacketChannelList[i]->splitPacketList.Size(); j++)
 {
@@ -3602,7 +3602,7 @@ void ReliabilityLayer::ClearPacketsAndDatagrams(void)
 		{
 			RemoveFromUnreliableLinkedList(packetsToSendThisUpdate[i]);
 			FreeInternalPacketData(packetsToSendThisUpdate[i], _FILE_AND_LINE_ );
-			// if (keepInternalPacketIfNeedsAck==false || packetsToSendThisUpdate[i]->reliability<RELIABLE_WITH_ACK_RECEIPT)
+			// if (keepInternalPacketIfNeedsAck==false || packetsToSendThisUpdate[i]->reliability<MafiaNet::Reliability::ReliableWithAckReceipt)
 			ReleaseToInternalPacketPool( packetsToSendThisUpdate[i] );
 		}
 	}
@@ -3770,9 +3770,9 @@ void ReliabilityLayer::ReleaseToInternalPacketPool(InternalPacket *ip)
 //-------------------------------------------------------------------------------------------------------
 void ReliabilityLayer::RemoveFromUnreliableLinkedList(InternalPacket *internalPacket)
 {
-	if (internalPacket->reliability==UNRELIABLE ||
-		internalPacket->reliability==UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability==UNRELIABLE_WITH_ACK_RECEIPT
+	if (internalPacket->reliability==MafiaNet::Reliability::Unreliable ||
+		internalPacket->reliability==MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability==MafiaNet::Reliability::UnreliableWithAckReceipt
 //		||
 //		internalPacket->reliability==UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT
 		)
@@ -3790,9 +3790,9 @@ void ReliabilityLayer::RemoveFromUnreliableLinkedList(InternalPacket *internalPa
 //-------------------------------------------------------------------------------------------------------
 void ReliabilityLayer::AddToUnreliableLinkedList(InternalPacket *internalPacket)
 {
-	if (internalPacket->reliability==UNRELIABLE ||
-		internalPacket->reliability==UNRELIABLE_SEQUENCED ||
-		internalPacket->reliability==UNRELIABLE_WITH_ACK_RECEIPT
+	if (internalPacket->reliability==MafiaNet::Reliability::Unreliable ||
+		internalPacket->reliability==MafiaNet::Reliability::UnreliableSequenced ||
+		internalPacket->reliability==MafiaNet::Reliability::UnreliableWithAckReceipt
 //		||
 //		internalPacket->reliability==UNRELIABLE_SEQUENCED_WITH_ACK_RECEIPT
 		)
@@ -4001,7 +4001,7 @@ BitSize_t ReliabilityLayer::GetMaxDatagramSizeExcludingMessageHeaderBits(void)
 //-------------------------------------------------------------------------------------------------------
 void ReliabilityLayer::InitHeapWeights(void)
 {
-	for (int priorityLevel=0; priorityLevel < NUMBER_OF_PRIORITIES; priorityLevel++)
+	for (int priorityLevel=0; priorityLevel < MafiaNet::NUMBER_OF_PRIORITIES; priorityLevel++)
 		outgoingPacketBufferNextWeights[priorityLevel]=(1<<priorityLevel)*priorityLevel+priorityLevel;
 }
 //-------------------------------------------------------------------------------------------------------
@@ -4010,7 +4010,7 @@ reliabilityHeapWeightType ReliabilityLayer::GetNextWeight(int priorityLevel)
 	uint64_t next = outgoingPacketBufferNextWeights[priorityLevel];
 	if (outgoingPacketBuffer.Size()>0)
 	{
-		int peekPL = outgoingPacketBuffer.Peek()->priority;
+		int peekPL = (int)outgoingPacketBuffer.Peek()->priority;
 		reliabilityHeapWeightType weight = outgoingPacketBuffer.PeekWeight();
 		reliabilityHeapWeightType min = weight - (1<<peekPL)*peekPL+peekPL;
 		if (next<min)

@@ -90,7 +90,7 @@ public:
 	/// \param[in] orderingChannel Passed to RakPeerInterface::Send()
 	/// \param[in] _incrementalReadInterface If a file in \a fileList has no data, _incrementalReadInterface will be used to read the file in chunks of size \a chunkSize
 	/// \param[in] _chunkSize How large of a block of a file to read/send at once. Large values use more memory but transfer slightly faster.
-	void Send(FileList *fileList, MafiaNet::RakPeerInterface *rakPeer, SystemAddress recipient, unsigned short setID, PacketPriority priority, char orderingChannel, IncrementalReadInterface *_incrementalReadInterface=0, unsigned int _chunkSize=262144*4*16);
+	void Send(FileList *fileList, MafiaNet::RakPeerInterface *rakPeer, SystemAddress recipient, unsigned short setID, MafiaNet::Priority priority, char orderingChannel, IncrementalReadInterface *_incrementalReadInterface=0, unsigned int _chunkSize=262144*4*16);
 
 	/// Return number of files waiting to go out to a particular address
 	unsigned int GetPendingFilesToAddress(SystemAddress recipient);
@@ -145,7 +145,7 @@ protected:
 	struct FileToPush
 	{
 		FileListNode fileListNode;
-		PacketPriority packetPriority;
+		MafiaNet::Priority packetPriority;
 		char orderingChannel;
 		unsigned int currentOffset;
 		////unsigned short setID;

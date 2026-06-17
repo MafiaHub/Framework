@@ -165,9 +165,8 @@ public:
 	/// \brief Stops the network threads and closes all connections.
 	/// \param[in] blockDuration How long, in milliseconds, you should wait for all remaining messages to go out, including ID_DISCONNECTION_NOTIFICATION.  If 0, it doesn't wait at all.
 	/// \param[in] orderingChannel If blockDuration > 0, ID_DISCONNECTION_NOTIFICATION will be sent on this channel
-	/// \param[in] disconnectionNotificationPriority Priority to send ID_DISCONNECTION_NOTIFICATION on.
-	/// If you set it to 0 then the disconnection notification won't be sent
-	virtual void Shutdown( unsigned int blockDuration, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY )=0;
+	/// \param[in] disconnectionNotificationPriority Priority at which ID_DISCONNECTION_NOTIFICATION is sent. Note that a blockDuration of 0 means the threads stop without waiting for it to flush.
+	virtual void Shutdown( unsigned int blockDuration, unsigned char orderingChannel=0, MafiaNet::Priority disconnectionNotificationPriority=MafiaNet::Priority::Low )=0;
 
 	/// Returns if the network thread is running
 	/// \return true if the network thread is running, false otherwise
@@ -200,7 +199,7 @@ public:
 	/// \param[in] broadcast True to send this packet to all connected systems. If true, then systemAddress specifies who not to send the packet to.
 	/// \param[in] forceReceipt If 0, will automatically determine the receipt number to return. If non-zero, will return what you give it.
 	/// \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
-	virtual uint32_t Send( const char *data, const int length, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 )=0;
+	virtual uint32_t Send( const char *data, const int length, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 )=0;
 
 	/// "Send" to yourself rather than a remote system. The message will be processed through the plugins and returned to the game as usual
 	/// This function works anytime
@@ -219,7 +218,7 @@ public:
 	/// \param[in] forceReceipt If 0, will automatically determine the receipt number to return. If non-zero, will return what you give it.
 	/// \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
 	/// \note COMMON MISTAKE: When writing the first byte, bitStream->Write((unsigned char) ID_MY_TYPE) be sure it is casted to a byte, and you are not writing a 4 byte enumeration.
-	virtual uint32_t Send( const MafiaNet::BitStream * bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 )=0;
+	virtual uint32_t Send( const MafiaNet::BitStream * bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 )=0;
 
 	/// Sends multiple blocks of data, concatenating them automatically.
 	///
@@ -241,7 +240,7 @@ public:
 	/// \param[in] broadcast True to send this packet to all connected systems. If true, then systemAddress specifies who not to send the packet to.
 	/// \param[in] forceReceipt If 0, will automatically determine the receipt number to return. If non-zero, will return what you give it.
 	/// \return 0 on bad input. Otherwise a number that identifies this message. If \a reliability is a type that returns a receipt, on a later call to Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS with bytes 1-4 inclusive containing this number
-	virtual uint32_t SendList( const char **data, const int *lengths, const int numParameters, PacketPriority priority, PacketReliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 )=0;
+	virtual uint32_t SendList( const char **data, const int *lengths, const int numParameters, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel, const AddressOrGUID systemIdentifier, bool broadcast, uint32_t forceReceiptNumber=0 )=0;
 
 	/// Gets a message from the incoming message queue.
 	/// Use DeallocatePacket() to deallocate the message after you are done with it.
@@ -271,7 +270,7 @@ public:
 	///            (ID_CONNECTION_LOST and timeout/dead-connection paths) stay payload-less, so consumers must tolerate
 	///            a zero-length body. Pass nullptr (the default) for no reason. Appending bytes after the 1-byte ID is
 	///            wire-backward-compatible: peers that only read data[0] are unaffected.
-	virtual void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, PacketPriority disconnectionNotificationPriority=LOW_PRIORITY, const MafiaNet::BitStream *reasonData=nullptr )=0;
+	virtual void CloseConnection( const AddressOrGUID target, bool sendDisconnectionNotification, unsigned char orderingChannel=0, MafiaNet::Priority disconnectionNotificationPriority=MafiaNet::Priority::Low, const MafiaNet::BitStream *reasonData=nullptr )=0;
 
 	/// Returns if a system is connected, disconnected, connecting in progress, or various other states
 	/// \param[in] systemIdentifier The system we are referring to

@@ -234,7 +234,7 @@ void UDPProxyCoordinator::OnForwardingRequestFromClientToCoordinator(Packet *pac
 		RakString serverPublicIp;
 		outgoingBs.Write(serverPublicIp);
 		outgoingBs.Write(forwardingPort);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 		MafiaNet::OP_DELETE(fw, _FILE_AND_LINE_);
 		return;
 	}
@@ -246,7 +246,7 @@ void UDPProxyCoordinator::OnForwardingRequestFromClientToCoordinator(Packet *pac
 		outgoingBs.Write(sata.senderClientAddress);
 		outgoingBs.Write(targetAddress);
 		outgoingBs.Write(targetGuid);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 		MafiaNet::OP_DELETE(fw, _FILE_AND_LINE_);
 		return;
 	}
@@ -258,7 +258,7 @@ void UDPProxyCoordinator::OnForwardingRequestFromClientToCoordinator(Packet *pac
 		outgoingBs.Write(sata.senderClientAddress);
 		outgoingBs.Write(targetAddress);
 		outgoingBs.Write(targetGuid);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 		MafiaNet::OP_DELETE(fw, _FILE_AND_LINE_);
 		return;
 	}
@@ -278,8 +278,8 @@ void UDPProxyCoordinator::OnForwardingRequestFromClientToCoordinator(Packet *pac
 		unsigned int idx;
 		for (idx=0; idx < serverList.Size(); idx++)
 			outgoingBs.Write(serverList[idx]);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, sourceAddress, false);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, targetAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, sourceAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, targetAddress, false);
 		fw->timeRequestedPings= MafiaNet::GetTimeMS();
 		unsigned int copyIndex;
 		for (copyIndex=0; copyIndex < serverList.Size(); copyIndex++)
@@ -304,7 +304,7 @@ void UDPProxyCoordinator::SendForwardingRequest(SystemAddress sourceAddress, Sys
 	outgoingBs.Write(sourceAddress);
 	outgoingBs.Write(targetAddress);
 	outgoingBs.Write(timeoutOnNoDataMS);
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, serverAddress, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, serverAddress, false);
 }
 void UDPProxyCoordinator::OnLoginRequestFromServerToCoordinator(Packet *packet)
 {
@@ -319,7 +319,7 @@ void UDPProxyCoordinator::OnLoginRequestFromServerToCoordinator(Packet *packet)
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_GENERAL);
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_NO_PASSWORD_SET_FROM_COORDINATOR_TO_SERVER);
 		outgoingBs.Write(password);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 		return;
 	}
 
@@ -328,7 +328,7 @@ void UDPProxyCoordinator::OnLoginRequestFromServerToCoordinator(Packet *packet)
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_GENERAL);
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_WRONG_PASSWORD_FROM_COORDINATOR_TO_SERVER);
 		outgoingBs.Write(password);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 		return;
 	}
 
@@ -339,14 +339,14 @@ void UDPProxyCoordinator::OnLoginRequestFromServerToCoordinator(Packet *packet)
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_GENERAL);
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_ALREADY_LOGGED_IN_FROM_COORDINATOR_TO_SERVER);
 		outgoingBs.Write(password);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 		return;
 	}
 	serverList.Push(packet->systemAddress, _FILE_AND_LINE_ );
 	outgoingBs.Write((MessageID)ID_UDP_PROXY_GENERAL);
 	outgoingBs.Write((MessageID)ID_UDP_PROXY_LOGIN_SUCCESS_FROM_COORDINATOR_TO_SERVER);
 	outgoingBs.Write(password);
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 }
 void UDPProxyCoordinator::OnForwardingReplyFromServerToCoordinator(Packet *packet)
 {
@@ -394,7 +394,7 @@ void UDPProxyCoordinator::OnForwardingReplyFromServerToCoordinator(Packet *packe
 		outgoingBs.Write(sata.targetClientGuid);
 		outgoingBs.Write(serverPublicIp);
 		outgoingBs.Write(forwardingPort);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, fw->requestingAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, fw->requestingAddress, false);
 
 		outgoingBs.Reset();
 		outgoingBs.Write((MessageID)ID_UDP_PROXY_GENERAL);
@@ -404,7 +404,7 @@ void UDPProxyCoordinator::OnForwardingReplyFromServerToCoordinator(Packet *packe
 		outgoingBs.Write(sata.targetClientGuid);
 		outgoingBs.Write(serverPublicIp);
 		outgoingBs.Write(forwardingPort);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, sata.targetClientAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, sata.targetClientAddress, false);
 
 		// 05/18/09 Keep the entry around for some time after success, so duplicates are reported if attempting forwarding from the target system before notification of success
 		fw->timeoutAfterSuccess= MafiaNet::GetTimeMS()+fw->timeoutOnNoDataMS;
@@ -430,7 +430,7 @@ void UDPProxyCoordinator::OnForwardingReplyFromServerToCoordinator(Packet *packe
 		outgoingBs.Write(sata.targetClientGuid);
 		outgoingBs.Write(serverPublicIp);
 		outgoingBs.Write(forwardingPort);
-		rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, fw->requestingAddress, false);
+		rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, fw->requestingAddress, false);
 		forwardingRequestList.RemoveAtIndex(index);
 		MafiaNet::OP_DELETE(fw,_FILE_AND_LINE_);
 	}
@@ -527,7 +527,7 @@ void UDPProxyCoordinator::SendAllBusy(SystemAddress senderClientAddress, SystemA
 	outgoingBs.Write(senderClientAddress);
 	outgoingBs.Write(targetClientAddress);
 	outgoingBs.Write(targetClientGuid);
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, requestingAddress, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, requestingAddress, false);
 }
 void UDPProxyCoordinator::Clear(void)
 {

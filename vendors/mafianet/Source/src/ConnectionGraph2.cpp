@@ -184,7 +184,7 @@ void ConnectionGraph2::OnClosedConnection(const SystemAddress &systemAddress, Ra
 		bs.Write((MessageID)ID_REMOTE_DISCONNECTION_NOTIFICATION);
 	bs.Write(systemAddress);
 	bs.Write(rakNetGUID);
-	SendUnified(&bs,HIGH_PRIORITY,RELIABLE_ORDERED,0,systemAddress,true);
+	SendUnified(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,systemAddress,true);
 
 	bool objectExists;
 	unsigned int idx = remoteSystems.GetIndexFromKey(rakNetGUID, &objectExists);
@@ -211,7 +211,7 @@ void ConnectionGraph2::AddParticipant(const SystemAddress &systemAddress, RakNet
 	bs.Write(systemAddress);
 	bs.Write(rakNetGUID);
 	bs.WriteCasted<uint16_t>(rakPeerInterface->GetAveragePing(rakNetGUID));
-	SendUnified(&bs,HIGH_PRIORITY,RELIABLE_ORDERED,0,systemAddress,true);
+	SendUnified(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,systemAddress,true);
 
 	// Send everyone to the new guy
 	DataStructures::List<SystemAddress> addresses;
@@ -241,7 +241,7 @@ void ConnectionGraph2::AddParticipant(const SystemAddress &systemAddress, RakNet
 		bs.SetWriteOffset(writeOffset);
 		bs.Write(count);
 		bs.SetWriteOffset(writeOffset2);
-		SendUnified(&bs,HIGH_PRIORITY,RELIABLE_ORDERED,0,systemAddress,false);
+		SendUnified(&bs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,systemAddress,false);
 	}
 
 	bool objectExists;

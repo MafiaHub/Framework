@@ -89,17 +89,17 @@ void RelayPlugin::AddParticipantRequestFromClient(const RakString &key, const Ra
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
 	bsOut.WriteCasted<MessageID>(RPE_ADD_CLIENT_REQUEST_FROM_CLIENT);
 	bsOut.WriteCompressed(key);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, relayPluginServerGuid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, relayPluginServerGuid, false);
 }
 void RelayPlugin::RemoveParticipantRequestFromClient(const RakNetGUID &relayPluginServerGuid)
 {
 	BitStream bsOut;
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
 	bsOut.WriteCasted<MessageID>(RPE_REMOVE_CLIENT_REQUEST_FROM_CLIENT);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, relayPluginServerGuid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, relayPluginServerGuid, false);
 }
 // Send a message to a server running RelayPlugin, to forward a message to the system identified by \a key
-void RelayPlugin::SendToParticipant(const RakNetGUID &relayPluginServerGuid, const RakString &key, BitStream *bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel)
+void RelayPlugin::SendToParticipant(const RakNetGUID &relayPluginServerGuid, const RakString &key, BitStream *bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel)
 {
 	BitStream bsOut;
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
@@ -111,7 +111,7 @@ void RelayPlugin::SendToParticipant(const RakNetGUID &relayPluginServerGuid, con
 	bsOut.Write(bitStream);
 	SendUnified(&bsOut, priority, reliability, orderingChannel, relayPluginServerGuid, false);
 }
-void RelayPlugin::SendGroupMessage(const RakNetGUID &relayPluginServerGuid, BitStream *bitStream, PacketPriority priority, PacketReliability reliability, char orderingChannel)
+void RelayPlugin::SendGroupMessage(const RakNetGUID &relayPluginServerGuid, BitStream *bitStream, MafiaNet::Priority priority, MafiaNet::Reliability reliability, char orderingChannel)
 {
 	BitStream bsOut;
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
@@ -127,14 +127,14 @@ void RelayPlugin::LeaveGroup(const RakNetGUID &relayPluginServerGuid)
 	BitStream bsOut;
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
 	bsOut.WriteCasted<MessageID>(RPE_LEAVE_GROUP_REQUEST_FROM_CLIENT);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, relayPluginServerGuid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, relayPluginServerGuid, false);
 }
 void RelayPlugin::GetGroupList(const RakNetGUID &relayPluginServerGuid)
 {
 	BitStream bsOut;
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
 	bsOut.WriteCasted<MessageID>(RPE_GET_GROUP_LIST_REQUEST_FROM_CLIENT);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, relayPluginServerGuid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, relayPluginServerGuid, false);
 }
 PluginReceiveResult RelayPlugin::OnReceive(Packet *packet)
 {
@@ -146,14 +146,14 @@ PluginReceiveResult RelayPlugin::OnReceive(Packet *packet)
 			{
 				BitStream bsIn(packet->data, packet->length, false);
 				bsIn.IgnoreBytes(sizeof(MessageID)*2);
-				PacketPriority priority;
-				PacketReliability reliability;
+				MafiaNet::Priority priority;
+				MafiaNet::Reliability reliability;
 				char orderingChannel;
 				unsigned char cIn;
 				bsIn.Read(cIn);
-				priority = (PacketPriority) cIn;
+				priority = (MafiaNet::Priority) cIn;
 				bsIn.Read(cIn);
-				reliability = (PacketReliability) cIn;
+				reliability = (MafiaNet::Reliability) cIn;
 				bsIn.Read(orderingChannel);
 				RakString key;
 				bsIn.ReadCompressed(key);
@@ -188,7 +188,7 @@ PluginReceiveResult RelayPlugin::OnReceive(Packet *packet)
 				else
 					bsOut.WriteCasted<MessageID>(RPE_ADD_CLIENT_NOT_ALLOWED);
 				bsOut.WriteCompressed(key);
-				SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, false);
+				SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->systemAddress, false);
 
 				return RR_STOP_PROCESSING_AND_DEALLOCATE;
 			}
@@ -253,7 +253,7 @@ void RelayPlugin::JoinGroupRequest(const RakNetGUID &relayPluginServerGuid, RakS
 	bsOut.WriteCasted<MessageID>(ID_RELAY_PLUGIN);
 	bsOut.WriteCasted<MessageID>(RPE_JOIN_GROUP_REQUEST_FROM_CLIENT);
 	bsOut.WriteCompressed(groupName);
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, relayPluginServerGuid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, relayPluginServerGuid, false);
 }
 RelayPlugin::RP_Group* RelayPlugin::JoinGroup(RakNetGUID userGuid, RakString roomName)
 {
@@ -333,7 +333,7 @@ void RelayPlugin::NotifyUsersInRoom(RP_Group *room, int msg, const RakString& me
 		bsOut.WriteCasted<MessageID>(msg);
 		bsOut.WriteCompressed(message);
 
-		SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, room->usersInRoom[i].guid, false);
+		SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, room->usersInRoom[i].guid, false);
 	}
 }
 void RelayPlugin::SendMessageToRoom(StrAndGuidAndRoom **strAndGuidSender, BitStream* message)
@@ -357,7 +357,7 @@ void RelayPlugin::SendMessageToRoom(StrAndGuidAndRoom **strAndGuidSender, BitStr
 			for (unsigned int j=0; j < room->usersInRoom.Size(); j++)
 			{
 				if (room->usersInRoom[j].guid!=(*strAndGuidSender)->guid)
-					SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, room->usersInRoom[j].guid, false);
+					SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, room->usersInRoom[j].guid, false);
 			}
 
 			break;
@@ -375,21 +375,21 @@ void RelayPlugin::SendChatRoomsList(RakNetGUID target)
 		bsOut.WriteCompressed(chatRooms[i]->roomName);
 		bsOut.WriteCasted<uint16_t>(chatRooms[i]->usersInRoom.Size());
 	}
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, target, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, target, false);
 }
 void RelayPlugin::OnGroupMessageFromClient(Packet *packet)
 {
 	BitStream bsIn(packet->data, packet->length, false);
 	bsIn.IgnoreBytes(sizeof(MessageID)*2);
 
-	PacketPriority priority;
-	PacketReliability reliability;
+	MafiaNet::Priority priority;
+	MafiaNet::Reliability reliability;
 	char orderingChannel;
 	unsigned char cIn;
 	bsIn.Read(cIn);
-	priority = (PacketPriority) cIn;
+	priority = (MafiaNet::Priority) cIn;
 	bsIn.Read(cIn);
-	reliability = (PacketReliability) cIn;
+	reliability = (MafiaNet::Reliability) cIn;
 	bsIn.Read(orderingChannel);
 	BitStream bsData;
 	bsIn.Read(&bsData);
@@ -424,7 +424,7 @@ void RelayPlugin::OnJoinGroupRequestFromClient(Packet *packet)
 		bsOut.WriteCasted<MessageID>(RPE_JOIN_GROUP_FAILURE);
 	}
 
-	SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+	SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 }
 void RelayPlugin::OnLeaveGroupRequestFromClient(Packet *packet)
 {

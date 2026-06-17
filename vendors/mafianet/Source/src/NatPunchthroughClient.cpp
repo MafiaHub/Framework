@@ -73,7 +73,7 @@ void NatPunchthroughClient::FindRouterPortStride(const SystemAddress &facilitato
 
 	MafiaNet::BitStream outgoingBs;
 	outgoingBs.Write((MessageID)ID_NAT_REQUEST_BOUND_ADDRESSES);
-	rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,facilitator,false);
+	rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,facilitator,false);
 }
 bool NatPunchthroughClient::OpenNAT(RakNetGUID destination, const SystemAddress &facilitator)
 {
@@ -1001,7 +1001,7 @@ void NatPunchthroughClient::OnGetMostRecentPort(Packet *packet)
 		portWithStride = mostRecentExternalPort;
 	outgoingBs.Write(portWithStride);
 
-	rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet->systemAddress,false);
+	rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet->systemAddress,false);
 	sp.facilitator=packet->systemAddress;
 }
 /*
@@ -1036,7 +1036,7 @@ void NatPunchthroughClient::SendPunchthrough(RakNetGUID destination, const Syste
 	MafiaNet::BitStream outgoingBs;
 	outgoingBs.Write((MessageID)ID_NAT_PUNCHTHROUGH_REQUEST);
 	outgoingBs.Write(destination);
-	rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,facilitator,false);
+	rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,facilitator,false);
 
 //	RakAssert(rakPeerInterface->GetSystemAddressFromGuid(destination)==UNASSIGNED_SYSTEM_ADDRESS);
 
@@ -1089,7 +1089,7 @@ void NatPunchthroughClient::OnReadyForNextPunchthrough(void)
 
 	MafiaNet::BitStream outgoingBs;
 	outgoingBs.Write((MessageID)ID_NAT_CLIENT_READY);
-	rakPeerInterface->Send(&outgoingBs,HIGH_PRIORITY,RELIABLE_ORDERED,0,sp.facilitator,false);
+	rakPeerInterface->Send(&outgoingBs,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,sp.facilitator,false);
 }
 
 void NatPunchthroughClient::PushSuccess(void)

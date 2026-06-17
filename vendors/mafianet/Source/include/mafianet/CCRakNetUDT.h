@@ -160,7 +160,7 @@ class CCRakNetUDT
 	/// If the time difference between when a message was last transmitted, and the current time is greater than RTO then packet is eligible for retransmission, pending congestion control
 	/// RTO = (RTT + 4 * RTTVar) + SYN
 	/// If we have been continuously sending for the last RTO, and no ACK or NAK at all, SND*=2;
-	/// This is per message, which is different from UDT, but RakNet supports packetloss with continuing data where UDT is only RELIABLE_ORDERED
+	/// This is per message, which is different from UDT, but RakNet supports packetloss with continuing data where UDT is only MafiaNet::Reliability::ReliableOrdered
 	/// Minimum value is 100 milliseconds
 	CCTimeType GetRTOForRetransmission(unsigned char timesSent) const;
 

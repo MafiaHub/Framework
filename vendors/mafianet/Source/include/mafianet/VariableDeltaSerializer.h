@@ -65,7 +65,7 @@ public:
 		RemoteSystemVariableHistory *variableHistoryUnique;
 		ChangedVariablesList *changedVariables;
 		uint32_t sendReceipt;
-		PacketReliability serializationMode;
+		MafiaNet::Reliability serializationMode;
 		bool anyVariablesWritten;
 		bool newSystemSend; // Force send all, do not record
 	};
@@ -75,7 +75,7 @@ public:
 		BitStream *bitStream;
 	};
 
-	/// \brief Call before doing one or more SerializeVariable calls when the data will be sent UNRELIABLE_WITH_ACK_RECEIPT
+	/// \brief Call before doing one or more SerializeVariable calls when the data will be sent MafiaNet::Reliability::UnreliableWithAckReceipt
 	/// The last value of each variable will be saved per remote system. Additionally, a history of \a _sendReceipts is stored to determine what to resend on packetloss.
 	/// When variables are lost, they will be flagged dirty and always resent to the system that lost it
 	/// Disadvantages: Every variable for every remote system is copied internally, in addition to a history list of what variables changed for which \a _sendReceipt. Very memory and CPU intensive for multiple connections.
@@ -180,7 +180,7 @@ public:
 				context->anyVariablesWritten=true;
 			}
 		}
-		else if (context->serializationMode==UNRELIABLE_WITH_ACK_RECEIPT)
+		else if (context->serializationMode==MafiaNet::Reliability::UnreliableWithAckReceipt)
 		{
 			context->anyVariablesWritten|=
 			context->variableHistory->variableListDeltaTracker.WriteVarToBitstream(variable, context->bitStream, context->changedVariables->bitField, context->changedVariables->bitWriteIndex++);

@@ -157,7 +157,7 @@ bool TwoWayAuthentication::Challenge(MafiaNet::RakString identifier, AddressOrGU
 	MafiaNet::BitStream bsOut;
 	bsOut.Write((MessageID)ID_TWO_WAY_AUTHENTICATION_NEGOTIATION);
 	bsOut.Write((MessageID)ID_NONCE_REQUEST);
-	SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,remoteSystem,false);
+	SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,remoteSystem,false);
 
 	PendingChallenge pc;
 	pc.identifier=identifier;
@@ -299,7 +299,7 @@ void TwoWayAuthentication::OnNonceRequest(Packet *packet)
 	bsOut.Write((MessageID)ID_NONCE_REPLY);
 	bsOut.Write(requestId);
 	bsOut.WriteAlignedBytes((const unsigned char*) nonce,TWO_WAY_AUTHENTICATION_NONCE_LENGTH);
-	SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet,false);
+	SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet,false);
 }
 void TwoWayAuthentication::OnNonceReply(Packet *packet)
 {
@@ -337,7 +337,7 @@ void TwoWayAuthentication::OnNonceReply(Packet *packet)
 				bsOut.Write(requestId);
 				bsOut.Write(outgoingChallenges[i].identifier); // Identifier helps the other system lookup the password quickly.
 				bsOut.WriteAlignedBytes((const unsigned char*) hashedNonceAndPw,HASHED_NONCE_AND_PW_LENGTH);
-				SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet,false);
+				SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet,false);
 			}
 
 			return;
@@ -374,7 +374,7 @@ PluginReceiveResult TwoWayAuthentication::OnHashedNonceAndPassword(Packet *packe
 			bsOut.WriteAlignedBytes((const unsigned char*) usedNonce,TWO_WAY_AUTHENTICATION_NONCE_LENGTH);
 			bsOut.WriteAlignedBytes((const unsigned char*) remoteHashedNonceAndPw,HASHED_NONCE_AND_PW_LENGTH);
 			bsOut.Write(passwordIdentifier);
-			SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet,false);
+			SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet,false);
 
 			// Incoming success, modify packet header to tell user
 			PushToUser(ID_TWO_WAY_AUTHENTICATION_INCOMING_CHALLENGE_SUCCESS, passwordIdentifier, packet);
@@ -391,7 +391,7 @@ PluginReceiveResult TwoWayAuthentication::OnHashedNonceAndPassword(Packet *packe
 	bsOut.WriteAlignedBytes((const unsigned char*) usedNonce,TWO_WAY_AUTHENTICATION_NONCE_LENGTH);
 	bsOut.WriteAlignedBytes((const unsigned char*) remoteHashedNonceAndPw,HASHED_NONCE_AND_PW_LENGTH);
 	bsOut.Write(passwordIdentifier);
-	SendUnified(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,packet,false);
+	SendUnified(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,packet,false);
 
 	return RR_CONTINUE_PROCESSING;
 }

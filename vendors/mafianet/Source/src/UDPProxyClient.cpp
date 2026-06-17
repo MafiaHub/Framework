@@ -72,7 +72,7 @@ bool UDPProxyClient::RequestForwarding(SystemAddress proxyCoordinator, SystemAdd
 	{
 		outgoingBs.Write(false);
 	}
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, proxyCoordinator, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, proxyCoordinator, false);
 
 	return true;
 }
@@ -104,7 +104,7 @@ bool UDPProxyClient::RequestForwarding(SystemAddress proxyCoordinator, SystemAdd
 	{
 		outgoingBs.Write(false);
 	}
-	rakPeerInterface->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, proxyCoordinator, false);
+	rakPeerInterface->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, proxyCoordinator, false);
 
 	return true;
 }
@@ -308,7 +308,7 @@ void UDPProxyClient::PingServerGroup::SendPingedServersToCoordinator(RakPeerInte
 		outgoingBs.Write(serversToPing[serversToPingIndex].serverAddress);
 		outgoingBs.Write(serversToPing[serversToPingIndex].ping);
 	}
-	rakPeer->Send(&outgoingBs, MEDIUM_PRIORITY, RELIABLE_ORDERED, 0, coordinatorAddressForPings, false);
+	rakPeer->Send(&outgoingBs, MafiaNet::Priority::Medium, MafiaNet::Reliability::ReliableOrdered, 0, coordinatorAddressForPings, false);
 }
 void UDPProxyClient::Clear(void)
 {

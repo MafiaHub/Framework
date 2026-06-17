@@ -93,13 +93,13 @@ enum DefaultMessageIDTypes
 	/// RakPeer - Same as ID_ADVERTISE_SYSTEM, but intended for internal use rather than being passed to the user.
 	/// Second byte indicates type. Used currently for NAT punchthrough for receiver port advertisement. See ID_NAT_ADVERTISE_RECIPIENT_PORT
 	ID_OUT_OF_BAND_INTERNAL,
-	/// If RakPeerInterface::Send() is called where PacketReliability contains _WITH_ACK_RECEIPT, then on a later call to
+	/// If RakPeerInterface::Send() is called with one of the MafiaNet::Reliability ...WithAckReceipt values, then on a later call to
 	/// RakPeerInterface::Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS. The message will be 5 bytes long,
 	/// and bytes 1-4 inclusive will contain a number in native order containing a number that identifies this message.
 	/// This number will be returned by RakPeerInterface::Send() or RakPeerInterface::SendList(). ID_SND_RECEIPT_ACKED means that
 	/// the message arrived
 	ID_SND_RECEIPT_ACKED,
-	/// If RakPeerInterface::Send() is called where PacketReliability contains UNRELIABLE_WITH_ACK_RECEIPT, then on a later call to
+	/// If RakPeerInterface::Send() is called where MafiaNet::Reliability contains MafiaNet::Reliability::UnreliableWithAckReceipt, then on a later call to
 	/// RakPeerInterface::Receive() you will get ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS. The message will be 5 bytes long,
 	/// and bytes 1-4 inclusive will contain a number in native order containing a number that identifies this message. This number
 	/// will be returned by RakPeerInterface::Send() or RakPeerInterface::SendList(). ID_SND_RECEIPT_LOSS means that an ack for the

@@ -175,7 +175,7 @@ bool TM_TeamMember::RequestTeam(TeamSelection teamSelection)
 		bsOut.WriteCasted<MessageID>(ID_RUN_JoinAnyTeam);
 		bsOut.Write(world->GetWorldId());
 		bsOut.Write(networkId);
-		world->GetTeamManager()->SendUnified(&bsOut,HIGH_PRIORITY, RELIABLE_ORDERED, 0, world->GetHost(), false);
+		world->GetTeamManager()->SendUnified(&bsOut,MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, world->GetHost(), false);
 	}
 	else
 	{
@@ -205,7 +205,7 @@ bool TM_TeamMember::RequestTeam(TeamSelection teamSelection)
 		bsOut.Write(networkId);
 		bsOut.Write(teamSelection.teamParameter.specificTeamToJoin->GetNetworkID());
 		bsOut.Write(false);
-		world->GetTeamManager()->SendUnified(&bsOut,HIGH_PRIORITY, RELIABLE_ORDERED, 0, world->GetHost(), false);
+		world->GetTeamManager()->SendUnified(&bsOut,MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, world->GetHost(), false);
 	}
 
 	return true;
@@ -237,7 +237,7 @@ bool TM_TeamMember::RequestTeamSwitch(TM_Team *teamToJoin, TM_Team *teamToLeave)
 	{
 		bsOut.Write(false);
 	}
-	world->GetTeamManager()->SendUnified(&bsOut,HIGH_PRIORITY, RELIABLE_ORDERED, 0, world->GetHost(), false);
+	world->GetTeamManager()->SendUnified(&bsOut,MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, world->GetHost(), false);
 
 	return true;
 }
@@ -1105,7 +1105,7 @@ void TM_World::AddParticipant(RakNetGUID rakNetGUID)
 		bsOut.WriteCasted<MessageID>(ID_RUN_SetBalanceTeamsInitial);
 		bsOut.Write(GetWorldId());
 		bsOut.Write(balanceTeamsIsActive);
-		teamManager->SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0,rakNetGUID, false);
+		teamManager->SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0,rakNetGUID, false);
 	}
 }
 
@@ -1316,7 +1316,7 @@ bool TM_World::SetBalanceTeams(bool balanceTeams, NoTeamId noTeamId)
 	bsOut.Write(GetWorldId());
 	bsOut.Write(balanceTeams);
 	bsOut.Write(noTeamId);
-	GetTeamManager()->SendUnified(&bsOut,HIGH_PRIORITY, RELIABLE_ORDERED, 0, GetHost(), false);
+	GetTeamManager()->SendUnified(&bsOut,MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, GetHost(), false);
 
 	return true;
 }
@@ -1655,7 +1655,7 @@ void TM_World::BroadcastToParticipants(MafiaNet::BitStream *bsOut, RakNetGUID ex
 	{
 		if (participants[i]==exclusionGuid)
 			continue;
-		teamManager->SendUnified(bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, participants[i], false);
+		teamManager->SendUnified(bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, participants[i], false);
 	}
 }
 
@@ -1667,7 +1667,7 @@ void TM_World::BroadcastToParticipants(unsigned char *data, const int length, Ra
 	{
 		if (participants[i]==exclusionGuid)
 			continue;
-		teamManager->SendUnified((const char*) data, length, HIGH_PRIORITY, RELIABLE_ORDERED, 0, participants[i], false);
+		teamManager->SendUnified((const char*) data, length, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, participants[i], false);
 	}
 }
 
@@ -2285,7 +2285,7 @@ void TeamManager::OnNewConnection(const SystemAddress &systemAddress, RakNetGUID
 
 void TeamManager::Send( const MafiaNet::BitStream * bitStream, const AddressOrGUID systemIdentifier, bool broadcast )
 {
-	SendUnified(bitStream,HIGH_PRIORITY, RELIABLE_ORDERED, 0, systemIdentifier, broadcast);
+	SendUnified(bitStream,MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, systemIdentifier, broadcast);
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2418,7 +2418,7 @@ void TeamManager::OnJoinAnyTeam(Packet *packet, TM_World *world)
 				MafiaNet::BitStream bitStream;
 				bitStream.WriteCasted<MessageID>(ID_TEAM_BALANCER_TEAM_ASSIGNED);
 				EncodeTeamAssigned(&bitStream, teamMember);
-				SendUnified(&bitStream, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+				SendUnified(&bitStream, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 			}
 		}
 		else
@@ -2440,7 +2440,7 @@ void TeamManager::OnJoinAnyTeam(Packet *packet, TM_World *world)
 			{
 				EncodeTeamLocked(&bsOut, teamMember, newTeam);
 			}
-			// SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+			// SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 			world->BroadcastToParticipants(&bsOut, UNASSIGNED_RAKNET_GUID);
 			if (packet->guid!=GetMyGUIDUnified())
 				PushBitStream(&bsOut);
@@ -2537,7 +2537,7 @@ void TeamManager::OnJoinRequestedTeam(Packet *packet, TM_World *world)
 				MafiaNet::BitStream bitStream;
 				bitStream.WriteCasted<MessageID>(ID_TEAM_BALANCER_TEAM_ASSIGNED);
 				EncodeTeamAssigned(&bitStream, teamMember);
-				SendUnified(&bitStream, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+				SendUnified(&bitStream, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 			}
 		}
 		else
@@ -2567,7 +2567,7 @@ void TeamManager::OnJoinRequestedTeam(Packet *packet, TM_World *world)
 			{
 				EncodeTeamLocked(&bsOut, teamMember, teamToJoin);
 			}
-			// SendUnified(&bsOut, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->guid, false);
+			// SendUnified(&bsOut, MafiaNet::Priority::High, MafiaNet::Reliability::ReliableOrdered, 0, packet->guid, false);
 
 			world->BroadcastToParticipants(&bsOut, UNASSIGNED_RAKNET_GUID);
 			if (packet->guid!=GetMyGUIDUnified())

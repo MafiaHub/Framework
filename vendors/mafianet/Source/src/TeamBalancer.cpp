@@ -159,7 +159,7 @@ void TeamBalancer::RequestSpecificTeam(NetworkID memberId, TeamId desiredTeam)
 	bsOut.Write((MessageID)ID_REQUEST_SPECIFIC_TEAM);
 	bsOut.Write(memberId);
 	bsOut.Write(desiredTeam);
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,hostGuid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,hostGuid,false);
 }
 void TeamBalancer::CancelRequestSpecificTeam(NetworkID memberId)
 {
@@ -174,7 +174,7 @@ void TeamBalancer::CancelRequestSpecificTeam(NetworkID memberId)
 			bsOut.Write((MessageID)ID_TEAM_BALANCER_INTERNAL);
 			bsOut.Write((MessageID)ID_CANCEL_TEAM_REQUEST);
 			bsOut.Write(memberId);
-			rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,hostGuid,false);
+			rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,hostGuid,false);
 
 			return;
 		}
@@ -211,7 +211,7 @@ void TeamBalancer::RequestAnyTeam(NetworkID memberId)
 	bsOut.Write((MessageID)ID_TEAM_BALANCER_INTERNAL);
 	bsOut.Write((MessageID)ID_REQUEST_ANY_TEAM);
 	bsOut.Write(memberId);
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,hostGuid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,hostGuid,false);
 }
 TeamId TeamBalancer::GetMyTeam(NetworkID memberId) const
 {
@@ -267,7 +267,7 @@ PluginReceiveResult TeamBalancer::OnReceive(Packet *packet)
 					bsOut.Write(myTeamMembers[i].currentTeam);
 					bsOut.Write(myTeamMembers[i].requestedTeam);
 				}
-				rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,hostGuid,false);
+				rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,hostGuid,false);
 			}
 		}
 		break;
@@ -693,7 +693,7 @@ void TeamBalancer::NotifyTeamAssigment(unsigned int teamMemberIndex)
 	bsOut.Write((MessageID)ID_TEAM_BALANCER_TEAM_ASSIGNED);
 	bsOut.Write(teamMembers[teamMemberIndex].currentTeam);
 	bsOut.Write(teamMembers[teamMemberIndex].memberId);
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,teamMembers[teamMemberIndex].memberGuid,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,teamMembers[teamMemberIndex].memberGuid,false);
 }
 bool TeamBalancer::WeAreHost(void) const
 {
@@ -854,7 +854,7 @@ void TeamBalancer::NotifyTeamsLocked(RakNetGUID target, TeamId requestedTeam)
 	BitStream bsOut;
 	bsOut.Write((MessageID)ID_TEAM_BALANCER_REQUESTED_TEAM_LOCKED);
 	bsOut.Write(requestedTeam);
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,target,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,target,false);
 }
 void TeamBalancer::NotifyTeamSwitchPending(RakNetGUID target, TeamId requestedTeam, NetworkID memberId)
 {
@@ -862,7 +862,7 @@ void TeamBalancer::NotifyTeamSwitchPending(RakNetGUID target, TeamId requestedTe
 	bsOut.Write((MessageID)ID_TEAM_BALANCER_REQUESTED_TEAM_FULL);
 	bsOut.Write(requestedTeam);
 	bsOut.Write(memberId);
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,target,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,target,false);
 }
 void TeamBalancer::SwapTeamMembersByRequest(unsigned int memberIndex1, unsigned int memberIndex2)
 {
@@ -878,7 +878,7 @@ void TeamBalancer::NotifyNoTeam(NetworkID memberId, RakNetGUID target)
 	bsOut.Write((MessageID)ID_TEAM_BALANCER_TEAM_ASSIGNED);
 	bsOut.Write((unsigned char)UNASSIGNED_TEAM_ID);
 	bsOut.Write(memberId);
-	rakPeerInterface->Send(&bsOut,HIGH_PRIORITY,RELIABLE_ORDERED,0,target,false);
+	rakPeerInterface->Send(&bsOut,MafiaNet::Priority::High,MafiaNet::Reliability::ReliableOrdered,0,target,false);
 }
 bool TeamBalancer::TeamsWouldBeEvenOnSwitch(TeamId t1, TeamId t2)
 {

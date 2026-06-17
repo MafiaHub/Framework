@@ -205,7 +205,7 @@ public:
 	/// \param[in] currentTime Current time, as per MafiaNet::GetTimeMS()
 	/// \param[in] receipt This number will be returned back with ID_SND_RECEIPT_ACKED or ID_SND_RECEIPT_LOSS and is only returned with the reliability types that contain RECEIPT in the name
 	/// \return True or false for success or failure.
-	bool Send( char *data, BitSize_t numberOfBitsToSend, PacketPriority priority, PacketReliability reliability, unsigned char orderingChannel, bool makeDataCopy, int MTUSize, CCTimeType currentTime, uint32_t receipt );
+	bool Send( char *data, BitSize_t numberOfBitsToSend, MafiaNet::Priority priority, MafiaNet::Reliability reliability, unsigned char orderingChannel, bool makeDataCopy, int MTUSize, CCTimeType currentTime, uint32_t receipt );
 
 	/// Call once per game cycle.  Handles internal lists and actually does the send.
 	/// \param[in] s the communication  end point
@@ -376,8 +376,8 @@ private:
 
 	void CalculateHistogramAckSize(void);
 
-	// Used ONLY for RELIABLE_ORDERED
-	// RELIABLE_SEQUENCED just returns the newest one
+	// Used ONLY for MafiaNet::Reliability::ReliableOrdered
+	// MafiaNet::Reliability::ReliableSequenced just returns the newest one
 	// DataStructures::List<DataStructures::LinkedList<InternalPacket*>*> orderingList;
 	DataStructures::Queue<InternalPacket*> outputQueue;
 	int splitMessageProgressInterval;
@@ -449,13 +449,13 @@ private:
 //	unsigned packetlossThisSampleResendCount;
 //	CCTimeType lastPacketlossTime;
 
-	//DataStructures::Queue<InternalPacket*> sendPacketSet[ NUMBER_OF_PRIORITIES ];
+	//DataStructures::Queue<InternalPacket*> sendPacketSet[ MafiaNet::NUMBER_OF_PRIORITIES ];
 	DataStructures::Heap<reliabilityHeapWeightType, InternalPacket*, false> outgoingPacketBuffer;
-	reliabilityHeapWeightType outgoingPacketBufferNextWeights[NUMBER_OF_PRIORITIES];
+	reliabilityHeapWeightType outgoingPacketBufferNextWeights[MafiaNet::NUMBER_OF_PRIORITIES];
 	void InitHeapWeights(void);
 	reliabilityHeapWeightType GetNextWeight(int priorityLevel);
-//	unsigned int messageInSendBuffer[NUMBER_OF_PRIORITIES];
-//	double bytesInSendBuffer[NUMBER_OF_PRIORITIES];
+//	unsigned int messageInSendBuffer[MafiaNet::NUMBER_OF_PRIORITIES];
+//	double bytesInSendBuffer[MafiaNet::NUMBER_OF_PRIORITIES];
 
 
     DataStructures::OrderedList<SplitPacketIdType, SplitPacketChannel*, SplitPacketChannelComp> splitPacketChannelList;

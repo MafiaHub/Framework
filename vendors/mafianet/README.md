@@ -271,7 +271,17 @@ Available tests include: `EightPeerTest`, `MaximumConnectTest`, `PeerConnectDisc
 
 ## Changelog
 
-### Version 0.9.0 (Latest)
+### Version 0.10.0 (Latest)
+- **Umbrella header `mafianet/mafianet.h`**: aggregates the core public headers (`RakPeerInterface`, types, message IDs, `PacketPriority`, `BitStream`, `GetTime`, `Statistics`) so the common path only needs `#include "mafianet/mafianet.h"`. Additive — granular headers remain; encryption headers are intentionally omitted (security stays opt-in via `InitializeSecurity()`)
+- **Canonical type aliases** (`mafianet/aliases.h`): `PeerInterface` (`RakPeerInterface`), `Guid` (`RakNetGUID`), `Statistics` (`RakNetStatistics`), `UnassignedGuid`. `using` aliases denoting the same types, so old and new names interoperate; legacy names left untouched
+- **RAII handles `Peer` & `PacketPtr`** (`mafianet/PeerHandle.h`): own a `RakPeerInterface` / received `Packet` and clean up on scope exit, removing manual `DestroyInstance` / `DeallocatePacket` bookkeeping. ChatExample client rewritten to use them
+- **Thread-safe GUID value accessors** (`mafianet/guid_util.h`): `MafiaNet::to_string(const RakNetGUID&)` owns its buffer; `connected_address(...)` returns `std::optional<SystemAddress>` (sentinel → `nullopt`)
+- **`PointGridSectorizer`**: uniform point grid with O(1) `RemoveEntry`/`MoveEntry` via per-entry hash + swap-remove (early-out on same-cell moves), upsert add/move semantics, duplicate-free `GetEntries`, and edge-cell clamping. `GridSectorizer` left untouched
+- **Breaking — scoped enum classes**: the global `PacketPriority` / `PacketReliability` C enums are removed in favour of scoped `MafiaNet::Priority` / `MafiaNet::Reliability`. Enumerator order (and the wire field) is preserved, but call sites must update (`HIGH_PRIORITY` → `MafiaNet::Priority::High`, `RELIABLE_ORDERED` → `MafiaNet::Reliability::ReliableOrdered`); `NUMBER_OF_*` sentinels are now `constexpr` counts in `MafiaNet`
+- **Breaking — removed non-thread-safe `RakNetGUID::ToString(void)`** (shared static buffer); use `MafiaNet::to_string(g).c_str()`
+- **Bug fix**: `PeerHandle` no longer dereferences a moved-from `Peer` in `receive()`
+
+### Version 0.9.0
 - **Strong-typed `PeerGuid`**: a new `enum class PeerGuid : uint64_t` names a peer's `RakNetGUID` value distinctly from `NetworkID` (an object id), so the two can no longer be passed interchangeably in a `uint64_t`-typed signature — removing a class of silent "passed the wrong id" bugs in ReplicaManager3 glue and `void(uint64_t)` callbacks. Convert with `ToPeerGuid()` / `ToGuid()` and compare against `UNASSIGNED_PEER_GUID`. As a trivially-copyable 8-byte scoped enum it serializes byte-identically through `BitStream` (and therefore `VariableDeltaSerializer`) to the raw `uint64_t` it replaces — fully wire-compatible, no netcode bump. Purely additive, no behavioural change
 
 ### Version 0.8.0

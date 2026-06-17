@@ -65,7 +65,17 @@ unsigned long AddressOrGUID::ToInteger( const AddressOrGUID &aog )
 const char *AddressOrGUID::ToString(bool writePort) const
 {
 	if (rakNetGuid!=UNASSIGNED_RAKNET_GUID)
-		return rakNetGuid.ToString();
+	{
+		// Rotating static buffer, mirroring SystemAddress::ToString below.
+		// NOT THREADSAFE — for an owning, thread-safe string use
+		// MafiaNet::to_string(guid) from "mafianet/guid_util.h".
+		static unsigned char strIndex=0;
+		static char str[8][64];
+		unsigned char lastStrIndex=strIndex;
+		strIndex++;
+		rakNetGuid.ToString(str[lastStrIndex&7], 64);
+		return (char*) str[lastStrIndex&7];
+	}
 	return systemAddress.ToString(writePort);
 }
 void AddressOrGUID::ToString(bool writePort, char *dest) const
@@ -726,16 +736,6 @@ bool RakNetGUID::operator > ( const RakNetGUID& right ) const
 bool RakNetGUID::operator < ( const RakNetGUID& right ) const
 {
 	return g < right.g;
-}
-const char *RakNetGUID::ToString(void) const
-{
-	static unsigned char strIndex=0;
-	static char str[8][64];
-
-	unsigned char lastStrIndex=strIndex;
-	strIndex++;
-	ToString(str[lastStrIndex&7], 64);
-	return (char*) str[lastStrIndex&7];
 }
 void RakNetGUID::ToString(char *dest) const
 {

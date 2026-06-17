@@ -15,8 +15,8 @@ namespace Framework::Graphics {
     template <typename TDevice, typename TContext, typename TSwapChain, typename TCommandQueue>
     class Backend {
       protected:
-        TDevice _device;
-        TContext _context;
+        TDevice _device {};
+        TContext _context {};
         uint32_t _nextTextureID       = 1;
         uint32_t _nextRenderBufferID = 1; // render buffer id 0 is reserved for default render target view.
         uint32_t _nextGeometryID      = 1;

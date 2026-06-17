@@ -37,6 +37,13 @@ namespace Framework::Networking::Replication {
         // queries, just less precisely). Takes effect on the next BeginRebuild().
         void Configure(float cellSize, float worldMin, float worldMax);
 
+        // Select the horizontal plane for relevance: false (default) uses XZ (Y-up engines); true uses
+        // XY (Z-up engines, e.g. Mafia 2). Streaming distance must be measured on the ground plane, so
+        // a Z-up game whose height is Z has to set this or height bleeds into the radius check.
+        void SetGroundPlaneXY(bool groundXY) {
+            _groundXY = groundXY;
+        }
+
         // Start a fresh rebuild: (re)initialise the grid if needed, then clear it and the indices.
         void BeginRebuild();
         // Add one live entity to the grid and the owned/always-visible indices.
@@ -57,8 +64,13 @@ namespace Framework::Networking::Replication {
         void CollectVisible(NetworkEntity *viewer, MafiaNet::PeerGuid viewerGUID, std::unordered_set<NetworkEntity *> &out);
 
       private:
-        // Range query on the XZ plane; the set dedupes per-cell hits.
+        // Range query on the configured ground plane; the set dedupes per-cell hits.
         void QueryRadius(const glm::vec3 &center, float radius, std::unordered_set<NetworkEntity *> &out);
+
+        // Second ground-plane axis (the first is always X): Y when _groundXY, else Z.
+        float GroundV(const glm::vec3 &p) const {
+            return _groundXY ? p.y : p.z;
+        }
 
         const std::unordered_set<NetworkEntity *> *OwnedBy(MafiaNet::PeerGuid guid) const;
         const std::unordered_set<NetworkEntity *> &AlwaysVisible() const {
@@ -71,6 +83,7 @@ namespace Framework::Networking::Replication {
         float _cellSize      = 100.0f;
         float _min           = -10000.0f;
         float _max           = 10000.0f;
+        bool _groundXY       = false; // false=XZ (Y-up), true=XY (Z-up); see SetGroundPlaneXY
         uint32_t _generation = 0;
         GridSectorizer _grid;
         std::unordered_map<MafiaNet::PeerGuid, std::unordered_set<NetworkEntity *>> _ownedByGuid;

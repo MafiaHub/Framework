@@ -95,7 +95,7 @@ public:
 	/// \brief Add a server, which is assumed to be connected in a fully connected mesh to all other servers and also running the CloudServer plugin
 	/// The other system must also call AddServer before getting the subscription data, or it will be rejected.
 	/// Sending a message telling the other system to call AddServer(), followed by calling AddServer() locally, would be sufficient for this to work.
-	/// \note This sends subscription data to the other system, using RELIABLE_ORDERED on channel 0
+	/// \note This sends subscription data to the other system, using MafiaNet::Reliability::ReliableOrdered on channel 0
 	/// \param[in] systemIdentifier Identifier of the remote system
 	void AddServer(RakNetGUID systemIdentifier);
 
