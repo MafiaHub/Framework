@@ -65,6 +65,31 @@ namespace Framework::Networking::Replication {
             }
         }
 
+        // Fixed-point float in [min,max] over `bits` bits (plain path only; VDS keeps full precision).
+        void FloatBits(float &value, float min, float max, int bits) {
+            if (!_plain) {
+                Field(value);
+                return;
+            }
+            const uint32_t maxQ = (bits >= 32) ? 0xFFFFFFFFu : ((1u << bits) - 1u);
+            if (_writePlain) {
+                float a = (value - min) / (max - min);
+                if (a < 0.0f) {
+                    a = 0.0f;
+                }
+                else if (a > 1.0f) {
+                    a = 1.0f;
+                }
+                uint32_t q = static_cast<uint32_t>(a * static_cast<float>(maxQ) + 0.5f);
+                _plain->SerializeBitsFromIntegerRange(true, q, 0u, maxQ);
+            }
+            else {
+                uint32_t q = 0;
+                _plain->SerializeBitsFromIntegerRange(false, q, 0u, maxQ);
+                value = min + (static_cast<float>(q) / static_cast<float>(maxQ)) * (max - min);
+            }
+        }
+
       private:
         MafiaNet::VariableDeltaSerializer *_vds                                 = nullptr;
         MafiaNet::VariableDeltaSerializer::SerializationContext *_serialize     = nullptr;
