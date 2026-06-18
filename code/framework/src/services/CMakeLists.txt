@@ -120,8 +120,10 @@ else()
         message(FATAL_ERROR "MafiaHub Services prebuilt library not found at: ${MAFIA_HUB_LIB}")
     endif()
     
-    # Create interface library
-    add_library(MafiaHubServices INTERFACE)
-    target_link_libraries(MafiaHubServices INTERFACE ${MAFIA_HUB_LIB})
-    target_include_directories(MafiaHubServices INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/services")
+    # IMPORTED (not INTERFACE) so the prebuilt archive is a real link target: order-dependent linkers
+    # can place it correctly, and a link group can capture the archive (an INTERFACE wrapper hides it).
+    add_library(MafiaHubServices STATIC IMPORTED GLOBAL)
+    set_target_properties(MafiaHubServices PROPERTIES
+        IMPORTED_LOCATION "${MAFIA_HUB_LIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/services")
 endif()
