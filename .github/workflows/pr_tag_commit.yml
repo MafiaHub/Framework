@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: develop
           fetch-depth: 0  # Ensure full history for diff comparisons
@@ -33,7 +33,7 @@ jobs:
     needs: bump-semver
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: develop
           fetch-depth: 0  # Get full history for tag comparison
@@ -68,10 +68,10 @@ jobs:
 
       - name: Create semver tag and release
         if: env.RELEASE_NEEDED == 'true'
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.new_tag }}
-          release_name: ${{ env.new_tag }}
+          name: ${{ env.new_tag }}
           draft: false
           prerelease: false
           generate_release_notes: true
