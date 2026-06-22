@@ -31,7 +31,7 @@ jobs:
             build_type: "Debug"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: ${{ secrets.FW_SERVICES_PAT != '' && 'recursive' || 'false' }}
           token: ${{ secrets.FW_SERVICES_PAT || github.token }}
