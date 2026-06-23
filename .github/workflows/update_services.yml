@@ -14,7 +14,7 @@ jobs:
       should_build: ${{ steps.check_changes.outputs.changed }}
     steps:
       - name: Checkout services-adapter repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: MafiaHub/services-adapter
           path: services-adapter-repo
@@ -101,7 +101,7 @@ jobs:
             build_type: "Release"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.FW_SERVICES_PAT }}
@@ -133,7 +133,7 @@ jobs:
         run: |
           cmake --build build --target MafiaHubServices --config ${{ matrix.build_type }}
       - name: Upload MafiaHub Services
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mafiahub-services-${{ matrix.os }}
           path: |
@@ -149,10 +149,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: temp-artifacts
           
@@ -202,7 +202,7 @@ jobs:
       
       - name: Create or update release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: MafiaHub-Services
           name: MafiaHub Services

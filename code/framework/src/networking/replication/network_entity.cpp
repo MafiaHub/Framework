@@ -13,6 +13,15 @@
 #include <mafianet/GetTime.h>
 
 namespace Framework::Networking::Replication {
+    namespace {
+        // Serialize channel split: the pose rides an unreliable-sequenced channel (a dropped frame is
+        // covered by the next one / receiver-side interpolation), game state rides a reliable-ordered
+        // channel (on-change deltas must never be lost). Both are flushed as independent RakNet
+        // messages because their PacketReliability differs (see Connection_RM3::SendSerialize).
+        constexpr int kTransformChannel = 0;
+        constexpr int kStateChannel     = 1;
+    } // namespace
+
     ReplicationManager *NetworkEntity::Manager() {
         return static_cast<ReplicationManager *>(replicaManager);
     }
@@ -64,6 +73,9 @@ namespace Framework::Networking::Replication {
             fields.Field(incomingOwner);
             AdoptIncomingOwner(incomingOwner);
         }
+    }
+
+    void NetworkEntity::SerializeTransform(FieldSerializer &fields) {
         fields.Field(position);
         fields.Field(velocity);
         fields.Field(rotation);
@@ -73,6 +85,7 @@ namespace Framework::Networking::Replication {
         constructionBitstream->Write(stateEpoch);
         FieldSerializer seed(constructionBitstream, true);
         SerializeBaseFields(seed);
+        SerializeTransform(seed);
         OnSerializeConstruction(seed);
         SerializeFields(seed);
     }
@@ -83,6 +96,7 @@ namespace Framework::Networking::Replication {
         ApplyIncomingEpoch(incomingEpoch);
         FieldSerializer seed(constructionBitstream, false);
         SerializeBaseFields(seed);
+        SerializeTransform(seed);
         OnSerializeConstruction(seed);
         SerializeFields(seed);
         OnConstructed();
@@ -138,53 +152,78 @@ namespace Framework::Networking::Replication {
     MafiaNet::RM3SerializationResult NetworkEntity::Serialize(MafiaNet::SerializeParameters *serializeParameters) {
         serializeParameters->messageTimestamp = MafiaNet::GetTime();
 
-        // The epoch rides raw ahead of the delta block: it must be present in every update, and a VDS
-        // variable is omitted when unchanged, which would let a pre-override packet pass the
-        // staleness check by absence.
-        serializeParameters->outputBitstream[0].Write(stateEpoch);
+        // The epoch rides raw at the head of each channel: it must be present in every update (a VDS
+        // variable is omitted when unchanged, which would let a pre-override packet pass the staleness
+        // check by absence), and the two channels are independent messages, so each carries its own.
 
+        // Channel 0 — transform: raw pose, unreliable-sequenced. Written every tick; ReplicaManager3
+        // memcmp-dedupes it against the last broadcast, so a motionless entity stops sending.
+        serializeParameters->outputBitstream[kTransformChannel].Write(stateEpoch);
+        FieldSerializer transform(&serializeParameters->outputBitstream[kTransformChannel], true);
+        SerializeTransform(transform);
+        serializeParameters->pro[kTransformChannel].reliability     = MafiaNet::Reliability::UnreliableSequenced;
+        serializeParameters->pro[kTransformChannel].orderingChannel = kTransformChannel;
+
+        // Channel 1 — state: owner + game fields, VDS delta, reliable-ordered. whenLastSerialized == 0
+        // means first send to a fresh system: write every variable in full; else only changed ones.
+        serializeParameters->outputBitstream[kStateChannel].Write(stateEpoch);
         MafiaNet::VariableDeltaSerializer::SerializationContext ctx;
-        // whenLastSerialized == 0 means this is the first send to a fresh system: write every
-        // variable in full; otherwise only changed variables are written.
-        _vds.BeginIdenticalSerialize(&ctx, serializeParameters->whenLastSerialized == 0, &serializeParameters->outputBitstream[0]);
+        _vds.BeginIdenticalSerialize(&ctx, serializeParameters->whenLastSerialized == 0, &serializeParameters->outputBitstream[kStateChannel]);
         FieldSerializer fields(&_vds, &ctx);
         SerializeBaseFields(fields);
         SerializeFields(fields);
         _vds.EndSerialize(&ctx);
+        serializeParameters->pro[kStateChannel].reliability    = MafiaNet::Reliability::ReliableOrdered;
+        serializeParameters->pro[kStateChannel].orderingChannel = kStateChannel;
 
-        // BeginIdenticalSerialize already produces one delta bitstream shared across all recipients
-        // (the state is identical for every viewer), so pair it with the broadcast-identical result:
-        // ReplicaManager3 serializes once per tick and reuses those bytes for every connection,
-        // suppressing the send when nothing changed. Per-connection filtering (owner exclusion) still
-        // happens upstream in QuerySerializationWithinWorld.
+        // Both channels carry recipient-identical bytes, so broadcast-identically: ReplicaManager3
+        // serializes once per tick, reuses the bytes for every connection, and suppresses each channel
+        // whose bytes are unchanged. Per-connection filtering (owner exclusion) still happens upstream
+        // in QuerySerializationWithinWorld.
         return MafiaNet::RM3SR_BROADCAST_IDENTICALLY;
     }
 
     void NetworkEntity::Deserialize(MafiaNet::DeserializeParameters *deserializeParameters) {
-        // Server authority gate: only accept state from the entity's current owner, rejecting a
-        // stale owner whose in-flight packets land after an ownership handover.
+        // Server authority gate (applies to both channels): only accept updates from the entity's
+        // current owner, rejecting a stale owner whose in-flight packets land after a handover.
         if (IsServerPeer() && deserializeParameters->sourceConnection && MafiaNet::ToPeerGuid(deserializeParameters->sourceConnection->GetRakNetGUID()) != ownerGUID) {
             return;
         }
 
-        uint8_t incomingEpoch = stateEpoch;
-        deserializeParameters->serializationBitstream[0].Read(incomingEpoch);
-        if (!ApplyIncomingEpoch(incomingEpoch)) {
-            // Stale epoch: discard this update without applying it.
-            return;
+        bool transformUpdated = false;
+
+        // Channel 0 — transform. The epoch fences a forced-state override against an owner's in-flight
+        // pose (which would otherwise revert it); the server drops a stale-epoch pose, clients adopt.
+        if (deserializeParameters->bitstreamWrittenTo[kTransformChannel]) {
+            uint8_t incomingEpoch = stateEpoch;
+            deserializeParameters->serializationBitstream[kTransformChannel].Read(incomingEpoch);
+            if (ApplyIncomingEpoch(incomingEpoch)) {
+                FieldSerializer transform(&deserializeParameters->serializationBitstream[kTransformChannel], false);
+                SerializeTransform(transform);
+                transformUpdated = true;
+            }
         }
 
-        MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
-        _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[0]);
-        FieldSerializer fields(&_vds, &ctx);
-        SerializeBaseFields(fields);
-        SerializeFields(fields);
-        _vds.EndDeserialize(&ctx);
+        // Channel 1 — state.
+        if (deserializeParameters->bitstreamWrittenTo[kStateChannel]) {
+            uint8_t incomingEpoch = stateEpoch;
+            deserializeParameters->serializationBitstream[kStateChannel].Read(incomingEpoch);
+            if (ApplyIncomingEpoch(incomingEpoch)) {
+                MafiaNet::VariableDeltaSerializer::DeserializationContext ctx;
+                _vds.BeginDeserialize(&ctx, &deserializeParameters->serializationBitstream[kStateChannel]);
+                FieldSerializer fields(&_vds, &ctx);
+                SerializeBaseFields(fields);
+                SerializeFields(fields);
+                _vds.EndDeserialize(&ctx);
+            }
+        }
 
         // Already shifted to our local clock by RakPeer; do not subtract GetClockDifferential.
         if (deserializeParameters->timeStamp != 0) {
             lastUpdateTime = deserializeParameters->timeStamp;
         }
+
+        OnDeserialized(transformUpdated);
     }
 
     MafiaNet::Time NetworkEntity::GetUpdateAge() const {

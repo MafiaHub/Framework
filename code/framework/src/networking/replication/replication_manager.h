@@ -102,6 +102,11 @@ namespace Framework::Networking::Replication {
         // Configure the spatial index extent (see InterestGrid::Configure). Call before the first
         // RebuildInterest().
         void ConfigureGrid(float cellSize, float worldMin, float worldMax);
+        // Select the interest ground plane: false (default) = XZ (Y-up), true = XY (Z-up). See
+        // InterestGrid::SetGroundPlaneXY.
+        void SetInterestGroundPlaneXY(bool groundXY) {
+            _interest.SetGroundPlaneXY(groundXY);
+        }
         // Rebuild the spatial index from current entity positions. Server only; call once per tick
         // before ReplicaManager3 serializes (driven from NetworkPeer::Update).
         void RebuildInterest();
