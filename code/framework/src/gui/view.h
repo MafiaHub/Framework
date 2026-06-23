@@ -73,6 +73,9 @@ namespace Framework::GUI {
         bool _shouldDisplay   = false;
         bool _garbageCollected = false;
 
+        // 0x0 views fill the viewport and track it across resizes
+        bool _autoResize = false;
+
         std::recursive_mutex _renderMutex;
         glm::vec2 _cursorPos {};
         bool _isMouseDown = false;
@@ -86,6 +89,9 @@ namespace Framework::GUI {
 
         virtual void Update();
         virtual void Render() = 0;
+
+        // Submit the view's quad; called inside an ImGui frame on the game thread.
+        virtual void SubmitImGuiDraw() {}
 
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -116,6 +122,17 @@ namespace Framework::GUI {
         void SetPosition(int x, int y) {
             _x = x;
             _y = y;
+        }
+
+        // Resize the view and its CEF surface; backend recreates its texture on next Render.
+        void Resize(int width, int height);
+
+        void SetAutoResize(bool enable) {
+            _autoResize = enable;
+        }
+
+        bool IsAutoResize() const {
+            return _autoResize;
         }
 
         glm::vec2 GetPosition() const {

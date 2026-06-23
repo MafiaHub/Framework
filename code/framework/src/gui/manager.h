@@ -13,6 +13,7 @@
 #include <utils/result.h>
 #include <utils/safe_win32.h>
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -34,15 +35,28 @@ namespace Framework::GUI {
       private:
         ViewportConfiguration _viewportConfiguration {};
         CefRefPtr<CEF::App> _cefApp;
-        bool _cefInitialized = false;
+        std::atomic<bool> _cefInitialized = false;
 
-        std::recursive_mutex _renderMutex;
+        // Latched once the pump faults; stops further pumping and the CefShutdown.
+        std::atomic<bool> _cefPumpFailed = false;
+
+        // mutable so const readers can lock
+        mutable std::recursive_mutex _renderMutex;
 
         std::vector<std::unique_ptr<View>> _views;
+
+        // Retired views, held a few ticks before freeing so in-flight draw data
+        // can stop referencing their textures. <view, age-in-ticks>
+        std::vector<std::pair<std::unique_ptr<View>, int>> _dyingViews;
+
         std::unique_ptr<SystemClipboard> _clipboard;
         Graphics::Renderer *_graphicsRenderer {};
         bool _gpuAccelerated = false;
         int _id              = 0;
+
+        // Callers must hold _renderMutex
+        std::vector<GUI::View *> GetViewsByZIndex() const;
+        void RetireView(std::unique_ptr<View> view);
 
       public:
         Manager();
@@ -64,14 +78,22 @@ namespace Framework::GUI {
         void Update() override;
         void Render();
 
+        // Match the viewport and every fullscreen view to a new client size.
+        void Resize(int width, int height);
+
+        // Game-thread companion to Render(); must be called inside an ImGui frame.
+        void SubmitImGuiDraws();
+
         void ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
         void ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const;
 
         void SetViewportConfiguration(const ViewportConfiguration &viewportConfiguration) {
+            std::scoped_lock lock(_renderMutex);
             _viewportConfiguration = viewportConfiguration;
         }
 
         ViewportConfiguration GetViewportConfiguration() const {
+            std::scoped_lock lock(_renderMutex);
             return _viewportConfiguration;
         }
 

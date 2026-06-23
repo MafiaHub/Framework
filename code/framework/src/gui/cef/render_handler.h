@@ -27,7 +27,9 @@ namespace Framework::GUI::CEF {
         Microsoft::WRL::ComPtr<ID3D11Texture2D> _sharedTexture;
         HANDLE _sharedHandle = nullptr;
 
-        // CPU fallback
+        // OnPaint (CEF pump thread) writes, views read on the render thread —
+        // both under LockPixels().
+        std::mutex _pixelMutex;
         std::vector<uint8_t> _pixelData;
         bool _pixelDataDirty = false;
 
@@ -49,6 +51,10 @@ namespace Framework::GUI::CEF {
 
         std::lock_guard<std::mutex> LockTexture() {
             return std::lock_guard<std::mutex>(_textureMutex);
+        }
+
+        [[nodiscard]] std::lock_guard<std::mutex> LockPixels() {
+            return std::lock_guard<std::mutex>(_pixelMutex);
         }
 
         ID3D11Texture2D *GetSharedTexture() const {

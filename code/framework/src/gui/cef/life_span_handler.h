@@ -10,6 +10,7 @@
 
 #include "include/cef_life_span_handler.h"
 #include "include/cef_request_handler.h"
+#include <atomic>
 #include <functional>
 
 namespace Framework::GUI::CEF {
@@ -24,7 +25,14 @@ namespace Framework::GUI::CEF {
         std::function<void(CefRefPtr<CefBrowser>)> _onAfterCreated;
         OnBeforeBrowseCallback _onBeforeBrowse;
 
+        // Live browsers (pre-OnBeforeClose); Shutdown drains this before CefShutdown.
+        static std::atomic<int> s_liveBrowserCount;
+
       public:
+        static int GetLiveBrowserCount() {
+            return s_liveBrowserCount.load();
+        }
+
         void SetOnAfterCreatedCallback(std::function<void(CefRefPtr<CefBrowser>)> cb) {
             _onAfterCreated = std::move(cb);
         }

@@ -175,25 +175,30 @@ namespace Framework::GUI {
         else {
             // CPU path: use pixel data from CEF's OnPaint
             auto *renderHandler = GetRenderHandler();
-            if (renderHandler && !renderHandler->GetPixelData().empty()) {
-                Graphics::Bitmap bmp;
-                bmp.format = Graphics::BitmapFormat::BGRA8;
-                bmp.width  = _width;
-                bmp.height = _height;
-                bmp.pitch  = _width * 4;
-                bmp.size   = static_cast<uint32_t>(renderHandler->GetPixelData().size());
-                bmp.pixels = const_cast<uint8_t *>(renderHandler->GetPixelData().data());
+            if (renderHandler) {
+                // held for the whole read; OnPaint reallocates on resize
+                const auto pixelLock = renderHandler->LockPixels();
 
-                if (_cpuTextureID == 0) {
-                    _cpuTextureID = backend->NextTextureId();
-                    backend->CreateTexture(_cpuTextureID, bmp);
-                }
-                else if (renderHandler->IsPixelDataDirty()) {
-                    backend->UpdateTexture(_cpuTextureID, bmp);
-                    renderHandler->ClearPixelDataDirty();
-                }
+                if (!renderHandler->GetPixelData().empty()) {
+                    Graphics::Bitmap bmp;
+                    bmp.format = Graphics::BitmapFormat::BGRA8;
+                    bmp.width  = _width;
+                    bmp.height = _height;
+                    bmp.pitch  = _width * 4;
+                    bmp.size   = static_cast<uint32_t>(renderHandler->GetPixelData().size());
+                    bmp.pixels = const_cast<uint8_t *>(renderHandler->GetPixelData().data());
 
-                gpuState.texture_1_id = _cpuTextureID;
+                    if (_cpuTextureID == 0) {
+                        _cpuTextureID = backend->NextTextureId();
+                        backend->CreateTexture(_cpuTextureID, bmp);
+                    }
+                    else if (renderHandler->IsPixelDataDirty()) {
+                        backend->UpdateTexture(_cpuTextureID, bmp);
+                        renderHandler->ClearPixelDataDirty();
+                    }
+
+                    gpuState.texture_1_id = _cpuTextureID;
+                }
             }
         }
 
