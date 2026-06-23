@@ -11,10 +11,16 @@
 #include "backend.h"
 
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace Framework::Graphics {
     class D3D12Backend: public Backend<ID3D12Device *, ID3D12DeviceContext *, IDXGISwapChain3 *, ID3D12CommandQueue *> {
+      public:
+        // Shader-visible SRV slots reserved past the ImGui font descriptors,
+        // handed to web views via AllocateSRVSlot.
+        static constexpr UINT kExtraSrvSlots = 64;
+
       private:
         IDXGISwapChain3 *_swapChain             = nullptr;
         UINT _frameBufferCount                  = 0;
@@ -22,6 +28,12 @@ namespace Framework::Graphics {
         ID3D12DescriptorHeap *_srvHeap          = nullptr;
         ID3D12GraphicsCommandList *_commandList = nullptr;
         ID3D12CommandQueue *_commandQueue       = nullptr;
+
+        UINT _srvDescriptorSize = 0;
+        UINT _srvHeapSize       = 0;
+        std::vector<UINT> _freeSrvSlots;
+        std::vector<bool> _srvSlotInUse;
+        mutable std::mutex _srvMutex;
 
         struct FrameContext {
             ID3D12CommandAllocator *_commandAllocator = nullptr;
@@ -39,6 +51,23 @@ namespace Framework::Graphics {
         void Begin();
         void End();
         int NumFramesInFlight() const;
+
+        // Bounded, shader-visible SRV slot pool shared with ImGui's heap (so handles
+        // double as ImTextureID). AllocateSRVSlot returns -1 when exhausted; the
+        // getters return a null handle for any out-of-range slot.
+        int AllocateSRVSlot();
+
+        // Frees an SRV slot from a given slot handle
+        void FreeSRVSlot(int slot);
+
+        // Retrieves a CPU Descriptor handle from a given @p slot handle
+        D3D12_CPU_DESCRIPTOR_HANDLE GetSRVSlotCPUHandle(int slot) const;
+
+        // Retrieves a GPU Descriptor handle from a given @p slot handle
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSRVSlotGPUHandle(int slot) const;
+
+        // Returns number of free SRV slots
+        size_t GetFreeSRVSlotCount() const;
 
         // TODO: Backend not implemented yet
         void BeginDrawing() {}
