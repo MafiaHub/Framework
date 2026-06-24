@@ -43,6 +43,9 @@ namespace Framework::GUI::CEF {
             return;
         }
 
+        // resize below can reallocate the buffer while a view reads it
+        std::lock_guard<std::mutex> lock(_pixelMutex);
+
         const size_t size = width * height * 4;
         if (_pixelData.size() != size) {
             _pixelData.resize(size);

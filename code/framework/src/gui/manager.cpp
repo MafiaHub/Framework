@@ -9,12 +9,28 @@
 #include "manager.h"
 
 #include <logging/logger.h>
+#include <utils/process_shutdown.h>
 
 #include "gui/backend/view_d3d11.h"
+
+#include "include/cef_scheme.h"
 
 #include <filesystem>
 
 namespace Framework::GUI {
+    namespace {
+        // Guard the pump: some exit paths tear CEF down before our Shutdown runs.
+        // TODO(cef-exit): an exit-path-independent Shutdown trigger would remove this.
+        bool PumpCefMessageLoopGuarded() {
+            __try {
+                CefDoMessageLoopWork();
+                return true;
+            }
+            __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+                return false;
+            }
+        }
+    } // namespace
     Manager::Manager() {
         _clipboard = std::make_unique<SystemClipboard>();
     }
@@ -26,13 +42,49 @@ namespace Framework::GUI {
     }
 
     void Manager::Shutdown() {
-        for (auto &view : _views) {
-            view.reset();
+        {
+            std::scoped_lock lock(_renderMutex);
+            for (auto &view : _views) {
+                view.reset();
+            }
+            _views.clear();
+            _dyingViews.clear();
         }
-        _views.clear();
 
-        if (_cefInitialized) {
-            CefShutdown();
+        if (_cefInitialized && _cefPumpFailed) {
+            Framework::Logging::GetLogger("Web")->debug("CEF pump previously faulted, skipping CefShutdown");
+            _cefInitialized = false;
+        }
+        else if (_cefInitialized) {
+            if (Framework::Utils::IsProcessShutdownInProgress()) {
+                // CEF's threads are already gone; CefShutdown would deadlock.
+                Framework::Logging::GetLogger("Web")->debug("Process teardown in progress, skipping CefShutdown");
+            }
+            else {
+                CefClearSchemeHandlerFactories();
+
+                // CloseBrowser is async: pump (guarded) until every browser hits
+                // OnBeforeClose, 3s cap, then a settle pass.
+                bool pumpOk   = true;
+                int drainedMs = 0;
+                while (pumpOk && CEF::LifeSpanHandler::GetLiveBrowserCount() > 0 && drainedMs < 3000) {
+                    pumpOk = PumpCefMessageLoopGuarded();
+                    Sleep(10);
+                    drainedMs += 10;
+                }
+                for (int i = 0; pumpOk && i < 50; i++) {
+                    pumpOk = PumpCefMessageLoopGuarded();
+                    Sleep(10);
+                }
+
+                if (pumpOk) {
+                    CefShutdown();
+                }
+                else {
+                    _cefPumpFailed = true;
+                    Framework::Logging::GetLogger("Web")->warn("CEF pump faulted during shutdown drain, skipping CefShutdown");
+                }
+            }
             _cefInitialized = false;
         }
 
@@ -66,8 +118,15 @@ namespace Framework::GUI {
         CefString(&settings.log_file)        = rootDir + "/logs/cef.log";
 
         // CEF requires an absolute path for the subprocess executable
+        // Resolve next to THIS module (injected DLL), not the process exe.
+        static const int s_moduleAnchor = 0;
+        HMODULE selfModule              = nullptr;
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&s_moduleAnchor), &selfModule) || !selfModule) {
+            Framework::Logging::GetLogger("Web")->error("Failed to resolve owning module for the CEF subprocess path");
+            return Error("Failed to resolve owning module for the CEF subprocess path");
+        }
         wchar_t exePath[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        GetModuleFileNameW(selfModule, exePath, MAX_PATH);
         std::filesystem::path subprocessPath = std::filesystem::path(exePath).parent_path() / "cef_subprocess.exe";
         CefString(&settings.browser_subprocess_path) = subprocessPath.wstring();
 
@@ -87,50 +146,81 @@ namespace Framework::GUI {
     }
 
     void Manager::Update() {
-        if (!_cefInitialized) {
+        if (!_cefInitialized || _cefPumpFailed) {
+            return;
+        }
+
+        // Pump OUTSIDE _renderMutex: it dispatches window messages that can block
+        // on the render thread (exit-flow RHI flush) and deadlock against Render.
+        if (!PumpCefMessageLoopGuarded()) {
+            _cefPumpFailed = true;
+            Framework::Logging::GetLogger("Web")->warn("CEF message pump faulted (exit teardown race) — disabling further pumps");
             return;
         }
 
         std::scoped_lock lock(_renderMutex);
-
-        // Pump the CEF message loop
-        CefDoMessageLoopWork();
 
         // Update the views
         for (auto &view : _views) {
             view->Update();
         }
+
+        // Free retired views once in-flight frames referencing their textures drained
+        constexpr int kDyingViewTicks = 8;
+        for (auto it = _dyingViews.begin(); it != _dyingViews.end();) {
+            if (++it->second > kDyingViewTicks) {
+                it = _dyingViews.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
     }
 
-    void Manager::Render() {
-        if (!_cefInitialized) {
-            return;
-        }
-
-        // Sort views by z-index
+    std::vector<GUI::View *> Manager::GetViewsByZIndex() const {
         std::vector<GUI::View *> views;
-        for (auto &view : _views) {
+        for (const auto &view : _views) {
             views.push_back(view.get());
         }
         std::sort(views.begin(), views.end(), [](GUI::View *a, GUI::View *b) {
             return a->GetZIndex() < b->GetZIndex();
         });
+        return views;
+    }
+
+    void Manager::SubmitImGuiDraws() {
+        if (!_cefInitialized || _cefPumpFailed) {
+            return;
+        }
 
         std::scoped_lock lock(_renderMutex);
 
-        // Render the views
-        for (auto &view : views) {
+        for (auto *view : GetViewsByZIndex()) {
+            view->SubmitImGuiDraw();
+        }
+    }
+
+    void Manager::Render() {
+        if (!_cefInitialized || _cefPumpFailed) {
+            return;
+        }
+
+        std::scoped_lock lock(_renderMutex);
+
+        for (auto *view : GetViewsByZIndex()) {
             view->Render();
         }
     }
 
     void Manager::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
+        std::scoped_lock lock(_renderMutex);
         for (auto &view : _views) {
             view->ProcessMouseEvent(hWnd, msg, wParam, lParam);
         }
     }
 
     void Manager::ProcessKeyboardEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
+        std::scoped_lock lock(_renderMutex);
         for (auto &view : _views) {
             view->ProcessKeyboardEvent(hWnd, msg, wParam, lParam);
         }
@@ -142,12 +232,16 @@ namespace Framework::GUI {
             return -1;
         }
 
+        // 0x0 means "fill the viewport" and follow it across resizes
+        const bool autoResize = (width == 0 && height == 0);
+
+        const auto viewport = GetViewportConfiguration();
         if (width == 0) {
-            width = _viewportConfiguration.width;
+            width = viewport.width;
         }
 
         if (height == 0) {
-            height = _viewportConfiguration.height;
+            height = viewport.height;
         }
 
         // Create the view based on the graphics backend
@@ -170,10 +264,38 @@ namespace Framework::GUI {
             return -1;
         }
 
-        _views.push_back(std::move(view));
+        view->SetAutoResize(autoResize);
+
+        {
+            std::scoped_lock lock(_renderMutex);
+            _views.push_back(std::move(view));
+        }
 
         Framework::Logging::GetLogger("Web")->debug("Created view with id {}", _id);
         return _id;
+    }
+
+    void Manager::Resize(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        std::scoped_lock lock(_renderMutex);
+        _viewportConfiguration.width  = width;
+        _viewportConfiguration.height = height;
+
+        for (auto &view : _views) {
+            if (view && view->IsAutoResize()) {
+                view->Resize(width, height);
+            }
+        }
+    }
+
+    void Manager::RetireView(std::unique_ptr<View> view) {
+        // Caller holds _renderMutex. Hide it, then let it age out in Update.
+        view->Display(false);
+        view->Focus(false);
+        _dyingViews.emplace_back(std::move(view), 0);
     }
 
     bool Manager::DestroyView(int id) {
@@ -182,31 +304,28 @@ namespace Framework::GUI {
             return false;
         }
 
-        int index = -1;
-        int i     = 0;
+        std::scoped_lock lock(_renderMutex);
 
-        for (auto it = _views.begin(); it != _views.end(); ++it, ++i) {
+        for (auto it = _views.begin(); it != _views.end(); ++it) {
             if ((*it)->GetId() == id) {
-                index = i;
-                break;
+                RetireView(std::move(*it));
+                _views.erase(it);
+
+                Framework::Logging::GetLogger("Web")->debug("Destroyed view with id {}", id);
+                return true;
             }
         }
 
-        if (index == -1) {
-            Framework::Logging::GetLogger("Web")->error("Failed to destroy view: View does not exist");
-            return false;
-        }
-
-        _views[index].reset();
-        _views.erase(_views.begin() + index);
-
-        Framework::Logging::GetLogger("Web")->debug("Destroyed view with id {}", id);
-        return true;
+        Framework::Logging::GetLogger("Web")->error("Failed to destroy view: View does not exist");
+        return false;
     }
 
     void Manager::CleanupViews() {
+        std::scoped_lock lock(_renderMutex);
+
         for (auto it = _views.begin(); it != _views.end();) {
             if ((*it)->IsGarbageCollected()) {
+                RetireView(std::move(*it));
                 it = _views.erase(it);
             }
             else {
@@ -216,6 +335,7 @@ namespace Framework::GUI {
     }
 
     bool Manager::IsAnyViewFocused() const {
+        std::scoped_lock lock(_renderMutex);
         for (const auto &view : _views) {
             if (view->HasFocus()) {
                 return true;
@@ -225,6 +345,7 @@ namespace Framework::GUI {
     }
 
     bool Manager::IsAnyGCViewFocused() const {
+        std::scoped_lock lock(_renderMutex);
         for (const auto &view : _views) {
             if (view->HasFocus() && view->IsGarbageCollected()) {
                 return true;
@@ -234,6 +355,7 @@ namespace Framework::GUI {
     }
 
     std::vector<GUI::View *> Manager::GetAllViews() const {
+        std::scoped_lock lock(_renderMutex);
         std::vector<GUI::View *> views;
         for (const auto &view : _views) {
             views.push_back(view.get());
@@ -242,6 +364,7 @@ namespace Framework::GUI {
     }
 
     std::vector<GUI::View *> Manager::GetGCViews() const {
+        std::scoped_lock lock(_renderMutex);
         std::vector<GUI::View *> views;
         for (const auto &view : _views) {
             if (view->IsGarbageCollected()) {
@@ -252,6 +375,7 @@ namespace Framework::GUI {
     }
 
     View *Manager::GetView(int id) const {
+        std::scoped_lock lock(_renderMutex);
         for (auto it = _views.begin(); it != _views.end(); ++it) {
             if ((*it)->GetId() == id) {
                 return it->get();

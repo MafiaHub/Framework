@@ -10,8 +10,15 @@
 #include "include/cef_parser.h"
 
 namespace Framework::GUI::CEF {
+    std::atomic<int> LifeSpanHandler::s_liveBrowserCount {0};
+
     void LifeSpanHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
         _browser = browser;
+        ++s_liveBrowserCount;
+
+        if (_onAfterCreated) {
+            _onAfterCreated(browser);
+        }
     }
 
     bool LifeSpanHandler::OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popupId, const CefString &targetUrl, const CefString &targetFrameName, CefLifeSpanHandler::WindowOpenDisposition targetDisposition, bool userGesture, const CefPopupFeatures &popupFeatures, CefWindowInfo &windowInfo, CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extraInfo, bool *noJavascriptAccess) {
@@ -21,6 +28,7 @@ namespace Framework::GUI::CEF {
 
     void LifeSpanHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
         _browser = nullptr;
+        --s_liveBrowserCount;
     }
 
     bool LifeSpanHandler::OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool userGesture, bool isRedirect) {

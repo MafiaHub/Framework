@@ -14,6 +14,7 @@
 #include "include/cef_browser_process_handler.h"
 
 #include <function2.hpp>
+#include <mutex>
 #include <unordered_map>
 
 namespace Framework::GUI::CEF {
@@ -68,6 +69,9 @@ namespace Framework::GUI::CEF {
         IMPLEMENT_REFCOUNTING(App);
 
         private:
+        // Create() runs on the CEF IO thread per request; registration happens
+        // on the game thread
+        std::mutex _handlersMutex;
         std::unordered_map<SchemeDomainKey, Framework::GUI::CEF::SchemaHandlerFactoryCallback, KeyHash> _handlers;
     };
 } // namespace Framework::GUI::CEF

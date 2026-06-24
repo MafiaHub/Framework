@@ -109,6 +109,23 @@ namespace Framework::GUI {
         // Nothing to update at the base level for CEF; message loop is driven by Manager
     }
 
+    void View::Resize(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        // lock so the render thread sees a consistent _width/_height
+        std::scoped_lock lock(_renderMutex);
+        _width  = width;
+        _height = height;
+        if (_renderHandler) {
+            _renderHandler->SetDimensions(width, height);
+        }
+        if (_browser) {
+            _browser->GetHost()->WasResized();
+        }
+    }
+
     void View::ProcessMouseEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (!_browser || !_shouldDisplay || !_hasFocus) {
             return;

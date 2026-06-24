@@ -22,11 +22,17 @@ namespace Framework::GUI::CEF {
         std::string scheme = CefString(&urlParts.scheme).ToString();
         std::string domain = CefString(&urlParts.host).ToString();
 
-        auto it = _handlers.find({scheme, domain});
-        if (it == _handlers.end())
-            return nullptr;
+        SchemaHandlerFactoryCallback handler;
+        {
+            std::scoped_lock lock(_handlersMutex);
+            auto it = _handlers.find({scheme, domain});
+            if (it == _handlers.end())
+                return nullptr;
+            handler = it->second;
+        }
 
-        return it->second(browser, frame, scheme_name, request);
+        // call outside the lock: the callback may be slow and must not race re-registration
+        return handler(browser, frame, scheme_name, request);
     }
 
     void App::OnBeforeCommandLineProcessing(const CefString &processType, CefRefPtr<CefCommandLine> commandLine) {
@@ -53,6 +59,7 @@ namespace Framework::GUI::CEF {
     }
 
     void App::RegisterSchemeHandlerFactory(const std::string &scheme, const std::string &domain, SchemaHandlerFactoryCallback callback) {
-        _handlers[{scheme, domain}] = callback;
+        std::scoped_lock lock(_handlersMutex);
+        _handlers[{scheme, domain}] = std::move(callback);
     }
 } // namespace Framework::GUI::CEF
