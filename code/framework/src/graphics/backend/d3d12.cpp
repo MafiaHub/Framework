@@ -9,6 +9,7 @@
 #include "d3d12.h"
 
 #include <logging/logger.h>
+#include <utils/process_shutdown.h>
 
 #include <wrl/client.h>
 
@@ -205,5 +206,53 @@ namespace Framework::Graphics {
     size_t D3D12Backend::GetFreeSRVSlotCount() const {
         std::lock_guard<std::mutex> lock(_srvMutex);
         return _freeSrvSlots.size();
+    }
+
+    bool D3D12Backend::WaitForGpu() {
+        if (!_commandQueue || !_device) {
+            return true; // nothing to drain
+        }
+
+        // teardown: device/queue are gone, so the fence can't signal; freeing is
+        // safe since in-flight work died with the queue's threads
+        if (Framework::Utils::IsProcessShutdownInProgress()) {
+            return true;
+        }
+
+        Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+        if (FAILED(_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)))) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, CreateFence failed");
+            return false;
+        }
+
+        const HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!event) {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, CreateEvent failed");
+            return false;
+        }
+
+        bool drained = false;
+        if (FAILED(_commandQueue->Signal(fence.Get(), 1))) {
+            // likely device removed; can't confirm the drain, so report failure
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, queue Signal failed (device removed?)");
+        }
+        else if (fence->GetCompletedValue() >= 1) {
+            drained = true;
+        }
+        else if (SUCCEEDED(fence->SetEventOnCompletion(1, event))) {
+            // a live GPU signals in single-digit ms; a timeout means a wedged
+            // queue, exactly when freeing its resources is unsafe — so fail
+            if (WaitForSingleObject(event, 500) == WAIT_OBJECT_0 || fence->GetCompletedValue() >= 1) {
+                drained = true;
+            }
+            else {
+                Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, fence wait timed out");
+            }
+        }
+        else {
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::WaitForGpu, SetEventOnCompletion failed");
+        }
+        CloseHandle(event);
+        return drained;
     }
 } // namespace Framework::Graphics

@@ -95,5 +95,14 @@ namespace Framework::Graphics {
         ID3D12GraphicsCommandList *GetGraphicsCommandList() const {
             return _commandList;
         }
+
+        UINT GetCurrentFrameIndex() const {
+            return _swapChain ? _swapChain->GetCurrentBackBufferIndex() : 0;
+        }
+
+        // Drain the GPU queue before freeing resources in-flight lists may use.
+        // Returns false if the drain can't be confirmed (caller should keep the
+        // resources); returns true during teardown, where freeing is always safe.
+        [[nodiscard]] bool WaitForGpu();
     };
 } // namespace Framework::Graphics

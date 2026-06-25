@@ -12,6 +12,7 @@
 #include <utils/process_shutdown.h>
 
 #include "gui/backend/view_d3d11.h"
+#include "gui/backend/view_d3d12.h"
 
 #include "include/cef_scheme.h"
 
@@ -249,6 +250,9 @@ namespace Framework::GUI {
         switch (_graphicsRenderer->GetBackendType()) {
         case Graphics::RendererBackend::BACKEND_D3D_11:
             view = std::make_unique<ViewD3D11>(++_id, _graphicsRenderer, this);
+            break;
+        case Graphics::RendererBackend::BACKEND_D3D_12:
+            view = std::make_unique<ViewD3D12>(++_id, _graphicsRenderer, this);
             break;
         default:
             Framework::Logging::GetLogger("Web")->error("Failed to create view: Unsupported renderer backend");
