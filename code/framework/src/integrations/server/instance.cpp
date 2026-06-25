@@ -254,7 +254,13 @@ namespace Framework::Integrations::Server {
         const auto net = _networkingEngine->GetNetworkServer();
         // Build gate: a mismatched token fails the challenge inside NetworkServer; the peer never
         // reaches the asset phase.
-        net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
+        if (_opts.verifyBuildToken) {
+            net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
+        }
+        else {
+            Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Build token verification DISABLED; accepting any client version");
+            net->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
+        }
 
         // Build verified -> send the resource list (carries the ReadyEvent id and tick rate).
         net->SetOnClientAuthenticatedCallback([this, net](MafiaNet::RakNetGUID guid) {

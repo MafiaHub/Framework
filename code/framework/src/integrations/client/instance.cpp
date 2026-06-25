@@ -324,7 +324,13 @@ namespace Framework::Integrations::Client {
     void Instance::InitNetworkingMessages() {
         const auto net = _networkingEngine->GetNetworkClient();
         // Build gate: NetworkClient challenges automatically on connect; a mismatch drops us.
-        net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
+        if (_opts.verifyBuildToken) {
+            net->SetBuildToken(Framework::Networking::NetworkPeer::BuildToken(_opts.gameName, _opts.gameVersion, Utils::Version::rel, _opts.modVersion));
+        }
+        else {
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Build token verification DISABLED; connecting to any server version");
+            net->SetBuildToken(Framework::Networking::NetworkPeer::kBuildVerificationDisabledToken);
+        }
 
         net->SetOnPlayerConnectedCallback([](MafiaNet::Packet *) {
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Connection accepted by server, verifying build");

@@ -79,6 +79,9 @@ namespace Framework::Networking {
         // TwoWayAuthentication identifier under which the build token is registered/challenged.
         static constexpr const char *kBuildChallengeId = "Framework::Build";
 
+        // Fixed token both peers register when verifyBuildToken is off; challenge still passes.
+        static constexpr const char *kBuildVerificationDisabledToken = "Framework::BuildVerificationDisabled";
+
         NetworkPeer();
         ~NetworkPeer();
 

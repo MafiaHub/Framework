@@ -49,6 +49,8 @@ namespace Framework::Integrations::Server {
         std::string gameName;
         std::string gameVersion;
 
+        bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
+
         std::string bindHost;
         std::string bindSecretKey;
         std::string bindMapName;

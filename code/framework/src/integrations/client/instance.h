@@ -58,6 +58,8 @@ namespace Framework::Integrations::Client {
         std::string gameVersion;
         std::string modVersion;
 
+        bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
+
         bool initRendererManually = false;
 
         Graphics::RendererConfiguration rendererOptions = {};
