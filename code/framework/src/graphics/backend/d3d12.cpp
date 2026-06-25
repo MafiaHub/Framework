@@ -75,10 +75,9 @@ namespace Framework::Graphics {
             const auto rtvDescriptorSize          = pD3DDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
             D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
 
+            // reserve one RTV slot per frame; the back buffer is bound fresh in Begin()
             for (UINT i = 0; i < _frameBufferCount; i++) {
                 _frameContext[i]._mainRenderTargetDescriptor = rtvHandle;
-                swapChain->GetBuffer(i, IID_PPV_ARGS(&_frameContext[i]._mainRenderTargetResource));
-                pD3DDevice->CreateRenderTargetView(_frameContext[i]._mainRenderTargetResource, nullptr, rtvHandle);
                 rtvHandle.ptr += rtvDescriptorSize;
             }
         }
@@ -108,13 +107,16 @@ namespace Framework::Graphics {
 
     void D3D12Backend::Shutdown() {
         // release objects
+        if (_currentBackBuffer) {
+            _currentBackBuffer->Release();
+            _currentBackBuffer = nullptr;
+        }
         _rtvHeap->Release();
         _srvHeap->Release();
         _srvHeap = nullptr;
         _commandList->Release();
         for (const auto &frameContext : _frameContext) {
             frameContext._commandAllocator->Release();
-            frameContext._mainRenderTargetResource->Release();
         }
         if (_device) {
             _device->Release();
@@ -123,12 +125,28 @@ namespace Framework::Graphics {
     }
 
     void D3D12Backend::Begin() {
-        const auto &currentFrameContext = _frameContext[_swapChain->GetCurrentBackBufferIndex()];
+        const UINT idx = _swapChain->GetCurrentBackBufferIndex();
+        // _frameContext/RTV heap are sized to Init's buffer count; a replacement
+        // swapchain (SetSwapChain) with a larger count would index out of range
+        if (idx >= _frameContext.size()) {
+            return;
+        }
+        const auto &currentFrameContext = _frameContext[idx];
         currentFrameContext._commandAllocator->Reset();
+
+        // acquire the back buffer fresh, release in End(); never held across
+        // frames so our ref doesn't block the game's ResizeBuffers
+        _currentBackBuffer = nullptr;
+        if (FAILED(_swapChain->GetBuffer(idx, IID_PPV_ARGS(&_currentBackBuffer)))) {
+            _currentBackBuffer = nullptr;
+            Framework::Logging::GetLogger(FRAMEWORK_INNER_GRAPHICS)->error("D3D12Backend::Begin, GetBuffer failed; skipping frame");
+            return;
+        }
+        _device->CreateRenderTargetView(_currentBackBuffer, nullptr, currentFrameContext._mainRenderTargetDescriptor);
 
         _barrier.Type                   = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         _barrier.Flags                  = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        _barrier.Transition.pResource   = currentFrameContext._mainRenderTargetResource;
+        _barrier.Transition.pResource   = _currentBackBuffer;
         _barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
         _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -140,11 +158,19 @@ namespace Framework::Graphics {
     }
 
     void D3D12Backend::End() {
+        if (!_currentBackBuffer) {
+            return; // Begin() failed to acquire this frame
+        }
+
         _barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
         _barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
         _commandList->ResourceBarrier(1, &_barrier);
         _commandList->Close();
         _commandQueue->ExecuteCommandLists(1, (ID3D12CommandList **)&_commandList);
+
+        // Drop our per-frame reference; the swapchain still owns the buffer.
+        _currentBackBuffer->Release();
+        _currentBackBuffer = nullptr;
     }
 
     void D3D12Backend::Update() {}

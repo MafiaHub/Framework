@@ -37,12 +37,15 @@ namespace Framework::Graphics {
 
         struct FrameContext {
             ID3D12CommandAllocator *_commandAllocator = nullptr;
-            ID3D12Resource *_mainRenderTargetResource = nullptr;
             D3D12_CPU_DESCRIPTOR_HANDLE _mainRenderTargetDescriptor;
         };
 
         std::vector<FrameContext> _frameContext;
         D3D12_RESOURCE_BARRIER _barrier {};
+
+        // acquired fresh in Begin(), released in End(); never held across frames
+        // so the game can resize/recreate the swapchain freely
+        ID3D12Resource *_currentBackBuffer = nullptr;
 
       public:
         bool Init(const Framework::Graphics::RendererConfiguration &opts) override;
@@ -51,6 +54,16 @@ namespace Framework::Graphics {
         void Begin();
         void End();
         int NumFramesInFlight() const;
+
+        // Repoint after the game recreates its swapchain (fullscreen / mode
+        // toggles). Assumes the same buffer count as Init — Begin() guards against
+        // a larger one rather than rebuilding the frame state.
+        IDXGISwapChain3 *GetSwapChain() const {
+            return _swapChain;
+        }
+        void SetSwapChain(IDXGISwapChain3 *swapChain) {
+            _swapChain = swapChain;
+        }
 
         // Bounded, shader-visible SRV slot pool shared with ImGui's heap (so handles
         // double as ImTextureID). AllocateSRVSlot returns -1 when exhausted; the
