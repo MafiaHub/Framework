@@ -160,6 +160,32 @@ namespace Framework::External::ImGUI {
         return {};
     }
 
+    void Wrapper::OnDeviceLost() {
+        std::scoped_lock _lock(_renderMtx);
+        if (!isContextInitialized) {
+            return;
+        }
+        switch (_config.renderBackend) {
+        case Graphics::RendererBackend::BACKEND_D3D_9: {
+            ImGui_ImplDX9_InvalidateDeviceObjects();
+        } break;
+        default: break;
+        }
+    }
+
+    void Wrapper::OnDeviceReset() {
+        std::scoped_lock _lock(_renderMtx);
+        if (!isContextInitialized) {
+            return;
+        }
+        switch (_config.renderBackend) {
+        case Graphics::RendererBackend::BACKEND_D3D_9: {
+            ImGui_ImplDX9_CreateDeviceObjects();
+        } break;
+        default: break;
+        }
+    }
+
     InputState Wrapper::ProcessEvent(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) const {
         if (_config.windowBackend != Graphics::PlatformBackend::PLATFORM_WIN32) {
             return InputState::ERROR_MISMATCH;

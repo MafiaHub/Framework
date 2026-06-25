@@ -65,6 +65,11 @@ namespace Framework::External::ImGUI {
         void Update() override;
         Utils::Result<void, Framework::Error> Render();
 
+        // Release/recreate backend device objects around a graphics device reset
+        // (e.g. D3D9 lost device on alt-tab). Must bracket the host's device Reset.
+        void OnDeviceLost();
+        void OnDeviceReset();
+
         void PushWidget(const RenderProc &proc) {
             _renderQueue.push(proc);
         }
