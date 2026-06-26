@@ -65,8 +65,12 @@ namespace Framework::Launcher {
         bool verifyGameIntegrity = false;
         std::vector<uint32_t> supportedGameVersions;
 
-        // additional DLL search paths
+        // additional DLL search paths, resolved relative to the game directory
         std::vector<std::wstring> additionalSearchPaths;
+
+        // absolute DLL search dirs added verbatim via AddDllDirectory; for runtimes
+        // outside the game tree whose deps are only reachable via PATH
+        std::vector<std::wstring> additionalDllDirectories;
 
         // Additional arguments
         std::wstring additionalLaunchArguments = L"";

@@ -244,6 +244,12 @@ namespace Framework::Launcher {
         if (addDllDirectory && setDefaultDllDirectories) {
             setDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
 
+            // mod-supplied absolute search dirs: for runtimes outside the game tree
+            // whose deps are only reachable via PATH, which we just dropped
+            for (const auto &dir : _config.additionalDllDirectories) {
+                addDllDirectory(dir.c_str());
+            }
+
             // first search in game root dir
             addDllDirectory(_gamePath.c_str());
 
