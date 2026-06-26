@@ -17,6 +17,7 @@
 #include <Psapi.h>
 #include <ShellScalingApi.h>
 #include <Windows.h>
+#include <winreg.h>
 #include <cppfs/FileHandle.h>
 #include <cppfs/fs.h>
 #include <fstream>
@@ -255,6 +256,26 @@ namespace Framework::Launcher {
             // add our own paths now
             addDllDirectory(gProjectDllPath);
             addDllDirectory((std::wstring(gProjectDllPath) + L"\\bin").c_str());
+
+            // Keep the system PhysX runtime reachable under the restricted DLL search:
+            // SetDefaultDllDirectories drops PATH, but legacy NVIDIA/AGEIA PhysX resolves its
+            // cudart dependency (in ...\PhysX\Common) by name via PATH, so games like Mafia II
+            // would fail NxCreatePhysicsSDK. Re-add the PhysX dirs from the AGEIA registry.
+            HKEY physXKey {};
+            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\AGEIA Technologies", 0, KEY_READ, &physXKey) == ERROR_SUCCESS) {
+                wchar_t enginePath[MAX_PATH] {};
+                DWORD enginePathSize = sizeof(enginePath);
+                if (RegQueryValueExW(physXKey, L"PhysXCore Path", nullptr, nullptr, reinterpret_cast<LPBYTE>(enginePath), &enginePathSize) == ERROR_SUCCESS) {
+                    addDllDirectory(enginePath);
+
+                    // PhysXCore.dll's cudart lives in the sibling Common dir; canonicalize (no "..").
+                    wchar_t commonPath[MAX_PATH] {};
+                    if (GetFullPathNameW((std::wstring(enginePath) + L"\\..\\Common").c_str(), MAX_PATH, commonPath, nullptr)) {
+                        addDllDirectory(commonPath);
+                    }
+                }
+                RegCloseKey(physXKey);
+            }
 
             if (_config.useAlternativeWorkDir) {
                 _gamePath += L"/" + _config.alternativeWorkDir;
