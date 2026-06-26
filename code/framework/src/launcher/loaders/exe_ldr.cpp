@@ -102,7 +102,7 @@ namespace Framework::Launcher::Loaders {
         }
     }
 
-    void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section) {
+    void ExecutableLoader::LoadSection(IMAGE_SECTION_HEADER *section, DWORD sectionAlignment) {
         void *targetAddress = GetTargetRVA<uint8_t>(section->VirtualAddress);
         if (!targetAddress) {
             return;
@@ -129,8 +129,11 @@ namespace Framework::Launcher::Loaders {
             return;
         }
 
-        // Calculate the size of data to be copied
-        const uint32_t sizeOfData = (section->SizeOfRawData < section->Misc.VirtualSize) ? section->SizeOfRawData : section->Misc.VirtualSize;
+        // Clamp like the OS loader: VirtualSize rounded up to SectionAlignment, not raw.
+        // Raw VirtualSize drops code in the file-alignment slack (e.g. a packed OEP).
+        const uint32_t align              = sectionAlignment ? sectionAlignment : 1;
+        const uint32_t roundedVirtualSize = (section->Misc.VirtualSize + align - 1) & ~(align - 1);
+        const uint32_t sizeOfData         = (section->SizeOfRawData < roundedVirtualSize) ? section->SizeOfRawData : roundedVirtualSize;
 
         // Copy the data
         memcpy(targetAddress, sourceAddress, sizeOfData);
@@ -192,7 +195,7 @@ namespace Framework::Launcher::Loaders {
         auto section = IMAGE_FIRST_SECTION(ntHeader);
 
         for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++) {
-            LoadSection(section);
+            LoadSection(section, ntHeader->OptionalHeader.SectionAlignment);
             section++;
         }
     }

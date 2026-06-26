@@ -42,7 +42,7 @@ namespace Framework::Launcher::Loaders {
         bool _useDirectTlsSlot0 = false;
 
       private:
-        void LoadSection(IMAGE_SECTION_HEADER *section);
+        void LoadSection(IMAGE_SECTION_HEADER *section, DWORD sectionAlignment);
         void LoadSections(IMAGE_NT_HEADERS *ntHeader);
 
         bool ApplyRelocations();
