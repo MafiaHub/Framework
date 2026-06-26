@@ -10,6 +10,8 @@
 
 #include "graphics/renderer.h"
 
+#include <logging/logger.h>
+
 #include <backends/imgui_impl_dx11.h>
 #include <backends/imgui_impl_dx12.h>
 #include <backends/imgui_impl_dx9.h>
@@ -42,6 +44,18 @@ namespace Framework::External::ImGUI {
         auto &io = ImGui::GetIO();
 
         io.ConfigWindowsResizeFromEdges = true;
+
+        // Load the optional UI font before the first frame. ImGui 1.92 rasterizes
+        // glyphs on demand, so any script the font covers renders without baking
+        // explicit ranges. Falls back to the embedded font when unset or on failure.
+        if (!_config.fontPath.empty()) {
+            ImFontConfig fontCfg;
+            fontCfg.Flags |= ImFontFlags_NoLoadError; // return null on failure instead of asserting (debug builds)
+            if (!io.Fonts->AddFontFromFileTTF(_config.fontPath.c_str(), _config.fontSize, &fontCfg)) {
+                Logging::GetLogger("ImGui")->warn("Failed to load UI font '{}', using default", _config.fontPath);
+                io.Fonts->AddFontDefault();
+            }
+        }
 
         ImGui::StyleColorsDark();
 

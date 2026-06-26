@@ -62,6 +62,11 @@ namespace Framework::Integrations::Client {
 
         bool initRendererManually = false;
 
+        // Optional UI font (TTF). Empty -> ImGui's embedded ASCII-only font.
+        // A Unicode-covering font enables non-Latin scripts (e.g. Cyrillic).
+        std::string imguiFontPath;
+        float imguiFontSize = 16.0f;
+
         Graphics::RendererConfiguration rendererOptions = {};
     };
 

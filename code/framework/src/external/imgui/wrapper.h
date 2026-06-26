@@ -21,6 +21,7 @@
 #include <function2.hpp>
 #include <mutex>
 #include <queue>
+#include <string>
 
 namespace Framework::Graphics {
     class Renderer;
@@ -36,6 +37,13 @@ namespace Framework::External::ImGUI {
     struct Config {
         Graphics::PlatformBackend windowBackend = Graphics::PlatformBackend::PLATFORM_WIN32;
         Graphics::RendererBackend renderBackend = Graphics::RendererBackend::BACKEND_D3D_11;
+
+        // Optional UI font. When fontPath is set, the TTF is loaded as the default
+        // font; otherwise ImGui's embedded ASCII-only font is used. With ImGui 1.92's
+        // dynamic atlas, glyphs are rasterized on demand, so a Unicode-covering font
+        // (e.g. Latin + Cyrillic + CJK) "just works" without explicit glyph ranges.
+        std::string fontPath;
+        float fontSize = 16.0f;
 
         // NOTE: Set up during init
         Graphics::Renderer *renderer = nullptr;
