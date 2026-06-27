@@ -9,6 +9,7 @@
 #include "node_engine.h"
 #include "engine_helpers.h"
 #include "builtins/messages.h"
+#include "resource/resource_manager.h"
 
 #include <logging/logger.h>
 
@@ -222,6 +223,51 @@ namespace Framework::Scripting {
             "    } catch (e) { return 0; }"
             "  }, writable: false, configurable: false, enumerable: false"
             "});"
+            // Per-resource timer tracking: wrap the global timer functions so a
+            // resource's setTimeout/setInterval can be cancelled when it stops
+            // (a shared runtime would otherwise keep firing them across reloads).
+            // Timers are attributed to a resource via __fw_ownerOf (installed
+            // from C++ after Init). The real timer handle is returned unchanged,
+            // so user clearTimeout/unref and util.promisify keep working.
+            "(function(){"
+            "  const reg = new Map();"
+            "  const _st = globalThis.setTimeout, _si = globalThis.setInterval,"
+            "        _ct = globalThis.clearTimeout, _ci = globalThis.clearInterval;"
+            "  function ownerSet(n){ let s = reg.get(n); if (!s) { s = new Set(); reg.set(n, s); } return s; }"
+            "  function ownerOf(fn){ try { return (typeof fn === 'function' && typeof globalThis.__fw_ownerOf === 'function') ? globalThis.__fw_ownerOf(fn) : ''; } catch (e) { return ''; } }"
+            "  globalThis.setTimeout = function(fn){"
+            "    const name = ownerOf(fn);"
+            "    let handle;"
+            "    const a = Array.prototype.slice.call(arguments);"
+            "    if (typeof fn === 'function' && name) {"
+            "      a[0] = function(){ const s = reg.get(name); if (s) s.delete(handle); return fn.apply(this, arguments); };"
+            "    }"
+            "    handle = _st.apply(this, a);"
+            "    if (name) ownerSet(name).add(handle);"
+            "    return handle;"
+            "  };"
+            "  globalThis.setInterval = function(fn){"
+            "    const name = ownerOf(fn);"
+            "    const handle = _si.apply(this, arguments);"
+            "    if (name) ownerSet(name).add(handle);"
+            "    return handle;"
+            "  };"
+            "  globalThis.clearTimeout = function(h){ for (const s of reg.values()) s.delete(h); return _ct(h); };"
+            "  globalThis.clearInterval = function(h){ for (const s of reg.values()) s.delete(h); return _ci(h); };"
+            "  try {"
+            "    const PCS = Symbol.for('nodejs.util.promisify.custom');"
+            "    if (_st[PCS]) globalThis.setTimeout[PCS] = _st[PCS];"
+            "    if (_si[PCS]) globalThis.setInterval[PCS] = _si[PCS];"
+            "  } catch (e) {}"
+            "  Object.defineProperty(globalThis, '__fw_clearResourceTimers', {"
+            "    value: function(name){"
+            "      const s = reg.get(name); if (!s) return 0;"
+            "      let n = 0;"
+            "      for (const h of s) { try { _ct(h); _ci(h); } catch (e) {} n++; }"
+            "      reg.delete(name); return n;"
+            "    }, writable: false, configurable: false, enumerable: false"
+            "  });"
+            "})();"
             "process.setUncaughtExceptionCaptureCallback((err) => {"
             "  try {"
             "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
@@ -366,6 +412,17 @@ namespace Framework::Scripting {
         Execute(code, "<evict-modules>");
     }
 
+    void NodeEngine::ClearResourceTimers(const std::string &resourceName) {
+        if (!_initialized || resourceName.empty()) {
+            return;
+        }
+        std::string escaped = EscapeForSingleQuotedJSString(resourceName);
+        std::string code =
+            "if (typeof globalThis.__fw_clearResourceTimers === 'function')"
+            " globalThis.__fw_clearResourceTimers('" + escaped + "');";
+        Execute(code, "<clear-timers>");
+    }
+
     v8::Local<v8::Context> NodeEngine::GetContext() const {
         if (_setup) {
             return _setup->context();
@@ -389,6 +446,35 @@ namespace Framework::Scripting {
         v8::Local<v8::String> key = v8::String::NewFromUtf8(
             _isolate, "__fw_handleUncaughtError").ToLocalChecked();
         context->Global()->Set(context, key, fn).Check();
+    }
+
+    void NodeEngine::InstallResourceTimerTracking() {
+        if (!_setup) {
+            return;
+        }
+        v8::Local<v8::Context> context = _setup->context();
+        v8::Local<v8::External> data = v8::External::New(_isolate, this);
+        v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
+            _isolate, OnTimerOwnerLookup, data);
+        v8::Local<v8::Function> fn = tmpl->GetFunction(context).ToLocalChecked();
+
+        v8::Local<v8::String> key = v8::String::NewFromUtf8(
+            _isolate, "__fw_ownerOf").ToLocalChecked();
+        context->Global()->Set(context, key, fn).Check();
+    }
+
+    void NodeEngine::OnTimerOwnerLookup(const v8::FunctionCallbackInfo<v8::Value> &info) {
+        v8::Isolate *isolate = info.GetIsolate();
+        auto *engine = static_cast<NodeEngine *>(
+            v8::Local<v8::External>::Cast(info.Data())->Value());
+
+        std::string name;
+        if (info.Length() > 0 && info[0]->IsFunction() && engine->GetResourceManager()) {
+            name = engine->GetResourceManager()->GetResourceNameFromFunction(
+                isolate, info[0].As<v8::Function>());
+        }
+        info.GetReturnValue().Set(
+            v8::String::NewFromUtf8(isolate, name.c_str()).ToLocalChecked());
     }
 
     void NodeEngine::OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info) {

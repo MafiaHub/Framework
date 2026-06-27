@@ -125,6 +125,17 @@ namespace Framework::Scripting {
             _requireDataStore.end());
     }
 
+    void V8Engine::ClearResourceTimers(const std::string &resourceName) {
+        if (resourceName.empty()) {
+            return;
+        }
+        for (auto &timer : _timers) {
+            if (timer && timer->ownerResource == resourceName) {
+                timer->cancelled = true;
+            }
+        }
+    }
+
     void V8Engine::Shutdown() {
         if (!_initialized) {
             return;

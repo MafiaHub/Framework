@@ -94,6 +94,19 @@ namespace Framework::Scripting {
         void EvictModulesUnderPath(const std::string &rootPath) override;
 
         /**
+         * Cancel timers created by the named resource (via the bootstrap timer
+         * tracking shim). Call after the resource has stopped.
+         */
+        void ClearResourceTimers(const std::string &resourceName) override;
+
+        /**
+         * Install the privileged __fw_ownerOf(fn) helper used by the bootstrap
+         * timer-tracking shim to attribute timers to resources. Must be called
+         * once after Init(), with V8 scopes active.
+         */
+        void InstallResourceTimerTracking();
+
+        /**
          * Process pending Node.js events (non-blocking).
          * Call this from game loop to process async operations.
          */
@@ -163,6 +176,10 @@ namespace Framework::Scripting {
         bool ApplySandbox();
 
         static void OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
+
+        // Privileged JS helper: returns the resource name owning a function,
+        // resolved from its script origin. Backs the timer-tracking shim.
+        static void OnTimerOwnerLookup(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         NodeEngineOptions _options;
 

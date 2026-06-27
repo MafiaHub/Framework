@@ -75,6 +75,15 @@ namespace Framework::Scripting {
         virtual void EvictModulesUnderPath(const std::string &rootPath) {}
 
         /**
+         * Cancel any timers (setTimeout/setInterval) still owned by a resource
+         * when it stops. In a shared runtime, re-running a resource otherwise
+         * leaves its old intervals firing and duplicates them on reload.
+         * Default is a no-op. Call only after the resource has been stopped.
+         * @param resourceName Name of the resource whose timers to cancel
+         */
+        virtual void ClearResourceTimers(const std::string &resourceName) {}
+
+        /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
          */

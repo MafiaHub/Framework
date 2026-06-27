@@ -406,6 +406,12 @@ namespace Framework::Scripting {
         // Call cleanup (removes handlers)
         CallResourceStop(name);
 
+        // Cancel timers the resource left running (raw setTimeout/setInterval),
+        // which the shared runtime would otherwise keep firing across reloads.
+        if (_jsEngine) {
+            _jsEngine->ClearResourceTimers(std::string(name));
+        }
+
         // Clear exports
         resource->ClearExports();
 
