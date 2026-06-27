@@ -240,6 +240,14 @@ namespace Framework::Scripting {
          */
         void SetOnResourceStateChanged(ResourceStateCallback callback);
 
+        /**
+         * Set callback for when a resource is hot-reloaded (refreshed from
+         * disk and restarted). Distinct from start/stop: fired only by
+         * RefreshResource/RefreshAll, so integrations can react to reloads
+         * (e.g. notify connected clients) without reacting to normal startup.
+         */
+        void SetOnResourceReloaded(ResourceEventCallback callback);
+
         // JS Engine Access
 
         /**
@@ -370,6 +378,7 @@ namespace Framework::Scripting {
         // Fire resource lifecycle events
         void FireOnResourceStarted(const std::string &name);
         void FireOnResourceStopped(const std::string &name);
+        void FireOnResourceReloaded(const std::string &name);
         void FireOnResourceError(const std::string &name, const std::string &error);
         void FireOnResourceStateChanged(const std::string &name, ResourceState oldState, ResourceState newState);
 
@@ -397,6 +406,7 @@ namespace Framework::Scripting {
         ResourceEventCallback _onResourceStopped;
         ResourceErrorCallback _onResourceError;
         ResourceStateCallback _onResourceStateChanged;
+        ResourceEventCallback _onResourceReloaded;
 
         // Current resource context
         std::string _currentResourceContext;

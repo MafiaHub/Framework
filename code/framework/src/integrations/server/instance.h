@@ -123,6 +123,8 @@ namespace Framework::Integrations::Server {
         void InitEndpoints();
         void InitNetworkingMessages();
         void InitAssetStreamer();
+        // Re-sync a hot-reloaded client resource to connected clients.
+        void BroadcastResourceRefresh(const std::string &name);
         void InitCommandListener();
         bool LoadConfigFromJSON();
         void RegisterScriptingBuiltins(Framework::Scripting::Engine *);

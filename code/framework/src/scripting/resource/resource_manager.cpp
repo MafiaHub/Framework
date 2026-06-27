@@ -520,6 +520,7 @@ namespace Framework::Scripting {
                 affected.insert(affected.end(), a.begin(), a.end());
             }
         }
+        FireOnResourceReloaded(newName);
         return ResourceOperationResult::Ok(affected);
     }
 
@@ -571,6 +572,7 @@ namespace Framework::Scripting {
             if (result) {
                 const auto &a = result.GetValue();
                 affected.insert(affected.end(), a.begin(), a.end());
+                FireOnResourceReloaded(name);
             }
         }
         return ResourceOperationResult::Ok(affected);
@@ -768,6 +770,10 @@ namespace Framework::Scripting {
 
     void ResourceManager::SetOnResourceStateChanged(ResourceStateCallback callback) {
         _onResourceStateChanged = std::move(callback);
+    }
+
+    void ResourceManager::SetOnResourceReloaded(ResourceEventCallback callback) {
+        _onResourceReloaded = std::move(callback);
     }
 
     Engine *ResourceManager::GetJSEngine() const {
@@ -1075,6 +1081,12 @@ namespace Framework::Scripting {
     void ResourceManager::FireOnResourceStopped(const std::string &name) {
         if (_onResourceStopped) {
             _onResourceStopped(name);
+        }
+    }
+
+    void ResourceManager::FireOnResourceReloaded(const std::string &name) {
+        if (_onResourceReloaded) {
+            _onResourceReloaded(name);
         }
     }
 

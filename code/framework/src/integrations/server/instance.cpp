@@ -18,6 +18,7 @@
 #include "networking/replication/replication_manager.h"
 #include "networking/rpc/chat_message.h"
 #include "networking/rpc/client_identity.h"
+#include "networking/rpc/resource_refresh.h"
 #include "networking/rpc/server_resources.h"
 
 #include "networking/connection.h"
@@ -177,6 +178,12 @@ namespace Framework::Integrations::Server {
 
         // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
+
+        // Notify connected clients when a client resource is hot-reloaded so
+        // they can re-sync its files and restart it (dev mode).
+        _scriptingModule->GetResourceManager()->SetOnResourceReloaded([this](const std::string &name) {
+            BroadcastResourceRefresh(name);
+        });
 
         // Start all resources (ES modules load asynchronously via normal Update cycle)
         auto startResult = _scriptingModule->GetResourceManager()->StartAll();
@@ -430,6 +437,43 @@ namespace Framework::Integrations::Server {
         }
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Asset streamer ready with {} client files", streamer->GetNumberOfFilesForUpload());
+    }
+
+    void Instance::BroadcastResourceRefresh(const std::string &name) {
+        if (!_scriptingModule || !_networkingEngine) {
+            return;
+        }
+        auto *rm = _scriptingModule->GetResourceManager();
+        if (!rm) {
+            return;
+        }
+        const auto *resource = rm->GetResource(name);
+        if (!resource) {
+            return;
+        }
+        // Only resources with a client entry point need a client-side refresh.
+        if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+            return;
+        }
+
+        const auto net = _networkingEngine->GetNetworkServer();
+        if (!net) {
+            return;
+        }
+
+        // Rebuild the asset streamer's upload list so the changed files get
+        // fresh hashes. The delta transfer compares stored hashes, so without
+        // this the edited file would look up-to-date and never be re-sent.
+        if (auto *streamer = net->GetAssetStreamer()) {
+            streamer->ClearUploads();
+        }
+        InitAssetStreamer();
+
+        Framework::Networking::RPC::ResourceRefresh refresh;
+        refresh.resources.push_back({resource->GetName(), resource->GetVersion()});
+        net->BroadcastRPC(refresh);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting hot-reload of resource '{}' to clients", name);
     }
 
     void Instance::InitCommandListener() {
