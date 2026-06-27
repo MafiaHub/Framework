@@ -184,8 +184,16 @@ namespace Framework::Integrations::Server {
         // resource). Gated on the initial boot: during StartAll below no client
         // is connected yet, and each client receives the full list on connect.
         _scriptingModule->GetResourceManager()->SetOnResourceStarted([this](const std::string &name) {
-            if (_resourcesBooted) {
+            if (_resourcesBooted && !_shuttingDown) {
                 BroadcastResourceRefresh(name);
+            }
+        });
+        // Mirror runtime stops to clients (operator stop, error-stop, or the
+        // transient stop of a reload — the matching start follows). Skipped
+        // during shutdown, when StopAll stops every resource.
+        _scriptingModule->GetResourceManager()->SetOnResourceStopped([this](const std::string &name) {
+            if (_resourcesBooted && !_shuttingDown) {
+                BroadcastResourceStop(name);
             }
         });
 
@@ -483,6 +491,37 @@ namespace Framework::Integrations::Server {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting hot-reload of resource '{}' to clients", name);
     }
 
+    void Instance::BroadcastResourceStop(const std::string &name) {
+        if (!_scriptingModule || !_networkingEngine) {
+            return;
+        }
+        auto *rm = _scriptingModule->GetResourceManager();
+        if (!rm) {
+            return;
+        }
+        const auto *resource = rm->GetResource(name);
+        if (!resource) {
+            return;
+        }
+        // Only client resources need a client-side stop.
+        if (resource->GetManifest().GetMafiaHubConfig().client.empty()) {
+            return;
+        }
+
+        const auto net = _networkingEngine->GetNetworkServer();
+        if (!net) {
+            return;
+        }
+
+        // No streamer rebuild: stopping ships no files, the client just stops
+        // running the resource.
+        Framework::Networking::RPC::ResourceStop stop;
+        stop.resources.push_back({resource->GetName(), resource->GetVersion()});
+        net->BroadcastRPC(stop);
+
+        Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Broadcasting stop of resource '{}' to clients", name);
+    }
+
     void Instance::InitCommandListener() {
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Setting up command listener and processor...");
         
@@ -502,12 +541,36 @@ namespace Framework::Integrations::Server {
             "Show this help message");
             
         _commandProcessor->RegisterCommand(
-            "stop", {},
+            "quit", {},
             [this](cxxopts::ParseResult &) {
                 Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
                 Shutdown();
             },
             "Stop the server");
+
+        // `stop` with no argument stops the server (back-compat); `stop <resource>`
+        // stops that resource (FiveM-style).
+        _commandProcessor->RegisterCommand(
+            "stop", {},
+            [this](cxxopts::ParseResult &result) {
+                const auto &args = result.unmatched();
+                if (args.empty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopping server...");
+                    Shutdown();
+                    return;
+                }
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                auto res = rm->StopResource(args[0]);
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Stopped resource '{}'", args[0]);
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to stop '{}': {}", args[0], res.GetError());
+                }
+            },
+            "Stop a resource (stop <resource>), or the server if no resource is given");
 
         _commandProcessor->RegisterCommand(
             "status", {},
@@ -524,26 +587,66 @@ namespace Framework::Integrations::Server {
             },
             "Show server status");
 
-        _commandProcessor->RegisterCommand(
-            "refresh", {},
-            [this](cxxopts::ParseResult &result) {
+        // Resource lifecycle commands (FiveM-style). A small helper keeps the
+        // boilerplate (resolve manager, require a name, log the result) in one
+        // place so each verb is just its operation.
+        auto resourceCommand = [this](std::string_view verb, auto op) {
+            return [this, verb, op](cxxopts::ParseResult &result) {
                 auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
                 if (!rm) {
                     return;
                 }
                 const auto &args = result.unmatched();
                 if (args.empty()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Usage: refresh <resource>");
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Usage: {} <resource>", verb);
                     return;
                 }
-                auto res = rm->RefreshResource(args[0]);
+                auto res = op(rm, args[0]);
                 if (res) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed resource '{}'", args[0]);
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("{}: '{}'", verb, args[0]);
                 } else {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh '{}': {}", args[0], res.GetError());
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to {} '{}': {}", verb, args[0], res.GetError());
                 }
+            };
+        };
+
+        _commandProcessor->RegisterCommand(
+            "start", {},
+            resourceCommand("start", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                return rm->StartResource(n);
+            }),
+            "Start a resource: start <resource>");
+
+        _commandProcessor->RegisterCommand(
+            "restart", {},
+            resourceCommand("restart", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                if (!rm->IsResourceRunning(n)) {
+                    return Framework::Scripting::ResourceOperationResult(std::string("resource is not running (use start)"));
+                }
+                return rm->RestartResource(n);
+            }),
+            "Reload a running resource's code: restart <resource>");
+
+        // Start-or-reload — the canonical verb FiveM/MTASA operators expect.
+        _commandProcessor->RegisterCommand(
+            "ensure", {},
+            resourceCommand("ensure", [](Framework::Scripting::ResourceManager *rm, const std::string &n) {
+                return rm->IsResourceRunning(n) ? rm->RefreshResource(n) : rm->StartResource(n);
+            }),
+            "Start or reload a resource: ensure <resource>");
+
+        // Re-scan for new/changed resources (manifests), without restarting.
+        _commandProcessor->RegisterCommand(
+            "refresh", {},
+            [this](cxxopts::ParseResult &) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                auto added = rm->Rescan();
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed resources ({} new)", added.size());
             },
-            "Reload a resource from disk: refresh <resource>");
+            "Re-scan the resources directory for new/changed resources");
 
         _commandProcessor->RegisterCommand(
             "refreshall", {},
@@ -559,30 +662,7 @@ namespace Framework::Integrations::Server {
                     Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh all resources: {}", res.GetError());
                 }
             },
-            "Re-scan and reload all resources from disk");
-
-        // FiveM-style start-or-reload: reload if running, start if stopped. The
-        // canonical reload verb operators coming from FiveM/MTASA expect.
-        _commandProcessor->RegisterCommand(
-            "ensure", {},
-            [this](cxxopts::ParseResult &result) {
-                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
-                if (!rm) {
-                    return;
-                }
-                const auto &args = result.unmatched();
-                if (args.empty()) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Usage: ensure <resource>");
-                    return;
-                }
-                auto res = rm->IsResourceRunning(args[0]) ? rm->RefreshResource(args[0]) : rm->StartResource(args[0]);
-                if (res) {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Ensured resource '{}'", args[0]);
-                } else {
-                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ensure '{}': {}", args[0], res.GetError());
-                }
-            },
-            "Start or reload a resource: ensure <resource>");
+            "Re-scan and reload all running resources from disk");
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
     }

@@ -576,6 +576,12 @@ namespace Framework::Scripting {
         return ResourceOperationResult::Ok(affected);
     }
 
+    std::vector<std::string> ResourceManager::Rescan() {
+        auto added = RescanResources();
+        BuildDependencyGraph();
+        return added;
+    }
+
     std::vector<std::string> ResourceManager::RescanResources() {
         std::vector<std::string> added;
 

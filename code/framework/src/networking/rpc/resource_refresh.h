@@ -48,4 +48,31 @@ namespace Framework::Networking::RPC {
             }
         }
     };
+
+    // Server -> client: stop these resources on the client. Sent when a client
+    // resource stops at runtime (operator stop, error-stop, or the transient
+    // stop of a reload). Carries no files — the client just stops running them.
+    struct ResourceStop {
+        static constexpr const char *kIdentifier = "Framework::ResourceStop";
+        static constexpr uint16_t kMaxResources  = 1000;
+
+        std::vector<ResourceInfo> resources;
+
+        void Serialize(MafiaNet::BitStream *bs, bool write) {
+            uint16_t count = static_cast<uint16_t>(std::min<size_t>(resources.size(), std::numeric_limits<uint16_t>::max()));
+            bs->Serialize(write, count);
+            if (!write) {
+                resources.clear();
+                resources.resize(std::min<uint16_t>(count, kMaxResources));
+            }
+            for (uint16_t i = 0; i < count; ++i) {
+                if (!write && i >= kMaxResources) {
+                    ResourceInfo discard;
+                    discard.Serialize(bs, write);
+                    continue;
+                }
+                resources[i].Serialize(bs, write);
+            }
+        }
+    };
 } // namespace Framework::Networking::RPC

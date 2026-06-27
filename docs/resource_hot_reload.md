@@ -9,13 +9,16 @@ the change.
 
 Hot-reload triggers come in two forms:
 
-- **Console commands** (always available), registered on the server `Instance`:
-  - `ensure <resource>` — start the resource if stopped, reload it if running.
-    The FiveM-style canonical reload verb.
-  - `refresh <resource>` — reload a running resource (re-parsing its manifest);
-    leaves a stopped resource stopped.
-  - `refreshall` — re-scan the resources directory and reload everything that
-    was running.
+- **Console commands** (always available), registered on the server `Instance`
+  (FiveM-style verbs):
+  - `start <resource>` — start a stopped resource.
+  - `stop <resource>` — stop a running resource. With **no** argument, `stop`
+    shuts down the server (back-compat); `quit` always shuts down the server.
+  - `restart <resource>` — reload a running resource's code.
+  - `ensure <resource>` — start if stopped, reload if running. The canonical
+    reload verb.
+  - `refresh` — re-scan the resources directory for new resources (no restart).
+  - `refreshall` — re-scan and reload everything that was running.
 - **Automatic file watcher** (opt-in): set `InstanceOptions.developmentMode =
   true` on the server. The watcher polls running resources' files and reloads
   any that change. It is **off by default** — leave it off in production.
@@ -70,8 +73,13 @@ clients so they re-sync and apply it in place:
    doesn't know it yet (newly added on the server) — discovers it from the
    just-synced cache and starts it.
 
-Clients that haven't finished connecting ignore `ResourceRefresh` — their
-initial asset sync already fetches the current files.
+Symmetrically, when a client resource **stops** at runtime (operator `stop`,
+error-stop, or the transient stop within a reload), the server broadcasts a
+`ResourceStop` RPC and clients stop it — no files transfer. A reload therefore
+mirrors as stop-then-start on the client.
+
+Clients that haven't finished connecting ignore `ResourceRefresh`/`ResourceStop`
+— their initial asset sync already fetches the current files.
 
 ## Limitations
 

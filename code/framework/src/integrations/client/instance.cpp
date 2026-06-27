@@ -364,9 +364,47 @@ namespace Framework::Integrations::Client {
             if (!sm || !sm->GetScriptingEngine() || !sm->GetScriptingEngine()->IsInitialized()) {
                 return;
             }
-            _pendingRefreshResources = payload.resources;
-            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server hot-reloaded {} resource(s); re-syncing", _pendingRefreshResources.size());
-            SyncResourceUpdatesFromServer();
+            // Accumulate (deduped) — a single reload of a resource with
+            // dependents arrives as several RPCs, and one delta download covers
+            // them all. Overwriting here would drop all but the last.
+            for (const auto &r : payload.resources) {
+                bool known = false;
+                for (const auto &e : _pendingRefreshResources) {
+                    if (e.name == r.name) { known = true; break; }
+                }
+                if (!known) {
+                    _pendingRefreshResources.push_back(r);
+                }
+            }
+            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server hot-reloaded {} resource(s); re-syncing", payload.resources.size());
+            // If a re-sync is already in flight, its whole-directory delta will
+            // pick up these files too; OnAssetsDownloaded drains the full set.
+            if (!_downloadStatus.downloading) {
+                SyncResourceUpdatesFromServer();
+            }
+        });
+
+        // Server stopped a client resource at runtime: stop it here too.
+        net->RegisterRPC<Framework::Networking::RPC::ResourceStop>([this](const Framework::Networking::RPC::ResourceStop &payload, MafiaNet::Packet *) {
+            if (payload.resources.empty()) {
+                return;
+            }
+            auto *sm = GetScriptingModule();
+            if (!sm || !sm->GetScriptingEngine() || !sm->GetScriptingEngine()->IsInitialized()) {
+                return;
+            }
+            auto *rm = sm->GetResourceManager();
+            if (!rm) {
+                return;
+            }
+            for (const auto &res : payload.resources) {
+                if (rm->IsResourceRunning(res.name)) {
+                    auto result = rm->StopResource(res.name);
+                    if (!result) {
+                        Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Failed to stop client resource '{}': {}", res.name, result.GetError());
+                    }
+                }
+            }
         });
 
         // Spawn barrier complete: activate replication and report the connection final.

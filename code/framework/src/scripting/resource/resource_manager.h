@@ -168,6 +168,14 @@ namespace Framework::Scripting {
          */
         ResourceOperationResult RefreshAll();
 
+        /**
+         * Re-scan the resources directory for newly-added resources and rebuild
+         * the dependency graph, without starting or restarting anything (the
+         * FiveM-style `refresh`). New resources are left stopped.
+         * @return Names of resources newly discovered
+         */
+        std::vector<std::string> Rescan();
+
         // Registry Queries
 
         /**
