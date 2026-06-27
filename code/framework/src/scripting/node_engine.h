@@ -87,6 +87,13 @@ namespace Framework::Scripting {
         bool ExecuteFile(std::string_view filepath) override;
 
         /**
+         * Evict CommonJS modules cached under rootPath so a subsequent
+         * require() of the resource entry point re-reads edited files. Used by
+         * hot-reload; call only after the owning resource has been stopped.
+         */
+        void EvictModulesUnderPath(const std::string &rootPath) override;
+
+        /**
          * Process pending Node.js events (non-blocking).
          * Call this from game loop to process async operations.
          */

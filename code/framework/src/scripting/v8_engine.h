@@ -84,6 +84,13 @@ namespace Framework::Scripting {
          */
         void ClearModuleCache();
 
+        /**
+         * Evict cached modules (and their require() backing data) whose
+         * resolved path sits inside rootPath. Used by hot-reload; call only
+         * after the owning resource has been stopped.
+         */
+        void EvictModulesUnderPath(const std::string &rootPath) override;
+
         // Module loader internals (used by require callback)
         v8::MaybeLocal<v8::Value> LoadModule(std::string_view requestedPath,
                                               std::string_view referencingDir);

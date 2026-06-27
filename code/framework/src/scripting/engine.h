@@ -65,6 +65,16 @@ namespace Framework::Scripting {
         virtual bool ExecuteFile(std::string_view filepath) = 0;
 
         /**
+         * Evict cached modules whose resolved path sits inside the given root
+         * directory. Used by hot-reload so re-executing a resource's entry
+         * point re-reads edited files from disk instead of returning stale
+         * cached exports. Must be called only after the owning resource has
+         * been stopped. Default is a no-op for engines without a module cache.
+         * @param rootPath Path to a resource directory
+         */
+        virtual void EvictModulesUnderPath(const std::string &rootPath) {}
+
+        /**
          * Register framework SDK bindings.
          * Called after Init() to set up Framework.* APIs.
          */

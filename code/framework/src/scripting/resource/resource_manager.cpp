@@ -387,7 +387,29 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
-        return RestartResource(name);
+        // Capture the resource root before stopping so we can evict its cached
+        // modules. Without eviction, re-executing the entry point returns stale
+        // require() exports and on-disk edits to non-entry files are ignored.
+        std::string resourceRoot;
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            auto it = _resources.find(name);
+            if (it != _resources.end() && it->second) {
+                resourceRoot = it->second->GetPath();
+            }
+        }
+
+        auto stopResult = StopResource(name);
+        if (!stopResult) {
+            return stopResult;
+        }
+
+        // Evict only after the resource is stopped (engine cache contract).
+        if (_jsEngine && !resourceRoot.empty()) {
+            _jsEngine->EvictModulesUnderPath(resourceRoot);
+        }
+
+        return StartResource(name);
     }
 
     bool ResourceManager::ExecuteResourceScript(Resource &resource, std::string &outError) {

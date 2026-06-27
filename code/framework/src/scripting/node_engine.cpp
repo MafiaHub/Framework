@@ -205,6 +205,23 @@ namespace Framework::Scripting {
             "globalThis.require = publicRequire;"
             "globalThis.Framework = {};"
             "globalThis.Core = {};"
+            // Privileged hot-reload hook: capture the real CommonJS module cache
+            // now, before require() is sandboxed (which hides require.cache).
+            // Lets C++ evict a resource's modules on reload.
+            "Object.defineProperty(globalThis, '__fw_evictModulesUnderPath', {"
+            "  value: function(root, ci) {"
+            "    try {"
+            "      const cache = publicRequire.cache; if (!cache) return 0;"
+            "      let r = String(root).replace(/\\\\/g, '/'); if (ci) r = r.toLowerCase();"
+            "      let removed = 0;"
+            "      for (const k of Object.keys(cache)) {"
+            "        let nk = k.replace(/\\\\/g, '/'); if (ci) nk = nk.toLowerCase();"
+            "        if (nk.indexOf(r) === 0) { delete cache[k]; removed++; }"
+            "      }"
+            "      return removed;"
+            "    } catch (e) { return 0; }"
+            "  }, writable: false, configurable: false, enumerable: false"
+            "});"
             "process.setUncaughtExceptionCaptureCallback((err) => {"
             "  try {"
             "    const msg = err instanceof Error ? (err.stack || err.message) : String(err);"
@@ -318,6 +335,35 @@ namespace Framework::Scripting {
         std::string escapedPath = EscapeForSingleQuotedJSString(absPathStr);
         std::string code = "require('" + escapedPath + "');";
         return Execute(code, absPathStr);
+    }
+
+    void NodeEngine::EvictModulesUnderPath(const std::string &rootPath) {
+        if (!_initialized) {
+            return;
+        }
+
+        std::error_code ec;
+        std::filesystem::path absRoot = std::filesystem::weakly_canonical(rootPath, ec);
+        std::string rootStr = (ec ? std::filesystem::path(rootPath) : absRoot).generic_string();
+        if (rootStr.empty()) {
+            return;
+        }
+        // Trailing slash enforces a directory boundary in the JS startsWith
+        // check so /res/a doesn't evict modules of /res/ab.
+        if (rootStr.back() != '/') {
+            rootStr += '/';
+        }
+
+#ifdef _WIN32
+        const char *caseInsensitive = "true";
+#else
+        const char *caseInsensitive = "false";
+#endif
+        std::string escaped = EscapeForSingleQuotedJSString(rootStr);
+        std::string code =
+            "if (typeof globalThis.__fw_evictModulesUnderPath === 'function')"
+            " globalThis.__fw_evictModulesUnderPath('" + escaped + "', " + caseInsensitive + ");";
+        Execute(code, "<evict-modules>");
     }
 
     v8::Local<v8::Context> NodeEngine::GetContext() const {
