@@ -105,6 +105,10 @@ namespace Framework::Graphics {
             return _srvHeap;
         }
 
+        ID3D12CommandQueue *GetCommandQueue() const {
+            return _commandQueue;
+        }
+
         ID3D12GraphicsCommandList *GetGraphicsCommandList() const {
             return _commandList;
         }
