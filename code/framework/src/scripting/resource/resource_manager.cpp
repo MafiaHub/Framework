@@ -426,18 +426,12 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::RestartResource(std::string_view name) {
-        auto stopResult = StopResource(name);
-        if (!stopResult) {
-            return stopResult;
-        }
-
-        return StartResource(name);
-    }
-
-    ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
-        // Capture the resource root before stopping so we can evict its cached
-        // modules. Without eviction, re-executing the entry point returns stale
-        // require() exports and on-disk edits to non-entry files are ignored.
+        // Capture the resource root so we can evict its cached modules between
+        // stop and start. In a shared runtime a plain stop+start re-executes the
+        // entry against stale require()/module caches and does NOT pick up code
+        // changes; eviction makes "restart" actually reload code, matching
+        // per-resource-runtime engines (FiveM/MTASA) where restart inherently
+        // reloads. This also gives error auto-restart a clean module slate.
         std::string resourceRoot;
         {
             std::scoped_lock lock(_resourcesMutex);
@@ -458,6 +452,12 @@ namespace Framework::Scripting {
         }
 
         return StartResource(name);
+    }
+
+    ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
+        // RestartResource now evicts modules, so reload is just a restart that
+        // re-reads the resource's code from disk.
+        return RestartResource(name);
     }
 
     ResourceOperationResult ResourceManager::RefreshResource(std::string_view name) {

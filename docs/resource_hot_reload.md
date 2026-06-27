@@ -9,8 +9,13 @@ the change.
 
 Hot-reload triggers come in two forms:
 
-- **Console commands** (always available): `refresh <resource>` and
-  `refreshall`, registered on the server `Instance`.
+- **Console commands** (always available), registered on the server `Instance`:
+  - `ensure <resource>` — start the resource if stopped, reload it if running.
+    The FiveM-style canonical reload verb.
+  - `refresh <resource>` — reload a running resource (re-parsing its manifest);
+    leaves a stopped resource stopped.
+  - `refreshall` — re-scan the resources directory and reload everything that
+    was running.
 - **Automatic file watcher** (opt-in): set `InstanceOptions.developmentMode =
   true` on the server. The watcher polls running resources' files and reloads
   any that change. It is **off by default** — leave it off in production.
@@ -78,6 +83,31 @@ initial asset sync already fetches the current files.
 - **Only changed existing resources propagate to clients.** A brand-new resource
   added at runtime reaches already-connected clients on their next full connect,
   not via `ResourceRefresh`.
+
+## Design notes (vs FiveM / MTASA)
+
+FiveM and MTASA run **each resource in its own script runtime** (Lua state / V8
+isolate / Mono domain). Reloading destroys and recreates that runtime, so
+modules, timers, and event listeners are freed automatically — there is no
+cache to evict or timer to cancel.
+
+This framework runs **one shared Node runtime** for all resources. Everything in
+the reload sequence above (module eviction, timer cancellation, listener
+cleanup) exists to compensate for that shared runtime. A consequence worth
+knowing: a plain stop+start does **not** reload code here — the entry point
+re-executes against stale module caches. `RestartResource` therefore evicts the
+resource's modules between stop and start, so "restart" reloads code the way it
+does in a per-resource-runtime engine.
+
+The robust long-term direction, if reload correctness becomes a recurring
+concern, is **per-resource isolation** (a dedicated V8 context per resource):
+reload would drop the context and rebuild it, eliminating the module-eviction,
+timer-leak, and listener-leak classes at the source — the same property FiveM
+and MTASA rely on.
+
+Where this framework is already ahead of FiveM: reloading a dependency restarts
+the dependents that cascaded down (FiveM leaves them stopped — see its
+`#TODO: restarting behavior of stopped dependencies at runtime`).
 
 ## Versioning
 

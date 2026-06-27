@@ -554,6 +554,29 @@ namespace Framework::Integrations::Server {
             },
             "Re-scan and reload all resources from disk");
 
+        // FiveM-style start-or-reload: reload if running, start if stopped. The
+        // canonical reload verb operators coming from FiveM/MTASA expect.
+        _commandProcessor->RegisterCommand(
+            "ensure", {},
+            [this](cxxopts::ParseResult &result) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                const auto &args = result.unmatched();
+                if (args.empty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Usage: ensure <resource>");
+                    return;
+                }
+                auto res = rm->IsResourceRunning(args[0]) ? rm->RefreshResource(args[0]) : rm->StartResource(args[0]);
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Ensured resource '{}'", args[0]);
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to ensure '{}': {}", args[0], res.GetError());
+                }
+            },
+            "Start or reload a resource: ensure <resource>");
+
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
     }
 
