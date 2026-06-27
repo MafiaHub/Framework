@@ -179,10 +179,14 @@ namespace Framework::Integrations::Server {
         // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
 
-        // Notify connected clients when a client resource is hot-reloaded so
-        // they can re-sync its files and restart it (dev mode).
-        _scriptingModule->GetResourceManager()->SetOnResourceReloaded([this](const std::string &name) {
-            BroadcastResourceRefresh(name);
+        // Notify connected clients whenever a client resource starts at runtime
+        // (a hot-reload restart, an error auto-restart, or a newly started
+        // resource). Gated on the initial boot: during StartAll below no client
+        // is connected yet, and each client receives the full list on connect.
+        _scriptingModule->GetResourceManager()->SetOnResourceStarted([this](const std::string &name) {
+            if (_resourcesBooted) {
+                BroadcastResourceRefresh(name);
+            }
         });
 
         // Start all resources (ES modules load asynchronously via normal Update cycle)
@@ -190,6 +194,9 @@ namespace Framework::Integrations::Server {
         if (!startResult) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.GetError());
         }
+        // Past this point, resource starts are runtime changes worth pushing to
+        // connected clients.
+        _resourcesBooted = true;
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Host:\t{}", _opts.bindHost);

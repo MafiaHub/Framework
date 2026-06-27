@@ -51,20 +51,24 @@ newly-added resource directories (left stopped — `start` them explicitly).
 
 ## Client propagation
 
-When a resource with a client entry point reloads, the server notifies clients
-so they re-sync and restart it in place:
+Whenever a client resource **starts at runtime** — a reload restart, an error
+auto-restart, or a newly started resource — the server notifies connected
+clients so they re-sync and apply it in place:
 
-1. `RefreshResource`/`RefreshAll` fire `ResourceManager::SetOnResourceReloaded`.
-2. The server `Instance` rebuilds the asset streamer's upload list
-   (`ClearUploads` + `InitAssetStreamer`). This is required: MafiaNet's
-   `DirectoryDeltaTransfer` compares the file hashes captured when files were
-   added, so without rebuilding, an edited file looks up-to-date and is never
-   re-sent.
-3. The server broadcasts a `ResourceRefresh` RPC (changed resource
-   names/versions).
+1. Any `StartResource` after the initial boot fires
+   `ResourceManager::SetOnResourceStarted`; the server `Instance` reacts (boot
+   starts are skipped — clients get the full list on connect).
+2. The server rebuilds the asset streamer's upload list (`ClearUploads` +
+   `InitAssetStreamer`). This is required: MafiaNet's `DirectoryDeltaTransfer`
+   compares the file hashes captured when files were added, so without
+   rebuilding, an edited file looks up-to-date and is never re-sent.
+3. The server broadcasts a `ResourceRefresh` RPC (affected resource
+   names/versions), for resources with a client entry point.
 4. The client re-runs a **targeted** delta download (only changed files
    transfer; unlike the connect-time download it does not stop all resources),
-   then calls its own `RefreshResource` for the flagged resources.
+   then for each flagged resource: reloads it if running, or — if the client
+   doesn't know it yet (newly added on the server) — discovers it from the
+   just-synced cache and starts it.
 
 Clients that haven't finished connecting ignore `ResourceRefresh` — their
 initial asset sync already fetches the current files.
@@ -80,9 +84,6 @@ initial asset sync already fetches the current files.
 - **`require('timers')` bypasses timer tracking.** Timer cleanup wraps the
   global `setTimeout`/`setInterval`; code importing the `timers` module
   directly is not tracked.
-- **Only changed existing resources propagate to clients.** A brand-new resource
-  added at runtime reaches already-connected clients on their next full connect,
-  not via `ResourceRefresh`.
 
 ## Design notes (vs FiveM / MTASA)
 

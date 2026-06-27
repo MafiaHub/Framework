@@ -548,9 +548,20 @@ namespace Framework::Integrations::Client {
                 && !_pendingRefreshResources.empty()) {
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     for (const auto &res : _pendingRefreshResources) {
-                        auto result = rm->RefreshResource(res.name);
+                        // A resource the client doesn't know yet was started on
+                        // the server at runtime: discover it from the just-synced
+                        // cache before starting.
+                        if (!rm->HasResource(res.name)) {
+                            const std::string resPath = GetAssetCachePath() + "/" + res.name;
+                            if (!rm->DiscoverResource(resPath)) {
+                                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Could not discover new client resource '{}' at {}", res.name, resPath);
+                                continue;
+                            }
+                        }
+                        // Reload if running, start if newly discovered/stopped.
+                        auto result = rm->IsResourceRunning(res.name) ? rm->RefreshResource(res.name) : rm->StartResource(res.name);
                         if (!result) {
-                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Failed to refresh client resource '{}': {}", res.name, result.GetError());
+                            Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Failed to sync client resource '{}': {}", res.name, result.GetError());
                         }
                     }
                 }
