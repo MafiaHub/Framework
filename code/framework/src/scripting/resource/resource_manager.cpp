@@ -42,9 +42,8 @@ namespace Framework::Scripting {
             return true;
         }
 
-        // Newest last-write-time across all files under a resource directory,
-        // as implementation-defined clock ticks (monotonic for comparison on a
-        // given platform). Returns 0 if the directory can't be scanned.
+        // Newest file mtime under a resource directory, in impl-defined clock
+        // ticks (monotonic for comparison). 0 if the directory can't be scanned.
         int64_t ComputeResourceMTime(const std::string &path) {
             std::error_code ec;
             int64_t newest = 0;
@@ -58,8 +57,7 @@ namespace Framework::Scripting {
                 if (ec) {
                     break;
                 }
-                // Don't descend into dependency/VCS trees — they're large and
-                // not hand-edited, so polling them every tick is wasted work.
+                // Skip large, non-hand-edited trees.
                 if (it->is_directory(ec) && !ec) {
                     const auto dirName = it->path().filename().string();
                     if (dirName == "node_modules" || dirName == ".git") {
@@ -406,8 +404,7 @@ namespace Framework::Scripting {
         // Call cleanup (removes handlers)
         CallResourceStop(name);
 
-        // Cancel timers the resource left running (raw setTimeout/setInterval),
-        // which the shared runtime would otherwise keep firing across reloads.
+        // Cancel timers the resource left running.
         if (_jsEngine) {
             _jsEngine->ClearResourceTimers(std::string(name));
         }
@@ -426,12 +423,9 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::RestartResource(std::string_view name) {
-        // Capture the resource root so we can evict its cached modules between
-        // stop and start. In a shared runtime a plain stop+start re-executes the
-        // entry against stale require()/module caches and does NOT pick up code
-        // changes; eviction makes "restart" actually reload code, matching
-        // per-resource-runtime engines (FiveM/MTASA) where restart inherently
-        // reloads. This also gives error auto-restart a clean module slate.
+        // Evict the resource's modules between stop and start: in a shared
+        // runtime a plain stop+start would re-run against stale caches and not
+        // reload code. See docs/resource_hot_reload.md.
         std::string resourceRoot;
         {
             std::scoped_lock lock(_resourcesMutex);
@@ -446,7 +440,7 @@ namespace Framework::Scripting {
             return stopResult;
         }
 
-        // Evict only after the resource is stopped (engine cache contract).
+        // Evict only after stop (engine cache contract).
         if (_jsEngine && !resourceRoot.empty()) {
             _jsEngine->EvictModulesUnderPath(resourceRoot);
         }
@@ -455,8 +449,6 @@ namespace Framework::Scripting {
     }
 
     ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
-        // RestartResource now evicts modules, so reload is just a restart that
-        // re-reads the resource's code from disk.
         return RestartResource(name);
     }
 
@@ -473,9 +465,8 @@ namespace Framework::Scripting {
             wasRunning  = it->second->IsRunning();
         }
 
-        // Stop first (cascades to dependents) so we can replace the registry
-        // entry and evict its modules safely. Remember everything that went
-        // down so we can bring it all back up afterwards.
+        // Stop first (cascades to dependents); remember what went down to
+        // restart it all afterwards.
         std::vector<std::string> toRestart;
         if (wasRunning) {
             auto stopResult = StopResource(name);
@@ -509,8 +500,7 @@ namespace Framework::Scripting {
             return ResourceOperationResult::Ok({newName});
         }
 
-        // Restart the resource itself plus any dependents that cascaded down.
-        // StartResource pulls dependencies in automatically, so order is safe.
+        // Restart the resource plus the dependents that cascaded down.
         std::vector<std::string> affected;
         for (const auto &stoppedName : toRestart) {
             const std::string startName = (stoppedName == oldName) ? newName : stoppedName;
@@ -1064,8 +1054,7 @@ namespace Framework::Scripting {
             if (current > snapIt->second) {
                 Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
                     ->info("Detected change in resource '{}', hot-reloading", name);
-                // Update before reloading so a reload-induced rescan next tick
-                // doesn't re-trigger on the same change.
+                // Update before reloading so we don't re-trigger on it.
                 snapIt->second = current;
                 RefreshResource(name);
             }

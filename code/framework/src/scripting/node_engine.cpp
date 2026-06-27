@@ -206,9 +206,8 @@ namespace Framework::Scripting {
             "globalThis.require = publicRequire;"
             "globalThis.Framework = {};"
             "globalThis.Core = {};"
-            // Privileged hot-reload hook: capture the real CommonJS module cache
-            // now, before require() is sandboxed (which hides require.cache).
-            // Lets C++ evict a resource's modules on reload.
+            // Capture the real require.cache before sandboxing hides it, so
+            // C++ can evict a resource's modules on reload.
             "Object.defineProperty(globalThis, '__fw_evictModulesUnderPath', {"
             "  value: function(root, ci) {"
             "    try {"
@@ -223,12 +222,9 @@ namespace Framework::Scripting {
             "    } catch (e) { return 0; }"
             "  }, writable: false, configurable: false, enumerable: false"
             "});"
-            // Per-resource timer tracking: wrap the global timer functions so a
-            // resource's setTimeout/setInterval can be cancelled when it stops
-            // (a shared runtime would otherwise keep firing them across reloads).
-            // Timers are attributed to a resource via __fw_ownerOf (installed
-            // from C++ after Init). The real timer handle is returned unchanged,
-            // so user clearTimeout/unref and util.promisify keep working.
+            // Wrap global timers to track them per resource (attributed via
+            // __fw_ownerOf) so a resource's timers can be cancelled on stop.
+            // The real handle is returned, so clearTimeout/unref/promisify work.
             "(function(){"
             "  const reg = new Map();"
             "  const _st = globalThis.setTimeout, _si = globalThis.setInterval,"
@@ -394,8 +390,7 @@ namespace Framework::Scripting {
         if (rootStr.empty()) {
             return;
         }
-        // Trailing slash enforces a directory boundary in the JS startsWith
-        // check so /res/a doesn't evict modules of /res/ab.
+        // Trailing slash so /res/a doesn't match /res/ab in the JS prefix check.
         if (rootStr.back() != '/') {
             rootStr += '/';
         }

@@ -108,8 +108,7 @@ namespace Framework::Integrations::Server {
     class Instance : public Framework::Lifecycle {
       private:
         std::atomic<bool> _shuttingDown;
-        // True once the initial StartAll has run; gates runtime resource-start
-        // broadcasts to clients (boot-time starts aren't pushed).
+        // Set after the initial StartAll; gates runtime broadcasts to clients.
         bool _resourcesBooted = false;
         std::chrono::time_point<std::chrono::high_resolution_clock> _nextTick;
 

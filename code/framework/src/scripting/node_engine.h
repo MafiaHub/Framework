@@ -86,24 +86,14 @@ namespace Framework::Scripting {
         void Shutdown() override;
         bool ExecuteFile(std::string_view filepath) override;
 
-        /**
-         * Evict CommonJS modules cached under rootPath so a subsequent
-         * require() of the resource entry point re-reads edited files. Used by
-         * hot-reload; call only after the owning resource has been stopped.
-         */
+        // Evict CommonJS modules cached under rootPath (require.cache).
         void EvictModulesUnderPath(const std::string &rootPath) override;
 
-        /**
-         * Cancel timers created by the named resource (via the bootstrap timer
-         * tracking shim). Call after the resource has stopped.
-         */
+        // Cancel timers the named resource created (via the bootstrap shim).
         void ClearResourceTimers(const std::string &resourceName) override;
 
-        /**
-         * Install the privileged __fw_ownerOf(fn) helper used by the bootstrap
-         * timer-tracking shim to attribute timers to resources. Must be called
-         * once after Init(), with V8 scopes active.
-         */
+        // Install the privileged __fw_ownerOf(fn) helper for the timer shim.
+        // Call once after Init() with V8 scopes active.
         void InstallResourceTimerTracking();
 
         /**
@@ -177,8 +167,7 @@ namespace Framework::Scripting {
 
         static void OnUncaughtError(const v8::FunctionCallbackInfo<v8::Value> &info);
 
-        // Privileged JS helper: returns the resource name owning a function,
-        // resolved from its script origin. Backs the timer-tracking shim.
+        // __fw_ownerOf(fn): resource owning a function, from its script origin.
         static void OnTimerOwnerLookup(const v8::FunctionCallbackInfo<v8::Value> &info);
 
         NodeEngineOptions _options;

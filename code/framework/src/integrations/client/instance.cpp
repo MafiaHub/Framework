@@ -357,16 +357,14 @@ namespace Framework::Integrations::Client {
             if (payload.resources.empty()) {
                 return;
             }
-            // Ignore until we've finished connecting and have a running scripting
-            // module. Otherwise we'd cancel the in-flight initial asset download;
-            // that initial sync already fetches the current (reloaded) files.
+            // Ignore until connected with a running module, else we'd cancel
+            // the initial download (which already fetches current files).
             auto *sm = GetScriptingModule();
             if (!sm || !sm->GetScriptingEngine() || !sm->GetScriptingEngine()->IsInitialized()) {
                 return;
             }
-            // Accumulate (deduped) — a single reload of a resource with
-            // dependents arrives as several RPCs, and one delta download covers
-            // them all. Overwriting here would drop all but the last.
+            // Accumulate (deduped): one reload arrives as several RPCs and a
+            // single delta download covers them all; overwriting would drop all but the last.
             for (const auto &r : payload.resources) {
                 bool known = false;
                 for (const auto &e : _pendingRefreshResources) {
@@ -377,8 +375,7 @@ namespace Framework::Integrations::Client {
                 }
             }
             Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->debug("Server hot-reloaded {} resource(s); re-syncing", payload.resources.size());
-            // If a re-sync is already in flight, its whole-directory delta will
-            // pick up these files too; OnAssetsDownloaded drains the full set.
+            // An in-flight re-sync already covers these; it drains the full set on complete.
             if (!_downloadStatus.downloading) {
                 SyncResourceUpdatesFromServer();
             }
@@ -549,10 +546,8 @@ namespace Framework::Integrations::Client {
             return;
         }
 
-        // Unlike DownloadsAssetsFromConnectedServer this does NOT stop all
-        // resources or tear down web views — only the changed resources are
-        // refreshed once the (delta) download completes. The asset cache path
-        // is already configured from the initial connect.
+        // Unlike DownloadsAssetsFromConnectedServer, does NOT stop all resources
+        // or tear down web views; cache path is already set from connect.
         const auto streamer = net->GetAssetStreamer();
         const auto cacheDir = GetAssetCachePath();
         if (cacheDir.empty()) {
@@ -577,18 +572,14 @@ namespace Framework::Integrations::Client {
 
             auto scriptingModule = GetScriptingModule();
 
-            // Hot-reload path: the scripting module is already running and the
-            // server flagged specific resources. Refresh just those (their
-            // files were re-synced above) instead of re-initializing the whole
-            // module and restarting everything.
+            // Hot-reload path: module already running, refresh just the flagged
+            // resources instead of re-initializing everything.
             if (scriptingModule && scriptingModule->GetScriptingEngine()
                 && scriptingModule->GetScriptingEngine()->IsInitialized()
                 && !_pendingRefreshResources.empty()) {
                 if (auto *rm = scriptingModule->GetResourceManager()) {
                     for (const auto &res : _pendingRefreshResources) {
-                        // A resource the client doesn't know yet was started on
-                        // the server at runtime: discover it from the just-synced
-                        // cache before starting.
+                        // Newly started server-side: discover from cache first.
                         if (!rm->HasResource(res.name)) {
                             const std::string resPath = GetAssetCachePath() + "/" + res.name;
                             if (!rm->DiscoverResource(resPath)) {
@@ -606,8 +597,7 @@ namespace Framework::Integrations::Client {
                 _pendingRefreshResources.clear();
                 return;
             }
-            // A refresh that raced an initial connect falls through to the full
-            // init below, which loads the just-synced files anyway.
+            // A refresh that raced an initial connect falls through to full init.
             _pendingRefreshResources.clear();
 
             if (scriptingModule) {

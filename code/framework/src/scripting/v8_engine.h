@@ -84,16 +84,10 @@ namespace Framework::Scripting {
          */
         void ClearModuleCache();
 
-        /**
-         * Evict cached modules (and their require() backing data) whose
-         * resolved path sits inside rootPath. Used by hot-reload; call only
-         * after the owning resource has been stopped.
-         */
+        // Evict cached modules (and require() backing data) under rootPath.
         void EvictModulesUnderPath(const std::string &rootPath) override;
 
-        /**
-         * Cancel all timers created by the named resource. Call after stop.
-         */
+        // Cancel all timers created by the named resource.
         void ClearResourceTimers(const std::string &resourceName) override;
 
         // Module loader internals (used by require callback)

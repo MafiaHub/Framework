@@ -147,9 +147,7 @@ namespace Framework::Scripting::V8EngineCallbacks {
         entry->intervalMs = data->isInterval ? (delayMs > 0 ? delayMs : 1) : 0;
         entry->cancelled = false;
 
-        // Attribute the timer to its owning resource (for cleanup on stop),
-        // mirroring how the event system attributes async handlers: prefer the
-        // callback's script origin, then the current context, then the stack.
+        // Owner for cleanup on stop: callback script origin, then context, then stack.
         if (auto *mgr = data->engine->GetResourceManager()) {
             std::string owner = mgr->GetResourceNameFromFunction(isolate, callbackFn);
             if (owner.empty()) {

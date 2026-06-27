@@ -70,10 +70,7 @@ namespace Framework::Scripting {
             return;
         }
 
-        // Disposing v8::Global handles touches the isolate; since the engine
-        // runs in locking mode (Engine::Execute takes a Locker), hold one here
-        // too. No HandleScope: Global::Reset needs none, and we create no
-        // Local handles. Locker is reentrant, so a locked caller is fine.
+        // Hold a Locker to dispose Global handles (engine runs in locking mode).
         v8::Locker locker(_isolate);
         v8::Isolate::Scope isolateScope(_isolate);
 

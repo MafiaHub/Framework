@@ -64,23 +64,12 @@ namespace Framework::Scripting {
          */
         virtual bool ExecuteFile(std::string_view filepath) = 0;
 
-        /**
-         * Evict cached modules whose resolved path sits inside the given root
-         * directory. Used by hot-reload so re-executing a resource's entry
-         * point re-reads edited files from disk instead of returning stale
-         * cached exports. Must be called only after the owning resource has
-         * been stopped. Default is a no-op for engines without a module cache.
-         * @param rootPath Path to a resource directory
-         */
+        // Evict cached modules under a resource dir so hot-reload re-reads
+        // edited files. No-op without a module cache; call only after stop.
         virtual void EvictModulesUnderPath(const std::string &rootPath) {}
 
-        /**
-         * Cancel any timers (setTimeout/setInterval) still owned by a resource
-         * when it stops. In a shared runtime, re-running a resource otherwise
-         * leaves its old intervals firing and duplicates them on reload.
-         * Default is a no-op. Call only after the resource has been stopped.
-         * @param resourceName Name of the resource whose timers to cancel
-         */
+        // Cancel timers the resource created (setTimeout/setInterval) so the
+        // shared runtime doesn't keep firing them after stop. Call after stop.
         virtual void ClearResourceTimers(const std::string &resourceName) {}
 
         /**

@@ -17,9 +17,8 @@
 #include <vector>
 
 namespace Framework::Networking::RPC {
-    // Server -> client, dev hot-reload only: these client resources changed on
-    // the server and were reloaded. The client re-syncs their files from the
-    // asset streamer (delta transfer) and restarts them in place.
+    // Server -> client: these client resources were (re)started; the client
+    // re-syncs their files (delta) and reloads/starts them.
     struct ResourceRefresh {
         static constexpr const char *kIdentifier = "Framework::ResourceRefresh";
         static constexpr uint16_t kMaxResources  = 1000; // bound untrusted input
@@ -49,9 +48,8 @@ namespace Framework::Networking::RPC {
         }
     };
 
-    // Server -> client: stop these resources on the client. Sent when a client
-    // resource stops at runtime (operator stop, error-stop, or the transient
-    // stop of a reload). Carries no files — the client just stops running them.
+    // Server -> client: stop these resources (no files). Sent when a client
+    // resource stops at runtime.
     struct ResourceStop {
         static constexpr const char *kIdentifier = "Framework::ResourceStop";
         static constexpr uint16_t kMaxResources  = 1000;

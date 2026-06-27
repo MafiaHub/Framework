@@ -179,18 +179,13 @@ namespace Framework::Integrations::Server {
         // Initialize asset streamer (needs discovered resources to know client files)
         InitAssetStreamer();
 
-        // Notify connected clients whenever a client resource starts at runtime
-        // (a hot-reload restart, an error auto-restart, or a newly started
-        // resource). Gated on the initial boot: during StartAll below no client
-        // is connected yet, and each client receives the full list on connect.
+        // Mirror runtime resource start/stop to clients. Gated on boot (the
+        // StartAll below predates any connection) and shutdown.
         _scriptingModule->GetResourceManager()->SetOnResourceStarted([this](const std::string &name) {
             if (_resourcesBooted && !_shuttingDown) {
                 BroadcastResourceRefresh(name);
             }
         });
-        // Mirror runtime stops to clients (operator stop, error-stop, or the
-        // transient stop of a reload — the matching start follows). Skipped
-        // during shutdown, when StopAll stops every resource.
         _scriptingModule->GetResourceManager()->SetOnResourceStopped([this](const std::string &name) {
             if (_resourcesBooted && !_shuttingDown) {
                 BroadcastResourceStop(name);
@@ -202,8 +197,6 @@ namespace Framework::Integrations::Server {
         if (!startResult) {
             Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to start resources: {}", startResult.GetError());
         }
-        // Past this point, resource starts are runtime changes worth pushing to
-        // connected clients.
         _resourcesBooted = true;
 
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->flush();
@@ -476,9 +469,8 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // Rebuild the asset streamer's upload list so the changed files get
-        // fresh hashes. The delta transfer compares stored hashes, so without
-        // this the edited file would look up-to-date and never be re-sent.
+        // Rebuild the streamer's upload list so changed files get fresh hashes;
+        // the delta transfer compares stored hashes. See docs/resource_hot_reload.md.
         if (auto *streamer = net->GetAssetStreamer()) {
             streamer->ClearUploads();
         }
@@ -513,8 +505,7 @@ namespace Framework::Integrations::Server {
             return;
         }
 
-        // No streamer rebuild: stopping ships no files, the client just stops
-        // running the resource.
+        // No streamer rebuild: stopping ships no files.
         Framework::Networking::RPC::ResourceStop stop;
         stop.resources.push_back({resource->GetName(), resource->GetVersion()});
         net->BroadcastRPC(stop);
@@ -548,8 +539,7 @@ namespace Framework::Integrations::Server {
             },
             "Stop the server");
 
-        // `stop` with no argument stops the server (back-compat); `stop <resource>`
-        // stops that resource (FiveM-style).
+        // No argument: stop the server (back-compat). With one: stop a resource.
         _commandProcessor->RegisterCommand(
             "stop", {},
             [this](cxxopts::ParseResult &result) {
@@ -587,9 +577,8 @@ namespace Framework::Integrations::Server {
             },
             "Show server status");
 
-        // Resource lifecycle commands (FiveM-style). A small helper keeps the
-        // boilerplate (resolve manager, require a name, log the result) in one
-        // place so each verb is just its operation.
+        // Resource lifecycle commands. Helper folds the shared boilerplate
+        // (resolve manager, require a name, log the result).
         auto resourceCommand = [this](std::string_view verb, auto op) {
             return [this, verb, op](cxxopts::ParseResult &result) {
                 auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
