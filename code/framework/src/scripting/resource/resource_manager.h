@@ -47,6 +47,13 @@ namespace Framework::Scripting {
 
         // Whether to warn (instead of error) when a dependency is missing
         bool warnOnMissingDependency = false;
+
+        // Development mode: poll resource files for changes and auto-reload.
+        // Should stay off in production (auto-reload is a dev convenience).
+        bool devMode = false;
+
+        // Minimum interval between file-change polls, in milliseconds.
+        int fileWatchIntervalMs = 1000;
     };
 
     /**
@@ -333,6 +340,13 @@ namespace Framework::Scripting {
          */
         void ProcessScheduledRestarts();
 
+        /**
+         * In dev mode, poll running resources' files for changes (throttled by
+         * fileWatchIntervalMs) and hot-reload any that changed on disk. No-op
+         * when devMode is disabled. Call from the scripting update tick.
+         */
+        void ProcessFileWatch();
+
       private:
         // Internal resource access (mutable)
         Resource *GetResourceMutable(std::string_view name);
@@ -395,6 +409,11 @@ namespace Framework::Scripting {
         };
         std::vector<ScheduledRestart> _scheduledRestarts;
         mutable std::mutex _scheduledRestartsMutex;
+
+        // Dev-mode file watcher state (accessed only from the update thread).
+        // Maps resource name -> newest file mtime seen (impl-defined ticks).
+        std::map<std::string, int64_t> _watchSnapshots;
+        std::chrono::steady_clock::time_point _lastFileWatchPoll{};
 
         // Events instance owned by this manager
         Events _events;

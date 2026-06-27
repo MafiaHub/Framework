@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <queue>
 #include <stack>
@@ -38,6 +40,46 @@ namespace Framework::Scripting {
                 }
             }
             return true;
+        }
+
+        // Newest last-write-time across all files under a resource directory,
+        // as implementation-defined clock ticks (monotonic for comparison on a
+        // given platform). Returns 0 if the directory can't be scanned.
+        int64_t ComputeResourceMTime(const std::string &path) {
+            std::error_code ec;
+            int64_t newest = 0;
+            std::filesystem::recursive_directory_iterator it(
+                path, std::filesystem::directory_options::skip_permission_denied, ec);
+            const std::filesystem::recursive_directory_iterator end;
+            if (ec) {
+                return newest;
+            }
+            for (; it != end; it.increment(ec)) {
+                if (ec) {
+                    break;
+                }
+                // Don't descend into dependency/VCS trees — they're large and
+                // not hand-edited, so polling them every tick is wasted work.
+                if (it->is_directory(ec) && !ec) {
+                    const auto dirName = it->path().filename().string();
+                    if (dirName == "node_modules" || dirName == ".git") {
+                        it.disable_recursion_pending();
+                    }
+                    continue;
+                }
+                if (!it->is_regular_file(ec) || ec) {
+                    continue;
+                }
+                auto t = std::filesystem::last_write_time(it->path(), ec);
+                if (ec) {
+                    continue;
+                }
+                int64_t ticks = static_cast<int64_t>(t.time_since_epoch().count());
+                if (ticks > newest) {
+                    newest = ticks;
+                }
+            }
+            return newest;
         }
     } // anonymous namespace
 
@@ -968,6 +1010,53 @@ namespace Framework::Scripting {
 
         for (const auto &sr : dueRestarts) {
             RestartResource(sr.resourceName);
+        }
+    }
+
+    void ResourceManager::ProcessFileWatch() {
+        if (!_config.devMode) {
+            return;
+        }
+
+        // Throttle polls to the configured interval.
+        const auto now = std::chrono::steady_clock::now();
+        if (_lastFileWatchPoll.time_since_epoch().count() != 0) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - _lastFileWatchPoll).count();
+            if (elapsed < _config.fileWatchIntervalMs) {
+                return;
+            }
+        }
+        _lastFileWatchPoll = now;
+
+        for (const auto &name : GetRunningResourceNames()) {
+            std::string path;
+            {
+                std::scoped_lock lock(_resourcesMutex);
+                auto it = _resources.find(name);
+                if (it != _resources.end() && it->second) {
+                    path = it->second->GetPath();
+                }
+            }
+            if (path.empty()) {
+                continue;
+            }
+
+            const int64_t current = ComputeResourceMTime(path);
+            auto snapIt = _watchSnapshots.find(name);
+            if (snapIt == _watchSnapshots.end()) {
+                // First time we've seen this resource: seed, don't reload.
+                _watchSnapshots[name] = current;
+                continue;
+            }
+            if (current > snapIt->second) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->info("Detected change in resource '{}', hot-reloading", name);
+                // Update before reloading so a reload-induced rescan next tick
+                // doesn't re-trigger on the same change.
+                snapIt->second = current;
+                RefreshResource(name);
+            }
         }
     }
 

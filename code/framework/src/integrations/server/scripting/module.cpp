@@ -56,6 +56,7 @@ namespace Framework::Integrations::Server::Scripting {
         config.resourcesPath = _resourcesPath;
         config.isClient = false;
         config.cascadeStopDependents = true;
+        config.devMode = _devMode;
 
         _resourceManager = std::make_unique<Framework::Scripting::ResourceManager>(
             _nodeEngine.get(), config);
@@ -180,6 +181,8 @@ namespace Framework::Integrations::Server::Scripting {
         if (_resourceManager) {
             // Process scheduled restarts
             _resourceManager->ProcessScheduledRestarts();
+            // Dev-mode: poll resource files and hot-reload on change
+            _resourceManager->ProcessFileWatch();
         }
 
         // Process pending message responses
@@ -200,6 +203,15 @@ namespace Framework::Integrations::Server::Scripting {
         if (_resourceManager) {
             Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
             config.resourcesPath = path;
+            _resourceManager->SetConfig(config);
+        }
+    }
+
+    void ServerScriptingModule::SetDevMode(bool enabled) {
+        _devMode = enabled;
+        if (_resourceManager) {
+            Framework::Scripting::ResourceManagerConfig config = _resourceManager->GetConfig();
+            config.devMode = enabled;
             _resourceManager->SetConfig(config);
         }
     }

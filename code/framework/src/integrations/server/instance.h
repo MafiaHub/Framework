@@ -45,6 +45,10 @@ namespace Framework::Integrations::Server {
         std::string modConfigFile = "server.json";
         std::string resourcesPath = "resources";
 
+        // Development mode: watch resource files and hot-reload on change.
+        // Leave off in production.
+        bool developmentMode = false;
+
         // networked game metadata (required)
         std::string gameName;
         std::string gameVersion;
