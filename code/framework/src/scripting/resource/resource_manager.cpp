@@ -412,6 +412,161 @@ namespace Framework::Scripting {
         return StartResource(name);
     }
 
+    ResourceOperationResult ResourceManager::RefreshResource(std::string_view name) {
+        std::string path;
+        bool wasRunning = false;
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            auto it = _resources.find(name);
+            if (it == _resources.end() || !it->second) {
+                return ResourceOperationResult("Resource not found: " + std::string(name));
+            }
+            path        = it->second->GetPath();
+            wasRunning  = it->second->IsRunning();
+        }
+
+        // Stop first (cascades to dependents) so we can replace the registry
+        // entry and evict its modules safely. Remember everything that went
+        // down so we can bring it all back up afterwards.
+        std::vector<std::string> toRestart;
+        if (wasRunning) {
+            auto stopResult = StopResource(name);
+            if (!stopResult) {
+                return stopResult;
+            }
+            toRestart = stopResult.GetValue();
+        }
+
+        if (_jsEngine && !path.empty()) {
+            _jsEngine->EvictModulesUnderPath(path);
+        }
+
+        // Re-parse package.json so manifest edits (deps, entry points) apply.
+        auto reparsed = std::make_unique<Resource>(path);
+        if (!reparsed->IsManifestValid()) {
+            return ResourceOperationResult("Invalid package.json in " + path + ": " + reparsed->GetErrorMessage());
+        }
+        const std::string oldName = std::string(name);
+        std::string newName       = reparsed->GetName();
+        {
+            std::scoped_lock lock(_resourcesMutex);
+            if (newName != oldName) {
+                _resources.erase(oldName);
+            }
+            _resources[newName] = std::move(reparsed);
+        }
+        BuildDependencyGraph();
+
+        if (!wasRunning) {
+            return ResourceOperationResult::Ok({newName});
+        }
+
+        // Restart the resource itself plus any dependents that cascaded down.
+        // StartResource pulls dependencies in automatically, so order is safe.
+        std::vector<std::string> affected;
+        for (const auto &stoppedName : toRestart) {
+            const std::string startName = (stoppedName == oldName) ? newName : stoppedName;
+            auto result = StartResource(startName);
+            if (result) {
+                const auto &a = result.GetValue();
+                affected.insert(affected.end(), a.begin(), a.end());
+            }
+        }
+        return ResourceOperationResult::Ok(affected);
+    }
+
+    ResourceOperationResult ResourceManager::RefreshAll() {
+        // Remember who was running so we restart exactly them.
+        auto running = GetRunningResourceNames();
+
+        // Stop everything currently running (reverse dependency order).
+        StopAll();
+
+        // Evict + re-parse every known resource so code/manifest edits apply.
+        for (const auto &name : GetAllResourceNames()) {
+            std::string path;
+            {
+                std::scoped_lock lock(_resourcesMutex);
+                auto it = _resources.find(name);
+                if (it != _resources.end() && it->second) {
+                    path = it->second->GetPath();
+                }
+            }
+            if (path.empty()) {
+                continue;
+            }
+            if (_jsEngine) {
+                _jsEngine->EvictModulesUnderPath(path);
+            }
+            auto reparsed = std::make_unique<Resource>(path);
+            if (!reparsed->IsManifestValid()) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->warn("Skipping invalid package.json in {}: {}", path, reparsed->GetErrorMessage());
+                continue;
+            }
+            std::string newName = reparsed->GetName();
+            std::scoped_lock lock(_resourcesMutex);
+            if (newName != name) {
+                _resources.erase(name);
+            }
+            _resources[newName] = std::move(reparsed);
+        }
+
+        // Pick up brand-new resource directories, then rebuild the graph once.
+        RescanResources();
+        BuildDependencyGraph();
+
+        // Restart exactly what was running before.
+        std::vector<std::string> affected;
+        for (const auto &name : running) {
+            auto result = StartResource(name);
+            if (result) {
+                const auto &a = result.GetValue();
+                affected.insert(affected.end(), a.begin(), a.end());
+            }
+        }
+        return ResourceOperationResult::Ok(affected);
+    }
+
+    std::vector<std::string> ResourceManager::RescanResources() {
+        std::vector<std::string> added;
+
+        std::error_code ec;
+        std::filesystem::path resourcesDir(_config.resourcesPath);
+        if (!std::filesystem::exists(resourcesDir, ec)) {
+            return added;
+        }
+
+        for (const auto &entry : std::filesystem::directory_iterator(resourcesDir, ec)) {
+            if (ec) {
+                break;
+            }
+            if (!entry.is_directory()) {
+                continue;
+            }
+            if (!std::filesystem::exists(entry.path() / "package.json")) {
+                continue;
+            }
+
+            Resource probe(entry.path().string());
+            if (!probe.IsManifestValid()) {
+                continue;
+            }
+
+            bool exists;
+            {
+                std::scoped_lock lock(_resourcesMutex);
+                exists = _resources.contains(probe.GetName());
+            }
+            if (!exists && DiscoverResource(entry.path().string())) {
+                added.push_back(probe.GetName());
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->info("Discovered new JS resource: {}", added.back());
+            }
+        }
+        return added;
+    }
+
     bool ResourceManager::ExecuteResourceScript(Resource &resource, std::string &outError) {
         if (!_jsEngine || !_jsEngine->IsInitialized()) {
             outError = "JavaScript engine not initialized";

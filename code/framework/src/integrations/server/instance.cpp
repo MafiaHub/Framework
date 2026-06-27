@@ -471,7 +471,44 @@ namespace Framework::Integrations::Server {
                 }
             },
             "Show server status");
-        
+
+        _commandProcessor->RegisterCommand(
+            "refresh", {},
+            [this](cxxopts::ParseResult &result) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                const auto &args = result.unmatched();
+                if (args.empty()) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Usage: refresh <resource>");
+                    return;
+                }
+                auto res = rm->RefreshResource(args[0]);
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed resource '{}'", args[0]);
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh '{}': {}", args[0], res.GetError());
+                }
+            },
+            "Reload a resource from disk: refresh <resource>");
+
+        _commandProcessor->RegisterCommand(
+            "refreshall", {},
+            [this](cxxopts::ParseResult &) {
+                auto *rm = _scriptingModule ? _scriptingModule->GetResourceManager() : nullptr;
+                if (!rm) {
+                    return;
+                }
+                auto res = rm->RefreshAll();
+                if (res) {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Refreshed all resources ({} affected)", res.GetValue().size());
+                } else {
+                    Logging::GetLogger(FRAMEWORK_INNER_SERVER)->error("Failed to refresh all resources: {}", res.GetError());
+                }
+            },
+            "Re-scan and reload all resources from disk");
+
         Logging::GetLogger(FRAMEWORK_INNER_SERVER)->debug("Command listener and processor initialized");
     }
 

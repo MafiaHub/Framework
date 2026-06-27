@@ -143,6 +143,24 @@ namespace Framework::Scripting {
          */
         ResourceOperationResult ReloadResource(std::string_view name);
 
+        /**
+         * Re-parse a resource's package.json from disk and, if it was running,
+         * restart it (evicting its cached modules first). Picks up both code
+         * and manifest edits. Resources stopped beforehand stay stopped.
+         * Backs the `refresh` console command.
+         * @param name Resource name
+         * @return Result with the list of affected resources
+         */
+        ResourceOperationResult RefreshResource(std::string_view name);
+
+        /**
+         * Re-scan the resources directory, re-parse every known resource, and
+         * restart exactly those that were running. Newly discovered resources
+         * are registered but left stopped. Backs the `refreshall` command.
+         * @return Result with the list of affected resources
+         */
+        ResourceOperationResult RefreshAll();
+
         // Registry Queries
 
         /**
@@ -324,6 +342,10 @@ namespace Framework::Scripting {
 
         // Build dependency graph from discovered resources
         void BuildDependencyGraph();
+
+        // Scan the resources directory for resources not already registered and
+        // register them. Returns the names added. Used by RefreshAll.
+        std::vector<std::string> RescanResources();
 
         // Validate all dependencies can be satisfied
         bool ValidateDependencies(std::string &outError) const;
