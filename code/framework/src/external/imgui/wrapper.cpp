@@ -24,6 +24,30 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace Framework::External::ImGUI {
+    namespace {
+        // Give ImGui 1.92's dynamic font atlas (RendererHasTextures) the backend's SRV slot
+        // pool; the legacy single-descriptor init clears the flag and asserts on atlas rebuild.
+        void ImGuiAllocSRV(ImGui_ImplDX12_InitInfo *info, D3D12_CPU_DESCRIPTOR_HANDLE *outCpu, D3D12_GPU_DESCRIPTOR_HANDLE *outGpu) {
+            auto *backend  = static_cast<Graphics::D3D12Backend *>(info->UserData);
+            const int slot = backend->AllocateSRVSlot();
+            IM_ASSERT(slot >= 0 && "D3D12 SRV descriptor heap exhausted");
+            if (slot < 0) {
+                *outCpu = {};
+                *outGpu = {};
+                return;
+            }
+            *outCpu = backend->GetSRVSlotCPUHandle(slot);
+            *outGpu = backend->GetSRVSlotGPUHandle(slot);
+        }
+
+        void ImGuiFreeSRV(ImGui_ImplDX12_InitInfo *info, D3D12_CPU_DESCRIPTOR_HANDLE cpu, D3D12_GPU_DESCRIPTOR_HANDLE) {
+            auto *backend       = static_cast<Graphics::D3D12Backend *>(info->UserData);
+            const auto base     = backend->GetSRVHeap()->GetCPUDescriptorHandleForHeapStart();
+            const UINT descSize = backend->GetDevice()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            backend->FreeSRVSlot(static_cast<int>((cpu.ptr - base.ptr) / descSize)); // slot = handle offset from heap start
+        }
+    } // namespace
+
     Utils::Result<void, Framework::Error> Wrapper::Init(Config &config) {
         if (isContextInitialized) {
             return {};
@@ -69,8 +93,17 @@ namespace Framework::External::ImGUI {
         } break;
         case Graphics::RendererBackend::BACKEND_D3D_12: {
             const auto renderBackend = _config.renderer->GetD3D12Backend();
-            ImGui_ImplDX12_Init(renderBackend->GetDevice(), renderBackend->NumFramesInFlight(), DXGI_FORMAT_R8G8B8A8_UNORM, renderBackend->GetSRVHeap(), renderBackend->GetSRVHeap()->GetCPUDescriptorHandleForHeapStart(),
-                renderBackend->GetSRVHeap()->GetGPUDescriptorHandleForHeapStart());
+
+            ImGui_ImplDX12_InitInfo initInfo {};
+            initInfo.Device               = renderBackend->GetDevice();
+            initInfo.CommandQueue         = renderBackend->GetCommandQueue();
+            initInfo.NumFramesInFlight    = renderBackend->NumFramesInFlight();
+            initInfo.RTVFormat            = DXGI_FORMAT_R8G8B8A8_UNORM;
+            initInfo.SrvDescriptorHeap    = renderBackend->GetSRVHeap();
+            initInfo.UserData             = renderBackend;
+            initInfo.SrvDescriptorAllocFn = ImGuiAllocSRV;
+            initInfo.SrvDescriptorFreeFn  = ImGuiFreeSRV;
+            ImGui_ImplDX12_Init(&initInfo);
         } break;
         }
 
