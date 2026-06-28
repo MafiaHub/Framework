@@ -455,7 +455,10 @@ namespace Framework::Scripting {
 
         v8::Local<v8::String> key = v8::String::NewFromUtf8(
             _isolate, "__fw_ownerOf").ToLocalChecked();
-        context->Global()->Set(context, key, fn).Check();
+        // Read-only/non-configurable so scripts can't replace it and break
+        // timer ownership tracking.
+        context->Global()->DefineOwnProperty(context, key, fn,
+            static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum | v8::DontDelete)).Check();
     }
 
     void NodeEngine::OnTimerOwnerLookup(const v8::FunctionCallbackInfo<v8::Value> &info) {
@@ -463,10 +466,19 @@ namespace Framework::Scripting {
         auto *engine = static_cast<NodeEngine *>(
             v8::Local<v8::External>::Cast(info.Data())->Value());
 
+        // Same fallback chain as the V8 timer path: function origin, then the
+        // current context, then the stack — so wrapped/bound callbacks resolve.
         std::string name;
-        if (info.Length() > 0 && info[0]->IsFunction() && engine->GetResourceManager()) {
-            name = engine->GetResourceManager()->GetResourceNameFromFunction(
-                isolate, info[0].As<v8::Function>());
+        if (auto *mgr = engine->GetResourceManager()) {
+            if (info.Length() > 0 && info[0]->IsFunction()) {
+                name = mgr->GetResourceNameFromFunction(isolate, info[0].As<v8::Function>());
+            }
+            if (name.empty()) {
+                name = mgr->GetCurrentResourceContext();
+            }
+            if (name.empty()) {
+                name = mgr->GetResourceContextFromStack(isolate);
+            }
         }
         info.GetReturnValue().Set(
             v8::String::NewFromUtf8(isolate, name.c_str()).ToLocalChecked());

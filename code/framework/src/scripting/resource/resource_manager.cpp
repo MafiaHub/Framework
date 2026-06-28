@@ -445,7 +445,27 @@ namespace Framework::Scripting {
             _jsEngine->EvictModulesUnderPath(resourceRoot);
         }
 
-        return StartResource(name);
+        // Restart the resource plus any dependents the stop cascaded down. If it
+        // wasn't running, the stop reports nothing, so start the resource itself.
+        auto toRestart = stopResult.GetValue();
+        if (toRestart.empty()) {
+            toRestart.push_back(std::string(name));
+        }
+        std::vector<std::string> affected;
+        for (const auto &n : toRestart) {
+            auto result = StartResource(n);
+            if (result) {
+                const auto &a = result.GetValue();
+                affected.insert(affected.end(), a.begin(), a.end());
+            }
+        }
+        return ResourceOperationResult::Ok(affected);
+    }
+
+    bool ResourceManager::HasDependencyCycle() const {
+        // ComputeLoadOrder (Kahn's) drops nodes that never reach in-degree 0, so
+        // a shorter result than the registry means a cycle.
+        return ComputeLoadOrder().size() < GetResourceCount();
     }
 
     ResourceOperationResult ResourceManager::ReloadResource(std::string_view name) {
@@ -489,6 +509,9 @@ namespace Framework::Scripting {
         std::string newName       = reparsed->GetName();
         {
             std::scoped_lock lock(_resourcesMutex);
+            if (newName != oldName && _resources.count(newName) > 0) {
+                return ResourceOperationResult("Rename '" + oldName + "' -> '" + newName + "' collides with an existing resource");
+            }
             if (newName != oldName) {
                 _resources.erase(oldName);
             }
@@ -498,6 +521,11 @@ namespace Framework::Scripting {
 
         if (!wasRunning) {
             return ResourceOperationResult::Ok({newName});
+        }
+
+        // A manifest edit could introduce a cycle; bail before recursing into it.
+        if (HasDependencyCycle()) {
+            return ResourceOperationResult("Dependency cycle after reloading '" + newName + "'; left stopped");
         }
 
         // Restart the resource plus the dependents that cascaded down.
@@ -521,6 +549,8 @@ namespace Framework::Scripting {
         StopAll();
 
         // Evict + re-parse every known resource so code/manifest edits apply.
+        // Track renames so we can restart the right names afterwards.
+        std::map<std::string, std::string> renamed; // old -> new
         for (const auto &name : GetAllResourceNames()) {
             std::string path;
             {
@@ -544,8 +574,14 @@ namespace Framework::Scripting {
             }
             std::string newName = reparsed->GetName();
             std::scoped_lock lock(_resourcesMutex);
+            if (newName != name && _resources.count(newName) > 0) {
+                Logging::GetLogger(FRAMEWORK_INNER_SCRIPTING)
+                    ->warn("Skipping rename '{}' -> '{}': name already in use", name, newName);
+                continue;
+            }
             if (newName != name) {
                 _resources.erase(name);
+                renamed[name] = newName;
             }
             _resources[newName] = std::move(reparsed);
         }
@@ -554,10 +590,16 @@ namespace Framework::Scripting {
         RescanResources();
         BuildDependencyGraph();
 
-        // Restart exactly what was running before.
+        if (HasDependencyCycle()) {
+            return ResourceOperationResult("Dependency cycle after refresh; nothing restarted");
+        }
+
+        // Restart exactly what was running before (following any renames).
         std::vector<std::string> affected;
         for (const auto &name : running) {
-            auto result = StartResource(name);
+            const auto it = renamed.find(name);
+            const std::string &startName = (it != renamed.end()) ? it->second : name;
+            auto result = StartResource(startName);
             if (result) {
                 const auto &a = result.GetValue();
                 affected.insert(affected.end(), a.begin(), a.end());

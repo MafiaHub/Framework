@@ -380,6 +380,9 @@ namespace Framework::Scripting {
         // Compute topological sort for load order
         std::vector<std::string> ComputeLoadOrder() const;
 
+        // True if the dependency graph has a cycle (can't fully topo-sort).
+        bool HasDependencyCycle() const;
+
         // Configuration
         ResourceManagerConfig _config;
 

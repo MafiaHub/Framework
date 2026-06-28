@@ -395,6 +395,10 @@ namespace Framework::Integrations::Client {
                 return;
             }
             for (const auto &res : payload.resources) {
+                // Drop any queued refresh so a pending sync can't resurrect it.
+                for (auto it = _pendingRefreshResources.begin(); it != _pendingRefreshResources.end();) {
+                    it = (it->name == res.name) ? _pendingRefreshResources.erase(it) : it + 1;
+                }
                 if (rm->IsResourceRunning(res.name)) {
                     auto result = rm->StopResource(res.name);
                     if (!result) {
@@ -595,6 +599,11 @@ namespace Framework::Integrations::Client {
                     }
                 }
                 _pendingRefreshResources.clear();
+                // Run the shared completion cleanup, skipping only the
+                // first-connect spawn barrier below.
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->flush();
+                _downloadStatus = {};
+                OnAssetsDownloadFinished(success);
                 return;
             }
             // A refresh that raced an initial connect falls through to full init.
