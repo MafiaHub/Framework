@@ -8,6 +8,8 @@
 
 #include "wrapper.h"
 
+#include <sentry.h>
+
 #include <cppfs/FileHandle.h>
 #include <cppfs/FileIterator.h>
 #include <cppfs/fs.h>
@@ -37,7 +39,8 @@ namespace Framework::External::Sentry {
         }
 
         sentry_options_set_handler_path(opts, breakpadFile.path().c_str());
-        if (sentry_init(opts) > 0) {
+        sentry_options_set_database_path(opts, cacheDirectory.path().c_str());
+        if (sentry_init(opts) != 0) {
             return Framework::Error("Failed to initialize Sentry");
         }
         _initialized = true;
@@ -117,11 +120,9 @@ namespace Framework::External::Sentry {
         if (!_initialized) {
             return Framework::Error {"Sentry is not initialized"};
         }
-        const sentry_value_t exc = sentry_value_new_object();
-        sentry_value_set_by_key(exc, "type", sentry_value_new_string(type.c_str()));
-        sentry_value_set_by_key(exc, "value", sentry_value_new_string(message.c_str()));
         const sentry_value_t event = sentry_value_new_event();
-        sentry_value_set_by_key(event, "exception", exc);
+        const sentry_value_t exc   = sentry_value_new_exception(type.c_str(), message.c_str());
+        sentry_event_add_exception(event, exc);
         sentry_capture_event(event);
         return {};
     }

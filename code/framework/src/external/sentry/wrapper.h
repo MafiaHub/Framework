@@ -13,7 +13,6 @@
 #include <utils/error.h>
 #include <utils/result.h>
 
-#include <sentry.h>
 #include <string>
 
 namespace Framework::External::Sentry {

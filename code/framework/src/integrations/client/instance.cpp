@@ -138,6 +138,7 @@ namespace Framework::Integrations::Client {
         _renderIO         = std::make_unique<Graphics::RenderIO>();
         _scriptingModule  = std::make_unique<Client::Scripting::ClientScriptingModule>();
         _webManager = std::make_unique<Framework::GUI::Manager>();
+        _crashReporter = std::make_unique<External::Sentry::Wrapper>();
     }
 
     Instance::~Instance() = default;
@@ -147,6 +148,18 @@ namespace Framework::Integrations::Client {
 
         if (opts.gameName.empty() || opts.gameVersion.empty()) {
             return Error("Game name and version are required");
+        }
+
+        // Crash reporting comes up first so its handler is installed before anything else can fault.
+        if (_crashReporter && !opts.sentryDSN.empty()) {
+            const std::string handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
+            if (auto sentryResult = _crashReporter->Init(opts.sentryDSN, handlerPath); !sentryResult) {
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->warn("Crash reporting disabled: {}", sentryResult.GetError().message);
+            }
+            else {
+                _crashReporter->SetGameInformation({opts.gameName, opts.gameVersion + " / mod " + opts.modVersion});
+                Logging::GetLogger(FRAMEWORK_INNER_CLIENT)->info("Crash reporting initialized");
+            }
         }
 
         if (opts.usePresence) {
@@ -272,6 +285,10 @@ namespace Framework::Integrations::Client {
 
         if (_imguiApp && _imguiApp->IsInitialized()) {
             _imguiApp->Shutdown();
+        }
+
+        if (_crashReporter && _crashReporter->IsInitialized()) {
+            _crashReporter->Shutdown();
         }
 
         CoreModules::SetScriptingModule(nullptr);

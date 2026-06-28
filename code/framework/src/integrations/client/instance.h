@@ -13,6 +13,7 @@
 #include <utils/result.h>
 #include <external/discord/wrapper.h>
 #include <external/imgui/wrapper.h>
+#include <external/sentry/wrapper.h>
 #include <function2.hpp>
 #include <graphics/renderer.h>
 #include <graphics/renderio.h>
@@ -62,6 +63,12 @@ namespace Framework::Integrations::Client {
 
         bool initRendererManually = false;
 
+        // Crash reporting (Sentry). Empty DSN leaves it disabled; the value is project-specific.
+        std::string sentryDSN;
+        // Directory holding crashpad_handler(.exe); the Sentry cache is created beneath it.
+        // Empty -> current working directory.
+        std::string sentryModulePath;
+
         // Optional UI font (TTF). Empty -> ImGui's embedded ASCII-only font.
         // A Unicode-covering font enables non-Latin scripts (e.g. Cyrillic).
         std::string imguiFontPath;
@@ -94,6 +101,7 @@ namespace Framework::Integrations::Client {
         std::unique_ptr<Graphics::RenderIO> _renderIO;
         std::unique_ptr<Client::Scripting::ClientScriptingModule> _scriptingModule;
         std::unique_ptr<Framework::GUI::Manager> _webManager;
+        std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
 
         // gui
         std::unique_ptr<External::ImGUI::Wrapper> _imguiApp;
@@ -196,6 +204,10 @@ namespace Framework::Integrations::Client {
 
         External::ImGUI::Wrapper *GetImGUI() const {
             return _imguiApp.get();
+        }
+
+        External::Sentry::Wrapper *GetCrashReporter() const {
+            return _crashReporter.get();
         }
 
         Framework::GUI::Manager *GetWebManager() const {

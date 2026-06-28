@@ -18,6 +18,8 @@
 #include "networking/engine.h"
 #include "scripting/module.h"
 
+#include <external/sentry/wrapper.h>
+
 #include <mafianet/types.h>
 #include "services/masterlist.h"
 #include "utils/config.h"
@@ -54,6 +56,12 @@ namespace Framework::Integrations::Server {
         std::string gameVersion;
 
         bool verifyBuildToken = true; // false bypasses the build/version mismatch challenge
+
+        // Crash reporting (Sentry). Empty DSN leaves it disabled; the value is project-specific.
+        std::string sentryDSN;
+        // Directory holding crashpad_handler(.exe); the Sentry cache is created beneath it.
+        // Empty -> current working directory.
+        std::string sentryModulePath;
 
         std::string bindHost;
         std::string bindSecretKey;
@@ -121,6 +129,7 @@ namespace Framework::Integrations::Server {
         std::unique_ptr<Services::MasterlistConnector> _masterlist;
         std::unique_ptr<Utils::CommandListener> _commandListener;
         std::unique_ptr<Utils::CommandProcessor> _commandProcessor;
+        std::unique_ptr<External::Sentry::Wrapper> _crashReporter;
 
         void InitEndpoints();
         void InitNetworkingMessages();
@@ -182,6 +191,10 @@ namespace Framework::Integrations::Server {
 
         Scripting::ServerScriptingModule *GetScriptingModule() const {
             return _scriptingModule.get();
+        }
+
+        External::Sentry::Wrapper *GetCrashReporter() const {
+            return _crashReporter.get();
         }
 
         Networking::Engine *GetNetworkingEngine() const {

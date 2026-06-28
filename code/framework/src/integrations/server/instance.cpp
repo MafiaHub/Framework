@@ -42,6 +42,7 @@ namespace Framework::Integrations::Server {
         _masterlist       = std::make_unique<Services::MasterlistConnector>();
         _commandListener  = std::make_unique<Utils::CommandListener>();
         _commandProcessor = std::make_unique<Utils::CommandProcessor>();
+        _crashReporter    = std::make_unique<External::Sentry::Wrapper>();
     }
 
     Instance::~Instance() {
@@ -53,6 +54,18 @@ namespace Framework::Integrations::Server {
 
         if (opts.gameName.empty() || opts.gameVersion.empty()) {
             return Error("Game name and version are required");
+        }
+
+        // Crash reporting comes up first so its handler is installed before anything else can fault.
+        if (_crashReporter && !opts.sentryDSN.empty()) {
+            const std::string handlerPath = opts.sentryModulePath.empty() ? "." : opts.sentryModulePath;
+            if (auto sentryResult = _crashReporter->Init(opts.sentryDSN, handlerPath); !sentryResult) {
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->warn("Crash reporting disabled: {}", sentryResult.GetError().message);
+            }
+            else {
+                _crashReporter->SetGameInformation({opts.gameName, opts.gameVersion + " / mod " + opts.modVersion});
+                Logging::GetLogger(FRAMEWORK_INNER_SERVER)->info("Crash reporting initialized");
+            }
         }
 
         CoreModules::SetTickInterval(opts.worldConfig.tickInterval);
@@ -710,6 +723,10 @@ namespace Framework::Integrations::Server {
 
         if (_commandListener) {
             _commandListener->Shutdown();
+        }
+
+        if (_crashReporter && _crashReporter->IsInitialized()) {
+            _crashReporter->Shutdown();
         }
 
         // Detach signal handlers
